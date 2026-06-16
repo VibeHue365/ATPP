@@ -22,10 +22,14 @@ import OAuthCallback from '../pages/auth/OAuthCallback';
 import ProfilePage from '../pages/dashboard/ProfilePage';
 import SettingsPage from '../pages/dashboard/SettingsPage';
 import NotFoundPage from '../pages/errors/NotFoundPage';
+import OnboardingPage from '../pages/OnboardingPage';
 
 export const AppRouter: React.FC = () => {
   return (
     <Routes>
+      {/* Onboarding Page */}
+      <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
+
       {/* Public Pages wrapped in MainLayout */}
       <Route element={<MainLayout />}>
         <Route path={ROUTES.LANDING} element={<LandingPage />} />
