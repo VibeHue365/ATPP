@@ -27,14 +27,23 @@ export const LoginForm: React.FC = () => {
   );
 
   useEffect(() => {
-    const state = location.state as { email?: string; message?: string } | null;
+    const state = location.state as {
+      email?: string;
+      message?: string;
+      from?: { pathname?: string };
+    } | null;
+
     if (state?.email) {
       setEmail(state.email);
     }
     if (state?.message) {
       toast.info(state.message);
+      navigate(location.pathname, {
+        replace: true,
+        state: state.from ? { from: state.from } : null,
+      });
     }
-  }, [location.state, toast]);
+  }, [location.pathname, location.state, navigate, toast]);
 
   const validate = () => {
     const tempErrors: { email?: string; password?: string } = {};

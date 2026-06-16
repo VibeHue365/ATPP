@@ -59,8 +59,27 @@ export class AuthService {
   async register(dto: RegisterDto): Promise<Record<string, unknown>> {
     const emailNormalized = this.normalizeEmail(dto.email);
     const phoneNormalized = this.normalizePhone(dto.phone);
-    const existing = await this.usersRepository.existsByEmail(emailNormalized);
-    if (existing) {
+
+    const existingUser =
+      await this.usersRepository.findUserByEmail(emailNormalized);
+    if (existingUser) {
+      const canResumeVerification =
+        existingUser.accountStatus === UserStatus.PendingEmailVerification &&
+        !existingUser.auth.emailVerified &&
+        existingUser.auth.phoneNormalized === phoneNormalized;
+
+      if (canResumeVerification) {
+        const otp = await this.sendFreshEmailVerificationOtp(
+          existingUser._id,
+          emailNormalized,
+        );
+
+        return {
+          message: 'Register success. Please verify your email.',
+          demoOtp: this.demoTokensEnabled() ? otp : undefined,
+        };
+      }
+
       throw new BadRequestException('Email already exists');
     }
 
@@ -71,40 +90,18 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const user = await this.usersRepository.createUser({
-      auth: {
-        email: dto.email.trim(),
-        emailNormalized,
-        phone: dto.phone.trim(),
-        phoneNormalized,
-        passwordHash,
-        emailVerified: false,
-        phoneVerified: false,
-        authProviders: [
-          {
-            provider: AuthProviderType.Local,
-            providerUserId: null,
-          },
-        ],
-      },
-      roles: ['CUSTOMER'],
-      defaultRole: 'CUSTOMER',
-      accountStatus: UserStatus.PendingEmailVerification,
-      profile: {
-        fullName: dto.fullName.trim(),
-      },
-      security: {
-        passwordChangedAt: new Date(),
-        failedLoginAttempts: 0,
-      },
-    });
+    const user = await this.createLocalPendingUser(
+      dto,
+      emailNormalized,
+      phoneNormalized,
+      passwordHash,
+    );
 
     await this.rolesService.assignDefaultCustomerRole(user._id);
-    const otp = await this.createEmailVerificationOtp(
+    const otp = await this.sendFreshEmailVerificationOtp(
       user._id,
       emailNormalized,
     );
-    await this.mailService.sendEmailVerificationOtp(emailNormalized, otp);
 
     return {
       message: 'Register success. Please verify your email.',
@@ -159,12 +156,7 @@ export class AuthService {
       };
     }
 
-    await this.authRepository.revokeActiveVerificationTokens(
-      user._id,
-      VerificationPurpose.VerifyEmail,
-    );
-    const otp = await this.createEmailVerificationOtp(user._id, email);
-    await this.mailService.sendEmailVerificationOtp(email, otp);
+    const otp = await this.sendFreshEmailVerificationOtp(user._id, email);
 
     return {
       message: 'If the email needs verification, a new OTP has been sent.',
@@ -457,6 +449,85 @@ export class AuthService {
     );
   }
 
+  private async createLocalPendingUser(
+    dto: RegisterDto,
+    emailNormalized: string,
+    phoneNormalized: string,
+    passwordHash: string,
+  ) {
+    try {
+      return await this.usersRepository.createUser({
+        auth: {
+          email: dto.email.trim(),
+          emailNormalized,
+          phone: dto.phone.trim(),
+          phoneNormalized,
+          passwordHash,
+          emailVerified: false,
+          phoneVerified: false,
+          authProviders: [
+            {
+              provider: AuthProviderType.Local,
+              providerUserId: null,
+            },
+          ],
+        },
+        roles: ['CUSTOMER'],
+        defaultRole: 'CUSTOMER',
+        accountStatus: UserStatus.PendingEmailVerification,
+        profile: {
+          fullName: dto.fullName.trim(),
+        },
+        security: {
+          passwordChangedAt: new Date(),
+          failedLoginAttempts: 0,
+        },
+      });
+    } catch (error) {
+      if (this.isDuplicateKeyError(error, 'auth.emailNormalized')) {
+        const existingUser =
+          await this.usersRepository.findUserByEmail(emailNormalized);
+        if (
+          existingUser?.accountStatus === UserStatus.PendingEmailVerification &&
+          !existingUser.auth.emailVerified &&
+          existingUser.auth.phoneNormalized === phoneNormalized
+        ) {
+          return existingUser;
+        }
+
+        throw new BadRequestException('Email already exists');
+      }
+
+      if (this.isDuplicateKeyError(error, 'auth.phoneNormalized')) {
+        throw new BadRequestException('Phone already exists');
+      }
+
+      if (this.isDuplicateKeyError(error)) {
+        throw new BadRequestException('Email or phone already exists');
+      }
+
+      throw error;
+    }
+  }
+
+  private async sendFreshEmailVerificationOtp(
+    userId: Types.ObjectId,
+    email: string,
+  ): Promise<string> {
+    const { otp, tokenId } = await this.createEmailVerificationOtp(
+      userId,
+      email,
+    );
+    await this.mailService.sendEmailVerificationOtp(email, otp);
+    await this.authRepository.revokeOtherActiveVerificationTokens(
+      userId,
+      VerificationPurpose.VerifyEmail,
+      tokenId,
+    );
+
+    return otp;
+  }
+
   private async issueTokens(
     userId: Types.ObjectId,
     email: string,
@@ -498,11 +569,13 @@ export class AuthService {
   private async createEmailVerificationOtp(
     userId: Types.ObjectId,
     email: string,
-  ): Promise<string> {
+  ): Promise<{ otp: string; tokenId: Types.ObjectId }> {
+    const tokenId = new Types.ObjectId();
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const codeHash = await bcrypt.hash(otp, 12);
 
     await this.authRepository.createVerificationToken({
+      _id: tokenId,
       userId,
       target: email,
       targetType: VerificationTargetType.Email,
@@ -511,7 +584,7 @@ export class AuthService {
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     });
 
-    return otp;
+    return { otp, tokenId };
   }
 
   private async createPasswordResetToken(
@@ -582,5 +655,27 @@ export class AuthService {
 
   private demoTokensEnabled(): boolean {
     return this.configService.get<string>('NODE_ENV') !== 'production';
+  }
+
+  private isDuplicateKeyError(error: unknown, field?: string): boolean {
+    const mongoError = error as
+      | {
+          code?: number;
+          keyPattern?: Record<string, unknown>;
+          keyValue?: Record<string, unknown>;
+        }
+      | undefined;
+
+    if (mongoError?.code !== 11000) {
+      return false;
+    }
+
+    if (!field) {
+      return true;
+    }
+
+    return Boolean(
+      mongoError.keyPattern?.[field] || mongoError.keyValue?.[field],
+    );
   }
 }

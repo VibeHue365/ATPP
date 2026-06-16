@@ -64,6 +64,22 @@ export class AuthRepository {
     );
   }
 
+  async revokeOtherActiveVerificationTokens(
+    userId: Types.ObjectId,
+    purpose: VerificationPurpose,
+    keepTokenId: Types.ObjectId,
+  ): Promise<void> {
+    await this.verificationTokenModel.updateMany(
+      {
+        _id: { $ne: keepTokenId },
+        userId,
+        purpose,
+        verifiedAt: null,
+      },
+      { $set: { verifiedAt: new Date() } },
+    );
+  }
+
   createRefreshToken(
     data: Partial<RefreshToken> & { _id: Types.ObjectId },
   ): Promise<RefreshTokenDocument> {

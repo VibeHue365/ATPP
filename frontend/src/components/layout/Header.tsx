@@ -47,7 +47,7 @@ export const Header: React.FC = () => {
               </button>
             </div>
           ) : (
-            <Link to={ROUTES.LOGIN} className="vh-btn vh-btn-primary vh-btn-sm">
+            <Link to={ROUTES.LOGIN} className="vh-btn vh-btn-primary vh-btn-sm vh-header-signin-btn">
               SIGN IN
             </Link>
           )}

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -26,8 +26,14 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const add = useCallback((type: ToastType, message: string) => {
-    const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-    setToasts((prev) => [...prev, { id, type, message }]);
+    const id = Date.now().toString() + Math.random().toString(36).substring(2, 11);
+    setToasts((prev) => {
+      if (prev.some((toast) => toast.type === type && toast.message === message)) {
+        return prev;
+      }
+
+      return [...prev, { id, type, message }].slice(-3);
+    });
     
     // Auto-remove after 4 seconds
     setTimeout(() => {
@@ -38,9 +44,13 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const success = useCallback((msg: string) => add('success', msg), [add]);
   const error = useCallback((msg: string) => add('error', msg), [add]);
   const info = useCallback((msg: string) => add('info', msg), [add]);
+  const value = useMemo(
+    () => ({ success, error, info, remove }),
+    [success, error, info, remove],
+  );
 
   return (
-    <ToastContext.Provider value={{ success, error, info, remove }}>
+    <ToastContext.Provider value={value}>
       {children}
       <div className="vh-toast-container">
         {toasts.map((toast) => (

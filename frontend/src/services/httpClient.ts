@@ -3,13 +3,13 @@ import { tokenStorage } from './tokenStorage';
 
 class HttpClient {
   private isRefreshing = false;
-  private refreshSubscribers: ((token: string) => void)[] = [];
+  private refreshSubscribers: ((token: string | null) => void)[] = [];
 
-  private subscribeTokenRefresh(cb: (token: string) => void) {
+  private subscribeTokenRefresh(cb: (token: string | null) => void) {
     this.refreshSubscribers.push(cb);
   }
 
-  private onRefreshed(token: string) {
+  private onRefreshFinished(token: string | null) {
     this.refreshSubscribers.forEach((cb) => cb(token));
     this.refreshSubscribers = [];
   }
@@ -109,13 +109,14 @@ class HttpClient {
 
       if (newAccessToken && newRefreshToken) {
         tokenStorage.replaceTokens(newAccessToken, newRefreshToken);
-        this.onRefreshed(newAccessToken);
+        this.onRefreshFinished(newAccessToken);
         return newAccessToken;
       }
 
       throw new Error('Tokens missing in refresh response');
     } catch (error) {
       console.error('Failed to refresh authentication session:', error);
+      this.onRefreshFinished(null);
       this.clearSessionAndRedirect();
       return null;
     } finally {

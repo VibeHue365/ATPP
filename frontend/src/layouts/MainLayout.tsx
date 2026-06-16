@@ -199,7 +199,7 @@ export const MainLayout: React.FC = () => {
                 )}
               </div>
             ) : (
-              <Link to={ROUTES.LOGIN} className="vh-btn vh-btn-primary vh-btn-sm" style={{ borderRadius: '8px', padding: '8px 20px', fontWeight: 600 }}>
+              <Link to={ROUTES.LOGIN} className="vh-btn vh-btn-primary vh-btn-sm vh-header-signin-btn" style={{ borderRadius: '8px', padding: '8px 20px', fontWeight: 600 }}>
                 SIGN IN
               </Link>
             )}
