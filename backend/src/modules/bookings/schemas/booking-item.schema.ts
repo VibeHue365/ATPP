@@ -26,10 +26,20 @@ export class BookingItem {
   @Prop({ type: Types.ObjectId, ref: 'Product', default: null, index: true })
   productId?: Types.ObjectId | null;
 
-  @Prop({ type: Types.ObjectId, ref: 'InventoryItem', default: null, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'InventoryItem',
+    default: null,
+    index: true,
+  })
   inventoryItemId?: Types.ObjectId | null;
 
-  @Prop({ type: Types.ObjectId, ref: 'PhotographyPackage', default: null, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'PhotographyPackage',
+    default: null,
+    index: true,
+  })
   photographyPackageId?: Types.ObjectId | null;
 
   @Prop({ type: Types.ObjectId, ref: 'PriceVersion', required: true })

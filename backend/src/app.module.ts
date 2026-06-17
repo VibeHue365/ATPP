@@ -13,6 +13,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
 import { DisputesModule } from './modules/disputes/disputes.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { AiModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -36,9 +37,9 @@ import { AuditModule } from './modules/audit/audit.module';
     DisputesModule,
     NotificationsModule,
     AuditModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
-

@@ -1,7 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 
-export type ProviderVerificationDocument = HydratedDocument<ProviderVerification>;
+export type ProviderVerificationDocument =
+  HydratedDocument<ProviderVerification>;
 
 export enum VerificationStatus {
   Pending = 'PENDING',

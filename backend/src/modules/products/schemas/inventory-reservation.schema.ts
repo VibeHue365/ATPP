@@ -1,7 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 
-export type InventoryReservationDocument = HydratedDocument<InventoryReservation>;
+export type InventoryReservationDocument =
+  HydratedDocument<InventoryReservation>;
 
 export enum ReservationStatus {
   TempReserved = 'TEMP_RESERVED',
@@ -13,13 +14,23 @@ export enum ReservationStatus {
 
 @Schema({ collection: 'inventory_reservations', timestamps: true })
 export class InventoryReservation {
-  @Prop({ type: Types.ObjectId, ref: 'InventoryItem', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'InventoryItem',
+    required: true,
+    index: true,
+  })
   inventoryItemId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
   bookingId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'BookingItem', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'BookingItem',
+    required: true,
+    index: true,
+  })
   bookingItemId: Types.ObjectId;
 
   @Prop({ required: true, type: Date, index: true })

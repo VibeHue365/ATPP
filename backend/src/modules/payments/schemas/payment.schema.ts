@@ -37,7 +37,13 @@ export class Payment {
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
   bookingId: Types.ObjectId;
 
-  @Prop({ required: true, unique: true, index: true, trim: true, uppercase: true })
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    trim: true,
+    uppercase: true,
+  })
   paymentCode: string;
 
   @Prop({ required: true, min: 0 })

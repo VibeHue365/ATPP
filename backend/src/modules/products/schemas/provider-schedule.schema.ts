@@ -10,12 +10,12 @@ export enum ScheduleType {
 
 export interface TimeSlotRange {
   start: string; // e.g. "08:00"
-  end: string;   // e.g. "12:00"
+  end: string; // e.g. "12:00"
 }
 
 export interface CustomTimeSlot {
   timeSlot: string; // e.g. "14:00-16:00"
-  status: string;   // e.g. "AVAILABLE", "BLOCKED", "BOOKED"
+  status: string; // e.g. "AVAILABLE", "BLOCKED", "BOOKED"
 }
 
 @Schema({ collection: 'provider_schedules', timestamps: true })

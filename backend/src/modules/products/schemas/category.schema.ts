@@ -13,7 +13,13 @@ export class Category {
   @Prop({ required: true, trim: true })
   name: string;
 
-  @Prop({ required: true, unique: true, index: true, trim: true, lowercase: true })
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    trim: true,
+    lowercase: true,
+  })
   slug: string;
 
   @Prop({ type: String, default: null, trim: true })

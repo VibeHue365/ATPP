@@ -279,7 +279,6 @@ export class AuthService {
   async logout(
     userId: string,
     sessionId: string,
-    context: RequestContext,
   ): Promise<Record<string, unknown>> {
     const userObjectId = new Types.ObjectId(userId);
     await this.authRepository.revokeRefreshToken(
@@ -293,7 +292,6 @@ export class AuthService {
   async changePassword(
     userId: string,
     dto: ChangePasswordDto,
-    context: RequestContext,
   ): Promise<Record<string, unknown>> {
     const userObjectId = new Types.ObjectId(userId);
     const user = await this.usersRepository.findUserById(userObjectId);
@@ -339,10 +337,7 @@ export class AuthService {
     };
   }
 
-  async resetPassword(
-    dto: ResetPasswordDto,
-    context: RequestContext,
-  ): Promise<Record<string, unknown>> {
+  async resetPassword(dto: ResetPasswordDto): Promise<Record<string, unknown>> {
     const { tokenId } = this.parseResetToken(dto.token);
     const resetToken =
       await this.authRepository.findVerificationTokenById(tokenId);

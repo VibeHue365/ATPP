@@ -1,33 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { 
   Camera, 
   ShieldCheck, 
   Calendar, 
-  History, 
-  MapPin, 
   User, 
   Mail, 
   Phone, 
   CalendarRange, 
-  Plus, 
   Star, 
-  Pencil,
-  Check,
-  Heart
+  Pencil
 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/env';
 import { ROUTES } from '../../config/routes';
 import { Modal } from '../../components/common/Modal';
-import { useToast } from '../../components/feedback/Toast';
+import { CustomerDashboard } from '../../features/dashboard/components/CustomerDashboard';
+import { ProviderDashboard } from '../../features/dashboard/components/ProviderDashboard';
 
 export const ProfilePage: React.FC = () => {
   const { user } = useAuth();
-  const toast = useToast();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'appointments';
 
   // Modals state control - Only View modal is needed now
   const [isViewOpen, setIsViewOpen] = useState(false);
@@ -63,10 +56,6 @@ export const ProfilePage: React.FC = () => {
     }
   }, [user]);
 
-  const handleTabChange = (tab: string) => {
-    setSearchParams({ tab });
-  };
-
   const getAvatarUrl = () => {
     if (user?.avatar) {
       if (user.avatar.startsWith('http')) return user.avatar;
@@ -84,79 +73,6 @@ export const ProfilePage: React.FC = () => {
     const parts = user.fullName.trim().split(/\s+/);
     return parts[parts.length - 1];
   };
-
-  // Mock data for Áo Dài đã thuê
-  const rentedItems = [
-    {
-      id: 'r1',
-      name: 'Cúc Họa Mi',
-      material: 'Lụa cao cấp',
-      price: '550,000đ',
-      rentalDate: '10/04/2026',
-      status: 'ĐÃ TRẢ',
-      image: '/cuc_hoa_mi.png'
-    },
-    {
-      id: 'r2',
-      name: 'Hồng Liên Hoa',
-      material: 'Lụa vẽ tay',
-      price: '1,200,000đ',
-      rentalDate: '28/04/2026',
-      status: 'ĐANG THUÊ',
-      image: '/hong_lien_hoa.png'
-    }
-  ];
-
-  // Mock data for Favorites
-  const [favorites, setFavorites] = useState([
-    {
-      id: 'f1',
-      name: 'Lam Ngọc Heritage',
-      material: 'Gấm & Satin',
-      price: '850,000đ',
-      image: '/lam_ngoc.png'
-    },
-    {
-      id: 'f2',
-      name: 'Nắng Thủy Tiên',
-      material: 'Linen tự nhiên',
-      price: '420,000đ',
-      image: '/nang_thuy_tien.png'
-    }
-  ]);
-
-  const handleRemoveFavorite = (id: string, name: string) => {
-    setFavorites(favorites.filter(item => item.id !== id));
-    toast.success(`Đã xóa "${name}" khỏi danh sách yêu thích!`);
-  };
-
-  // Mock data for Payment History
-  const paymentHistory = [
-    {
-      id: 'TXN89127021',
-      date: '28/04/2026',
-      service: 'Thuê trang phục "Hồng Liên Hoa"',
-      amount: '1,200,000đ',
-      method: 'Chuyển khoản QR',
-      status: 'Thành công'
-    },
-    {
-      id: 'TXN89125601',
-      date: '10/04/2026',
-      service: 'Thuê trang phục "Cúc Họa Mi"',
-      amount: '550,000đ',
-      method: 'Ví điện tử',
-      status: 'Thành công'
-    },
-    {
-      id: 'TXN89110481',
-      date: '02/09/2024',
-      service: 'Tư vấn Bộ sưu tập "Sắc Son"',
-      amount: '300,000đ',
-      method: 'Thẻ tín dụng',
-      status: 'Thành công'
-    }
-  ];
 
   const translateGender = (g?: string) => {
     if (g === 'MALE') return 'Nam';
@@ -214,7 +130,7 @@ export const ProfilePage: React.FC = () => {
               </div>
               <div className="vh-profile-hero-stat-divider" />
               <div className="vh-profile-hero-stat">
-                <span className="vh-profile-hero-stat-value font-header">{favorites.length + 26}</span>
+                <span className="vh-profile-hero-stat-value font-header">26</span>
                 <span className="vh-profile-hero-stat-label">YÊU THÍCH</span>
               </div>
             </div>
@@ -235,200 +151,11 @@ export const ProfilePage: React.FC = () => {
 
       {/* Tabs System Container */}
       <section className="vh-profile-tabs-section-container">
-        {/* Header Tabs */}
-        <div className="vh-profile-tabs-navigation-row">
-          <button 
-            className={`vh-profile-navigation-tab-btn font-header ${activeTab === 'appointments' ? 'vh-profile-navigation-tab-btn-active' : ''}`}
-            onClick={() => handleTabChange('appointments')}
-          >
-            Lịch hẹn của tôi
-          </button>
-          <button 
-            className={`vh-profile-navigation-tab-btn font-header ${activeTab === 'rentals' ? 'vh-profile-navigation-tab-btn-active' : ''}`}
-            onClick={() => handleTabChange('rentals')}
-          >
-            Áo dài đã thuê
-          </button>
-          <button 
-            className={`vh-profile-navigation-tab-btn font-header ${activeTab === 'favorites' ? 'vh-profile-navigation-tab-btn-active' : ''}`}
-            onClick={() => handleTabChange('favorites')}
-          >
-            Danh sách yêu thích
-          </button>
-          <button 
-            className={`vh-profile-navigation-tab-btn font-header ${activeTab === 'payments' ? 'vh-profile-navigation-tab-btn-active' : ''}`}
-            onClick={() => handleTabChange('payments')}
-          >
-            Lịch sử thanh toán
-          </button>
-        </div>
-
-        {/* Tab content panel */}
-        <div className="vh-profile-tab-content-panel">
-          
-          {/* Tab 1: Appointments Grid */}
-          {activeTab === 'appointments' && (
-            <div className="vh-profile-appointments-grid animate-fade-in">
-              {/* Card 1: Upcoming appointment */}
-              <div className="vh-profile-appointment-card vh-appointment-upcoming">
-                <div className="vh-appointment-card-header">
-                  <div className="vh-appointment-status-label-upcoming">
-                    <Calendar size={13} style={{ marginRight: '4px' }} />
-                    <span>SẮP TỚI • 15 TH10, 2024</span>
-                  </div>
-                </div>
-                <h4 className="vh-appointment-card-title font-header">Thử đồ & Đo may</h4>
-                <div className="vh-appointment-card-detail-item">
-                  <MapPin size={14} className="vh-appointment-icon-muted" />
-                  <span>Showroom Nam Kỳ Khởi Nghĩa, Q.1</span>
-                </div>
-                <div className="vh-appointment-card-footer">
-                  <span className="vh-appointment-time-badge font-header">09:30 AM</span>
-                  <a href="#appointment-details" className="vh-appointment-action-link" onClick={(e) => { e.preventDefault(); toast.success('Đang hiển thị chi tiết lịch hẹn sắp tới!'); }}>
-                    Chi tiết
-                  </a>
-                </div>
-              </div>
-
-              {/* Card 2: Completed appointment */}
-              <div className="vh-profile-appointment-card vh-appointment-past">
-                <div className="vh-appointment-card-header">
-                  <div className="vh-appointment-status-label-past">
-                    <History size={13} style={{ marginRight: '4px' }} />
-                    <span>ĐÃ QUA • 02 TH09, 2024</span>
-                  </div>
-                </div>
-                <h4 className="vh-appointment-card-title font-header">Tư vấn Bộ sưu tập "Sắc Son"</h4>
-                <div className="vh-appointment-card-detail-item">
-                  <User size={14} className="vh-appointment-icon-muted" />
-                  <span>Chuyên gia: Linh Nguyen</span>
-                </div>
-                <div className="vh-appointment-card-footer">
-                  <span className="vh-appointment-status-success font-header">Hoàn thành</span>
-                  <a href="#rebook" className="vh-appointment-action-link" onClick={(e) => { e.preventDefault(); toast.success('Khởi tạo đặt lịch tư vấn lại bộ sưu tập!'); }}>
-                    Đặt lại
-                  </a>
-                </div>
-              </div>
-
-              {/* Card 3: Create new appointment dashed card */}
-              <button 
-                className="vh-profile-appointment-card-dashed-btn"
-                onClick={() => toast.success('Khởi chạy trình đặt lịch hẹn dịch vụ di sản cá nhân hóa!')}
-              >
-                <div className="vh-appointment-dashed-circle">
-                  <Plus size={24} />
-                </div>
-                <h4 className="vh-appointment-dashed-title font-header">Đặt lịch hẹn mới</h4>
-                <p className="vh-appointment-dashed-desc">Trải nghiệm dịch vụ cá nhân hóa</p>
-              </button>
-            </div>
-          )}
-
-          {/* Tab 2: Rented Items */}
-          {activeTab === 'rentals' && (
-            <div className="vh-profile-rentals-grid-layout animate-fade-in">
-              {rentedItems.map((item) => (
-                <div key={item.id} className="vh-profile-rental-product-card">
-                  <div className="vh-profile-rental-img-wrapper">
-                    <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
-                    <span className={`vh-profile-rental-status-badge ${item.status === 'ĐÃ TRẢ' ? 'status-returned' : 'status-renting'}`}>
-                      {item.status}
-                    </span>
-                  </div>
-                  <div className="vh-profile-rental-details">
-                    <div className="vh-profile-rental-name-row">
-                      <h4 className="vh-profile-rental-name font-header">{item.name}</h4>
-                      <span className="vh-profile-rental-date">{item.rentalDate}</span>
-                    </div>
-                    <span className="vh-profile-rental-material">{item.material}</span>
-                    <div className="vh-profile-rental-price-row">
-                      <div className="vh-profile-rental-price-sub">
-                        <span>Tổng thanh toán</span>
-                        <strong className="font-header">{item.price}</strong>
-                      </div>
-                      <button className="vh-btn vh-btn-outline vh-btn-sm" style={{ padding: '6px 14px', fontSize: '12px', borderRadius: '6px' }} onClick={() => toast.success(`Mở hóa đơn điện tử cho tà áo ${item.name}`)}>
-                        Hóa đơn
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Tab 3: Favorite items list */}
-          {activeTab === 'favorites' && (
-            <div className="vh-profile-favorites-grid-layout animate-fade-in">
-              {favorites.length === 0 ? (
-                <div className="vh-favorites-empty-state">
-                  <Heart size={40} className="text-stone-300 mb-2" />
-                  <p className="text-stone-500">Danh sách yêu thích trống.</p>
-                </div>
-              ) : (
-                favorites.map((item) => (
-                  <div key={item.id} className="vh-profile-rental-product-card">
-                    <div className="vh-profile-rental-img-wrapper">
-                      <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
-                      <button 
-                        className="vh-profile-favorite-heart-active-btn" 
-                        onClick={() => handleRemoveFavorite(item.id, item.name)}
-                        title="Xóa khỏi yêu thích"
-                      >
-                        <Heart size={16} fill="currentColor" />
-                      </button>
-                    </div>
-                    <div className="vh-profile-rental-details">
-                      <h4 className="vh-profile-rental-name font-header">{item.name}</h4>
-                      <span className="vh-profile-rental-material">{item.material}</span>
-                      <div className="vh-profile-rental-price-row" style={{ marginTop: '16px' }}>
-                        <strong className="font-header" style={{ fontSize: '18px', color: 'var(--color-text-primary)' }}>{item.price}</strong>
-                        <button className="vh-btn vh-btn-primary vh-btn-sm" style={{ padding: '6px 14px', fontSize: '12px', borderRadius: '6px' }} onClick={() => toast.success(`Khởi tạo đặt mua ${item.name}!`)}>
-                          Đặt ngay
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* Tab 4: Payments history Table */}
-          {activeTab === 'payments' && (
-            <div className="vh-profile-payments-table-wrapper animate-fade-in">
-              <table className="vh-profile-payments-table">
-                <thead>
-                  <tr>
-                    <th>Mã giao dịch</th>
-                    <th>Ngày thanh toán</th>
-                    <th>Dịch vụ / Trang phục</th>
-                    <th>Số tiền</th>
-                    <th>Phương thức</th>
-                    <th>Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paymentHistory.map((payment) => (
-                    <tr key={payment.id}>
-                      <td className="font-header font-bold text-stone-900">{payment.id}</td>
-                      <td>{payment.date}</td>
-                      <td>{payment.service}</td>
-                      <td className="font-bold text-stone-950">{payment.amount}</td>
-                      <td className="text-stone-500 text-xs">{payment.method}</td>
-                      <td>
-                        <span className="vh-profile-payment-status-success-badge">
-                          <Check size={10} style={{ marginRight: '3px' }} />
-                          <span>{payment.status}</span>
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        {user?.roles?.includes('PROVIDER') ? (
+          <ProviderDashboard />
+        ) : (
+          <CustomerDashboard />
+        )}
       </section>
 
       {/* AI Recommendation Showcase Section */}

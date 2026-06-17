@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { ROUTES } from '../config/routes';
-import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings } from 'lucide-react';
+import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X } from 'lucide-react';
 import { API_BASE_URL } from '../config/env';
+import { AIChatBot } from '../features/dashboard/components/AIChatBot';
 
 export const MainLayout: React.FC = () => {
   const { isAuthenticated, user, logout } = useAuth();
@@ -11,6 +12,7 @@ export const MainLayout: React.FC = () => {
   const location = useLocation();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -232,6 +234,76 @@ export const MainLayout: React.FC = () => {
           </div>
         </div>
       </footer>
+      {/* AI ChatBot Floating Widget */}
+      {isAuthenticated && (
+        <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999 }}>
+          {isChatOpen && (
+            <div style={{
+              position: 'absolute',
+              bottom: '72px',
+              right: '0',
+              width: '380px',
+              height: '520px',
+              background: 'white',
+              borderRadius: '16px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              border: '1px solid rgba(139, 90, 43, 0.15)',
+            }}>
+              {/* Chat Header */}
+              <div style={{
+                background: 'linear-gradient(135deg, #8B5A2B 0%, #6B4226 100%)',
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                color: 'white',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={18} />
+                  <span style={{ fontWeight: 600, fontSize: '14px' }}>Trợ Lý AI Áo Dài</span>
+                </div>
+                <button
+                  onClick={() => setIsChatOpen(false)}
+                  style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '2px' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              {/* Chat Content */}
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <AIChatBot />
+              </div>
+            </div>
+          )}
+
+          {/* Floating Toggle Button */}
+          <button
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            title="Trợ Lý AI"
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              background: isChatOpen
+                ? 'linear-gradient(135deg, #6B4226 0%, #4a2e1a 100%)'
+                : 'linear-gradient(135deg, #8B5A2B 0%, #C49A6C 100%)',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 20px rgba(139, 90, 43, 0.5)',
+              transition: 'all 0.3s ease',
+              color: 'white',
+            }}
+          >
+            {isChatOpen ? <X size={24} /> : <Sparkles size={24} />}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -25,10 +25,22 @@ export interface ContractSignature {
 
 @Schema({ collection: 'digital_contracts', timestamps: true })
 export class DigitalContract {
-  @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, unique: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'Booking',
+    required: true,
+    unique: true,
+    index: true,
+  })
   bookingId: Types.ObjectId;
 
-  @Prop({ required: true, unique: true, index: true, trim: true, uppercase: true })
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    trim: true,
+    uppercase: true,
+  })
   contractCode: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
@@ -74,4 +86,5 @@ export class DigitalContract {
   status: ContractStatus;
 }
 
-export const DigitalContractSchema = SchemaFactory.createForClass(DigitalContract);
+export const DigitalContractSchema =
+  SchemaFactory.createForClass(DigitalContract);

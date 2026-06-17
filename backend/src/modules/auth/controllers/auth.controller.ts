@@ -72,15 +72,8 @@ export class AuthController {
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
-  logout(
-    @CurrentUser() user: AuthUser,
-    @Req() request: RequestMeta,
-  ): Promise<Record<string, unknown>> {
-    return this.authService.logout(
-      user.sub,
-      user.sessionId,
-      this.context(request),
-    );
+  logout(@CurrentUser() user: AuthUser): Promise<Record<string, unknown>> {
+    return this.authService.logout(user.sub, user.sessionId);
   }
 
   @Post('change-password')
@@ -88,13 +81,8 @@ export class AuthController {
   changePassword(
     @CurrentUser() user: AuthUser,
     @Body() dto: ChangePasswordDto,
-    @Req() request: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    return this.authService.changePassword(
-      user.sub,
-      dto,
-      this.context(request),
-    );
+    return this.authService.changePassword(user.sub, dto);
   }
 
   @Post('forgot-password')
@@ -107,9 +95,8 @@ export class AuthController {
   @Post('reset-password')
   resetPassword(
     @Body() dto: ResetPasswordDto,
-    @Req() request: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    return this.authService.resetPassword(dto, this.context(request));
+    return this.authService.resetPassword(dto);
   }
 
   @Get('google')

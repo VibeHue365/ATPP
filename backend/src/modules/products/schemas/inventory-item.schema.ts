@@ -22,7 +22,13 @@ export class InventoryItem {
   @Prop({ type: Types.ObjectId, ref: 'Product', required: true, index: true })
   productId: Types.ObjectId;
 
-  @Prop({ required: true, unique: true, index: true, trim: true, uppercase: true })
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    trim: true,
+    uppercase: true,
+  })
   sku: string;
 
   @Prop({ required: true, trim: true, uppercase: true })

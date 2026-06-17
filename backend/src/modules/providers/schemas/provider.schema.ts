@@ -64,7 +64,13 @@ export interface ProviderRating {
 
 @Schema({ collection: 'providers', timestamps: true })
 export class Provider {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, unique: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'User',
+    required: true,
+    unique: true,
+    index: true,
+  })
   userId: Types.ObjectId;
 
   @Prop({ required: true, trim: true })
