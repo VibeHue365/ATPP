@@ -13,6 +13,8 @@ import PublicRoute from './PublicRoute';
 // Pages
 import LandingPage from '../pages/LandingPage';
 import { AoDaiListingPage } from '../pages/rentals/AoDaiListingPage';
+import { ProductDetailPage } from '../pages/rentals/ProductDetailPage';
+import { PhotographersListingPage } from '../pages/photographers/PhotographersListingPage';
 import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
 import VerifyOtpPage from '../pages/auth/VerifyOtpPage';
@@ -30,6 +32,8 @@ export const AppRouter: React.FC = () => {
       <Route element={<MainLayout />}>
         <Route path={ROUTES.LANDING} element={<LandingPage />} />
         <Route path={ROUTES.RENTALS} element={<AoDaiListingPage />} />
+        <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
+        <Route path={ROUTES.PHOTOGRAPHERS} element={<PhotographersListingPage />} />
       </Route>
 
       {/* Google OAuth Callback Handler */}

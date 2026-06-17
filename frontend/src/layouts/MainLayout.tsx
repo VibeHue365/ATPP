@@ -85,12 +85,12 @@ export const MainLayout: React.FC = () => {
               Cho thuê
             </Link>
 
-            <a 
-              href="/#photographers" 
-              className={`vh-header-nav-link-custom ${location.hash === '#photographers' ? 'active' : ''}`}
+            <Link 
+              to={ROUTES.PHOTOGRAPHERS} 
+              className={`vh-header-nav-link-custom ${location.pathname === ROUTES.PHOTOGRAPHERS ? 'active' : ''}`}
             >
               Nhiếp ảnh
-            </a>
+            </Link>
 
             <a 
               href="/#heritage" 
