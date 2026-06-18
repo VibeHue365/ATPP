@@ -23,6 +23,10 @@ export class ProductsService {
     return this.connection.db!.collection('categories').find({ status: 'ACTIVE' }).toArray();
   }
 
+  async getProductById(productId: string): Promise<ProductDocument | null> {
+    return this.productsRepository.findById(new Types.ObjectId(productId));
+  }
+
   async getMyProducts(userId: string): Promise<ProductDocument[]> {
     const user = await this.usersRepository.findUserById(new Types.ObjectId(userId));
     if (!user || !user.provider || !user.provider.providerId) {
