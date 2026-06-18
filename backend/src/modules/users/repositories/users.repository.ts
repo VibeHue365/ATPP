@@ -8,6 +8,7 @@ import {
   UserDocument,
   UserProfile,
   UserStatus,
+  UserNotificationSettings,
 } from '../schemas/user.schema';
 
 @Injectable()
@@ -172,6 +173,16 @@ export class UsersRepository {
         $set: { 'security.lastLoginAt': new Date() },
         $unset: { 'security.lockedUntil': '' },
       },
+    );
+  }
+
+  async updateNotificationSettings(
+    userId: Types.ObjectId,
+    settings: UserNotificationSettings,
+  ): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: userId },
+      { $set: { notificationSettings: settings } },
     );
   }
 }

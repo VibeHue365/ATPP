@@ -7,6 +7,7 @@ import {
 import { Types } from 'mongoose';
 import { UserProfile } from '../schemas/user.schema';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
+import { UpdateNotificationSettingsDto } from '../dto/update-notification-settings.dto';
 import { UserProfileMapper } from '../mappers/user-profile.mapper';
 import { UsersRepository } from '../repositories/users.repository';
 
@@ -109,5 +110,20 @@ export class UsersService {
 
   private normalizePhone(phone: string): string {
     return phone.replace(/\s/g, '');
+  }
+
+  async updateNotificationSettings(
+    userId: string,
+    dto: UpdateNotificationSettingsDto,
+    roles: string[] = [],
+  ): Promise<Record<string, unknown>> {
+    const userObjectId = this.toObjectId(userId);
+    const user = await this.usersRepository.findUserById(userObjectId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.usersRepository.updateNotificationSettings(userObjectId, dto);
+    return this.getMe(userId, roles);
   }
 }

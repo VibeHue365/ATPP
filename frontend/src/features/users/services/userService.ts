@@ -3,6 +3,7 @@ import type {
   BackendUserProfileResponse,
   UserProfile,
   UpdateProfileDto,
+  UserNotificationSettings,
 } from '../types/users.types';
 
 const normalizeUserProfile = (response: BackendUserProfileResponse): UserProfile => {
@@ -22,6 +23,7 @@ const normalizeUserProfile = (response: BackendUserProfileResponse): UserProfile
     roles: response.roles,
     status: response.status,
     createdAt: response.createdAt,
+    notificationSettings: response.notificationSettings,
   };
 };
 
@@ -38,6 +40,11 @@ export const userService = {
 
   async updateAvatar(formData: FormData): Promise<UserProfile> {
     const response = await httpClient.patch<BackendUserProfileResponse>('/users/me/avatar', formData);
+    return normalizeUserProfile(response);
+  },
+
+  async updateNotificationSettings(payload: UserNotificationSettings): Promise<UserProfile> {
+    const response = await httpClient.patch<BackendUserProfileResponse>('/users/me/notification-settings', payload);
     return normalizeUserProfile(response);
   },
 };

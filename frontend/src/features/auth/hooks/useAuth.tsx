@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { authService } from "../services/authService";
 import { userService } from "../../users/services/userService";
-import type { UserProfile } from "../../users/types/users.types";
+import type { UserProfile, UserNotificationSettings } from "../../users/types/users.types";
 import { tokenStorage } from "../../../services/tokenStorage";
 
 interface AuthContextType {
@@ -18,6 +18,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateProfile: (payload: any) => Promise<void>;
   updateAvatar: (formData: FormData) => Promise<void>;
+  updateNotificationSettings: (payload: UserNotificationSettings) => Promise<void>;
   setSession: (accessToken: string, refreshToken: string) => Promise<void>;
   clearError: () => void;
 }
@@ -170,6 +171,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const updateNotificationSettings = async (payload: UserNotificationSettings) => {
+    setError(null);
+    try {
+      const updated = await userService.updateNotificationSettings(payload);
+      setUser(updated);
+    } catch (err: any) {
+      setError(err.message || "Updating notification settings failed");
+      throw err;
+    }
+  };
+
   const setSession = async (accessToken: string, refreshToken: string) => {
     tokenStorage.saveTokens(accessToken, refreshToken, true);
     setIsLoading(true);
@@ -195,6 +207,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         logout,
         updateProfile,
         updateAvatar,
+        updateNotificationSettings,
         setSession,
         clearError,
       }}

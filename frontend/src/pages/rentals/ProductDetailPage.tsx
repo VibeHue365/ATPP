@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { chatService } from '../../services/chatService';
 import { 
   Heart, 
   Star, 
@@ -36,6 +37,7 @@ interface ProductDetail {
   };
   providerId: {
     _id: string;
+    userId?: string;
     businessName: string;
     contact?: {
       email: string;
@@ -405,6 +407,20 @@ export const ProductDetailPage: React.FC = () => {
     addToCart(cartPayload);
     toast.success('Đã thêm sản phẩm áo dài vào giỏ hàng!');
     navigate(ROUTES.CART);
+  };
+
+  const handleStartChat = async () => {
+    const partnerUserId = product?.providerId?.userId || (product?.providerId as any)?._id;
+    if (!partnerUserId) {
+      toast.error('Không tìm thấy thông tin liên hệ của cửa hàng.');
+      return;
+    }
+    try {
+      const room = await chatService.getOrCreateRoom(partnerUserId);
+      navigate(ROUTES.CHAT, { state: { activeRoomId: room.id } });
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể bắt đầu trò chuyện với cửa hàng.');
+    }
   };
 
   if (loading) {
@@ -943,6 +959,23 @@ export const ProductDetailPage: React.FC = () => {
               >
                 <span>THUÊ NGAY</span>
                 <ArrowRight size={18} />
+              </button>
+
+              <button 
+                onClick={handleStartChat}
+                className="vh-btn vh-btn-outline vh-btn-lg" 
+                style={{ 
+                  width: '100%', 
+                  borderRadius: '12px', 
+                  fontSize: '16px', 
+                  height: '54px', 
+                  fontWeight: 700,
+                  border: '1.5px solid #6b0c22',
+                  backgroundColor: 'transparent',
+                  color: '#6b0c22'
+                }}
+              >
+                <span>NHẮN TIN CHO CỬA HÀNG</span>
               </button>
 
               {/* COMBO BANNER */}

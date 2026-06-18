@@ -1,3 +1,15 @@
+export interface ChannelSettings {
+  email: boolean;
+  app: boolean;
+}
+
+export interface UserNotificationSettings {
+  booking: ChannelSettings;
+  finance: ChannelSettings;
+  schedule: ChannelSettings;
+  system: ChannelSettings;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -11,6 +23,7 @@ export interface UserProfile {
   roles?: string[];
   status?: string;
   createdAt?: string;
+  notificationSettings?: UserNotificationSettings;
 }
 
 export interface BackendUserProfileResponse {
@@ -28,6 +41,7 @@ export interface BackendUserProfileResponse {
     dateOfBirth?: string;
     avatarUrl?: string | null;
   } | null;
+  notificationSettings?: UserNotificationSettings;
 }
 
 export interface UpdateProfileDto {

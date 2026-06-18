@@ -16,4 +16,5 @@ export const ROUTES = {
   PRODUCT_DETAIL: '/rentals/:id',
   PHOTOGRAPHER_DETAIL: '/photographers/:id',
   CART: '/cart',
+  CHAT: '/dashboard/chat',
 } as const;

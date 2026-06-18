@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
+import { UpdateNotificationSettingsDto } from '../dto/update-notification-settings.dto';
 import { UsersService } from '../services/users.service';
 
 interface RequestMeta {
@@ -96,6 +97,18 @@ export class UsersController {
       file,
       request.ip,
       this.userAgent(request),
+      user.roles,
+    );
+  }
+
+  @Patch('me/notification-settings')
+  updateNotificationSettings(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateNotificationSettingsDto,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.updateNotificationSettings(
+      user.sub,
+      dto,
       user.roles,
     );
   }

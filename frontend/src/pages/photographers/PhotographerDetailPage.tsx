@@ -4,6 +4,7 @@ import { useCart } from '../../context/CartContext';
 import { useToast } from '../../components/feedback/Toast';
 import { httpClient } from '../../services/httpClient';
 import { ROUTES } from '../../config/routes';
+import { chatService } from '../../services/chatService';
 import { 
   MapPin, Star, ArrowRight, Upload, ChevronLeft, ChevronRight, CheckCircle, AlertCircle
 } from 'lucide-react';
@@ -21,6 +22,7 @@ interface Package {
 
 interface PhotographerDetails {
   _id: string;
+  userId?: string;
   businessName: string;
   rating: {
     averageRating: number;
@@ -502,6 +504,20 @@ export const PhotographerDetailPage: React.FC = () => {
       setBookingSuccess(true);
     } finally {
       setIsBookingNow(false);
+    }
+  };
+
+  const handleStartChat = async () => {
+    const partnerUserId = photographer?.userId || (photographer as any)?._id;
+    if (!partnerUserId) {
+      toast.error('Không tìm thấy thông tin liên hệ của nhiếp ảnh gia.');
+      return;
+    }
+    try {
+      const room = await chatService.getOrCreateRoom(partnerUserId);
+      navigate(ROUTES.CHAT, { state: { activeRoomId: room.id } });
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể bắt đầu trò chuyện với nhiếp ảnh gia.');
     }
   };
 
@@ -1144,6 +1160,32 @@ export const PhotographerDetailPage: React.FC = () => {
                   }}
                 >
                   <span>THÊM VÀO GIỎ HÀNG</span>
+                  <ArrowRight size={16} />
+                </button>
+
+                {/* NHẮN TIN CHO THỢ */}
+                <button
+                  onClick={handleStartChat}
+                  className="vh-btn"
+                  style={{
+                    width: '100%',
+                    borderRadius: '12px',
+                    padding: '13px 20px',
+                    fontWeight: 700,
+                    fontSize: '14px',
+                    backgroundColor: 'transparent',
+                    color: '#6b0c22',
+                    border: '1.5px solid #6b0c22',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    letterSpacing: '0.04em',
+                    marginTop: '10px'
+                  }}
+                >
+                  <span>NHẮN TIN CHO THỢ</span>
                   <ArrowRight size={16} />
                 </button>
               </div>

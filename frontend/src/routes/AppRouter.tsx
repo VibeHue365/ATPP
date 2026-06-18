@@ -25,6 +25,7 @@ import ResetPasswordPage from '../pages/auth/ResetPasswordPage';
 import OAuthCallback from '../pages/auth/OAuthCallback';
 import ProfilePage from '../pages/dashboard/ProfilePage';
 import SettingsPage from '../pages/dashboard/SettingsPage';
+import ChatPage from '../pages/chat/ChatPage';
 import NotFoundPage from '../pages/errors/NotFoundPage';
 import OnboardingPage from '../pages/onboarding/OnboardingPage';
 import ProviderDashboard from '../pages/providerdashboard/ProviderDashboard';
@@ -69,6 +70,7 @@ export const AppRouter: React.FC = () => {
           <Route path={ROUTES.DASHBOARD} element={<Navigate to={ROUTES.PROFILE} replace />} />
           <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+          <Route path={ROUTES.CHAT} element={<ChatPage />} />
         </Route>
       </Route>
 

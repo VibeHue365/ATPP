@@ -111,6 +111,18 @@ export interface UserSecurity {
   lockedUntil?: Date | null;
 }
 
+export interface ChannelSettings {
+  email: boolean;
+  app: boolean;
+}
+
+export interface UserNotificationSettings {
+  booking: ChannelSettings;
+  finance: ChannelSettings;
+  schedule: ChannelSettings;
+  system: ChannelSettings;
+}
+
 @Schema({ collection: 'users', timestamps: true })
 export class User {
   @Prop({
@@ -259,6 +271,17 @@ export class User {
 
   @Prop({ type: Date, default: null, index: true })
   deletedAt?: Date | null;
+
+  @Prop({
+    type: Object,
+    default: {
+      booking: { email: true, app: true },
+      finance: { email: true, app: true },
+      schedule: { email: true, app: true },
+      system: { email: true, app: true },
+    },
+  })
+  notificationSettings: UserNotificationSettings;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

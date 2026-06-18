@@ -14,11 +14,12 @@ import {
   Key
 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/env';
+import type { UserNotificationSettings } from '../../features/users/types/users.types';
 
 type SettingsTab = 'personal' | 'security' | 'notifications' | 'transactions';
 
 export const SettingsPage: React.FC = () => {
-  const { user, updateProfile, updateAvatar } = useAuth();
+  const { user, updateProfile, updateAvatar, updateNotificationSettings } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -37,10 +38,13 @@ export const SettingsPage: React.FC = () => {
   // Avatar states
   const [isUploading, setIsUploading] = useState(false);
 
-  // Notifications Mock States
-  const [emailNotif, setEmailNotif] = useState(true);
-  const [smsNotif, setSmsNotif] = useState(false);
-  const [promoNotif, setPromoNotif] = useState(true);
+  // Notifications Real States
+  const [notifSettings, setNotifSettings] = useState<UserNotificationSettings>({
+    booking: { email: true, app: true },
+    finance: { email: true, app: true },
+    schedule: { email: true, app: true },
+    system: { email: true, app: true },
+  });
 
   // Initialize form with current user details
   useEffect(() => {
@@ -52,6 +56,27 @@ export const SettingsPage: React.FC = () => {
         setDateOfBirth(new Date(user.dateOfBirth).toISOString().split('T')[0]);
       }
       setAddress(localStorage.getItem(`vh_user_address_${user.id}`) || '123 Phố Huế, Quận Hai Bà Trưng, Hà Nội, Việt Nam');
+      
+      if (user.notificationSettings) {
+        setNotifSettings({
+          booking: {
+            email: user.notificationSettings.booking?.email ?? true,
+            app: user.notificationSettings.booking?.app ?? true,
+          },
+          finance: {
+            email: user.notificationSettings.finance?.email ?? true,
+            app: user.notificationSettings.finance?.app ?? true,
+          },
+          schedule: {
+            email: user.notificationSettings.schedule?.email ?? true,
+            app: user.notificationSettings.schedule?.app ?? true,
+          },
+          system: {
+            email: user.notificationSettings.system?.email ?? true,
+            app: user.notificationSettings.system?.app ?? true,
+          },
+        });
+      }
     }
   }, [user]);
 
@@ -409,55 +434,152 @@ export const SettingsPage: React.FC = () => {
 
           {/* Tab 3: Notifications Settings */}
           {activeTab === 'notifications' && (
-            <div className="vh-settings-tab-view animate-fade-in" style={{ maxWidth: '600px' }}>
+            <div className="vh-settings-tab-view animate-fade-in" style={{ maxWidth: '650px' }}>
               <h3 className="vh-settings-section-title font-header">Cài đặt thông báo</h3>
               <p className="text-sm text-stone-500 mb-6">Chọn cách thức bạn muốn nhận thông báo từ Di sản Áo Dài.</p>
               
-              <div className="vh-settings-notifications-list">
-                
-                <div className="vh-settings-notification-item">
-                  <div className="notif-text">
-                    <h4>Thông báo email về dịch vụ</h4>
-                    <p>Nhận các cập nhật email về đơn thuê, đặt lịch thử đồ và trạng thái giao hàng.</p>
-                  </div>
-                  <label className="vh-toggle-switch">
-                    <input 
-                      type="checkbox" 
-                      checked={emailNotif}
-                      onChange={(e) => setEmailNotif(e.target.checked)}
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
+              <div className="vh-settings-notifications-list-new" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {/* Notification Table Header */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px', gap: '16px', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0', fontWeight: 600, color: '#475569', fontSize: '13px' }}>
+                  <div>LOẠI THÔNG BÁO</div>
+                  <div style={{ textAlign: 'center' }}>EMAIL</div>
+                  <div style={{ textAlign: 'center' }}>ỨNG DỤNG</div>
                 </div>
 
-                <div className="vh-settings-notification-item">
-                  <div className="notif-text">
-                    <h4>Tin nhắn SMS nhắc hẹn</h4>
-                    <p>Gửi tin nhắn SMS tự động nhắc nhở lịch hẹn thử đồ trước 2 tiếng.</p>
+                {/* Row 1: Booking */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px', gap: '16px', padding: '16px 0', borderBottom: '1px solid #f1f5f9', alignItems: 'center' }}>
+                  <div>
+                    <h4 style={{ fontWeight: 600, fontSize: '14px', margin: 0, color: '#1e293b' }}>Thông tin đơn hàng & Đặt lịch</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>Cập nhật trạng thái đơn thuê trang phục, đặt lịch thử đồ và lịch chụp hình.</p>
                   </div>
-                  <label className="vh-toggle-switch">
-                    <input 
-                      type="checkbox" 
-                      checked={smsNotif}
-                      onChange={(e) => setSmsNotif(e.target.checked)}
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <label className="vh-toggle-switch">
+                      <input 
+                        type="checkbox" 
+                        checked={notifSettings.booking.email}
+                        onChange={(e) => setNotifSettings(prev => ({
+                          ...prev,
+                          booking: { ...prev.booking, email: e.target.checked }
+                        }))}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <label className="vh-toggle-switch">
+                      <input 
+                        type="checkbox" 
+                        checked={notifSettings.booking.app}
+                        onChange={(e) => setNotifSettings(prev => ({
+                          ...prev,
+                          booking: { ...prev.booking, app: e.target.checked }
+                        }))}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
                 </div>
 
-                <div className="vh-settings-notification-item">
-                  <div className="notif-text">
-                    <h4>Bản tin di sản & Khuyến mãi</h4>
-                    <p>Nhận tin tức về các bộ sưu tập áo dài cổ phong mới và các chương trình ưu đãi.</p>
+                {/* Row 2: Finance */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px', gap: '16px', padding: '16px 0', borderBottom: '1px solid #f1f5f9', alignItems: 'center' }}>
+                  <div>
+                    <h4 style={{ fontWeight: 600, fontSize: '14px', margin: 0, color: '#1e293b' }}>Tài chính & Thanh toán</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>Hóa đơn thanh toán điện tử, hoàn tiền và thông báo biến động số dư ưu đãi.</p>
                   </div>
-                  <label className="vh-toggle-switch">
-                    <input 
-                      type="checkbox" 
-                      checked={promoNotif}
-                      onChange={(e) => setPromoNotif(e.target.checked)}
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <label className="vh-toggle-switch">
+                      <input 
+                        type="checkbox" 
+                        checked={notifSettings.finance.email}
+                        onChange={(e) => setNotifSettings(prev => ({
+                          ...prev,
+                          finance: { ...prev.finance, email: e.target.checked }
+                        }))}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <label className="vh-toggle-switch">
+                      <input 
+                        type="checkbox" 
+                        checked={notifSettings.finance.app}
+                        onChange={(e) => setNotifSettings(prev => ({
+                          ...prev,
+                          finance: { ...prev.finance, app: e.target.checked }
+                        }))}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Row 3: Schedule */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px', gap: '16px', padding: '16px 0', borderBottom: '1px solid #f1f5f9', alignItems: 'center' }}>
+                  <div>
+                    <h4 style={{ fontWeight: 600, fontSize: '14px', margin: 0, color: '#1e293b' }}>Lịch trình nhắc nhở</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>Nhắc nhở trả đồ thuê sắp hết hạn, lịch hẹn chụp hình hoặc thử đồ tại cửa hàng.</p>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <label className="vh-toggle-switch">
+                      <input 
+                        type="checkbox" 
+                        checked={notifSettings.schedule.email}
+                        onChange={(e) => setNotifSettings(prev => ({
+                          ...prev,
+                          schedule: { ...prev.schedule, email: e.target.checked }
+                        }))}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <label className="vh-toggle-switch">
+                      <input 
+                        type="checkbox" 
+                        checked={notifSettings.schedule.app}
+                        onChange={(e) => setNotifSettings(prev => ({
+                          ...prev,
+                          schedule: { ...prev.schedule, app: e.target.checked }
+                        }))}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Row 4: System */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px', gap: '16px', padding: '16px 0', borderBottom: '1px solid #f1f5f9', alignItems: 'center' }}>
+                  <div>
+                    <h4 style={{ fontWeight: 600, fontSize: '14px', margin: 0, color: '#1e293b' }}>Khuyến mãi & Hệ thống</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>Thông tin cập nhật hệ thống, nâng cấp tính năng, khuyến mãi và ưu đãi độc quyền.</p>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <label className="vh-toggle-switch">
+                      <input 
+                        type="checkbox" 
+                        checked={notifSettings.system.email}
+                        onChange={(e) => setNotifSettings(prev => ({
+                          ...prev,
+                          system: { ...prev.system, email: e.target.checked }
+                        }))}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <label className="vh-toggle-switch">
+                      <input 
+                        type="checkbox" 
+                        checked={notifSettings.system.app}
+                        onChange={(e) => setNotifSettings(prev => ({
+                          ...prev,
+                          system: { ...prev.system, app: e.target.checked }
+                        }))}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
                 </div>
 
               </div>
@@ -466,7 +588,15 @@ export const SettingsPage: React.FC = () => {
                 <button 
                   type="button" 
                   className="vh-settings-action-btn-save font-header"
-                  onClick={() => { toast.success('Đã lưu cấu hình thông báo thành công!'); navigate(ROUTES.PROFILE); }}
+                  onClick={async () => {
+                    try {
+                      await updateNotificationSettings(notifSettings);
+                      toast.success('Cập nhật cấu hình thông báo thành công!');
+                      navigate(ROUTES.PROFILE);
+                    } catch (err: any) {
+                      toast.error(err.message || 'Cập nhật cấu hình thông báo thất bại');
+                    }
+                  }}
                 >
                   Lưu cấu hình
                 </button>
