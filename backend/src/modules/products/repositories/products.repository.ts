@@ -29,6 +29,7 @@ export class ProductsRepository {
     return this.productModel
       .findById(id)
       .populate('categoryId')
+      .populate('providerId')
       .exec();
   }
 }
