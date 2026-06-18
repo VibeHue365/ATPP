@@ -15,9 +15,6 @@ import {
   RentalHandover,
   RentalHandoverSchema,
 } from './schemas/rental-handover.schema';
-import { ProductsModule } from '../products/products.module';
-import { BookingsService } from './services/bookings.service';
-import { BookingsController } from './controllers/bookings.controller';
 
 export const bookingModels = MongooseModule.forFeature([
   { name: Cart.name, schema: CartSchema },
@@ -29,9 +26,7 @@ export const bookingModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [bookingModels, ProductsModule],
-  controllers: [BookingsController],
-  providers: [BookingsService],
-  exports: [bookingModels, BookingsService],
+  imports: [bookingModels],
+  exports: [bookingModels],
 })
 export class BookingsModule {}

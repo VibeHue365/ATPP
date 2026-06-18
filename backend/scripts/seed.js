@@ -51,16 +51,6 @@ async function seed() {
   const providerPhotoProfileId = new mongoose.Types.ObjectId();
   const providerBothProfileId = new mongoose.Types.ObjectId();
 
-  const providerMinhTriId = new mongoose.Types.ObjectId();
-  const providerHoangLeId = new mongoose.Types.ObjectId();
-  const providerThanhThuyId = new mongoose.Types.ObjectId();
-  const providerQuocBaoId = new mongoose.Types.ObjectId();
-
-  const providerMinhTriProfileId = new mongoose.Types.ObjectId();
-  const providerHoangLeProfileId = new mongoose.Types.ObjectId();
-  const providerThanhThuyProfileId = new mongoose.Types.ObjectId();
-  const providerQuocBaoProfileId = new mongoose.Types.ObjectId();
-
   const categoryRentalId = new mongoose.Types.ObjectId();
   const categoryPhotoId = new mongoose.Types.ObjectId();
 
@@ -262,158 +252,6 @@ async function seed() {
       security: { failedLoginAttempts: 0 },
       createdAt: new Date(),
       updatedAt: new Date()
-    },
-    {
-      _id: providerMinhTriId,
-      auth: {
-        email: 'minhtri@vibehue.com',
-        emailNormalized: 'minhtri@vibehue.com',
-        phone: '+84900000005',
-        phoneNormalized: '+84900000005',
-        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0',
-        emailVerified: true,
-        phoneVerified: true,
-        authProviders: [{ provider: 'LOCAL', providerUserId: null }]
-      },
-      roles: ['PROVIDER'],
-      defaultRole: 'PROVIDER',
-      accountStatus: 'ACTIVE',
-      profile: {
-        fullName: 'Minh Trí',
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
-        gender: 'MALE',
-        dateOfBirth: new Date('1994-06-15')
-      },
-      preferences: {
-        stylePreferences: [],
-        favoriteColors: [],
-        preferredAoDaiStyles: [],
-        preferredPhotographyStyles: [],
-        sizeInfo: {},
-        budgetRange: {},
-        preferredLocations: []
-      },
-      addresses: [],
-      favorites: [],
-      loyalty: { pointsBalance: 0, membershipLevel: 'BRONZE' },
-      provider: { providerId: providerMinhTriProfileId, providerStatus: 'APPROVED' },
-      security: { failedLoginAttempts: 0 },
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      _id: providerHoangLeId,
-      auth: {
-        email: 'hoangle@vibehue.com',
-        emailNormalized: 'hoangle@vibehue.com',
-        phone: '+84900000006',
-        phoneNormalized: '+84900000006',
-        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0',
-        emailVerified: true,
-        phoneVerified: true,
-        authProviders: [{ provider: 'LOCAL', providerUserId: null }]
-      },
-      roles: ['PROVIDER'],
-      defaultRole: 'PROVIDER',
-      accountStatus: 'ACTIVE',
-      profile: {
-        fullName: 'Hoàng Lê',
-        avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d',
-        gender: 'MALE',
-        dateOfBirth: new Date('1995-08-20')
-      },
-      preferences: {
-        stylePreferences: [],
-        favoriteColors: [],
-        preferredAoDaiStyles: [],
-        preferredPhotographyStyles: [],
-        sizeInfo: {},
-        budgetRange: {},
-        preferredLocations: []
-      },
-      addresses: [],
-      favorites: [],
-      loyalty: { pointsBalance: 0, membershipLevel: 'BRONZE' },
-      provider: { providerId: providerHoangLeProfileId, providerStatus: 'APPROVED' },
-      security: { failedLoginAttempts: 0 },
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      _id: providerThanhThuyId,
-      auth: {
-        email: 'thanhthuy@vibehue.com',
-        emailNormalized: 'thanhthuy@vibehue.com',
-        phone: '+84900000007',
-        phoneNormalized: '+84900000007',
-        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0',
-        emailVerified: true,
-        phoneVerified: true,
-        authProviders: [{ provider: 'LOCAL', providerUserId: null }]
-      },
-      roles: ['PROVIDER'],
-      defaultRole: 'PROVIDER',
-      accountStatus: 'ACTIVE',
-      profile: {
-        fullName: 'Thanh Thủy',
-        avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-        gender: 'FEMALE',
-        dateOfBirth: new Date('1997-04-12')
-      },
-      preferences: {
-        stylePreferences: [],
-        favoriteColors: [],
-        preferredAoDaiStyles: [],
-        preferredPhotographyStyles: [],
-        sizeInfo: {},
-        budgetRange: {},
-        preferredLocations: []
-      },
-      addresses: [],
-      favorites: [],
-      loyalty: { pointsBalance: 0, membershipLevel: 'BRONZE' },
-      provider: { providerId: providerThanhThuyProfileId, providerStatus: 'APPROVED' },
-      security: { failedLoginAttempts: 0 },
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      _id: providerQuocBaoId,
-      auth: {
-        email: 'quocbao@vibehue.com',
-        emailNormalized: 'quocbao@vibehue.com',
-        phone: '+84900000008',
-        phoneNormalized: '+84900000008',
-        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0',
-        emailVerified: true,
-        phoneVerified: true,
-        authProviders: [{ provider: 'LOCAL', providerUserId: null }]
-      },
-      roles: ['PROVIDER'],
-      defaultRole: 'PROVIDER',
-      accountStatus: 'ACTIVE',
-      profile: {
-        fullName: 'Quốc Bảo',
-        avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e',
-        gender: 'MALE',
-        dateOfBirth: new Date('1993-11-02')
-      },
-      preferences: {
-        stylePreferences: [],
-        favoriteColors: [],
-        preferredAoDaiStyles: [],
-        preferredPhotographyStyles: [],
-        sizeInfo: {},
-        budgetRange: {},
-        preferredLocations: []
-      },
-      addresses: [],
-      favorites: [],
-      loyalty: { pointsBalance: 0, membershipLevel: 'BRONZE' },
-      provider: { providerId: providerQuocBaoProfileId, providerStatus: 'APPROVED' },
-      security: { failedLoginAttempts: 0 },
-      createdAt: new Date(),
-      updatedAt: new Date()
     }
   ];
   await db.collection('users').insertMany(users);
@@ -588,138 +426,6 @@ async function seed() {
       approvedBy: adminId,
       createdAt: new Date(),
       updatedAt: new Date()
-    },
-    {
-      _id: providerMinhTriProfileId,
-      userId: providerMinhTriId,
-      businessName: 'Minh Trí',
-      capabilities: ['PHOTOGRAPHY'],
-      contact: {
-        email: 'minhtri@vibehue.com',
-        phone: '+84900000005',
-        website: null
-      },
-      address: {
-        addressLine: '15 Lê Lợi',
-        ward: 'Phú Hội',
-        district: 'Thành phố Huế',
-        city: 'Thừa Thiên Huế'
-      },
-      media: {
-        logoUrl: null,
-        coverUrl: null,
-        images: []
-      },
-      policies: {
-        cancellationPolicy: 'Hủy trước 48h hoàn trả 100% cọc.',
-        rentalPolicy: 'Giao ảnh sau 3 ngày.'
-      },
-      paymentAccounts: [],
-      rating: { averageRating: 4.9, totalReviews: 120 },
-      status: 'APPROVED',
-      approvedAt: new Date(),
-      approvedBy: adminId,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      _id: providerHoangLeProfileId,
-      userId: providerHoangLeId,
-      businessName: 'Hoàng Lê',
-      capabilities: ['PHOTOGRAPHY'],
-      contact: {
-        email: 'hoangle@vibehue.com',
-        phone: '+84900000006',
-        website: null
-      },
-      address: {
-        addressLine: 'Vỹ Dạ',
-        ward: 'Vỹ Dạ',
-        district: 'Thành phố Huế',
-        city: 'Thừa Thiên Huế'
-      },
-      media: {
-        logoUrl: null,
-        coverUrl: null,
-        images: []
-      },
-      policies: {
-        cancellationPolicy: 'Hủy trước 24h.',
-        rentalPolicy: 'Giao ảnh sau 5 ngày.'
-      },
-      paymentAccounts: [],
-      rating: { averageRating: 4.8, totalReviews: 95 },
-      status: 'APPROVED',
-      approvedAt: new Date(),
-      approvedBy: adminId,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      _id: providerThanhThuyProfileId,
-      userId: providerThanhThuyId,
-      businessName: 'Thanh Thủy',
-      capabilities: ['PHOTOGRAPHY'],
-      contact: {
-        email: 'thanhthuy@vibehue.com',
-        phone: '+84900000007',
-        website: null
-      },
-      address: {
-        addressLine: 'Đại Nội',
-        ward: 'Thuận Thành',
-        district: 'Thành phố Huế',
-        city: 'Thừa Thiên Huế'
-      },
-      media: {
-        logoUrl: null,
-        coverUrl: null,
-        images: []
-      },
-      policies: {
-        cancellationPolicy: 'Không hoàn cọc chụp.',
-        rentalPolicy: 'Giao ảnh sau 7 ngày.'
-      },
-      paymentAccounts: [],
-      rating: { averageRating: 5.0, totalReviews: 110 },
-      status: 'APPROVED',
-      approvedAt: new Date(),
-      approvedBy: adminId,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      _id: providerQuocBaoProfileId,
-      userId: providerQuocBaoId,
-      businessName: 'Quốc Bảo',
-      capabilities: ['PHOTOGRAPHY'],
-      contact: {
-        email: 'quocbao@vibehue.com',
-        phone: '+84900000008',
-        website: null
-      },
-      address: {
-        addressLine: 'Trần Phú',
-        ward: 'Minh An',
-        district: 'Hội An',
-        city: 'Quảng Nam'
-      },
-      media: {
-        logoUrl: null,
-        coverUrl: null,
-        images: []
-      },
-      policies: {
-        cancellationPolicy: 'Đổi lịch trước 3 ngày.',
-        rentalPolicy: 'Giao ảnh sau 4 ngày.'
-      },
-      paymentAccounts: [],
-      rating: { averageRating: 4.7, totalReviews: 85 },
-      status: 'APPROVED',
-      approvedAt: new Date(),
-      approvedBy: adminId,
-      createdAt: new Date(),
-      updatedAt: new Date()
     }
   ];
   await db.collection('providers').insertMany(providers);
@@ -789,9 +495,8 @@ async function seed() {
       slug: 'ao-dai-trang-nu-truyen-thong-lua-ha-dong',
       description: 'Chất liệu lụa tơ tằm Hà Đông mềm mại, tôn dáng nữ tính Việt Nam.',
       images: ['https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'],
-      basePrice: 250000,    // 250k / ngày
-      hourlyPrice: 50000,   // 50k / giờ (tối thiểu 2 giờ = 100k)
-      depositAmount: 500000,
+      basePrice: 250000, // 250k / day
+      depositAmount: 500000, // 500k deposit
       sizes: ['S', 'M', 'L'],
       colors: ['WHITE'],
       materials: ['SILK'],
@@ -807,9 +512,8 @@ async function seed() {
       name: 'Áo Dài Gấm Đỏ Hoàng Gia Thêu Phượng',
       slug: 'ao-dai-gam-do-hoang-gia-theu-phuong',
       description: 'Thích hợp cho ngày cưới hỏi, lễ hội truyền thống, gấm thêu sang trọng.',
-      images: ['https://images.unsplash.com/photo-1621184455862-c163dfb30e0f'],
-      basePrice: 400000,    // 400k / ngày
-      hourlyPrice: 80000,   // 80k / giờ (tối thiểu 2 giờ = 160k)
+      images: ['https://images.unsplash.com/photo-1596462502278-27bfdc403348'],
+      basePrice: 400000,
       depositAmount: 1000000,
       sizes: ['M', 'L', 'XL'],
       colors: ['RED', 'GOLD'],
@@ -962,74 +666,6 @@ async function seed() {
       images: ['https://images.unsplash.com/photo-1542038784456-1ea8e935640e'],
       status: 'ACTIVE',
       rating: { averageRating: 4.9, totalReviews: 8 },
-      createdAt: new Date()
-    },
-    {
-      providerId: providerMinhTriProfileId,
-      name: 'Gói Cổ phục Huế Cung Đình',
-      slug: 'goi-co-phuc-hue-cung-dinh',
-      description: 'Chuyên Huế / Hoài cổ • 5 năm kn. Phong cách trầm mặc cổ kính tại Đại Nội.',
-      price: 2500000,
-      durationHours: 4,
-      editedPhotosCount: 25,
-      rawPhotosCount: 200,
-      deliveryDays: 3,
-      travelFeeNotes: 'Miễn phí di chuyển Đại Nội',
-      overtimeFeePerHour: 150000,
-      images: ['https://images.unsplash.com/photo-1621184455862-c163dfb30e0f'],
-      status: 'ACTIVE',
-      rating: { averageRating: 4.9, totalReviews: 120 },
-      createdAt: new Date()
-    },
-    {
-      providerId: providerHoangLeProfileId,
-      name: 'Gói Nàng Thơ Trữ Tình',
-      slug: 'goi-nang-tho-tru-tinh',
-      description: 'Nàng thơ / Tự nhiên • 3 năm kn. Phong cách thơ mộng, lãng mạn bên bờ Sông Hương.',
-      price: 1800000,
-      durationHours: 3,
-      editedPhotosCount: 20,
-      rawPhotosCount: 150,
-      deliveryDays: 5,
-      travelFeeNotes: 'Đã bao gồm phí di chuyển',
-      overtimeFeePerHour: 100000,
-      images: ['https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'],
-      status: 'ACTIVE',
-      rating: { averageRating: 4.8, totalReviews: 95 },
-      createdAt: new Date()
-    },
-    {
-      providerId: providerThanhThuyProfileId,
-      name: 'Gói Chân Dung Nghệ Thuật Cao Cấp',
-      slug: 'goi-chan-dung-nghe-thuat-cao-cap',
-      description: 'Chân dung nghệ thuật • 7 năm kn. Bắt trọn vẻ đẹp chiều sâu gương mặt.',
-      price: 3200000,
-      durationHours: 5,
-      editedPhotosCount: 30,
-      rawPhotosCount: 300,
-      deliveryDays: 7,
-      travelFeeNotes: 'Đã bao gồm',
-      overtimeFeePerHour: 200000,
-      images: ['https://images.unsplash.com/photo-1524504388940-b1c1722653e1'],
-      status: 'ACTIVE',
-      rating: { averageRating: 5.0, totalReviews: 110 },
-      createdAt: new Date()
-    },
-    {
-      providerId: providerQuocBaoProfileId,
-      name: 'Gói Phố Cổ Film Look',
-      slug: 'goi-pho-co-film-look',
-      description: 'Phố cổ / Film look • 4 năm kn. Màu ảnh film hoài niệm đặc trưng Hội An.',
-      price: 2000000,
-      durationHours: 4,
-      editedPhotosCount: 20,
-      rawPhotosCount: 180,
-      deliveryDays: 4,
-      travelFeeNotes: 'Đã bao gồm phí Hội An',
-      overtimeFeePerHour: 120000,
-      images: ['https://images.unsplash.com/photo-1517841905240-472988babdf9'],
-      status: 'ACTIVE',
-      rating: { averageRating: 4.7, totalReviews: 85 },
       createdAt: new Date()
     }
   ];

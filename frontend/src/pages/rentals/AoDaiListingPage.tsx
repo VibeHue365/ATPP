@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Heart, Star, ChevronDown, Sparkles, ShoppingCart } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
 
@@ -37,7 +36,6 @@ const translateMaterial = (mat: string): string => {
 };
 
 export const AoDaiListingPage: React.FC = () => {
-  const navigate = useNavigate();
   const [products, setProducts] = useState<ProductFromDb[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductFromDb[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -211,8 +209,8 @@ export const AoDaiListingPage: React.FC = () => {
   };
 
   return (
-    <div style={{ backgroundColor: '#FAFAF8', minHeight: '100vh', padding: '40px 0' }}>
-      <div style={{ maxWidth: '1500px', width: '100%', margin: '0 auto', padding: '0 40px', display: 'grid', gridTemplateColumns: '280px 1fr', gap: '40px', alignItems: 'start' }}>
+    <div className="vh-listing-page bg-stone-50/50" style={{ width: '100%', minHeight: '100vh', padding: '40px 0' }}>
+      <div className="max-w-[1600px] w-full px-6 md:px-12 mx-auto" style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '40px' }}>
         
         {/* LEFT COLUMN: Filters Sidebar */}
         <aside className="vh-filter-sidebar">
@@ -426,11 +424,7 @@ export const AoDaiListingPage: React.FC = () => {
 
                       {/* Premium Hover Overlay */}
                       <div className="vh-card-hover-overlay">
-                        <button 
-                          className="vh-btn vh-btn-primary vh-btn-sm" 
-                          style={{ flex: 1, borderRadius: '6px', fontSize: '12px', padding: '8px 12px' }}
-                          onClick={() => navigate(`/rentals/${p._id}`)}
-                        >
+                        <button className="vh-btn vh-btn-primary vh-btn-sm" style={{ flex: 1, borderRadius: '6px', fontSize: '12px', padding: '8px 12px' }}>
                           Thuê ngay
                         </button>
                         <button 

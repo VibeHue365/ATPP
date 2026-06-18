@@ -1,7 +1,6 @@
 export const ROUTES = {
   LANDING: '/',
   RENTALS: '/rentals',
-  PHOTOGRAPHERS: '/photographers',
   LOGIN: '/auth/login',
   REGISTER: '/auth/register',
   VERIFY_EMAIL: '/auth/verify-email',
@@ -13,7 +12,4 @@ export const ROUTES = {
   SETTINGS: '/dashboard/settings',
   PROVIDER_DASHBOARD: '/provider/dashboard',
   OAUTH_CALLBACK: '/oauth/callback',
-  PRODUCT_DETAIL: '/rentals/:id',
-  PHOTOGRAPHER_DETAIL: '/photographers/:id',
-  CART: '/cart',
 } as const;

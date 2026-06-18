@@ -20,6 +20,7 @@ import {
 import { ProductsRepository } from './repositories/products.repository';
 import { ProductsService } from './services/products.service';
 import { ProductsController } from './controllers/products.controller';
+import { UsersModule } from '../users/users.module';
 
 export const productModels = MongooseModule.forFeature([
   { name: Category.name, schema: CategorySchema },
@@ -33,7 +34,7 @@ export const productModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [productModels],
+  imports: [productModels, UsersModule],
   controllers: [ProductsController],
   providers: [ProductsService, ProductsRepository],
   exports: [productModels, ProductsService],
