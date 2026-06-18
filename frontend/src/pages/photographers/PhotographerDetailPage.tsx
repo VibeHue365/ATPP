@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../components/feedback/Toast';
 import { httpClient } from '../../services/httpClient';
@@ -7,6 +7,7 @@ import { ROUTES } from '../../config/routes';
 import { 
   MapPin, Star, ArrowRight, Upload, ChevronLeft, ChevronRight, CheckCircle, AlertCircle
 } from 'lucide-react';
+import { useAuth } from '../../features/auth/hooks/useAuth';
 
 interface Package {
   _id: string;
@@ -65,11 +66,29 @@ const getLocationsByCity = (city: string): string[] => {
   return ['Đại Nội Huế', 'Cung An Định', 'Lăng Tự Đức']; // Fallback
 };
 
+const timeSlots = [
+  '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
+  '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'
+];
+
+const photographerSlots = [
+  { start: '07:00', end: '09:00', label: '07:00 - 09:00' },
+  { start: '09:00', end: '11:00', label: '09:00 - 11:00' },
+  { start: '11:00', end: '13:00', label: '11:00 - 13:00' },
+  { start: '13:00', end: '15:00', label: '13:00 - 15:00' },
+  { start: '15:00', end: '17:00', label: '15:00 - 17:00' },
+  { start: '17:00', end: '19:00', label: '17:00 - 19:00' },
+  { start: '19:00', end: '21:00', label: '19:00 - 21:00' },
+];
+
 export const PhotographerDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
   const { cart, addToCart } = useCart();
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
 
   const [photographer, setPhotographer] = useState<PhotographerDetails | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -92,6 +111,8 @@ export const PhotographerDetailPage: React.FC = () => {
   const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 5, 1));
   const [isBookingNow, setIsBookingNow] = useState<boolean>(false);
   const [bookingSuccess, setBookingSuccess] = useState<boolean>(false);
+  const [busyDates, setBusyDates] = useState<string[]>([]);
+  const [busySlots, setBusySlots] = useState<{ date: string, timeSlot: string }[]>([]);
 
   // Check if cart has an Ao Dai to auto-fill details
   const aoDaiInCart = cart.find((item) => item.itemType === 'PRODUCT');
@@ -256,9 +277,28 @@ export const PhotographerDetailPage: React.FC = () => {
 
         setPhotographer(details);
         
-        // Default select first package if available
+        // Load busy dates/slots
+        try {
+          const busyData = await httpClient.get<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }>(`/api/bookings/busy-dates/provider/${id}`);
+          setBusyDates(busyData.bookedDates || []);
+          setBusySlots(busyData.bookedSlots || []);
+        } catch (e) {
+          console.error('Lỗi tải lịch bận của thợ chụp:', e);
+        }
+        
+        // Default select package based on state or fallback to first package
         if (details.packages && details.packages.length > 0) {
-          setSelectedPkg(details.packages[0]);
+          const statePkgId = location.state?.selectedPackageId;
+          if (statePkgId) {
+            const found = details.packages.find((p: any) => p._id === statePkgId);
+            if (found) {
+              setSelectedPkg(found);
+            } else {
+              setSelectedPkg(details.packages[0]);
+            }
+          } else {
+            setSelectedPkg(details.packages[0]);
+          }
         }
       } catch (err: any) {
         console.error('Lỗi tải chi tiết thợ chụp:', err);
@@ -302,6 +342,26 @@ export const PhotographerDetailPage: React.FC = () => {
     }
   }, [aoDaiInCart, photographer, photographerCity]);
 
+  const bookedSlotsOnSelectedDate = useMemo(() => {
+    if (!selectedDate) return [];
+    return busySlots.filter(s => s.date === selectedDate).map(s => s.timeSlot);
+  }, [selectedDate, busySlots]);
+
+  const isTimeSlotOverlap = (slot1: string, slot2: string) => {
+    const parseTime = (t: string) => {
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + m;
+    };
+    const [start1Str, end1Str] = slot1.split('-').map(s => s.trim());
+    const [start2Str, end2Str] = slot2.split('-').map(s => s.trim());
+    if (!start1Str || !end1Str || !start2Str || !end2Str) return false;
+    const s1 = parseTime(start1Str);
+    const e1 = parseTime(end1Str);
+    const s2 = parseTime(start2Str);
+    const e2 = parseTime(end2Str);
+    return s1 < e2 && s2 < e1;
+  };
+
   // Set default location once photographer loads (if not already set by autofill)
   useEffect(() => {
     if (photographer && !selectedLocation) {
@@ -328,15 +388,118 @@ export const PhotographerDetailPage: React.FC = () => {
     for (let i = 1; i <= daysInMonth; i++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
       const dayOfWeek = new Date(dateStr).getDay();
+      
+      let isAvailable = !busyDates.includes(dateStr) && dateStr >= todayStr;
+      if (dateStr === todayStr) {
+        const currentHour = today.getHours();
+        const currentMinute = today.getMinutes();
+        const hasTimeSlotsLeft = timeSlots.slice(0, -2).some(t => {
+          const [h, m] = t.split(':').map(Number);
+          return h > currentHour || (h === currentHour && m > currentMinute);
+        });
+        isAvailable = isAvailable && hasTimeSlotsLeft;
+      }
+
       days.push({
         day: i, dateStr,
         isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
-        isAvailable: i !== 15 && i !== 24 && dateStr >= todayStr,
+        isAvailable,
         isEmpty: false,
       });
     }
     return days;
-  }, [calendarDate]);
+  }, [calendarDate, busyDates]);
+
+  const startSlotIndex = useMemo(() => {
+    return photographerSlots.findIndex(s => s.start === startTime);
+  }, [startTime]);
+
+  const endSlotIndex = useMemo(() => {
+    return photographerSlots.findIndex(s => s.end === endTime);
+  }, [endTime]);
+
+  // Reset and auto-select first available slot when date changes
+  useEffect(() => {
+    if (!selectedDate) {
+      setStartTime('10:30');
+      setEndTime('12:30');
+      return;
+    }
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    const firstAvailableIndex = photographerSlots.findIndex((block) => {
+      const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+        isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
+      );
+      const isPast = selectedDate === todayStr && (() => {
+        const [sh, sm] = block.start.split(':').map(Number);
+        return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+      })();
+      return !isBusy && !isPast;
+    });
+
+    if (firstAvailableIndex !== -1) {
+      setStartTime(photographerSlots[firstAvailableIndex].start);
+      setEndTime(photographerSlots[firstAvailableIndex].end);
+    }
+  }, [selectedDate, bookedSlotsOnSelectedDate]);
+
+  const handleSlotClick = (i: number) => {
+    const block = photographerSlots[i];
+    
+    // Check if busy or past
+    const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+      isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
+    );
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const isPast = selectedDate === todayStr && (() => {
+      const [sh, sm] = block.start.split(':').map(Number);
+      return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+    })();
+    
+    if (isBusy || isPast) return;
+
+    const currentStartIdx = photographerSlots.findIndex(s => s.start === startTime);
+    const currentEndIdx = photographerSlots.findIndex(s => s.end === endTime);
+
+    if (currentStartIdx === -1 || currentStartIdx !== currentEndIdx || i < currentStartIdx) {
+      setStartTime(block.start);
+      setEndTime(block.end);
+    } else {
+      let hasBusyOrPastInRange = false;
+      for (let idx = currentStartIdx; idx <= i; idx++) {
+        const checkBlock = photographerSlots[idx];
+        const checkBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+          isTimeSlotOverlap(`${checkBlock.start}-${checkBlock.end}`, bookedSlot)
+        );
+        const checkPast = selectedDate === todayStr && (() => {
+          const [sh, sm] = checkBlock.start.split(':').map(Number);
+          return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+        })();
+        if (checkBusy || checkPast) {
+          hasBusyOrPastInRange = true;
+          break;
+        }
+      }
+
+      if (hasBusyOrPastInRange) {
+        toast.error('Khoảng thời gian chọn chứa khung giờ đã bận hoặc đã qua!');
+        setStartTime(block.start);
+        setEndTime(block.end);
+      } else {
+        setEndTime(block.end);
+      }
+    }
+  };
+
+  const isCurrentTimeSlotBusy = useMemo(() => {
+    return bookedSlotsOnSelectedDate.some(bookedSlot => {
+      if (!bookedSlot) return false;
+      return isTimeSlotOverlap(selectedTimeSlot, bookedSlot);
+    });
+  }, [selectedTimeSlot, bookedSlotsOnSelectedDate]);
 
   // Dynamic location options based on photographer's city
   const locations = useMemo(() => getLocationsByCity(photographerCity), [photographerCity]);
@@ -368,18 +531,8 @@ export const PhotographerDetailPage: React.FC = () => {
   }
 
   const conceptOptions = ['Cổ phục Huế', 'Cô ba Sài Gòn', 'Nàng thơ', 'Hiện đại'];
-  const timeSlots = [
-    '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
-    '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'
-  ];
 
-  const getEndTimesOptions = () => {
-    const startIndex = timeSlots.indexOf(startTime);
-    if (startIndex === -1) return timeSlots;
-    // Minimum 1 hour = 2 slots ahead
-    return timeSlots.slice(startIndex + 2);
-  };
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -389,6 +542,12 @@ export const PhotographerDetailPage: React.FC = () => {
   };
 
   const handleAddBookingToCart = () => {
+    if (!isAuthenticated) {
+      toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
+      navigate(ROUTES.LOGIN);
+      return;
+    }
+
     if (!selectedPkg) { toast.error('Vui lòng chọn gói dịch vụ!'); return; }
     if (!selectedDate) { toast.error('Vui lòng chọn ngày dự kiến chụp!'); return; }
     if (!agreeTerms) { toast.error('Vui lòng đồng ý với điều khoản đặt lịch!'); return; }
@@ -443,10 +602,15 @@ export const PhotographerDetailPage: React.FC = () => {
       referenceImage: referenceFile ? URL.createObjectURL(referenceFile) : null
     });
     toast.success(`Đã thêm gói ${selectedPkg.name} của ${photographer.businessName} vào giỏ hàng!`);
-    navigate(ROUTES.CART);
   };
 
   const handleDirectBooking = async () => {
+    if (!isAuthenticated) {
+      toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
+      navigate(ROUTES.LOGIN);
+      return;
+    }
+
     if (!selectedPkg) { toast.error('Vui lòng chọn gói dịch vụ!'); return; }
     if (!selectedDate) { toast.error('Vui lòng chọn ngày dự kiến chụp!'); return; }
     if (!agreeTerms) { toast.error('Vui lòng đồng ý với điều khoản đặt lịch!'); return; }
@@ -488,18 +652,17 @@ export const PhotographerDetailPage: React.FC = () => {
     try {
       setIsBookingNow(true);
       await httpClient.post('/api/bookings/photography', {
-        photographyPackageId: selectedPkg._id,
+        packageId: selectedPkg._id,
         shootDate: selectedDate,
         shootTimeSlot: selectedTimeSlot,
         shootLocation: finalLocation,
-        shootConcept: selectedConcept,
+        concept: selectedConcept,
         customRequests: customRequest || null,
-        depositAmount: Math.round(selectedPkg.price * 0.3),
       });
       setBookingSuccess(true);
     } catch (err: any) {
-      // Nếu chưa đăng nhập, vẫn hiển thị thành công demo
-      setBookingSuccess(true);
+      console.error('Lỗi đặt lịch:', err);
+      toast.error(err.message || 'Đặt lịch thợ chụp thất bại. Vui lòng thử lại!');
     } finally {
       setIsBookingNow(false);
     }
@@ -750,52 +913,66 @@ export const PhotographerDetailPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* RIGHT: Time slots dropdowns */}
+                {/* RIGHT: Time slots grid */}
                 <div>
-                  <h3 style={{ fontSize: '11px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>CHỌN GIỜ CHỤP</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div className="vh-input-group" style={{ margin: 0 }}>
-                        <span className="vh-input-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: 700 }}>GIỜ BẮT ĐẦU</span>
-                        <select 
-                          value={startTime} 
-                          onChange={(e) => {
-                            setStartTime(e.target.value);
-                            // Automatically adjust end time if it becomes invalid
-                            const startIndex = timeSlots.indexOf(e.target.value);
-                            const endIndex = timeSlots.indexOf(endTime);
-                            if (endIndex <= startIndex) {
-                              const newEndIndex = Math.min(startIndex + 4, timeSlots.length - 1);
-                              setEndTime(timeSlots[newEndIndex]);
-                            }
+                  <h3 style={{ fontSize: '11.5px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>CHỌN GIỜ CHỤP (MỖI Ô 2 TIẾNG)</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
+                    {photographerSlots.map((block, idx) => {
+                      const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+                        isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
+                      );
+                      const today = new Date();
+                      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                      const isPast = selectedDate === todayStr && (() => {
+                        const [sh, sm] = block.start.split(':').map(Number);
+                        return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+                      })();
+
+                      const isSelected = idx >= startSlotIndex && idx <= endSlotIndex;
+
+                      return (
+                        <button
+                          key={block.label}
+                          type="button"
+                          disabled={isBusy || isPast}
+                          onClick={() => handleSlotClick(idx)}
+                          style={{
+                            padding: '12px 8px',
+                            borderRadius: '8px',
+                            fontSize: '12.5px',
+                            fontWeight: 700,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '4px',
+                            cursor: (isBusy || isPast) ? 'not-allowed' : 'pointer',
+                            backgroundColor: isSelected
+                              ? 'var(--color-primary-dark)'
+                              : (isBusy || isPast)
+                                ? '#EAEAE8'
+                                : '#FFFFFF',
+                            color: isSelected
+                              ? '#FFFFFF'
+                              : (isBusy || isPast)
+                                ? '#A0A09E'
+                                : 'var(--color-text-primary)',
+                            border: isSelected
+                              ? '1.5px solid var(--color-primary-dark)'
+                              : '1.5px solid rgba(45, 41, 38, 0.15)',
+                            transition: 'all 0.15s ease',
                           }}
-                          className="vh-select-field"
-                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(45, 41, 38, 0.15)', backgroundColor: 'white' }}
                         >
-                          {timeSlots.slice(0, -2).map((t) => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      <div className="vh-input-group" style={{ margin: 0 }}>
-                        <span className="vh-input-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: 700 }}>GIỜ KẾT THÚC</span>
-                        <select 
-                          value={endTime} 
-                          onChange={(e) => setEndTime(e.target.value)}
-                          className="vh-select-field"
-                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(45, 41, 38, 0.15)', backgroundColor: 'white' }}
-                        >
-                          {getEndTimesOptions().map((t) => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <span style={{ fontSize: '11.5px', fontStyle: 'italic', color: 'var(--color-text-secondary)' }}>
-                      * Bạn có thể chọn thời lượng chụp linh hoạt (tối thiểu 1 tiếng).
-                    </span>
+                          <span>{block.label}</span>
+                          <span style={{ fontSize: '10px', fontWeight: 600, opacity: 0.85 }}>
+                            {isBusy ? 'Đã bận' : isPast ? 'Đã qua' : isSelected ? 'Đã chọn' : 'Trống'}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
+                  <span style={{ fontSize: '11.5px', fontStyle: 'italic', color: 'var(--color-text-secondary)', display: 'block', marginTop: '14px' }}>
+                    * Bạn có thể chọn liên tiếp nhiều ô để đặt lịch chụp dài hơn (Ví dụ: click ô 7h-9h rồi click ô 9h-11h).
+                  </span>
                 </div>
               </div>
             </section>
@@ -1091,12 +1268,29 @@ export const PhotographerDetailPage: React.FC = () => {
                 </label>
               </div>
 
+              {/* Conflict Warning Message */}
+              {isCurrentTimeSlotBusy && (
+                <div style={{
+                  color: '#C0392B',
+                  backgroundColor: '#FADBD8',
+                  border: '1px solid #F1948A',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  fontWeight: 650,
+                  textAlign: 'center',
+                  marginBottom: '10px'
+                }}>
+                  ⚠️ Thợ chụp đã bận trong khung giờ này. Vui lòng chọn giờ hoặc ngày khác!
+                </div>
+              )}
+
               {/* CTA Buttons */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {/* ĐẶT LỊCH NGAY */}
                 <button
                   onClick={handleDirectBooking}
-                  disabled={isBookingNow}
+                  disabled={isBookingNow || isCurrentTimeSlotBusy}
                   className="vh-btn vh-btn-primary"
                   style={{
                     width: '100%',
@@ -1104,10 +1298,10 @@ export const PhotographerDetailPage: React.FC = () => {
                     padding: '14px 20px',
                     fontWeight: 700,
                     fontSize: '15px',
-                    backgroundColor: isBookingNow ? '#8C827A' : 'var(--color-primary-dark)',
+                    backgroundColor: (isBookingNow || isCurrentTimeSlotBusy) ? '#8C827A' : 'var(--color-primary-dark)',
                     color: '#FFFFFF',
                     border: 'none',
-                    cursor: isBookingNow ? 'not-allowed' : 'pointer',
+                    cursor: (isBookingNow || isCurrentTimeSlotBusy) ? 'not-allowed' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1125,6 +1319,7 @@ export const PhotographerDetailPage: React.FC = () => {
                 {/* THÊM VÀO GIỎ HÀNG */}
                 <button
                   onClick={handleAddBookingToCart}
+                  disabled={isCurrentTimeSlotBusy}
                   className="vh-btn"
                   style={{
                     width: '100%',
@@ -1133,9 +1328,9 @@ export const PhotographerDetailPage: React.FC = () => {
                     fontWeight: 700,
                     fontSize: '14px',
                     backgroundColor: 'transparent',
-                    color: 'var(--color-primary-dark)',
-                    border: '1.5px solid var(--color-primary-dark)',
-                    cursor: 'pointer',
+                    color: isCurrentTimeSlotBusy ? '#8C827A' : 'var(--color-primary-dark)',
+                    border: isCurrentTimeSlotBusy ? '1.5px solid #8C827A' : '1.5px solid var(--color-primary-dark)',
+                    cursor: isCurrentTimeSlotBusy ? 'not-allowed' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',

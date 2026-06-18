@@ -18,6 +18,7 @@ import { useToast } from '../../components/feedback/Toast';
 import { useCart } from '../../context/CartContext';
 import { Modal } from '../../components/common/Modal';
 import { ROUTES } from '../../config/routes';
+import { useAuth } from '../../features/auth/hooks/useAuth';
 
 interface ProductDetail {
   _id: string;
@@ -51,11 +52,28 @@ interface ProductDetail {
   };
 }
 
+const timeSlots = [
+  '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
+  '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'
+];
+
+const productSlots = [
+  { start: '07:00', end: '09:00', label: '07:00 - 09:00' },
+  { start: '09:00', end: '11:00', label: '09:00 - 11:00' },
+  { start: '11:00', end: '13:00', label: '11:00 - 13:00' },
+  { start: '13:00', end: '15:00', label: '13:00 - 15:00' },
+  { start: '15:00', end: '17:00', label: '15:00 - 17:00' },
+  { start: '17:00', end: '19:00', label: '17:00 - 19:00' },
+  { start: '19:00', end: '21:00', label: '19:00 - 21:00' },
+];
+
 export const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
   const { addToCart } = useCart();
+  const { isAuthenticated } = useAuth();
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -77,8 +95,31 @@ export const ProductDetailPage: React.FC = () => {
   const [singleDate, setSingleDate] = useState<string>('');
   
   // Time states (for hourly rental)
-  const [startTime, setStartTime] = useState<string>('08:00');
-  const [endTime, setEndTime] = useState<string>('10:00');
+  const [startTime, setStartTime] = useState<string>('07:00');
+  const [endTime, setEndTime] = useState<string>('09:00');
+
+  const [busyDates, setBusyDates] = useState<string[]>([]);
+  const [busySlots, setBusySlots] = useState<{ date: string, timeSlot: string }[]>([]);
+
+  const bookedSlotsOnSelectedDate = React.useMemo(() => {
+    if (!singleDate) return [];
+    return busySlots.filter(s => s.date === singleDate).map(s => s.timeSlot);
+  }, [singleDate, busySlots]);
+
+  const isTimeSlotOverlap = (slot1: string, slot2: string) => {
+    const parseTime = (t: string) => {
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + m;
+    };
+    const [start1Str, end1Str] = slot1.split('-').map(s => s.trim());
+    const [start2Str, end2Str] = slot2.split('-').map(s => s.trim());
+    if (!start1Str || !end1Str || !start2Str || !end2Str) return false;
+    const s1 = parseTime(start1Str);
+    const e1 = parseTime(end1Str);
+    const s2 = parseTime(start2Str);
+    const e2 = parseTime(end2Str);
+    return s1 < e2 && s2 < e1;
+  };
 
   // Interactive UI modals
   const [isAiStylingOpen, setIsAiStylingOpen] = useState<boolean>(false);
@@ -110,23 +151,121 @@ export const ProductDetailPage: React.FC = () => {
     for (let i = 1; i <= daysInMonth; i++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
       const dayOfWeek = new Date(dateStr).getDay();
+      
+      let isAvailable = !busyDates.includes(dateStr) && dateStr >= todayStr;
+      if (rentalMode === 'HOURLY' && dateStr === todayStr) {
+        const currentHour = today.getHours();
+        const currentMinute = today.getMinutes();
+        const hasTimeSlotsLeft = productSlots.some(block => {
+          const [h, m] = block.start.split(':').map(Number);
+          return h > currentHour || (h === currentHour && m > currentMinute);
+        });
+        isAvailable = isAvailable && hasTimeSlotsLeft;
+      }
+      
       days.push({
         day: i,
         dateStr,
         isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
-        isAvailable: i !== 15 && i !== 24 && dateStr >= todayStr, // Consistent busy dates, disabled in past
+        isAvailable,
         isEmpty: false,
       });
     }
     return days;
-  }, [calendarDate]);
+  }, [calendarDate, busyDates, rentalMode]);
 
-  // Hours catalog (08:00 to 20:00)
-  const timeSlots = [
-    '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
-    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', 
-    '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'
-  ];
+  const startSlotIndex = React.useMemo(() => {
+    return productSlots.findIndex(s => s.start === startTime);
+  }, [startTime]);
+
+  const endSlotIndex = React.useMemo(() => {
+    return productSlots.findIndex(s => s.end === endTime);
+  }, [endTime]);
+
+  // Reset and auto-select first available slot when date changes
+  useEffect(() => {
+    if (rentalMode !== 'HOURLY' || !singleDate) {
+      return;
+    }
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    // Find first available slot
+    const firstAvailableIndex = productSlots.findIndex((block) => {
+      const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+        isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
+      );
+      const isPast = singleDate === todayStr && (() => {
+        const [sh, sm] = block.start.split(':').map(Number);
+        return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+      })();
+      return !isBusy && !isPast;
+    });
+
+    if (firstAvailableIndex !== -1) {
+      setStartTime(productSlots[firstAvailableIndex].start);
+      setEndTime(productSlots[firstAvailableIndex].end);
+    }
+  }, [singleDate, bookedSlotsOnSelectedDate, rentalMode]);
+
+  const handleSlotClick = (i: number) => {
+    const block = productSlots[i];
+    
+    // Check if busy or past
+    const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+      isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
+    );
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const isPast = singleDate === todayStr && (() => {
+      const [sh, sm] = block.start.split(':').map(Number);
+      return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+    })();
+    
+    if (isBusy || isPast) return;
+
+    const currentStartIdx = productSlots.findIndex(s => s.start === startTime);
+    const currentEndIdx = productSlots.findIndex(s => s.end === endTime);
+
+    if (currentStartIdx === -1 || currentStartIdx !== currentEndIdx || i < currentStartIdx) {
+      setStartTime(block.start);
+      setEndTime(block.end);
+    } else {
+      let hasBusyOrPastInRange = false;
+      for (let idx = currentStartIdx; idx <= i; idx++) {
+        const checkBlock = productSlots[idx];
+        const checkBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+          isTimeSlotOverlap(`${checkBlock.start}-${checkBlock.end}`, bookedSlot)
+        );
+        const checkPast = singleDate === todayStr && (() => {
+          const [sh, sm] = checkBlock.start.split(':').map(Number);
+          return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+        })();
+        if (checkBusy || checkPast) {
+          hasBusyOrPastInRange = true;
+          break;
+        }
+      }
+
+      if (hasBusyOrPastInRange) {
+        toast.error('Khoảng thời gian chọn chứa khung giờ đã bận hoặc đã qua!');
+        setStartTime(block.start);
+        setEndTime(block.end);
+      } else {
+        setEndTime(block.end);
+      }
+    }
+  };
+
+  const selectedTimeSlot = `${startTime}-${endTime}`;
+
+  const isCurrentTimeSlotBusy = React.useMemo(() => {
+    if (rentalMode !== 'HOURLY') return false;
+    return bookedSlotsOnSelectedDate.some(bookedSlot => {
+      if (!bookedSlot) return false;
+      return isTimeSlotOverlap(selectedTimeSlot, bookedSlot);
+    });
+  }, [rentalMode, selectedTimeSlot, bookedSlotsOnSelectedDate]);
 
   const handleCalendarDayClick = (dateStr: string) => {
     if (rentalMode === 'HOURLY') {
@@ -164,6 +303,15 @@ export const ProductDetailPage: React.FC = () => {
         setLoading(true);
         const data = await httpClient.get<any>(`/products/${id}`);
         setProduct(data);
+        
+        // Load busy dates/slots
+        try {
+          const busyData = await httpClient.get<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }>(`/api/bookings/busy-dates/product/${id}`);
+          setBusyDates(busyData.bookedDates || []);
+          setBusySlots(busyData.bookedSlots || []);
+        } catch (e) {
+          console.error('Lỗi tải lịch bận của sản phẩm:', e);
+        }
         if (data.images && data.images.length > 0) {
           setActiveImage(data.images[0]);
         }
@@ -341,14 +489,15 @@ export const ProductDetailPage: React.FC = () => {
     }
   };
 
-  const getEndTimesOptions = () => {
-    const startIndex = timeSlots.indexOf(startTime);
-    if (startIndex === -1) return timeSlots;
-    // Minimum 2 hours = 4 slots ahead
-    return timeSlots.slice(startIndex + 4);
-  };
+
 
   const handleAddToCart = () => {
+    if (!isAuthenticated) {
+      toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
+      navigate(ROUTES.LOGIN);
+      return;
+    }
+
     if (!selectedSize || !selectedColor) {
       toast.error('Vui lòng chọn đầy đủ màu sắc và kích cỡ.');
       return;
@@ -378,6 +527,12 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   const handleBookingSubmit = async () => {
+    if (!isAuthenticated) {
+      toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
+      navigate(ROUTES.LOGIN);
+      return;
+    }
+
     if (!selectedSize || !selectedColor) {
       toast.error('Vui lòng chọn đầy đủ màu sắc và kích cỡ.');
       return;
@@ -843,47 +998,63 @@ export const ProductDetailPage: React.FC = () => {
                   <div>
                     {rentalMode === 'HOURLY' ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <h3 style={{ fontSize: '11px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>CHỌN GIỜ THUÊ</h3>
-                        
-                        <div className="vh-input-group" style={{ margin: 0 }}>
-                          <span className="vh-input-label" style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: 700 }}>GIỜ BẮT ĐẦU</span>
-                          <select 
-                            value={startTime} 
-                            onChange={(e) => {
-                              setStartTime(e.target.value);
-                              // Automatically adjust end time if it becomes invalid
-                              const startIndex = timeSlots.indexOf(e.target.value);
-                              const endIndex = timeSlots.indexOf(endTime);
-                              if (endIndex <= startIndex) {
-                                const newEndIndex = Math.min(startIndex + 4, timeSlots.length - 1);
-                                setEndTime(timeSlots[newEndIndex]);
-                              }
-                            }}
-                            className="vh-select-field"
-                            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(45, 41, 38, 0.15)', backgroundColor: 'white' }}
-                          >
-                            {timeSlots.slice(0, -4).map((t) => (
-                              <option key={t} value={t}>{t}</option>
-                            ))}
-                          </select>
-                        </div>
+                        <h3 style={{ fontSize: '11.5px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>CHỌN GIỜ THUÊ (MỖI Ô 2 TIẾNG)</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
+                          {productSlots.map((block, idx) => {
+                            const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+                              isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
+                            );
+                            const today = new Date();
+                            const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                            const isPast = singleDate === todayStr && (() => {
+                              const [sh, sm] = block.start.split(':').map(Number);
+                              return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+                            })();
 
-                        <div className="vh-input-group" style={{ margin: 0 }}>
-                          <span className="vh-input-label" style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: 700 }}>GIỜ KẾT THÚC</span>
-                          <select 
-                            value={endTime} 
-                            onChange={(e) => setEndTime(e.target.value)}
-                            className="vh-select-field"
-                            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(45, 41, 38, 0.15)', backgroundColor: 'white' }}
-                          >
-                            {getEndTimesOptions().map((t) => (
-                              <option key={t} value={t}>{t}</option>
-                            ))}
-                          </select>
+                            const isSelected = idx >= startSlotIndex && idx <= endSlotIndex;
+
+                            return (
+                              <button
+                                key={block.label}
+                                type="button"
+                                disabled={isBusy || isPast}
+                                onClick={() => handleSlotClick(idx)}
+                                style={{
+                                  padding: '12px 8px',
+                                  borderRadius: '8px',
+                                  fontSize: '12px',
+                                  fontWeight: 700,
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  cursor: (isBusy || isPast) ? 'not-allowed' : 'pointer',
+                                  backgroundColor: isSelected
+                                    ? 'var(--color-primary-dark)'
+                                    : (isBusy || isPast)
+                                      ? '#EAEAE8'
+                                      : '#FFFFFF',
+                                  color: isSelected
+                                    ? '#FFFFFF'
+                                    : (isBusy || isPast)
+                                      ? '#A0A09E'
+                                      : 'var(--color-text-primary)',
+                                  border: isSelected
+                                    ? '1.5px solid var(--color-primary-dark)'
+                                    : '1.5px solid rgba(45, 41, 38, 0.15)',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <span>{block.label}</span>
+                                <span style={{ fontSize: '9px', fontWeight: 600, opacity: 0.85 }}>
+                                  {isBusy ? 'Đã bận' : isPast ? 'Đã qua' : isSelected ? 'Đã chọn' : 'Trống'}
+                                </span>
+                              </button>
+                            );
+                          })}
                         </div>
-                        
                         <span style={{ fontSize: '10px', fontStyle: 'italic', color: 'var(--color-text-secondary)', marginTop: '8px', lineHeight: 1.4 }}>
-                          * Tối thiểu 2 tiếng.
+                          * Bạn có thể chọn liên tiếp nhiều ô để thuê nhiều giờ (Ví dụ: click ô 8h-10h rồi click ô 10h-12h).
                         </span>
                       </div>
                     ) : (
@@ -919,8 +1090,25 @@ export const ProductDetailPage: React.FC = () => {
 
             {/* ACTION ACTIONS */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {isCurrentTimeSlotBusy && (
+                <div style={{
+                  color: '#C0392B',
+                  backgroundColor: '#FADBD8',
+                  border: '1px solid #F1948A',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  fontWeight: 650,
+                  textAlign: 'center',
+                  marginBottom: '10px'
+                }}>
+                  ⚠️ Trang phục đã bận trong khung giờ này. Vui lòng chọn giờ hoặc ngày khác!
+                </div>
+              )}
+
               <button 
                 onClick={handleAddToCart}
+                disabled={isCurrentTimeSlotBusy}
                 className="vh-btn vh-btn-outline vh-btn-lg" 
                 style={{ 
                   width: '100%', 
@@ -928,9 +1116,10 @@ export const ProductDetailPage: React.FC = () => {
                   fontSize: '16px', 
                   height: '54px', 
                   fontWeight: 700,
-                  border: '1.5px solid var(--color-primary-dark)',
+                  border: isCurrentTimeSlotBusy ? '1.5px solid #8C827A' : '1.5px solid var(--color-primary-dark)',
                   backgroundColor: 'transparent',
-                  color: 'var(--color-primary-dark)'
+                  color: isCurrentTimeSlotBusy ? '#8C827A' : 'var(--color-primary-dark)',
+                  cursor: isCurrentTimeSlotBusy ? 'not-allowed' : 'pointer'
                 }}
               >
                 THÊM VÀO GIỎ HÀNG
@@ -938,8 +1127,19 @@ export const ProductDetailPage: React.FC = () => {
 
               <button 
                 onClick={handleBookingSubmit}
+                disabled={isCurrentTimeSlotBusy}
                 className="vh-btn vh-btn-primary vh-btn-lg" 
-                style={{ width: '100%', borderRadius: '12px', fontSize: '16px', height: '54px', fontWeight: 700 }}
+                style={{ 
+                  width: '100%', 
+                  borderRadius: '12px', 
+                  fontSize: '16px', 
+                  height: '54px', 
+                  fontWeight: 700,
+                  backgroundColor: isCurrentTimeSlotBusy ? '#8C827A' : 'var(--color-primary-dark)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  cursor: isCurrentTimeSlotBusy ? 'not-allowed' : 'pointer'
+                }}
               >
                 <span>THUÊ NGAY</span>
                 <ArrowRight size={18} />

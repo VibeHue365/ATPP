@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCart } from '../../context/CartContext';
 import type { CartItem } from '../../context/CartContext';
+import { httpClient } from '../../services/httpClient';
 import { 
   Trash2, 
   CheckCircle, 
@@ -309,9 +310,12 @@ export const CartPage: React.FC = () => {
   // Flat service fee of 50.000đ if any items are selected
   const serviceFee = selectedItems.length > 0 ? 50000 : 0;
 
+  const totalPhotographerDeposit = Math.round(totalPhotographerFee * 0.3);
+  const totalPhotographerRemaining = totalPhotographerFee - totalPhotographerDeposit;
+
   const grandTotal = totalProductRental + totalPhotographerFee + totalOthersFee;
-  const depositToPayNow = grandTotal + serviceFee + totalProductDeposit;
-  const remainingToPayLater = 0; // 100% is paid upfront in this premium flow
+  const depositToPayNow = totalProductRental + totalPhotographerDeposit + totalOthersFee + serviceFee + totalProductDeposit;
+  const remainingToPayLater = totalPhotographerRemaining;
 
   const handleCheckout = () => {
     if (selectedItems.length === 0) return;
@@ -325,11 +329,42 @@ export const CartPage: React.FC = () => {
     setShowPaymentModal(true);
   };
 
-  const handleConfirmPayment = () => {
-    setShowPaymentModal(false);
-    setIsCheckoutSuccess(true);
-    // Clear only selected items from the cart
-    selectedItems.forEach(item => removeFromCart(item.id));
+  const handleConfirmPayment = async () => {
+    try {
+      // Loop through selected items and save them to backend database
+      for (const item of selectedItems) {
+        if (item.itemType === 'PRODUCT') {
+          await httpClient.post('/api/bookings', {
+            productId: item.productId,
+            rentalType: item.rentalType || 'DAILY',
+            startDate: item.startDate || item.rentalFrom,
+            endDate: item.endDate || item.rentalTo,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            size: item.size || 'M',
+            color: item.color || 'RED',
+            quantity: item.quantity || 1
+          });
+        } else if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
+          await httpClient.post('/api/bookings/photography', {
+            packageId: item.photographyPackageId,
+            shootDate: item.shootDate,
+            shootTimeSlot: item.shootTimeSlot,
+            shootLocation: item.shootLocation,
+            concept: item.shootConcept || 'Cổ phục Huế',
+            customRequests: item.customRequests || null,
+          });
+        }
+      }
+      setShowPaymentModal(false);
+      setIsCheckoutSuccess(true);
+      // Clear only selected items from the cart
+      selectedItems.forEach(item => removeFromCart(item.id));
+      toast.success('Thành công! Lịch hẹn của bạn đã được ghi nhận.');
+    } catch (err: any) {
+      console.error('Lỗi khi lưu đơn đặt lịch:', err);
+      toast.error(err.message || 'Không thể lưu đơn đặt lịch lên hệ thống. Vui lòng thử lại!');
+    }
   };
 
   if (isCheckoutSuccess) {

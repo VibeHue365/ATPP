@@ -1,31 +1,81 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Booking, BookingDocument, BookingType, BookingStatus, PaymentStatus } from '../schemas/booking.schema';
 import { BookingItem, BookingItemType } from '../schemas/booking-item.schema';
+import { BookingSchedule, BookingScheduleType, BookingScheduleStatus } from '../schemas/booking-schedule.schema';
 import { ProductsService } from '../../products/services/products.service';
 import { PriceVersion, PriceTargetType } from '../../products/schemas/price-version.schema';
 import { PhotographyPackage } from '../../products/schemas/photography-package.schema';
 
+import { IsString, IsNotEmpty, IsOptional, IsEnum, IsNumber } from 'class-validator';
+
 export class CreateBookingDto {
+  @IsString()
+  @IsNotEmpty()
   productId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsEnum(['DAILY', 'HOURLY'])
   rentalType: 'DAILY' | 'HOURLY';
+
+  @IsString()
+  @IsNotEmpty()
   startDate: string;   // YYYY-MM-DD — dùng cho cả DAILY (bắt đầu) và HOURLY (ngày thuê)
+
+  @IsString()
+  @IsOptional()
   endDate?: string;    // YYYY-MM-DD — chỉ dùng cho DAILY (ngày kết thúc)
+
+  @IsString()
+  @IsOptional()
   startTime?: string;  // HH:mm      — chỉ dùng cho HOURLY
+
+  @IsString()
+  @IsOptional()
   endTime?: string;    // HH:mm      — chỉ dùng cho HOURLY
+
+  @IsString()
+  @IsNotEmpty()
   size: string;
+
+  @IsString()
+  @IsNotEmpty()
   color: string;
+
+  @IsNumber()
+  @IsOptional()
   quantity?: number;
 }
 
 export class CreatePhotographyBookingDto {
+  @IsString()
+  @IsNotEmpty()
   packageId: string;
+
+  @IsString()
+  @IsNotEmpty()
   shootDate: string;
+
+  @IsString()
+  @IsNotEmpty()
   shootTimeSlot: string;
+
+  @IsString()
+  @IsNotEmpty()
   shootLocation: string;
+
+  @IsString()
+  @IsNotEmpty()
   concept: string;
+
+  @IsString()
+  @IsOptional()
   customRequests?: string;
+
+  @IsString()
+  @IsOptional()
   referenceImage?: string;
 }
 
@@ -34,6 +84,7 @@ export class BookingsService {
   constructor(
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
     @InjectModel(BookingItem.name) private readonly bookingItemModel: Model<BookingItem>,
+    @InjectModel(BookingSchedule.name) private readonly bookingScheduleModel: Model<BookingSchedule>,
     @InjectModel(PriceVersion.name) private readonly priceVersionModel: Model<PriceVersion>,
     @InjectModel(PhotographyPackage.name) private readonly photographyPackageModel: Model<PhotographyPackage>,
     private readonly productsService: ProductsService,
@@ -200,7 +251,34 @@ export class BookingsService {
       customRequests: null,
     });
 
-    await bookingItem.save();
+    const savedBookingItem = await bookingItem.save();
+
+    // Create BookingSchedule entries
+    if (rentalType === 'DAILY' && rentalFrom && rentalTo) {
+      const start = new Date(rentalFrom);
+      const end = new Date(rentalTo);
+      const current = new Date(start);
+      while (current <= end) {
+        await this.bookingScheduleModel.create({
+          bookingId: savedBooking._id,
+          bookingItemId: savedBookingItem._id,
+          scheduleType: BookingScheduleType.RentalPeriod,
+          scheduledDate: new Date(current),
+          timeSlot: null,
+          status: BookingScheduleStatus.Scheduled,
+        });
+        current.setDate(current.getDate() + 1);
+      }
+    } else if (rentalType === 'HOURLY' && shootDate) {
+      await this.bookingScheduleModel.create({
+        bookingId: savedBooking._id,
+        bookingItemId: savedBookingItem._id,
+        scheduleType: BookingScheduleType.RentalPeriod,
+        scheduledDate: shootDate,
+        timeSlot: shootTimeSlot,
+        status: BookingScheduleStatus.Scheduled,
+      });
+    }
 
     return savedBooking;
   }
@@ -311,8 +389,272 @@ export class BookingsService {
       customRequests: customRequests || null,
     });
 
-    await bookingItem.save();
+    const savedBookingItem = await bookingItem.save();
+
+    // Create BookingSchedule entry for the photoshoot
+    await this.bookingScheduleModel.create({
+      bookingId: savedBooking._id,
+      bookingItemId: savedBookingItem._id,
+      scheduleType: BookingScheduleType.Photoshoot,
+      scheduledDate: date,
+      timeSlot: shootTimeSlot,
+      status: BookingScheduleStatus.Scheduled,
+    });
 
     return savedBooking;
+  }
+
+  async getCustomerBookings(customerId: string): Promise<any[]> {
+    const bookings = await this.bookingModel.find({ customerId: new Types.ObjectId(customerId) }).sort({ createdAt: -1 });
+    
+    const populatedBookings = [];
+    for (const booking of bookings) {
+      const items = await this.bookingItemModel.find({ bookingId: booking._id })
+        .populate({
+          path: 'productId',
+          populate: { path: 'providerId' }
+        })
+        .populate('photographyPackageId')
+        .populate('providerId');
+      
+      populatedBookings.push({
+        ...booking.toObject(),
+        items: items.map(item => item.toObject()),
+      });
+    }
+    
+    return populatedBookings;
+  }
+
+  async getBusySchedulesForProduct(productId: string): Promise<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }> {
+    // 1. Find active bookings (not cancelled)
+    const activeBookings = await this.bookingModel.find({
+      status: { $ne: BookingStatus.Cancelled }
+    }).select('_id');
+    const activeBookingIds = activeBookings.map(b => b._id);
+
+    // 2. Find booking items for this product
+    const items = await this.bookingItemModel.find({
+      bookingId: { $in: activeBookingIds },
+      productId: new Types.ObjectId(productId)
+    });
+    const bookingItemIds = items.map(item => item._id);
+
+    // 3. Find schedules
+    const schedules = await this.bookingScheduleModel.find({
+      bookingItemId: { $in: bookingItemIds },
+      status: { $ne: BookingScheduleStatus.Cancelled }
+    });
+
+    const bookedDates = new Set<string>();
+    const bookedSlots: { date: string, timeSlot: string }[] = [];
+
+    schedules.forEach(sched => {
+      const dateStr = sched.scheduledDate.toISOString().split('T')[0];
+      if (sched.timeSlot) {
+        bookedSlots.push({ date: dateStr, timeSlot: sched.timeSlot });
+      } else {
+        bookedDates.add(dateStr);
+      }
+    });
+
+    return {
+      bookedDates: Array.from(bookedDates),
+      bookedSlots
+    };
+  }
+
+  async getBusySchedulesForProvider(providerId: string): Promise<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }> {
+    // 1. Find active bookings (not cancelled)
+    const activeBookings = await this.bookingModel.find({
+      status: { $ne: BookingStatus.Cancelled }
+    }).select('_id');
+    const activeBookingIds = activeBookings.map(b => b._id);
+
+    // 2. Find booking items for this provider
+    const items = await this.bookingItemModel.find({
+      bookingId: { $in: activeBookingIds },
+      providerId: new Types.ObjectId(providerId),
+      itemType: BookingItemType.PhotographyPackage
+    });
+    const bookingItemIds = items.map(item => item._id);
+
+    // 3. Find schedules
+    const schedules = await this.bookingScheduleModel.find({
+      bookingItemId: { $in: bookingItemIds },
+      status: { $ne: BookingScheduleStatus.Cancelled }
+    });
+
+    const bookedDates = new Set<string>();
+    const bookedSlots: { date: string, timeSlot: string }[] = [];
+
+    schedules.forEach(sched => {
+      const dateStr = sched.scheduledDate.toISOString().split('T')[0];
+      if (sched.timeSlot) {
+        bookedSlots.push({ date: dateStr, timeSlot: sched.timeSlot });
+      } else {
+        bookedDates.add(dateStr);
+      }
+    });
+
+    return {
+      bookedDates: Array.from(bookedDates),
+      bookedSlots
+    };
+  }
+
+  async cancelBooking(bookingId: string, userId: string, roles: string[], reason?: string): Promise<any> {
+    const booking = await this.bookingModel.findById(bookingId);
+    if (!booking) {
+      throw new NotFoundException('Không tìm thấy đơn đặt lịch');
+    }
+
+    // Check authorization: customer, provider or admin
+    const isCustomer = booking.customerId.toString() === userId;
+    const isProvider = booking.providerIds.map(id => id.toString()).includes(userId);
+    const isAdmin = roles.includes('ADMIN') || roles.includes('admin');
+
+    if (!isCustomer && !isProvider && !isAdmin) {
+      throw new ForbiddenException('Bạn không có quyền hủy đơn đặt lịch này');
+    }
+
+    if (booking.status === BookingStatus.Cancelled) {
+      throw new BadRequestException('Đơn đặt lịch đã được hủy trước đó');
+    }
+
+    const nonCancellableStatuses = [
+      BookingStatus.PickedUp,
+      BookingStatus.Returned,
+      BookingStatus.Completed,
+      BookingStatus.Disputed
+    ];
+    if (nonCancellableStatuses.includes(booking.status)) {
+      throw new BadRequestException('Không thể hủy đơn đặt lịch đang thực hiện hoặc đã hoàn thành');
+    }
+
+    const now = new Date();
+    let isFreeCancel = true;
+    let refundAmount = 0;
+    let penaltyReason = '';
+
+    if (isCustomer && booking.status !== BookingStatus.PendingPayment) {
+      // Find booking items to get the earliest start date
+      const items = await this.bookingItemModel.find({ bookingId: booking._id });
+      let earliestStartTime: Date | null = null;
+
+      for (const item of items) {
+        let itemStart: Date | null = null;
+        if (item.rentalType === 'HOURLY' || item.itemType === 'PHOTOGRAPHY_PACKAGE') {
+          if (item.shootDate) {
+            const d = new Date(item.shootDate);
+            let hour = 7;
+            let min = 0;
+            if (item.shootTimeSlot) {
+              const timePart = item.shootTimeSlot.split('-')[0].trim();
+              const [h, m] = timePart.split(':').map(Number);
+              if (!isNaN(h)) {
+                hour = h;
+                min = m || 0;
+              }
+            }
+            d.setHours(hour, min, 0, 0);
+            itemStart = d;
+          }
+        } else {
+          // DAILY
+          if (item.rentalFrom) {
+            const d = new Date(item.rentalFrom);
+            d.setHours(0, 0, 0, 0);
+            itemStart = d;
+          }
+        }
+
+        if (itemStart) {
+          if (!earliestStartTime || itemStart < earliestStartTime) {
+            earliestStartTime = itemStart;
+          }
+        }
+      }
+
+      if (earliestStartTime) {
+        const diffInMs = earliestStartTime.getTime() - now.getTime();
+        const diffInHours = diffInMs / (1000 * 60 * 60);
+
+        if (diffInHours >= 24) {
+          isFreeCancel = true;
+        } else {
+          // Check if this booking was created within 24 hours of start time (last-minute booking)
+          const createdAtDate = new Date((booking as any).createdAt);
+          const startMinusCreatedHours = (earliestStartTime.getTime() - createdAtDate.getTime()) / (1000 * 60 * 60);
+          if (startMinusCreatedHours < 24) {
+            const minsSinceCreation = (now.getTime() - createdAtDate.getTime()) / (1000 * 60);
+            if (diffInHours >= 2) {
+              // Grace period is 60 minutes
+              if (minsSinceCreation <= 60) {
+                isFreeCancel = true;
+              } else {
+                isFreeCancel = false;
+                penaltyReason = `Đã quá thời gian ân hạn 60 phút đối với đơn hàng đặt sát giờ (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
+              }
+            } else {
+              // Super last-minute: Grace period is 5 minutes
+              if (minsSinceCreation <= 5) {
+                isFreeCancel = true;
+              } else {
+                isFreeCancel = false;
+                penaltyReason = `Đã quá thời gian ân hạn 5 phút đối với đơn hàng đặt siêu gấp (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
+              }
+            }
+          } else {
+            // Normal booking cancelled late
+            isFreeCancel = false;
+            penaltyReason = 'Hủy đơn trễ (dưới 24 giờ trước giờ hẹn).';
+          }
+        }
+      }
+    }
+
+    if (isProvider) {
+      isFreeCancel = true;
+      // We can also flag provider penalty here if needed (e.g. decrease provider rating score or log)
+    }
+
+    if (isFreeCancel) {
+      refundAmount = booking.pricingSummary?.depositTotal || 0;
+    } else {
+      refundAmount = 0;
+    }
+
+    booking.status = BookingStatus.Cancelled;
+    booking.cancellation = {
+      cancelledBy: new Types.ObjectId(userId),
+      reason: reason || (isProvider ? 'Nhà cung cấp chủ động hủy lịch' : 'Khách hàng hủy đơn'),
+      cancelledAt: now,
+      refundAmount,
+    };
+
+    booking.statusTimeline.push({
+      status: BookingStatus.Cancelled,
+      changedAt: now,
+      note: isFreeCancel 
+        ? `Đơn hàng đã được hủy thành công. Hoàn cọc 100% (${refundAmount.toLocaleString('vi-VN')}đ).` 
+        : `Đơn hàng đã bị hủy kèm mức phạt mất cọc do: ${penaltyReason}`,
+    });
+
+    const savedBooking = await booking.save();
+
+    // Set schedule entries to Cancelled
+    await this.bookingScheduleModel.updateMany(
+      { bookingId: booking._id },
+      { status: BookingScheduleStatus.Cancelled }
+    );
+
+    return {
+      success: true,
+      booking: savedBooking,
+      isFreeCancel,
+      refundAmount,
+      penaltyReason,
+    };
   }
 }
