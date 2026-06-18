@@ -54,23 +54,13 @@ class ChatbotEngine:
         Kiểm tra xem 2 age range có tương thích không
         
         Logic:
-        - age_unspecified match với age_unspecified
-        - age_unspecified match với bất kỳ range nào (tổng quát)
-        - same range match với nhau
-        - khác range không match
+        - Nếu user không nhắc tuổi (age_unspecified) -> có thể khớp với bất kỳ độ tuổi nào trong DB
+        - Nếu DB không ghi cụ thể tuổi (age_unspecified) -> có thể khớp với bất kỳ user nào
+        - Nếu cả hai đều ghi cụ thể tuổi -> phải trùng khớp nhau
         """
-        if user_age_range == "age_unspecified" and db_age_range == "age_unspecified":
+        if user_age_range == "age_unspecified" or db_age_range == "age_unspecified":
             return True
         
-        if user_age_range == "age_unspecified":
-            # User không nhắc tuổi → chỉ match với answers không specific tuổi
-            return db_age_range == "age_unspecified"
-        
-        if db_age_range == "age_unspecified":
-            # DB answer không specific → match với bất kỳ user age
-            return True
-        
-        # User có tuổi → match với cùng age_range
         return user_age_range == db_age_range
 
     def _is_gender_compatible(self, user_gender: str, db_gender: str) -> bool:

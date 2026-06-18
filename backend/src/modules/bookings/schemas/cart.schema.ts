@@ -18,6 +18,9 @@ export interface CartItem {
   rentalTo?: Date | null;
   shootDate?: Date | null;
   shootTimeSlot?: string | null;
+  shootLocation?: string | null;
+  shootConcept?: string | null;
+  referenceImage?: string | null;
   customRequests?: string | null;
   addedAt: Date;
 }
@@ -58,6 +61,9 @@ export class Cart {
         rentalTo: { type: Date, default: null },
         shootDate: { type: Date, default: null },
         shootTimeSlot: { type: String, default: null },
+        shootLocation: { type: String, default: null },
+        shootConcept: { type: String, default: null },
+        referenceImage: { type: String, default: null },
         customRequests: { type: String, default: null },
         addedAt: { type: Date, default: Date.now },
       },

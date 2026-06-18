@@ -5,9 +5,11 @@ import { ROUTES } from '../config/routes';
 import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X } from 'lucide-react';
 import { API_BASE_URL } from '../config/env';
 import { AIChatBot } from '../features/dashboard/components/AIChatBot';
+import { useCart } from '../context/CartContext';
 
 export const MainLayout: React.FC = () => {
   const { isAuthenticated, user, logout } = useAuth();
+  const { cart } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -80,19 +82,19 @@ export const MainLayout: React.FC = () => {
               Khám phá
             </Link>
 
-            <a 
-              href="/#rentals" 
-              className={`vh-header-nav-link-custom ${location.hash === '#rentals' ? 'active' : ''}`}
+            <Link 
+              to={ROUTES.RENTALS} 
+              className={`vh-header-nav-link-custom ${location.pathname === ROUTES.RENTALS ? 'active' : ''}`}
             >
               Cho thuê
-            </a>
+            </Link>
 
-            <a 
-              href="/#photographers" 
-              className={`vh-header-nav-link-custom ${location.hash === '#photographers' ? 'active' : ''}`}
+            <Link 
+              to={ROUTES.PHOTOGRAPHERS} 
+              className={`vh-header-nav-link-custom ${location.pathname.startsWith('/photographers') ? 'active' : ''}`}
             >
               Nhiếp ảnh
-            </a>
+            </Link>
 
             <a 
               href="/#heritage" 
@@ -115,9 +117,29 @@ export const MainLayout: React.FC = () => {
               <Bell size={20} />
             </button>
             
-            <button className="vh-header-action-icon-custom" title="Giỏ hàng">
+            <Link to={ROUTES.CART} className="vh-header-action-icon-custom" title="Giỏ hàng" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ShoppingBag size={20} />
-            </button>
+              {cart.length > 0 && (
+                <span className="vh-cart-badge" style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  right: '-4px',
+                  backgroundColor: 'var(--color-primary)',
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: '16px',
+                  height: '16px',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                </span>
+              )}
+            </Link>
 
             {isAuthenticated ? (
               <div className="vh-header-user-section-relative-wrapper" ref={dropdownRef}>
@@ -202,7 +224,7 @@ export const MainLayout: React.FC = () => {
               </div>
             ) : (
               <Link to={ROUTES.LOGIN} className="vh-btn vh-btn-primary vh-btn-sm" style={{ borderRadius: '8px', padding: '8px 20px', fontWeight: 600 }}>
-                SIGN IN
+                ĐĂNG NHẬP
               </Link>
             )}
           </div>

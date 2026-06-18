@@ -199,46 +199,116 @@ async def _get_recommended_products(answer_text: str) -> tuple[str, list[dict]]:
 
 @app.post("/chat")
 async def chat(message: str):
-    # Extract age_range và gender từ user message
+    from chatbot.normalization import extract_intent
+
+    # Extract age_range, gender, và intent từ user message
     age_info = extract_age_and_range(message)
     user_age_range = age_info["age_range"]
     user_gender = extract_gender(message)
+    user_intent = extract_intent(message)
 
+    # 1. Ưu tiên tra cứu cơ sở dữ liệu local QA trước
+    # Điều này giúp các câu hỏi nghiệp vụ chuẩn (như thời gian thuê, cọc đồ) 
+    # luôn được trả lời chính xác từ DB mà không bị chuyển sang luồng Product RAG.
     qa_col = db["qa_data"]
     all_qa = await qa_col.find({}).to_list(length=20000)
 
-    result = chatbot.answer_question(
+    # Tìm câu tương đồng
+    similar_qas = chatbot.search_similar_questions(
         message,
         user_age_range,
         user_gender,
-        all_qa
+        all_qa,
+        top_k=1
     )
 
+    MIN_SCORE_THRESHOLD = 35.0
     recommended_prods = []
 
-    # Nếu không tìm thấy trong DB nội bộ → dùng Gemini RAG với product context
-    if not result.get("found") or result.get("source") == "gemini_learned":
+    # Nếu tìm thấy câu trả lời khớp tốt trong local QA
+    if similar_qas and similar_qas[0]["score"] >= MIN_SCORE_THRESHOLD:
+        best_match = similar_qas[0]
+        best_qa = best_match["qa"]
+        best_score = best_match["score"]
+        confidence = min(0.5 + (best_score / 100.0), 0.99)
+
+        return {
+            "question": message,
+            "answer": best_qa["answer"],
+            "found": True,
+            "matched_question": best_qa["question_original"],
+            "category": best_qa.get("category", "unknown"),
+            "confidence": round(confidence, 2),
+            "source": best_qa.get("source", "manual"),
+            "age_range_matched": best_qa.get("age_range"),
+            "gender_matched": best_qa.get("gender"),
+            "age_range_used": user_age_range,
+            "gender_used": user_gender,
+            "recommended_products": []
+        }
+
+    # 2. Nếu không khớp câu hỏi local QA -> Kiểm tra xem có phải ý định tìm/thuê sản phẩm không
+    PRODUCT_INTENT_KEYWORDS = [
+        "thuê", "mua", "muốn", "tìm", "có mẫu", "có bộ", "gợi ý",
+        "đề xuất", "recommend", "giống", "tương tự", "shop có",
+        "màu", "chất liệu", "gấm", "lụa", "thêu"
+    ]
+    is_product_query = (
+        user_intent == "recommendation" or
+        any(kw in message.lower() for kw in PRODUCT_INTENT_KEYWORDS)
+    )
+
+    if is_product_query:
+        # ── Đường dẫn PRODUCT RAG: Gemini + products collection ──
         product_context = await _get_product_context(limit=10)
         gemini_answer = chatbot.call_gemini_fallback(message, product_context=product_context)
         if gemini_answer:
             cleaned_answer, recommended_prods = await _get_recommended_products(gemini_answer)
-            from chatbot.normalization import create_normalized_doc
-            new_doc = create_normalized_doc(message, cleaned_answer, source="gemini_learned")
-            result = {
-                "question": message,
-                "answer": cleaned_answer,
-                "found": True,
-                "matched_question": "Tri thức tự học từ Gemini AI Trợ lý",
-                "category": new_doc.get("category", "general"),
-                "confidence": 0.85,
-                "source": "gemini_learned",
-                "age_range_used": user_age_range,
-                "gender_used": user_gender,
-                "new_doc": new_doc,
-                "recommended_products": recommended_prods
-            }
+        else:
+            cleaned_answer = "Xin lỗi, mình chưa tư vấn được lúc này. Bạn thử lại sau nhé! 😊"
+        return {
+            "question": message,
+            "answer": cleaned_answer,
+            "found": True,
+            "matched_question": "Gemini Product RAG",
+            "category": "product_recommendation",
+            "confidence": 0.9,
+            "source": "gemini_rag",
+            "age_range_used": user_age_range,
+            "gender_used": user_gender,
+            "recommended_products": recommended_prods
+        }
 
-    # Cơ chế TỰ HỌC
+    # 3. Nếu không phải câu hỏi sản phẩm -> Gọi Gemini fallback thông thường và TỰ HỌC
+    gemini_answer = chatbot.call_gemini_fallback(message, product_context="")
+    if gemini_answer:
+        from chatbot.normalization import create_normalized_doc
+        new_doc = create_normalized_doc(message, gemini_answer, source="gemini_learned")
+        result = {
+            "question": message,
+            "answer": gemini_answer,
+            "found": True,
+            "matched_question": "Tri thức tự học từ Gemini AI Trợ lý",
+            "category": new_doc.get("category", "general"),
+            "confidence": 0.85,
+            "source": "gemini_learned",
+            "age_range_used": user_age_range,
+            "gender_used": user_gender,
+            "new_doc": new_doc,
+            "recommended_products": []
+        }
+    else:
+        result = {
+            "question": message,
+            "answer": "Mình chưa có thông tin về câu hỏi này. Bạn vui lòng thử lại nhé! 😊",
+            "found": False,
+            "confidence": 0.0,
+            "age_range_used": user_age_range,
+            "gender_used": user_gender,
+            "recommended_products": []
+        }
+
+    # Cơ chế TỰ HỌC — chỉ lưu câu hỏi kiến thức chung, KHÔNG lưu product query
     if result.get("source") == "gemini_learned" and "new_doc" in result:
         new_doc = result["new_doc"]
         new_doc["_id"] = f"qa_learned_{len(all_qa)}"
@@ -249,8 +319,6 @@ async def chat(message: str):
             print(f"[Auto-Learning Error] {str(e).encode('ascii', errors='replace').decode('ascii')}")
 
     result.pop("new_doc", None)
-    if "recommended_products" not in result:
-        result["recommended_products"] = recommended_prods
     return result
 
 

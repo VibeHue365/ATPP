@@ -66,6 +66,31 @@ export class BookingItem {
   @Prop({ type: String, default: null })
   shootTimeSlot?: string | null;
 
+  @Prop({ type: String, default: null })
+  shootLocation?: string | null;
+
+  @Prop({ type: String, default: null })
+  shootConcept?: string | null;
+
+  @Prop({ type: String, default: null })
+  referenceImage?: string | null;
+
+  // ---- Thông tin thuê rõ ràng ----
+  @Prop({
+    type: String,
+    enum: ['DAILY', 'HOURLY'],
+    required: true,
+    default: 'DAILY',
+    index: true,
+  })
+  rentalType: 'DAILY' | 'HOURLY'; // Hình thức thuê: theo ngày hoặc theo giờ
+
+  @Prop({ type: String, default: null, trim: true, uppercase: true })
+  selectedSize?: string | null; // Kích cỡ được chọn (VD: 'M', 'L')
+
+  @Prop({ type: String, default: null, trim: true, uppercase: true })
+  selectedColor?: string | null; // Màu sắc được chọn (VD: 'RED', 'WHITE')
+
   @Prop({ type: String, default: null, trim: true })
   customRequests?: string | null;
 }

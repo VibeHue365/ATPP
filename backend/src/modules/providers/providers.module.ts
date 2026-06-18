@@ -5,10 +5,12 @@ import {
   ProviderVerification,
   ProviderVerificationSchema,
 } from './schemas/provider-verification.schema';
+import { ProductsModule } from '../products/products.module';
 import { ProvidersController } from './controllers/providers.controller';
 import { ProvidersService } from './services/providers.service';
 import { ProvidersRepository } from './repositories/providers.repository';
-import { ProductsModule } from '../products/products.module';
+import { PhotographersController } from './controllers/photographers.controller';
+import { PhotographersService } from './services/photographers.service';
 
 export const providerModels = MongooseModule.forFeature([
   { name: Provider.name, schema: ProviderSchema },
@@ -17,8 +19,8 @@ export const providerModels = MongooseModule.forFeature([
 
 @Module({
   imports: [providerModels, ProductsModule],
-  controllers: [ProvidersController],
-  providers: [ProvidersService, ProvidersRepository],
-  exports: [providerModels, ProvidersService, ProvidersRepository],
+  controllers: [ProvidersController, PhotographersController],
+  providers: [ProvidersService, ProvidersRepository, PhotographersService],
+  exports: [providerModels, ProvidersService, ProvidersRepository, PhotographersService],
 })
 export class ProvidersModule {}

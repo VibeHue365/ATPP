@@ -41,7 +41,10 @@ export class Product {
   images: string[];
 
   @Prop({ required: true, min: 0 })
-  basePrice: number;
+  basePrice: number; // Giá thuê theo ngày (VNĐ/ngày)
+
+  @Prop({ type: Number, default: null, min: 0 })
+  hourlyPrice?: number | null; // Giá thuê theo giờ (VNĐ/giờ), null = không hỗ trợ thuê giờ
 
   @Prop({ required: true, min: 0 })
   depositAmount: number;

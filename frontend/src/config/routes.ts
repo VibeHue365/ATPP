@@ -1,12 +1,18 @@
 export const ROUTES = {
   LANDING: '/',
+  RENTALS: '/rentals',
+  PHOTOGRAPHERS: '/photographers',
   LOGIN: '/auth/login',
   REGISTER: '/auth/register',
   VERIFY_EMAIL: '/auth/verify-email',
   FORGOT_PASSWORD: '/auth/forgot-password',
   RESET_PASSWORD: '/auth/reset-password',
+  ONBOARDING: '/onboarding',
   DASHBOARD: '/dashboard',
   PROFILE: '/dashboard/profile',
   SETTINGS: '/dashboard/settings',
   OAUTH_CALLBACK: '/oauth/callback',
+  PRODUCT_DETAIL: '/rentals/:id',
+  PHOTOGRAPHER_DETAIL: '/photographers/:id',
+  CART: '/cart',
 } as const;

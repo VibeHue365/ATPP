@@ -14,6 +14,7 @@ import { DisputesModule } from './modules/disputes/disputes.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AiModule } from './modules/ai/ai.module';
+import { ChatModule } from './modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { AiModule } from './modules/ai/ai.module';
     NotificationsModule,
     AuditModule,
     AiModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
