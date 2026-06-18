@@ -10,5 +10,6 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   PROFILE: '/dashboard/profile',
   SETTINGS: '/dashboard/settings',
+  PROVIDER_DASHBOARD: '/provider/dashboard',
   OAUTH_CALLBACK: '/oauth/callback',
 } as const;
