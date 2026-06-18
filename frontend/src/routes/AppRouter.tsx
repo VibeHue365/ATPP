@@ -15,6 +15,8 @@ import LandingPage from '../pages/LandingPage';
 import { AoDaiListingPage } from '../pages/rentals/AoDaiListingPage';
 import { ProductDetailPage } from '../pages/rentals/ProductDetailPage';
 import { PhotographersListingPage } from '../pages/photographers/PhotographersListingPage';
+import { PhotographerDetailPage } from '../pages/photographers/PhotographerDetailPage';
+import { CartPage } from '../pages/cart/CartPage';
 import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
 import VerifyOtpPage from '../pages/auth/VerifyOtpPage';
@@ -34,6 +36,8 @@ export const AppRouter: React.FC = () => {
         <Route path={ROUTES.RENTALS} element={<AoDaiListingPage />} />
         <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
         <Route path={ROUTES.PHOTOGRAPHERS} element={<PhotographersListingPage />} />
+        <Route path={ROUTES.PHOTOGRAPHER_DETAIL} element={<PhotographerDetailPage />} />
+        <Route path={ROUTES.CART} element={<CartPage />} />
       </Route>
 
       {/* Google OAuth Callback Handler */}

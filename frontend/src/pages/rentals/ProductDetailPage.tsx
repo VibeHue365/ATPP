@@ -4,19 +4,18 @@ import {
   Heart, 
   Star, 
   Sparkles, 
-  Clock, 
   ArrowRight, 
   ChevronRight,
+  ChevronLeft,
   Shield,
-  Truck,
-  RotateCcw,
   Camera,
   User,
-  Check
+  Check,
+  MapPin
 } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
-import { useAuth } from '../../features/auth/hooks/useAuth';
 import { useToast } from '../../components/feedback/Toast';
+import { useCart } from '../../context/CartContext';
 import { Modal } from '../../components/common/Modal';
 import { ROUTES } from '../../config/routes';
 
@@ -38,14 +37,25 @@ interface ProductDetail {
   providerId: {
     _id: string;
     businessName: string;
+    contact?: {
+      email: string;
+      phone: string;
+      website?: string | null;
+    };
+    address?: {
+      addressLine: string;
+      ward?: string | null;
+      district?: string | null;
+      city?: string | null;
+    };
   };
 }
 
 export const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
   const toast = useToast();
+  const { addToCart } = useCart();
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -74,16 +84,42 @@ export const ProductDetailPage: React.FC = () => {
   const [isAiStylingOpen, setIsAiStylingOpen] = useState<boolean>(false);
   const [isAiSizeOpen, setIsAiSizeOpen] = useState<boolean>(false);
   const [isComboOpen, setIsComboOpen] = useState<boolean>(false);
-  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState<boolean>(false);
   
-  // Created booking information
-  const [createdBooking, setCreatedBooking] = useState<any>(null);
-
   // Description Tabs: 'details' | 'policies' | 'guide'
   const [activeInfoTab, setActiveInfoTab] = useState<'details' | 'policies' | 'guide'>('details');
 
   // Favorites state
   const [isFav, setIsFav] = useState<boolean>(false);
+  const [suggestedPhotographers, setSuggestedPhotographers] = useState<any[]>([]);
+
+  // Calendar states
+  const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 5, 1));
+
+  const calendarDays = React.useMemo(() => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let firstDayOfWeek = new Date(year, month, 1).getDay();
+    firstDayOfWeek = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+    const days: any[] = [];
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      days.push({ day: 0, dateStr: '', isWeekend: false, isAvailable: false, isEmpty: true });
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      const dayOfWeek = new Date(dateStr).getDay();
+      days.push({
+        day: i,
+        dateStr,
+        isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
+        isAvailable: i !== 15 && i !== 24 && dateStr >= todayStr, // Consistent busy dates, disabled in past
+        isEmpty: false,
+      });
+    }
+    return days;
+  }, [calendarDate]);
 
   // Hours catalog (08:00 to 20:00)
   const timeSlots = [
@@ -91,6 +127,35 @@ export const ProductDetailPage: React.FC = () => {
     '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', 
     '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'
   ];
+
+  const handleCalendarDayClick = (dateStr: string) => {
+    if (rentalMode === 'HOURLY') {
+      setSingleDate(dateStr);
+      setStartDate(dateStr);
+      setEndDate(dateStr);
+    } else {
+      // DAILY range selection
+      if (!startDate || (startDate && endDate)) {
+        setStartDate(dateStr);
+        setEndDate('');
+      } else {
+        if (dateStr < startDate) {
+          setStartDate(dateStr);
+          setEndDate('');
+        } else {
+          // Check if there are any unavailable dates between startDate and dateStr!
+          const hasUnavailable = calendarDays.some(d => 
+            !d.isEmpty && !d.isAvailable && d.dateStr > startDate && d.dateStr < dateStr
+          );
+          if (hasUnavailable) {
+            toast.error('Khoảng thời gian chọn chứa ngày đã bị đặt!');
+            return;
+          }
+          setEndDate(dateStr);
+        }
+      }
+    }
+  };
 
   useEffect(() => {
     const fetchProductDetails = async () => {
@@ -128,6 +193,84 @@ export const ProductDetailPage: React.FC = () => {
     fetchProductDetails();
   }, [id]);
 
+  useEffect(() => {
+    if (!product) return;
+    const fetchSuggestions = async () => {
+      try {
+        const data = await httpClient.get<any[]>('/api/photographers');
+        const productCity = product.providerId?.address?.city || 'Thừa Thiên Huế';
+
+        // Filter photographers by matching city
+        const filtered = data.filter((prov: any) => {
+          const provCity = prov.address?.city || '';
+          const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+          return normalize(provCity).includes(normalize(productCity)) || normalize(productCity).includes(normalize(provCity));
+        });
+
+        // Use filtered or fallback to original data if filtered is empty
+        const listToMap = filtered.length > 0 ? filtered : data;
+
+        const mapped = listToMap.slice(0, 3).map((prov: any) => {
+          const rawName = prov.businessName || 'Nhiếp ảnh gia';
+          let displayName = rawName;
+          let quote = 'Chuyên chụp cổ phục ngoại cảnh Đại Nội Huế';
+          let avatar = '/hoang_minh.png';
+
+          if (rawName.includes('Minh Trí') || rawName.includes('Hoàng Minh')) {
+            displayName = 'Hoàng Minh';
+            quote = 'Phong cách nghệ thuật hoài cổ. Concept Mộng Thơ sẽ phù hợp với thiết kế này.';
+            avatar = '/hoang_minh.png';
+          } else if (rawName.includes('Hoàng Lê') || rawName.includes('Lê Thảo')) {
+            displayName = 'Lê Thảo';
+            quote = 'Phong cách thơ mộng, ánh sáng tự nhiên, tôn nét dịu dàng của tà áo dài truyền thống.';
+            avatar = '/le_thao.png';
+          } else if (rawName.includes('Thanh Thủy') || rawName.includes('Trần Bảo')) {
+            displayName = 'Trần Bảo';
+            quote = 'Kể chuyện cổ phục bằng ngôn ngữ điện ảnh, tạo góc máy thần thái đạt chất lượng cao.';
+            avatar = '/tran_bao.png';
+          } else {
+            avatar = prov.portfolio?.[0] || '/hoang_minh.png';
+          }
+
+          const minPrice = prov.packages && prov.packages.length > 0
+            ? Math.min(...prov.packages.map((p: any) => p.price))
+            : 1500000;
+
+          return {
+            id: prov._id,
+            name: displayName,
+            rating: prov.rating?.averageRating || 5.0,
+            count: prov.rating?.totalReviews || 12,
+            desc: quote,
+            price: `${minPrice.toLocaleString('vi-VN')}đ`,
+            image: avatar
+          };
+        });
+
+        if (mapped.length < 3) {
+          const fallbacks = [
+            { id: 'p1', name: 'Hoàng Minh', rating: 4.9, count: 142, desc: 'Phong cách nghệ thuật hoài cổ. Concept Mộng Thơ sẽ phù hợp với thiết kế này.', price: '1.500.000đ', image: '/hoang_minh.png' },
+            { id: 'p2', name: 'Lê Thảo', rating: 5.0, count: 96, desc: 'Phong cách thơ mộng, ánh sáng tự nhiên, tôn nét dịu dàng của tà áo dài truyền thống.', price: '2.000.000đ', image: '/le_thao.png' },
+            { id: 'p3', name: 'Trần Bảo', rating: 4.8, count: 75, desc: 'Kể chuyện cổ phục bằng ngôn ngữ điện ảnh, tạo góc máy thần thái đạt chất lượng cao.', price: '2.500.000đ', image: '/tran_bao.png' }
+          ];
+          const combined = [...mapped, ...fallbacks.slice(mapped.length)];
+          setSuggestedPhotographers(combined);
+        } else {
+          setSuggestedPhotographers(mapped);
+        }
+      } catch (err) {
+        console.error('Lỗi lấy danh sách thợ gợi ý:', err);
+        setSuggestedPhotographers([
+          { id: 'p1', name: 'Hoàng Minh', rating: 4.9, count: 142, desc: 'Phong cách nghệ thuật hoài cổ. Concept Mộng Thơ sẽ phù hợp với thiết kế này.', price: '1.500.000đ', image: '/hoang_minh.png' },
+          { id: 'p2', name: 'Lê Thảo', rating: 5.0, count: 96, desc: 'Phong cách thơ mộng, ánh sáng tự nhiên, tôn nét dịu dàng của tà áo dài truyền thống.', price: '2.000.000đ', image: '/le_thao.png' },
+          { id: 'p3', name: 'Trần Bảo', rating: 4.8, count: 75, desc: 'Kể chuyện cổ phục bằng ngôn ngữ điện ảnh, tạo góc máy thần thái đạt chất lượng cao.', price: '2.500.000đ', image: '/tran_bao.png' }
+        ]);
+      }
+    };
+
+    fetchSuggestions();
+  }, [product]);
+
   // Handle hourly time validation rules
   useEffect(() => {
     if (rentalMode === 'HOURLY') {
@@ -159,6 +302,14 @@ export const ProductDetailPage: React.FC = () => {
       YELLOW: '#F4D03F',
     };
     return catalog[colorName.toUpperCase()] || '#CCCCCC';
+  };
+
+  const formatSingleDate = (dateStr?: string | null) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    if (dateStr.includes('/')) return dateStr;
+    return dateStr;
   };
 
   const getDayDuration = () => {
@@ -197,39 +348,63 @@ export const ProductDetailPage: React.FC = () => {
     return timeSlots.slice(startIndex + 4);
   };
 
-  const handleBookingSubmit = async () => {
-    if (!isAuthenticated) {
-      toast.info('Bạn cần đăng nhập để đặt thuê sản phẩm.');
-      navigate(ROUTES.LOGIN);
-      return;
-    }
-
+  const handleAddToCart = () => {
     if (!selectedSize || !selectedColor) {
       toast.error('Vui lòng chọn đầy đủ màu sắc và kích cỡ.');
       return;
     }
 
-    try {
-      const bookingPayload = {
-        productId: product?._id,
-        rentalType: rentalMode,
-        startDate: rentalMode === 'DAILY' ? startDate : singleDate,
-        endDate: rentalMode === 'DAILY' ? endDate : singleDate,
-        startTime: rentalMode === 'HOURLY' ? startTime : undefined,
-        endTime: rentalMode === 'HOURLY' ? endTime : undefined,
-        size: selectedSize,
-        color: selectedColor,
-        quantity: 1,
-      };
+    const cartPayload = {
+      itemType: 'PRODUCT' as const,
+      productId: product?._id,
+      name: product?.name,
+      image: product?.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+      basePrice: product?.basePrice,
+      depositAmount: product?.depositAmount,
+      size: selectedSize,
+      color: selectedColor,
+      rentalType: rentalMode,
+      startDate: rentalMode === 'DAILY' ? startDate : singleDate,
+      endDate: rentalMode === 'DAILY' ? endDate : singleDate,
+      startTime: rentalMode === 'HOURLY' ? startTime : undefined,
+      endTime: rentalMode === 'HOURLY' ? endTime : undefined,
+      providerCity: product?.providerId?.address?.city || 'Thừa Thiên Huế',
+      providerAddress: product?.providerId?.address?.addressLine || '',
+      quantity: 1,
+    };
 
-      const res = await httpClient.post<any>('/bookings', bookingPayload);
-      setCreatedBooking(res);
-      setIsSuccessModalOpen(true);
-      toast.success('Tạo đơn thuê áo dài thành công!');
-    } catch (err: any) {
-      console.error('Lỗi tạo đơn đặt hàng:', err);
-      toast.error(err.message || 'Không thể tạo đơn đặt thuê.');
+    addToCart(cartPayload);
+    toast.success('Đã thêm sản phẩm áo dài vào giỏ hàng thành công!');
+  };
+
+  const handleBookingSubmit = async () => {
+    if (!selectedSize || !selectedColor) {
+      toast.error('Vui lòng chọn đầy đủ màu sắc và kích cỡ.');
+      return;
     }
+
+    const cartPayload = {
+      itemType: 'PRODUCT' as const,
+      productId: product?._id,
+      name: product?.name,
+      image: product?.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+      basePrice: product?.basePrice,
+      depositAmount: product?.depositAmount,
+      size: selectedSize,
+      color: selectedColor,
+      rentalType: rentalMode,
+      startDate: rentalMode === 'DAILY' ? startDate : singleDate,
+      endDate: rentalMode === 'DAILY' ? endDate : singleDate,
+      startTime: rentalMode === 'HOURLY' ? startTime : undefined,
+      endTime: rentalMode === 'HOURLY' ? endTime : undefined,
+      providerCity: product?.providerId?.address?.city || 'Thừa Thiên Huế',
+      providerAddress: product?.providerId?.address?.addressLine || '',
+      quantity: 1,
+    };
+
+    addToCart(cartPayload);
+    toast.success('Đã thêm sản phẩm áo dài vào giỏ hàng!');
+    navigate(ROUTES.CART);
   };
 
   if (loading) {
@@ -295,7 +470,7 @@ export const ProductDetailPage: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)', gap: '60px', alignItems: 'start' }}>
           
           {/* LEFT COLUMN: Gallery */}
-          <div style={{ display: 'flex', gap: '20px' }}>
+          <div style={{ display: 'flex', gap: '20px', position: 'sticky', top: '112px' }}>
             {/* Thumbnails list */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flexShrink: 0 }}>
               {(product.images.length > 0 ? product.images : [
@@ -405,6 +580,26 @@ export const ProductDetailPage: React.FC = () => {
                 <Shield size={13} className="text-emerald-600" />
                 <span>Tiền cọc đảm bảo hoàn trả: <strong>{product.depositAmount.toLocaleString('vi-VN')}đ</strong></span>
               </p>
+            </div>
+
+            {/* Pickup Address Section */}
+            <div style={{ display: 'flex', gap: '12px', backgroundColor: '#F5F2EB', padding: '16px', borderRadius: '12px', border: '1px solid rgba(182, 145, 91, 0.2)' }}>
+              <MapPin size={20} style={{ color: 'var(--color-primary-dark)', flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, display: 'block', textTransform: 'uppercase' }}>Địa chỉ nhận đồ (Lấy tại cửa hàng)</span>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-primary)', display: 'block', marginTop: '2px' }}>
+                  {product.providerId?.address ? (
+                    `${product.providerId.address.addressLine}, ${product.providerId.address.ward ? product.providerId.address.ward + ', ' : ''}${product.providerId.address.district ? product.providerId.address.district + ', ' : ''}${product.providerId.address.city || ''}`
+                  ) : (
+                    '45 Lê Lợi, Phú Hội, Thành phố Huế, Thừa Thiên Huế'
+                  )}
+                </span>
+                {product.providerId?.contact?.phone && (
+                  <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '4px' }}>
+                    SĐT liên hệ: <strong>{product.providerId.contact.phone}</strong>
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* AI Assistance Widget */}
@@ -563,101 +758,184 @@ export const ProductDetailPage: React.FC = () => {
                 )}
               </div>
 
-
               {/* Selector Panels */}
               <div style={{ padding: '24px' }}>
-                {rentalMode === 'DAILY' ? (
-                  /* Daily Selection Grid */
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div className="vh-input-group" style={{ margin: 0 }}>
-                        <span className="vh-input-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: 700 }}>NHẬN ĐỒ</span>
-                        <div className="vh-input-wrapper">
-                          <input 
-                            type="date" 
-                            value={startDate} 
-                            onChange={(e) => setStartDate(e.target.value)} 
-                            className="vh-input-field" 
-                            style={{ paddingRight: '8px' }}
-                          />
-                        </div>
-                      </div>
-                      <div className="vh-input-group" style={{ margin: 0 }}>
-                        <span className="vh-input-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: 700 }}>TRẢ ĐỒ</span>
-                        <div className="vh-input-wrapper">
-                          <input 
-                            type="date" 
-                            value={endDate} 
-                            onChange={(e) => setEndDate(e.target.value)} 
-                            className="vh-input-field" 
-                            style={{ paddingRight: '8px' }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Helper text */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--color-text-secondary)', backgroundColor: '#FAF7F0', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(182,145,91,0.15)' }}>
-                      <Clock size={14} className="text-amber-600" />
-                      <span>Thời gian nhận đồ: <strong>sau 09:00</strong> | Trả đồ: <strong>trước 18:00</strong></span>
-                    </div>
-                  </div>
-                ) : (
-                  /* Hourly Selection Grid */
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    
-                    {/* Date Picker */}
-                    <div className="vh-input-group" style={{ margin: 0 }}>
-                      <span className="vh-input-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: 700 }}>NGÀY THUÊ</span>
-                      <div className="vh-input-wrapper">
-                        <input 
-                          type="date" 
-                          value={singleDate} 
-                          onChange={(e) => setSingleDate(e.target.value)} 
-                          className="vh-input-field" 
-                        />
-                      </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: '32px', alignItems: 'start' }}>
+                  
+                  {/* LEFT: Calendar Grid */}
+                  <div>
+                    {/* Month navigation header */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                      <button
+                        onClick={() => { const d = new Date(calendarDate); d.setMonth(d.getMonth() - 1); setCalendarDate(d); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center' }}
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                        Tháng {calendarDate.getMonth() + 1}, {calendarDate.getFullYear()}
+                      </span>
+                      <button
+                        onClick={() => { const d = new Date(calendarDate); d.setMonth(d.getMonth() + 1); setCalendarDate(d); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center' }}
+                      >
+                        <ChevronRight size={16} />
+                      </button>
                     </div>
 
-                    {/* Time Selectors Dropdowns */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div className="vh-input-group" style={{ margin: 0 }}>
-                        <span className="vh-input-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: 700 }}>GIỜ BẮT ĐẦU</span>
-                        <select 
-                          value={startTime} 
-                          onChange={(e) => setStartTime(e.target.value)}
-                          className="vh-select-field"
-                        >
-                          {timeSlots.slice(0, -4).map((t) => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="vh-input-group" style={{ margin: 0 }}>
-                        <span className="vh-input-label" style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: 700 }}>GIỜ KẾT THÚC</span>
-                        <select 
-                          value={endTime} 
-                          onChange={(e) => setEndTime(e.target.value)}
-                          className="vh-select-field"
-                        >
-                          {getEndTimesOptions().map((t) => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
-                      </div>
+                    {/* Calendar grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
+                      {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((w) => (
+                        <span key={w} style={{ fontSize: '10px', fontWeight: 800, color: '#8C827A', padding: '4px 0' }}>{w}</span>
+                      ))}
+                      {calendarDays.map((d, idx) => {
+                        if (d.isEmpty) return <div key={`e-${idx}`} />;
+                        
+                        const isDaySelected = rentalMode === 'HOURLY' 
+                          ? singleDate === d.dateStr
+                          : (startDate === d.dateStr || endDate === d.dateStr);
+                          
+                        const isDayInRange = rentalMode === 'DAILY' && startDate && endDate && d.dateStr > startDate && d.dateStr < endDate;
+                        
+                        return (
+                          <button
+                            key={d.day}
+                            disabled={!d.isAvailable}
+                            onClick={() => handleCalendarDayClick(d.dateStr)}
+                            style={{
+                              aspectRatio: '1',
+                              border: isDaySelected ? '2px solid var(--color-primary-dark)' : '1px solid transparent',
+                              borderRadius: '8px',
+                              backgroundColor: isDaySelected
+                                ? 'var(--color-primary-dark)'
+                                : isDayInRange
+                                  ? '#FFF0F1'
+                                  : !d.isAvailable
+                                    ? '#F5F5F5'
+                                    : d.isWeekend
+                                      ? '#FCF9F2'
+                                      : '#FFFFFF',
+                              color: !d.isAvailable
+                                ? '#CCCCCC'
+                                : isDaySelected
+                                  ? '#FFFFFF'
+                                  : isDayInRange
+                                    ? 'var(--color-primary-dark)'
+                                    : '#4A4440',
+                              fontWeight: isDaySelected || isDayInRange ? 700 : 500,
+                              fontSize: '12px',
+                              cursor: !d.isAvailable ? 'not-allowed' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.15s ease',
+                              padding: 0
+                            }}
+                          >
+                            {d.day}
+                          </button>
+                        );
+                      })}
                     </div>
-
-                    {/* Rule indicator */}
-                    <span style={{ fontSize: '11px', fontStyle: 'italic', color: 'var(--color-text-secondary)' }}>
-                      * Thời gian thuê tối thiểu theo quy định là 2 tiếng. Các khung giờ không hợp lệ sẽ tự động ẩn đi.
-                    </span>
                   </div>
-                )}
+
+                  {/* RIGHT: Time Selectors (HOURLY) or Range Summary (DAILY) */}
+                  <div>
+                    {rentalMode === 'HOURLY' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <h3 style={{ fontSize: '11px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>CHỌN GIỜ THUÊ</h3>
+                        
+                        <div className="vh-input-group" style={{ margin: 0 }}>
+                          <span className="vh-input-label" style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: 700 }}>GIỜ BẮT ĐẦU</span>
+                          <select 
+                            value={startTime} 
+                            onChange={(e) => {
+                              setStartTime(e.target.value);
+                              // Automatically adjust end time if it becomes invalid
+                              const startIndex = timeSlots.indexOf(e.target.value);
+                              const endIndex = timeSlots.indexOf(endTime);
+                              if (endIndex <= startIndex) {
+                                const newEndIndex = Math.min(startIndex + 4, timeSlots.length - 1);
+                                setEndTime(timeSlots[newEndIndex]);
+                              }
+                            }}
+                            className="vh-select-field"
+                            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(45, 41, 38, 0.15)', backgroundColor: 'white' }}
+                          >
+                            {timeSlots.slice(0, -4).map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="vh-input-group" style={{ margin: 0 }}>
+                          <span className="vh-input-label" style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: 700 }}>GIỜ KẾT THÚC</span>
+                          <select 
+                            value={endTime} 
+                            onChange={(e) => setEndTime(e.target.value)}
+                            className="vh-select-field"
+                            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(45, 41, 38, 0.15)', backgroundColor: 'white' }}
+                          >
+                            {getEndTimesOptions().map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
+                        
+                        <span style={{ fontSize: '10px', fontStyle: 'italic', color: 'var(--color-text-secondary)', marginTop: '8px', lineHeight: 1.4 }}>
+                          * Tối thiểu 2 tiếng.
+                        </span>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <h3 style={{ fontSize: '11px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>THỜI GIAN THUÊ</h3>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY NHẬN ĐỒ</span>
+                            <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                              {startDate ? formatSingleDate(startDate) : 'Chưa chọn'}
+                            </span>
+                          </div>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY TRẢ ĐỒ</span>
+                            <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                              {endDate ? formatSingleDate(endDate) : 'Chưa chọn'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <span style={{ fontSize: '10px', fontStyle: 'italic', color: 'var(--color-text-secondary)', marginTop: '8px', lineHeight: 1.4 }}>
+                          * Chọn Ngày nhận và Ngày trả trực tiếp trên lịch.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  
+                </div>
               </div>
             </div>
 
             {/* ACTION ACTIONS */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <button 
+                onClick={handleAddToCart}
+                className="vh-btn vh-btn-outline vh-btn-lg" 
+                style={{ 
+                  width: '100%', 
+                  borderRadius: '12px', 
+                  fontSize: '16px', 
+                  height: '54px', 
+                  fontWeight: 700,
+                  border: '1.5px solid var(--color-primary-dark)',
+                  backgroundColor: 'transparent',
+                  color: 'var(--color-primary-dark)'
+                }}
+              >
+                THÊM VÀO GIỎ HÀNG
+              </button>
+
               <button 
                 onClick={handleBookingSubmit}
                 className="vh-btn vh-btn-primary vh-btn-lg" 
@@ -697,10 +975,7 @@ export const ProductDetailPage: React.FC = () => {
             {/* Micro value bullets */}
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--color-light-border)', paddingTop: '20px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Truck size={14} className="text-stone-500" /> Vận chuyển tận nơi
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <RotateCcw size={14} className="text-stone-500" /> Hỗ trợ đổi trả
+                <MapPin size={14} className="text-stone-500" /> Nhận tại cửa hàng
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Shield size={14} className="text-stone-500" /> Bảo mật thanh toán
@@ -803,11 +1078,7 @@ export const ProductDetailPage: React.FC = () => {
           </div>
           
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '32px' }}>
-            {[
-              { id: 'p1', name: 'Tran Studio', rating: 4.9, count: 142, desc: 'Chuyên phong cách thơ mộng, ánh sáng tự nhiên. Concept Mộng Thơ sẽ phù hợp với thiết kế này.', price: '1.500.000đ', image: '/hoang_minh.png' },
-              { id: 'p2', name: 'Linh Photography', rating: 5.0, count: 96, desc: 'Phong cách hoài cổ, Vintage tôn nét ảnh đậm chất di sản Việt Nam truyền thống và uy nghiêm.', price: '2.000.000đ', image: '/le_thao.png' },
-              { id: 'p3', name: 'Khoa Visuals', rating: 4.8, count: 75, desc: 'Chuyên chụp beauty và chân dung ngoại cảnh, tạo cho bạn bức ảnh thần thái đạt chất lượng cao.', price: '2.500.000đ', image: '/tran_bao.png' }
-            ].map((photographer) => (
+            {suggestedPhotographers.map((photographer) => (
               <div key={photographer.id} className="vh-premium-card" style={{ padding: '20px', backgroundColor: 'white', border: '1px solid var(--color-light-border)' }}>
                 <div className="vh-card-image-wrapper" style={{ height: '240px' }}>
                   <img src={photographer.image} alt={photographer.name} className="vh-card-image" />
@@ -828,7 +1099,7 @@ export const ProductDetailPage: React.FC = () => {
                       <strong className="font-header" style={{ fontSize: '18px', color: 'var(--color-primary-dark)' }}>{photographer.price}</strong>
                     </div>
                     <button 
-                      onClick={() => { toast.success(`Đã thêm lịch hẹn chụp với ${photographer.name} vào hàng đợi!`); }}
+                      onClick={() => navigate(`/photographers/${photographer.id}`)}
                       className="vh-btn vh-btn-outline vh-btn-sm" 
                       style={{ borderRadius: '6px' }}
                     >
@@ -1052,72 +1323,6 @@ export const ProductDetailPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* 4. Success Booking Info Modal */}
-      <Modal isOpen={isSuccessModalOpen} onClose={() => setIsSuccessModalOpen(false)} title="🎉 Đặt Thuê Thành Công" maxWidth="520px">
-        {createdBooking && (
-          <div style={{ padding: '10px 0' }}>
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                <Check size={28} />
-              </div>
-              <h4 className="font-header font-bold text-stone-900" style={{ fontSize: '20px' }}>Đơn hàng {createdBooking.bookingCode} đã sẵn sàng</h4>
-              <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-                Vui lòng thanh toán cọc để giữ chỗ cho trang phục của bạn.
-              </p>
-            </div>
-
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px', marginBottom: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Mẫu áo dài:</span>
-                <strong className="text-stone-900">{product.name}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Tùy chọn:</span>
-                <strong className="text-stone-900">Màu {selectedColor} • Size {selectedSize}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Hình thức thuê:</span>
-                <strong className="text-stone-900">{rentalMode === 'DAILY' ? 'Thuê theo ngày' : 'Thuê theo giờ'}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Thời gian thuê:</span>
-                <strong className="text-stone-900">
-                  {rentalMode === 'DAILY' 
-                    ? `${startDate} đến ${endDate} (${getDayDuration()} ngày)` 
-                    : `${singleDate} từ ${startTime} đến ${endTime} (${getHourDuration()} giờ)`}
-                </strong>
-              </div>
-              <div style={{ height: '1px', backgroundColor: 'var(--color-light-border)' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Phí thuê trang phục:</span>
-                <strong className="text-stone-900">{createdBooking.pricingSummary?.subTotal?.toLocaleString('vi-VN')} đ</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Tiền đặt cọc (Refundable):</span>
-                <strong className="text-stone-900">{createdBooking.pricingSummary?.depositTotal?.toLocaleString('vi-VN')} đ</strong>
-              </div>
-              <div style={{ height: '1px', backgroundColor: 'var(--color-light-border)' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px' }}>
-                <span style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Tổng cộng thanh toán:</span>
-                <strong style={{ fontWeight: 800, color: 'var(--color-primary-dark)' }}>{createdBooking.pricingSummary?.grandTotal?.toLocaleString('vi-VN')} đ</strong>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button 
-                className="vh-btn vh-btn-primary" 
-                style={{ padding: '10px 24px', borderRadius: '8px' }} 
-                onClick={() => { setIsSuccessModalOpen(false); navigate(`/dashboard/profile?tab=rentals`); }}
-              >
-                XEM ĐƠN HÀNG CỦA TÔI
-              </button>
-              <button className="vh-btn vh-btn-outline" style={{ padding: '10px 24px', borderRadius: '8px' }} onClick={() => setIsSuccessModalOpen(false)}>
-                Đóng
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
 
     </div>
   );

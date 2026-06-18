@@ -4,9 +4,11 @@ import { useAuth } from '../features/auth/hooks/useAuth';
 import { ROUTES } from '../config/routes';
 import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings } from 'lucide-react';
 import { API_BASE_URL } from '../config/env';
+import { useCart } from '../context/CartContext';
 
 export const MainLayout: React.FC = () => {
   const { isAuthenticated, user, logout } = useAuth();
+  const { cart } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -87,7 +89,7 @@ export const MainLayout: React.FC = () => {
 
             <Link 
               to={ROUTES.PHOTOGRAPHERS} 
-              className={`vh-header-nav-link-custom ${location.pathname === ROUTES.PHOTOGRAPHERS ? 'active' : ''}`}
+              className={`vh-header-nav-link-custom ${location.pathname.startsWith('/photographers') ? 'active' : ''}`}
             >
               Nhiếp ảnh
             </Link>
@@ -113,9 +115,29 @@ export const MainLayout: React.FC = () => {
               <Bell size={20} />
             </button>
             
-            <button className="vh-header-action-icon-custom" title="Giỏ hàng">
+            <Link to={ROUTES.CART} className="vh-header-action-icon-custom" title="Giỏ hàng" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ShoppingBag size={20} />
-            </button>
+              {cart.length > 0 && (
+                <span className="vh-cart-badge" style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  right: '-4px',
+                  backgroundColor: 'var(--color-primary)',
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: '16px',
+                  height: '16px',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                </span>
+              )}
+            </Link>
 
             {isAuthenticated ? (
               <div className="vh-header-user-section-relative-wrapper" ref={dropdownRef}>

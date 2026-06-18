@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   MapPin, 
   Calendar, 
@@ -8,13 +9,16 @@ import {
   Search,
   Camera,
   X,
-  ChevronDown
+  ChevronDown,
+  Sparkles
 } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
+import { useCart } from '../../context/CartContext';
 
 interface Photographer {
   id: string;
+  providerId: string;
   name: string;
   rating: number;
   reviewsCount: number;
@@ -95,6 +99,9 @@ const getPhotographerReview = (name: string) => {
 
 export const PhotographersListingPage: React.FC = () => {
   const toast = useToast();
+  const navigate = useNavigate();
+  const { cart } = useCart();
+  const hasAoDaiInCart = cart.some((item) => item.itemType === 'PRODUCT');
 
   // Database photographers list state
   const [photographers, setPhotographers] = useState<Photographer[]>([]);
@@ -139,15 +146,15 @@ export const PhotographersListingPage: React.FC = () => {
   const [selectedPhotographer, setSelectedPhotographer] = useState<Photographer | null>(null);
   const [selectedPkgIndex, setSelectedPkgIndex] = useState(0);
 
-  // Fetch photographers packages from the database
+  // Fetch photographers from the database
   useEffect(() => {
     const fetchPhotographers = async () => {
       try {
         setLoading(true);
-        const data = await httpClient.get<any[]>('/products/photography-packages');
+        const data = await httpClient.get<any[]>('/api/photographers');
         
-        const mapped: Photographer[] = data.map((pkg: any) => {
-          const rawProviderName = pkg.providerId?.businessName || 'Nhiếp ảnh gia';
+        const mapped: Photographer[] = data.map((prov: any) => {
+          const rawProviderName = prov.businessName || 'Nhiếp ảnh gia';
           
           // Map MongoDB provider names to match the names on Mockup
           let providerName = rawProviderName;
@@ -167,20 +174,23 @@ export const PhotographersListingPage: React.FC = () => {
             quote = '"Khai phá góc nhìn mới lạ và đầy cảm xúc."';
           }
 
+          const defaultPkg = prov.packages?.[0] || {};
+          const slug = defaultPkg.slug || '';
+
           // Concept & Style Tags Mapping
           let concepts: string[] = [];
           let styleTag = 'ẢNH THỜI TRANG DI SẢN';
           
-          if (pkg.slug?.includes('cung-dinh') || pkg.slug?.includes('co-phuc')) {
-            concepts = ['Cổ phục Huế', 'Cung đình'];
+          if (slug.includes('cung-dinh') || slug.includes('co-phuc')) {
+            concepts = ['Cổ phục Huế', 'Cung định'];
             styleTag = 'DI SẢN HUẾ';
-          } else if (pkg.slug?.includes('nang-tho') || pkg.slug?.includes('tru-tinh')) {
+          } else if (slug.includes('nang-tho') || slug.includes('tru-tinh')) {
             concepts = ['Nàng thơ', 'Tự nhiên'];
             styleTag = 'NÀNG THƠ';
-          } else if (pkg.slug?.includes('chan-dung') || pkg.slug?.includes('nghe-thuat')) {
+          } else if (slug.includes('chan-dung') || slug.includes('nghe-thuat')) {
             concepts = ['Chân dung nghệ thuật', 'Nàng thơ'];
             styleTag = 'NGHỆ THUẬT';
-          } else if (pkg.slug?.includes('film-look') || pkg.slug?.includes('pho-co')) {
+          } else if (slug.includes('film-look') || slug.includes('pho-co')) {
             concepts = ['Cô ba Sài Gòn', 'Film look'];
             styleTag = 'CINEMATIC';
           } else {
@@ -189,8 +199,8 @@ export const PhotographersListingPage: React.FC = () => {
           }
 
           let locationName = 'Huế';
-          if (pkg.providerId?.address?.city) {
-            const city = pkg.providerId.address.city;
+          if (prov.address?.city) {
+            const city = prov.address.city;
             if (city.includes('Huế') || city.includes('Thừa Thiên')) {
               locationName = 'Huế';
             } else if (city.includes('Hội An') || city.includes('Quảng Nam')) {
@@ -201,19 +211,20 @@ export const PhotographersListingPage: React.FC = () => {
           }
 
           return {
-            id: pkg._id,
+            id: prov._id,
+            providerId: prov._id,
             name: providerName,
-            rating: pkg.rating?.averageRating || pkg.providerId?.rating?.averageRating || 4.9,
-            reviewsCount: pkg.rating?.totalReviews || pkg.providerId?.rating?.totalReviews || 120,
+            rating: prov.rating?.averageRating || 4.9,
+            reviewsCount: prov.rating?.totalReviews || 120,
             quote: quote,
             styleTag: styleTag,
-            price: pkg.price || 1500000,
+            price: defaultPkg.price || 1500000,
             location: locationName,
             concepts: concepts,
-            image: pkg.images?.[0] || 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e',
-            durationHours: pkg.durationHours || 3,
-            editedPhotosCount: pkg.editedPhotosCount || 20,
-            rawPhotosCount: pkg.rawPhotosCount || 150
+            image: prov.media?.images?.[0] || defaultPkg.images?.[0] || 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e',
+            durationHours: defaultPkg.durationHours || 3,
+            editedPhotosCount: defaultPkg.editedPhotosCount || 20,
+            rawPhotosCount: defaultPkg.rawPhotosCount || 150
           };
         });
 
@@ -770,6 +781,27 @@ export const PhotographersListingPage: React.FC = () => {
                         </span>
                       </div>
 
+                      {/* Costume Match Badge */}
+                      {hasAoDaiInCart && (
+                        <div style={{ position: 'absolute', top: '52px', left: '16px', zIndex: 5 }}>
+                          <span style={{ 
+                            padding: '6px 12px', 
+                            fontSize: '9px', 
+                            fontWeight: 700, 
+                            borderRadius: '4px', 
+                            backgroundColor: 'rgba(26, 188, 156, 0.95)', 
+                            color: '#FFFFFF', 
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                          }}>
+                            <Sparkles size={10} />
+                            <span>Phù hợp 98%</span>
+                          </span>
+                        </div>
+                      )}
+
                       {/* Top Middle So Sanh Checkbox Pill */}
                       <div 
                         onClick={(e) => e.stopPropagation()} 
@@ -1151,8 +1183,8 @@ export const PhotographersListingPage: React.FC = () => {
               <button
                 className="vh-btn vh-btn-primary"
                 onClick={() => {
-                  toast.success(`Đã tạo lịch chụp thành công với ${selectedPhotographer.name}!`);
                   setIsDrawerOpen(false);
+                  navigate(`/photographers/${selectedPhotographer.providerId || selectedPhotographer.id}`);
                 }}
                 style={{
                   width: '100%',

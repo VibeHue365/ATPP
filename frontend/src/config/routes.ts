@@ -12,4 +12,6 @@ export const ROUTES = {
   SETTINGS: '/dashboard/settings',
   OAUTH_CALLBACK: '/oauth/callback',
   PRODUCT_DETAIL: '/rentals/:id',
+  PHOTOGRAPHER_DETAIL: '/photographers/:id',
+  CART: '/cart',
 } as const;
