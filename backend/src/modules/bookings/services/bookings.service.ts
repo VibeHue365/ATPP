@@ -4,6 +4,7 @@ import {
   NotFoundException,
   Inject,
   forwardRef,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -25,49 +26,136 @@ import {
   PriceVersion,
   PriceTargetType,
 } from '../../products/schemas/price-version.schema';
+import {
+  BookingSchedule,
+  BookingScheduleType,
+  BookingScheduleStatus,
+} from '../schemas/booking-schedule.schema';
+import { IsString, IsNotEmpty, IsOptional, IsEnum, IsNumber, IsArray, Min } from 'class-validator';
 
 // ─── DTOs (dùng chung với controller) ────────────────────────────────────────
 
 /** Dùng cho createBooking tổng hợp (nhiều items, hỗ trợ promo) */
-export interface CreateBookingItemDto {
+export class CreateBookingItemDto {
+  @IsString()
+  @IsOptional()
   productId?: string;
+
+  @IsString()
+  @IsOptional()
   photographyPackageId?: string;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(1)
   quantity?: number;
+
+  @IsString()
+  @IsOptional()
   rentalFrom?: string;
+
+  @IsString()
+  @IsOptional()
   rentalTo?: string;
+
+  @IsString()
+  @IsOptional()
   shootDate?: string;
+
+  @IsString()
+  @IsOptional()
   shootTimeSlot?: string;
+
+  @IsString()
+  @IsOptional()
   customRequests?: string;
 }
 
-export interface CreateBookingDto {
+export class CreateBookingDto {
+  @IsEnum(BookingType)
+  bookingType: BookingType;
+
+  @IsArray()
+  @IsNotEmpty()
   items: CreateBookingItemDto[];
-  travelFee?: number;
+
+  @IsString()
+  @IsOptional()
   promoCode?: string;
-  bookingType?: BookingType;
+
+  @IsNumber()
+  @IsOptional()
+  travelFee?: number;
 }
 
 /** Dùng cho createProductBooking (thuê áo dài theo ngày/giờ) */
 export class CreateProductBookingDto {
+  @IsString()
+  @IsNotEmpty()
   productId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsEnum(['DAILY', 'HOURLY'])
   rentalType: 'DAILY' | 'HOURLY';
-  startDate: string;
-  endDate?: string;
-  startTime?: string;
-  endTime?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  startDate: string;   // YYYY-MM-DD — dùng cho cả DAILY (bắt đầu) và HOURLY (ngày thuê)
+
+  @IsString()
+  @IsOptional()
+  endDate?: string;    // YYYY-MM-DD — chỉ dùng cho DAILY (ngày kết thúc)
+
+  @IsString()
+  @IsOptional()
+  startTime?: string;  // HH:mm      — chỉ dùng cho HOURLY
+
+  @IsString()
+  @IsOptional()
+  endTime?: string;    // HH:mm      — chỉ dùng cho HOURLY
+
+  @IsString()
+  @IsNotEmpty()
   size: string;
+
+  @IsString()
+  @IsNotEmpty()
   color: string;
+
+  @IsNumber()
+  @IsOptional()
   quantity?: number;
 }
 
 /** Dùng cho createPhotographyBooking */
 export class CreatePhotographyBookingDto {
+  @IsString()
+  @IsNotEmpty()
   packageId: string;
+
+  @IsString()
+  @IsNotEmpty()
   shootDate: string;
+
+  @IsString()
+  @IsNotEmpty()
   shootTimeSlot: string;
+
+  @IsString()
+  @IsNotEmpty()
   shootLocation: string;
+
+  @IsString()
+  @IsNotEmpty()
   concept: string;
+
+  @IsString()
+  @IsOptional()
   customRequests?: string;
+
+  @IsString()
+  @IsOptional()
   referenceImage?: string;
 }
 
@@ -86,11 +174,18 @@ export class BookingsService {
     private readonly photoPackageModel: Model<PhotographyPackage>,
     @InjectModel(PriceVersion.name)
     private readonly priceVersionModel: Model<PriceVersion>,
+    @InjectModel(BookingSchedule.name)
+    private readonly bookingScheduleModel: Model<BookingSchedule>,
     private readonly promotionsService: PromotionsService,
     @Inject(forwardRef(() => PaymentsService))
     private readonly paymentsService: PaymentsService,
     private readonly productsService: ProductsService,
   ) {}
+
+  // Getter để map photographyPackageModel sang photoPackageModel cho cả hai bên
+  private get photographyPackageModel() {
+    return this.photoPackageModel;
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1. createBooking — tổng hợp nhiều items, hỗ trợ promo code
@@ -266,6 +361,10 @@ export class BookingsService {
       quantity = 1,
     } = dto;
 
+    if (!Types.ObjectId.isValid(productId)) {
+      throw new BadRequestException('Mã sản phẩm không hợp lệ');
+    }
+
     const product = await this.productsService.getProductById(productId);
     if (!product) {
       throw new NotFoundException(`Không tìm thấy sản phẩm với ID: ${productId}`);
@@ -413,7 +512,34 @@ export class BookingsService {
       customRequests: null,
     });
 
-    await bookingItem.save();
+    const savedBookingItem = await bookingItem.save();
+
+    // Create BookingSchedule entries
+    if (rentalType === 'DAILY' && rentalFrom && rentalTo) {
+      const start = new Date(rentalFrom);
+      const end = new Date(rentalTo);
+      const current = new Date(start);
+      while (current <= end) {
+        await this.bookingScheduleModel.create({
+          bookingId: savedBooking._id,
+          bookingItemId: savedBookingItem._id,
+          scheduleType: BookingScheduleType.RentalPeriod,
+          scheduledDate: new Date(current),
+          timeSlot: null,
+          status: BookingScheduleStatus.Scheduled,
+        });
+        current.setDate(current.getDate() + 1);
+      }
+    } else if (rentalType === 'HOURLY' && shootDate) {
+      await this.bookingScheduleModel.create({
+        bookingId: savedBooking._id,
+        bookingItemId: savedBookingItem._id,
+        scheduleType: BookingScheduleType.RentalPeriod,
+        scheduledDate: shootDate,
+        timeSlot: shootTimeSlot,
+        status: BookingScheduleStatus.Scheduled,
+      });
+    }
 
     return savedBooking;
   }
@@ -434,6 +560,10 @@ export class BookingsService {
       customRequests,
       referenceImage,
     } = dto;
+
+    if (!Types.ObjectId.isValid(packageId)) {
+      throw new BadRequestException('Mã gói chụp không hợp lệ');
+    }
 
     const pkg = await this.photoPackageModel.findById(packageId);
     if (!pkg) {
@@ -541,7 +671,17 @@ export class BookingsService {
       customRequests: customRequests || null,
     });
 
-    await bookingItem.save();
+    const savedBookingItem = await bookingItem.save();
+
+    // Create BookingSchedule entry for the photoshoot
+    await this.bookingScheduleModel.create({
+      bookingId: savedBooking._id,
+      bookingItemId: savedBookingItem._id,
+      scheduleType: BookingScheduleType.Photoshoot,
+      scheduledDate: date,
+      timeSlot: shootTimeSlot,
+      status: BookingScheduleStatus.Scheduled,
+    });
 
     return savedBooking;
   }
@@ -627,29 +767,280 @@ export class BookingsService {
 
   /** Hủy đơn → trigger hoàn tiền cọc (PaymentsService.refundDeposit) */
   async cancelBooking(
-    bookingIdStr: string,
-    reason: string,
-    cancelledByUserIdStr?: string,
-  ): Promise<BookingDocument> {
-    const bookingId = new Types.ObjectId(bookingIdStr);
+    bookingId: string,
+    userIdOrReason: string,
+    rolesOrCancelledByUserId?: string | string[],
+    maybeReason?: string,
+  ): Promise<any> {
     const booking = await this.bookingModel.findById(bookingId);
-    if (!booking) throw new NotFoundException('Booking not found');
+    if (!booking) {
+      throw new NotFoundException('Không tìm thấy đơn đặt lịch');
+    }
 
-    if (booking.status === BookingStatus.Cancelled) return booking;
+    let userId: string;
+    let roles: string[] = [];
+    let reason: string;
+
+    if (Array.isArray(rolesOrCancelledByUserId)) {
+      userId = userIdOrReason;
+      roles = rolesOrCancelledByUserId;
+      reason = maybeReason || 'Khách hàng/Nhà cung cấp hủy đơn';
+    } else {
+      reason = userIdOrReason;
+      userId = rolesOrCancelledByUserId || '';
+      roles = [];
+    }
+
+    // Check authorization: customer, provider or admin
+    const isCustomer = booking.customerId.toString() === userId;
+    const isProvider = booking.providerIds.map(id => id.toString()).includes(userId);
+    const isAdmin = roles.includes('ADMIN') || roles.includes('admin');
+
+    // Nếu không truyền userId (trường hợp HEAD cũ hoặc admin tự kích hoạt), cho phép đi tiếp
+    if (userId && !isCustomer && !isProvider && !isAdmin) {
+      throw new ForbiddenException('Bạn không có quyền hủy đơn đặt lịch này');
+    }
+
+    if (booking.status === BookingStatus.Cancelled) {
+      return booking;
+    }
+
+    const nonCancellableStatuses = [
+      BookingStatus.PickedUp,
+      BookingStatus.Returned,
+      BookingStatus.Completed,
+      BookingStatus.Disputed
+    ];
+    if (nonCancellableStatuses.includes(booking.status)) {
+      throw new BadRequestException('Không thể hủy đơn đặt lịch đang thực hiện hoặc đã hoàn thành');
+    }
+
+    const now = new Date();
+    let isFreeCancel = true;
+    let refundAmount = 0;
+    let penaltyReason = '';
+
+    if (isCustomer && booking.status !== BookingStatus.PendingPayment) {
+      // Tìm booking items để lấy start date sớm nhất
+      const items = await this.bookingItemModel.find({ bookingId: booking._id });
+      let earliestStartTime: Date | null = null;
+
+      for (const item of items) {
+        let itemStart: Date | null = null;
+        if (item.rentalType === 'HOURLY' || item.itemType === BookingItemType.PhotographyPackage) {
+          if (item.shootDate) {
+            const d = new Date(item.shootDate);
+            let hour = 7;
+            let min = 0;
+            if (item.shootTimeSlot) {
+              const timePart = item.shootTimeSlot.split('-')[0].trim();
+              const [h, m] = timePart.split(':').map(Number);
+              if (!isNaN(h)) {
+                hour = h;
+                min = m || 0;
+              }
+            }
+            d.setHours(hour, min, 0, 0);
+            itemStart = d;
+          }
+        } else {
+          // DAILY
+          if (item.rentalFrom) {
+            const d = new Date(item.rentalFrom);
+            d.setHours(0, 0, 0, 0);
+            itemStart = d;
+          }
+        }
+
+        if (itemStart) {
+          if (!earliestStartTime || itemStart < earliestStartTime) {
+            earliestStartTime = itemStart;
+          }
+        }
+      }
+
+      if (earliestStartTime) {
+        const diffInMs = earliestStartTime.getTime() - now.getTime();
+        const diffInHours = diffInMs / (1000 * 60 * 60);
+
+        if (diffInHours >= 24) {
+          isFreeCancel = true;
+        } else {
+          // Kiểm tra xem đơn hàng có được tạo trong vòng 24 giờ trước giờ bắt đầu hay không (last-minute booking)
+          const createdAtDate = new Date((booking as any).createdAt || now);
+          const startMinusCreatedHours = (earliestStartTime.getTime() - createdAtDate.getTime()) / (1000 * 60 * 60);
+          if (startMinusCreatedHours < 24) {
+            const minsSinceCreation = (now.getTime() - createdAtDate.getTime()) / (1000 * 60);
+            if (diffInHours >= 2) {
+              // Hạn ân hạn là 60 phút
+              if (minsSinceCreation <= 60) {
+                isFreeCancel = true;
+              } else {
+                isFreeCancel = false;
+                penaltyReason = `Đã quá thời gian ân hạn 60 phút đối với đơn hàng đặt sát giờ (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
+              }
+            } else {
+              // Siêu gấp: Hạn ân hạn là 5 phút
+              if (minsSinceCreation <= 5) {
+                isFreeCancel = true;
+              } else {
+                isFreeCancel = false;
+                penaltyReason = `Đã quá thời gian ân hạn 5 phút đối với đơn hàng đặt siêu gấp (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
+              }
+            }
+          } else {
+            // Hủy trễ bình thường
+            isFreeCancel = false;
+            penaltyReason = 'Hủy đơn trễ (dưới 24 giờ trước giờ hẹn).';
+          }
+        }
+      }
+    }
+
+    if (isProvider) {
+      isFreeCancel = true;
+    }
+
+    if (isFreeCancel) {
+      refundAmount = booking.pricingSummary?.depositTotal || 0;
+    } else {
+      refundAmount = 0;
+    }
 
     booking.status = BookingStatus.Cancelled;
+    booking.cancellation = {
+      cancelledBy: new Types.ObjectId(userId || undefined),
+      reason: reason || (isProvider ? 'Nhà cung cấp chủ động hủy lịch' : 'Khách hàng hủy đơn'),
+      cancelledAt: now,
+      refundAmount,
+    };
+
     booking.statusTimeline.push({
       status: BookingStatus.Cancelled,
-      changedAt: new Date(),
-      note: `Hủy đơn hàng. Lý do: ${reason}`,
-      changedBy: cancelledByUserIdStr
-        ? new Types.ObjectId(cancelledByUserIdStr)
-        : null,
+      changedAt: now,
+      note: isFreeCancel 
+        ? `Đơn hàng đã được hủy thành công. Hoàn cọc 100% (${refundAmount.toLocaleString('vi-VN')}đ).` 
+        : `Đơn hàng đã bị hủy kèm mức phạt mất cọc do: ${penaltyReason}`,
+      changedBy: userId ? new Types.ObjectId(userId) : null,
     });
 
-    await booking.save();
-    await this.paymentsService.refundDeposit(bookingIdStr);
+    const savedBooking = await booking.save();
 
-    return booking;
+    // Hủy các BookingSchedule liên quan
+    await this.bookingScheduleModel.updateMany(
+      { bookingId: booking._id },
+      { status: BookingScheduleStatus.Cancelled }
+    );
+
+    // Kích hoạt hoàn tiền cọc nếu được phép và có số tiền cọc
+    if (isFreeCancel && refundAmount > 0) {
+      try {
+        await this.paymentsService.refundDeposit(booking._id.toString());
+      } catch (err) {
+        console.error('PaymentsService.refundDeposit failed during cancelBooking:', err);
+      }
+    }
+
+    // Trả về định dạng phù hợp cho cả 2 luồng gọi
+    return Array.isArray(rolesOrCancelledByUserId) ? {
+      success: true,
+      booking: savedBooking,
+      isFreeCancel,
+      refundAmount,
+      penaltyReason,
+    } : savedBooking;
+  }
+
+  async getCustomerBookings(customerId: string): Promise<any[]> {
+    const bookings = await this.bookingModel.find({ customerId: new Types.ObjectId(customerId) }).sort({ createdAt: -1 });
+    
+    const populatedBookings = [];
+    for (const booking of bookings) {
+      const items = await this.bookingItemModel.find({ bookingId: booking._id })
+        .populate({
+          path: 'productId',
+          populate: { path: 'providerId' }
+        })
+        .populate('photographyPackageId')
+        .populate('providerId');
+      
+      populatedBookings.push({
+        ...booking.toObject(),
+        items: items.map(item => item.toObject()),
+      });
+    }
+    
+    return populatedBookings;
+  }
+
+  async getBusySchedulesForProduct(productId: string): Promise<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }> {
+    const activeBookings = await this.bookingModel.find({
+      status: { $ne: BookingStatus.Cancelled }
+    }).select('_id');
+    const activeBookingIds = activeBookings.map(b => b._id);
+
+    const items = await this.bookingItemModel.find({
+      bookingId: { $in: activeBookingIds },
+      productId: new Types.ObjectId(productId)
+    });
+    const bookingItemIds = items.map(item => item._id);
+
+    const schedules = await this.bookingScheduleModel.find({
+      bookingItemId: { $in: bookingItemIds },
+      status: { $ne: BookingScheduleStatus.Cancelled }
+    });
+
+    const bookedDates = new Set<string>();
+    const bookedSlots: { date: string, timeSlot: string }[] = [];
+
+    schedules.forEach(sched => {
+      const dateStr = sched.scheduledDate.toISOString().split('T')[0];
+      if (sched.timeSlot) {
+        bookedSlots.push({ date: dateStr, timeSlot: sched.timeSlot });
+      } else {
+        bookedDates.add(dateStr);
+      }
+    });
+
+    return {
+      bookedDates: Array.from(bookedDates),
+      bookedSlots
+    };
+  }
+
+  async getBusySchedulesForProvider(providerId: string): Promise<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }> {
+    const activeBookings = await this.bookingModel.find({
+      status: { $ne: BookingStatus.Cancelled }
+    }).select('_id');
+    const activeBookingIds = activeBookings.map(b => b._id);
+
+    const items = await this.bookingItemModel.find({
+      bookingId: { $in: activeBookingIds },
+      providerId: new Types.ObjectId(providerId),
+      itemType: BookingItemType.PhotographyPackage
+    });
+    const bookingItemIds = items.map(item => item._id);
+
+    const schedules = await this.bookingScheduleModel.find({
+      bookingItemId: { $in: bookingItemIds },
+      status: { $ne: BookingScheduleStatus.Cancelled }
+    });
+
+    const bookedDates = new Set<string>();
+    const bookedSlots: { date: string, timeSlot: string }[] = [];
+
+    schedules.forEach(sched => {
+      const dateStr = sched.scheduledDate.toISOString().split('T')[0];
+      if (sched.timeSlot) {
+        bookedSlots.push({ date: dateStr, timeSlot: sched.timeSlot });
+      } else {
+        bookedDates.add(dateStr);
+      }
+    });
+
+    return {
+      bookedDates: Array.from(bookedDates),
+      bookedSlots
+    };
   }
 }

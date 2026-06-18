@@ -31,6 +31,8 @@ interface Photographer {
   durationHours: number;
   editedPhotosCount: number;
   rawPhotosCount: number;
+  packages: any[];
+  equipment?: string[];
 }
 
 // Gear definitions matching photographer name
@@ -224,7 +226,9 @@ export const PhotographersListingPage: React.FC = () => {
             image: prov.media?.images?.[0] || defaultPkg.images?.[0] || 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e',
             durationHours: defaultPkg.durationHours || 3,
             editedPhotosCount: defaultPkg.editedPhotosCount || 20,
-            rawPhotosCount: defaultPkg.rawPhotosCount || 150
+            rawPhotosCount: defaultPkg.rawPhotosCount || 150,
+            packages: prov.packages || [],
+            equipment: prov.equipment || []
           };
         });
 
@@ -1064,63 +1068,47 @@ export const PhotographersListingPage: React.FC = () => {
                   Gói dịch vụ
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  
-                  {/* Package 1 (From database details) */}
-                  <div 
-                    onClick={() => setSelectedPkgIndex(0)}
-                    style={{
-                      border: selectedPkgIndex === 0 ? '1.5px solid var(--color-primary)' : '1px solid rgba(182, 145, 91, 0.3)',
-                      borderRadius: '8px',
-                      padding: '14px 16px',
-                      backgroundColor: selectedPkgIndex === 0 ? 'rgba(161, 30, 34, 0.03)' : '#FFFFFF',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
-                      <span style={{ fontSize: '14px', fontWeight: 700, color: '#2D2926' }}>
-                        Gói Cơ Bản (Heritage Minimal)
-                      </span>
-                      <span style={{ fontSize: '12px', color: '#8C827A' }}>
-                        {selectedPhotographer.durationHours}h - {selectedPhotographer.durationHours + 1} giờ, 1 địa điểm, {selectedPhotographer.editedPhotosCount} ảnh edit
-                      </span>
+                  {selectedPhotographer.packages && selectedPhotographer.packages.length > 0 ? (
+                    selectedPhotographer.packages.map((pkg: any, pIdx: number) => {
+                      const isSelected = selectedPkgIndex === pIdx;
+                      return (
+                        <div 
+                          key={pkg._id || pIdx}
+                          onClick={() => setSelectedPkgIndex(pIdx)}
+                          style={{
+                            border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid rgba(182, 145, 91, 0.3)',
+                            borderRadius: '8px',
+                            padding: '14px 16px',
+                            backgroundColor: isSelected ? 'rgba(161, 30, 34, 0.03)' : '#FFFFFF',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left', maxWidth: '75%' }}>
+                            <span style={{ fontSize: '14px', fontWeight: 700, color: '#2D2926' }}>
+                              {pkg.name}
+                            </span>
+                            <span style={{ fontSize: '12px', color: '#8C827A', lineHeight: 1.4 }}>
+                              {pkg.description || `${pkg.durationHours} giờ, ${pkg.editedPhotosCount} ảnh chỉnh sửa`}
+                            </span>
+                            <span style={{ fontSize: '11px', color: '#8C827A' }}>
+                              Thời gian: {pkg.durationHours}h | Edit: {pkg.editedPhotosCount} ảnh | Trả ảnh: {pkg.deliveryDays} ngày
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary-dark)', flexShrink: 0 }}>
+                            {pkg.price.toLocaleString('vi-VN')}đ
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div style={{ fontSize: '13px', color: '#8C827A', textAlign: 'center', padding: '10px' }}>
+                      Chưa cấu hình gói dịch vụ nào.
                     </div>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary-dark)' }}>
-                      {selectedPhotographer.price.toLocaleString('vi-VN')}đ
-                    </span>
-                  </div>
-
-                  {/* Package 2 (Premium customized model matching mockup) */}
-                  <div 
-                    onClick={() => setSelectedPkgIndex(1)}
-                    style={{
-                      border: selectedPkgIndex === 1 ? '1.5px solid var(--color-primary)' : '1px solid rgba(182, 145, 91, 0.3)',
-                      borderRadius: '8px',
-                      padding: '14px 16px',
-                      backgroundColor: selectedPkgIndex === 1 ? 'rgba(161, 30, 34, 0.03)' : '#FFFFFF',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
-                      <span style={{ fontSize: '14px', fontWeight: 700, color: '#2D2926' }}>
-                        Gói Nghệ Thuật (Fine-Art)
-                      </span>
-                      <span style={{ fontSize: '12px', color: '#8C827A' }}>
-                        {selectedPhotographer.durationHours + 2} giờ, makeup + concept, {selectedPhotographer.editedPhotosCount * 2} ảnh edit + album
-                      </span>
-                    </div>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary-dark)' }}>
-                      {(selectedPhotographer.price * 2.5).toLocaleString('vi-VN')}đ
-                    </span>
-                  </div>
-
+                  )}
                 </div>
               </div>
 
@@ -1130,7 +1118,10 @@ export const PhotographersListingPage: React.FC = () => {
                   Thiết bị
                 </h3>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {getPhotographerGear(selectedPhotographer.name).tags.map((tag) => (
+                  {(selectedPhotographer.equipment && selectedPhotographer.equipment.length > 0
+                    ? selectedPhotographer.equipment
+                    : getPhotographerGear(selectedPhotographer.name).tags
+                  ).map((tag: string) => (
                     <span 
                       key={tag}
                       style={{
@@ -1184,7 +1175,9 @@ export const PhotographersListingPage: React.FC = () => {
                 className="vh-btn vh-btn-primary"
                 onClick={() => {
                   setIsDrawerOpen(false);
-                  navigate(`/photographers/${selectedPhotographer.providerId || selectedPhotographer.id}`);
+                  navigate(`/photographers/${selectedPhotographer.providerId || selectedPhotographer.id}`, {
+                    state: { selectedPackageId: selectedPhotographer.packages[selectedPkgIndex]?._id }
+                  });
                 }}
                 style={{
                   width: '100%',

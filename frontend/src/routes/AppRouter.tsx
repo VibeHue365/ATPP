@@ -26,7 +26,8 @@ import OAuthCallback from '../pages/auth/OAuthCallback';
 import ProfilePage from '../pages/dashboard/ProfilePage';
 import SettingsPage from '../pages/dashboard/SettingsPage';
 import NotFoundPage from '../pages/errors/NotFoundPage';
-import OnboardingPage from '../pages/OnboardingPage';
+import OnboardingPage from '../pages/onboarding/OnboardingPage';
+import ProviderDashboard from '../pages/providerdashboard/ProviderDashboard';
 
 export const AppRouter: React.FC = () => {
   return (
@@ -34,6 +35,8 @@ export const AppRouter: React.FC = () => {
       {/* Onboarding Page */}
       <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
 
+      {/* Provider Dashboard */}
+      <Route path={ROUTES.PROVIDER_DASHBOARD} element={<ProviderDashboard />} />
       {/* Public Pages wrapped in MainLayout */}
       <Route element={<MainLayout />}>
         <Route path={ROUTES.LANDING} element={<LandingPage />} />

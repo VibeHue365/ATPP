@@ -75,7 +75,6 @@ export class BookingItem {
   @Prop({ type: String, default: null })
   referenceImage?: string | null;
 
-  // ---- Thông tin thuê rõ ràng ----
   @Prop({
     type: String,
     enum: ['DAILY', 'HOURLY'],
@@ -83,13 +82,13 @@ export class BookingItem {
     default: 'DAILY',
     index: true,
   })
-  rentalType: 'DAILY' | 'HOURLY'; // Hình thức thuê: theo ngày hoặc theo giờ
+  rentalType: 'DAILY' | 'HOURLY';
 
   @Prop({ type: String, default: null, trim: true, uppercase: true })
-  selectedSize?: string | null; // Kích cỡ được chọn (VD: 'M', 'L')
+  selectedSize?: string | null;
 
   @Prop({ type: String, default: null, trim: true, uppercase: true })
-  selectedColor?: string | null; // Màu sắc được chọn (VD: 'RED', 'WHITE')
+  selectedColor?: string | null;
 
   @Prop({ type: String, default: null, trim: true })
   customRequests?: string | null;

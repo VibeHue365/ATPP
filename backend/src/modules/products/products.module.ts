@@ -29,6 +29,7 @@ import { PromotionsService } from './services/promotions.service';
 import { ProductsController } from './controllers/products.controller';
 import { ProductsService } from './services/products.service';
 import { ProductsRepository } from './repositories/products.repository';
+import { UsersModule } from '../users/users.module';
 
 export const productModels = MongooseModule.forFeature([
   { name: Category.name, schema: CategorySchema },
@@ -43,7 +44,7 @@ export const productModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [productModels],
+  imports: [productModels, UsersModule],
   controllers: [PromotionsController, ProductsController],
   providers: [PromotionsService, ProductsService, ProductsRepository],
   exports: [productModels, PromotionsService, ProductsService],

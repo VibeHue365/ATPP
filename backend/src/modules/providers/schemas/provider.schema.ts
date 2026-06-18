@@ -147,12 +147,6 @@ export class Provider {
   })
   paymentAccounts: PaymentAccount[];
 
-  @Prop({ type: [String], default: [] })
-  equipment: string[];
-
-  @Prop({ type: [String], default: [] })
-  portfolio: string[];
-
   @Prop({
     type: {
       averageRating: { type: Number, default: 0 },

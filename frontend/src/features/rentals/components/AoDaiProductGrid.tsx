@@ -112,8 +112,8 @@ export const AoDaiProductGrid: React.FC = () => {
                   />
                   {/* Premium Hover Overlay Button */}
                   <div className="vh-card-hover-overlay">
-                    <button 
-                      className="vh-btn vh-btn-primary vh-btn-sm" 
+                    <button
+                      className="vh-btn vh-btn-primary vh-btn-sm"
                       style={{ flex: 1, borderRadius: '6px', fontSize: '12px', padding: '8px 12px' }}
                       onClick={() => navigate(`/rentals/${item.id}`)}
                     >

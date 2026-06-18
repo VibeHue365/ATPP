@@ -1,139 +1,15 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
-import {
-  IsArray,
-  IsEnum,
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Min,
-} from 'class-validator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { BookingsService } from '../services/bookings.service';
-import { BookingType } from '../schemas/booking.schema';
-
-// ─── DTOs ────────────────────────────────────────────────────────────────────
-
-export class BookingItemDto {
-  @IsString()
-  @IsOptional()
-  productId?: string;
-
-  @IsString()
-  @IsOptional()
-  photographyPackageId?: string;
-
-  @IsNumber()
-  @Min(1)
-  quantity: number;
-
-  @IsString()
-  @IsOptional()
-  rentalFrom?: string;
-
-  @IsString()
-  @IsOptional()
-  rentalTo?: string;
-
-  @IsString()
-  @IsOptional()
-  shootDate?: string;
-
-  @IsString()
-  @IsOptional()
-  shootTimeSlot?: string;
-
-  @IsString()
-  @IsOptional()
-  customRequests?: string;
-}
-
-export class CreateBookingDto {
-  @IsEnum(BookingType)
-  bookingType: BookingType;
-
-  @IsArray()
-  @IsNotEmpty()
-  items: BookingItemDto[];
-
-  @IsString()
-  @IsOptional()
-  promoCode?: string;
-
-  @IsNumber()
-  @IsOptional()
-  travelFee?: number;
-}
-
-export class CreateProductBookingDto {
-  @IsString()
-  @IsNotEmpty()
-  productId: string;
-
-  @IsString()
-  @IsNotEmpty()
-  rentalType: 'DAILY' | 'HOURLY';
-
-  @IsString()
-  @IsNotEmpty()
-  startDate: string;
-
-  @IsString()
-  @IsOptional()
-  endDate?: string;
-
-  @IsString()
-  @IsOptional()
-  startTime?: string;
-
-  @IsString()
-  @IsOptional()
-  endTime?: string;
-
-  @IsString()
-  @IsNotEmpty()
-  size: string;
-
-  @IsString()
-  @IsNotEmpty()
-  color: string;
-
-  @IsNumber()
-  @IsOptional()
-  quantity?: number;
-}
-
-export class CreatePhotographyBookingDto {
-  @IsString()
-  @IsNotEmpty()
-  packageId: string;
-
-  @IsString()
-  @IsNotEmpty()
-  shootDate: string;
-
-  @IsString()
-  @IsNotEmpty()
-  shootTimeSlot: string;
-
-  @IsString()
-  @IsNotEmpty()
-  shootLocation: string;
-
-  @IsString()
-  @IsNotEmpty()
-  concept: string;
-
-  @IsString()
-  @IsOptional()
-  customRequests?: string;
-
-  @IsString()
-  @IsOptional()
-  referenceImage?: string;
-}
+import { BookingDocument } from '../schemas/booking.schema';
+import {
+  CreateBookingDto,
+  CreateProductBookingDto,
+  CreatePhotographyBookingDto,
+} from '../services/bookings.service';
+import { IsString, IsNotEmpty } from 'class-validator';
 
 export class CancelBookingDto {
   @IsString()
@@ -141,20 +17,25 @@ export class CancelBookingDto {
   reason: string;
 }
 
-// ─── Controller ───────────────────────────────────────────────────────────────
-
-@Controller('bookings')
+@Controller(['bookings', 'api/bookings'])
 @UseGuards(JwtAuthGuard)
 export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
 
-  /** POST /bookings — tạo booking tổng hợp (kết hợp nhiều items, hỗ trợ mã giảm giá) */
+  /** POST /bookings hoặc POST /api/bookings — Tạo booking tổng hợp hoặc booking đơn lẻ */
   @Post()
-  async create(@CurrentUser() user: AuthUser, @Body() dto: CreateBookingDto) {
-    return this.bookingsService.createBooking(user.sub, dto);
+  async create(
+    @CurrentUser() user: AuthUser,
+    @Body() body: any,
+  ): Promise<BookingDocument> {
+    if (body && Array.isArray(body.items)) {
+      return this.bookingsService.createBooking(user.sub, body as CreateBookingDto);
+    } else {
+      return this.bookingsService.createProductBooking(user.sub, body as CreateProductBookingDto);
+    }
   }
 
-  /** POST /bookings/product — tạo booking thuê áo dài (theo ngày hoặc theo giờ) */
+  /** POST /bookings/product hoặc POST /api/bookings/product */
   @Post('product')
   async createProduct(
     @CurrentUser() user: AuthUser,
@@ -163,7 +44,7 @@ export class BookingsController {
     return this.bookingsService.createProductBooking(user.sub, dto);
   }
 
-  /** POST /bookings/photography — tạo booking gói chụp ảnh */
+  /** POST /bookings/photography hoặc POST /api/bookings/photography */
   @Post('photography')
   async createPhotography(
     @CurrentUser() user: AuthUser,
@@ -172,13 +53,13 @@ export class BookingsController {
     return this.bookingsService.createPhotographyBooking(user.sub, dto);
   }
 
-  /** GET /bookings/my — danh sách booking của khách hàng hiện tại */
+  /** GET /bookings/my hoặc GET /api/bookings/my */
   @Get('my')
   async getMy(@CurrentUser() user: AuthUser): Promise<Record<string, any>[]> {
     return this.bookingsService.getMyBookings(user.sub);
   }
 
-  /** GET /bookings/provider — danh sách booking của provider hiện tại */
+  /** GET /bookings/provider hoặc GET /api/bookings/provider */
   @Get('provider')
   async getProvider(
     @CurrentUser() user: AuthUser,
@@ -186,25 +67,44 @@ export class BookingsController {
     return this.bookingsService.getProviderBookings(user.sub);
   }
 
-  /** GET /bookings/:id */
+  /** GET /bookings/:id hoặc GET /api/bookings/:id */
   @Get(':id')
   async getById(@Param('id') id: string): Promise<Record<string, any>> {
     return this.bookingsService.getBookingById(id);
   }
 
-  /** POST /bookings/:id/complete — hoàn thành đơn → trigger đối soát thanh toán */
+  /** POST /bookings/:id/complete hoặc POST /api/bookings/:id/complete */
   @Post(':id/complete')
   async complete(@Param('id') id: string) {
     return this.bookingsService.completeBooking(id);
   }
 
-  /** POST /bookings/:id/cancel — hủy đơn → trigger hoàn tiền cọc */
+  /** POST /bookings/:id/cancel hoặc POST /api/bookings/:id/cancel */
   @Post(':id/cancel')
   async cancel(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() dto: CancelBookingDto,
+    @Body() body: any,
   ) {
-    return this.bookingsService.cancelBooking(id, dto.reason, user.sub);
+    const reason = body?.reason || (typeof body === 'string' ? body : undefined);
+    return this.bookingsService.cancelBooking(id, user.sub, user.roles || [], reason);
+  }
+
+  /** GET /bookings hoặc GET /api/bookings */
+  @Get()
+  async getMyBookings(@CurrentUser() user: AuthUser): Promise<any[]> {
+    return this.bookingsService.getCustomerBookings(user.sub);
+  }
+
+  /** GET /bookings/busy-dates/product/:productId hoặc GET /api/bookings/busy-dates/product/:productId */
+  @Get('busy-dates/product/:productId')
+  async getProductBusyDates(@Param('productId') productId: string) {
+    return this.bookingsService.getBusySchedulesForProduct(productId);
+  }
+
+  /** GET /bookings/busy-dates/provider/:providerId hoặc GET /api/bookings/busy-dates/provider/:providerId */
+  @Get('busy-dates/provider/:providerId')
+  async getProviderBusyDates(@Param('providerId') providerId: string) {
+    return this.bookingsService.getBusySchedulesForProvider(providerId);
   }
 }
