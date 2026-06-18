@@ -11,5 +11,7 @@ export const ROUTES = {
   PROFILE: '/dashboard/profile',
   SETTINGS: '/dashboard/settings',
   PROVIDER_DASHBOARD: '/provider/dashboard',
+  PHOTOGRAPHERS: '/photographers',
+  CART: '/cart',
   OAUTH_CALLBACK: '/oauth/callback',
 } as const;

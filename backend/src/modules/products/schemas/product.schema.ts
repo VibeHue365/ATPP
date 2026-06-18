@@ -40,6 +40,9 @@ export class Product {
   @Prop({ required: true, min: 0 })
   depositAmount: number;
 
+  @Prop({ required: false, min: 0 })
+  hourlyPrice?: number;
+
   @Prop({ type: [String], default: [] })
   sizes: string[];
 
