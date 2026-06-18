@@ -9,7 +9,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (payload: any) => Promise<void>;
+  login: (payload: any) => Promise<any>;
   register: (payload: any) => Promise<any>;
   verifyEmail: (payload: any) => Promise<void>;
   resendOtp: (payload: any) => Promise<any>;
@@ -79,6 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       if (res.accessToken && res.refreshToken) {
         tokenStorage.saveTokens(res.accessToken, res.refreshToken, rememberMe);
         await fetchProfile();
+        return res.user;
       } else {
         throw new Error("Tokens missing in login response");
       }

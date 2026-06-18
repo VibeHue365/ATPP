@@ -93,6 +93,10 @@ export class BookingsService {
   async createProductBooking(customerId: string, dto: CreateBookingDto): Promise<BookingDocument> {
     const { productId, rentalType, startDate, endDate, startTime, endTime, size, color, quantity = 1 } = dto;
 
+    if (!Types.ObjectId.isValid(productId)) {
+      throw new BadRequestException('Mã sản phẩm không hợp lệ');
+    }
+
     // 1. Xác nhận sản phẩm tồn tại
     const product = await this.productsService.getProductById(productId);
     if (!product) {
@@ -285,6 +289,10 @@ export class BookingsService {
 
   async createPhotographyBooking(customerId: string, dto: CreatePhotographyBookingDto): Promise<BookingDocument> {
     const { packageId, shootDate, shootTimeSlot, shootLocation, concept, customRequests, referenceImage } = dto;
+
+    if (!Types.ObjectId.isValid(packageId)) {
+      throw new BadRequestException('Mã gói chụp không hợp lệ');
+    }
 
     const pkg = await this.photographyPackageModel.findById(packageId);
     if (!pkg) {

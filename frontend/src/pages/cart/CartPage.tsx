@@ -63,6 +63,8 @@ const isSameCity = (city1?: string | null, city2?: string | null) => {
   return c1.includes(c2) || c2.includes(c1);
 };
 
+const isMongoObjectId = (id?: string | null) => /^[a-f\d]{24}$/i.test(id || '');
+
 export const CartPage: React.FC = () => {
   const { cart, removeFromCart, updateCartItemDate, updateCartItemTimeSlot } = useCart();
   const toast = useToast();
@@ -334,11 +336,23 @@ export const CartPage: React.FC = () => {
       // Loop through selected items and save them to backend database
       for (const item of selectedItems) {
         if (item.itemType === 'PRODUCT') {
+          if (!isMongoObjectId(item.productId)) {
+            throw new Error(`Sản phẩm "${item.name || item.productName || 'trong giỏ hàng'}" không còn hợp lệ. Vui lòng xóa khỏi giỏ và thêm lại từ trang sản phẩm.`);
+          }
+
+          const startDate = item.startDate || item.rentalFrom;
+          const endDate = item.endDate || item.rentalTo;
+          const rentalType = item.rentalType || 'DAILY';
+
+          if (!startDate || (rentalType === 'DAILY' && !endDate)) {
+            throw new Error(`Sản phẩm "${item.name || item.productName || 'trong giỏ hàng'}" thiếu ngày thuê. Vui lòng chọn lại lịch thuê.`);
+          }
+
           await httpClient.post('/api/bookings', {
             productId: item.productId,
-            rentalType: item.rentalType || 'DAILY',
-            startDate: item.startDate || item.rentalFrom,
-            endDate: item.endDate || item.rentalTo,
+            rentalType,
+            startDate,
+            endDate,
             startTime: item.startTime,
             endTime: item.endTime,
             size: item.size || 'M',
@@ -346,6 +360,14 @@ export const CartPage: React.FC = () => {
             quantity: item.quantity || 1
           });
         } else if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
+          if (!isMongoObjectId(item.photographyPackageId)) {
+            throw new Error(`Gói chụp "${item.packageName || 'trong giỏ hàng'}" không còn hợp lệ. Vui lòng xóa khỏi giỏ và thêm lại từ trang nhiếp ảnh gia.`);
+          }
+
+          if (!item.shootDate || !item.shootTimeSlot || !item.shootLocation) {
+            throw new Error(`Gói chụp "${item.packageName || 'trong giỏ hàng'}" thiếu lịch chụp. Vui lòng chọn lại lịch chụp.`);
+          }
+
           await httpClient.post('/api/bookings/photography', {
             packageId: item.photographyPackageId,
             shootDate: item.shootDate,

@@ -35,13 +35,13 @@ export class Product {
   images: string[];
 
   @Prop({ required: true, min: 0 })
-  basePrice: number; // Giá thuê theo ngày (VNĐ/ngày)
-
-  @Prop({ type: Number, default: null, min: 0 })
-  hourlyPrice?: number | null; // Giá thuê theo giờ (VNĐ/giờ), null = không hỗ trợ thuê giờ
+  basePrice: number;
 
   @Prop({ required: true, min: 0 })
   depositAmount: number;
+
+  @Prop({ required: false, min: 0 })
+  hourlyPrice?: number;
 
   @Prop({ type: [String], default: [] })
   sizes: string[];
@@ -51,6 +51,12 @@ export class Product {
 
   @Prop({ type: [String], default: [] })
   materials: string[];
+
+  @Prop({ type: String, default: null, trim: true })
+  style?: string | null;
+
+  @Prop({ type: [String], default: [] })
+  occasions: string[];
 
   @Prop({ type: Map, of: String, default: {} })
   specifications: Map<string, string>;
