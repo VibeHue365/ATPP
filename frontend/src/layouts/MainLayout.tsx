@@ -52,6 +52,7 @@ export const MainLayout: React.FC = () => {
   const getRoleDisplayName = (roles?: string[]) => {
     if (!roles || roles.length === 0) return 'Khách hàng';
     if (roles.includes('ADMIN')) return 'Quản trị viên';
+    if (roles.includes('PROVIDER')) return 'Đối tác (Provider)';
     if (roles.includes('MERCHANT') || roles.includes('STORE_OWNER') || roles.includes('SHOP_OWNER')) return 'Chủ cửa hàng';
     if (roles.includes('PHOTOGRAPHER')) return 'Nhiếp ảnh gia';
     return 'Khách hàng';
@@ -182,6 +183,18 @@ export const MainLayout: React.FC = () => {
 
                     {/* Nav Items */}
                     <div className="vh-header-dropdown-items-list">
+                      {user?.roles?.includes('PROVIDER') && (
+                        <Link 
+                          to={ROUTES.PROVIDER_DASHBOARD} 
+                          className="vh-header-dropdown-item-link" 
+                          onClick={() => setIsDropdownOpen(false)}
+                          style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}
+                        >
+                          <Sparkles size={16} />
+                          <span>Kênh Đối Tác</span>
+                        </Link>
+                      )}
+
                       <Link 
                         to={ROUTES.PROFILE} 
                         className="vh-header-dropdown-item-link" 

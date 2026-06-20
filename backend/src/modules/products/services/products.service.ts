@@ -79,7 +79,11 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
-    if (product.providerId.toString() !== user.provider.providerId.toString()) {
+    const productProviderId = product.providerId && typeof product.providerId === 'object' && '_id' in product.providerId
+      ? (product.providerId as any)._id
+      : product.providerId;
+
+    if (productProviderId.toString() !== user.provider.providerId.toString()) {
       throw new BadRequestException('You do not own this product');
     }
 
@@ -124,7 +128,11 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
-    if (product.providerId.toString() !== user.provider.providerId.toString()) {
+    const productProviderId = product.providerId && typeof product.providerId === 'object' && '_id' in product.providerId
+      ? (product.providerId as any)._id
+      : product.providerId;
+
+    if (productProviderId.toString() !== user.provider.providerId.toString()) {
       throw new BadRequestException('You do not own this product');
     }
 
