@@ -19,6 +19,15 @@ import { useCart } from '../../context/CartContext';
 import { Modal } from '../../components/common/Modal';
 import { ROUTES } from '../../config/routes';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import { API_BASE_URL } from '../../config/env';
+
+const getImageUrl = (url: string) => {
+  if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  return `${API_BASE_URL}${url}`;
+};
 
 interface ProductDetail {
   _id: string;
@@ -648,14 +657,14 @@ export const ProductDetailPage: React.FC = () => {
                     padding: 0
                   }}
                 >
-                  <img src={img} alt={`${product.name} thumbnail ${index}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={getImageUrl(img)} alt={`${product.name} thumbnail ${index}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </button>
               ))}
             </div>
 
             {/* Main Image View */}
             <div style={{ flex: 1, height: '580px', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--color-light-border)', position: 'relative', boxShadow: 'var(--shadow-md)' }}>
-              <img src={activeImage || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={getImageUrl(activeImage)} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               
               {/* Premium Badge */}
               <span style={{ position: 'absolute', top: '20px', left: '20px', padding: '6px 14px', borderRadius: '9999px', backgroundColor: 'var(--color-primary)', color: 'white', fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em' }}>

@@ -2,6 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart, Star, ChevronDown, Sparkles, ShoppingCart } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
+import { API_BASE_URL } from '../../config/env';
+
+const getImageUrl = (url: string) => {
+  if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  return `${API_BASE_URL}${url}`;
+};
 
 interface ProductFromDb {
   _id: string;
@@ -405,7 +414,7 @@ export const AoDaiListingPage: React.FC = () => {
                     {/* Image Wrapper */}
                     <div className="vh-card-image-wrapper">
                       <img
-                        src={p.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'}
+                        src={getImageUrl(p.images?.[0])}
                         alt={p.name}
                         className="vh-card-image"
                       />
