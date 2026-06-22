@@ -1,4 +1,8 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards, UseInterceptors, UploadedFile, BadRequestException, UnsupportedMediaTypeException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
@@ -21,6 +25,51 @@ export class CancelBookingDto {
 @UseGuards(JwtAuthGuard)
 export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
+
+  @Post('upload-reference')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_request, file, callback) => {
+        const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedMimeTypes.includes(file.mimetype)) {
+          callback(
+            new UnsupportedMediaTypeException(
+              'Only jpg, png, and webp images are allowed',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+      storage: diskStorage({
+        destination: (_request, _file, callback) => {
+          const dest = join(process.cwd(), 'uploads', 'bookings');
+          if (!existsSync(dest)) {
+            mkdirSync(dest, { recursive: true });
+          }
+          callback(null, dest);
+        },
+        filename: (_request, file, callback) => {
+          const safeExt = extname(file.originalname).toLowerCase() || '.jpg';
+          callback(
+            null,
+            `ref-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`,
+          );
+        },
+      }),
+    }),
+  )
+  uploadReferenceFile(
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    return { url: `/uploads/bookings/${file.filename}` };
+  }
+
 
   /** POST /bookings hoặc POST /api/bookings — Tạo booking tổng hợp hoặc booking đơn lẻ */
   @Post()

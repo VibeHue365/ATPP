@@ -404,6 +404,7 @@ export const CartPage: React.FC = () => {
             shootLocation: item.shootLocation || 'Đại Nội Huế',
             concept: item.shootConcept || 'Cổ phục Huế',
             customRequests: item.customRequests || '',
+            referenceImage: item.referenceImage || null,
           };
         }
       });
@@ -493,6 +494,7 @@ export const CartPage: React.FC = () => {
             shootLocation: item.shootLocation,
             concept: item.shootConcept || 'Cổ phục Huế',
             customRequests: item.customRequests || null,
+            referenceImage: item.referenceImage || null,
           });
         }
       }

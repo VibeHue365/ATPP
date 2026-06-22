@@ -134,6 +134,149 @@ export const ProductDetailPage: React.FC = () => {
   const [isAiStylingOpen, setIsAiStylingOpen] = useState<boolean>(false);
   const [isAiSizeOpen, setIsAiSizeOpen] = useState<boolean>(false);
   const [isComboOpen, setIsComboOpen] = useState<boolean>(false);
+
+  // AI Size Form States
+  const [aiHeight, setAiHeight] = useState<number | ''>(160);
+  const [aiWeight, setAiWeight] = useState<number | ''>(50);
+  const [aiChest, setAiChest] = useState<number | ''>(84);
+  const [aiWaist, setAiWaist] = useState<number | ''>(66);
+  const [aiFitPref, setAiFitPref] = useState<'SLIM' | 'COMFORT'>('COMFORT');
+  const [aiResultSize, setAiResultSize] = useState<string>('');
+  const [aiReason, setAiReason] = useState<string>('');
+  const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
+
+  const calculateSizeLocally = (h: number, w: number, c: number, e: number, fit: 'SLIM' | 'COMFORT'): string => {
+    if (w > 85 || e > 95) {
+      return 'CUSTOM';
+    }
+
+    let sizeH = 'XS';
+    if (h < 150) sizeH = 'XS';
+    else if (h < 155) sizeH = 'S';
+    else if (h < 162) sizeH = 'M';
+    else if (h < 168) sizeH = 'L';
+    else if (h < 173) sizeH = 'XL';
+    else sizeH = 'XXL';
+
+    let sizeW = 'XS';
+    if (w < 43) sizeW = 'XS';
+    else if (w < 48) sizeW = 'S';
+    else if (w < 54) sizeW = 'M';
+    else if (w < 60) sizeW = 'L';
+    else if (w < 68) sizeW = 'XL';
+    else sizeW = 'XXL';
+
+    let sizeC = 'XS';
+    if (c <= 81) sizeC = 'XS';
+    else if (c <= 85) sizeC = 'S';
+    else if (c <= 89) sizeC = 'M';
+    else if (c <= 93) sizeC = 'L';
+    else if (c <= 97) sizeC = 'XL';
+    else sizeC = 'XXL';
+
+    let sizeE = 'XS';
+    if (e <= 63) sizeE = 'XS';
+    else if (e <= 67) sizeE = 'S';
+    else if (e <= 71) sizeE = 'M';
+    else if (e <= 75) sizeE = 'L';
+    else if (e <= 79) sizeE = 'XL';
+    else sizeE = 'XXL';
+
+    const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+    const idxH = sizeOrder.indexOf(sizeH);
+    const idxW = sizeOrder.indexOf(sizeW);
+    const idxC = sizeOrder.indexOf(sizeC);
+    const idxE = sizeOrder.indexOf(sizeE);
+    
+    let maxIdx = Math.max(idxH, idxW, idxC, idxE);
+    if (fit === 'COMFORT') {
+      maxIdx = maxIdx + 1;
+    }
+
+    if (maxIdx >= sizeOrder.length) {
+      return 'CUSTOM';
+    }
+
+    const calculatedSize = sizeOrder[maxIdx];
+    const sizesList = product?.sizes || ['S', 'M', 'L'];
+    
+    if (sizesList.includes(calculatedSize)) {
+      return calculatedSize;
+    }
+
+    const validSizes = sizesList.filter(s => sizeOrder.includes(s));
+    if (validSizes.length === 0) {
+      return 'CUSTOM';
+    }
+
+    const availableIndices = validSizes.map(s => sizeOrder.indexOf(s));
+    const maxAvailableIdx = Math.max(...availableIndices);
+    const minAvailableIdx = Math.min(...availableIndices);
+
+    if (maxIdx > maxAvailableIdx) {
+      return 'CUSTOM';
+    }
+
+    if (maxIdx < minAvailableIdx) {
+      return sizeOrder[minAvailableIdx];
+    }
+
+    const fitIndices = availableIndices.filter(idx => idx >= maxIdx);
+    if (fitIndices.length > 0) {
+      const nextSizeIdx = Math.min(...fitIndices);
+      return sizeOrder[nextSizeIdx];
+    }
+
+    return 'CUSTOM';
+  };
+
+  const handleAiSizeCalculation = async () => {
+    // Normalization of values
+    const h = Math.max(100, Math.min(250, Number(aiHeight) || 160));
+    const w = Math.max(20, Math.min(200, Number(aiWeight) || 50));
+    const c = Math.max(40, Math.min(150, Number(aiChest) || 84));
+    const e = Math.max(30, Math.min(150, Number(aiWaist) || 66));
+
+    // Update UI states to display sanitised values
+    setAiHeight(h);
+    setAiWeight(w);
+    setAiChest(c);
+    setAiWaist(e);
+
+    setIsAiLoading(true);
+    setAiResultSize('');
+    setAiReason('');
+    
+    const computedSize = calculateSizeLocally(h, w, c, e, aiFitPref);
+    
+    try {
+      let prompt = '';
+      if (computedSize === 'CUSTOM') {
+        prompt = `Tôi muốn thuê áo dài "${product?.name}". Số đo: cao ${h}cm, nặng ${w}kg, vòng eo ${e}cm, vòng ngực ${c}cm. Tôi thích mặc kiểu ${aiFitPref === 'SLIM' ? 'ôm sát tôn dáng' : 'rộng rãi thoải mái'}. Số đo này vượt quá bảng size may sẵn tiêu chuẩn hoặc vượt quá các size hiện có của sản phẩm này (${product?.sizes?.join(', ') || 'S, M, L'}). Hãy tư vấn cho tôi lý do tôi cần liên hệ trực tiếp với cửa hàng để được đặt may đo hoặc chỉnh sửa theo số đo cơ thể, và khuyên tôi không nên thuê các size may sẵn hiện có. Hãy trả lời ngắn gọn trong 2-3 câu.`;
+      } else {
+        prompt = `Tôi muốn thuê áo dài "${product?.name}". Số đo: cao ${h}cm, nặng ${w}kg, vòng eo ${e}cm, vòng ngực ${c}cm. Tôi thích mặc kiểu ${aiFitPref === 'SLIM' ? 'ôm sát tôn dáng' : 'rộng rãi thoải mái'}. Hãy tư vấn xem tôi nên chọn size nào trong các size khả dụng: ${product?.sizes?.join(', ') || 'S, M, L'}. Hãy khuyên dùng size ${computedSize} và giải thích lý do cụ thể trong 2-3 câu ngắn gọn.`;
+      }
+      
+      const response: any = await httpClient.post('/ai/chat', { message: prompt });
+      
+      setAiResultSize(computedSize);
+      if (computedSize === 'CUSTOM') {
+        setAiReason(response.answer || `Số đo bạn nhập (cân nặng ${w}kg, vòng eo ${e}cm) vượt quá bảng size may sẵn tiêu chuẩn của áo dài này. Chúng tôi khuyên bạn nên liên hệ trực tiếp với VibeHue để đặt may hoặc chỉnh sửa số đo riêng nhằm đảm bảo sự vừa vặn và thoải mái cao nhất.`);
+      } else {
+        setAiReason(response.answer || `Dựa trên số đo chiều cao ${h}cm và cân nặng ${w}kg, kích cỡ tối ưu cho bạn là Size ${computedSize}. Size này sẽ giúp bạn thoải mái cử động và giữ phom dáng áo đẹp nhất.`);
+      }
+    } catch (error) {
+      console.error('Lỗi khi gọi AI tư vấn size:', error);
+      setAiResultSize(computedSize);
+      if (computedSize === 'CUSTOM') {
+        setAiReason(`Số đo bạn nhập (cân nặng ${w}kg, vòng eo ${e}cm) vượt quá bảng size may sẵn tiêu chuẩn của áo dài này. Chúng tôi khuyên bạn nên liên hệ trực tiếp với VibeHue để đặt may hoặc chỉnh sửa số đo riêng nhằm đảm bảo sự vừa vặn và thoải mái cao nhất.`);
+      } else {
+        setAiReason(`Dựa trên phân tích số đo chiều cao ${h}cm, cân nặng ${w}kg và sở thích mặc của bạn, chuyên gia khuyên dùng Size ${computedSize} để ôm vừa vặn vòng eo ${e}cm của bạn.`);
+      }
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
   
   // Description Tabs: 'details' | 'policies' | 'guide'
   const [activeInfoTab, setActiveInfoTab] = useState<'details' | 'policies' | 'guide'>('details');
@@ -492,7 +635,7 @@ export const ProductDetailPage: React.FC = () => {
       return `${priceVal.toLocaleString('vi-VN')}đ / ${days} ngày`;
     } else {
       const hours = getHourDuration();
-      const hourlyRate = product.hourlyPrice || 80000;
+      const hourlyRate = product.hourlyPrice || Math.round(product.basePrice * 0.3) || 80000;
       const priceVal = hourlyRate * hours;
       return `${priceVal.toLocaleString('vi-VN')}đ / ${hours} giờ`;
     }
@@ -512,12 +655,17 @@ export const ProductDetailPage: React.FC = () => {
       return;
     }
 
+    const days = getDayDuration();
+    const hours = getHourDuration();
+    const hourlyRate = product?.hourlyPrice || Math.round((product?.basePrice || 0) * 0.3) || 80000;
+    const computedPrice = rentalMode === 'DAILY' ? (product?.basePrice || 0) * days : hourlyRate * hours;
+
     const cartPayload = {
       itemType: 'PRODUCT' as const,
       productId: product?._id,
       name: product?.name,
       image: product?.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
-      basePrice: product?.basePrice,
+      basePrice: computedPrice,
       depositAmount: product?.depositAmount,
       size: selectedSize,
       color: selectedColor,
@@ -547,12 +695,17 @@ export const ProductDetailPage: React.FC = () => {
       return;
     }
 
+    const days = getDayDuration();
+    const hours = getHourDuration();
+    const hourlyRate = product?.hourlyPrice || Math.round((product?.basePrice || 0) * 0.3) || 80000;
+    const computedPrice = rentalMode === 'DAILY' ? (product?.basePrice || 0) * days : hourlyRate * hours;
+
     const cartPayload = {
       itemType: 'PRODUCT' as const,
       productId: product?._id,
       name: product?.name,
       image: product?.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
-      basePrice: product?.basePrice,
+      basePrice: computedPrice,
       depositAmount: product?.depositAmount,
       size: selectedSize,
       color: selectedColor,
@@ -896,30 +1049,28 @@ export const ProductDetailPage: React.FC = () => {
                     color: rentalMode === 'DAILY' ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    borderRight: product?.hourlyPrice ? '1px solid var(--color-light-border)' : 'none',
+                    borderRight: '1px solid var(--color-light-border)',
                   }}
                 >
                   Thuê Theo Ngày
                 </button>
-                {product?.hourlyPrice && (
-                  <button
-                    onClick={() => setRentalMode('HOURLY')}
-                    style={{
-                      flex: 1,
-                      padding: '16px',
-                      fontFamily: 'var(--font-header)',
-                      fontWeight: 700,
-                      fontSize: '14px',
-                      border: 'none',
-                      backgroundColor: rentalMode === 'HOURLY' ? 'white' : 'transparent',
-                      color: rentalMode === 'HOURLY' ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    Thuê Theo Giờ
-                  </button>
-                )}
+                <button
+                  onClick={() => setRentalMode('HOURLY')}
+                  style={{
+                    flex: 1,
+                    padding: '16px',
+                    fontFamily: 'var(--font-header)',
+                    fontWeight: 700,
+                    fontSize: '14px',
+                    border: 'none',
+                    backgroundColor: rentalMode === 'HOURLY' ? 'white' : 'transparent',
+                    color: rentalMode === 'HOURLY' ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Thuê Theo Giờ
+                </button>
               </div>
 
               {/* Selector Panels */}
@@ -1472,33 +1623,209 @@ export const ProductDetailPage: React.FC = () => {
 
       {/* 2. AI Size Suggestion Modal */}
       <Modal isOpen={isAiSizeOpen} onClose={() => setIsAiSizeOpen(false)} title="Gợi ý Size Thông Minh bởi AI" maxWidth="500px">
-        <div style={{ padding: '10px 0' }}>
-          <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', lineHeight: 1.6, marginBottom: '20px' }}>
-            Dựa trên thông số chiều cao và cân nặng trong hồ sơ cá nhân của bạn, AI của Silk & Stone gợi ý:
+        <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <p style={{ fontSize: '13.5px', color: 'var(--color-text-secondary)', lineHeight: 1.6, margin: 0 }}>
+            Nhập số đo cơ thể của bạn bên dưới để Trợ lý AI phân tích và đưa ra đề xuất kích cỡ tối ưu nhất cho thiết kế <strong>{product.name}</strong>.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '20px', borderRadius: '12px', marginBottom: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Size đề xuất tối ưu:</span>
-              <span style={{ fontSize: '24px', fontWeight: 800, color: 'var(--color-primary-dark)', fontFamily: 'var(--font-header)' }}>SIZE M</span>
+          {/* Form Fields Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', backgroundColor: '#FAF8F5', padding: '16px', borderRadius: '12px', border: '1px solid #EAE1D4' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>Chiều cao (cm)</label>
+              <input
+                type="number"
+                value={aiHeight}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAiHeight(val === '' ? '' : parseInt(val) || 0);
+                }}
+                onBlur={() => {
+                  if (aiHeight !== '') {
+                    setAiHeight(Math.max(100, Math.min(250, Number(aiHeight))));
+                  }
+                }}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #D5C2AD', outline: 'none', fontSize: '13.5px', fontWeight: 600 }}
+              />
             </div>
-            <div style={{ height: '1px', backgroundColor: 'var(--color-light-border)' }} />
-            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
-              * Tỷ lệ vừa vặn chính xác lên đến 95%. Lụa Hà Đông có độ co giãn nhẹ ở ngực giúp bạn di chuyển thoải mái.
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>Cân nặng (kg)</label>
+              <input
+                type="number"
+                value={aiWeight}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAiWeight(val === '' ? '' : parseInt(val) || 0);
+                }}
+                onBlur={() => {
+                  if (aiWeight !== '') {
+                    setAiWeight(Math.max(20, Math.min(200, Number(aiWeight))));
+                  }
+                }}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #D5C2AD', outline: 'none', fontSize: '13.5px', fontWeight: 600 }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>Vòng ngực (cm)</label>
+              <input
+                type="number"
+                value={aiChest}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAiChest(val === '' ? '' : parseInt(val) || 0);
+                }}
+                onBlur={() => {
+                  if (aiChest !== '') {
+                    setAiChest(Math.max(40, Math.min(150, Number(aiChest))));
+                  }
+                }}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #D5C2AD', outline: 'none', fontSize: '13.5px', fontWeight: 600 }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>Vòng eo (cm)</label>
+              <input
+                type="number"
+                value={aiWaist}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAiWaist(val === '' ? '' : parseInt(val) || 0);
+                }}
+                onBlur={() => {
+                  if (aiWaist !== '') {
+                    setAiWaist(Math.max(30, Math.min(150, Number(aiWaist))));
+                  }
+                }}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #D5C2AD', outline: 'none', fontSize: '13.5px', fontWeight: 600 }}
+              />
+            </div>
+            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>Sở thích mặc áo dài</label>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setAiFitPref('SLIM')}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    fontSize: '12.5px',
+                    fontWeight: 700,
+                    border: aiFitPref === 'SLIM' ? '1.5px solid var(--color-primary-dark)' : '1px solid #D5C2AD',
+                    backgroundColor: aiFitPref === 'SLIM' ? 'var(--color-primary-trans)' : 'white',
+                    color: aiFitPref === 'SLIM' ? 'var(--color-primary-dark)' : '#7E6D5B',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Mặc ôm dáng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiFitPref('COMFORT')}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    fontSize: '12.5px',
+                    fontWeight: 700,
+                    border: aiFitPref === 'COMFORT' ? '1.5px solid var(--color-primary-dark)' : '1px solid #D5C2AD',
+                    backgroundColor: aiFitPref === 'COMFORT' ? 'var(--color-primary-trans)' : 'white',
+                    color: aiFitPref === 'COMFORT' ? 'var(--color-primary-dark)' : '#7E6D5B',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Mặc thoải mái
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-            <button 
-              className="vh-btn vh-btn-primary" 
-              style={{ padding: '8px 24px', borderRadius: '8px' }} 
-              onClick={() => { setSelectedSize('M'); toast.success('Đã áp dụng đề xuất Size M!'); setIsAiSizeOpen(false); }}
+          {/* Action Trigger Button */}
+          <button
+            type="button"
+            disabled={isAiLoading}
+            onClick={handleAiSizeCalculation}
+            style={{
+              width: '100%',
+              padding: '12px',
+              borderRadius: '10px',
+              backgroundColor: isAiLoading ? '#8C827A' : 'var(--color-primary-dark)',
+              color: 'white',
+              border: 'none',
+              fontSize: '14px',
+              fontWeight: 700,
+              cursor: isAiLoading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            {isAiLoading ? (
+              <>ĐANG PHÂN TÍCH BỞI AI...</>
+            ) : (
+              <>
+                <Sparkles size={16} />
+                <span>PHÂN TÍCH SỐ ĐO BẰNG AI</span>
+              </>
+            )}
+          </button>
+
+          {/* Result Block */}
+          {(aiResultSize || aiReason) && (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              backgroundColor: 'white',
+              border: '1.5px solid rgba(182, 145, 91, 0.4)',
+              padding: '20px',
+              borderRadius: '12px',
+              animation: 'fadeIn 0.25s ease-out'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#8C827A' }}>SIZE ĐỀ XUẤT TỐI ƯU:</span>
+                <span style={{ fontSize: aiResultSize === 'CUSTOM' ? '15px' : '24px', fontWeight: 800, color: aiResultSize === 'CUSTOM' ? '#B85C00' : 'var(--color-primary-dark)', fontFamily: 'var(--font-header)' }}>
+                  {aiResultSize === 'CUSTOM' ? 'ĐẶT MAY / LIÊN HỆ SHOP' : `SIZE ${aiResultSize}`}
+                </span>
+              </div>
+              <div style={{ height: '1px', backgroundColor: 'rgba(182, 145, 91, 0.15)' }} />
+              <p style={{ fontSize: '13px', color: '#4A4440', lineHeight: 1.6, margin: 0, textAlign: 'justify' }}>
+                {aiReason}
+              </p>
+            </div>
+          )}
+
+          {/* Apply size selection */}
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid #EAEAE8', paddingTop: '16px', marginTop: '4px' }}>
+            <button
+              className="vh-btn vh-btn-outline"
+              style={{ padding: '8px 24px', borderRadius: '8px', fontSize: '13px' }}
+              onClick={() => setIsAiSizeOpen(false)}
             >
-              ÁP DỤNG SIZE M
+              Hủy bỏ
             </button>
-            <button className="vh-btn vh-btn-outline" style={{ padding: '8px 24px', borderRadius: '8px' }} onClick={() => setIsAiSizeOpen(false)}>
-              Đóng
-            </button>
+            {aiResultSize && aiResultSize !== 'CUSTOM' && (
+              <button 
+                className="vh-btn vh-btn-primary" 
+                style={{ padding: '8px 24px', borderRadius: '8px', fontSize: '13px' }} 
+                onClick={() => { setSelectedSize(aiResultSize); toast.success(`Đã áp dụng đề xuất Size ${aiResultSize}!`); setIsAiSizeOpen(false); }}
+              >
+                ÁP DỤNG SIZE {aiResultSize}
+              </button>
+            )}
+            {aiResultSize === 'CUSTOM' && (
+              <button 
+                className="vh-btn vh-btn-primary" 
+                style={{ padding: '8px 24px', borderRadius: '8px', fontSize: '13px', backgroundColor: '#B85C00', borderColor: '#B85C00' }} 
+                onClick={() => {
+                  toast.info('Vui lòng liên hệ hotline hoặc nhắn tin trực tiếp để được tư vấn thiết kế may đo riêng!');
+                  window.open('https://zalo.me/', '_blank');
+                  setIsAiSizeOpen(false);
+                }}
+              >
+                LIÊN HỆ TƯ VẤN MAY
+              </button>
+            )}
           </div>
         </div>
       </Modal>

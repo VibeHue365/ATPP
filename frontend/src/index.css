@@ -4526,3 +4526,14 @@ button {
   border-color: var(--color-primary);
   color: white;
 }
+
+/* Hide scrollbar utility class */
+.vh-hide-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;  /* IE/Edge */
+}
+
+.vh-hide-scrollbar::-webkit-scrollbar {
+  display: none; /* WebKit (Chrome, Safari, Edge) */
+}
+

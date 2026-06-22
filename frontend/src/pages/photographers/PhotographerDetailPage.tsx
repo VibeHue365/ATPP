@@ -541,7 +541,7 @@ export const PhotographerDetailPage: React.FC = () => {
     }
   };
 
-  const handleAddBookingToCart = () => {
+  const handleAddBookingToCart = async () => {
     if (!isAuthenticated) {
       toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
       navigate(ROUTES.LOGIN);
@@ -586,6 +586,22 @@ export const PhotographerDetailPage: React.FC = () => {
       }
     }
 
+    setIsBookingNow(true);
+    let referenceImageUrl = null;
+    if (referenceFile) {
+      try {
+        const formData = new FormData();
+        formData.append('file', referenceFile);
+        const uploadRes: any = await httpClient.post('/api/bookings/upload-reference', formData);
+        referenceImageUrl = uploadRes.url;
+      } catch (err: any) {
+        console.error('Lỗi upload ảnh:', err);
+        toast.error(err.message || 'Không thể tải ảnh concept lên hệ thống. Vui lòng thử lại!');
+        setIsBookingNow(false);
+        return;
+      }
+    }
+
     addToCart({
       itemType: 'PHOTOGRAPHY_PACKAGE',
       photographyPackageId: selectedPkg._id,
@@ -599,8 +615,9 @@ export const PhotographerDetailPage: React.FC = () => {
       shootConcept: selectedConcept,
       photographerCity: photographerCity,
       customRequests: customRequest || null,
-      referenceImage: referenceFile ? URL.createObjectURL(referenceFile) : null
+      referenceImage: referenceImageUrl
     });
+    setIsBookingNow(false);
     toast.success(`Đã thêm gói ${selectedPkg.name} của ${photographer.businessName} vào giỏ hàng!`);
   };
 
@@ -651,6 +668,22 @@ export const PhotographerDetailPage: React.FC = () => {
 
     try {
       setIsBookingNow(true);
+
+      let referenceImageUrl = null;
+      if (referenceFile) {
+        try {
+          const formData = new FormData();
+          formData.append('file', referenceFile);
+          const uploadRes: any = await httpClient.post('/api/bookings/upload-reference', formData);
+          referenceImageUrl = uploadRes.url;
+        } catch (err: any) {
+          console.error('Lỗi upload ảnh:', err);
+          toast.error(err.message || 'Không thể tải ảnh concept lên hệ thống. Vui lòng thử lại!');
+          setIsBookingNow(false);
+          return;
+        }
+      }
+
       const bookingRes: any = await httpClient.post('/api/bookings/photography', {
         packageId: selectedPkg._id,
         shootDate: selectedDate,
@@ -658,6 +691,7 @@ export const PhotographerDetailPage: React.FC = () => {
         shootLocation: finalLocation,
         concept: selectedConcept,
         customRequests: customRequest || null,
+        referenceImage: referenceImageUrl,
       });
 
       // Show toast and proceed to PayOS simulator
@@ -1187,7 +1221,18 @@ export const PhotographerDetailPage: React.FC = () => {
 
           {/* RIGHT COLUMN: Sticky summary panel */}
           <aside style={{ position: 'sticky', top: '100px' }}>
-            <div className="vh-premium-card" style={{ backgroundColor: 'white', padding: '28px', borderRadius: '16px', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="vh-premium-card vh-hide-scrollbar" style={{ 
+              backgroundColor: 'white', 
+              padding: '28px', 
+              borderRadius: '16px', 
+              border: '1px solid var(--color-light-border)', 
+              boxShadow: 'var(--shadow-sm)', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '24px',
+              maxHeight: 'calc(100vh - 140px)',
+              overflowY: 'auto'
+            }}>
               
               {/* Profile card summary */}
               <div style={{ display: 'flex', gap: '16px', alignItems: 'center', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '20px' }}>
@@ -1335,9 +1380,9 @@ export const PhotographerDetailPage: React.FC = () => {
                 </button>
 
                 {/* THÊM VÀO GIỎ HÀNG */}
-                <button
+                 <button
                   onClick={handleAddBookingToCart}
-                  disabled={isCurrentTimeSlotBusy}
+                  disabled={isCurrentTimeSlotBusy || isBookingNow}
                   className="vh-btn"
                   style={{
                     width: '100%',
@@ -1346,9 +1391,9 @@ export const PhotographerDetailPage: React.FC = () => {
                     fontWeight: 700,
                     fontSize: '14px',
                     backgroundColor: 'transparent',
-                    color: isCurrentTimeSlotBusy ? '#8C827A' : 'var(--color-primary-dark)',
-                    border: isCurrentTimeSlotBusy ? '1.5px solid #8C827A' : '1.5px solid var(--color-primary-dark)',
-                    cursor: isCurrentTimeSlotBusy ? 'not-allowed' : 'pointer',
+                    color: (isCurrentTimeSlotBusy || isBookingNow) ? '#8C827A' : 'var(--color-primary-dark)',
+                    border: (isCurrentTimeSlotBusy || isBookingNow) ? '1.5px solid #8C827A' : '1.5px solid var(--color-primary-dark)',
+                    cursor: (isCurrentTimeSlotBusy || isBookingNow) ? 'not-allowed' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1356,8 +1401,14 @@ export const PhotographerDetailPage: React.FC = () => {
                     letterSpacing: '0.04em',
                   }}
                 >
-                  <span>THÊM VÀO GIỎ HÀNG</span>
-                  <ArrowRight size={16} />
+                  {isBookingNow ? (
+                    <span>ĐANG XỬ LÝ...</span>
+                  ) : (
+                    <>
+                      <span>THÊM VÀO GIỎ HÀNG</span>
+                      <ArrowRight size={16} />
+                    </>
+                  )}
                 </button>
               </div>
 

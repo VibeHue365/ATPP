@@ -127,7 +127,55 @@ export class AiService {
     let category = 'general';
     let matchedQuestion = 'Tư vấn chung';
 
-    if (normalized.includes('cổ') || normalized.includes('co')) {
+    if (normalized.includes('size') || normalized.includes('chiều cao') || normalized.includes('chieu cao') || normalized.includes('cân nặng') || normalized.includes('can nang') || normalized.includes('eo')) {
+      const heightMatch = normalized.match(/chiều cao\s*(\d+)/i) || normalized.match(/cao\s*(\d+)/i);
+      const weightMatch = normalized.match(/cân nặng\s*(\d+)/i) || normalized.match(/nặng\s*(\d+)/i);
+      const waistMatch = normalized.match(/vòng eo\s*(\d+)/i) || normalized.match(/eo\s*(\d+)/i);
+      
+      const height = heightMatch ? parseInt(heightMatch[1]) : 160;
+      const weight = weightMatch ? parseInt(weightMatch[1]) : 50;
+      const waist = waistMatch ? parseInt(waistMatch[1]) : 66;
+      
+      let sizeH = 'XS';
+      if (height < 150) sizeH = 'XS';
+      else if (height < 155) sizeH = 'S';
+      else if (height < 162) sizeH = 'M';
+      else if (height < 168) sizeH = 'L';
+      else if (height < 173) sizeH = 'XL';
+      else sizeH = 'XXL';
+
+      let sizeW = 'XS';
+      if (weight < 43) sizeW = 'XS';
+      else if (weight < 48) sizeW = 'S';
+      else if (weight < 54) sizeW = 'M';
+      else if (weight < 60) sizeW = 'L';
+      else if (weight < 68) sizeW = 'XL';
+      else sizeW = 'XXL';
+
+      let sizeE = 'XS';
+      if (waist <= 63) sizeE = 'XS';
+      else if (waist <= 67) sizeE = 'S';
+      else if (waist <= 71) sizeE = 'M';
+      else if (waist <= 75) sizeE = 'L';
+      else if (waist <= 79) sizeE = 'XL';
+      else sizeE = 'XXL';
+
+      const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+      const idxH = sizeOrder.indexOf(sizeH);
+      const idxW = sizeOrder.indexOf(sizeW);
+      const idxE = sizeOrder.indexOf(sizeE);
+      
+      const maxIdx = Math.max(idxH, idxW, idxE);
+      const recommendedSize = sizeOrder[maxIdx];
+      
+      if (weight > 85 || waist > 95) {
+        answer = `Số đo bạn nhập (cân nặng ${weight}kg, vòng eo ${waist}cm) vượt quá bảng size may sẵn tiêu chuẩn của áo dài (lớn nhất là XXL). Chúng tôi khuyên bạn nên liên hệ trực tiếp với VibeHue để đặt may hoặc chỉnh sửa số đo riêng nhằm đảm bảo sự vừa vặn và thoải mái cao nhất.`;
+      } else {
+        answer = `Dựa trên số đo chiều cao ${height}cm, cân nặng ${weight}kg và vòng eo ${waist}cm bạn cung cấp, kích cỡ tối ưu cho bạn là Size ${recommendedSize}. Kích cỡ này giúp ôm vừa vặn cơ thể mà vẫn thoải mái khi bạn đi đứng, ngồi hay tạo dáng chụp hình ngoại cảnh Đại Nội.`;
+      }
+      category = 'size_guidance';
+      matchedQuestion = 'Tư vấn chọn size thông minh';
+    } else if (normalized.includes('cổ') || normalized.includes('co')) {
       answer =
         'Áo dài truyền thống thường có cổ cao từ 2-4 cm ôm sát cổ, tạo vẻ trang nghiêm. Ngoài ra, bạn có thể chọn cổ tròn trẻ trung, cổ chữ V quyến rũ hoặc cổ thuyền tôn lên bờ vai thanh mảnh nha!';
       category = 'collar';

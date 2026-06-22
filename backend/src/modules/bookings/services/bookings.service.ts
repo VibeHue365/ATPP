@@ -69,6 +69,10 @@ export class CreateBookingItemDto {
   @IsString()
   @IsOptional()
   customRequests?: string;
+
+  @IsString()
+  @IsOptional()
+  referenceImage?: string;
 }
 
 export class CreateBookingDto {
@@ -258,6 +262,7 @@ export class BookingsService {
         shootDate: item.shootDate ? new Date(item.shootDate) : null,
         shootTimeSlot: item.shootTimeSlot || null,
         customRequests: item.customRequests || '',
+        referenceImage: item.referenceImage || null,
       });
     }
 
@@ -388,11 +393,7 @@ export class BookingsService {
           'Yêu cầu giờ bắt đầu và giờ kết thúc khi thuê theo giờ',
         );
       }
-      if (!product.hourlyPrice) {
-        throw new BadRequestException(
-          'Sản phẩm này không hỗ trợ hình thức thuê theo giờ',
-        );
-      }
+      const hourlyRate = product.hourlyPrice || Math.round(product.basePrice * 0.3) || 80000;
 
       const [sh, sm] = startTime.split(':').map(Number);
       const [eh, em] = endTime.split(':').map(Number);
@@ -409,7 +410,7 @@ export class BookingsService {
         throw new BadRequestException('Thời gian thuê tối thiểu là 2 tiếng');
       }
 
-      unitPrice = product.hourlyPrice;
+      unitPrice = hourlyRate;
       subTotal = unitPrice * durationHours * quantity;
       shootDate = start;
       shootTimeSlot = `${startTime}-${endTime}`;

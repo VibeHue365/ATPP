@@ -1,37 +1,61 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
-import { CreditCard, Star, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck } from 'lucide-react';
 
-export const CustomerDashboard: React.FC = () => {
+interface CustomerDashboardProps {
+  user: any;
+  bookings: any[];
+  onViewDetails: (booking: any) => void;
+  onRefresh: () => void;
+}
+
+export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
+  user,
+  bookings,
+  onViewDetails,
+  onRefresh
+}) => {
   const toast = useToast();
-  const [activeSubTab, setActiveSubTab] = useState<'bookings' | 'payments' | 'reviews'>('bookings');
-  const [bookings, setBookings] = useState<any[]>([]);
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'appointments' | 'rentals' | 'favorites' | 'payments'>('appointments');
   const [payments, setPayments] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [realProductList, setRealProductList] = useState<any[]>([]);
+  const [realPhotographersList, setRealPhotographersList] = useState<any[]>([]);
 
   // Review modal states
   const [reviewingItem, setReviewingItem] = useState<any>(null);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
 
-  const fetchData = async () => {
-    setIsLoading(true);
+  const fetchPayments = async () => {
     try {
-      const bRes: any = await httpClient.get('/bookings/my');
-      setBookings(bRes);
-
       const pRes: any = await httpClient.get('/payments/history');
-      setPayments(pRes);
+      setPayments(pRes || []);
     } catch (err: any) {
-      toast.error('Không thể tải dữ liệu tài khoản');
-    } finally {
-      setIsLoading(false);
+      console.error('Không thể tải lịch sử thanh toán:', err);
+    }
+  };
+
+  const fetchRealDataForFavorites = async () => {
+    try {
+      const prods = await httpClient.get<any[]>('/products');
+      setRealProductList(prods || []);
+    } catch (e) {
+      console.error('Failed to fetch products for dashboard favorites', e);
+    }
+    try {
+      const phs = await httpClient.get<any[]>('/api/photographers');
+      setRealPhotographersList(phs || []);
+    } catch (e) {
+      console.error('Failed to fetch photographers for dashboard favorites', e);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchPayments();
+    fetchRealDataForFavorites();
   }, []);
 
   const handleCreateReview = async (e: React.FormEvent) => {
@@ -52,175 +76,382 @@ export const CustomerDashboard: React.FC = () => {
       setReviewingItem(null);
       setComment('');
       setRating(5);
-      fetchData();
+      onRefresh();
     } catch (err: any) {
       toast.error(err.message || 'Gửi đánh giá thất bại');
     }
   };
 
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case 'PENDING_PAYMENT': return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'DEPOSIT_PAID': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-      case 'CONFIRMED': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'COMPLETED': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      default: return 'bg-stone-100 text-stone-600 border-stone-200';
-    }
+  const formatDate = (dateStr?: string | null) => {
+    if (!dateStr) return 'Chưa xác định';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return date.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
   };
 
+  // --- 1. APPOINTMENTS (Lịch hẹn của tôi) ---
+  const realAppointments = bookings.filter(b => 
+    b.items?.some((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE')
+  ).map(b => {
+    const photoItem = b.items.find((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE');
+    const isPast = ['COMPLETED', 'CANCELLED', 'REFUNDED'].includes(b.status);
+    return {
+      id: b._id,
+      isReal: true,
+      booking: b,
+      statusType: isPast ? 'PAST' : 'UPCOMING',
+      dateStr: photoItem?.shootDate ? formatDate(photoItem.shootDate) : '',
+      title: photoItem?.name || 'Gói Chụp Ảnh Cổ Phong',
+      detailText: photoItem?.photographerName ? `Thợ ảnh: ${photoItem.photographerName}` : 'Showroom Nam Kỳ Khởi Nghĩa, Q.1',
+      detailType: photoItem?.photographerName ? 'USER' : 'LOCATION',
+      timeStr: photoItem?.shootTimeSlot || '09:00 - 11:00',
+      statusLabel: b.status === 'COMPLETED' ? 'Hoàn thành' : b.status === 'CANCELLED' ? 'Đã hủy' : 'Sắp tới'
+    };
+  });
+
+  const displayAppointments = realAppointments;
+
+  // --- 2. RENTED AO DAI (Áo dài đã thuê) ---
+  const rentalItems: any[] = [];
+  bookings.forEach(b => {
+    if (b.items) {
+      b.items.forEach((item: any) => {
+        if (item.itemType === 'PRODUCT') {
+          rentalItems.push({
+            id: item._id,
+            bookingId: b._id,
+            bookingCode: b.bookingCode,
+            status: b.status,
+            name: item.name || 'Mẫu Áo Dài Di Sản',
+            image: item.image || item.productImage || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+            size: item.size || 'M',
+            color: item.color || 'RED',
+            rentalType: item.rentalType || 'DAILY',
+            startDate: item.startDate || item.rentalFrom,
+            endDate: item.endDate || item.rentalTo,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            unitPrice: item.unitPrice,
+            quantity: item.quantity || 1,
+            depositAmount: item.depositAmount || 0,
+            booking: b
+          });
+        }
+      });
+    }
+  });
+
+  const displayRentals = rentalItems;
+
+  // --- 3. FAVORITES (Danh sách yêu thích) ---
+  const realFavorites = React.useMemo(() => {
+    if (!user?.favorites || !Array.isArray(user.favorites)) return [];
+    
+    const list: any[] = [];
+    user.favorites.forEach((fav: any) => {
+      const targetId = fav.targetId?.toString() || fav.targetId;
+      if (fav.targetType === 'PRODUCT' || fav.targetType === 'Product') {
+        const prod = realProductList.find(p => p._id === targetId);
+        if (prod) {
+          list.push({
+            id: prod._id,
+            itemType: 'PRODUCT',
+            name: prod.name,
+            image: prod.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+            price: prod.basePrice,
+            material: prod.materials?.[0] || 'Lụa truyền thống',
+            link: `/rentals/${prod._id}`
+          });
+        }
+      } else if (fav.targetType === 'PHOTOGRAPHER' || fav.targetType === 'Photographer') {
+        const photo = realPhotographersList.find(p => p._id === targetId);
+        if (photo) {
+          list.push({
+            id: photo._id,
+            itemType: 'PHOTOGRAPHY_PACKAGE',
+            name: photo.businessName,
+            image: photo.portfolio?.[0] || '/avatar_hanna.png',
+            price: photo.packages && photo.packages.length > 0 ? Math.min(...photo.packages.map((p: any) => p.price)) : 1500000,
+            material: photo.quote || 'Nhiếp ảnh gia chuyên nghiệp',
+            link: `/photographers/${photo._id}`
+          });
+        }
+      }
+    });
+    return list;
+  }, [user?.favorites, realProductList, realPhotographersList]);
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* Sub tabs */}
-      <div className="flex border-b border-stone-200/80 bg-white p-1 rounded-xl max-w-md shadow-sm">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
+      
+      {/* Navigation tabs row */}
+      <div className="vh-profile-tabs-navigation-row">
         <button
-          onClick={() => setActiveSubTab('bookings')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
-            activeSubTab === 'bookings' ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-600 hover:bg-stone-50'
-          }`}
+          onClick={() => setActiveTab('appointments')}
+          className={`vh-profile-navigation-tab-btn ${activeTab === 'appointments' ? 'vh-profile-navigation-tab-btn-active' : ''}`}
         >
-          Lịch hẹn & Thuê đồ
+          Lịch hẹn của tôi
         </button>
         <button
-          onClick={() => setActiveSubTab('payments')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
-            activeSubTab === 'payments' ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-600 hover:bg-stone-50'
-          }`}
+          onClick={() => setActiveTab('rentals')}
+          className={`vh-profile-navigation-tab-btn ${activeTab === 'rentals' ? 'vh-profile-navigation-tab-btn-active' : ''}`}
         >
-          Lịch sử giao dịch
+          Áo dài đã thuê
+        </button>
+        <button
+          onClick={() => setActiveTab('favorites')}
+          className={`vh-profile-navigation-tab-btn ${activeTab === 'favorites' ? 'vh-profile-navigation-tab-btn-active' : ''}`}
+        >
+          Danh sách yêu thích
+        </button>
+        <button
+          onClick={() => setActiveTab('payments')}
+          className={`vh-profile-navigation-tab-btn ${activeTab === 'payments' ? 'vh-profile-navigation-tab-btn-active' : ''}`}
+        >
+          Lịch sử thanh toán
         </button>
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <span className="w-8 h-8 border-3 border-stone-300 border-t-stone-900 rounded-full animate-spin"></span>
-        </div>
-      ) : (
-        <div className="animate-fade-in">
-          {/* Sub Tab: Bookings */}
-          {activeSubTab === 'bookings' && (
-            <div className="flex flex-col gap-4">
-              {bookings.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-2xl border border-stone-200/80 text-stone-500">
-                  Bạn chưa có lịch hẹn hay đơn thuê áo dài nào.
-                </div>
-              ) : (
-                bookings.map((booking) => (
-                  <div key={booking._id} className="bg-white rounded-2xl border border-stone-200/80 shadow-sm overflow-hidden">
-                    <div className="px-6 py-4 bg-stone-50 border-b border-stone-100 flex justify-between items-center flex-wrap gap-2">
-                      <div className="flex items-center gap-3">
-                        <strong className="text-sm font-header text-stone-900 font-bold">{booking.bookingCode}</strong>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadgeClass(booking.status)}`}>
-                          {booking.status}
-                        </span>
-                      </div>
-                      <span className="text-xs text-stone-400 font-medium">Đặt ngày: {new Date(booking.createdAt).toLocaleDateString('vi-VN')}</span>
-                    </div>
-
-                    <div className="p-6 flex flex-col gap-4">
-                      {booking.items?.map((item: any, idx: number) => (
-                        <div key={idx} className="flex justify-between items-center border-b border-stone-100 pb-3 last:border-0 last:pb-0">
-                          <div>
-                            <h5 className="font-header text-sm font-bold text-stone-900">
-                              {item.productId ? 'Mẫu Áo Dài Di Sản' : 'Gói Chụp Ảnh Cổ Phong'}
-                            </h5>
-                            <p className="text-stone-500 text-xs mt-1">Đơn giá: {item.unitPrice.toLocaleString()}đ x {item.quantity}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            {booking.status === 'COMPLETED' && (
-                              <button
-                                onClick={() => setReviewingItem({
-                                  bookingId: booking._id,
-                                  itemId: item._id,
-                                  productId: item.productId,
-                                  photographyPackageId: item.photographyPackageId,
-                                })}
-                                className="px-3.5 py-1.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-lg transition flex items-center gap-1"
-                              >
-                                <Star size={12} fill="currentColor" />
-                                <span>Đánh giá</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="px-6 py-3 bg-stone-50 border-t border-stone-100 flex justify-between items-center">
-                      <div className="text-xs text-stone-500 font-medium">
-                        Tổng tiền: <strong className="text-stone-900 text-sm">{booking.pricingSummary.grandTotal.toLocaleString()}đ</strong>
-                      </div>
-                      {booking.status === 'PENDING_PAYMENT' && (
-                        <button
-                          onClick={async () => {
-                            try {
-                              const payRes: any = await httpClient.post('/payments/create-link', {
-                                bookingId: booking._id,
-                                purpose: 'DEPOSIT_PAYMENT',
-                              });
-                              window.location.href = payRes.payos.checkoutUrl;
-                            } catch (err: any) {
-                              toast.error('Không thể tạo cổng thanh toán');
-                            }
-                          }}
-                          className="px-4 py-2 bg-[#a11e22] hover:bg-[#801418] text-white text-xs font-bold rounded-lg transition flex items-center gap-1"
-                        >
-                          <CreditCard size={12} />
-                          <span>Đặt cọc ngay (20%)</span>
-                        </button>
+      {/* Tab Panels */}
+      <div className="vh-profile-tab-content-panel">
+        
+        {/* PANEL 1: APPOINTMENTS */}
+        {activeTab === 'appointments' && (
+          <div className="vh-profile-appointments-grid">
+            {displayAppointments.length === 0 ? (
+              <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8' }}>
+                <Calendar size={32} style={{ color: '#8C827A', margin: '0 auto 12px' }} />
+                <h5 className="font-header" style={{ fontSize: '16px', color: '#2D2926', marginBottom: '4px' }}>Chưa có lịch hẹn nào</h5>
+                <p style={{ fontSize: '13px', color: '#8C827A' }}>Bạn chưa đặt lịch chụp ảnh nào với nhiếp ảnh gia.</p>
+              </div>
+            ) : (
+              displayAppointments.map((app) => (
+                <div 
+                  key={app.id} 
+                  className={`vh-profile-appointment-card ${app.statusType === 'UPCOMING' ? 'vh-appointment-upcoming' : 'vh-appointment-past'}`}
+                >
+                  <div className="vh-appointment-card-header">
+                    {app.statusType === 'UPCOMING' ? (
+                      <span className="vh-appointment-status-label-upcoming">
+                        <Calendar size={13} style={{ marginRight: '6px' }} />
+                        SẮP TỚI • {app.dateStr}
+                      </span>
+                    ) : (
+                      <span className="vh-appointment-status-label-past">
+                        <History size={13} style={{ marginRight: '6px' }} />
+                        ĐÃ QUA • {app.dateStr}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <h4 className="vh-appointment-card-title font-header">{app.title}</h4>
+                    <div className="vh-appointment-card-detail-item">
+                      {app.detailType === 'LOCATION' ? (
+                        <MapPin size={14} className="vh-appointment-icon-muted" />
+                      ) : (
+                        <User size={14} className="vh-appointment-icon-muted" />
                       )}
+                      <span>{app.detailText}</span>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          )}
+                  
+                  <div className="vh-appointment-card-footer">
+                    {app.statusType === 'UPCOMING' ? (
+                      <span className="vh-appointment-time-badge">{app.timeStr}</span>
+                    ) : (
+                      <span className="vh-appointment-status-success">{app.timeStr}</span>
+                    )}
+                    
+                    {app.isReal ? (
+                      <button 
+                        className="vh-appointment-action-link"
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                        onClick={() => onViewDetails(app.booking)}
+                      >
+                        Chi tiết
+                      </button>
+                    ) : (
+                      <span className="vh-appointment-action-link" style={{ cursor: 'pointer' }}>
+                        {app.statusType === 'UPCOMING' ? 'Chi tiết' : 'Đặt lại'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
 
-          {/* Sub Tab: Payments */}
-          {activeSubTab === 'payments' && (
-            <div className="bg-white rounded-2xl border border-stone-200/80 shadow-sm overflow-hidden">
-              <table className="w-full text-left border-collapse">
+            {/* Dashed placeholder card to book new appointment */}
+            <button 
+              onClick={() => navigate('/photographers')}
+              className="vh-profile-appointment-card-dashed-btn"
+              style={{ width: '100%', height: '100%', minHeight: '184px' }}
+            >
+              <div className="vh-appointment-dashed-circle" style={{ backgroundColor: '#FDE8E8', color: '#8B1E22' }}>
+                <Plus size={20} />
+              </div>
+              <h5 className="vh-appointment-dashed-title font-header">Đặt lịch hẹn mới</h5>
+              <p className="vh-appointment-dashed-desc">Trải nghiệm dịch vụ cá nhân hóa</p>
+            </button>
+          </div>
+        )}
+
+        {/* PANEL 2: RENTALS */}
+        {activeTab === 'rentals' && (
+          <div className="vh-profile-rentals-grid-layout">
+            {displayRentals.length === 0 ? (
+              <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', width: '100%' }}>
+                <History size={32} style={{ color: '#8C827A', margin: '0 auto 12px' }} />
+                <h5 className="font-header" style={{ fontSize: '16px', color: '#2D2926', marginBottom: '4px' }}>Chưa có trang phục nào được thuê</h5>
+                <p style={{ fontSize: '13px', color: '#8C827A' }}>Hãy khám phá các bộ sưu tập áo dài của chúng tôi để bắt đầu thuê.</p>
+              </div>
+            ) : (
+              displayRentals.map((item) => {
+                const isReturned = item.status === 'RETURNED' || item.status === 'COMPLETED';
+                const rentalDateFormatted = item.rentalType === 'DAILY'
+                  ? `${formatDate(item.startDate)} - ${formatDate(item.endDate)}`
+                  : `Ngày ${formatDate(item.startDate)} (${item.startTime} - ${item.endTime})`;
+
+                return (
+                  <div key={item.id} className="vh-profile-rental-product-card">
+                    <div className="vh-profile-rental-img-wrapper" style={{ height: '280px' }}>
+                      <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
+                      <span className={`vh-profile-rental-status-badge ${isReturned ? 'status-returned' : 'status-renting'}`}>
+                        {isReturned ? 'ĐÃ TRẢ ĐỒ' : 'ĐANG THUÊ'}
+                      </span>
+                    </div>
+                    <div className="vh-profile-rental-details">
+                      <div>
+                        <div className="vh-profile-rental-name-row">
+                          <h4 className="vh-profile-rental-name font-header">{item.name}</h4>
+                        </div>
+                        <span className="vh-profile-rental-material" style={{ marginTop: '8px', display: 'block' }}>
+                          Kích cỡ: <strong>{item.size}</strong> • Màu: <strong>{item.color}</strong>
+                        </span>
+                        <span className="vh-profile-rental-date" style={{ marginTop: '8px', display: 'block' }}>
+                          Thời hạn: <strong>{rentalDateFormatted}</strong>
+                        </span>
+                      </div>
+
+                      <div className="vh-profile-rental-price-row">
+                        <div className="vh-profile-rental-price-sub">
+                          <span>TỔNG CHI PHÍ</span>
+                          <strong>{item.unitPrice?.toLocaleString('vi-VN')}đ</strong>
+                        </div>
+                        {item.booking ? (
+                          <button 
+                            className="vh-appointment-action-link"
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                            onClick={() => onViewDetails(item.booking)}
+                          >
+                            Hóa đơn
+                          </button>
+                        ) : (
+                          <span className="vh-appointment-action-link" style={{ cursor: 'pointer' }}>
+                            Hóa đơn
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* PANEL 3: FAVORITES */}
+        {activeTab === 'favorites' && (
+          <div className="vh-profile-favorites-grid-layout">
+            {realFavorites.length === 0 ? (
+              <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', width: '100%' }}>
+                <Heart size={32} style={{ color: '#8C827A', margin: '0 auto 12px' }} />
+                <h5 className="font-header" style={{ fontSize: '16px', color: '#2D2926', marginBottom: '4px' }}>Chưa có yêu thích nào</h5>
+                <p style={{ fontSize: '13px', color: '#8C827A' }}>Bạn chưa lưu sản phẩm hay nhiếp ảnh gia yêu thích nào.</p>
+              </div>
+            ) : (
+              realFavorites.map((item) => (
+                <div key={item.id} className="vh-profile-rental-product-card">
+                  <div className="vh-profile-rental-img-wrapper" style={{ height: '280px' }}>
+                    <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
+                  </div>
+                  
+                  <div className="vh-profile-rental-details">
+                    <div>
+                      <h4 className="vh-profile-rental-name font-header">{item.name}</h4>
+                      <span className="vh-profile-rental-material" style={{ marginTop: '6px', display: 'block' }}>{item.material}</span>
+                    </div>
+                    
+                    <div className="vh-profile-rental-price-row">
+                      <div className="vh-profile-rental-price-sub">
+                        <span>Giá cọc / dịch vụ tham khảo</span>
+                        <strong>{item.price.toLocaleString('vi-VN')}đ</strong>
+                      </div>
+                      <button 
+                        className="vh-appointment-action-link"
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                        onClick={() => navigate(item.link)}
+                      >
+                        Xem chi tiết
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* PANEL 4: PAYMENTS */}
+        {activeTab === 'payments' && (
+          <div className="vh-profile-payments-table-wrapper">
+            {payments.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', width: '100%' }}>
+                <ShieldCheck size={32} style={{ color: '#8C827A', margin: '0 auto 12px' }} />
+                <h5 className="font-header" style={{ fontSize: '16px', color: '#2D2926', marginBottom: '4px' }}>Chưa có lịch sử giao dịch</h5>
+                <p style={{ fontSize: '13px', color: '#8C827A' }}>Bạn chưa thực hiện bất kỳ giao dịch thanh toán nào.</p>
+              </div>
+            ) : (
+              <table className="vh-profile-payments-table">
                 <thead>
-                  <tr className="bg-stone-50 text-stone-600 border-b border-stone-200/80 text-xs font-bold">
-                    <th className="px-6 py-4">MÃ GIAO DỊCH</th>
-                    <th className="px-6 py-4">DỊCH VỤ</th>
-                    <th className="px-6 py-4">SỐ TIỀN</th>
-                    <th className="px-6 py-4">PHƯƠNG THỨC</th>
-                    <th className="px-6 py-4">TRẠNG THÁI</th>
+                  <tr>
+                    <th>Mã giao dịch</th>
+                    <th>Dịch vụ</th>
+                    <th>Số tiền</th>
+                    <th>Phương thức</th>
+                    <th>Trạng thái</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-stone-100 text-sm">
-                  {payments.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-8 text-stone-500">
-                        Chưa có lịch sử giao dịch nào được ghi nhận.
+                <tbody>
+                  {payments.map((p) => (
+                    <tr key={p._id || p.paymentCode}>
+                      <td style={{ fontWeight: 700 }}>{p.paymentCode}</td>
+                      <td style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                        {p.purpose === 'DEPOSIT_PAYMENT' ? 'Đặt cọc giữ chỗ' : 'Thanh toán hoàn tất'}
+                      </td>
+                      <td style={{ fontWeight: 800, color: 'var(--color-primary-dark)' }}>
+                        {p.amount?.toLocaleString('vi-VN')}đ
+                      </td>
+                      <td>{p.paymentMethod || 'PayOS (VietQR)'}</td>
+                      <td>
+                        <span className="vh-profile-payment-status-success-badge">
+                          <ShieldCheck size={12} style={{ marginRight: '4px' }} />
+                          <span>Thành công</span>
+                        </span>
                       </td>
                     </tr>
-                  ) : (
-                    payments.map((p) => (
-                      <tr key={p._id}>
-                        <td className="px-6 py-4 font-bold text-stone-900">{p.paymentCode}</td>
-                        <td className="px-6 py-4 text-xs text-stone-500">
-                          {p.purpose === 'DEPOSIT_PAYMENT' ? 'Đặt cọc dịch vụ' : 'Thanh toán toàn bộ'}
-                        </td>
-                        <td className="px-6 py-4 font-extrabold text-stone-950">{p.amount.toLocaleString()}đ</td>
-                        <td className="px-6 py-4 text-xs text-stone-500">{p.paymentMethod}</td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                            p.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'
-                          }`}>
-                            {p.status === 'SUCCESS' ? <ShieldCheck size={10} /> : <AlertTriangle size={10} />}
-                            {p.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
+
+      </div>
 
       {/* Review Modal popup */}
       {reviewingItem && (
@@ -267,7 +498,9 @@ export const CustomerDashboard: React.FC = () => {
           </form>
         </div>
       )}
+
     </div>
   );
 };
+
 export default CustomerDashboard;

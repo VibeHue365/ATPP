@@ -34,6 +34,12 @@ async function seed() {
   const collections = await db.listCollections().toArray();
   const collectionNames = collections.map(c => c.name);
   console.log(`Found ${collectionNames.length} existing collections. Clearing for fresh seed...`);
+  for (const name of collectionNames) {
+    if (name.startsWith('system.')) continue;
+    await db.collection(name).deleteMany({});
+    console.log(`Cleared collection: ${name}`);
+  }
+
 
 
 
@@ -47,6 +53,20 @@ async function seed() {
   const providerAoDaiProfileId = new mongoose.Types.ObjectId();
   const providerPhotoProfileId = new mongoose.Types.ObjectId();
   const providerBothProfileId = new mongoose.Types.ObjectId();
+
+  // IDs for 4 photographers from photographer.seeder.js
+  const providerMinhAnhId = new mongoose.Types.ObjectId();
+  const providerMinhAnhProfileId = new mongoose.Types.ObjectId();
+
+  const providerHoangMinhUserId = new mongoose.Types.ObjectId();
+  const providerHoangMinhProfileId = new mongoose.Types.ObjectId();
+
+  const providerLeThaoUserId = new mongoose.Types.ObjectId();
+  const providerLeThaoProfileId = new mongoose.Types.ObjectId();
+
+  const providerTranBaoUserId = new mongoose.Types.ObjectId();
+  const providerTranBaoProfileId = new mongoose.Types.ObjectId();
+
 
   const categoryRentalId = new mongoose.Types.ObjectId();
   const categoryPhotoId = new mongoose.Types.ObjectId();
@@ -249,9 +269,162 @@ async function seed() {
       security: { failedLoginAttempts: 0 },
       createdAt: new Date(),
       updatedAt: new Date()
+    },
+    {
+      _id: providerMinhAnhId,
+      auth: {
+        email: 'minhanhle@vibehue.com',
+        emailNormalized: 'minhanhle@vibehue.com',
+        phone: '+84911122201',
+        phoneNormalized: '+84911122201',
+        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0',
+        emailVerified: true,
+        phoneVerified: true,
+        authProviders: [{ provider: 'LOCAL', providerUserId: null }]
+      },
+      roles: ['PROVIDER'],
+      defaultRole: 'PROVIDER',
+      accountStatus: 'ACTIVE',
+      profile: {
+        fullName: 'Minh Anh Lê',
+        avatarUrl: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+        gender: 'MALE',
+        dateOfBirth: new Date('1990-01-01')
+      },
+      preferences: {
+        stylePreferences: [],
+        favoriteColors: [],
+        preferredAoDaiStyles: [],
+        preferredPhotographyStyles: [],
+        sizeInfo: {},
+        budgetRange: {},
+        preferredLocations: []
+      },
+      addresses: [],
+      favorites: [],
+      loyalty: { pointsBalance: 0, membershipLevel: 'BRONZE' },
+      provider: { providerId: providerMinhAnhProfileId, providerStatus: 'APPROVED' },
+      security: { failedLoginAttempts: 0 },
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      _id: providerHoangMinhUserId,
+      auth: {
+        email: 'hoangminh@vibehue.com',
+        emailNormalized: 'hoangminh@vibehue.com',
+        phone: '+84911122202',
+        phoneNormalized: '+84911122202',
+        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0',
+        emailVerified: true,
+        phoneVerified: true,
+        authProviders: [{ provider: 'LOCAL', providerUserId: null }]
+      },
+      roles: ['PROVIDER'],
+      defaultRole: 'PROVIDER',
+      accountStatus: 'ACTIVE',
+      profile: {
+        fullName: 'Hoàng Minh',
+        avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9',
+        gender: 'MALE',
+        dateOfBirth: new Date('1990-01-01')
+      },
+      preferences: {
+        stylePreferences: [],
+        favoriteColors: [],
+        preferredAoDaiStyles: [],
+        preferredPhotographyStyles: [],
+        sizeInfo: {},
+        budgetRange: {},
+        preferredLocations: []
+      },
+      addresses: [],
+      favorites: [],
+      loyalty: { pointsBalance: 0, membershipLevel: 'BRONZE' },
+      provider: { providerId: providerHoangMinhProfileId, providerStatus: 'APPROVED' },
+      security: { failedLoginAttempts: 0 },
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      _id: providerLeThaoUserId,
+      auth: {
+        email: 'lethao@vibehue.com',
+        emailNormalized: 'lethao@vibehue.com',
+        phone: '+84911122203',
+        phoneNormalized: '+84911122203',
+        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0',
+        emailVerified: true,
+        phoneVerified: true,
+        authProviders: [{ provider: 'LOCAL', providerUserId: null }]
+      },
+      roles: ['PROVIDER'],
+      defaultRole: 'PROVIDER',
+      accountStatus: 'ACTIVE',
+      profile: {
+        fullName: 'Lê Thảo',
+        avatarUrl: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+        gender: 'FEMALE',
+        dateOfBirth: new Date('1990-01-01')
+      },
+      preferences: {
+        stylePreferences: [],
+        favoriteColors: [],
+        preferredAoDaiStyles: [],
+        preferredPhotographyStyles: [],
+        sizeInfo: {},
+        budgetRange: {},
+        preferredLocations: []
+      },
+      addresses: [],
+      favorites: [],
+      loyalty: { pointsBalance: 0, membershipLevel: 'BRONZE' },
+      provider: { providerId: providerLeThaoProfileId, providerStatus: 'APPROVED' },
+      security: { failedLoginAttempts: 0 },
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      _id: providerTranBaoUserId,
+      auth: {
+        email: 'tranbao@vibehue.com',
+        emailNormalized: 'tranbao@vibehue.com',
+        phone: '+84911122204',
+        phoneNormalized: '+84911122204',
+        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0',
+        emailVerified: true,
+        phoneVerified: true,
+        authProviders: [{ provider: 'LOCAL', providerUserId: null }]
+      },
+      roles: ['PROVIDER'],
+      defaultRole: 'PROVIDER',
+      accountStatus: 'ACTIVE',
+      profile: {
+        fullName: 'Trần Bảo',
+        avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9',
+        gender: 'MALE',
+        dateOfBirth: new Date('1990-01-01')
+      },
+      preferences: {
+        stylePreferences: [],
+        favoriteColors: [],
+        preferredAoDaiStyles: [],
+        preferredPhotographyStyles: [],
+        sizeInfo: {},
+        budgetRange: {},
+        preferredLocations: []
+      },
+      addresses: [],
+      favorites: [],
+      loyalty: { pointsBalance: 0, membershipLevel: 'BRONZE' },
+      provider: { providerId: providerTranBaoProfileId, providerStatus: 'APPROVED' },
+      security: { failedLoginAttempts: 0 },
+      createdAt: new Date(),
+      updatedAt: new Date()
     }
   ];
   await db.collection('users').insertMany(users);
+
 
   // ==========================================
   // 2. roles
@@ -423,9 +596,182 @@ async function seed() {
       approvedBy: adminId,
       createdAt: new Date(),
       updatedAt: new Date()
+    },
+    {
+      _id: providerMinhAnhProfileId,
+      userId: providerMinhAnhId,
+      businessName: 'Minh Anh Lê',
+      capabilities: ['PHOTOGRAPHY'],
+      contact: {
+        email: 'minhanhle@vibehue.com',
+        phone: '+84911122201',
+        website: null
+      },
+      address: {
+        addressLine: '12 Đại Nội',
+        ward: null,
+        district: 'Thành phố Huế',
+        city: 'Thừa Thiên Huế'
+      },
+      media: {
+        logoUrl: null,
+        coverUrl: null,
+        images: [
+          'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+          'https://images.unsplash.com/photo-1621184455862-c163dfb30e0f',
+          'https://images.unsplash.com/photo-1542038784456-1ea8e935640e'
+        ]
+      },
+      equipment: ['Sony A7R V', 'Lens 85mm f/1.4 GM', 'Flash Profoto A10'],
+      portfolio: [
+        'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+        'https://images.unsplash.com/photo-1621184455862-c163dfb30e0f',
+        'https://images.unsplash.com/photo-1542038784456-1ea8e935640e'
+      ],
+      policies: {
+        cancellationPolicy: 'Hủy trước 48h hoàn trả cọc. Sau 48h phạt cọc.',
+        rentalPolicy: 'Giao ảnh đúng hạn.'
+      },
+      paymentAccounts: [],
+      rating: { averageRating: 4.9, totalReviews: 45 },
+      status: 'APPROVED',
+      approvedAt: new Date(),
+      approvedBy: adminId,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      _id: providerHoangMinhProfileId,
+      userId: providerHoangMinhUserId,
+      businessName: 'Hoàng Minh',
+      capabilities: ['PHOTOGRAPHY'],
+      contact: {
+        email: 'hoangminh@vibehue.com',
+        phone: '+84911122202',
+        website: null
+      },
+      address: {
+        addressLine: '88 Lê Lợi',
+        ward: null,
+        district: 'Thành phố Huế',
+        city: 'Thừa Thiên Huế'
+      },
+      media: {
+        logoUrl: null,
+        coverUrl: null,
+        images: [
+          'https://images.unsplash.com/photo-1517841905240-472988babdf9',
+          'https://images.unsplash.com/photo-1524504388940-b1c1722653e1',
+          'https://images.unsplash.com/photo-1542038784456-1ea8e935640e'
+        ]
+      },
+      equipment: ['Canon R5', 'Lens 50mm f/1.2 L', 'Flash Godox V1'],
+      portfolio: [
+        'https://images.unsplash.com/photo-1517841905240-472988babdf9',
+        'https://images.unsplash.com/photo-1524504388940-b1c1722653e1',
+        'https://images.unsplash.com/photo-1542038784456-1ea8e935640e'
+      ],
+      policies: {
+        cancellationPolicy: 'Hủy trước 48h hoàn trả cọc. Sau 48h phạt cọc.',
+        rentalPolicy: 'Giao ảnh đúng hạn.'
+      },
+      paymentAccounts: [],
+      rating: { averageRating: 4.9, totalReviews: 45 },
+      status: 'APPROVED',
+      approvedAt: new Date(),
+      approvedBy: adminId,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      _id: providerLeThaoProfileId,
+      userId: providerLeThaoUserId,
+      businessName: 'Lê Thảo',
+      capabilities: ['PHOTOGRAPHY'],
+      contact: {
+        email: 'lethao@vibehue.com',
+        phone: '+84911122203',
+        website: null
+      },
+      address: {
+        addressLine: '15 Vỹ Dạ',
+        ward: null,
+        district: 'Thành phố Huế',
+        city: 'Thừa Thiên Huế'
+      },
+      media: {
+        logoUrl: null,
+        coverUrl: null,
+        images: [
+          'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+          'https://images.unsplash.com/photo-1542038784456-1ea8e935640e',
+          'https://images.unsplash.com/photo-1621184455862-c163dfb30e0f'
+        ]
+      },
+      equipment: ['Sony A7IV', 'Lens 35mm f/1.4 GM', 'Flash Godox AD200'],
+      portfolio: [
+        'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+        'https://images.unsplash.com/photo-1542038784456-1ea8e935640e',
+        'https://images.unsplash.com/photo-1621184455862-c163dfb30e0f'
+      ],
+      policies: {
+        cancellationPolicy: 'Hủy trước 48h hoàn trả cọc. Sau 48h phạt cọc.',
+        rentalPolicy: 'Giao ảnh đúng hạn.'
+      },
+      paymentAccounts: [],
+      rating: { averageRating: 4.9, totalReviews: 45 },
+      status: 'APPROVED',
+      approvedAt: new Date(),
+      approvedBy: adminId,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      _id: providerTranBaoProfileId,
+      userId: providerTranBaoUserId,
+      businessName: 'Trần Bảo',
+      capabilities: ['PHOTOGRAPHY'],
+      contact: {
+        email: 'tranbao@vibehue.com',
+        phone: '+84911122204',
+        website: null
+      },
+      address: {
+        addressLine: '90 Trần Phú',
+        ward: null,
+        district: 'Hội An',
+        city: 'Quảng Nam'
+      },
+      media: {
+        logoUrl: null,
+        coverUrl: null,
+        images: [
+          'https://images.unsplash.com/photo-1517841905240-472988babdf9',
+          'https://images.unsplash.com/photo-1524504388940-b1c1722653e1',
+          'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'
+        ]
+      },
+      equipment: ['Fujifilm GFX', 'Lens 110mm f/2.0 GF', 'Elinchrom One'],
+      portfolio: [
+        'https://images.unsplash.com/photo-1517841905240-472988babdf9',
+        'https://images.unsplash.com/photo-1524504388940-b1c1722653e1',
+        'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'
+      ],
+      policies: {
+        cancellationPolicy: 'Hủy trước 48h hoàn trả cọc. Sau 48h phạt cọc.',
+        rentalPolicy: 'Giao ảnh đúng hạn.'
+      },
+      paymentAccounts: [],
+      rating: { averageRating: 4.9, totalReviews: 45 },
+      status: 'APPROVED',
+      approvedAt: new Date(),
+      approvedBy: adminId,
+      createdAt: new Date(),
+      updatedAt: new Date()
     }
   ];
   await db.collection('providers').insertMany(providers);
+
 
   // ==========================================
   // 7. provider_verifications
@@ -493,6 +839,7 @@ async function seed() {
       description: 'Chất liệu lụa tơ tằm Hà Đông mềm mại, tôn dáng nữ tính Việt Nam.',
       images: ['https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'],
       basePrice: 250000, // 250k / day
+      hourlyPrice: 80000,
       depositAmount: 500000, // 500k deposit
       sizes: ['S', 'M', 'L'],
       colors: ['WHITE'],
@@ -511,6 +858,7 @@ async function seed() {
       description: 'Thích hợp cho ngày cưới hỏi, lễ hội truyền thống, gấm thêu sang trọng.',
       images: ['https://images.unsplash.com/photo-1596462502278-27bfdc403348'],
       basePrice: 400000,
+      hourlyPrice: 120000,
       depositAmount: 1000000,
       sizes: ['M', 'L', 'XL'],
       colors: ['RED', 'GOLD'],
@@ -664,9 +1012,150 @@ async function seed() {
       status: 'ACTIVE',
       rating: { averageRating: 4.9, totalReviews: 8 },
       createdAt: new Date()
+    },
+    // Packages for Minh Anh Lê
+    {
+      providerId: providerMinhAnhProfileId,
+      name: 'Gói Cơ Bản (Heritage Minimal)',
+      slug: 'goi-co-ban-heritage-minimal-minhanh',
+      description: 'Chụp ngoại cảnh Đại Nội 2 giờ, 15 ảnh chỉnh sửa chất lượng cao, giao ảnh sau 3 ngày.',
+      price: 1500000,
+      durationHours: 2,
+      editedPhotosCount: 15,
+      rawPhotosCount: 120,
+      deliveryDays: 3,
+      travelFeeNotes: 'Đã bao gồm chi phí di chuyển trong nội thành.',
+      overtimeFeePerHour: 150000,
+      images: ['https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'],
+      status: 'ACTIVE',
+      rating: { averageRating: 4.9, totalReviews: 20 },
+      createdAt: new Date()
+    },
+    {
+      providerId: providerMinhAnhProfileId,
+      name: 'Gói Nghệ Thuật (Fine-Art Heritage)',
+      slug: 'goi-nghe-thuat-fine-art-minhanh',
+      description: 'Chụp Đại Nội + Cung An Định 4 giờ, hỗ trợ concept trang phục, makeup chuyên nghiệp, 35 ảnh chỉnh sửa + album ảnh cao cấp.',
+      price: 3500000,
+      durationHours: 4,
+      editedPhotosCount: 35,
+      rawPhotosCount: 250,
+      deliveryDays: 5,
+      travelFeeNotes: 'Đã bao gồm chi phí di chuyển trong nội thành.',
+      overtimeFeePerHour: 150000,
+      images: ['https://images.unsplash.com/photo-1621184455862-c163dfb30e0f'],
+      status: 'ACTIVE',
+      rating: { averageRating: 4.9, totalReviews: 20 },
+      createdAt: new Date()
+    },
+    // Packages for Hoàng Minh
+    {
+      providerId: providerHoangMinhProfileId,
+      name: 'Gói Chụp Studio Cổ Phục',
+      slug: 'goi-chup-studio-co-phuc-hoangminh',
+      description: 'Chụp tại studio phông nền nghệ thuật, trang phục tự chọn, 15 ảnh chỉnh sửa.',
+      price: 1200000,
+      durationHours: 1.5,
+      editedPhotosCount: 15,
+      rawPhotosCount: 100,
+      deliveryDays: 2,
+      travelFeeNotes: 'Đã bao gồm chi phí di chuyển trong nội thành.',
+      overtimeFeePerHour: 150000,
+      images: ['https://images.unsplash.com/photo-1517841905240-472988babdf9'],
+      status: 'ACTIVE',
+      rating: { averageRating: 4.9, totalReviews: 20 },
+      createdAt: new Date()
+    },
+    {
+      providerId: providerHoangMinhProfileId,
+      name: 'Gói Ngoại Cảnh Cung Đình Cao Cấp',
+      slug: 'goi-ngoai-canh-cung-dinh-hoangminh',
+      description: 'Chụp ngoại cảnh Đại Nội, Lăng Khải Định, 4 giờ chụp, makeup + làm tóc, 40 ảnh chỉnh sửa chuyên sâu.',
+      price: 3800000,
+      durationHours: 4,
+      editedPhotosCount: 40,
+      rawPhotosCount: 300,
+      deliveryDays: 4,
+      travelFeeNotes: 'Đã bao gồm chi phí di chuyển trong nội thành.',
+      overtimeFeePerHour: 150000,
+      images: ['https://images.unsplash.com/photo-1524504388940-b1c1722653e1'],
+      status: 'ACTIVE',
+      rating: { averageRating: 4.9, totalReviews: 20 },
+      createdAt: new Date()
+    },
+    // Packages for Lê Thảo
+    {
+      providerId: providerLeThaoProfileId,
+      name: 'Gói Nàng Thơ Trữ Tình',
+      slug: 'goi-nang-tho-tru-tinh-lethao',
+      description: 'Chụp tại đồi Thiên An hoặc bờ sông Hương thơ mộng, phong cách lãng mạn nhẹ nhàng, 20 ảnh chỉnh sửa.',
+      price: 1800000,
+      durationHours: 3,
+      editedPhotosCount: 20,
+      rawPhotosCount: 150,
+      deliveryDays: 3,
+      travelFeeNotes: 'Đã bao gồm chi phí di chuyển trong nội thành.',
+      overtimeFeePerHour: 150000,
+      images: ['https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'],
+      status: 'ACTIVE',
+      rating: { averageRating: 4.9, totalReviews: 20 },
+      createdAt: new Date()
+    },
+    {
+      providerId: providerLeThaoProfileId,
+      name: 'Gói Nàng Thơ Cổ Phong',
+      slug: 'goi-nang-tho-co-phong-lethao',
+      description: 'Phong cách cổ phong nhẹ nhàng trữ tình tại lăng tẩm Huế, 3 giờ chụp, 25 ảnh chỉnh sửa.',
+      price: 2400000,
+      durationHours: 3,
+      editedPhotosCount: 25,
+      rawPhotosCount: 200,
+      deliveryDays: 4,
+      travelFeeNotes: 'Đã bao gồm chi phí di chuyển trong nội thành.',
+      overtimeFeePerHour: 150000,
+      images: ['https://images.unsplash.com/photo-1542038784456-1ea8e935640e'],
+      status: 'ACTIVE',
+      rating: { averageRating: 4.9, totalReviews: 20 },
+      createdAt: new Date()
+    },
+    // Packages for Trần Bảo
+    {
+      providerId: providerTranBaoProfileId,
+      name: 'Gói Phố Cổ Film Look',
+      slug: 'goi-pho-co-film-look-tranbao',
+      description: 'Màu phim hoài niệm đặc trưng phố cổ Hội An, 3 giờ chụp, 20 ảnh chỉnh sửa, giao ảnh sau 3 ngày.',
+      price: 2000000,
+      durationHours: 3,
+      editedPhotosCount: 20,
+      rawPhotosCount: 180,
+      deliveryDays: 3,
+      travelFeeNotes: 'Đã bao gồm chi phí di chuyển trong nội thành.',
+      overtimeFeePerHour: 150000,
+      images: ['https://images.unsplash.com/photo-1517841905240-472988babdf9'],
+      status: 'ACTIVE',
+      rating: { averageRating: 4.9, totalReviews: 20 },
+      createdAt: new Date()
+    },
+    {
+      providerId: providerTranBaoProfileId,
+      name: 'Gói Fine-Art Cinematic',
+      slug: 'goi-fine-art-cinematic-tranbao',
+      description: 'Gói chụp ảnh nghệ thuật đỉnh cao kết hợp ánh sáng điện ảnh, 5 giờ chụp ngoại cảnh Hội An + biển An Bàng, 45 ảnh chỉnh sửa.',
+      price: 4500000,
+      durationHours: 5,
+      editedPhotosCount: 45,
+      rawPhotosCount: 350,
+      deliveryDays: 5,
+      travelFeeNotes: 'Đã bao gồm chi phí di chuyển trong nội thành.',
+      overtimeFeePerHour: 150000,
+      images: ['https://images.unsplash.com/photo-1524504388940-b1c1722653e1'],
+      status: 'ACTIVE',
+      rating: { averageRating: 4.9, totalReviews: 20 },
+      createdAt: new Date()
     }
   ];
   await db.collection('photography_packages').insertMany(photographyPackages);
+
 
   // ==========================================
   // 15. provider_schedules
