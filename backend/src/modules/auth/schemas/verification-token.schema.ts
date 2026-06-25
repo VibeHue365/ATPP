@@ -12,6 +12,7 @@ export enum VerificationPurpose {
   VerifyEmail = 'VERIFY_EMAIL',
   VerifyPhone = 'VERIFY_PHONE',
   PasswordReset = 'PASSWORD_RESET',
+  OAuthLogin = 'OAUTH_LOGIN',
   EmailChange = 'EMAIL_CHANGE',
   PhoneChange = 'PHONE_CHANGE',
 }

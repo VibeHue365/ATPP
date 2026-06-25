@@ -2,15 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { ROUTES } from '../config/routes';
-import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings } from 'lucide-react';
+import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X } from 'lucide-react';
 import { API_BASE_URL } from '../config/env';
+import { AIChatBot } from '../features/dashboard/components/AIChatBot';
+import { useCart } from '../context/CartContext';
 
 export const MainLayout: React.FC = () => {
   const { isAuthenticated, user, logout } = useAuth();
+  const { cart } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -48,6 +52,7 @@ export const MainLayout: React.FC = () => {
   const getRoleDisplayName = (roles?: string[]) => {
     if (!roles || roles.length === 0) return 'Khách hàng';
     if (roles.includes('ADMIN')) return 'Quản trị viên';
+    if (roles.includes('PROVIDER')) return 'Đối tác (Provider)';
     if (roles.includes('MERCHANT') || roles.includes('STORE_OWNER') || roles.includes('SHOP_OWNER')) return 'Chủ cửa hàng';
     if (roles.includes('PHOTOGRAPHER')) return 'Nhiếp ảnh gia';
     return 'Khách hàng';
@@ -78,19 +83,19 @@ export const MainLayout: React.FC = () => {
               Khám phá
             </Link>
 
-            <a 
-              href="/#rentals" 
-              className={`vh-header-nav-link-custom ${location.hash === '#rentals' ? 'active' : ''}`}
+            <Link 
+              to={ROUTES.RENTALS} 
+              className={`vh-header-nav-link-custom ${location.pathname === ROUTES.RENTALS ? 'active' : ''}`}
             >
               Cho thuê
-            </a>
+            </Link>
 
-            <a 
-              href="/#photographers" 
-              className={`vh-header-nav-link-custom ${location.hash === '#photographers' ? 'active' : ''}`}
+            <Link 
+              to={ROUTES.PHOTOGRAPHERS} 
+              className={`vh-header-nav-link-custom ${location.pathname.startsWith('/photographers') ? 'active' : ''}`}
             >
               Nhiếp ảnh
-            </a>
+            </Link>
 
             <a 
               href="/#heritage" 
@@ -112,10 +117,29 @@ export const MainLayout: React.FC = () => {
             <button className="vh-header-action-icon-custom" title="Thông báo">
               <Bell size={20} />
             </button>
-            
-            <button className="vh-header-action-icon-custom" title="Giỏ hàng">
+            <Link to={ROUTES.CART} className="vh-header-action-icon-custom" title="Giỏ hàng" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ShoppingBag size={20} />
-            </button>
+              {cart.length > 0 && (
+                <span className="vh-cart-badge" style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  right: '-4px',
+                  backgroundColor: 'var(--color-primary)',
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: '16px',
+                  height: '16px',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                </span>
+              )}
+            </Link>
 
             {isAuthenticated ? (
               <div className="vh-header-user-section-relative-wrapper" ref={dropdownRef}>
@@ -158,6 +182,29 @@ export const MainLayout: React.FC = () => {
 
                     {/* Nav Items */}
                     <div className="vh-header-dropdown-items-list">
+                      {user?.roles?.includes('PROVIDER') && (
+                        <Link 
+                          to={ROUTES.PROVIDER_DASHBOARD} 
+                          className="vh-header-dropdown-item-link" 
+                          onClick={() => setIsDropdownOpen(false)}
+                          style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}
+                        >
+                          <Sparkles size={16} />
+                          <span>Kênh Đối Tác</span>
+                        </Link>
+                      )}
+
+                      {!user?.roles?.includes('PROVIDER') && (
+                        <Link
+                          to={ROUTES.PROVIDER_REGISTER}
+                          className="vh-header-dropdown-item-link"
+                          onClick={() => setIsDropdownOpen(false)}
+                        >
+                          <Sparkles size={16} />
+                          <span>Đăng ký Provider</span>
+                        </Link>
+                      )}
+
                       <Link 
                         to={ROUTES.PROFILE} 
                         className="vh-header-dropdown-item-link" 
@@ -199,8 +246,8 @@ export const MainLayout: React.FC = () => {
                 )}
               </div>
             ) : (
-              <Link to={ROUTES.LOGIN} className="vh-btn vh-btn-primary vh-btn-sm vh-header-signin-btn" style={{ borderRadius: '8px', padding: '8px 20px', fontWeight: 600 }}>
-                SIGN IN
+              <Link to={ROUTES.LOGIN} className="vh-btn vh-btn-primary vh-btn-sm" style={{ borderRadius: '8px', padding: '8px 20px', fontWeight: 600 }}>
+                ĐĂNG NHẬP
               </Link>
             )}
           </div>
@@ -232,6 +279,76 @@ export const MainLayout: React.FC = () => {
           </div>
         </div>
       </footer>
+      {/* AI ChatBot Floating Widget */}
+      {isAuthenticated && (
+        <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999 }}>
+          {isChatOpen && (
+            <div style={{
+              position: 'absolute',
+              bottom: '72px',
+              right: '0',
+              width: '380px',
+              height: '520px',
+              background: 'white',
+              borderRadius: '16px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              border: '1px solid rgba(139, 90, 43, 0.15)',
+            }}>
+              {/* Chat Header */}
+              <div style={{
+                background: 'linear-gradient(135deg, #8B5A2B 0%, #6B4226 100%)',
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                color: 'white',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={18} />
+                  <span style={{ fontWeight: 600, fontSize: '14px' }}>Trợ Lý AI Áo Dài</span>
+                </div>
+                <button
+                  onClick={() => setIsChatOpen(false)}
+                  style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '2px' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              {/* Chat Content */}
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <AIChatBot />
+              </div>
+            </div>
+          )}
+
+          {/* Floating Toggle Button */}
+          <button
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            title="Trợ Lý AI"
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              background: isChatOpen
+                ? 'linear-gradient(135deg, #6B4226 0%, #4a2e1a 100%)'
+                : 'linear-gradient(135deg, #8B5A2B 0%, #C49A6C 100%)',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 20px rgba(139, 90, 43, 0.5)',
+              transition: 'all 0.3s ease',
+              color: 'white',
+            }}
+          >
+            {isChatOpen ? <X size={24} /> : <Sparkles size={24} />}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

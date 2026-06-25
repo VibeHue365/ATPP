@@ -5,6 +5,16 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { ProvidersModule } from './modules/providers/providers.module';
+import { ProductsModule } from './modules/products/products.module';
+import { BookingsModule } from './modules/bookings/bookings.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
+import { DisputesModule } from './modules/disputes/disputes.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { AiModule } from './modules/ai/ai.module';
+import { ChatModule } from './modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -20,6 +30,16 @@ import { UsersModule } from './modules/users/users.module';
     }),
     AuthModule,
     UsersModule,
+    ProvidersModule,
+    ProductsModule,
+    BookingsModule,
+    PaymentsModule,
+    ReviewsModule,
+    DisputesModule,
+    NotificationsModule,
+    AuditModule,
+    AiModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

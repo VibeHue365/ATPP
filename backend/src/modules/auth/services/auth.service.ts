@@ -16,6 +16,7 @@ import { UsersRepository } from '../../users/repositories/users.repository';
 import { ChangePasswordDto } from '../dto/change-password.dto';
 import { ForgotPasswordDto } from '../dto/forgot-password.dto';
 import { LoginDto } from '../dto/login.dto';
+import { OAuthExchangeDto } from '../dto/oauth-exchange.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterDto } from '../dto/register.dto';
 import { ResendVerificationDto } from '../dto/resend-verification.dto';
@@ -39,6 +40,14 @@ interface IssuedTokens {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
+}
+
+interface AuthSession extends IssuedTokens {
+  user: Record<string, unknown>;
+}
+
+interface OAuthLoginCode {
+  code: string;
 }
 
 @Injectable()
@@ -90,18 +99,40 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const user = await this.createLocalPendingUser(
-      dto,
-      emailNormalized,
-      phoneNormalized,
-      passwordHash,
-    );
+    const user = await this.usersRepository.createUser({
+      auth: {
+        email: dto.email.trim(),
+        emailNormalized,
+        phone: dto.phone.trim(),
+        phoneNormalized,
+        passwordHash,
+        emailVerified: false,
+        phoneVerified: false,
+        authProviders: [
+          {
+            provider: AuthProviderType.Local,
+            providerUserId: null,
+          },
+        ],
+      },
+      roles: ['CUSTOMER'],
+      defaultRole: 'CUSTOMER',
+      accountStatus: UserStatus.PendingEmailVerification,
+      profile: {
+        fullName: dto.fullName.trim(),
+      },
+      security: {
+        passwordChangedAt: new Date(),
+        failedLoginAttempts: 0,
+      },
+    });
 
     await this.rolesService.assignDefaultCustomerRole(user._id);
-    const otp = await this.sendFreshEmailVerificationOtp(
+    const otp = await this.createEmailVerificationOtp(
       user._id,
       emailNormalized,
     );
+    await this.mailService.sendEmailVerificationOtp(emailNormalized, otp);
 
     return {
       message: 'Register success. Please verify your email.',
@@ -156,7 +187,12 @@ export class AuthService {
       };
     }
 
-    const otp = await this.sendFreshEmailVerificationOtp(user._id, email);
+    await this.authRepository.revokeActiveVerificationTokens(
+      user._id,
+      VerificationPurpose.VerifyEmail,
+    );
+    const otp = await this.createEmailVerificationOtp(user._id, email);
+    await this.mailService.sendEmailVerificationOtp(email, otp);
 
     return {
       message: 'If the email needs verification, a new OTP has been sent.',
@@ -167,7 +203,7 @@ export class AuthService {
   async login(
     dto: LoginDto,
     context: RequestContext,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<AuthSession> {
     const email = this.normalizeEmail(dto.email);
     const user = await this.usersRepository.findUserByEmail(email);
 
@@ -259,7 +295,14 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token is invalid');
     }
 
-    await refreshToken.updateOne({ $set: { revokedAt: new Date() } });
+    const revoked = await this.authRepository.revokeRefreshTokenIfActive(
+      new Types.ObjectId(refreshTokenId),
+      refreshToken.userId,
+    );
+    if (!revoked) {
+      throw new UnauthorizedException('Refresh token is invalid');
+    }
+
     const user = await this.usersRepository.findUserById(refreshToken.userId);
     if (!user || user.accountStatus !== UserStatus.Active) {
       throw new UnauthorizedException('User is not active');
@@ -271,7 +314,6 @@ export class AuthService {
   async logout(
     userId: string,
     sessionId: string,
-    context: RequestContext,
   ): Promise<Record<string, unknown>> {
     const userObjectId = new Types.ObjectId(userId);
     await this.authRepository.revokeRefreshToken(
@@ -285,7 +327,6 @@ export class AuthService {
   async changePassword(
     userId: string,
     dto: ChangePasswordDto,
-    context: RequestContext,
   ): Promise<Record<string, unknown>> {
     const userObjectId = new Types.ObjectId(userId);
     const user = await this.usersRepository.findUserById(userObjectId);
@@ -331,10 +372,7 @@ export class AuthService {
     };
   }
 
-  async resetPassword(
-    dto: ResetPasswordDto,
-    context: RequestContext,
-  ): Promise<Record<string, unknown>> {
+  async resetPassword(dto: ResetPasswordDto): Promise<Record<string, unknown>> {
     const { tokenId } = this.parseResetToken(dto.token);
     const resetToken =
       await this.authRepository.findVerificationTokenById(tokenId);
@@ -367,7 +405,11 @@ export class AuthService {
   async handleGoogleLogin(
     profile: GoogleOAuthProfile,
     context: RequestContext,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<OAuthLoginCode> {
+    if (profile.emailVerified === false) {
+      throw new ForbiddenException('Google email is not verified');
+    }
+
     const email = this.normalizeEmail(profile.email);
     const providerUserId = profile.providerUserId;
     let user = await this.usersRepository.findUserByAuthProvider(
@@ -420,16 +462,59 @@ export class AuthService {
       });
     }
 
-    const tokens = await this.issueTokens(user._id, email, context);
+    await this.usersRepository.activateEmail(user._id);
+
+    return {
+      code: await this.createOAuthExchangeCode(user._id, email),
+    };
+  }
+
+  async exchangeOAuthCode(
+    dto: OAuthExchangeDto,
+    context: RequestContext,
+  ): Promise<AuthSession> {
+    const { tokenId } = this.parseOAuthCode(dto.code);
+    const token = await this.authRepository.findVerificationTokenById(tokenId);
+
+    if (
+      !token ||
+      token.purpose !== VerificationPurpose.OAuthLogin ||
+      token.verifiedAt ||
+      token.expiresAt.getTime() < Date.now()
+    ) {
+      throw new UnauthorizedException('OAuth code is expired or invalid');
+    }
+
+    const validCode = await bcrypt.compare(dto.code, token.codeHash);
+    if (!validCode) {
+      throw new UnauthorizedException('OAuth code is expired or invalid');
+    }
+
+    const verified = await this.authRepository.markVerificationTokenVerifiedIfActive(
+      new Types.ObjectId(tokenId),
+    );
+    if (!verified) {
+      throw new UnauthorizedException('OAuth code is expired or invalid');
+    }
+
+    const user = await this.usersRepository.findUserById(token.userId);
+    if (!user || user.accountStatus !== UserStatus.Active) {
+      throw new UnauthorizedException('User is not active');
+    }
+
+    const tokens = await this.issueTokens(
+      user._id,
+      user.auth.emailNormalized,
+      context,
+    );
     const { roles } = await this.rolesService.getRoleCodesAndPermissions(
       user._id,
     );
     await Promise.all([
       this.usersRepository.markLoggedIn(user._id),
-      this.usersRepository.activateEmail(user._id),
       this.recordLogin(
         user._id,
-        email,
+        user.auth.emailNormalized,
         LoginProvider.Google,
         LoginStatus.Success,
         null,
@@ -449,81 +534,16 @@ export class AuthService {
     );
   }
 
-  private async createLocalPendingUser(
-    dto: RegisterDto,
-    emailNormalized: string,
-    phoneNormalized: string,
-    passwordHash: string,
-  ) {
-    try {
-      return await this.usersRepository.createUser({
-        auth: {
-          email: dto.email.trim(),
-          emailNormalized,
-          phone: dto.phone.trim(),
-          phoneNormalized,
-          passwordHash,
-          emailVerified: false,
-          phoneVerified: false,
-          authProviders: [
-            {
-              provider: AuthProviderType.Local,
-              providerUserId: null,
-            },
-          ],
-        },
-        roles: ['CUSTOMER'],
-        defaultRole: 'CUSTOMER',
-        accountStatus: UserStatus.PendingEmailVerification,
-        profile: {
-          fullName: dto.fullName.trim(),
-        },
-        security: {
-          passwordChangedAt: new Date(),
-          failedLoginAttempts: 0,
-        },
-      });
-    } catch (error) {
-      if (this.isDuplicateKeyError(error, 'auth.emailNormalized')) {
-        const existingUser =
-          await this.usersRepository.findUserByEmail(emailNormalized);
-        if (
-          existingUser?.accountStatus === UserStatus.PendingEmailVerification &&
-          !existingUser.auth.emailVerified &&
-          existingUser.auth.phoneNormalized === phoneNormalized
-        ) {
-          return existingUser;
-        }
-
-        throw new BadRequestException('Email already exists');
-      }
-
-      if (this.isDuplicateKeyError(error, 'auth.phoneNormalized')) {
-        throw new BadRequestException('Phone already exists');
-      }
-
-      if (this.isDuplicateKeyError(error)) {
-        throw new BadRequestException('Email or phone already exists');
-      }
-
-      throw error;
-    }
-  }
-
   private async sendFreshEmailVerificationOtp(
     userId: Types.ObjectId,
     email: string,
   ): Promise<string> {
-    const { otp, tokenId } = await this.createEmailVerificationOtp(
-      userId,
-      email,
-    );
-    await this.mailService.sendEmailVerificationOtp(email, otp);
-    await this.authRepository.revokeOtherActiveVerificationTokens(
+    await this.authRepository.revokeActiveVerificationTokens(
       userId,
       VerificationPurpose.VerifyEmail,
-      tokenId,
     );
+    const otp = await this.createEmailVerificationOtp(userId, email);
+    await this.mailService.sendEmailVerificationOtp(email, otp);
 
     return otp;
   }
@@ -569,13 +589,11 @@ export class AuthService {
   private async createEmailVerificationOtp(
     userId: Types.ObjectId,
     email: string,
-  ): Promise<{ otp: string; tokenId: Types.ObjectId }> {
-    const tokenId = new Types.ObjectId();
+  ): Promise<string> {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const codeHash = await bcrypt.hash(otp, 12);
 
     await this.authRepository.createVerificationToken({
-      _id: tokenId,
       userId,
       target: email,
       targetType: VerificationTargetType.Email,
@@ -584,7 +602,28 @@ export class AuthService {
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     });
 
-    return { otp, tokenId };
+    return otp;
+  }
+
+  private async createOAuthExchangeCode(
+    userId: Types.ObjectId,
+    email: string,
+  ): Promise<string> {
+    const tokenId = new Types.ObjectId();
+    const code = `${tokenId.toString()}.${randomBytes(48).toString('hex')}`;
+    const codeHash = await bcrypt.hash(code, 12);
+
+    await this.authRepository.createVerificationToken({
+      _id: tokenId,
+      userId,
+      target: email,
+      targetType: VerificationTargetType.Email,
+      codeHash,
+      purpose: VerificationPurpose.OAuthLogin,
+      expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+    });
+
+    return code;
   }
 
   private async createPasswordResetToken(
@@ -653,8 +692,17 @@ export class AuthService {
     return { tokenId };
   }
 
+  private parseOAuthCode(code: string): { tokenId: string } {
+    const [tokenId] = code.split('.');
+    if (!Types.ObjectId.isValid(tokenId)) {
+      throw new UnauthorizedException('OAuth code is expired or invalid');
+    }
+
+    return { tokenId };
+  }
+
   private demoTokensEnabled(): boolean {
-    return this.configService.get<string>('NODE_ENV') !== 'production';
+    return this.configService.get<string>('AUTH_DEMO_TOKENS_ENABLED') === 'true';
   }
 
   private isDuplicateKeyError(error: unknown, field?: string): boolean {

@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PassportModule } from '@nestjs/passport';
+import { getJwtSecret } from '../../common/config/jwt-secret';
 import { JwtStrategy } from '../../common/strategies/jwt.strategy';
 import { GoogleStrategy } from '../../common/strategies/google.strategy';
 import { UsersModule } from '../users/users.module';
@@ -43,10 +44,7 @@ export const authModels = MongooseModule.forFeature([
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>(
-          'JWT_SECRET',
-          'dev-jwt-secret-change-me',
-        ),
+        secret: getJwtSecret(configService),
       }),
     }),
   ],

@@ -33,9 +33,10 @@ export enum MembershipLevel {
 }
 
 export enum ProviderStatus {
-  Pending = 'PENDING',
-  Approved = 'APPROVED',
+  PendingApproval = 'PENDING_APPROVAL',
+  Active = 'ACTIVE',
   Rejected = 'REJECTED',
+  Suspended = 'SUSPENDED',
 }
 
 export interface UserAuthProvider {

@@ -17,6 +17,7 @@ import { GoogleOAuthProfile } from '../../../common/strategies/google.strategy';
 import { ChangePasswordDto } from '../dto/change-password.dto';
 import { ForgotPasswordDto } from '../dto/forgot-password.dto';
 import { LoginDto } from '../dto/login.dto';
+import { OAuthExchangeDto } from '../dto/oauth-exchange.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterDto } from '../dto/register.dto';
 import { ResendVerificationDto } from '../dto/resend-verification.dto';
@@ -58,7 +59,7 @@ export class AuthController {
   login(
     @Body() dto: LoginDto,
     @Req() request: RequestMeta,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<object> {
     return this.authService.login(dto, this.context(request));
   }
 
@@ -70,17 +71,18 @@ export class AuthController {
     return this.authService.refreshToken(dto, this.context(request));
   }
 
+  @Post('oauth/exchange')
+  exchangeOAuthCode(
+    @Body() dto: OAuthExchangeDto,
+    @Req() request: RequestMeta,
+  ): Promise<object> {
+    return this.authService.exchangeOAuthCode(dto, this.context(request));
+  }
+
   @Post('logout')
   @UseGuards(JwtAuthGuard)
-  logout(
-    @CurrentUser() user: AuthUser,
-    @Req() request: RequestMeta,
-  ): Promise<Record<string, unknown>> {
-    return this.authService.logout(
-      user.sub,
-      user.sessionId,
-      this.context(request),
-    );
+  logout(@CurrentUser() user: AuthUser): Promise<Record<string, unknown>> {
+    return this.authService.logout(user.sub, user.sessionId);
   }
 
   @Post('change-password')
@@ -88,13 +90,8 @@ export class AuthController {
   changePassword(
     @CurrentUser() user: AuthUser,
     @Body() dto: ChangePasswordDto,
-    @Req() request: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    return this.authService.changePassword(
-      user.sub,
-      dto,
-      this.context(request),
-    );
+    return this.authService.changePassword(user.sub, dto);
   }
 
   @Post('forgot-password')
@@ -107,9 +104,8 @@ export class AuthController {
   @Post('reset-password')
   resetPassword(
     @Body() dto: ResetPasswordDto,
-    @Req() request: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    return this.authService.resetPassword(dto, this.context(request));
+    return this.authService.resetPassword(dto);
   }
 
   @Get('google')
@@ -138,8 +134,7 @@ export class AuthController {
       'http://localhost:5173',
     );
     const redirectUrl = new URL('/oauth/callback', frontendUrl);
-    redirectUrl.searchParams.set('accessToken', String(result.accessToken));
-    redirectUrl.searchParams.set('refreshToken', String(result.refreshToken));
+    redirectUrl.searchParams.set('code', result.code);
 
     response.redirect(redirectUrl.toString());
   }

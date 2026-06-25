@@ -5,13 +5,16 @@ import { useAuth } from "../features/auth/hooks/useAuth";
 import { ROUTES } from "../config/routes";
 
 export const PublicRoute: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) {
     return <Loading fullScreen message="Đang khởi tạo ứng dụng..." />;
   }
 
   if (isAuthenticated) {
+    if (user?.roles?.includes('PROVIDER')) {
+      return <Navigate to={ROUTES.PROVIDER_DASHBOARD} replace />;
+    }
     return <Navigate to={ROUTES.PROFILE} replace />;
   }
 

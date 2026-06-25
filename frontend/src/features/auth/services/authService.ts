@@ -27,6 +27,10 @@ export const authService = {
     return httpClient.post<LoginResponse>("/auth/login", payload);
   },
 
+  async exchangeOAuthCode(code: string): Promise<LoginResponse> {
+    return httpClient.post<LoginResponse>("/auth/oauth/exchange", { code });
+  },
+
   async logout(): Promise<MessageResponse> {
     return httpClient.post<MessageResponse>("/auth/logout");
   },

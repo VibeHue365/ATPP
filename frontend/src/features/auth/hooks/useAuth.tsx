@@ -9,7 +9,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (payload: any) => Promise<void>;
+  login: (payload: any) => Promise<UserProfile>;
   register: (payload: any) => Promise<any>;
   verifyEmail: (payload: any) => Promise<void>;
   resendOtp: (payload: any) => Promise<any>;
@@ -18,7 +18,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateProfile: (payload: any) => Promise<void>;
   updateAvatar: (formData: FormData) => Promise<void>;
-  setSession: (accessToken: string, refreshToken: string) => Promise<void>;
+  setSession: (accessToken: string, refreshToken: string) => Promise<UserProfile>;
   clearError: () => void;
 }
 
@@ -32,14 +32,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProfile = async () => {
+  const fetchProfile = async (): Promise<UserProfile> => {
     try {
       const profile = await userService.getMe();
       setUser(profile);
       setIsAuthenticated(true);
+      return profile;
     } catch (err: any) {
       console.error("Failed to load user profile:", err);
       logoutLocal();
+      throw err;
     }
   };
 
@@ -51,11 +53,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = tokenStorage.getAccessToken();
-      if (token) {
-        await fetchProfile();
+      try {
+        const token = tokenStorage.getAccessToken();
+        if (token) {
+          await fetchProfile();
+        }
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     initAuth();
@@ -71,14 +76,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
-  const login = async (payload: any) => {
+  const login = async (payload: any): Promise<UserProfile> => {
     setError(null);
     try {
       const { rememberMe = false, ...credentials } = payload;
       const res = await authService.login(credentials);
       if (res.accessToken && res.refreshToken) {
         tokenStorage.saveTokens(res.accessToken, res.refreshToken, rememberMe);
-        await fetchProfile();
+        return await fetchProfile();
       } else {
         throw new Error("Tokens missing in login response");
       }
@@ -170,11 +175,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const setSession = async (accessToken: string, refreshToken: string) => {
+  const setSession = async (
+    accessToken: string,
+    refreshToken: string,
+  ): Promise<UserProfile> => {
     tokenStorage.saveTokens(accessToken, refreshToken, true);
     setIsLoading(true);
-    await fetchProfile();
-    setIsLoading(false);
+    try {
+      return await fetchProfile();
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const clearError = () => setError(null);

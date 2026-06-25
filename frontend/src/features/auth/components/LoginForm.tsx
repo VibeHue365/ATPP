@@ -27,23 +27,14 @@ export const LoginForm: React.FC = () => {
   );
 
   useEffect(() => {
-    const state = location.state as {
-      email?: string;
-      message?: string;
-      from?: { pathname?: string };
-    } | null;
-
+    const state = location.state as { email?: string; message?: string } | null;
     if (state?.email) {
       setEmail(state.email);
     }
     if (state?.message) {
       toast.info(state.message);
-      navigate(location.pathname, {
-        replace: true,
-        state: state.from ? { from: state.from } : null,
-      });
     }
-  }, [location.pathname, location.state, navigate, toast]);
+  }, [location.state, toast]);
 
   const validate = () => {
     const tempErrors: { email?: string; password?: string } = {};
@@ -67,12 +58,16 @@ export const LoginForm: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await login({ email, password, rememberMe });
+      const loggedInUser = (await login({ email, password, rememberMe })) as any;
       toast.success("Đăng nhập thành công. Chào mừng bạn trở lại.");
 
-      const destination =
-        (location.state as any)?.from?.pathname || ROUTES.LANDING;
-      navigate(destination, { replace: true });
+      if (loggedInUser?.roles?.includes('PROVIDER')) {
+        navigate(ROUTES.PROVIDER_DASHBOARD, { replace: true });
+      } else {
+        const destination =
+          (location.state as any)?.from?.pathname || ROUTES.LANDING;
+        navigate(destination, { replace: true });
+      }
     } catch (err: any) {
       toast.error(
         err.message || "Đăng nhập thất bại. Vui lòng kiểm tra lại tài khoản.",

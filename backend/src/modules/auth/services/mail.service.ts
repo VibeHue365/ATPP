@@ -22,11 +22,11 @@ export class MailService {
     this.transporter =
       host && user && pass
         ? nodemailer.createTransport({
-            host,
-            port,
-            secure,
-            auth: { user, pass },
-          })
+          host,
+          port,
+          secure,
+          auth: { user, pass },
+        })
         : null;
   }
 
