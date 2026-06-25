@@ -71,6 +71,9 @@ export interface UserPreferences {
     weight?: number | null;
     preferredSize?: string | null;
     bodyShape?: string | null;
+    chest?: number | null;
+    waist?: number | null;
+    hips?: number | null;
   };
   budgetRange: {
     min?: number | null;
@@ -156,6 +159,9 @@ export class User {
   })
   accountStatus: UserStatus;
 
+  @Prop({ type: Boolean, default: false })
+  hasCompletedOnboarding: boolean;
+
   @Prop({
     type: {
       fullName: { type: String, required: true, trim: true },
@@ -178,6 +184,9 @@ export class User {
         weight: { type: Number, default: null },
         preferredSize: { type: String, default: null },
         bodyShape: { type: String, default: null },
+        chest: { type: Number, default: null },
+        waist: { type: Number, default: null },
+        hips: { type: Number, default: null },
       },
       budgetRange: {
         min: { type: Number, default: null },

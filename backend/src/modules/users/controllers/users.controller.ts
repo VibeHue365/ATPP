@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
+import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
 import { UsersService } from '../services/users.service';
 
 interface RequestMeta {
@@ -49,6 +50,14 @@ export class UsersController {
       this.userAgent(request),
       user.roles,
     );
+  }
+
+  @Patch('me/preferences')
+  updatePreferences(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdatePreferencesDto,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.updatePreferences(user.sub, dto, user.roles);
   }
 
   @Patch('me/avatar')

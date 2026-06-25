@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart, Star, ChevronDown, Sparkles, ShoppingCart } from 'lucide-react';
+import { Heart, Star, ChevronDown, Sparkles, ShoppingCart, Settings } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
 import { API_BASE_URL } from '../../config/env';
+import { calculateRecommendedSize } from '../../utils/sizeHelper';
 
 const getImageUrl = (url: string) => {
   if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
@@ -10,6 +11,13 @@ const getImageUrl = (url: string) => {
     return url;
   }
   return `${API_BASE_URL}${url}`;
+};
+
+const TONE_GROUP_TO_COLORS: Record<string, string[]> = {
+  PASTEL: ['WHITE', 'PINK', 'GOLD'],
+  RED_GOLD: ['RED', 'GOLD', 'YELLOW'],
+  DARK: ['BLACK', 'GREY', 'BROWN', 'BLUE'],
+  COLORFUL: ['YELLOW', 'BLUE', 'PINK', 'GREEN', 'RED'],
 };
 
 interface ProductFromDb {
@@ -22,6 +30,7 @@ interface ProductFromDb {
   colors: string[];
   materials: string[];
   status: string;
+  style?: string;
   rating: {
     averageRating: number;
     totalReviews: number;
@@ -62,6 +71,11 @@ export const AoDaiListingPage: React.FC = () => {
 
   const [sortOption, setSortOption] = useState<string>('newest');
   const [favorites, setFavorites] = useState<string[]>([]);
+  
+  // Onboarding & Preferences state
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [matchMySize, setMatchMySize] = useState<boolean>(false);
+  const [recommendMyGu, setRecommendMyGu] = useState<boolean>(false);
 
   // Dynamically derive available filter options from the fetched database products
   const availableColors = React.useMemo(() => {
@@ -127,10 +141,24 @@ export const AoDaiListingPage: React.FC = () => {
         setLoading(false);
       }
     };
+
+    const fetchUser = async () => {
+      try {
+        const user = await httpClient.get<any>('/users/me');
+        setCurrentUser(user);
+        // Automatically enable size matching if onboarding is complete and size is saved
+        if (user?.hasCompletedOnboarding && user?.preferences?.sizeInfo?.preferredSize) {
+          setMatchMySize(true);
+        }
+      } catch (err) {
+        console.log('User not logged in or failed to fetch profile:', err);
+      }
+    };
+
     fetchProducts();
+    fetchUser();
   }, []);
 
-  // Filter & Sort Logic
   useEffect(() => {
     let result = [...products];
 
@@ -155,6 +183,58 @@ export const AoDaiListingPage: React.FC = () => {
       );
     }
 
+    // Apply smart filters from onboarding preferences
+    if (matchMySize && currentUser?.preferences?.sizeInfo) {
+      const sizeInfo = currentUser.preferences.sizeInfo;
+      const recommended = calculateRecommendedSize(sizeInfo.height, sizeInfo.weight);
+      let sizeToMatch = (recommended || sizeInfo.preferredSize || '').toUpperCase();
+      
+      // Fallback XXL to XL if XXL products are not available in current database
+      if (sizeToMatch === 'XXL' && availableSizes.length > 0 && !availableSizes.includes('XXL')) {
+        if (availableSizes.includes('XL')) {
+          sizeToMatch = 'XL';
+        }
+      }
+
+      if (sizeToMatch) {
+        result = result.filter((p) =>
+          p.sizes.some((size) => size.toUpperCase() === sizeToMatch)
+        );
+      }
+    }
+
+    if (recommendMyGu && currentUser?.preferences) {
+      const prefs = currentUser.preferences;
+      // Filter by favorite colors if defined
+      if (prefs.favoriteColors && prefs.favoriteColors.length > 0) {
+        const favColors = prefs.favoriteColors.map((c: string) => c.toUpperCase());
+        
+        // Expand tone groups to individual product colors
+        const expandedColors = new Set<string>();
+        favColors.forEach((colorTone: string) => {
+          const mapped = TONE_GROUP_TO_COLORS[colorTone];
+          if (mapped) {
+            mapped.forEach(c => expandedColors.add(c));
+          } else {
+            expandedColors.add(colorTone);
+          }
+        });
+
+        if (expandedColors.size > 0) {
+          result = result.filter((p) =>
+            p.colors.some((color) => expandedColors.has(color.toUpperCase()))
+          );
+        }
+      }
+      // Filter by preferred styles if defined
+      if (prefs.preferredAoDaiStyles && prefs.preferredAoDaiStyles.length > 0) {
+        const favStyles = prefs.preferredAoDaiStyles.map((s: string) => s.toUpperCase());
+        result = result.filter((p) =>
+          favStyles.includes((p.style || '').toUpperCase())
+        );
+      }
+    }
+
     // Apply price range
     result = result.filter((p) => p.basePrice <= filters.priceRange);
 
@@ -168,7 +248,7 @@ export const AoDaiListingPage: React.FC = () => {
     }
 
     setFilteredProducts(result);
-  }, [filters, products, sortOption]);
+  }, [filters, products, sortOption, matchMySize, recommendMyGu, currentUser]);
 
   const handleColorToggle = (colorValue: string) => {
     setFilters((prev) => ({
@@ -219,6 +299,22 @@ export const AoDaiListingPage: React.FC = () => {
     );
   };
 
+  const calculatedSize = calculateRecommendedSize(currentUser?.preferences?.sizeInfo?.height, currentUser?.preferences?.sizeInfo?.weight);
+  let displaySize = calculatedSize || currentUser?.preferences?.sizeInfo?.preferredSize;
+  let isFallbackApplied = false;
+
+  if (displaySize && displaySize.toUpperCase() === 'XXL' && !availableSizes.includes('XXL')) {
+    if (availableSizes.includes('XL')) {
+      displaySize = 'XL';
+      isFallbackApplied = true;
+    }
+  }
+
+  const hasSizePreference = !!displaySize;
+  const hasGuPreference = !!((currentUser?.preferences?.favoriteColors && currentUser.preferences.favoriteColors.length > 0) || 
+                             (currentUser?.preferences?.preferredAoDaiStyles && currentUser.preferences.preferredAoDaiStyles.length > 0));
+  const showPersonalization = currentUser?.hasCompletedOnboarding && (hasSizePreference || hasGuPreference);
+
   return (
     <div className="vh-listing-page bg-stone-50/50" style={{ width: '100%', minHeight: '100vh', padding: '40px 0' }}>
       <div className="max-w-[1600px] w-full px-6 md:px-12 mx-auto" style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '40px' }}>
@@ -236,6 +332,96 @@ export const AoDaiListingPage: React.FC = () => {
           </div>
 
           <div className="vh-filter-divider" />
+
+          {/* SMART FILTER FOR ONBOARDED USERS */}
+          {showPersonalization ? (
+            <>
+              <div className="vh-filter-section" style={{ backgroundColor: 'var(--color-light-bg)', padding: '16px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                <h4 className="vh-filter-section-title" style={{ color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 12px 0' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={14} /> GỢI Ý CÁ NHÂN HÓA
+                  </span>
+                  <button 
+                    onClick={() => navigate('/onboarding')} 
+                    title="Cập nhật gu & số đo"
+                    style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
+                  >
+                    <Settings size={14} style={{ color: 'var(--color-text-secondary)' }} />
+                  </button>
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {hasSizePreference && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={matchMySize}
+                        onChange={(e) => setMatchMySize(e.target.checked)}
+                        style={{ accentColor: 'var(--color-primary)' }}
+                      />
+                      {isFallbackApplied ? (
+                        <span title="Hệ thống tự động lùi về size lớn nhất hiện có (XL) do kho chưa có sản phẩm size XXL của bạn.">
+                          📏 Khớp số đo (Size XL - khuyên dùng XXL ⚠️)
+                        </span>
+                      ) : (
+                        `📏 Khớp số đo (Size ${displaySize})`
+                      )}
+                    </label>
+                  )}
+                  {hasGuPreference && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={recommendMyGu}
+                        onChange={(e) => setRecommendMyGu(e.target.checked)}
+                        style={{ accentColor: 'var(--color-primary)' }}
+                      />
+                      ✨ Đề xuất theo gu của tôi
+                    </label>
+                  )}
+                </div>
+              </div>
+              <div className="vh-filter-divider" />
+            </>
+          ) : (
+            currentUser && currentUser.hasCompletedOnboarding && (
+              <>
+                <div className="vh-filter-section" style={{ backgroundColor: '#FFFDF9', padding: '16px', borderRadius: '8px', border: '1px dashed #E6C280' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#B7791F', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={14} /> Gợi ý cá nhân hóa
+                  </h4>
+                  <p style={{ fontSize: '11px', color: '#744210', margin: '0 0 12px 0', lineHeight: 1.5 }}>
+                    Thiết lập gu thời trang và số đo cơ thể để nhận đề xuất trang phục phù hợp nhất.
+                  </p>
+                  <button
+                    onClick={() => navigate('/onboarding')}
+                    style={{ width: '100%', padding: '8px 12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase' }}
+                  >
+                    Thiết lập ngay
+                  </button>
+                </div>
+                <div className="vh-filter-divider" />
+              </>
+            )
+          )}
+
+          {/* PROMOTION BANNER FOR USERS WHO HAVEN'T COMPLETED ONBOARDING */}
+          {currentUser && !currentUser.hasCompletedOnboarding && (
+            <>
+              <div className="vh-filter-section" style={{ backgroundColor: '#FFFDF9', padding: '16px', borderRadius: '8px', border: '1px dashed #E6C280' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#B7791F', margin: '0 0 6px 0' }}>📏 Chưa tìm thấy size chuẩn?</h4>
+                <p style={{ fontSize: '11px', color: '#744210', margin: '0 0 12px 0', lineHeight: 1.5 }}>
+                  Làm khảo sát vóc dáng trong 30 giây để nhận gợi ý kích thước phù hợp nhất với bạn.
+                </p>
+                <button
+                  onClick={() => navigate('/onboarding')}
+                  style={{ width: '100%', padding: '8px 12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase' }}
+                >
+                  Khảo sát ngay
+                </button>
+              </div>
+              <div className="vh-filter-divider" />
+            </>
+          )}
 
           {/* COLOR FILTER */}
           {availableColors.length > 0 && (

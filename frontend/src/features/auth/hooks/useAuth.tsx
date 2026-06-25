@@ -18,7 +18,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateProfile: (payload: any) => Promise<void>;
   updateAvatar: (formData: FormData) => Promise<void>;
-  setSession: (accessToken: string, refreshToken: string) => Promise<void>;
+  updatePreferences: (payload: any) => Promise<void>;
+  setSession: (accessToken: string, refreshToken: string) => Promise<any>;
   clearError: () => void;
 }
 
@@ -37,9 +38,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const profile = await userService.getMe();
       setUser(profile);
       setIsAuthenticated(true);
+      return profile;
     } catch (err: any) {
       console.error("Failed to load user profile:", err);
       logoutLocal();
+      return null;
     }
   };
 
@@ -171,11 +174,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const updatePreferences = async (payload: any) => {
+    setError(null);
+    try {
+      const updated = await userService.updatePreferences(payload);
+      setUser(updated);
+    } catch (err: any) {
+      setError(err.message || "Updating preferences failed");
+      throw err;
+    }
+  };
+
   const setSession = async (accessToken: string, refreshToken: string) => {
     tokenStorage.saveTokens(accessToken, refreshToken, true);
     setIsLoading(true);
-    await fetchProfile();
-    setIsLoading(false);
+    try {
+      const profile = await fetchProfile();
+      return profile;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const clearError = () => setError(null);
@@ -196,6 +214,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         logout,
         updateProfile,
         updateAvatar,
+        updatePreferences,
         setSession,
         clearError,
       }}
