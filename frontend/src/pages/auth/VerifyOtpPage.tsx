@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useToast } from "../../components/feedback/Toast";
 import { ROUTES } from "../../config/routes";
@@ -8,14 +8,20 @@ import { VerifyOtpForm } from "../../features/auth/components/VerifyOtpForm";
 export const VerifyOtpPage: React.FC = () => {
   const toast = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
 
-  const stateEmail = location.state?.email || "";
+  const state = location.state as { email?: string; message?: string } | null;
+  const stateEmail = state?.email || "";
 
   useEffect(() => {
-    if (location.state?.message) {
-      toast.info(location.state.message);
+    if (state?.message) {
+      toast.info(state.message);
+      navigate(location.pathname, {
+        replace: true,
+        state: state.email ? { email: state.email } : null,
+      });
     }
-  }, [location.state, toast]);
+  }, [location.pathname, navigate, state, toast]);
 
   return (
     <div className="vh-otp-view">

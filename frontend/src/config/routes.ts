@@ -12,6 +12,7 @@ export const ROUTES = {
   PROFILE: '/dashboard/profile',
   SETTINGS: '/dashboard/settings',
   PROVIDER_DASHBOARD: '/provider/dashboard',
+  PROVIDER_REGISTER: '/provider/register',
   OAUTH_CALLBACK: '/oauth/callback',
   PRODUCT_DETAIL: '/rentals/:id',
   PHOTOGRAPHER_DETAIL: '/photographers/:id',

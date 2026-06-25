@@ -17,6 +17,7 @@ import { GoogleOAuthProfile } from '../../../common/strategies/google.strategy';
 import { ChangePasswordDto } from '../dto/change-password.dto';
 import { ForgotPasswordDto } from '../dto/forgot-password.dto';
 import { LoginDto } from '../dto/login.dto';
+import { OAuthExchangeDto } from '../dto/oauth-exchange.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterDto } from '../dto/register.dto';
 import { ResendVerificationDto } from '../dto/resend-verification.dto';
@@ -58,7 +59,7 @@ export class AuthController {
   login(
     @Body() dto: LoginDto,
     @Req() request: RequestMeta,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<object> {
     return this.authService.login(dto, this.context(request));
   }
 
@@ -68,6 +69,14 @@ export class AuthController {
     @Req() request: RequestMeta,
   ): Promise<object> {
     return this.authService.refreshToken(dto, this.context(request));
+  }
+
+  @Post('oauth/exchange')
+  exchangeOAuthCode(
+    @Body() dto: OAuthExchangeDto,
+    @Req() request: RequestMeta,
+  ): Promise<object> {
+    return this.authService.exchangeOAuthCode(dto, this.context(request));
   }
 
   @Post('logout')
@@ -125,8 +134,7 @@ export class AuthController {
       'http://localhost:5173',
     );
     const redirectUrl = new URL('/oauth/callback', frontendUrl);
-    redirectUrl.searchParams.set('accessToken', String(result.accessToken));
-    redirectUrl.searchParams.set('refreshToken', String(result.refreshToken));
+    redirectUrl.searchParams.set('code', result.code);
 
     response.redirect(redirectUrl.toString());
   }

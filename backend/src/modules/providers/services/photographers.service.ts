@@ -15,7 +15,7 @@ export class PhotographersService {
     // Tìm tất cả các providers có khả năng chụp ảnh (capabilities chứa PHOTOGRAPHY) và được duyệt (APPROVED)
     const photographers = await this.providerModel.find({
       capabilities: ProviderCapability.Photography,
-      status: ProviderStatus.Approved,
+      status: ProviderStatus.Active,
     }).exec();
 
     // Với mỗi thợ chụp, lấy kèm các gói dịch vụ của họ để tối ưu lượng truy vấn ở FE

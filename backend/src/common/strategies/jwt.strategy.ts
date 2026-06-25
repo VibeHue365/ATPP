@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Types } from 'mongoose';
+import { getJwtSecret } from '../config/jwt-secret';
 import { AuthRepository } from '../../modules/auth/repositories/auth.repository';
 import { AuthUser } from '../decorators/current-user.decorator';
 
@@ -15,10 +16,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>(
-        'JWT_SECRET',
-        'dev-jwt-secret-change-me',
-      ),
+      secretOrKey: getJwtSecret(configService),
     });
   }
 

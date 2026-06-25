@@ -67,7 +67,7 @@ export class ProvidersService {
           rentalPolicy:
             'Thời gian thuê tối đa 3 ngày. Trả trễ hạn phạt 100.000đ/ngày.',
         },
-        status: ProviderStatus.Approved,
+        status: ProviderStatus.Active,
         rating: { averageRating: 4.8, totalReviews: 12 },
       });
     }

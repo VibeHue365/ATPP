@@ -64,6 +64,33 @@ export class AuthRepository {
     );
   }
 
+  async revokeOtherActiveVerificationTokens(
+    userId: Types.ObjectId,
+    purpose: VerificationPurpose,
+    keepTokenId: Types.ObjectId,
+  ): Promise<void> {
+    await this.verificationTokenModel.updateMany(
+      {
+        _id: { $ne: keepTokenId },
+        userId,
+        purpose,
+        verifiedAt: null,
+      },
+      { $set: { verifiedAt: new Date() } },
+    );
+  }
+
+  async markVerificationTokenVerifiedIfActive(
+    tokenId: Types.ObjectId,
+  ): Promise<boolean> {
+    const result = await this.verificationTokenModel.updateOne(
+      { _id: tokenId, verifiedAt: null },
+      { $set: { verifiedAt: new Date() } },
+    );
+
+    return result.modifiedCount === 1;
+  }
+
   createRefreshToken(
     data: Partial<RefreshToken> & { _id: Types.ObjectId },
   ): Promise<RefreshTokenDocument> {
@@ -86,6 +113,17 @@ export class AuthRepository {
     );
   }
 
+  async revokeRefreshTokenIfActive(
+    refreshTokenId: Types.ObjectId,
+    userId: Types.ObjectId,
+  ): Promise<boolean> {
+    const result = await this.refreshTokenModel.updateOne(
+      { _id: refreshTokenId, userId, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+    );
+
+    return result.modifiedCount === 1;
+  }
   async revokeActiveRefreshTokens(userId: Types.ObjectId): Promise<void> {
     await this.refreshTokenModel.updateMany(
       { userId, revokedAt: null },

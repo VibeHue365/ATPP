@@ -256,6 +256,7 @@ export const OnboardingPage: React.FC = () => {
                         </div>
                       )}
                     </div>
+
                     <div style={{ width: '36px', height: '36px', borderRadius: '8px', marginBottom: '10px', border: '1px solid var(--color-light-border)', background: c.color }} />
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{c.label}</span>
                   </div>

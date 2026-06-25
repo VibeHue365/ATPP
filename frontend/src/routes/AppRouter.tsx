@@ -28,6 +28,7 @@ import SettingsPage from '../pages/dashboard/SettingsPage';
 import NotFoundPage from '../pages/errors/NotFoundPage';
 import OnboardingPage from '../pages/onboarding/OnboardingPage';
 import ProviderDashboard from '../pages/providerdashboard/ProviderDashboard';
+import BecomeProviderPage from '../pages/provider/BecomeProviderPage';
 
 export const AppRouter: React.FC = () => {
   return (
@@ -37,6 +38,7 @@ export const AppRouter: React.FC = () => {
 
       {/* Provider Dashboard */}
       <Route path={ROUTES.PROVIDER_DASHBOARD} element={<ProviderDashboard />} />
+
       {/* Public Pages wrapped in MainLayout */}
       <Route element={<MainLayout />}>
         <Route path={ROUTES.LANDING} element={<LandingPage />} />
@@ -68,6 +70,7 @@ export const AppRouter: React.FC = () => {
           <Route path={ROUTES.DASHBOARD} element={<Navigate to={ROUTES.PROFILE} replace />} />
           <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+          <Route path={ROUTES.PROVIDER_REGISTER} element={<BecomeProviderPage />} />
         </Route>
       </Route>
 

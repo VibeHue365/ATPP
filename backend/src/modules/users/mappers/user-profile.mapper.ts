@@ -16,8 +16,6 @@ export class UserProfileMapper {
       phoneVerified: user.auth.phoneVerified,
       status: user.accountStatus,
       roles,
-      hasCompletedOnboarding: user.hasCompletedOnboarding || false,
-      preferences: user.preferences || {},
       profile: {
         fullName: user.profile.fullName,
         phone: user.auth.phone,

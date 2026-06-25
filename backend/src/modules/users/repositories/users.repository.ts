@@ -8,7 +8,6 @@ import {
   UserDocument,
   UserProfile,
   UserStatus,
-  UserPreferences,
 } from '../schemas/user.schema';
 
 @Injectable()
@@ -174,72 +173,5 @@ export class UsersRepository {
         $unset: { 'security.lockedUntil': '' },
       },
     );
-  }
-
-  async updatePreferences(
-    userId: Types.ObjectId,
-    hasCompletedOnboarding?: boolean,
-    preferences?: Partial<UserPreferences>,
-  ): Promise<void> {
-    const $set: Record<string, unknown> = {};
-
-    if (hasCompletedOnboarding !== undefined) {
-      $set.hasCompletedOnboarding = hasCompletedOnboarding;
-    }
-
-    if (preferences !== undefined) {
-      if (preferences.stylePreferences !== undefined) {
-        $set['preferences.stylePreferences'] = preferences.stylePreferences;
-      }
-      if (preferences.favoriteColors !== undefined) {
-        $set['preferences.favoriteColors'] = preferences.favoriteColors;
-      }
-      if (preferences.preferredAoDaiStyles !== undefined) {
-        $set['preferences.preferredAoDaiStyles'] = preferences.preferredAoDaiStyles;
-      }
-      if (preferences.preferredPhotographyStyles !== undefined) {
-        $set['preferences.preferredPhotographyStyles'] = preferences.preferredPhotographyStyles;
-      }
-      if (preferences.sizeInfo !== undefined) {
-        if (preferences.sizeInfo.height !== undefined) {
-          $set['preferences.sizeInfo.height'] = preferences.sizeInfo.height;
-        }
-        if (preferences.sizeInfo.weight !== undefined) {
-          $set['preferences.sizeInfo.weight'] = preferences.sizeInfo.weight;
-        }
-        if (preferences.sizeInfo.preferredSize !== undefined) {
-          $set['preferences.sizeInfo.preferredSize'] = preferences.sizeInfo.preferredSize;
-        }
-        if (preferences.sizeInfo.bodyShape !== undefined) {
-          $set['preferences.sizeInfo.bodyShape'] = preferences.sizeInfo.bodyShape;
-        }
-        if (preferences.sizeInfo.chest !== undefined) {
-          $set['preferences.sizeInfo.chest'] = preferences.sizeInfo.chest;
-        }
-        if (preferences.sizeInfo.waist !== undefined) {
-          $set['preferences.sizeInfo.waist'] = preferences.sizeInfo.waist;
-        }
-        if (preferences.sizeInfo.hips !== undefined) {
-          $set['preferences.sizeInfo.hips'] = preferences.sizeInfo.hips;
-        }
-      }
-      if (preferences.budgetRange !== undefined) {
-        if (preferences.budgetRange.min !== undefined) {
-          $set['preferences.budgetRange.min'] = preferences.budgetRange.min;
-        }
-        if (preferences.budgetRange.max !== undefined) {
-          $set['preferences.budgetRange.max'] = preferences.budgetRange.max;
-        }
-      }
-      if (preferences.preferredLocations !== undefined) {
-        $set['preferences.preferredLocations'] = preferences.preferredLocations;
-      }
-    }
-
-    if (Object.keys($set).length === 0) {
-      return;
-    }
-
-    await this.userModel.updateOne({ _id: userId }, { $set });
   }
 }

@@ -9,8 +9,8 @@ export enum ProviderCapability {
 }
 
 export enum ProviderStatus {
-  Pending = 'PENDING',
-  Approved = 'APPROVED',
+  PendingApproval = 'PENDING_APPROVAL',
+  Active = 'ACTIVE',
   Rejected = 'REJECTED',
   Suspended = 'SUSPENDED',
 }
@@ -159,7 +159,7 @@ export class Provider {
   @Prop({
     type: String,
     enum: Object.values(ProviderStatus),
-    default: ProviderStatus.Pending,
+    default: ProviderStatus.PendingApproval,
     index: true,
   })
   status: ProviderStatus;
@@ -172,3 +172,6 @@ export class Provider {
 }
 
 export const ProviderSchema = SchemaFactory.createForClass(Provider);
+ProviderSchema.index({ userId: 1, status: 1 });
+ProviderSchema.index({ capabilities: 1 });
+ProviderSchema.index({ 'address.city': 1 });
