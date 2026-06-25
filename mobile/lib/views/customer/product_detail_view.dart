@@ -1,0 +1,169 @@
+import 'package:flutter/material.dart';
+import '../../core/constants/colors.dart';
+import '../../models/product.dart';
+import 'checkout_view.dart';
+
+class ProductDetailView extends StatefulWidget {
+  final Product product;
+  const ProductDetailView({super.key, required this.product});
+
+  @override
+  State<ProductDetailView> createState() => _ProductDetailViewState();
+}
+
+class _ProductDetailViewState extends State<ProductDetailView> {
+  String? _selectedSize;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.product.availableSizes.isNotEmpty) {
+      _selectedSize = widget.product.availableSizes.first;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final product = widget.product;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(product.name),
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Product Image
+            AspectRatio(
+              aspectRatio: 1,
+              child: Image.network(
+                product.imageUrl ?? 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600',
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  color: AppColors.primaryTrans,
+                  child: const Icon(Icons.image, size: 64, color: AppColors.primary),
+                ),
+              ),
+            ),
+            
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title and Category
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          product.name,
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Chip(
+                        label: Text(product.category),
+                      )
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Pricing
+                  Row(
+                    children: [
+                      Text(
+                        '${product.price.toStringAsFixed(0)}đ',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Text(' / ngày', style: TextStyle(color: AppColors.textSecondary)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Tiền đặt cọc (Deposit): ${product.depositPrice.toStringAsFixed(0)}đ',
+                    style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.goldDark),
+                  ),
+                  const Divider(height: 24),
+                  
+                  // Description
+                  Text(
+                    'Mô tả sản phẩm',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    product.description.isNotEmpty
+                        ? product.description
+                        : 'Sản phẩm phục trang Áo Dài cổ phong thượng hạng, mang phong vị xưa tôn vinh vẻ đẹp truyền thống của con người Việt Nam. Thích hợp cho các buổi chụp ảnh Cố Đô, lễ hội truyền thống hay lễ cưới hỏi.',
+                    style: const TextStyle(height: 1.5, color: AppColors.textSecondary),
+                  ),
+                  const Divider(height: 24),
+                  
+                  // Size Selector
+                  if (product.availableSizes.isNotEmpty) ...[
+                    Text(
+                      'Lựa chọn kích cỡ (Size)',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 12,
+                      children: product.availableSizes.map((size) {
+                        final isSelected = _selectedSize == size;
+                        return ChoiceChip(
+                          label: Text(size),
+                          selected: isSelected,
+                          selectedColor: AppColors.primaryTrans,
+                          labelStyle: TextStyle(
+                            color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          onSelected: (val) {
+                            if (val) {
+                              setState(() {
+                                _selectedSize = size;
+                              });
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CheckoutView(
+                    product: product,
+                    selectedSize: _selectedSize ?? 'M',
+                  ),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            child: const Text('ĐẶT LỊCH THUÊ NGAY'),
+          ),
+        ),
+      ),
+    );
+  }
+}
