@@ -44,6 +44,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const success = useCallback((msg: string) => add('success', msg), [add]);
   const error = useCallback((msg: string) => add('error', msg), [add]);
   const info = useCallback((msg: string) => add('info', msg), [add]);
+
   const value = useMemo(
     () => ({ success, error, info, remove }),
     [success, error, info, remove],

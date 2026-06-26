@@ -33,11 +33,15 @@ import BecomeProviderPage from '../pages/provider/BecomeProviderPage';
 export const AppRouter: React.FC = () => {
   return (
     <Routes>
+      {/* Onboarding Page */}
+      <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
+
+      {/* Provider Dashboard */}
+      <Route path={ROUTES.PROVIDER_DASHBOARD} element={<ProviderDashboard />} />
+
       {/* Public Pages wrapped in MainLayout */}
       <Route element={<MainLayout />}>
         <Route path={ROUTES.LANDING} element={<LandingPage />} />
-        <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
-        <Route path={ROUTES.PROVIDER_DASHBOARD} element={<ProviderDashboard />} />
         <Route path={ROUTES.RENTALS} element={<AoDaiListingPage />} />
         <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
         <Route path={ROUTES.PHOTOGRAPHERS} element={<PhotographersListingPage />} />

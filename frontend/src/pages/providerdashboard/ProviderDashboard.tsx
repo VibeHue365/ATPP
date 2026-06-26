@@ -4,6 +4,7 @@ import {
   HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,
   Upload, X
 } from 'lucide-react';
+import Swal from 'sweetalert2';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
 import { Modal } from '../../components/common/Modal';
@@ -235,15 +236,41 @@ export const ProviderDashboard: React.FC = () => {
   };
 
   const handleDeleteProduct = async (id: string, name: string) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa áo dài "${name}" không?`)) {
+    const result = await Swal.fire({
+      title: 'Xác nhận xóa?',
+      text: `Bạn có chắc chắn muốn xóa áo dài "${name}" không?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: 'var(--color-primary)',
+      cancelButtonColor: '#9CA3AF',
+      confirmButtonText: 'Đồng ý',
+      cancelButtonText: 'Hủy',
+      background: 'white',
+      customClass: {
+        popup: 'font-body',
+      }
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
+
     try {
       await httpClient.delete(`/products/${id}`);
-      toast.success(`Đã xóa thành công sản phẩm "${name}".`);
+      Swal.fire({
+        title: 'Đã xóa!',
+        text: `Đã xóa thành công sản phẩm "${name}".`,
+        icon: 'success',
+        confirmButtonColor: 'var(--color-primary)',
+      });
       fetchProducts();
     } catch (err: any) {
-      toast.error(err.message || 'Xóa sản phẩm thất bại.');
+      Swal.fire({
+        title: 'Thất bại!',
+        text: err.message || 'Xóa sản phẩm thất bại.',
+        icon: 'error',
+        confirmButtonColor: 'var(--color-primary)',
+      });
     }
   };
 

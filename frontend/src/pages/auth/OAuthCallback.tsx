@@ -25,9 +25,14 @@ export const OAuthCallback: React.FC = () => {
       if (code) {
         try {
           const session = await authService.exchangeOAuthCode(code);
-          await setSession(session.accessToken, session.refreshToken);
+          const user = await setSession(session.accessToken, session.refreshToken);
           toast.success("Đăng nhập bằng tài khoản Google thành công.");
-          navigate(ROUTES.LANDING, { replace: true });
+          
+          if (user?.roles?.includes('PROVIDER')) {
+            navigate(ROUTES.PROVIDER_DASHBOARD, { replace: true });
+          } else {
+            navigate(ROUTES.LANDING, { replace: true });
+          }
         } catch (err: any) {
           console.error("OAuth callback session establishment failed:", err);
           toast.error(

@@ -124,7 +124,6 @@ export class AuthRepository {
 
     return result.modifiedCount === 1;
   }
-
   async revokeActiveRefreshTokens(userId: Types.ObjectId): Promise<void> {
     await this.refreshTokenModel.updateMany(
       { userId, revokedAt: null },

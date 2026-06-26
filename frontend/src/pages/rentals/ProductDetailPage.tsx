@@ -472,6 +472,18 @@ export const ProductDetailPage: React.FC = () => {
         }
         if (data.sizes && data.sizes.length > 0) {
           setSelectedSize(data.sizes[0]);
+          try {
+            const user = await httpClient.get<any>('/users/me');
+            if (user?.hasCompletedOnboarding && user?.preferences?.sizeInfo?.preferredSize) {
+              const preferred = user.preferences.sizeInfo.preferredSize.toUpperCase();
+              const matchedSize = data.sizes.find((s: string) => s.toUpperCase() === preferred);
+              if (matchedSize) {
+                setSelectedSize(matchedSize);
+              }
+            }
+          } catch (e) {
+            console.log('Not logged in or failed to fetch profile for pre-selection:', e);
+          }
         }
         // Set default dates
         const tomorrow = new Date();

@@ -6,9 +6,12 @@ import {
   Sparkles, 
   PartyPopper,
   ArrowRight,
-  ArrowLeft
+  ArrowLeft,
+  Info
 } from 'lucide-react';
 import { ROUTES } from '../../config/routes';
+import { useAuth } from '../../features/auth/hooks/useAuth';
+import { calculateRecommendedSize } from '../../utils/sizeHelper';
 
 // Import images
 import traditionalImg from '../../assets/images/onboarding_traditional.png';
@@ -36,17 +39,58 @@ interface Step3Data {
 
 export const OnboardingPage: React.FC = () => {
   const navigate = useNavigate();
+  const { updatePreferences } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   const [step1, setStep1] = useState<Step1Data>({ style: 'traditional' });
   const [step2, setStep2] = useState<Step2Data>({
-    colorTone: 'red_gold', size: 'M', height: '160', weight: '50', chest: '85', waist: '64', hips: '90',
+    colorTone: 'red_gold', size: 'M', height: '160', weight: '50', chest: '', waist: '', hips: '',
   });
   const [step3, setStep3] = useState<Step3Data>({ purpose: 'wedding', aiAssistant: false });
 
-  const handleNext = () => { if (step < 3) setStep((p) => (p + 1) as 1|2|3); else navigate(ROUTES.RENTALS); };
+  const [submitting, setSubmitting] = useState(false);
+  const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
+
+  const savePreferences = async (isSkipped = false) => {
+    setSubmitting(true);
+    try {
+      const payload = {
+        hasCompletedOnboarding: true,
+        preferences: isSkipped ? {} : {
+          stylePreferences: step3.purpose ? [step3.purpose.toUpperCase()] : [],
+          favoriteColors: step2.colorTone ? [step2.colorTone.toUpperCase()] : [],
+          preferredAoDaiStyles: step1.style ? [step1.style.toUpperCase()] : [],
+          sizeInfo: {
+            preferredSize: step2.size || null,
+            height: step2.height ? Number(step2.height) : null,
+            weight: step2.weight ? Number(step2.weight) : null,
+            chest: step2.chest ? Number(step2.chest) : null,
+            waist: step2.waist ? Number(step2.waist) : null,
+            hips: step2.hips ? Number(step2.hips) : null,
+          },
+          preferredLocations: []
+        }
+      };
+
+      await updatePreferences(payload);
+    } catch (err) {
+      console.error('Failed to save onboarding preferences:', err);
+    } finally {
+      setSubmitting(false);
+      navigate(ROUTES.RENTALS);
+    }
+  };
+
+  const handleNext = () => {
+    if (step < 3) {
+      setStep((p) => (p + 1) as 1|2|3);
+    } else {
+      savePreferences(false);
+    }
+  };
+
   const handleBack = () => { if (step > 1) setStep((p) => (p - 1) as 1|2|3); };
-  const handleSkip = () => { navigate(ROUTES.RENTALS); };
+  const handleSkip = () => { savePreferences(true); };
 
   const selectedCardStyle = (isSelected: boolean): React.CSSProperties => ({
     border: isSelected ? '2px solid var(--color-primary)' : '1px solid var(--color-light-border)',
@@ -78,7 +122,7 @@ export const OnboardingPage: React.FC = () => {
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        overflow: 'hidden',
+        overflow: 'visible',
       }}>
         
         {/* Watermark */}
@@ -149,15 +193,70 @@ export const OnboardingPage: React.FC = () => {
               <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, color: 'var(--color-text-primary)', margin: '0 0 32px 0' }}>Chọn tone màu sắc ưa thích</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '40px' }}>
                 {[
-                  { key: 'pastel', color: '#FCE7F3', label: 'Pastel nhẹ nhàng' },
-                  { key: 'red_gold', color: '#DC2626', label: 'Đỏ/Vàng lễ hội' },
-                  { key: 'dark', color: '#1F2937', label: 'Tone trầm sang trọng' },
-                  { key: 'colorful', color: 'linear-gradient(135deg, #10B981 0%, #F59E0B 100%)', label: 'Hoa văn sặc sỡ' },
+                  { key: 'pastel', color: '#FCE7F3', label: 'Pastel nhẹ nhàng', tooltip: 'Bao gồm: Trắng, Hồng, Vàng/Kem' },
+                  { key: 'red_gold', color: '#DC2626', label: 'Đỏ/Vàng lễ hội', tooltip: 'Bao gồm: Đỏ, Vàng/Kem, Vàng' },
+                  { key: 'dark', color: '#1F2937', label: 'Tone trầm sang trọng', tooltip: 'Bao gồm: Đen, Xám, Nâu, Xanh dương' },
+                  { key: 'colorful', color: 'linear-gradient(135deg, #10B981 0%, #F59E0B 100%)', label: 'Hoa văn sặc sỡ', tooltip: 'Bao gồm: Vàng, Xanh lá, Hồng, Xanh dương, Đỏ' },
                 ].map((c) => (
                   <div key={c.key} onClick={() => setStep2(p => ({ ...p, colorTone: c.key as any }))} style={{
                     cursor: 'pointer', padding: '18px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
-                    transition: 'var(--transition-smooth)', ...selectedCardStyle(step2.colorTone === c.key),
+                    transition: 'var(--transition-smooth)', position: 'relative', ...selectedCardStyle(step2.colorTone === c.key),
                   }}>
+                    {/* Info Icon with detailed color list tooltip */}
+                    <div 
+                      style={{
+                        position: 'absolute',
+                        top: '8px',
+                        right: '8px',
+                        color: 'var(--color-text-secondary)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: activeTooltip === c.key ? 1 : 0.6,
+                        transition: 'opacity 0.2s',
+                        zIndex: 5,
+                      }}
+                      onMouseEnter={() => setActiveTooltip(c.key)}
+                      onMouseLeave={() => setActiveTooltip(null)}
+                    >
+                      <Info size={14} />
+
+                      {/* Custom Tooltip Card */}
+                      {activeTooltip === c.key && (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 'calc(100% + 8px)',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          backgroundColor: '#1E293B',
+                          color: '#F8FAFC',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          fontWeight: 500,
+                          lineHeight: '1.4',
+                          whiteSpace: 'nowrap',
+                          boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)',
+                          zIndex: 100,
+                          pointerEvents: 'none',
+                          border: '1px solid #334155',
+                        }}>
+                          {c.tooltip}
+                          {/* Triangle arrow pointing down */}
+                          <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            borderWidth: '5px',
+                            borderStyle: 'solid',
+                            borderColor: '#1E293B transparent transparent transparent',
+                          }} />
+                        </div>
+                      )}
+                    </div>
+
                     <div style={{ width: '36px', height: '36px', borderRadius: '8px', marginBottom: '10px', border: '1px solid var(--color-light-border)', background: c.color }} />
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{c.label}</span>
                   </div>
@@ -181,17 +280,45 @@ export const OnboardingPage: React.FC = () => {
                 {[
                   { label: 'Chiều cao (cm)', key: 'height' as const },
                   { label: 'Cân nặng (kg)', key: 'weight' as const },
-                  { label: 'Ngực', key: 'chest' as const },
-                  { label: 'Eo', key: 'waist' as const },
-                  { label: 'Mông', key: 'hips' as const },
+                  { label: 'Ngực (tự chọn)', key: 'chest' as const },
+                  { label: 'Eo (tự chọn)', key: 'waist' as const },
+                  { label: 'Mông (tự chọn)', key: 'hips' as const },
                 ].map((m) => (
                   <div key={m.key} style={{ display: 'flex', flexDirection: 'column' }}>
                     <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{m.label}</label>
                     <input type="number" value={step2[m.key]} onChange={(e) => setStep2(p => ({ ...p, [m.key]: e.target.value }))}
+                      placeholder={m.key === 'chest' || m.key === 'waist' || m.key === 'hips' ? '--' : ''}
                       style={{ width: '100%', textAlign: 'center', border: 'none', borderBottom: '1px solid var(--color-light-border)', padding: '6px 0', fontSize: '15px', fontWeight: 600, color: 'var(--color-text-primary)', background: 'transparent', outline: 'none' }} />
                   </div>
                 ))}
               </div>
+
+              {(() => {
+                const recommended = calculateRecommendedSize(step2.height, step2.weight);
+                if (!recommended) return null;
+                const isMismatch = step2.size && step2.size !== recommended;
+                return (
+                  <div style={{ 
+                    marginTop: '24px', 
+                    padding: '12px 16px', 
+                    borderRadius: '6px', 
+                    fontSize: '13px', 
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    backgroundColor: isMismatch ? '#FFF3CD' : '#D1E7DD',
+                    color: isMismatch ? '#664D03' : '#0F5132',
+                    border: isMismatch ? '1px solid #FFE69C' : '1px solid #BADBCC'
+                  }}>
+                    {isMismatch ? (
+                      <span>⚠️ Kích thước cơ thể có vẻ phù hợp với size <strong>{recommended}</strong>. Vui lòng kiểm tra lại chiều cao/cân nặng hoặc chọn size tương ứng.</span>
+                    ) : (
+                      <span>✓ Kích thước và size đã chọn phù hợp với vóc dáng của bạn.</span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -250,16 +377,18 @@ export const OnboardingPage: React.FC = () => {
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <button onClick={handleSkip} style={{
+            <button onClick={handleSkip} disabled={submitting} style={{
               background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', fontWeight: 700, fontSize: '12px',
               textTransform: 'uppercase', letterSpacing: '0.08em', cursor: 'pointer',
+              opacity: submitting ? 0.5 : 1,
             }}>Bỏ qua</button>
-            <button onClick={handleNext} style={{
+            <button onClick={handleNext} disabled={submitting} style={{
               padding: '12px 28px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', fontWeight: 700, fontSize: '12px',
               textTransform: 'uppercase', letterSpacing: '0.1em', borderRadius: '4px', cursor: 'pointer',
               boxShadow: '0 4px 12px rgba(161,30,34,0.15)', display: 'flex', alignItems: 'center', gap: '8px', transition: 'var(--transition-smooth)',
+              opacity: submitting ? 0.8 : 1,
             }}>
-              {step === 3 ? 'Hoàn tất' : 'Tiếp tục'} <ArrowRight size={16} />
+              {step === 3 ? (submitting ? 'Đang lưu...' : 'Hoàn tất') : 'Tiếp tục'} <ArrowRight size={16} />
             </button>
           </div>
         </div>

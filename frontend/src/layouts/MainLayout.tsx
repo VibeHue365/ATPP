@@ -30,7 +30,14 @@ export const MainLayout: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-
+  // Redirect to onboarding if user is logged in but hasn't completed onboarding
+  useEffect(() => {
+    if (isAuthenticated && user && user.hasCompletedOnboarding === false) {
+      if (location.pathname !== ROUTES.ONBOARDING) {
+        navigate(ROUTES.ONBOARDING);
+      }
+    }
+  }, [isAuthenticated, user, location.pathname, navigate]);
   const handleLogout = async () => {
     setIsDropdownOpen(false);
     await logout();
@@ -204,7 +211,6 @@ export const MainLayout: React.FC = () => {
                           <span>Đăng ký Provider</span>
                         </Link>
                       )}
-
                       <Link 
                         to={ROUTES.PROFILE} 
                         className="vh-header-dropdown-item-link" 

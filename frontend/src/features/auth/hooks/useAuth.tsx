@@ -18,6 +18,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateProfile: (payload: any) => Promise<void>;
   updateAvatar: (formData: FormData) => Promise<void>;
+  updatePreferences: (payload: any) => Promise<void>;
   setSession: (accessToken: string, refreshToken: string) => Promise<UserProfile>;
   clearError: () => void;
 }
@@ -58,6 +59,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         if (token) {
           await fetchProfile();
         }
+      } catch (err) {
+        console.error("Init auth failed:", err);
       } finally {
         setIsLoading(false);
       }
@@ -175,6 +178,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const updatePreferences = async (payload: any) => {
+    setError(null);
+    try {
+      const updated = await userService.updatePreferences(payload);
+      setUser(updated);
+    } catch (err: any) {
+      setError(err.message || "Updating preferences failed");
+      throw err;
+    }
+  };
+
   const setSession = async (
     accessToken: string,
     refreshToken: string,
@@ -206,6 +220,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         logout,
         updateProfile,
         updateAvatar,
+        updatePreferences,
         setSession,
         clearError,
       }}

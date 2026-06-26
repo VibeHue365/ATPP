@@ -9,20 +9,17 @@ import './App.css';
 
 export const App: React.FC = () => {
   return (
-    
-      <ToastProvider>
-        <AuthProvider>
-          <CartProvider>
-            <BrowserRouter>
-              <ScrollToTop />
-              <AppRouter />
-            </BrowserRouter>
-          </CartProvider>
-        </AuthProvider>
-      </ToastProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <CartProvider>
+          <BrowserRouter>
+            <ScrollToTop />
+            <AppRouter />
+          </BrowserRouter>
+        </CartProvider>
+      </AuthProvider>
+    </ToastProvider>
   );
 };
 
 export default App;
-
-

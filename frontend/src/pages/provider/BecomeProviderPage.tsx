@@ -68,13 +68,13 @@ const documentLabels: Record<ProviderDocumentType, string> = {
   PROFESSIONAL_CERTIFICATE: 'Chứng chỉ chuyên môn',
 };
 
-const ocrDocumentTypes: ProviderDocumentType[] = [
-  'IDENTITY_CARD_FRONT',
-  'IDENTITY_CARD_BACK',
-  'BUSINESS_LICENSE',
-  'TAX_REGISTRATION',
-  'PROFESSIONAL_CERTIFICATE',
-];
+// const ocrDocumentTypes: ProviderDocumentType[] = [
+//   'IDENTITY_CARD_FRONT',
+//   'IDENTITY_CARD_BACK',
+//   'BUSINESS_LICENSE',
+//   'TAX_REGISTRATION',
+//   'PROFESSIONAL_CERTIFICATE',
+// ];
 
 const steps = ['Loại dịch vụ', 'Hồ sơ', 'Đồng ý', 'Tài liệu', 'Gửi duyệt'];
 
@@ -200,18 +200,18 @@ function formatDate(dateStr?: string | Date | null) {
   });
 }
 
-function translateMismatchFlag(flag: string) {
-  const translations: Record<string, string> = {
-    NAME_MISMATCH: 'Họ tên không trùng khớp với hồ sơ đăng ký',
-    ID_MISMATCH: 'Số định danh không trùng khớp với thông tin đã nhập',
-    DOB_MISMATCH: 'Ngày sinh không trùng khớp với thông tin định danh',
-    EXPIRY_MISMATCH: 'Tài liệu đã hết hạn sử dụng',
-    LOW_CONFIDENCE: 'Độ chính xác hình ảnh thấp, vui lòng cung cấp ảnh rõ nét hơn',
-    DOCUMENT_EXPIRED: 'Giấy tờ đã hết hạn hiệu lực',
-    FACE_MISMATCH: 'Khuôn mặt trích xuất không khớp',
-  };
-  return translations[flag] ?? flag;
-}
+// function translateMismatchFlag(flag: string) {
+//   const translations: Record<string, string> = {
+//     NAME_MISMATCH: 'Họ tên không trùng khớp với hồ sơ đăng ký',
+//     ID_MISMATCH: 'Số định danh không trùng khớp với thông tin đã nhập',
+//     DOB_MISMATCH: 'Ngày sinh không trùng khớp với thông tin định danh',
+//     EXPIRY_MISMATCH: 'Tài liệu đã hết hạn sử dụng',
+//     LOW_CONFIDENCE: 'Độ chính xác hình ảnh thấp, vui lòng cung cấp ảnh rõ nét hơn',
+//     DOCUMENT_EXPIRED: 'Giấy tờ đã hết hạn hiệu lực',
+//     FACE_MISMATCH: 'Khuôn mặt trích xuất không khớp',
+//   };
+//   return translations[flag] ?? flag;
+// }
 
 export const BecomeProviderPage: React.FC = () => {
   const { user } = useAuth();
@@ -647,21 +647,21 @@ export const BecomeProviderPage: React.FC = () => {
     }
   };
 
-  const runOcr = async (documentType: ProviderDocumentType) => {
-    if (!verificationId) return;
-    setActionLoading(`ocr-${documentType}`);
-    setError(null);
-    setSuccess(null);
-    try {
-      await providerVerificationService.runOcr(verificationId, documentType);
-      await refreshVerification();
-      setSuccess(`Đã chạy đối chiếu trích xuất thông tin OCR cho ${documentLabels[documentType]}.`);
-    } catch (err) {
-      setError(messageFromError(err));
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  // const runOcr = async (documentType: ProviderDocumentType) => {
+  //   if (!verificationId) return;
+  //   setActionLoading(`ocr-${documentType}`);
+  //   setError(null);
+  //   setSuccess(null);
+  //   try {
+  //     await providerVerificationService.runOcr(verificationId, documentType);
+  //     await refreshVerification();
+  //     setSuccess(`Đã chạy đối chiếu trích xuất thông tin OCR cho ${documentLabels[documentType]}.`);
+  //   } catch (err) {
+  //     setError(messageFromError(err));
+  //   } finally {
+  //     setActionLoading(null);
+  //   }
+  // };
 
   const viewDocument = async (documentType: ProviderDocumentType) => {
     if (!verificationId) return;
