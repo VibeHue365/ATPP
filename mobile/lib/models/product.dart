@@ -26,12 +26,14 @@ class Product {
       id: json['_id'] ?? json['id'] ?? '',
       name: json['name'] ?? '',
       description: json['description'] ?? '',
-      price: (json['price'] ?? 0.0).toDouble(),
-      depositPrice: (json['depositPrice'] ?? 0.0).toDouble(),
-      imageUrl: json['imageUrl'] ?? json['image'],
-      category: json['category'] ?? 'Ao Dai',
-      providerId: json['providerId'] ?? json['provider'] ?? '',
-      availableSizes: List<String>.from(json['availableSizes'] ?? json['sizes'] ?? []),
+      price: ((json['basePrice'] ?? json['price'] ?? 0) as num).toDouble(),
+      depositPrice: ((json['depositAmount'] ?? json['depositPrice'] ?? 0) as num).toDouble(),
+      imageUrl: (json['images'] != null && (json['images'] as List).isNotEmpty)
+          ? (json['images'] as List).first as String
+          : (json['imageUrl'] ?? json['image']),
+      category: (json['categoryId'] is Map ? json['categoryId']['name'] : null) ?? json['category'] ?? 'Ao Dai',
+      providerId: (json['providerId'] is Map ? json['providerId']['_id'] : json['providerId']) ?? json['provider'] ?? '',
+      availableSizes: List<String>.from(json['sizes'] ?? json['availableSizes'] ?? []),
     );
   }
 

@@ -120,15 +120,23 @@ class BookingProvider extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
+
+    // Format date as YYYY-MM-DD
+    String formatDate(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
     try {
       final Map<String, dynamic> body = {
         'productId': productId,
-        'selectedSize': size,
-        'selectedColor': color,
-        'rentalFrom': rentalFrom.toIso8601String(),
-        'rentalTo': rentalTo.toIso8601String(),
-        'customRequests': customRequests,
+        'rentalType': 'DAILY',           // backend yêu cầu bắt buộc
+        'startDate': formatDate(rentalFrom),
+        'endDate': formatDate(rentalTo),
+        'size': size,                    // đúng field name backend
+        'color': color,                  // đúng field name backend
       };
+      if (customRequests != null && customRequests.isNotEmpty) {
+        body['customRequests'] = customRequests;
+      }
       if (_appliedVoucher != null) {
         body['voucherCode'] = _appliedVoucher!.code;
       }
