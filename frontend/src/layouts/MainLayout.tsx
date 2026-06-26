@@ -189,6 +189,18 @@ export const MainLayout: React.FC = () => {
 
                     {/* Nav Items */}
                     <div className="vh-header-dropdown-items-list">
+                      {(user?.roles?.includes('ADMIN') || user?.roles?.includes('admin')) && (
+                        <Link 
+                          to={ROUTES.ADMIN_DASHBOARD} 
+                          className="vh-header-dropdown-item-link" 
+                          onClick={() => setIsDropdownOpen(false)}
+                          style={{ color: '#C0392B', fontWeight: 'bold' }}
+                        >
+                          <ShieldCheck size={16} />
+                          <span>Kênh Quản Trị (Admin)</span>
+                        </Link>
+                      )}
+
                       {user?.roles?.includes('PROVIDER') && (
                         <Link 
                           to={ROUTES.PROVIDER_DASHBOARD} 
@@ -211,14 +223,16 @@ export const MainLayout: React.FC = () => {
                           <span>Đăng ký Provider</span>
                         </Link>
                       )}
-                      <Link 
-                        to={ROUTES.PROFILE} 
-                        className="vh-header-dropdown-item-link" 
-                        onClick={() => setIsDropdownOpen(false)}
-                      >
-                        <UserIcon size={16} />
-                        <span>Trang cá nhân</span>
-                      </Link>
+                      {!user?.roles?.includes('PROVIDER') && (
+                        <Link 
+                          to={ROUTES.PROFILE} 
+                          className="vh-header-dropdown-item-link" 
+                          onClick={() => setIsDropdownOpen(false)}
+                        >
+                          <UserIcon size={16} />
+                          <span>Trang cá nhân</span>
+                        </Link>
+                      )}
 
                       <Link 
                         to="/dashboard/profile?tab=rentals" 

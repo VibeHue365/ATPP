@@ -11,8 +11,10 @@ import {
   Camera,
   User,
   Check,
-  MapPin
+  MapPin,
+  Flag
 } from 'lucide-react';
+import Swal from 'sweetalert2';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
 import { useCart } from '../../context/CartContext';
@@ -90,6 +92,215 @@ export const ProductDetailPage: React.FC = () => {
 
   // Gallery Active Image
   const [activeImage, setActiveImage] = useState<string>('');
+
+  // Reviews and Ratings States
+  const [realReviews, setRealReviews] = useState<any[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState<boolean>(true);
+
+  // Write Review Modal States
+  const [isWriteReviewOpen, setIsWriteReviewOpen] = useState<boolean>(false);
+  const [writeRating, setWriteRating] = useState<number>(5);
+  const [writeComment, setWriteComment] = useState<string>('');
+  const [writeImages, setWriteImages] = useState<string[]>([]);
+  const [reviewBookingDetails, setReviewBookingDetails] = useState<any>(null);
+  const [submittingReview, setSubmittingReview] = useState<boolean>(false);
+
+  const fetchRealReviews = async () => {
+    if (!id) return;
+    try {
+      setLoadingReviews(true);
+      const res: any = await httpClient.get(`/reviews/item/${id}`);
+      setRealReviews(res || []);
+    } catch (e) {
+      console.error('Lỗi tải đánh giá sản phẩm:', e);
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRealReviews();
+  }, [id]);
+
+  const reviewStats = React.useMemo(() => {
+    const totalReviews = realReviews.length;
+    if (totalReviews === 0) {
+      return {
+        averageRating: product?.rating?.averageRating || 0,
+        totalReviews: product?.rating?.totalReviews || 0,
+        breakdown: { 5: '0%', 4: '0%', 3: '0%', 2: '0%', 1: '0%' }
+      };
+    }
+    const sum = realReviews.reduce((acc, r) => acc + r.rating, 0);
+    const avg = Math.round((sum / totalReviews) * 10) / 10;
+    
+    const counts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    realReviews.forEach(r => {
+      const star = Math.floor(r.rating) as 5 | 4 | 3 | 2 | 1;
+      if (counts[star] !== undefined) {
+        counts[star]++;
+      }
+    });
+
+    const breakdown = {
+      5: `${Math.round((counts[5] / totalReviews) * 100)}%`,
+      4: `${Math.round((counts[4] / totalReviews) * 100)}%`,
+      3: `${Math.round((counts[3] / totalReviews) * 100)}%`,
+      2: `${Math.round((counts[2] / totalReviews) * 100)}%`,
+      1: `${Math.round((counts[1] / totalReviews) * 100)}%`,
+    };
+
+    return {
+      averageRating: avg,
+      totalReviews,
+      breakdown
+    };
+  }, [realReviews, product]);
+
+  const handleReportReview = async (reviewId: string) => {
+    try {
+      await httpClient.post(`/reviews/${reviewId}/report`, { reason: 'Spam hoặc không phù hợp' });
+      toast.success('Báo cáo đánh giá vi phạm thành công!');
+    } catch (err: any) {
+      toast.error('Báo cáo đánh giá thất bại');
+    }
+  };
+
+  const handleWriteReviewClick = async () => {
+    if (!isAuthenticated) {
+      toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
+      navigate(ROUTES.LOGIN);
+      return;
+    }
+
+    try {
+      const bookingsList: any = await httpClient.get('/api/bookings');
+      
+      const completedBooking = bookingsList.find((b: any) => 
+        b.status === 'COMPLETED' && 
+        b.items?.some((item: any) => {
+          const prodId = typeof item.productId === 'object' && item.productId !== null
+            ? item.productId._id
+            : item.productId;
+          return prodId === id;
+        })
+      );
+
+      if (completedBooking) {
+        const item = completedBooking.items.find((i: any) => {
+          const prodId = typeof i.productId === 'object' && i.productId !== null
+            ? i.productId._id
+            : i.productId;
+          return prodId === id;
+        });
+        setReviewBookingDetails({
+          bookingId: completedBooking._id,
+          bookingItemId: item._id,
+        });
+        setIsWriteReviewOpen(true);
+      } else {
+        const result = await Swal.fire({
+          title: 'Chưa có đơn thuê hoàn thành',
+          text: 'Bạn cần hoàn thành một đơn thuê trang phục này trước khi viết đánh giá. Để chạy thử nghiệm và kiểm thử nhanh, hệ thống có thể tạo nhanh một Đơn thuê giả lập trạng thái "Hoàn thành" cho bạn ngay lập tức!',
+          icon: 'info',
+          showCancelButton: true,
+          confirmButtonColor: 'var(--color-primary-dark)',
+          cancelButtonColor: '#9CA3AF',
+          confirmButtonText: 'Tạo đơn & Đánh giá ngay',
+          cancelButtonText: 'Hủy',
+          background: 'white',
+          customClass: {
+            popup: 'font-body',
+          }
+        });
+
+        if (result.isConfirmed) {
+          Swal.fire({
+            title: 'Đang khởi tạo...',
+            text: 'Vui lòng chờ trong giây lát',
+            allowOutsideClick: false,
+            didOpen: () => {
+              Swal.showLoading();
+            }
+          });
+
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const nextDay = new Date();
+          nextDay.setDate(nextDay.getDate() + 3);
+
+          const sizeVal = selectedSize || product?.sizes?.[0] || 'M';
+          const colorVal = selectedColor || product?.colors?.[0] || 'RED';
+
+          const createPayload = {
+            itemType: 'PRODUCT' as const,
+            productId: product?._id,
+            name: product?.name,
+            image: product?.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+            basePrice: product?.basePrice || 200000,
+            depositAmount: product?.depositAmount || 500000,
+            size: sizeVal,
+            color: colorVal,
+            rentalType: 'DAILY',
+            startDate: tomorrow.toISOString().split('T')[0],
+            endDate: nextDay.toISOString().split('T')[0],
+            providerCity: product?.providerId?.address?.city || 'Thừa Thiên Huế',
+            providerAddress: product?.providerId?.address?.addressLine || '',
+            quantity: 1,
+          };
+
+          const bookingRes: any = await httpClient.post('/api/bookings/product', createPayload);
+          const bookingId = bookingRes._id;
+
+          await httpClient.post(`/api/bookings/${bookingId}/complete`);
+
+          // Fetch full booking details to get populated items
+          const fullBooking: any = await httpClient.get(`/api/bookings/${bookingId}`);
+          const itemId = fullBooking.items?.[0]?._id;
+
+          Swal.close();
+          toast.success('Đã giả lập đơn hàng thuê hoàn thành thành công!');
+          
+          setReviewBookingDetails({
+            bookingId,
+            bookingItemId: itemId,
+          });
+          setIsWriteReviewOpen(true);
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Có lỗi xảy ra khi kiểm tra đơn hàng.');
+    }
+  };
+
+  const handleReviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewBookingDetails) return;
+
+    setSubmittingReview(true);
+    try {
+      await httpClient.post('/reviews', {
+        bookingId: reviewBookingDetails.bookingId,
+        bookingItemId: reviewBookingDetails.bookingItemId,
+        rating: writeRating,
+        comment: writeComment,
+        images: writeImages,
+        productId: id,
+      });
+
+      toast.success('Gửi đánh giá dịch vụ thành công!');
+      setIsWriteReviewOpen(false);
+      setWriteComment('');
+      setWriteRating(5);
+      setWriteImages([]);
+      fetchRealReviews();
+    } catch (err: any) {
+      toast.error(err.message || 'Gửi đánh giá thất bại');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   // Selector choices
   const [selectedColor, setSelectedColor] = useState<string>('');
@@ -760,27 +971,7 @@ export const ProductDetailPage: React.FC = () => {
     );
   }
 
-  // Real mock review comments list
-  const reviews = [
-    {
-      id: 'rev1',
-      author: 'Nguyễn T. Hương',
-      rating: 5,
-      date: '10/05/2026',
-      content: 'Chất liệu lụa cực kỳ xịn sò, mặc ôm dáng rất tôn đường cong luôn. Áo được giặt thơm tho sạch sẽ trước khi giao. Dịch vụ cọc giải ngân nhanh, rate 5 sao nhe.',
-      images: ['https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'],
-      verified: true
-    },
-    {
-      id: 'rev2',
-      author: 'Trần ** Mai',
-      rating: 5,
-      date: '28/04/2026',
-      content: 'Đặt combo chụp ảnh cùng thợ của hệ thống đi Đại Nội rất tuyệt vời! Áo cổ kính chuẩn truyền thống thêu tay tỉ mỉ từng chỉ vàng.',
-      images: [],
-      verified: true
-    }
-  ];
+
 
   return (
     <div style={{ backgroundColor: '#FCF9F2', minHeight: '100vh', padding: '40px 0' }}>
@@ -1495,23 +1686,32 @@ export const ProductDetailPage: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 240px', gap: '48px', alignItems: 'center', backgroundColor: 'white', borderRadius: '16px', padding: '40px', border: '1px solid var(--color-light-border)', marginBottom: '40px' }}>
             {/* Average rating */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <span className="font-header" style={{ fontSize: '56px', fontWeight: 800, color: 'var(--color-text-primary)' }}>4.8</span>
+              <span className="font-header" style={{ fontSize: '56px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                {reviewStats.averageRating.toFixed(1)}
+              </span>
               <div style={{ display: 'flex', gap: '2px', color: 'var(--color-gold)' }}>
                 {[1, 2, 3, 4, 5].map((starIdx) => (
-                  <Star key={starIdx} size={18} fill="currentColor" color="currentColor" />
+                  <Star 
+                    key={starIdx} 
+                    size={18} 
+                    fill={starIdx <= Math.round(reviewStats.averageRating) ? 'currentColor' : 'none'} 
+                    color="currentColor" 
+                  />
                 ))}
               </div>
-              <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>120 đánh giá thực tế</span>
+              <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                {reviewStats.totalReviews} đánh giá thực tế
+              </span>
             </div>
 
             {/* Bars summary */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {[
-                { stars: '5 sao', percent: '80%' },
-                { stars: '4 sao', percent: '15%' },
-                { stars: '3 sao', percent: '3%' },
-                { stars: '2 sao', percent: '1%' },
-                { stars: '1 sao', percent: '1%' }
+                { stars: '5 sao', percent: reviewStats.breakdown[5] },
+                { stars: '4 sao', percent: reviewStats.breakdown[4] },
+                { stars: '3 sao', percent: reviewStats.breakdown[3] },
+                { stars: '2 sao', percent: reviewStats.breakdown[2] },
+                { stars: '1 sao', percent: reviewStats.breakdown[1] }
               ].map((row, idx) => (
                 <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
                   <span style={{ width: '40px', textAlign: 'right' }}>{row.stars}</span>
@@ -1526,7 +1726,7 @@ export const ProductDetailPage: React.FC = () => {
             {/* Action write button */}
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <button 
-                onClick={() => { toast.info('Tính năng viết đánh giá sẽ mở sau khi bạn hoàn tất một đơn hàng.'); }}
+                onClick={handleWriteReviewClick}
                 className="vh-btn vh-btn-inverted font-header" 
                 style={{ borderRadius: '8px', padding: '12px 24px', fontSize: '14px' }}
               >
@@ -1550,45 +1750,117 @@ export const ProductDetailPage: React.FC = () => {
 
           {/* Reviews list */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            {reviews.map((rev) => (
-              <div key={rev.id} style={{ borderBottom: '1px solid var(--color-light-border)', paddingBottom: '32px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#EADFC9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--color-primary-dark)', fontSize: '14px' }}>
-                      {rev.author.charAt(0)}
-                    </div>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>{rev.author}</strong>
-                        {rev.verified && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px' }}>
-                            <Check size={10} /> ĐÃ THUÊ
-                          </span>
+            {loadingReviews ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--color-text-secondary)' }}>
+                Đang tải đánh giá...
+              </div>
+            ) : realReviews.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--color-text-secondary)', backgroundColor: 'white', borderRadius: '12px', border: '1px solid var(--color-light-border)' }}>
+                Chưa có đánh giá nào cho sản phẩm này. Hãy là người đầu tiên thuê và đánh giá!
+              </div>
+            ) : (
+              realReviews.map((rev) => {
+                const authorName = rev.customerId?.profile?.fullName || 'Khách hàng VibeHue';
+                const authorAvatar = rev.customerId?.profile?.avatarUrl || rev.customerId?.profile?.avatar;
+                const formattedDate = new Date(rev.createdAt || rev.date || Date.now()).toLocaleDateString('vi-VN');
+                const firstLetter = authorName.charAt(0).toUpperCase();
+
+                return (
+                  <div key={rev._id || rev.id} style={{ borderBottom: '1px solid var(--color-light-border)', paddingBottom: '32px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        {authorAvatar ? (
+                          <img 
+                            src={getImageUrl(authorAvatar)} 
+                            alt={authorName} 
+                            style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} 
+                          />
+                        ) : (
+                          <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#EADFC9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--color-primary-dark)', fontSize: '14px' }}>
+                            {firstLetter}
+                          </div>
                         )}
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>{authorName}</strong>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px' }}>
+                              <Check size={10} /> ĐÃ THUÊ
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '2px', color: 'var(--color-gold)', marginTop: '4px' }}>
+                            {Array.from({ length: Math.round(rev.rating) }).map((_, sIdx) => (
+                              <Star key={sIdx} size={11} fill="currentColor" color="currentColor" />
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '2px', color: 'var(--color-gold)', marginTop: '4px' }}>
-                        {Array.from({ length: rev.rating }).map((_, sIdx) => (
-                          <Star key={sIdx} size={11} fill="currentColor" color="currentColor" />
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{formattedDate}</span>
+                        <button
+                          onClick={() => handleReportReview(rev._id || rev.id)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#9CA3AF',
+                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            cursor: 'pointer',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#DC2626';
+                            e.currentTarget.style.backgroundColor = '#FEE2E2';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = '#9CA3AF';
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                          title="Báo cáo review spam/vi phạm"
+                        >
+                          <Flag size={10} />
+                          <span>Báo cáo Spam</span>
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <p style={{ fontSize: '14px', color: 'var(--color-text-primary)', marginTop: '16px', lineHeight: 1.7 }}>{rev.comment}</p>
+                    
+                    {rev.images && rev.images.length > 0 && (
+                      <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                        {rev.images.map((imgUrl: string, idx: number) => (
+                          <div key={idx} style={{ width: '80px', height: '100px', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
+                            <img src={getImageUrl(imgUrl)} alt="review media" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </div>
                         ))}
                       </div>
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{rev.date}</span>
-                </div>
-                
-                <p style={{ fontSize: '14px', color: 'var(--color-text-primary)', marginTop: '16px', lineHeight: 1.7 }}>{rev.content}</p>
-                
-                {rev.images && rev.images.length > 0 && (
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-                    {rev.images.map((imgUrl, idx) => (
-                      <div key={idx} style={{ width: '80px', height: '100px', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
-                        <img src={imgUrl} alt="review media" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    )}
+
+                    {rev.reply && (
+                      <div style={{ 
+                        marginTop: '16px', 
+                        padding: '16px', 
+                        backgroundColor: '#F5EFEB', 
+                        borderRadius: '12px', 
+                        borderLeft: '4px solid var(--color-primary)',
+                        fontSize: '13px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <strong style={{ color: 'var(--color-primary-dark)' }}>Phản hồi từ cửa hàng</strong>
+                          <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                            {new Date(rev.repliedAt || new Date()).toLocaleDateString('vi-VN')}
+                          </span>
+                        </div>
+                        <p style={{ color: 'var(--color-text-primary)', margin: 0, lineHeight: 1.6 }}>{rev.reply}</p>
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              })
+            )}
           </div>
         </section>
 
@@ -1871,6 +2143,151 @@ export const ProductDetailPage: React.FC = () => {
         </div>
       </Modal>
 
+      {/* 4. Write Review Modal */}
+      <Modal isOpen={isWriteReviewOpen} onClose={() => setIsWriteReviewOpen(false)} title="Viết Nhận Xét & Đánh Giá" maxWidth="550px">
+        <form onSubmit={handleReviewSubmit} style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div>
+            <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', display: 'block', marginBottom: '8px' }}>
+              Độ hài lòng của bạn:
+            </label>
+            <div style={{ display: 'flex', gap: '8px', color: 'var(--color-gold)' }}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  type="button"
+                  key={star}
+                  onClick={() => setWriteRating(star)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  <Star
+                    size={28}
+                    fill={star <= writeRating ? 'currentColor' : 'none'}
+                    color="currentColor"
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', display: 'block', marginBottom: '8px' }}>
+              Nội dung đánh giá:
+            </label>
+            <textarea
+              required
+              rows={4}
+              value={writeComment}
+              onChange={(e) => setWriteComment(e.target.value)}
+              placeholder="Chia sẻ trải nghiệm của bạn về phom dáng, chất lượng vải, dịch vụ nhận/trả đồ..."
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1px solid #D5C2AD',
+                outline: 'none',
+                fontFamily: 'inherit',
+                fontSize: '14px',
+                lineHeight: 1.6,
+                resize: 'vertical'
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', display: 'block', marginBottom: '8px' }}>
+              Hình ảnh đính kèm (URL):
+            </label>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <input
+                type="text"
+                placeholder="Nhập đường dẫn hình ảnh (URL)..."
+                id="write-image-input"
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid #D5C2AD',
+                  fontSize: '13px',
+                  outline: 'none'
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const target = e.target as HTMLInputElement;
+                    if (target.value.trim()) {
+                      setWriteImages([...writeImages, target.value.trim()]);
+                      target.value = '';
+                    }
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('write-image-input') as HTMLInputElement;
+                  if (el && el.value.trim()) {
+                    setWriteImages([...writeImages, el.value.trim()]);
+                    el.value = '';
+                  }
+                }}
+                className="vh-btn vh-btn-secondary"
+                style={{ padding: '0 16px', fontSize: '13px', borderRadius: '8px' }}
+              >
+                Thêm ảnh
+              </button>
+            </div>
+            {writeImages.length > 0 && (
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
+                {writeImages.map((img, idx) => (
+                  <div key={idx} style={{ position: 'relative', width: '60px', height: '60px', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
+                    <img src={getImageUrl(img)} alt="attached" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button
+                      type="button"
+                      onClick={() => setWriteImages(writeImages.filter((_, i) => i !== idx))}
+                      style={{
+                        position: 'absolute',
+                        top: 2,
+                        right: 2,
+                        backgroundColor: 'rgba(0,0,0,0.6)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '16px',
+                        height: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '9px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid #EAEAE8', paddingTop: '16px', marginTop: '10px' }}>
+            <button
+              type="button"
+              className="vh-btn vh-btn-outline"
+              style={{ padding: '8px 24px', borderRadius: '8px', fontSize: '13px' }}
+              onClick={() => setIsWriteReviewOpen(false)}
+            >
+              Hủy bỏ
+            </button>
+            <button
+              type="submit"
+              disabled={submittingReview}
+              className="vh-btn vh-btn-primary"
+              style={{ padding: '8px 24px', borderRadius: '8px', fontSize: '13px' }}
+            >
+              {submittingReview ? 'Đang gửi...' : 'Gửi đánh giá'}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
     </div>
   );

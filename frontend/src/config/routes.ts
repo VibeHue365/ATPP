@@ -17,4 +17,5 @@ export const ROUTES = {
   PRODUCT_DETAIL: '/rentals/:id',
   PHOTOGRAPHER_DETAIL: '/photographers/:id',
   CART: '/cart',
+  ADMIN_DASHBOARD: '/admin/dashboard',
 } as const;

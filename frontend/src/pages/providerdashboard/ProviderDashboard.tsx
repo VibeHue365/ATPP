@@ -1,24 +1,31 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, ShoppingBag, Layers, Camera, Settings, Plus, Download, Bell,
+  ShoppingBag, Layers, Camera, Plus, Download, Bell,
   HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,
-  Upload, X
+  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
 import { Modal } from '../../components/common/Modal';
+import { useAuth } from '../../features/auth/hooks/useAuth';
 import { API_BASE_URL } from '../../config/env';
 
 interface Order {
-  id: string;
+  _id: string;
+  id?: string;
   customerName: string;
   customerEmail: string;
   customerInitials: string;
   productName: string;
   orderDate: string;
   total: string;
-  status: 'HOÀN THÀNH' | 'CHỜ XỬ LÝ' | 'ĐANG XỬ LÝ' | 'ĐÃ HỦY';
+  status: string;
+  totalAmount?: number;
+  createdAt?: string;
+  customerId?: any;
+  items?: any[];
 }
 
 interface Product {
@@ -41,23 +48,362 @@ interface Product {
 }
 
 export const ProviderDashboard: React.FC = () => {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const toast = useToast();
   
-  // Views navigation state: 'orders' | 'collections'
-  const [currentView, setCurrentView] = useState<'orders' | 'collections'>('orders');
+  // Views navigation state
+  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'calendar' | 'vouchers' | 'reviews' | 'trust'>('orders');
 
-  // Orders Mock Data & State
-  const allOrders: Order[] = [
-    { id: '#ORD-7721', customerName: 'Nguyễn Thanh', customerEmail: 'thanh.ng@gmail.com', customerInitials: 'NT', productName: 'Áo dài Tố Nữ (Size M)', orderDate: '14/05/2024', total: '2.450.000đ', status: 'HOÀN THÀNH' },
-    { id: '#ORD-7725', customerName: 'Lê Kim', customerEmail: 'kim.le@outlook.com', customerInitials: 'LK', productName: 'Váy Lụa Hà Đông', orderDate: '15/05/2024', total: '1.800.000đ', status: 'CHỜ XỬ LÝ' },
-    { id: '#ORD-7728', customerName: 'Phan Hoàng', customerEmail: 'hoangp@company.vn', customerInitials: 'PH', productName: 'Khăn quàng Di sản', orderDate: '15/05/2024', total: '850.000đ', status: 'ĐANG XỬ LÝ' },
-    { id: '#ORD-7730', customerName: 'Trần Thảo', customerEmail: 'thaotran.vn@gmail.com', customerInitials: 'TT', productName: 'Mấn đội đầu Phượng', orderDate: '16/05/2024', total: '3.200.000đ', status: 'HOÀN THÀNH' },
-    { id: '#ORD-7734', customerName: 'Minh Huy', customerEmail: 'huy.minh@web.com', customerInitials: 'MH', productName: 'Áo Nhật Bình', orderDate: '16/05/2024', total: '5.600.000đ', status: 'CHỜ XỬ LÝ' },
-  ];
-  const [orders, setOrders] = useState<Order[]>(allOrders);
+  // Provider Specific States
+  const [provider, setProvider] = useState<any>(null);
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [vouchers, setVouchers] = useState<any[]>([]);
+  const [reviewsData, setReviewsData] = useState<any>(null);
+  const [bookingsState, setBookingsState] = useState<any[]>([]);
+  const [isLoadingProvider, setIsLoadingProvider] = useState(false);
+
+  // Form states - Profile
+  const [businessName, setBusinessName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [addressLine, setAddressLine] = useState('');
+  const [city, setCity] = useState('');
+  const [cancellationPolicy, setCancellationPolicy] = useState('');
+
+  // Form states - Voucher
+  const [vCode, setVCode] = useState('');
+  const [vName, setVName] = useState('');
+  const [vType, setVType] = useState('PERCENTAGE');
+  const [vValue, setVValue] = useState(10);
+  const vMinOrder = 0;
+
+  // Form states - Calendar
+  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(0);
+  const [startHour, setStartHour] = useState('08:00');
+  const [endHour, setEndHour] = useState('17:00');
+  const [blockedDate, setBlockedDate] = useState('');
+
+  // Reply states
+  const [replyingReviewId, setReplyingReviewId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+
+  // Two-way rating state
+  const [ratingBooking, setRatingBooking] = useState<any>(null);
+  const [cRating, setCRating] = useState(5);
+  const [cComment, setCComment] = useState('');
+
+  // Trust search score
+  const [searchCustId, setSearchCustId] = useState('');
+  const [trustScoreResult, setTrustScoreResult] = useState<any>(null);
+
+  const fetchProviderData = async () => {
+    setIsLoadingProvider(true);
+    try {
+      const pRes: any = await httpClient.get('/providers/me');
+      setProvider(pRes);
+      setBusinessName(pRes.businessName || '');
+      setPhone(pRes.contact?.phone || '');
+      setAddressLine(pRes.address?.addressLine || '');
+      setCity(pRes.address?.city || '');
+      setCancellationPolicy(pRes.policies?.cancellationPolicy || '');
+
+      const sRes: any = await httpClient.get('/providers/me/schedules');
+      setSchedules(sRes);
+
+      const vRes: any = await httpClient.get('/promotions/provider');
+      setVouchers(vRes);
+
+      const rRes: any = await httpClient.get('/reviews/stats');
+      setReviewsData(rRes);
+
+      const bRes: any = await httpClient.get('/bookings/provider');
+      setBookingsState(bRes);
+    } catch (err: any) {
+      toast.error('Không thể đồng bộ dữ liệu đối tác');
+    } finally {
+      setIsLoadingProvider(false);
+    }
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await httpClient.patch('/providers/me', {
+        businessName,
+        contact: { ...provider?.contact, phone },
+        address: { ...provider?.address, addressLine, city },
+        policies: { ...provider?.policies, cancellationPolicy },
+      });
+      toast.success('Cập nhật thông tin dịch vụ thành công!');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error('Cập nhật thất bại');
+    }
+  };
+
+  const handleAddVoucher = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await httpClient.post('/promotions', {
+        code: vCode,
+        name: vName,
+        discountType: vType,
+        discountValue: Number(vValue),
+        minOrderValue: Number(vMinOrder),
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(), // 30 days expiry
+      });
+      toast.success(`Tạo mã ưu đãi "${vCode}" thành công!`);
+      setVCode('');
+      setVName('');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể tạo voucher');
+    }
+  };
+
+  const handleDeleteVoucher = async (id: string) => {
+    try {
+      await httpClient.delete(`/promotions/${id}`);
+      toast.success('Đã xóa mã ưu đãi thành công!');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error('Xóa voucher thất bại');
+    }
+  };
+
+  const handleAddRecurringSchedule = async () => {
+    try {
+      await httpClient.post('/providers/me/schedules/recurring', {
+        dayOfWeek: Number(selectedDayOfWeek),
+        workingHours: [{ start: startHour, end: endHour }],
+      });
+      toast.success('Thiết lập khung giờ làm việc recurring thành công!');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error('Lưu lịch làm việc thất bại');
+    }
+  };
+
+  const handleBlockDate = async () => {
+    if (!blockedDate) return;
+    try {
+      await httpClient.post('/providers/me/schedules/specific-date', {
+        date: blockedDate,
+        isOffDay: true,
+        customSlots: [],
+      });
+      toast.success(`Đã chặn lịch bận ngày ${blockedDate}!`);
+      setBlockedDate('');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error('Không thể chặn lịch ngày bận');
+    }
+  };
+
+  const handleAddPortfolio = async () => {
+    const { value: imageUrl, isConfirmed } = await Swal.fire({
+      title: 'Thêm ảnh mẫu Portfolio',
+      input: 'url',
+      inputLabel: 'Đường dẫn URL ảnh (JPEG/PNG)',
+      inputPlaceholder: 'https://example.com/image.jpg',
+      showCancelButton: true,
+      confirmButtonColor: 'var(--color-primary-dark)',
+      cancelButtonColor: '#9CA3AF',
+      confirmButtonText: 'Thêm ảnh',
+      cancelButtonText: 'Hủy',
+      background: 'white',
+      inputValidator: (value) => {
+        if (!value) return 'Vui lòng nhập URL ảnh!';
+        try { new URL(value); } catch { return 'URL không hợp lệ!'; }
+      },
+    });
+    if (!isConfirmed || !imageUrl) return;
+    try {
+      await httpClient.post('/providers/me/portfolio', { imageUrl });
+      toast.success('Đã thêm ảnh mẫu thiết kế vào Portfolio!');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error('Tải ảnh portfolio thất bại');
+    }
+  };
+
+  const handleRemovePortfolio = async (imgUrl: string) => {
+    try {
+      await httpClient.delete(`/providers/me/portfolio?imageUrl=${encodeURIComponent(imgUrl)}`);
+      toast.success('Đã gỡ ảnh khỏi Portfolio');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error('Gỡ ảnh thất bại');
+    }
+  };
+
+  const handleReplyReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyingReviewId) return;
+    try {
+      await httpClient.post(`/reviews/${replyingReviewId}/reply`, { reply: replyText });
+      toast.success('Gửi phản hồi đánh giá thành công!');
+      setReplyingReviewId(null);
+      setReplyText('');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error('Không thể gửi phản hồi');
+    }
+  };
+
+  const handleReportReview = async (reviewId: string) => {
+    try {
+      await httpClient.post(`/reviews/${reviewId}/report`, { reason: 'Spam, ngôn từ không phù hợp' });
+      toast.success('Đã gửi báo cáo vi phạm nội dung lên hệ thống admin!');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error('Báo cáo review thất bại');
+    }
+  };
+
+  const handleRateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ratingBooking) return;
+    try {
+      await httpClient.post('/reviews/customer', {
+        bookingId: ratingBooking.bookingId,
+        rating: cRating,
+        comment: cComment,
+      });
+      toast.success('Đã gửi đánh giá tín nhiệm khách hàng thành công!');
+      setRatingBooking(null);
+      setCComment('');
+      setCRating(5);
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error(err.message || 'Đánh giá khách hàng thất bại');
+    }
+  };
+
+  const handleSearchTrustScore = async () => {
+    if (!searchCustId) return;
+    try {
+      const res: any = await httpClient.get(`/reviews/customer/${searchCustId}/trust`);
+      setTrustScoreResult(res);
+      toast.success('Đồng bộ tín nhiệm khách hàng hoàn tất!');
+    } catch (err: any) {
+      toast.error('Không thể tìm thấy khách hàng này');
+      setTrustScoreResult(null);
+    }
+  };
+
+  const daysOfWeekVn = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+
+  // Orders State — loaded from API via bookingsState
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
   const [orderTab, setOrderTab] = useState('Tất cả');
   const [activePage, setActivePage] = useState(1);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+
+  // Incident Report States
+  const [reportingOrder, setReportingOrder] = useState<Order | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string>('');
+  const [incidentDesc, setIncidentDesc] = useState<string>('');
+  const [incidentEvidence, setIncidentEvidence] = useState<string>('');
+  const [incidentAmount, setIncidentAmount] = useState<number>(0);
+  const [incidentActionType, setIncidentActionType] = useState<'CLEANING' | 'MAINTENANCE'>('CLEANING');
+
+  const handleSendIncidentReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportingOrder || !selectedItemId) {
+      toast.error('Vui lòng chọn sản phẩm gặp sự cố!');
+      return;
+    }
+    if (incidentAmount > (reportingOrder.depositTotal || 0)) {
+      toast.error(`Tiền đền bù không được vượt quá số tiền cọc (${(reportingOrder.depositTotal || 0).toLocaleString()}đ)`);
+      return;
+    }
+    try {
+      const photos = incidentEvidence ? incidentEvidence.split(',').map(s => s.trim()).filter(Boolean) : [];
+      await httpClient.post('/api/disputes/incidents', {
+        bookingId: reportingOrder._id,
+        bookingItemId: selectedItemId,
+        description: incidentDesc,
+        evidencePhotos: photos,
+        requestedAmount: incidentAmount,
+        actionType: incidentActionType,
+      });
+      toast.success('Báo cáo sự cố thành công! Đơn đặt lịch đã chuyển sang trạng thái chờ giải quyết.');
+      setReportingOrder(null);
+      setSelectedItemId('');
+      setIncidentDesc('');
+      setIncidentEvidence('');
+      setIncidentAmount(0);
+      setIncidentActionType('CLEANING');
+      fetchOrders();
+    } catch (err: any) {
+      toast.error(err.message || 'Gửi báo cáo sự cố thất bại');
+    }
+  };
+
+  const fetchOrders = async () => {
+    setLoadingOrders(true);
+    try {
+      const bRes: any = await httpClient.get('/bookings/provider');
+      const mapped: Order[] = (Array.isArray(bRes) ? bRes : []).map((b: any) => {
+        const cust = b.customerId;
+        const custName = cust?.profile?.fullName || cust?.email?.split('@')[0] || 'Khách hàng';
+        const custEmail = cust?.email || '';
+        const initials = custName.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+        const firstItem = b.items?.[0];
+        const productName = firstItem?.name || firstItem?.productId?.name || firstItem?.photographyPackageId?.name || 'Sản phẩm thuê';
+        const dateStr = b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : '';
+        
+        let totalAmt = 0;
+        if (b.items && b.items.length > 0) {
+          totalAmt = b.items.reduce((sum: number, item: any) => {
+            const price = item.unitPrice ?? 0;
+            const qty = item.quantity ?? 1;
+            return sum + (price * qty);
+          }, 0);
+        }
+        if (totalAmt === 0 && b.pricingSummary?.grandTotal) {
+          totalAmt = b.pricingSummary.grandTotal;
+        }
+
+        const statusMap: Record<string, string> = {
+          PENDING: 'CHỜ XỬ LÝ',
+          PENDING_PAYMENT: 'CHỜ THANH TOÁN',
+          DEPOSIT_PAID: 'ĐÃ ĐẶT CỌC',
+          CONFIRMED: 'ĐANG THỰC HIỆN',
+          PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
+          PICKED_UP: 'ĐANG THUÊ',
+          RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
+          RETURNED: 'ĐÃ TRẢ ĐỒ',
+          COMPLETED: 'HOÀN THÀNH',
+          CANCELLED: 'ĐÃ HỦY',
+          DISPUTED: 'TRANH CHẤP',
+        };
+        return {
+          _id: b._id,
+          id: `#${b._id?.slice(-6).toUpperCase()}`,
+          customerName: custName,
+          customerEmail: custEmail,
+          customerInitials: initials,
+          productName,
+          orderDate: dateStr,
+          total: `${totalAmt.toLocaleString('vi-VN')}đ`,
+          status: statusMap[b.status] || b.status,
+          totalAmount: totalAmt,
+          items: b.items,
+          depositTotal: b.pricingSummary?.depositTotal || 0,
+          rawStatus: b.status,
+        };
+      });
+      setOrders(mapped);
+    } catch (err: any) {
+      toast.error('Không thể tải danh sách đơn hàng');
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
 
   // Products State
   const [products, setProducts] = useState<Product[]>([]);
@@ -114,9 +460,13 @@ export const ProviderDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    if (currentView === 'collections') {
+    if (currentView === 'orders') {
+      fetchOrders();
+    } else if (currentView === 'collections') {
       fetchProducts();
       fetchCategories();
+    } else if (['profile', 'portfolio', 'calendar', 'vouchers', 'reviews', 'trust'].includes(currentView)) {
+      fetchProviderData();
     }
   }, [currentView]);
 
@@ -286,23 +636,43 @@ export const ProviderDashboard: React.FC = () => {
     setProdMaterials(prev => prev.includes(material) ? prev.filter(m => m !== material) : [...prev, material]);
   };
 
-  // Orders Tab filter & helpers
-  const tabs = [
-    { label: 'Tất cả', count: 128 }, { label: 'Chờ xử lý', count: 12 },
-    { label: 'Đang thực hiện', count: 45 }, { label: 'Hoàn thành', count: 64 }, { label: 'Đã hủy', count: 7 },
-  ];
-
-  const statusMap: Record<string, string> = {
-    'Chờ xử lý': 'CHỜ XỬ LÝ', 'Đang thực hiện': 'ĐANG XỬ LÝ', 'Hoàn thành': 'HOÀN THÀNH', 'Đã hủy': 'ĐÃ HỦY',
+  // Orders Tab filter & helpers — counts computed dynamically
+  const statusLabelMap: Record<string, string> = {
+    'Chờ xử lý': 'CHỜ XỬ LÝ',
+    'Đang thực hiện': 'ĐANG XỬ LÝ',
+    'Hoàn thành': 'HOÀN THÀNH',
+    'Đã hủy': 'ĐÃ HỦY',
   };
 
-  const filteredOrders = orderTab === 'Tất cả' ? orders : orders.filter(o => o.status === statusMap[orderTab]);
+  const tabs = React.useMemo(() => [
+    { label: 'Tất cả', count: orders.length },
+    { label: 'Chờ xử lý', count: orders.filter(o => o.status === 'CHỜ XỬ LÝ').length },
+    { label: 'Đang thực hiện', count: orders.filter(o => o.status === 'ĐANG XỬ LÝ').length },
+    { label: 'Hoàn thành', count: orders.filter(o => o.status === 'HOÀN THÀNH').length },
+    { label: 'Đã hủy', count: orders.filter(o => o.status === 'ĐÃ HỦY').length },
+  ], [orders]);
+
+  const filteredOrders = orderTab === 'Tất cả' ? orders : orders.filter(o => o.status === statusLabelMap[orderTab]);
+
+  // Monthly revenue from completed orders
+  const monthlyRevenue = React.useMemo(() => {
+    const now = new Date();
+    return orders
+      .filter(o => {
+        const d = o.orderDate ? new Date(o.orderDate.split('/').reverse().join('-')) : null;
+        return o.status === 'HOÀN THÀNH' && d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      })
+      .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
+  }, [orders]);
 
   const statusBadgeStyle = (status: string): React.CSSProperties => {
     const base: React.CSSProperties = { display: 'inline-block', padding: '4px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', color: 'white' };
-    if (status === 'HOÀN THÀNH') return { ...base, backgroundColor: 'var(--color-dark-bg)' };
-    if (status === 'CHỜ XỬ LÝ') return { ...base, backgroundColor: 'var(--color-primary)' };
-    if (status === 'ĐANG XỬ LÝ') return { ...base, backgroundColor: 'var(--color-gold)' };
+    if (status === 'HOÀN THÀNH') return { ...base, backgroundColor: '#2e7d32' };
+    if (status === 'CHỜ KHÁCH DUYỆT SỰ CỐ') return { ...base, backgroundColor: '#ed6c02' };
+    if (status === 'TRANH CHẤP') return { ...base, backgroundColor: '#d32f2f' };
+    if (status === 'ĐÃ HỦY') return { ...base, backgroundColor: '#757575' };
+    if (status === 'CHỜ XỬ LÝ' || status === 'CHỜ THANH TOÁN') return { ...base, backgroundColor: 'var(--color-primary)' };
+    if (status === 'ĐANG XỬ LÝ' || status === 'ĐANG THỰC HIỆN' || status === 'ĐANG THUÊ') return { ...base, backgroundColor: 'var(--color-gold)' };
     return { ...base, backgroundColor: '#ccc', color: '#555' };
   };
 
@@ -313,9 +683,47 @@ export const ProviderDashboard: React.FC = () => {
     borderRight: active ? '2px solid var(--color-primary)' : 'none',
   });
 
-  const changeOrderStatus = (id: string, s: Order['status']) => { 
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: s } : o)); 
-    setActionMenuId(null); 
+  // Map từ trạng thái tiếng Việt → BookingStatus enum value
+  const statusApiMap: Record<string, string> = {
+    'HOÀN THÀNH': 'COMPLETED',
+    'ĐANG XỬ LÝ': 'CONFIRMED',
+    'CHỜ XỬ LÝ': 'PENDING_PAYMENT',
+    'ĐÃ HỦY': 'CANCELLED',
+  };
+
+  const changeOrderStatus = async (_id: string, s: string) => {
+    const apiStatus = statusApiMap[s] || s;
+    try {
+      await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus });
+      setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: s } : o));
+      toast.success(`Đã cập nhật trạng thái đơn hàng thành "${s}"!`);
+    } catch (err: any) {
+      toast.error(err.message || 'Cập nhật trạng thái thất bại');
+    }
+    setActionMenuId(null);
+  };
+
+  const handleLogoutClick = async () => {
+    const result = await Swal.fire({
+      title: 'Đăng xuất?',
+      text: 'Bạn có chắc chắn muốn đăng xuất khỏi hệ thống không?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: 'var(--color-primary)',
+      cancelButtonColor: '#9CA3AF',
+      confirmButtonText: 'Đăng xuất',
+      cancelButtonText: 'Hủy',
+      background: 'white',
+      customClass: {
+        popup: 'font-body',
+      }
+    });
+
+    if (result.isConfirmed) {
+      logout();
+      toast.success('Đã đăng xuất thành công!');
+      navigate('/');
+    }
   };
 
   return (
@@ -328,12 +736,19 @@ export const ProviderDashboard: React.FC = () => {
             <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 600 }}>Rental Marketplace</p>
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <button onClick={() => setCurrentView('orders')} style={navItemStyle(false)}><LayoutDashboard size={18} /> Dashboard</button>
-            <button onClick={() => setCurrentView('orders')} style={navItemStyle(currentView === 'orders')}><ShoppingBag size={18} /> Orders</button>
-            <button onClick={() => setCurrentView('collections')} style={navItemStyle(currentView === 'collections')}><Layers size={18} /> Collections</button>
-            <button onClick={() => setCurrentView('orders')} style={navItemStyle(false)}><Camera size={18} /> Photographers</button>
-            <button onClick={() => setCurrentView('orders')} style={navItemStyle(false)}><Settings size={18} /> Settings</button>
+            <button onClick={() => setCurrentView('orders')} style={navItemStyle(currentView === 'orders')}><ShoppingBag size={18} /> Đơn hàng</button>
+            <button onClick={() => setCurrentView('collections')} style={navItemStyle(currentView === 'collections')}><Layers size={18} /> Bộ sưu tập</button>
+            <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ (UC-B06)</button>
+            <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio (UC-B08)</button>
+            <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn (UC-F01)</button>
+            <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi (UC-P01)</button>
+            <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi (UC-H04/05)</button>
+            <button onClick={() => setCurrentView('trust')} style={navItemStyle(currentView === 'trust')}><Users size={18} /> Đánh giá khách hàng (UC-H06)</button>
           </nav>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+          <button onClick={() => navigate('/')} style={navItemStyle(false)}><ArrowLeft size={18} /> Trang chủ</button>
+          <button onClick={handleLogoutClick} style={{ ...navItemStyle(false), color: '#FCA5A5' }}><LogOut size={18} /> Đăng xuất</button>
         </div>
       </aside>
 
@@ -352,16 +767,22 @@ export const ProviderDashboard: React.FC = () => {
             <div style={{ height: '24px', width: '1px', backgroundColor: 'var(--color-light-border)' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.2 }}>Lê Studio</div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.2 }}>{provider?.businessName || 'Provider'}</div>
                 <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>PROVIDER</div>
               </div>
-              <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d" alt="Avatar" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--color-light-border)' }} />
+              {provider?.avatar || provider?.logoUrl ? (
+                <img src={getImageUrl(provider.avatar || provider.logoUrl)} alt="Avatar" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--color-light-border)' }} />
+              ) : (
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--color-primary-trans)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', color: 'var(--color-primary-dark)', border: '1px solid var(--color-light-border)' }}>
+                  {(provider?.businessName || 'P').charAt(0).toUpperCase()}
+                </div>
+              )}
             </div>
           </div>
         </header>
 
         {/* CONTENT SWITCH PANEL */}
-        {currentView === 'orders' ? (
+        {currentView === 'orders' && (
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
@@ -394,7 +815,9 @@ export const ProviderDashboard: React.FC = () => {
                 padding: '24px', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center',
               }}>
                 <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Doanh thu tháng này</div>
-                <div style={{ fontFamily: 'var(--font-header)', fontSize: '28px', fontWeight: 700, color: 'var(--color-primary)' }}>145.200.000đ</div>
+                <div style={{ fontFamily: 'var(--font-header)', fontSize: '28px', fontWeight: 700, color: 'var(--color-primary)' }}>
+                  {monthlyRevenue > 0 ? `${monthlyRevenue.toLocaleString('vi-VN')}đ` : '—'}
+                </div>
                 <div style={{ position: 'absolute', right: '16px', bottom: '8px', opacity: 0.06, pointerEvents: 'none', color: 'var(--color-primary)' }}><ShoppingBag size={80} /></div>
               </div>
             </div>
@@ -409,10 +832,12 @@ export const ProviderDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.length === 0 ? (
+                  {loadingOrders ? (
+                    <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải đơn hàng...</td></tr>
+                  ) : filteredOrders.length === 0 ? (
                     <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Không có đơn hàng nào.</td></tr>
                   ) : filteredOrders.map(o => (
-                    <tr key={o.id} style={{ borderBottom: '1px solid var(--color-light-border)', transition: 'var(--transition-smooth)' }}>
+                    <tr key={o._id} style={{ borderBottom: '1px solid var(--color-light-border)', transition: 'var(--transition-smooth)' }}>
                       <td style={{ padding: '16px 20px', fontWeight: 700 }}>{o.id}</td>
                       <td style={{ padding: '16px 20px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -428,21 +853,36 @@ export const ProviderDashboard: React.FC = () => {
                       <td style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'right' }}>{o.total}</td>
                       <td style={{ padding: '16px 20px', textAlign: 'center' }}><span style={statusBadgeStyle(o.status)}>{o.status}</span></td>
                       <td style={{ padding: '16px 20px', textAlign: 'center', position: 'relative' }}>
-                        <button onClick={() => setActionMenuId(actionMenuId === o.id ? null : o.id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
-                        {actionMenuId === o.id && (
-                          <div style={{ position: 'absolute', right: '20px', top: '40px', width: '160px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
+                        <button onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
+                        {actionMenuId === o._id && (
+                          <div style={{ position: 'absolute', right: '20px', top: '40px', width: '180px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
                             {[
-                              { label: 'Hoàn thành', status: 'HOÀN THÀNH' as const, icon: <CheckCircle size={14} />, color: 'var(--color-dark-bg)' },
-                              { label: 'Đang thực hiện', status: 'ĐANG XỬ LÝ' as const, icon: <Play size={14} />, color: 'var(--color-gold)' },
-                              { label: 'Chờ xử lý', status: 'CHỜ XỬ LÝ' as const, icon: <FileText size={14} />, color: 'var(--color-primary)' },
-                              { label: 'Hủy đơn', status: 'ĐÃ HỦY' as const, icon: <Trash2 size={14} />, color: 'var(--color-error)' },
+                              { label: 'Hoàn thành', status: 'HOÀN THÀNH', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                              { label: 'Đang thực hiện', status: 'ĐANG XỬ LÝ', icon: <Play size={14} />, color: 'var(--color-gold)' },
+                              { label: 'Chờ xử lý', status: 'CHỜ XỬ LÝ', icon: <FileText size={14} />, color: 'var(--color-primary)' },
+                              { label: 'Hủy đơn', status: 'ĐÃ HỦY', icon: <Trash2 size={14} />, color: 'var(--color-error)' },
                             ].map(a => (
-                              <button key={a.label} onClick={() => changeOrderStatus(o.id, a.status)} style={{
+                              <button key={a.label} onClick={() => changeOrderStatus(o._id, a.status)} style={{
                                 width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
                                 fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: a.color,
                                 fontWeight: a.label === 'Hủy đơn' ? 700 : 500, textAlign: 'left',
                               }}>{a.icon} {a.label}</button>
                             ))}
+                            {(o.rawStatus === 'CONFIRMED' || o.rawStatus === 'COMPLETED' || o.rawStatus === 'PICKED_UP' || o.rawStatus === 'RETURNED' || o.rawStatus === 'RETURN_PENDING' || o.rawStatus === 'DISPUTED') && (
+                              <button onClick={() => {
+                                setReportingOrder(o);
+                                setSelectedItemId(o.items?.[0]?._id || '');
+                                setIncidentDesc('');
+                                setIncidentEvidence('');
+                                setIncidentAmount(o.depositTotal || 0);
+                                setIncidentActionType('CLEANING');
+                                setActionMenuId(null);
+                              }} style={{
+                                width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
+                                fontWeight: 700, textAlign: 'left', borderTop: '1px solid var(--color-light-border)'
+                              }}><Flag size={14} /> Báo cáo hỏng đồ</button>
+                            )}
                           </div>
                         )}
                       </td>
@@ -451,29 +891,18 @@ export const ProviderDashboard: React.FC = () => {
                 </tbody>
               </table>
               <div style={{ borderTop: '1px solid var(--color-light-border)', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', fontSize: '12px' }}>
-                <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Hiển thị 1 - {filteredOrders.length} trong số {filteredOrders.length} đơn hàng</span>
+                <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Hiển thị {filteredOrders.length} đơn hàng</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <button disabled={activePage === 1} onClick={() => setActivePage(p => Math.max(1, p - 1))} style={{ padding: '6px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: 'pointer', color: 'var(--color-text-secondary)' }}><ChevronLeft size={14} /></button>
-                  {[1, 2, 3, '...', 13].map((pg, i) => {
-                    const isNum = typeof pg === 'number';
-                    const isActive = activePage === pg;
-                    return (
-                      <button key={i} disabled={!isNum} onClick={() => isNum && setActivePage(pg)} style={{
-                        width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        borderRadius: '4px', fontSize: '12px', fontWeight: 700, border: isActive ? 'none' : isNum ? '1px solid var(--color-light-border)' : 'none',
-                        backgroundColor: isActive ? 'var(--color-primary)' : isNum ? 'white' : 'transparent',
-                        color: isActive ? 'white' : isNum ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                        cursor: isNum ? 'pointer' : 'default',
-                      }}>{pg}</button>
-                    );
-                  })}
-                  <button disabled={activePage === 13} onClick={() => setActivePage(p => Math.min(13, p + 1))} style={{ padding: '6px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: 'pointer', color: 'var(--color-text-secondary)' }}><ChevronRight size={14} /></button>
+                  <button disabled={activePage <= 1} onClick={() => setActivePage(p => Math.max(1, p - 1))} style={{ padding: '6px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: activePage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}><ChevronLeft size={14} /></button>
+                  <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>{activePage}</span>
+                  <button disabled={filteredOrders.length < 20} onClick={() => setActivePage(p => p + 1)} style={{ padding: '6px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: filteredOrders.length >= 20 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}><ChevronRight size={14} /></button>
                 </div>
               </div>
             </div>
           </main>
-        ) : (
-          /* COLLECTIONS (PRODUCTS CRUD) VIEW */
+        )}
+
+        {currentView === 'collections' && (
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
@@ -581,6 +1010,490 @@ export const ProviderDashboard: React.FC = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </main>
+        )}
+
+        {currentView === 'profile' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Thông tin dịch vụ (UC-B06)</h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Thiết lập thông tin thương hiệu, showroom nhận đồ và chính sách hủy dịch vụ.</p>
+              </div>
+            </div>
+
+            {isLoadingProvider ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải thông tin dịch vụ...</div>
+            ) : (
+              <form onSubmit={handleUpdateProfile} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '32px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TÊN THƯƠNG HIỆU / CỬA HÀNG</label>
+                    <input
+                      type="text"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      required
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>SỐ ĐIỆN THOẠI LIÊN HỆ</label>
+                    <input
+                      type="text"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      required
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>ĐỊA CHỈ SHOWROOM / ĐỊA ĐIỂM NHẬN ĐỒ</label>
+                    <input
+                      type="text"
+                      value={addressLine}
+                      onChange={(e) => setAddressLine(e.target.value)}
+                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      required
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>THÀNH PHỐ</label>
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      required
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>CHÍNH SÁCH HỦY DỊCH VỤ / HOÀN CỌC (UC-B06)</label>
+                    <textarea
+                      value={cancellationPolicy}
+                      onChange={(e) => setCancellationPolicy(e.target.value)}
+                      rows={3}
+                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'none', fontFamily: 'inherit' }}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  style={{ alignSelf: 'flex-start', padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-sm)' }}
+                >
+                  <Save size={14} />
+                  Lưu thay đổi
+                </button>
+              </form>
+            )}
+          </main>
+        )}
+
+        {currentView === 'portfolio' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Portfolio (UC-B08)</h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Đăng tải các tác phẩm thiết kế mẫu hoặc các dự án đã hoàn thành của bạn.</p>
+              </div>
+              <button
+                onClick={handleAddPortfolio}
+                style={{ padding: '10px 20px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Plus size={14} />
+                Thêm tác phẩm mới
+              </button>
+            </div>
+
+            {isLoadingProvider ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải portfolio...</div>
+            ) : !provider?.media?.images || provider.media.images.length === 0 ? (
+              <div style={{ padding: '80px 40px', textAlign: 'center', backgroundColor: 'white', border: '1px dashed var(--color-light-border)', borderRadius: 'var(--radius-md)' }}>
+                <Camera size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5, marginBottom: '16px', margin: '0 auto' }} />
+                <h4 style={{ fontSize: '16px', fontWeight: 700 }}>Chưa có tác phẩm nào trong Portfolio</h4>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '6px' }}>Bắt đầu đăng tải hình ảnh chất lượng cao để thu hút khách hàng đặt lịch chụp.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '20px' }}>
+                {provider.media.images.map((img: string, idx: number) => (
+                  <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)' }}>
+                    <img src={img.startsWith('http') ? img : getImageUrl(img)} alt="Portfolio item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', opacity: 0, transition: 'opacity 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '1'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}>
+                      <button
+                        onClick={() => handleRemovePortfolio(img)}
+                        style={{ padding: '8px 12px', backgroundColor: '#EF4444', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '12px' }}
+                      >
+                        Gỡ ảnh
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </main>
+        )}
+
+        {currentView === 'calendar' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Lịch làm việc & Chặn (UC-F01)</h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Thiết lập khung giờ làm việc cố định hàng tuần và chặn các ngày bận đột xuất.</p>
+              </div>
+            </div>
+
+            {isLoadingProvider ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải lịch trình...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
+                    KHUNG GIỜ LÀM VIỆC CỐ ĐỊNH HẰNG TUẦN
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY TRONG TUẦN</span>
+                      <select
+                        value={selectedDayOfWeek}
+                        onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))}
+                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      >
+                        {daysOfWeekVn.map((day, idx) => (
+                          <option key={idx} value={idx}>{day}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIỜ MỞ CỬA</span>
+                      <input
+                        type="text"
+                        value={startHour}
+                        onChange={(e) => setStartHour(e.target.value)}
+                        placeholder="Ví dụ: 08:00"
+                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIỜ ĐÓNG CỬA</span>
+                      <input
+                        type="text"
+                        value={endHour}
+                        onChange={(e) => setEndHour(e.target.value)}
+                        placeholder="Ví dụ: 18:00"
+                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      />
+                    </div>
+                    <button
+                      onClick={handleAddRecurringSchedule}
+                      style={{ padding: '11px 20px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                    >
+                      Lưu khung giờ
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
+                    CHẶN LỊCH NGHỈ / LỊCH BẬN ĐỘT XUẤT
+                  </h3>
+                  <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '240px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHỌN NGÀY CHẶN</span>
+                      <input
+                        type="date"
+                        value={blockedDate}
+                        onChange={(e) => setBlockedDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      />
+                    </div>
+                    <button
+                      onClick={handleBlockDate}
+                      style={{ padding: '11px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: '#EF4444', color: 'white', cursor: 'pointer' }}
+                    >
+                      Xác nhận chặn ngày bận
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
+                    LỊCH TRÌNH ĐÃ THIẾT LẬP
+                  </h3>
+                  {schedules.length === 0 ? (
+                    <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Chưa có thiết lập khung giờ nào.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {schedules.map((sch) => (
+                        <div key={sch._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '6px' }}>
+                          <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>
+                            {sch.scheduleType === 'RECURRING'
+                              ? `Mỗi tuần vào ${daysOfWeekVn[sch.dayOfWeek]}`
+                              : `Nghỉ ngày bận đột xuất: ${new Date(sch.specificDate).toLocaleDateString('vi-VN')}`}
+                          </strong>
+                          <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                            {sch.scheduleType === 'RECURRING'
+                              ? sch.workingHours?.map((h: any) => `${h.start} - ${h.end}`).join(', ')
+                              : 'CHẶN NGHỈ CẢ NGÀY'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </main>
+        )}
+
+        {currentView === 'vouchers' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Mã khuyến mãi (UC-P01)</h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Tạo các chương trình khuyến mãi, giảm giá trực tiếp theo % hoặc tiền mặt cho khách hàng.</p>
+              </div>
+            </div>
+
+            {isLoadingProvider ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải danh sách voucher...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                <form onSubmit={handleAddVoucher} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>TẠO MÃ KHUYẾN MÃI MỚI</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÃ CODE (IN HOA, VIẾT LIỀN)</span>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: SILKSTONE10"
+                        value={vCode}
+                        onChange={(e) => setVCode(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                        required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN CHƯƠNG TRÌNH KHUYẾN MÃI</span>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: Giảm giá hè rực rỡ"
+                        value={vName}
+                        onChange={(e) => setVName(e.target.value)}
+                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                        required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>LOẠI GIẢM GIÁ</span>
+                      <select
+                        value={vType}
+                        onChange={(e) => setVType(e.target.value)}
+                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      >
+                        <option value="PERCENTAGE">Giảm theo Phần trăm (%)</option>
+                        <option value="FIXED_AMOUNT">Giảm số tiền mặt cố định (đ)</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIÁ TRỊ GIẢM</span>
+                      <input
+                        type="number"
+                        value={vValue}
+                        onChange={(e) => setVValue(Number(e.target.value))}
+                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    style={{ alignSelf: 'flex-start', padding: '11px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                  >
+                    Tạo Voucher ngay
+                  </button>
+                </form>
+
+                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>DANH SÁCH VOUCHERS HOẠT ĐỘNG</h3>
+                  {vouchers.length === 0 ? (
+                    <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Chưa có mã khuyến mãi nào được tạo.</p>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      {vouchers.map((v) => (
+                        <div key={v._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+                          <div>
+                            <span style={{ padding: '4px 10px', backgroundColor: 'var(--color-dark-bg)', color: 'white', borderRadius: '4px', fontWeight: 700, fontSize: '11px', letterSpacing: '0.05em' }}>{v.code}</span>
+                            <h5 style={{ fontSize: '14px', fontWeight: 700, margin: '10px 0 4px 0' }}>{v.name}</h5>
+                            <span style={{ fontSize: '13px', color: 'var(--color-primary)', fontWeight: 700 }}>
+                              Giảm {v.discountValue.toLocaleString()}{v.discountType === 'PERCENTAGE' ? '%' : 'đ'}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteVoucher(v._id)}
+                            style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '6px' }}
+                            title="Xóa Voucher"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </main>
+        )}
+
+        {currentView === 'reviews' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá & Phản hồi (UC-H04/H05/H03)</h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Theo dõi mức độ đánh giá trung bình và trả lời các thắc mắc, phản hồi từ khách hàng.</p>
+              </div>
+            </div>
+
+            {isLoadingProvider ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải thống kê đánh giá...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-md)', padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>RATING TRUNG BÌNH</span>
+                    <strong style={{ fontSize: '36px', fontWeight: 800, color: 'var(--color-primary-dark)', margin: '8px 0' }}>{reviewsData?.averageRating || 0} / 5.0</strong>
+                    <div style={{ display: 'flex', gap: '2px', color: 'var(--color-gold)' }}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star key={s} size={14} fill={s <= Math.round(reviewsData?.averageRating || 0) ? 'currentColor' : 'none'} />
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-md)', padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TỔNG LƯỢT ĐÁNH GIÁ</span>
+                    <strong style={{ fontSize: '36px', fontWeight: 800, color: 'var(--color-text-primary)', margin: '8px 0' }}>{reviewsData?.totalReviews || 0}</strong>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Lượt nhận xét thực tế từ khách</span>
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 20px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>DANH SÁCH BÌNH LUẬN NỔI BẬT</h3>
+                  {!reviewsData?.reviews || reviewsData.reviews.length === 0 ? (
+                    <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Chưa có lượt đánh giá nào cho cửa hàng của bạn.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      {reviewsData.reviews.map((r: any) => (
+                        <div key={r._id} style={{ padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <div style={{ display: 'flex', gap: '2px', color: 'var(--color-gold)' }}>
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                  <Star key={s} size={11} fill={s <= r.rating ? 'currentColor' : 'none'} />
+                                ))}
+                              </div>
+                              <p style={{ fontSize: '14px', color: 'var(--color-text-primary)', margin: '8px 0 0 0' }}>{r.comment || 'Không có bình luận.'}</p>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={() => handleReportReview(r._id)}
+                                style={{ padding: '4px 10px', backgroundColor: '#FFF5F5', border: '1px solid #FEB2B2', borderRadius: '6px', color: '#C53030', fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <Flag size={11} />
+                                Báo cáo Spam (UC-H03)
+                              </button>
+                              <button
+                                onClick={() => { setReplyingReviewId(r._id); setReplyText(r.reply || ''); }}
+                                style={{ padding: '4px 12px', backgroundColor: 'var(--color-dark-bg)', border: 'none', borderRadius: '6px', color: 'white', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                              >
+                                Phản hồi
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Reply display */}
+                          {r.reply && (
+                            <div style={{ padding: '10px 14px', backgroundColor: 'var(--color-light-bg)', borderRadius: '6px', borderLeft: '3px solid var(--color-primary)', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}>
+                              <strong>Phản hồi của shop: </strong> {r.reply}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </main>
+        )}
+
+        {currentView === 'trust' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá khách hàng & Tín nhiệm (UC-H06)</h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Đánh giá hai chiều sau khi hoàn thành dịch vụ và tra cứu độ uy tín của khách hàng.</p>
+              </div>
+            </div>
+
+            {isLoadingProvider ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải dữ liệu...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>TRA CỨU ĐỘ TÍN NHIỆM KHÁCH HÀNG (UC-B05)</h3>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <input
+                      type="text"
+                      placeholder="Nhập mã ID khách hàng để tra cứu..."
+                      value={searchCustId}
+                      onChange={(e) => setSearchCustId(e.target.value)}
+                      style={{ flex: 1, padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                    />
+                    <button
+                      onClick={handleSearchTrustScore}
+                      style={{ padding: '11px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                    >
+                      Tra cứu tín nhiệm
+                    </button>
+                  </div>
+                  {trustScoreResult && (
+                    <div style={{ padding: '16px', backgroundColor: 'var(--color-light-bg)', borderRadius: '8px', border: '1px solid var(--color-light-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                      <div>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ĐIỂM TÍN NHIỆM TRUNG BÌNH</span>
+                        <strong style={{ display: 'block', fontSize: '24px', fontWeight: 800, color: 'var(--color-primary)', marginTop: '4px' }}>
+                          {trustScoreResult.averageRating} / 5.0
+                        </strong>
+                      </div>
+                      <span style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)' }}>Dựa trên {trustScoreResult.totalReviews} lượt đánh giá hành vi từ các đối tác.</span>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 20px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>ĐƠN HÀNG CHỜ ĐÁNH GIÁ HÀNH VI</h3>
+                  {bookingsState.length === 0 ? (
+                    <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Không có đơn đặt lịch nào khả dụng để đánh giá.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {bookingsState.map((booking) => (
+                        <div key={booking._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'white' }}>
+                          <div>
+                            <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>{booking.bookingCode}</strong>
+                            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>Mã khách hàng: {booking.customerId}</p>
+                          </div>
+                          <button
+                            onClick={() => setRatingBooking({ bookingId: booking._id, customerId: booking.customerId })}
+                            style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                          >
+                            Đánh giá khách hàng
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </main>
@@ -945,6 +1858,181 @@ export const ProviderDashboard: React.FC = () => {
 
         </form>
       </Modal>
+      {/* Review reply modal popup */}
+      {replyingReviewId && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+          <form onSubmit={handleReplyReview} style={{ width: '100%', maxWidth: '440px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>PHẢN HỒI ĐÁNH GIÁ CỦA KHÁCH HÀNG</h4>
+              <button type="button" onClick={() => setReplyingReviewId(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+            </div>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <textarea
+                style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none', resize: 'none', height: '100px', fontFamily: 'inherit' }}
+                placeholder="Nhập nội dung phản hồi nhận xét..."
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                required
+              />
+              <button
+                type="submit"
+                style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em' }}
+              >
+                GỬI PHẢN HỒI
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Report incident modal popup */}
+      {reportingOrder && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+          <form onSubmit={handleSendIncidentReport} style={{ width: '100%', maxWidth: '500px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>BÁO CÁO SỰ CỐ / HỎNG ĐỒ</h4>
+              <button type="button" onClick={() => setReportingOrder(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+            </div>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '80vh', overflowY: 'auto' }}>
+              
+              {/* Chọn sản phẩm bị hỏng */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SẢN PHẨM GẶP SỰ CỐ *</span>
+                <select
+                  value={selectedItemId}
+                  onChange={(e) => setSelectedItemId(e.target.value)}
+                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none' }}
+                  required
+                >
+                  <option value="">-- Chọn sản phẩm trong đơn hàng --</option>
+                  {(reportingOrder.items || []).map((item: any) => (
+                    <option key={item._id} value={item._id}>
+                      {item.name || 'Sản phẩm'} ({item.quantity}x - {item.unitPrice?.toLocaleString()}đ)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Loại xử lý */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>HÌNH THỨC XỬ LÝ *</span>
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                    <input
+                      type="radio"
+                      name="actionType"
+                      value="CLEANING"
+                      checked={incidentActionType === 'CLEANING'}
+                      onChange={() => setIncidentActionType('CLEANING')}
+                    />
+                    Giặt là vết bẩn (CLEANING)
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                    <input
+                      type="radio"
+                      name="actionType"
+                      value="MAINTENANCE"
+                      checked={incidentActionType === 'MAINTENANCE'}
+                      onChange={() => setIncidentActionType('MAINTENANCE')}
+                    />
+                    Sửa chữa / Đền bù rách, hỏng (MAINTENANCE)
+                  </label>
+                </div>
+              </div>
+
+              {/* Mô tả chi tiết */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÔ TẢ CHI TIẾT SỰ CỐ *</span>
+                <textarea
+                  style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none', resize: 'none', height: '80px', fontFamily: 'inherit' }}
+                  placeholder="Nhập chi tiết vết bẩn hoặc vị trí rách hỏng của sản phẩm..."
+                  value={incidentDesc}
+                  onChange={(e) => setIncidentDesc(e.target.value)}
+                  required
+                />
+              </div>
+
+              {/* Ảnh bằng chứng */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ẢNH CHỤP BẰNG CHỨNG (CÁCH NHAU BẰNG DẤU PHẨY)</span>
+                <input
+                  type="text"
+                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none' }}
+                  placeholder="Link ảnh bằng chứng 1, Link ảnh bằng chứng 2..."
+                  value={incidentEvidence}
+                  onChange={(e) => setIncidentEvidence(e.target.value)}
+                />
+              </div>
+
+              {/* Số tiền yêu cầu đền bù */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TIỀN ĐỀN BÙ YÊU CẦU *</span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)' }}>Tối đa cọc giữ đồ: {reportingOrder.depositTotal?.toLocaleString()}đ</span>
+                </div>
+                <input
+                  type="number"
+                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none' }}
+                  placeholder="Nhập số tiền yêu cầu đền bù..."
+                  value={incidentAmount}
+                  onChange={(e) => setIncidentAmount(Number(e.target.value))}
+                  min={0}
+                  max={reportingOrder.depositTotal}
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em', marginTop: '8px' }}
+              >
+                GỬI BÁO CÁO SỰ CỐ
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Rate customer modal popup */}
+      {ratingBooking && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+          <form onSubmit={handleRateCustomer} style={{ width: '100%', maxWidth: '440px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>ĐÁNH GIÁ KHÁCH HÀNG (TWO-WAY REVIEW)</h4>
+              <button type="button" onClick={() => setRatingBooking(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+            </div>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>MỨC ĐỘ UY TÍN / TÍN NHIỆM</span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setCRating(star)}
+                      style={{ background: 'none', border: 'none', color: 'var(--color-gold)', cursor: 'pointer', padding: '4px' }}
+                    >
+                      <Star size={24} fill={star <= cRating ? 'currentColor' : 'none'} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <textarea
+                style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none', resize: 'none', height: '80px', fontFamily: 'inherit' }}
+                placeholder="Ghi nhận xét về khách hàng (ví dụ: trả trang phục đúng hạn, giữ gìn sạch sẽ)..."
+                value={cComment}
+                onChange={(e) => setCComment(e.target.value)}
+              />
+              <button
+                type="submit"
+                style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em' }}
+              >
+                XÁC NHẬN ĐÁNH GIÁ KHÁCH
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
     </div>
   );

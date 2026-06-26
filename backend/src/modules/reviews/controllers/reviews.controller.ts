@@ -72,16 +72,17 @@ export class RateCustomerDto {
 }
 
 @Controller('reviews')
-@UseGuards(JwtAuthGuard)
 export class ReviewsController {
   constructor(private readonly reviewsService: ReviewsService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard)
   async create(@CurrentUser() user: AuthUser, @Body() dto: CreateReviewDto) {
     return this.reviewsService.createReview(user.sub, dto);
   }
 
   @Post(':id/reply')
+  @UseGuards(JwtAuthGuard)
   async reply(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -91,11 +92,13 @@ export class ReviewsController {
   }
 
   @Post(':id/report')
+  @UseGuards(JwtAuthGuard)
   async report(@Param('id') id: string, @Body() dto: ReportReviewDto) {
     return this.reviewsService.reportReview(id, dto.reason);
   }
 
   @Get('stats')
+  @UseGuards(JwtAuthGuard)
   async getStats(@CurrentUser() user: AuthUser) {
     return this.reviewsService.getReviewStats(user.sub);
   }
@@ -105,12 +108,19 @@ export class ReviewsController {
     return this.reviewsService.getReviewsForProvider(providerId);
   }
 
+  @Get('item/:itemId')
+  async getByItem(@Param('itemId') itemId: string) {
+    return this.reviewsService.getReviewsForItem(itemId);
+  }
+
   @Post('customer')
+  @UseGuards(JwtAuthGuard)
   async rateCust(@CurrentUser() user: AuthUser, @Body() dto: RateCustomerDto) {
     return this.reviewsService.rateCustomer(user.sub, dto);
   }
 
   @Get('customer/:customerId/trust')
+  @UseGuards(JwtAuthGuard)
   async getTrustScore(@Param('customerId') customerId: string) {
     return this.reviewsService.getCustomerTrustScore(customerId);
   }

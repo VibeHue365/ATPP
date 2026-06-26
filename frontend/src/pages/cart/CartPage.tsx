@@ -429,7 +429,7 @@ export const CartPage: React.FC = () => {
 
       const paymentRes: any = await httpClient.post('/payments/create-link', {
         bookingId: bookingRes._id,
-        purpose: 'DEPOSIT_PAYMENT',
+        purpose: 'FULL_PAYMENT',
       });
 
       if (paymentRes.payos && paymentRes.payos.checkoutUrl) {

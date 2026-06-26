@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
@@ -37,6 +38,59 @@ export const ProfilePage: React.FC = () => {
 
   // Bookings list state
   const [bookings, setBookings] = useState<any[]>([]);
+
+  // Incident & Dispute States for selected booking
+  const [bookingIncident, setBookingIncident] = useState<any | null>(null);
+
+  useEffect(() => {
+    const fetchIncident = async () => {
+      if (activeDetailBooking) {
+        try {
+          const inc = await httpClient.get(`/api/disputes/incidents/booking/${activeDetailBooking._id}`);
+          setBookingIncident(inc);
+        } catch (err) {
+          console.error('Không thể tải thông tin sự cố:', err);
+          setBookingIncident(null);
+        }
+      } else {
+        setBookingIncident(null);
+      }
+    };
+    fetchIncident();
+  }, [activeDetailBooking]);
+
+  const handleIncidentResponse = async (agree: boolean) => {
+    if (!bookingIncident) return;
+    const actionText = agree ? 'đồng ý đền bù' : 'từ chối đền bù và yêu cầu Admin giải quyết';
+    const result = await Swal.fire({
+      title: agree ? 'Đồng ý đền bù?' : 'Yêu cầu khiếu nại?',
+      text: `Bạn có chắc chắn muốn ${actionText} số tiền ${bookingIncident.requestedAmount?.toLocaleString()}đ không?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: agree ? '#27AE60' : '#C0392B',
+      cancelButtonColor: '#9CA3AF',
+      confirmButtonText: agree ? 'Đồng ý' : 'Khiếu nại',
+      cancelButtonText: 'Quay lại',
+      background: 'white',
+      customClass: {
+        popup: 'font-body',
+      }
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const endpoint = agree 
+          ? `/api/disputes/incidents/${bookingIncident._id}/agree` 
+          : `/api/disputes/incidents/${bookingIncident._id}/disagree`;
+        await httpClient.post(endpoint, {});
+        toast.success(agree ? 'Đã chấp nhận đền bù thành công!' : 'Đã gửi yêu cầu tranh chấp lên Admin!');
+        setActiveDetailBooking(null);
+        fetchBookings();
+      } catch (err: any) {
+        toast.error(err.message || 'Thao tác thất bại');
+      }
+    }
+  };
 
   // Bio & Location state loaded from local storage for persistency
   const [bio, setBio] = useState(() => {
@@ -533,6 +587,103 @@ export const ProfilePage: React.FC = () => {
                 );
               })}
             </div>
+
+            {/* Incident / Dispute section */}
+            {bookingIncident && (
+              <div style={{
+                backgroundColor: '#FFF5F5',
+                border: '1px solid #FEB2B2',
+                borderRadius: '8px',
+                padding: '16px',
+                marginTop: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #FED7D7', paddingBottom: '8px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#C53030', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <AlertTriangle size={16} /> BÁO CÁO SỰ CỐ / HỎNG ĐỒ
+                  </span>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: bookingIncident.status === 'PENDING_CUSTOMER' ? '#ED8936' : bookingIncident.status === 'ACCEPTED' ? '#48BB78' : bookingIncident.status === 'DISPUTED' ? '#E53E3E' : '#4A5568',
+                    color: 'white'
+                  }}>
+                    {bookingIncident.status === 'PENDING_CUSTOMER' ? 'CHỜ PHẢN HỒI' : bookingIncident.status === 'ACCEPTED' ? 'ĐÃ ĐỒNG Ý' : bookingIncident.status === 'DISPUTED' ? 'ĐANG TRANH CHẤP' : 'ĐÃ GIẢI QUYẾT'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '13px', color: '#2D3748', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span>Sản phẩm gặp sự cố: <strong>{bookingIncident.bookingItemId?.name || bookingIncident.productId?.name || 'Sản phẩm'}</strong></span>
+                  <span>Hình thức xử lý: <strong>{bookingIncident.bookingItemId?.actionType === 'MAINTENANCE' || bookingIncident.actionType === 'MAINTENANCE' ? 'Sửa chữa / Bảo dưỡng (MAINTENANCE)' : 'Giặt là / Tẩy rửa (CLEANING)'}</strong></span>
+                  <span>Mô tả sự cố: <em style={{ color: '#4A5568' }}>"{bookingIncident.description}"</em></span>
+                  <span>Số tiền đền bù yêu cầu: <strong style={{ color: '#C53030', fontSize: '15px' }}>{bookingIncident.requestedAmount?.toLocaleString('vi-VN')}đ</strong></span>
+                  
+                  {bookingIncident.evidencePhotos && bookingIncident.evidencePhotos.length > 0 && (
+                    <div style={{ marginTop: '8px' }}>
+                      <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#4A5568', marginBottom: '4px' }}>Hình ảnh bằng chứng:</span>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {bookingIncident.evidencePhotos.map((photo: string, idx: number) => (
+                          <a key={idx} href={photo} target="_blank" rel="noopener noreferrer">
+                            <img src={photo} alt={`Bằng chứng ${idx + 1}`} style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #FEB2B2' }} />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {bookingIncident.adminNotes && (
+                    <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#EDF2F7', borderRadius: '6px', borderLeft: '4px solid #4A5568' }}>
+                      <span style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#2D3748' }}>Quyết định của Admin:</span>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#4A5568' }}>{bookingIncident.adminNotes}</p>
+                    </div>
+                  )}
+
+                  {bookingIncident.status === 'PENDING_CUSTOMER' && (
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '12px', borderTop: '1px dashed #FED7D7', paddingTop: '12px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleIncidentResponse(true)}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          backgroundColor: '#38A169',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          textAlign: 'center'
+                        }}
+                      >
+                        ĐỒNG Ý ĐỀN BÙ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleIncidentResponse(false)}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          backgroundColor: '#E53E3E',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          textAlign: 'center'
+                        }}
+                      >
+                        KHIẾU NẠI / TỪ CHỐI
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Financial Summary */}
             <div style={{ marginLeft: 'auto', width: '320px', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #EAEAE8', paddingTop: '12px' }}>

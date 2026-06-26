@@ -29,6 +29,7 @@ import NotFoundPage from '../pages/errors/NotFoundPage';
 import OnboardingPage from '../pages/onboarding/OnboardingPage';
 import ProviderDashboard from '../pages/providerdashboard/ProviderDashboard';
 import BecomeProviderPage from '../pages/provider/BecomeProviderPage';
+import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
 
 export const AppRouter: React.FC = () => {
   return (
@@ -71,6 +72,7 @@ export const AppRouter: React.FC = () => {
           <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
           <Route path={ROUTES.PROVIDER_REGISTER} element={<BecomeProviderPage />} />
+          <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardPage />} />
         </Route>
       </Route>
 

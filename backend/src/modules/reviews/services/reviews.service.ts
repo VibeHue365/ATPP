@@ -7,6 +7,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Review, CustomerReview } from '../schemas/review.schema';
 import { Booking } from '../../bookings/schemas/booking.schema';
+import { BookingItem } from '../../bookings/schemas/booking-item.schema';
 import { Product } from '../../products/schemas/product.schema';
 import { PhotographyPackage } from '../../products/schemas/photography-package.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
@@ -48,6 +49,7 @@ export class ReviewsService {
     @InjectModel(CustomerReview.name)
     private readonly customerReviewModel: Model<CustomerReview>,
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
+    @InjectModel(BookingItem.name) private readonly bookingItemModel: Model<BookingItem>,
     @InjectModel(Product.name) private readonly productModel: Model<Product>,
     @InjectModel(PhotographyPackage.name)
     private readonly photoPackageModel: Model<PhotographyPackage>,
@@ -174,6 +176,30 @@ export class ReviewsService {
   async getReviewsForProvider(providerIdStr: string): Promise<Review[]> {
     return this.reviewModel
       .find({ providerId: new Types.ObjectId(providerIdStr) })
+      .populate('customerId')
+      .sort({ createdAt: -1 });
+  }
+
+  async getReviewsForItem(itemIdStr: string): Promise<Review[]> {
+    const itemId = new Types.ObjectId(itemIdStr);
+    
+    // Find all BookingItem IDs referencing this productId or photographyPackageId
+    const bookingItems = await this.bookingItemModel.find({
+      $or: [
+        { productId: itemId },
+        { photographyPackageId: itemId }
+      ]
+    }).select('_id');
+    
+    const bookingItemIds = bookingItems.map(item => item._id);
+    
+    if (bookingItemIds.length === 0) {
+      return [];
+    }
+    
+    return this.reviewModel
+      .find({ bookingItemId: { $in: bookingItemIds } })
+      .populate('customerId')
       .sort({ createdAt: -1 });
   }
 
@@ -244,7 +270,22 @@ export class ReviewsService {
   }
 
   private async updateProductRating(productId: Types.ObjectId): Promise<void> {
-    const reviews = await this.reviewModel.find({ bookingItemId: productId }); // Simplified mapping
+    const bookingItems = await this.bookingItemModel.find({ productId }).select('_id');
+    const bookingItemIds = bookingItems.map(item => item._id);
+    if (bookingItemIds.length === 0) {
+      await this.productModel.updateOne(
+        { _id: productId },
+        {
+          $set: {
+            'rating.averageRating': 0,
+            'rating.totalReviews': 0,
+          },
+        },
+      );
+      return;
+    }
+
+    const reviews = await this.reviewModel.find({ bookingItemId: { $in: bookingItemIds } });
     const total = reviews.length;
     const average =
       total > 0 ? reviews.reduce((acc, r) => acc + r.rating, 0) / total : 0;
@@ -263,7 +304,22 @@ export class ReviewsService {
   private async updatePhotoPackageRating(
     packageId: Types.ObjectId,
   ): Promise<void> {
-    const reviews = await this.reviewModel.find({ bookingItemId: packageId }); // Simplified mapping
+    const bookingItems = await this.bookingItemModel.find({ photographyPackageId: packageId }).select('_id');
+    const bookingItemIds = bookingItems.map(item => item._id);
+    if (bookingItemIds.length === 0) {
+      await this.photoPackageModel.updateOne(
+        { _id: packageId },
+        {
+          $set: {
+            'rating.averageRating': 0,
+            'rating.totalReviews': 0,
+          },
+        },
+      );
+      return;
+    }
+
+    const reviews = await this.reviewModel.find({ bookingItemId: { $in: bookingItemIds } });
     const total = reviews.length;
     const average =
       total > 0 ? reviews.reduce((acc, r) => acc + r.rating, 0) / total : 0;

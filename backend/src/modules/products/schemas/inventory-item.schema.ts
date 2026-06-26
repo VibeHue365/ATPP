@@ -15,6 +15,7 @@ export enum InventoryItemStatus {
   Available = 'AVAILABLE',
   Rented = 'RENTED',
   Maintenance = 'MAINTENANCE',
+  Cleaning = 'CLEANING',
 }
 
 @Schema({ collection: 'inventory_items', timestamps: true })

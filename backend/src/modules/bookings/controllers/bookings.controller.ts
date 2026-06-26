@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards, UseInterceptors, UploadedFile, BadRequestException, UnsupportedMediaTypeException } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards, UseInterceptors, UploadedFile, BadRequestException, UnsupportedMediaTypeException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -122,10 +122,20 @@ export class BookingsController {
     return this.bookingsService.getBookingById(id);
   }
 
-  /** POST /bookings/:id/complete hoặc POST /api/bookings/:id/complete */
+  /** POST /bookings/:id/complete */
   @Post(':id/complete')
   async complete(@Param('id') id: string) {
     return this.bookingsService.completeBooking(id);
+  }
+
+  /** PATCH /bookings/:id/status — Provider cập nhật trạng thái đơn hàng */
+  @Patch(':id/status')
+  async updateStatus(
+    @Param('id') id: string,
+    @Body() body: { status: string; note?: string },
+  ) {
+    if (!body?.status) throw new BadRequestException('Thiếu trường status');
+    return this.bookingsService.updateBookingStatus(id, body.status, body.note);
   }
 
   /** POST /bookings/:id/cancel hoặc POST /api/bookings/:id/cancel */

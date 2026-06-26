@@ -99,7 +99,7 @@ export const BookingCheckoutModal: React.FC<BookingCheckoutModalProps> = ({
       // 2. Create PayOS Simulated Payment Link
       const paymentRes: any = await httpClient.post('/payments/create-link', {
         bookingId: bookingRes._id,
-        purpose: 'DEPOSIT_PAYMENT',
+        purpose: 'FULL_PAYMENT',
       });
 
       if (paymentRes.payos && paymentRes.payos.checkoutUrl) {

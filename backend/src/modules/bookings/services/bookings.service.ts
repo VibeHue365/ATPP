@@ -230,7 +230,7 @@ export class BookingsService {
           );
         }
         unitPrice = pkg.price;
-        depositAmount = Math.round(pkg.price * 0.2);
+        depositAmount = 0;
         providerId = pkg.providerId;
         itemType = BookingItemType.PhotographyPackage;
       } else {
@@ -298,8 +298,11 @@ export class BookingsService {
       }
     }
 
-    const grandTotal = Math.max(subTotal - discountAmount + travelFee, 0);
-    const depositTotal = Math.round(grandTotal * 0.2);
+    let depositTotal = 0;
+    for (const item of itemDetails) {
+      depositTotal += (item.depositAmount || 0) * (item.quantity || 1);
+    }
+    const grandTotal = Math.max(subTotal - discountAmount + travelFee, 0) + depositTotal;
 
     const booking = (await this.bookingModel.create({
       bookingCode,
@@ -599,7 +602,7 @@ export class BookingsService {
 
     const unitPrice = pkg.price;
     const subTotal = pkg.price;
-    const depositTotal = Math.round(pkg.price * 0.3); // 30% cọc
+    const depositTotal = 0;
     const grandTotal = pkg.price;
 
     let priceVersion = await this.priceVersionModel
@@ -730,7 +733,9 @@ export class BookingsService {
       const items = await this.bookingItemModel.find({
         bookingId: booking._id,
         providerId: provider._id,
-      });
+      })
+      .populate('productId')
+      .populate('photographyPackageId');
       results.push({ ...booking.toObject(), items });
     }
     return results;
@@ -765,6 +770,43 @@ export class BookingsService {
 
     return booking;
   }
+
+  /** Provider cập nhật trạng thái đơn hàng (CONFIRMED, PICKUP_PENDING, PICKED_UP, v.v.) */
+  async updateBookingStatus(
+    bookingIdStr: string,
+    newStatus: string,
+    note?: string,
+  ): Promise<BookingDocument> {
+    const booking = await this.bookingModel.findById(bookingIdStr);
+    if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
+
+    // Nếu chuyển sang COMPLETED → dùng completeBooking để trigger settlement
+    if (newStatus === BookingStatus.Completed) {
+      return this.completeBooking(bookingIdStr);
+    }
+
+    // Nếu chuyển sang CANCELLED → dùng cancelBooking để trigger refund
+    if (newStatus === BookingStatus.Cancelled) {
+      return this.cancelBooking(bookingIdStr, 'provider', [], note || 'Provider hủy đơn');
+    }
+
+    const validStatuses = Object.values(BookingStatus);
+    if (!validStatuses.includes(newStatus as BookingStatus)) {
+      throw new BadRequestException(`Trạng thái không hợp lệ: ${newStatus}`);
+    }
+
+    booking.status = newStatus as BookingStatus;
+    booking.statusTimeline.push({
+      status: newStatus as BookingStatus,
+      changedAt: new Date(),
+      note: note || `Cập nhật trạng thái bởi nhà cung cấp`,
+    });
+
+    await booking.save();
+    return booking;
+  }
+
+
 
   /** Hủy đơn → trigger hoàn tiền cọc (PaymentsService.refundDeposit) */
   async cancelBooking(
@@ -864,13 +906,13 @@ export class BookingsService {
         const diffInMs = earliestStartTime.getTime() - now.getTime();
         const diffInHours = diffInMs / (1000 * 60 * 60);
 
-        if (diffInHours >= 24) {
+        if (diffInHours >= 72) {
           isFreeCancel = true;
         } else {
-          // Kiểm tra xem đơn hàng có được tạo trong vòng 24 giờ trước giờ bắt đầu hay không (last-minute booking)
+          // Kiểm tra xem đơn hàng có được tạo trong vòng 72 giờ trước giờ bắt đầu hay không (last-minute booking)
           const createdAtDate = new Date((booking as any).createdAt || now);
           const startMinusCreatedHours = (earliestStartTime.getTime() - createdAtDate.getTime()) / (1000 * 60 * 60);
-          if (startMinusCreatedHours < 24) {
+          if (startMinusCreatedHours < 72) {
             const minsSinceCreation = (now.getTime() - createdAtDate.getTime()) / (1000 * 60);
             if (diffInHours >= 2) {
               // Hạn ân hạn là 60 phút
@@ -892,7 +934,7 @@ export class BookingsService {
           } else {
             // Hủy trễ bình thường
             isFreeCancel = false;
-            penaltyReason = 'Hủy đơn trễ (dưới 24 giờ trước giờ hẹn).';
+            penaltyReason = 'Hủy đơn trễ (dưới 72 giờ trước giờ hẹn).';
           }
         }
       }
@@ -900,12 +942,82 @@ export class BookingsService {
 
     if (isProvider) {
       isFreeCancel = true;
+      // Provider tự hủy -> tăng violationCount của Provider đó
+      await this.bookingModel.db
+        .model('Provider')
+        .findOneAndUpdate(
+          { userId: new Types.ObjectId(userId) },
+          { $inc: { violationCount: 1 } }
+        );
     }
 
+    let penaltyAmount = 0;
     if (isFreeCancel) {
-      refundAmount = booking.pricingSummary?.depositTotal || 0;
+      refundAmount = booking.pricingSummary?.grandTotal || 0;
     } else {
-      refundAmount = 0;
+      // Khách hủy trễ -> phạt cọc dịch vụ, hoàn cọc giữ đồ
+      const items = await this.bookingItemModel.find({ bookingId: booking._id });
+      for (const item of items) {
+        if (item.itemType === 'PRODUCT') {
+          penaltyAmount += item.unitPrice * item.quantity; // 100% tiền thuê
+        } else {
+          penaltyAmount += Math.round(item.unitPrice * 0.3) * item.quantity; // 30% tiền chụp
+        }
+      }
+
+      // Không cho phép tiền phạt vượt quá subTotal
+      penaltyAmount = Math.min(penaltyAmount, booking.pricingSummary.subTotal);
+
+      // Chuyển khoản trực tiếp số tiền phạt này cho các Provider tương ứng
+      const providerItems = new Map<string, any[]>();
+      for (const item of items) {
+        const pId = item.providerId.toString();
+        if (!providerItems.has(pId)) providerItems.set(pId, []);
+        providerItems.get(pId)!.push(item);
+      }
+
+      for (const [pIdStr, pItems] of providerItems.entries()) {
+        let providerPenalty = 0;
+        for (const item of pItems) {
+          if (item.itemType === 'PRODUCT') {
+            providerPenalty += item.unitPrice * item.quantity;
+          } else {
+            providerPenalty += Math.round(item.unitPrice * 0.3) * item.quantity;
+          }
+        }
+
+        if (providerPenalty > 0) {
+          const provider = await this.bookingModel.db
+            .model('Provider')
+            .findById(new Types.ObjectId(pIdStr));
+          if (provider) {
+            let bankName = 'VietinBank';
+            let accountNumber = '1029384756';
+            let accountHolder = 'PROVIDER STUDIO';
+
+            if (provider.paymentAccounts && provider.paymentAccounts.length > 0) {
+              const activeAccount = provider.paymentAccounts.find((a: any) => a.isDefault) || provider.paymentAccounts[0];
+              bankName = activeAccount.bankName || bankName;
+              accountNumber = activeAccount.accountNumberMasked
+                ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
+                : accountNumber;
+              accountHolder = activeAccount.accountHolder || accountHolder;
+            }
+
+            const transferRef = `CANCEL_PENALTY_${booking.bookingCode}`;
+            await this.paymentsService.executeAutoTransfer(
+              bankName,
+              accountNumber,
+              accountHolder,
+              providerPenalty,
+              transferRef,
+            );
+          }
+        }
+      }
+
+      // Khách nhận lại phần tiền cọc giữ đồ và phần dư tiền dịch vụ (nếu có)
+      refundAmount = Math.max((booking.pricingSummary?.grandTotal || 0) - penaltyAmount, 0);
     }
 
     booking.status = BookingStatus.Cancelled;
@@ -920,8 +1032,8 @@ export class BookingsService {
       status: BookingStatus.Cancelled,
       changedAt: now,
       note: isFreeCancel 
-        ? `Đơn hàng đã được hủy thành công. Hoàn cọc 100% (${refundAmount.toLocaleString('vi-VN')}đ).` 
-        : `Đơn hàng đã bị hủy kèm mức phạt mất cọc do: ${penaltyReason}`,
+        ? `Đơn hàng đã được hủy thành công. Hoàn tiền 100% (${refundAmount.toLocaleString('vi-VN')}đ).` 
+        : `Đơn hàng đã bị hủy. Khách bị phạt mất cọc dịch vụ (${penaltyAmount.toLocaleString('vi-VN')}đ). Hoàn cọc giữ đồ & số dư (${refundAmount.toLocaleString('vi-VN')}đ). Lý do phạt: ${penaltyReason}`,
       changedBy: userId ? new Types.ObjectId(userId) : null,
     });
 
@@ -933,10 +1045,10 @@ export class BookingsService {
       { status: BookingScheduleStatus.Cancelled }
     );
 
-    // Kích hoạt hoàn tiền cọc nếu được phép và có số tiền cọc
-    if (isFreeCancel && refundAmount > 0) {
+    // Kích hoạt hoàn tiền cọc / hoàn tiền dịch vụ cho khách hàng
+    if (refundAmount > 0) {
       try {
-        await this.paymentsService.refundDeposit(booking._id.toString());
+        await this.paymentsService.refundDeposit(booking._id.toString(), refundAmount);
       } catch (err) {
         console.error('PaymentsService.refundDeposit failed during cancelBooking:', err);
       }

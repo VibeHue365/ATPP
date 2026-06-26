@@ -169,6 +169,9 @@ export class Provider {
 
   @Prop({ type: Types.ObjectId, ref: 'User', default: null })
   approvedBy?: Types.ObjectId | null;
+
+  @Prop({ type: Number, default: 0 })
+  violationCount: number;
 }
 
 export const ProviderSchema = SchemaFactory.createForClass(Provider);
