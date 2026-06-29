@@ -31,8 +31,15 @@ class Booking {
     return Booking(
       id: json['_id'] ?? json['id'] ?? '',
       bookingCode: json['bookingCode'] ?? '',
-      customerId: json['customerId'] ?? '',
-      providerIds: List<String>.from(json['providerIds'] ?? []),
+      customerId: json['customerId'] is Map
+          ? (json['customerId']['_id'] ?? json['customerId']['id'] ?? '').toString()
+          : (json['customerId'] ?? '').toString(),
+      providerIds: List<String>.from((json['providerIds'] ?? []).map((x) {
+        if (x is Map) {
+          return (x['_id'] ?? x['id'] ?? '').toString();
+        }
+        return x.toString();
+      })),
       bookingType: json['bookingType'] ?? 'AODAI_RENTAL',
       status: json['status'] ?? 'DRAFT',
       pricingSummary: BookingPricingSummary.fromJson(json['pricingSummary'] ?? {}),
@@ -41,7 +48,9 @@ class Booking {
       items: json['items'] != null
           ? List<BookingItem>.from(json['items'].map((x) => BookingItem.fromJson(x)))
           : [],
-      contractId: json['contractId'],
+      contractId: json['contractId'] is Map
+          ? (json['contractId']['_id'] ?? json['contractId']['id'] ?? '').toString()
+          : json['contractId']?.toString(),
       createdAt: json['createdAt'],
     );
   }
@@ -170,10 +179,16 @@ class BookingItem {
     return BookingItem(
       id: json['_id'] ?? json['id'] ?? '',
       bookingId: json['bookingId'] ?? '',
-      providerId: json['providerId'] ?? '',
+      providerId: json['providerId'] is Map
+          ? (json['providerId']['_id'] ?? json['providerId']['id'] ?? '').toString()
+          : (json['providerId'] ?? '').toString(),
       itemType: json['itemType'] ?? 'PRODUCT',
-      productId: json['productId'],
-      photographyPackageId: json['photographyPackageId'],
+      productId: json['productId'] is Map
+          ? (json['productId']['_id'] ?? json['productId']['id'] ?? '').toString()
+          : json['productId']?.toString(),
+      photographyPackageId: json['photographyPackageId'] is Map
+          ? (json['photographyPackageId']['_id'] ?? json['photographyPackageId']['id'] ?? '').toString()
+          : json['photographyPackageId']?.toString(),
       unitPrice: (json['unitPrice'] ?? 0.0).toDouble(),
       depositAmount: (json['depositAmount'] ?? 0.0).toDouble(),
       quantity: json['quantity'] ?? 1,

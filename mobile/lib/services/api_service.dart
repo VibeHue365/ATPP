@@ -150,9 +150,16 @@ class ApiService {
         'bookingId': bookingId,
         'purpose': purpose,
       });
-      return response.data['checkoutUrl'] ?? response.data['paymentUrl'] ?? '';
+      if (response.data != null && response.data['payos'] != null && response.data['payos'] is Map) {
+        return (response.data['payos']['checkoutUrl'] ?? '').toString();
+      }
+      return (response.data['checkoutUrl'] ?? response.data['paymentUrl'] ?? '').toString();
     } on DioException catch (e) {
-      throw e.response?.data?['message'] ?? 'Failed to generate payment link';
+      final msg = e.response?.data?['message'];
+      if (msg is List) {
+        throw msg.join(', ');
+      }
+      throw msg ?? 'Failed to generate payment link';
     }
   }
 

@@ -101,8 +101,8 @@ class _CheckoutViewState extends State<CheckoutView> {
         customRequests: _notesController.text.trim(),
       );
 
-      // Now create payment link for deposit
-      final paymentUrl = await bp.getPaymentLink(booking.id, 'DEPOSIT_PAYMENT');
+      // Now create payment link for full payment
+      final paymentUrl = await bp.getPaymentLink(booking.id, 'FULL_PAYMENT');
       if (paymentUrl.isNotEmpty && mounted) {
         // Open webview
         Navigator.push(
@@ -112,7 +112,7 @@ class _CheckoutViewState extends State<CheckoutView> {
               paymentUrl: paymentUrl,
               onSuccess: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Thanh toán tiền cọc thành công!')),
+                  const SnackBar(content: Text('Thanh toán đơn hàng thành công!')),
                 );
                 Navigator.pop(context); // Close webview
                 Navigator.pop(context); // Close checkout
@@ -360,7 +360,7 @@ class _CheckoutViewState extends State<CheckoutView> {
                 ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : ElevatedButton(
                     onPressed: _checkout,
-                    child: const Text('XÁC NHẬN VÀ THANH TOÁN ĐẶT CỌC'),
+                    child: const Text('XÁC NHẬN VÀ THANH TOÁN'),
                   ),
             const SizedBox(height: 24),
           ],
