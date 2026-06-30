@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart, Star, ChevronDown, Sparkles, ShoppingCart, Settings } from 'lucide-react';
+import { Heart, Star, ChevronDown, Sparkles, ShoppingCart, Settings, Search } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
 import { API_BASE_URL } from '../../config/env';
 import { calculateRecommendedSize } from '../../utils/sizeHelper';
+import { useAuth } from '../../features/auth/hooks/useAuth';
+import { useToast } from '../../components/feedback/Toast';
+import Swal from 'sweetalert2';
 
 const getImageUrl = (url: string) => {
   if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
@@ -41,7 +44,10 @@ interface FilterState {
   colors: string[];
   sizes: string[];
   materials: string[];
-  priceRange: number;
+  minPrice: string;
+  maxPrice: string;
+  minRating: string;
+  search: string;
 }
 
 const translateMaterial = (mat: string): string => {
@@ -56,28 +62,48 @@ const translateMaterial = (mat: string): string => {
 
 export const AoDaiListingPage: React.FC = () => {
   const navigate = useNavigate();
+  const toast = useToast();
+  const { user, toggleFavorite: apiToggleFavorite } = useAuth();
+
   const [products, setProducts] = useState<ProductFromDb[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductFromDb[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters State
+  // Search and range input states (to allow free typing before apply)
+  const [searchVal, setSearchVal] = useState<string>('');
+  const [minPriceVal, setMinPriceVal] = useState<string>('');
+  const [maxPriceVal, setMaxPriceVal] = useState<string>('');
+
+  // Filters State passed to API
   const [filters, setFilters] = useState<FilterState>({
     colors: [],
     sizes: [],
     materials: [],
-    priceRange: 10000000,
+    minPrice: '',
+    maxPrice: '',
+    minRating: '',
+    search: '',
   });
 
   const [sortOption, setSortOption] = useState<string>('newest');
   const [favorites, setFavorites] = useState<string[]>([]);
-  
-  // Onboarding & Preferences state
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const [matchMySize, setMatchMySize] = useState<boolean>(false);
   const [recommendMyGu, setRecommendMyGu] = useState<boolean>(false);
 
-  // Dynamically derive available filter options from the fetched database products
+  // Sync favorites with user context
+  useEffect(() => {
+    if (user?.favorites) {
+      const favIds = user.favorites
+        .filter((f: any) => f.targetType === 'PRODUCT' || f.targetType === 'Product')
+        .map((f: any) => f.targetId.toString());
+      setFavorites(favIds);
+    } else {
+      setFavorites([]);
+    }
+  }, [user]);
+
+  // Derive static filter catalogs from ALL products loaded once
   const availableColors = React.useMemo(() => {
     const colorsSet = new Set<string>();
     products.forEach((p) => {
@@ -127,128 +153,112 @@ export const AoDaiListingPage: React.FC = () => {
     }));
   }, [products]);
 
+  // Load static catalog on mount
   useEffect(() => {
-    const fetchProducts = async () => {
+    const fetchAllProducts = async () => {
       try {
-        setLoading(true);
         const data = await httpClient.get<ProductFromDb[]>('/products');
         setProducts(data);
-        setFilteredProducts(data);
+      } catch (err) {
+        console.error('Lỗi tải danh mục gốc:', err);
+      }
+    };
+    fetchAllProducts();
+  }, []);
+
+  // Sync Match My Size setting if user is logged in
+  useEffect(() => {
+    if (user?.hasCompletedOnboarding && user?.preferences?.sizeInfo?.preferredSize) {
+      setMatchMySize(true);
+    }
+  }, [user]);
+
+  // Fetch filtered products from backend API when filters or sorting changes
+  useEffect(() => {
+    const fetchFiltered = async () => {
+      try {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (filters.search) params.append('search', filters.search);
+        if (filters.minPrice) params.append('minPrice', filters.minPrice);
+        if (filters.maxPrice) params.append('maxPrice', filters.maxPrice);
+        if (filters.minRating) params.append('minRating', filters.minRating);
+        if (filters.colors.length > 0) params.append('colors', filters.colors.join(','));
+        if (filters.sizes.length > 0) params.append('sizes', filters.sizes.join(','));
+        if (filters.materials.length > 0) params.append('materials', filters.materials.join(','));
+
+        const data = await httpClient.get<ProductFromDb[]>(`/products?${params.toString()}`);
+        
+        let result = [...data];
+
+        // Apply personal size recommendation locally on top of filtered results
+        if (matchMySize && user?.preferences?.sizeInfo) {
+          const sizeInfo = user.preferences.sizeInfo;
+          const recommended = calculateRecommendedSize(sizeInfo.height, sizeInfo.weight);
+          let sizeToMatch = (recommended || sizeInfo.preferredSize || '').toUpperCase();
+          
+          if (sizeToMatch === 'XXL' && availableSizes.length > 0 && !availableSizes.includes('XXL')) {
+            if (availableSizes.includes('XL')) {
+              sizeToMatch = 'XL';
+            }
+          }
+
+          if (sizeToMatch) {
+            result = result.filter((p) =>
+              p.sizes.some((size) => size.toUpperCase() === sizeToMatch)
+            );
+          }
+        }
+
+        // Apply personal style recommendations locally
+        if (recommendMyGu && user?.preferences) {
+          const prefs = user.preferences;
+          if (prefs.favoriteColors && prefs.favoriteColors.length > 0) {
+            const favColors = prefs.favoriteColors.map((c: string) => c.toUpperCase());
+            const expandedColors = new Set<string>();
+            favColors.forEach((colorTone: string) => {
+              const mapped = TONE_GROUP_TO_COLORS[colorTone];
+              if (mapped) {
+                mapped.forEach(c => expandedColors.add(c));
+              } else {
+                expandedColors.add(colorTone);
+              }
+            });
+
+            if (expandedColors.size > 0) {
+              result = result.filter((p) =>
+                p.colors.some((color) => expandedColors.has(color.toUpperCase()))
+              );
+            }
+          }
+          if (prefs.preferredAoDaiStyles && prefs.preferredAoDaiStyles.length > 0) {
+            const favStyles = prefs.preferredAoDaiStyles.map((s: string) => s.toUpperCase());
+            result = result.filter((p) =>
+              favStyles.includes((p.style || '').toUpperCase())
+            );
+          }
+        }
+
+        // Apply sorting
+        if (sortOption === 'price-asc') {
+          result.sort((a, b) => a.basePrice - b.basePrice);
+        } else if (sortOption === 'price-desc') {
+          result.sort((a, b) => b.basePrice - a.basePrice);
+        } else if (sortOption === 'rating') {
+          result.sort((a, b) => b.rating.averageRating - a.rating.averageRating);
+        }
+
+        setFilteredProducts(result);
       } catch (err: any) {
-        console.error('Lỗi lấy danh sách sản phẩm:', err);
+        console.error('Lỗi khi lọc sản phẩm từ API:', err);
         setError(err.message || 'Không thể tải sản phẩm.');
       } finally {
         setLoading(false);
       }
     };
 
-    const fetchUser = async () => {
-      try {
-        const user = await httpClient.get<any>('/users/me');
-        setCurrentUser(user);
-        // Automatically enable size matching if onboarding is complete and size is saved
-        if (user?.hasCompletedOnboarding && user?.preferences?.sizeInfo?.preferredSize) {
-          setMatchMySize(true);
-        }
-      } catch (err) {
-        console.log('User not logged in or failed to fetch profile:', err);
-      }
-    };
-
-    fetchProducts();
-    fetchUser();
-  }, []);
-
-  useEffect(() => {
-    let result = [...products];
-
-    // Apply color filters
-    if (filters.colors.length > 0) {
-      result = result.filter((p) =>
-        p.colors.some((color) => filters.colors.includes(color.toUpperCase()))
-      );
-    }
-
-    // Apply size filters
-    if (filters.sizes.length > 0) {
-      result = result.filter((p) =>
-        p.sizes.some((size) => filters.sizes.includes(size.toUpperCase()))
-      );
-    }
-
-    // Apply material filters
-    if (filters.materials.length > 0) {
-      result = result.filter((p) =>
-        p.materials.some((mat) => filters.materials.includes(mat.toUpperCase()))
-      );
-    }
-
-    // Apply smart filters from onboarding preferences
-    if (matchMySize && currentUser?.preferences?.sizeInfo) {
-      const sizeInfo = currentUser.preferences.sizeInfo;
-      const recommended = calculateRecommendedSize(sizeInfo.height, sizeInfo.weight);
-      let sizeToMatch = (recommended || sizeInfo.preferredSize || '').toUpperCase();
-      
-      // Fallback XXL to XL if XXL products are not available in current database
-      if (sizeToMatch === 'XXL' && availableSizes.length > 0 && !availableSizes.includes('XXL')) {
-        if (availableSizes.includes('XL')) {
-          sizeToMatch = 'XL';
-        }
-      }
-
-      if (sizeToMatch) {
-        result = result.filter((p) =>
-          p.sizes.some((size) => size.toUpperCase() === sizeToMatch)
-        );
-      }
-    }
-
-    if (recommendMyGu && currentUser?.preferences) {
-      const prefs = currentUser.preferences;
-      // Filter by favorite colors if defined
-      if (prefs.favoriteColors && prefs.favoriteColors.length > 0) {
-        const favColors = prefs.favoriteColors.map((c: string) => c.toUpperCase());
-        
-        // Expand tone groups to individual product colors
-        const expandedColors = new Set<string>();
-        favColors.forEach((colorTone: string) => {
-          const mapped = TONE_GROUP_TO_COLORS[colorTone];
-          if (mapped) {
-            mapped.forEach(c => expandedColors.add(c));
-          } else {
-            expandedColors.add(colorTone);
-          }
-        });
-
-        if (expandedColors.size > 0) {
-          result = result.filter((p) =>
-            p.colors.some((color) => expandedColors.has(color.toUpperCase()))
-          );
-        }
-      }
-      // Filter by preferred styles if defined
-      if (prefs.preferredAoDaiStyles && prefs.preferredAoDaiStyles.length > 0) {
-        const favStyles = prefs.preferredAoDaiStyles.map((s: string) => s.toUpperCase());
-        result = result.filter((p) =>
-          favStyles.includes((p.style || '').toUpperCase())
-        );
-      }
-    }
-
-    // Apply price range
-    result = result.filter((p) => p.basePrice <= filters.priceRange);
-
-    // Apply sorting
-    if (sortOption === 'price-asc') {
-      result.sort((a, b) => a.basePrice - b.basePrice);
-    } else if (sortOption === 'price-desc') {
-      result.sort((a, b) => b.basePrice - a.basePrice);
-    } else if (sortOption === 'rating') {
-      result.sort((a, b) => b.rating.averageRating - a.rating.averageRating);
-    }
-
-    setFilteredProducts(result);
-  }, [filters, products, sortOption, matchMySize, recommendMyGu, currentUser]);
+    fetchFiltered();
+  }, [filters, sortOption, matchMySize, recommendMyGu, user?.preferences, availableSizes]);
 
   const handleColorToggle = (colorValue: string) => {
     setFilters((prev) => ({
@@ -277,30 +287,75 @@ export const AoDaiListingPage: React.FC = () => {
     }));
   };
 
-  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const applyPriceFilter = () => {
     setFilters((prev) => ({
       ...prev,
-      priceRange: Number(e.target.value),
+      minPrice: minPriceVal,
+      maxPrice: maxPriceVal,
     }));
   };
 
+  const applySearchFilter = () => {
+    setFilters((prev) => ({
+      ...prev,
+      search: searchVal,
+    }));
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      applySearchFilter();
+    }
+  };
+
   const clearAllFilters = () => {
+    setSearchVal('');
+    setMinPriceVal('');
+    setMaxPriceVal('');
     setFilters({
       colors: [],
       sizes: [],
       materials: [],
-      priceRange: 10000000,
+      minPrice: '',
+      maxPrice: '',
+      minRating: '',
+      search: '',
     });
   };
 
-  const toggleFavorite = (id: string) => {
-    setFavorites((prev) =>
-      prev.includes(id) ? prev.filter((favId) => favId !== id) : [...prev, id]
-    );
+  const toggleFavorite = async (id: string) => {
+    if (!user) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Yêu cầu đăng nhập',
+        text: 'Vui lòng đăng nhập để lưu sản phẩm yêu thích!',
+        confirmButtonColor: 'var(--color-primary)',
+        confirmButtonText: 'Đăng nhập ngay',
+        showCancelButton: true,
+        cancelButtonText: 'Hủy',
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate('/login');
+        }
+      });
+      return;
+    }
+    try {
+      const isAlreadyFavorite = favorites.includes(id);
+      await apiToggleFavorite('PRODUCT', id);
+      if (isAlreadyFavorite) {
+        toast.success('Đã xóa khỏi danh sách yêu thích!');
+      } else {
+        toast.success('Đã thêm vào danh sách yêu thích!');
+      }
+    } catch (err) {
+      console.error('Lỗi khi lưu yêu thích:', err);
+      toast.error('Không thể cập nhật danh sách yêu thích.');
+    }
   };
 
-  const calculatedSize = calculateRecommendedSize(currentUser?.preferences?.sizeInfo?.height, currentUser?.preferences?.sizeInfo?.weight);
-  let displaySize = calculatedSize || currentUser?.preferences?.sizeInfo?.preferredSize;
+  const calculatedSize = calculateRecommendedSize(user?.preferences?.sizeInfo?.height, user?.preferences?.sizeInfo?.weight);
+  let displaySize = calculatedSize || user?.preferences?.sizeInfo?.preferredSize;
   let isFallbackApplied = false;
 
   if (displaySize && displaySize.toUpperCase() === 'XXL' && !availableSizes.includes('XXL')) {
@@ -311,9 +366,9 @@ export const AoDaiListingPage: React.FC = () => {
   }
 
   const hasSizePreference = !!displaySize;
-  const hasGuPreference = !!((currentUser?.preferences?.favoriteColors && currentUser.preferences.favoriteColors.length > 0) || 
-                             (currentUser?.preferences?.preferredAoDaiStyles && currentUser.preferences.preferredAoDaiStyles.length > 0));
-  const showPersonalization = currentUser?.hasCompletedOnboarding && (hasSizePreference || hasGuPreference);
+  const hasGuPreference = !!((user?.preferences?.favoriteColors && user.preferences.favoriteColors.length > 0) || 
+                             (user?.preferences?.preferredAoDaiStyles && user.preferences.preferredAoDaiStyles.length > 0));
+  const showPersonalization = user?.hasCompletedOnboarding && (hasSizePreference || hasGuPreference);
 
   return (
     <div className="vh-listing-page bg-stone-50/50" style={{ width: '100%', minHeight: '100vh', padding: '40px 0' }}>
@@ -330,9 +385,6 @@ export const AoDaiListingPage: React.FC = () => {
               Xóa bộ lọc
             </button>
           </div>
-
-          <div className="vh-filter-divider" />
-
           {/* SMART FILTER FOR ONBOARDED USERS */}
           {showPersonalization ? (
             <>
@@ -383,7 +435,7 @@ export const AoDaiListingPage: React.FC = () => {
               <div className="vh-filter-divider" />
             </>
           ) : (
-            currentUser && currentUser.hasCompletedOnboarding && (
+            user && user.hasCompletedOnboarding && (
               <>
                 <div className="vh-filter-section" style={{ backgroundColor: '#FFFDF9', padding: '16px', borderRadius: '8px', border: '1px dashed #E6C280' }}>
                   <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#B7791F', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -405,7 +457,7 @@ export const AoDaiListingPage: React.FC = () => {
           )}
 
           {/* PROMOTION BANNER FOR USERS WHO HAVEN'T COMPLETED ONBOARDING */}
-          {currentUser && !currentUser.hasCompletedOnboarding && (
+          {user && !user.hasCompletedOnboarding && (
             <>
               <div className="vh-filter-section" style={{ backgroundColor: '#FFFDF9', padding: '16px', borderRadius: '8px', border: '1px dashed #E6C280' }}>
                 <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#B7791F', margin: '0 0 6px 0' }}>📏 Chưa tìm thấy size chuẩn?</h4>
@@ -503,22 +555,87 @@ export const AoDaiListingPage: React.FC = () => {
           )}
 
           {/* PRICE RANGE FILTER */}
-          <div className="vh-filter-section">
+          <div className="vh-filter-section" style={{ marginBottom: '20px' }}>
             <h4 className="vh-filter-section-title">KHOẢNG GIÁ</h4>
-            <div style={{ marginTop: '16px' }}>
-              <input
-                type="range"
-                min="0"
-                max="10000000"
-                step="100000"
-                value={filters.priceRange}
-                onChange={handlePriceChange}
-                style={{ width: '100%', accentColor: 'var(--color-primary)' }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '8px', fontWeight: 700 }}>
-                <span>0đ</span>
-                <span className="vh-txt-primary">{filters.priceRange.toLocaleString('vi-VN')}đ</span>
+            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="number"
+                  placeholder="Từ (đ)"
+                  value={minPriceVal}
+                  onChange={(e) => setMinPriceVal(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--color-light-border)',
+                    fontSize: '13px',
+                    outline: 'none',
+                  }}
+                />
+                <span style={{ color: 'var(--color-text-secondary)' }}>-</span>
+                <input
+                  type="number"
+                  placeholder="Đến (đ)"
+                  value={maxPriceVal}
+                  onChange={(e) => setMaxPriceVal(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--color-light-border)',
+                    fontSize: '13px',
+                    outline: 'none',
+                  }}
+                />
               </div>
+              <button
+                onClick={applyPriceFilter}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: 'var(--color-primary)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-primary-dark)')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-primary)')}
+              >
+                Áp dụng khoảng giá
+              </button>
+            </div>
+          </div>
+          <div className="vh-filter-divider" />
+
+          {/* RATING FILTER (Dropdown) */}
+          <div className="vh-filter-section" style={{ marginBottom: '20px' }}>
+            <h4 className="vh-filter-section-title">ĐÁNH GIÁ</h4>
+            <div style={{ marginTop: '12px' }}>
+              <select
+                value={filters.minRating}
+                onChange={(e) => setFilters(prev => ({ ...prev, minRating: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-light-border)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: 'white',
+                }}
+              >
+                <option value="">Tất cả đánh giá</option>
+                <option value="4.5">Từ 4.5 ⭐ trở lên (Xuất sắc)</option>
+                <option value="4.0">Từ 4.0 ⭐ trở lên (Rất tốt)</option>
+                <option value="3.5">Từ 3.5 ⭐ trở lên (Tốt)</option>
+              </select>
             </div>
           </div>
         </aside>
@@ -548,10 +665,46 @@ export const AoDaiListingPage: React.FC = () => {
           </div>
 
           {/* Grid Header & Sort */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-            <span style={{ fontSize: '15px', color: 'var(--color-text-primary)', fontWeight: 700 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', gap: '16px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '15px', color: 'var(--color-text-primary)', fontWeight: 700, minWidth: '150px' }}>
               Mới Nhất ({filteredProducts.length} Sản phẩm)
             </span>
+
+            {/* Inline search input */}
+            <div style={{ display: 'flex', gap: '8px', position: 'relative', flex: 1, maxWidth: '360px' }}>
+              <input
+                type="text"
+                placeholder="Tìm kiếm sản phẩm..."
+                value={searchVal}
+                onChange={(e) => setSearchVal(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                style={{
+                  width: '100%',
+                  padding: '8px 36px 8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-light-border)',
+                  fontSize: '13px',
+                  outline: 'none',
+                  backgroundColor: 'white',
+                }}
+              />
+              <button
+                onClick={applySearchFilter}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--color-text-secondary)',
+                }}
+              >
+                <Search size={16} />
+              </button>
+            </div>
+
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', position: 'relative' }}>
               <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Sắp xếp:</span>
               <select 

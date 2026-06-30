@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  ShieldAlert, ShieldCheck, AlertTriangle, CheckCircle, XCircle, 
-  ArrowLeft, MessageSquare, DollarSign, Image, Calendar, User, Eye
+  ShieldAlert, ShieldCheck, AlertTriangle, 
+  ArrowLeft, DollarSign, Image, Eye
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../services/httpClient';
@@ -215,7 +215,6 @@ export const AdminDashboardPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {disputes.map(d => {
-                    const bId = d.bookingId?._id || '';
                     const bookingCode = d.bookingId?.bookingCode || 'N/A';
                     const productName = d.productId?.name || d.bookingItemId?.name || 'Sản phẩm';
                     const shopName = d.reportedBy?.businessName || d.reportedBy?.profile?.fullName || 'Shop';

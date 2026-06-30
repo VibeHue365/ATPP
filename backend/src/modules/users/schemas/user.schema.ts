@@ -157,6 +157,9 @@ export class User {
   })
   accountStatus: UserStatus;
 
+  @Prop({ type: Boolean, default: false })
+  hasCompletedOnboarding: boolean;
+
   @Prop({
     type: {
       fullName: { type: String, required: true, trim: true },

@@ -15,8 +15,16 @@ export class ProductsService {
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
-  async getAllActiveProducts(): Promise<ProductDocument[]> {
-    return this.productsRepository.findAllActive();
+  async getAllActiveProducts(options?: {
+    search?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    minRating?: number;
+    colors?: string[];
+    sizes?: string[];
+    materials?: string[];
+  }): Promise<ProductDocument[]> {
+    return this.productsRepository.findAllActive(options);
   }
 
   async getCategories(): Promise<any[]> {

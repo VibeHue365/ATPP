@@ -12,6 +12,7 @@ export interface UserProfile {
   status?: string;
   hasCompletedOnboarding?: boolean;
   preferences?: any;
+  favorites?: any[];
   createdAt?: string;
 }
 
@@ -24,6 +25,7 @@ export interface BackendUserProfileResponse {
   roles?: string[];
   hasCompletedOnboarding?: boolean;
   preferences?: any;
+  favorites?: any[];
   createdAt?: string;
   profile?: {
     fullName?: string;

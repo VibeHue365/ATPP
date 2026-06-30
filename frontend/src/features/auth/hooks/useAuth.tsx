@@ -19,6 +19,7 @@ interface AuthContextType {
   updateProfile: (payload: any) => Promise<void>;
   updateAvatar: (formData: FormData) => Promise<void>;
   updatePreferences: (payload: any) => Promise<void>;
+  toggleFavorite: (targetType: 'PRODUCT' | 'PHOTOGRAPHER', targetId: string) => Promise<void>;
   setSession: (accessToken: string, refreshToken: string) => Promise<UserProfile>;
   clearError: () => void;
 }
@@ -189,6 +190,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const toggleFavorite = async (targetType: 'PRODUCT' | 'PHOTOGRAPHER', targetId: string) => {
+    setError(null);
+    try {
+      const updated = await userService.toggleFavorite(targetType, targetId);
+      setUser(updated);
+    } catch (err: any) {
+      setError(err.message || "Toggling favorite failed");
+      throw err;
+    }
+  };
+
   const setSession = async (
     accessToken: string,
     refreshToken: string,
@@ -221,6 +233,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         updateProfile,
         updateAvatar,
         updatePreferences,
+        toggleFavorite,
         setSession,
         clearError,
       }}
