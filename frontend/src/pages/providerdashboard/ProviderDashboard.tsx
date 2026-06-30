@@ -26,6 +26,8 @@ interface Order {
   createdAt?: string;
   customerId?: any;
   items?: any[];
+  depositTotal?: number;
+  rawStatus?: string;
 }
 
 interface Product {

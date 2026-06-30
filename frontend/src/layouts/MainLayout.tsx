@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { ROUTES } from '../config/routes';
-import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X } from 'lucide-react';
+import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X, ShieldCheck } from 'lucide-react';
 import { API_BASE_URL } from '../config/env';
 import { AIChatBot } from '../features/dashboard/components/AIChatBot';
 import { useCart } from '../context/CartContext';

@@ -84,7 +84,7 @@ export const ProductDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const { addToCart } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, toggleFavorite: apiToggleFavorite } = useAuth();
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -494,6 +494,50 @@ export const ProductDetailPage: React.FC = () => {
 
   // Favorites state
   const [isFav, setIsFav] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (user?.favorites && id) {
+      const isFavorited = user.favorites.some(
+        (f: any) =>
+          (f.targetType === 'PRODUCT' || f.targetType === 'Product') &&
+          f.targetId.toString() === id.toString()
+      );
+      setIsFav(isFavorited);
+    } else {
+      setIsFav(false);
+    }
+  }, [user, id]);
+
+  const handleToggleFavorite = async () => {
+    if (!user) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Yêu cầu đăng nhập',
+        text: 'Vui lòng đăng nhập để lưu sản phẩm yêu thích!',
+        confirmButtonColor: 'var(--color-primary)',
+        confirmButtonText: 'Đăng nhập ngay',
+        showCancelButton: true,
+        cancelButtonText: 'Hủy',
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate('/login');
+        }
+      });
+      return;
+    }
+    try {
+      await apiToggleFavorite('PRODUCT', id!);
+      if (isFav) {
+        toast.success('Đã xóa khỏi danh sách yêu thích!');
+      } else {
+        toast.success('Đã thêm vào danh sách yêu thích!');
+      }
+    } catch (err) {
+      console.error('Lỗi khi lưu yêu thích:', err);
+      toast.error('Không thể cập nhật danh sách yêu thích.');
+    }
+  };
+
   const [suggestedPhotographers, setSuggestedPhotographers] = useState<any[]>([]);
 
   // Calendar states
@@ -1029,7 +1073,7 @@ export const ProductDetailPage: React.FC = () => {
 
               {/* Heart floating action */}
               <button 
-                onClick={() => setIsFav(!isFav)}
+                onClick={handleToggleFavorite}
                 style={{
                   position: 'absolute',
                   top: '20px',

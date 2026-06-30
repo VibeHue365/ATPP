@@ -23,6 +23,7 @@ const normalizeUserProfile = (response: BackendUserProfileResponse): UserProfile
     status: response.status,
     hasCompletedOnboarding: response.hasCompletedOnboarding,
     preferences: response.preferences,
+    favorites: response.favorites,
     createdAt: response.createdAt,
   };
 };
@@ -45,6 +46,11 @@ export const userService = {
 
   async updatePreferences(payload: any): Promise<UserProfile> {
     const response = await httpClient.patch<BackendUserProfileResponse>('/users/me/preferences', payload);
+    return normalizeUserProfile(response);
+  },
+
+  async toggleFavorite(targetType: 'PRODUCT' | 'PHOTOGRAPHER', targetId: string): Promise<UserProfile> {
+    const response = await httpClient.patch<BackendUserProfileResponse>('/users/me/favorites', { targetType, targetId });
     return normalizeUserProfile(response);
   },
 };

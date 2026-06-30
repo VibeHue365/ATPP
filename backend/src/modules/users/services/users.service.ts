@@ -110,4 +110,29 @@ export class UsersService {
   private normalizePhone(phone: string): string {
     return phone.replace(/\s/g, '');
   }
+
+  async updatePreferences(
+    userId: string,
+    preferences: any,
+    roles: string[] = [],
+  ): Promise<Record<string, unknown>> {
+    const userObjectId = this.toObjectId(userId);
+    await this.usersRepository.updatePreferences(userObjectId, preferences);
+    return this.getMe(userId, roles);
+  }
+
+  async toggleFavorite(
+    userId: string,
+    targetType: string,
+    targetId: string,
+    roles: string[] = [],
+  ): Promise<Record<string, unknown>> {
+    const userObjectId = this.toObjectId(userId);
+    if (!Types.ObjectId.isValid(targetId)) {
+      throw new BadRequestException('Invalid target id');
+    }
+    const targetObjectId = new Types.ObjectId(targetId);
+    await this.usersRepository.toggleFavorite(userObjectId, targetType, targetObjectId);
+    return this.getMe(userId, roles);
+  }
 }

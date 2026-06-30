@@ -16,6 +16,9 @@ export class UserProfileMapper {
       phoneVerified: user.auth.phoneVerified,
       status: user.accountStatus,
       roles,
+      hasCompletedOnboarding: user.hasCompletedOnboarding,
+      preferences: user.preferences,
+      favorites: user.favorites || [],
       profile: {
         fullName: user.profile.fullName,
         phone: user.auth.phone,
