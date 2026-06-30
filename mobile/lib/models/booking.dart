@@ -28,11 +28,20 @@ class Booking {
   });
 
   factory Booking.fromJson(Map<String, dynamic> json) {
+    final rawProviderIds = json['providerIds'] as List?;
+    final parsedProviderIds = rawProviderIds
+            ?.map((x) => x is Map ? (x['_id'] ?? x['id'] ?? '').toString() : x.toString())
+            .where((x) => x.isNotEmpty)
+            .toList() ??
+        <String>[];
+
     return Booking(
       id: json['_id'] ?? json['id'] ?? '',
       bookingCode: json['bookingCode'] ?? '',
-      customerId: json['customerId'] ?? '',
-      providerIds: List<String>.from(json['providerIds'] ?? []),
+      customerId: json['customerId'] is Map
+          ? (json['customerId']['_id'] ?? json['customerId']['id'] ?? '').toString()
+          : (json['customerId'] ?? '').toString(),
+      providerIds: parsedProviderIds,
       bookingType: json['bookingType'] ?? 'AODAI_RENTAL',
       status: json['status'] ?? 'DRAFT',
       pricingSummary: BookingPricingSummary.fromJson(json['pricingSummary'] ?? {}),
@@ -169,11 +178,11 @@ class BookingItem {
   factory BookingItem.fromJson(Map<String, dynamic> json) {
     return BookingItem(
       id: json['_id'] ?? json['id'] ?? '',
-      bookingId: json['bookingId'] ?? '',
-      providerId: json['providerId'] ?? '',
+      bookingId: json['bookingId'] is Map ? (json['bookingId']['_id'] ?? json['bookingId']['id'] ?? '') : (json['bookingId'] ?? ''),
+      providerId: json['providerId'] is Map ? (json['providerId']['_id'] ?? json['providerId']['id'] ?? '') : (json['providerId'] ?? ''),
       itemType: json['itemType'] ?? 'PRODUCT',
-      productId: json['productId'],
-      photographyPackageId: json['photographyPackageId'],
+      productId: json['productId'] is Map ? (json['productId']['_id'] ?? json['productId']['id']) : json['productId'],
+      photographyPackageId: json['photographyPackageId'] is Map ? (json['photographyPackageId']['_id'] ?? json['photographyPackageId']['id']) : json['photographyPackageId'],
       unitPrice: (json['unitPrice'] ?? 0.0).toDouble(),
       depositAmount: (json['depositAmount'] ?? 0.0).toDouble(),
       quantity: json['quantity'] ?? 1,

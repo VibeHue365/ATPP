@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/constants/colors.dart';
 import '../../models/product.dart';
+import '../../models/cart_item.dart';
+import '../../providers/cart_provider.dart';
 import 'checkout_view.dart';
 
 class ProductDetailView extends StatefulWidget {
@@ -38,12 +41,15 @@ class _ProductDetailViewState extends State<ProductDetailView> {
             // Product Image
             AspectRatio(
               aspectRatio: 1,
-              child: Image.network(
-                product.imageUrl ?? 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600',
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  color: AppColors.primaryTrans,
-                  child: const Icon(Icons.image, size: 64, color: AppColors.primary),
+              child: Hero(
+                tag: 'product_image_${product.id}',
+                child: Image.network(
+                  product.imageUrl ?? 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: AppColors.primaryTrans,
+                    child: const Icon(Icons.image, size: 64, color: AppColors.primary),
+                  ),
                 ),
               ),
             ),
@@ -145,22 +151,58 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CheckoutView(
-                    product: product,
-                    selectedSize: _selectedSize ?? 'M',
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    context.read<CartProvider>().addItem(
+                      product,
+                      _selectedSize ?? 'M',
+                      'ĐỎ ĐÔ',
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Đã thêm phục trang vào giỏ hàng!'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.add_shopping_cart, color: AppColors.primary),
+                  label: const Text('THÊM GIỎ HÀNG'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: const BorderSide(color: AppColors.primary, width: 1.5),
+                    foregroundColor: AppColors.primary,
                   ),
                 ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-            child: const Text('ĐẶT LỊCH THUÊ NGAY'),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CheckoutView(
+                          cartItems: [
+                            CartItem(
+                              product: product,
+                              selectedSize: _selectedSize ?? 'M',
+                              selectedColor: 'ĐỎ ĐÔ',
+                            )
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: const Text('ĐẶT LỊCH NGAY'),
+                ),
+              ),
+            ],
           ),
         ),
       ),

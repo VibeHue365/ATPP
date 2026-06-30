@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/cart_item.dart';
 import '../models/product.dart';
 import '../models/booking.dart';
 import '../models/voucher.dart';
@@ -107,6 +108,56 @@ class BookingProvider extends ChangeNotifier {
     _appliedVoucher = null;
     _voucherDiscount = 0.0;
     notifyListeners();
+  }
+
+  Future<Booking> createMultiItemBooking({
+    required List<CartItem> cartItems,
+    required DateTime rentalFrom,
+    required DateTime rentalTo,
+    String? customRequests,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    // Format date as YYYY-MM-DD
+    String formatDate(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    try {
+      final List<Map<String, dynamic>> itemsList = cartItems.map((item) {
+        return {
+          'productId': item.product.id,
+          'quantity': item.quantity,
+          'rentalFrom': formatDate(rentalFrom),
+          'rentalTo': formatDate(rentalTo),
+          'selectedSize': item.selectedSize.toUpperCase(),
+          'selectedColor': item.selectedColor.toUpperCase(),
+          if (customRequests != null && customRequests.isNotEmpty)
+            'customRequests': customRequests,
+        };
+      }).toList();
+
+      final Map<String, dynamic> body = {
+        'bookingType': 'AODAI_RENTAL',
+        'items': itemsList,
+      };
+
+      if (_appliedVoucher != null) {
+        body['promoCode'] = _appliedVoucher!.code;
+      }
+
+      final booking = await _apiService.createMultiItemBooking(body);
+      _isLoading = false;
+      loadMyBookings(); // Reload list
+      notifyListeners();
+      return booking;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<Booking> createProductBooking({

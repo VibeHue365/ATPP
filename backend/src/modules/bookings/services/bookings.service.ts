@@ -73,6 +73,14 @@ export class CreateBookingItemDto {
   @IsString()
   @IsOptional()
   referenceImage?: string;
+
+  @IsString()
+  @IsOptional()
+  selectedSize?: string;
+
+  @IsString()
+  @IsOptional()
+  selectedColor?: string;
 }
 
 export class CreateBookingDto {
@@ -263,6 +271,8 @@ export class BookingsService {
         shootTimeSlot: item.shootTimeSlot || null,
         customRequests: item.customRequests || '',
         referenceImage: item.referenceImage || null,
+        selectedSize: item.selectedSize || null,
+        selectedColor: item.selectedColor || null,
       });
     }
 

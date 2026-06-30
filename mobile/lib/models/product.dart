@@ -32,7 +32,7 @@ class Product {
           ? (json['images'] as List).first as String
           : (json['imageUrl'] ?? json['image']),
       category: (json['categoryId'] is Map ? json['categoryId']['name'] : null) ?? json['category'] ?? 'Ao Dai',
-      providerId: (json['providerId'] is Map ? json['providerId']['_id'] : json['providerId']) ?? json['provider'] ?? '',
+      providerId: (json['providerId'] is Map ? (json['providerId']['_id'] ?? json['providerId']['id']) : json['providerId']) ?? (json['provider'] is Map ? (json['provider']['_id'] ?? json['provider']['id']) : json['provider']) ?? '',
       availableSizes: List<String>.from(json['sizes'] ?? json['availableSizes'] ?? []),
     );
   }
