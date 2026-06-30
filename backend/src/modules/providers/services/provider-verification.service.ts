@@ -29,6 +29,7 @@ import {
 } from '../../notifications/schemas/notification.schema';
 import { PrivateStorageService } from '../../storage/services/private-storage.service';
 import { User, UserDocument, ProviderStatus as UserProviderStatus } from '../../users/schemas/user.schema';
+import { RefreshToken } from '../../auth/schemas/refresh-token.schema';
 import {
   Provider,
   ProviderCapability,
@@ -126,6 +127,8 @@ export class ProviderVerificationService {
     private readonly auditLogModel: Model<AuditLog>,
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<Notification>,
+    @InjectModel(RefreshToken.name)
+    private readonly refreshTokenModel: Model<RefreshToken>,
     private readonly storageService: PrivateStorageService,
     private readonly configService: ConfigService,
   ) {}
@@ -936,6 +939,8 @@ export class ProviderVerificationService {
     await this.userModel.findByIdAndUpdate(provider.userId, {
       $set: { 'provider.providerStatus': nextStatus },
     });
+
+    // Status updated successfully. Do not revoke sessions so provider users can still access Customer functions.
 
     await this.writeAudit(
       actor,

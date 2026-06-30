@@ -99,6 +99,12 @@ export class ProvidersController {
     );
   }
 
+  @Get('me/analytics')
+  async getAnalytics(@CurrentUser() user: AuthUser) {
+    return this.providersService.getProviderAnalytics(user.sub);
+  }
+
+
   @Patch('me')
   async updateMe(
     @CurrentUser() user: AuthUser,

@@ -13,6 +13,12 @@ import {
   Notification,
   NotificationSchema,
 } from '../notifications/schemas/notification.schema';
+import { RefreshToken, RefreshTokenSchema } from '../auth/schemas/refresh-token.schema';
+import { Product, ProductSchema } from '../products/schemas/product.schema';
+import { Booking, BookingSchema } from '../bookings/schemas/booking.schema';
+import { BookingItem, BookingItemSchema } from '../bookings/schemas/booking-item.schema';
+import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
+import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { ProviderVerificationsController } from './controllers/provider-verifications.controller';
 import { AdminProviderVerificationsController } from './controllers/admin-provider-verifications.controller';
 import { AdminProvidersController } from './controllers/admin-providers.controller';
@@ -31,7 +37,14 @@ export const providerModels = MongooseModule.forFeature([
 const providerSupportModels = MongooseModule.forFeature([
   { name: AuditLog.name, schema: AuditLogSchema },
   { name: Notification.name, schema: NotificationSchema },
+  { name: RefreshToken.name, schema: RefreshTokenSchema },
+  { name: Product.name, schema: ProductSchema },
+  { name: Booking.name, schema: BookingSchema },
+  { name: BookingItem.name, schema: BookingItemSchema },
+  { name: Review.name, schema: ReviewSchema },
+  { name: Payment.name, schema: PaymentSchema },
 ]);
+
 
 @Module({
   imports: [providerModels, providerSupportModels, userModels, ProductsModule, StorageModule],

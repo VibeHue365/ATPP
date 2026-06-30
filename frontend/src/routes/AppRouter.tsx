@@ -72,8 +72,9 @@ export const AppRouter: React.FC = () => {
           <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
           <Route path={ROUTES.PROVIDER_REGISTER} element={<BecomeProviderPage />} />
-          <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardPage />} />
         </Route>
+        {/* Admin Dashboard Page (No MainLayout header/footer) */}
+        <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardPage />} />
       </Route>
 
       {/* 404 Route Fallback */}
