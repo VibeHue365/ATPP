@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
 import '../core/network/api_client.dart';
 import '../models/product.dart';
@@ -64,6 +65,15 @@ class ApiService {
   Future<Booking> createProductBooking(Map<String, dynamic> data) async {
     try {
       final response = await _dio.post('/bookings/product', data: data);
+      return Booking.fromJson(response.data);
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to create booking';
+    }
+  }
+
+  Future<Booking> createMultiItemBooking(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post('/bookings', data: data);
       return Booking.fromJson(response.data);
     } on DioException catch (e) {
       throw e.response?.data?['message'] ?? 'Failed to create booking';
@@ -150,10 +160,15 @@ class ApiService {
         'bookingId': bookingId,
         'purpose': purpose,
       });
-      if (response.data != null && response.data['payos'] != null && response.data['payos'] is Map) {
-        return (response.data['payos']['checkoutUrl'] ?? '').toString();
+      final data = response.data;
+      if (data is Map) {
+        String url = data['payos']?['checkoutUrl'] ?? data['checkoutUrl'] ?? data['paymentUrl'] ?? '';
+        if (Platform.isAndroid) {
+          url = url.replaceAll('127.0.0.1', '10.0.2.2').replaceAll('localhost', '10.0.2.2');
+        }
+        return url;
       }
-      return (response.data['checkoutUrl'] ?? response.data['paymentUrl'] ?? '').toString();
+      return '';
     } on DioException catch (e) {
       final msg = e.response?.data?['message'];
       if (msg is List) {

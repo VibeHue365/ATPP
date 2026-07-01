@@ -3,9 +3,15 @@ import 'package:provider/provider.dart';
 import '../../core/constants/colors.dart';
 import '../../providers/booking_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/cart_provider.dart';
+import '../../providers/theme_provider.dart';
+import '../../widgets/shimmer_loading.dart';
 import 'product_detail_view.dart';
 import 'chat_bot_view.dart';
 import 'customer_dashboard_view.dart';
+import 'cart_view.dart';
+import 'map_view.dart';
+import 'notifications_view.dart';
 import '../onboarding/onboarding_view.dart';
 
 class LandingView extends StatefulWidget {
@@ -101,14 +107,91 @@ class _HomeTabState extends State<HomeTab> {
       appBar: AppBar(
         title: const Text('Di Sản Áo Dài'),
         actions: [
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.shopping_cart_outlined, color: AppColors.primary),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CartView()),
+                  );
+                },
+              ),
+              Positioned(
+                right: 6,
+                top: 6,
+                child: Consumer<CartProvider>(
+                  builder: (context, cart, _) {
+                    if (cart.totalItemsCount == 0) return const SizedBox.shrink();
+                    return Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: AppColors.error,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        '${cart.totalItemsCount}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.notifications_outlined, color: AppColors.primary),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NotificationsView()),
+              );
+            },
           ),
         ],
       ),
       body: provider.isLoading && provider.products.isEmpty
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? SafeArea(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 24),
+                    // Mock banner shimmer
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: ShimmerLoading.rectangular(
+                        width: double.infinity,
+                        height: 120,
+                        shapeBorder: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: ShimmerLoading.rectangular(
+                        width: 150,
+                        height: 20,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ShimmerLoading.productGridSkeleton(context: context),
+                  ],
+                ),
+              ),
+            )
           : RefreshIndicator(
               color: AppColors.primary,
               onRefresh: () async {
@@ -162,6 +245,56 @@ class _HomeTabState extends State<HomeTab> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 8),
+
+                    // Map Banner Button
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const MapView()),
+                        );
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.gold.withOpacity(0.5), width: 1.0),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.02),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            )
+                          ],
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.location_on, color: AppColors.primary),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Hệ thống Cửa Hàng VibeHue',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
+                                  ),
+                                  Text(
+                                    'Xem bản đồ vị trí & địa chỉ các chi nhánh tại Hà Nội, Huế',
+                                    style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(Icons.chevron_right, color: AppColors.textSecondary, size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
                     // Categories List
                     const Padding(
@@ -247,12 +380,15 @@ class _HomeTabState extends State<HomeTab> {
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
                                       Expanded(
-                                        child: Image.network(
-                                          product.imageUrl ?? 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=400',
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => Container(
-                                            color: AppColors.primaryTrans,
-                                            child: const Icon(Icons.image, color: AppColors.primary),
+                                        child: Hero(
+                                          tag: 'product_image_${product.id}',
+                                          child: Image.network(
+                                            product.imageUrl ?? 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=400',
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => Container(
+                                              color: AppColors.primaryTrans,
+                                              child: const Icon(Icons.image, color: AppColors.primary),
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -422,6 +558,20 @@ class ProfileTab extends StatelessWidget {
             title: const Text('Đổi mật khẩu'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {},
+          ),
+          const Divider(),
+          Consumer<ThemeProvider>(
+            builder: (context, themeProvider, _) {
+              return SwitchListTile(
+                secondary: const Icon(Icons.dark_mode, color: AppColors.primary),
+                title: const Text('Chế độ tối (Dark Mode)'),
+                value: themeProvider.isDarkMode,
+                onChanged: (val) {
+                  themeProvider.toggleTheme(val);
+                },
+                activeColor: AppColors.primary,
+              );
+            },
           ),
           const Divider(),
           ListTile(
