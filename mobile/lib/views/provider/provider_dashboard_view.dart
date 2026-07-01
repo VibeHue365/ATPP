@@ -4,6 +4,7 @@ import '../../core/constants/colors.dart';
 import '../../providers/provider_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../onboarding/onboarding_view.dart';
+import '../customer/chat_rooms_view.dart';
 import 'schedule_manager_view.dart';
 import 'portfolio_manager_view.dart';
 import 'voucher_manager_view.dart';
@@ -100,10 +101,54 @@ class ProviderHomeTab extends StatelessWidget {
     final double avgRating = (stats['averageRating'] ?? 0.0).toDouble();
     final int totalReviews = stats['totalReviews'] ?? 0;
 
+    // Calculate detailed statistics from providerBookings
+    final bookings = provider.providerBookings;
+    final now = DateTime.now();
+
+    double monthlyRevenue = 0;
+    for (var b in bookings) {
+      if (b.status.toUpperCase() == 'COMPLETED') {
+        if (b.createdAt != null) {
+          final date = DateTime.tryParse(b.createdAt!);
+          if (date != null && date.month == now.month && date.year == now.year) {
+            monthlyRevenue += b.pricingSummary.grandTotal;
+          }
+        }
+      }
+    }
+
+    final int pendingBookings = bookings.where((b) {
+      final s = b.status.toUpperCase();
+      return s == 'PENDING' || s == 'PENDING_PAYMENT';
+    }).length;
+
+    final int activeBookings = bookings.where((b) {
+      final s = b.status.toUpperCase();
+      return s == 'CONFIRMED' ||
+          s == 'DEPOSIT_PAID' ||
+          s == 'PICKUP_PENDING' ||
+          s == 'PICKED_UP' ||
+          s == 'RETURN_PENDING' ||
+          s == 'RETURNED';
+    }).length;
+
+    final int completedBookings = bookings.where((b) {
+      return b.status.toUpperCase() == 'COMPLETED';
+    }).length;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bảng quản trị tiệm'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ChatRoomsView()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.error),
             onPressed: () async {
@@ -137,32 +182,95 @@ class ProviderHomeTab extends StatelessWidget {
                 'Kính chào, ${provider.providerProfile['businessName'] ?? 'Chủ tiệm Di Sản'}',
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
-                  fontSize: 22,
+                  fontSize: 20,
                 ),
               ),
               const SizedBox(height: 4),
-              const Text('Hôm nay của bạn thế nào? Xem thống kê tình hình hoạt động bên dưới.'),
+              const Text('Xem báo cáo chi tiết và thống kê hoạt động bên dưới.'),
               const SizedBox(height: 20),
 
-              // Stats summary row
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard(
-                      'Đánh giá trung bình',
-                      '$avgRating / 5.0',
-                      Icons.star,
-                      AppColors.gold,
-                    ),
+              // Monthly Revenue Card
+              Card(
+                elevation: 3,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Color(0xFFF0D8D9), width: 1),
+                ),
+                color: const Color(0xFFFFF7F7),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'DOANH THU THÁNG NÀY',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            monthlyRevenue > 0
+                                ? '${monthlyRevenue.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}đ'
+                                : '0đ',
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const CircleAvatar(
+                        backgroundColor: Color(0xFFFDE4E5),
+                        radius: 28,
+                        child: Icon(Icons.account_balance_wallet,
+                            color: AppColors.primary, size: 28),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildStatCard(
-                      'Tổng số lượt đánh giá',
-                      '$totalReviews lượt',
-                      Icons.rate_review,
-                      AppColors.primary,
-                    ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Grid of Status Stats (2x2)
+              GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 1.35,
+                children: [
+                  _buildStatCard(
+                    'Chờ thanh toán',
+                    '$pendingBookings đơn',
+                    Icons.pending_actions,
+                    Colors.orange,
+                  ),
+                  _buildStatCard(
+                    'Đang thực hiện',
+                    '$activeBookings đơn',
+                    Icons.sync,
+                    const Color(0xFFC0A060),
+                  ),
+                  _buildStatCard(
+                    'Đã hoàn thành',
+                    '$completedBookings đơn',
+                    Icons.check_circle_outline,
+                    Colors.green,
+                  ),
+                  _buildStatCard(
+                    'Đánh giá',
+                    '$avgRating / 5.0 ($totalReviews lượt)',
+                    Icons.star_outline,
+                    Colors.amber,
                   ),
                 ],
               ),

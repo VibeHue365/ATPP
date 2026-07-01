@@ -604,6 +604,32 @@ class _SuccessScreenState extends State<SuccessScreen> with SingleTickerProvider
                   color: AppColors.textSecondary,
                 ),
               ),
+              const SizedBox(height: 48),
+              SizedBox(
+                width: 200,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    elevation: 2,
+                  ),
+                  child: const Text(
+                    'VỀ TRANG CHỦ',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),

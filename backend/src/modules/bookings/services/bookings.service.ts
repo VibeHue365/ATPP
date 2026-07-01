@@ -32,6 +32,8 @@ import {
   BookingScheduleStatus,
 } from '../schemas/booking-schedule.schema';
 import { IsString, IsNotEmpty, IsOptional, IsEnum, IsNumber, IsArray, Min } from 'class-validator';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/schemas/notification.schema';
 
 // ─── DTOs (dùng chung với controller) ────────────────────────────────────────
 
@@ -192,6 +194,7 @@ export class BookingsService {
     @Inject(forwardRef(() => PaymentsService))
     private readonly paymentsService: PaymentsService,
     private readonly productsService: ProductsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // Getter để map photographyPackageModel sang photoPackageModel cho cả hai bên
@@ -355,6 +358,18 @@ export class BookingsService {
 
     if (promotionId) {
       await this.promotionsService.incrementUsage(promotionId);
+    }
+
+    try {
+      await this.notificationsService.createNotification(
+        customerId.toString(),
+        `Đặt lịch thành công`,
+        `Đơn đặt lịch ${bookingCode} đã được khởi tạo thành công và đang chờ thanh toán cọc.`,
+        NotificationType.Booking,
+        { bookingId: booking._id },
+      );
+    } catch (e) {
+      console.error('Failed to create createBooking notification:', e);
     }
 
     return booking;
@@ -776,6 +791,19 @@ export class BookingsService {
     });
 
     await booking.save();
+
+    try {
+      await this.notificationsService.createNotification(
+        booking.customerId.toString(),
+        `Đơn hàng hoàn thành`,
+        `Đơn hàng ${booking.bookingCode} của bạn đã được đánh dấu hoàn thành. Cảm ơn bạn!`,
+        NotificationType.Booking,
+        { bookingId: booking._id },
+      );
+    } catch (e) {
+      console.error('Failed to create completeBooking notification:', e);
+    }
+
     await this.paymentsService.settleBooking(bookingIdStr);
 
     return booking;
@@ -813,6 +841,19 @@ export class BookingsService {
     });
 
     await booking.save();
+
+    try {
+      await this.notificationsService.createNotification(
+        booking.customerId.toString(),
+        `Cập nhật trạng thái đơn hàng`,
+        `Đơn hàng ${booking.bookingCode} của bạn đã chuyển sang trạng thái: ${newStatus}`,
+        NotificationType.Booking,
+        { bookingId: booking._id },
+      );
+    } catch (e) {
+      console.error('Failed to create updateBookingStatus notification:', e);
+    }
+
     return booking;
   }
 
@@ -1048,6 +1089,18 @@ export class BookingsService {
     });
 
     const savedBooking = await booking.save();
+
+    try {
+      await this.notificationsService.createNotification(
+        booking.customerId.toString(),
+        `Đơn hàng đã hủy`,
+        `Đơn hàng ${booking.bookingCode} của bạn đã bị hủy. Lý do: ${reason}`,
+        NotificationType.Booking,
+        { bookingId: booking._id },
+      );
+    } catch (e) {
+      console.error('Failed to create cancelBooking notification:', e);
+    }
 
     // Hủy các BookingSchedule liên quan
     await this.bookingScheduleModel.updateMany(

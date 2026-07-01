@@ -12,6 +12,9 @@ export const PublicRoute: React.FC = () => {
   }
 
   if (isAuthenticated) {
+    if (user?.roles?.includes('ADMIN') || user?.roles?.includes('admin')) {
+      return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />;
+    }
     if (user?.roles?.includes('PROVIDER')) {
       return <Navigate to={ROUTES.PROVIDER_DASHBOARD} replace />;
     }

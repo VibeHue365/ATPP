@@ -4,8 +4,10 @@ import '../../core/constants/colors.dart';
 import '../../models/product.dart';
 import '../../models/cart_item.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/user_chat_provider.dart';
 import '../../providers/auth_provider.dart';
 import 'checkout_view.dart';
+import 'chat_view.dart';
 
 class ProductDetailView extends StatefulWidget {
   final Product product;
@@ -179,6 +181,56 @@ class _ProductDetailViewState extends State<ProductDetailView> {
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
+              if (product.providerUserId != null) ...[
+                Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.primary, width: 1.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
+                    onPressed: () async {
+                      final otherUserId = product.providerUserId!;
+
+                      // Show loading spinner
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (_) => const Center(
+                          child: CircularProgressIndicator(color: AppColors.primary),
+                        ),
+                      );
+
+                      try {
+                        final chatProvider = context.read<UserChatProvider>();
+                        final roomId = await chatProvider.startChat(otherUserId);
+
+                        if (context.mounted) {
+                          Navigator.pop(context); // dismiss loading spinner
+                          chatProvider.enterRoom(roomId);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatView(
+                                roomId: roomId,
+                                otherParticipantName: 'Chủ tiệm',
+                              ),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          Navigator.pop(context); // dismiss loading spinner
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Không thể mở chat: $e')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ),
+              ],
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {

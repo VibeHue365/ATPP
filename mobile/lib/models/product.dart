@@ -10,6 +10,7 @@ class Product {
   final String category;
   final String categoryId;
   final String providerId;
+  final String? providerUserId;
   final List<String> availableSizes;
 
   String get fullImageUrl {
@@ -33,6 +34,7 @@ class Product {
     required this.category,
     required this.categoryId,
     required this.providerId,
+    this.providerUserId,
     this.availableSizes = const [],
   });
 
@@ -49,6 +51,11 @@ class Product {
       category: (json['categoryId'] is Map ? json['categoryId']['name'] : null) ?? json['category'] ?? 'Ao Dai',
       categoryId: (json['categoryId'] is Map ? (json['categoryId']['_id'] ?? json['categoryId']['id']) : json['categoryId']) ?? '',
       providerId: (json['providerId'] is Map ? (json['providerId']['_id'] ?? json['providerId']['id']) : json['providerId']) ?? (json['provider'] is Map ? (json['provider']['_id'] ?? json['provider']['id']) : json['provider']) ?? '',
+      providerUserId: (json['providerId'] is Map
+          ? (json['providerId']['userId'] is Map
+              ? (json['providerId']['userId']['_id'] ?? json['providerId']['userId']['id'])
+              : json['providerId']['userId'])
+          : null)?.toString(),
       availableSizes: List<String>.from(json['sizes'] ?? json['availableSizes'] ?? []),
     );
   }
@@ -64,6 +71,7 @@ class Product {
       'category': category,
       'categoryId': categoryId,
       'providerId': providerId,
+      'providerUserId': providerUserId,
       'availableSizes': availableSizes,
     };
   }

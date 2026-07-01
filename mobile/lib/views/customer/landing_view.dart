@@ -12,10 +12,13 @@ import 'customer_dashboard_view.dart';
 import 'cart_view.dart';
 import 'map_view.dart';
 import 'notifications_view.dart';
+import 'chat_rooms_view.dart';
+import 'chat_view.dart';
 import 'favorites_view.dart';
 import 'edit_profile_view.dart';
+import '../../providers/user_chat_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../onboarding/onboarding_view.dart';
-
 
 class LandingView extends StatefulWidget {
   const LandingView({super.key});
@@ -33,6 +36,7 @@ class _LandingViewState extends State<LandingView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<BookingProvider>().loadProducts();
       context.read<BookingProvider>().loadPhotographers();
+      context.read<NotificationProvider>().fetchNotifications();
     });
   }
 
@@ -40,7 +44,7 @@ class _LandingViewState extends State<LandingView> {
   Widget build(BuildContext context) {
     final List<Widget> tabs = [
       const HomeTab(),
-      const ChatBotView(),
+      const ChatRoomsView(),
       const CustomerDashboardView(),
       const ProfileTab(),
     ];
@@ -66,9 +70,9 @@ class _LandingViewState extends State<LandingView> {
             label: 'Cửa hàng',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: 'Trợ lý AI',
+            icon: Icon(Icons.message_outlined),
+            activeIcon: Icon(Icons.message),
+            label: 'Tin nhắn',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.receipt_long_outlined),
@@ -153,11 +157,29 @@ class _HomeTabState extends State<HomeTab> {
             ],
           ),
           IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: AppColors.primary),
+            icon: const Icon(Icons.assistant, color: AppColors.primary),
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const NotificationsView()),
+                MaterialPageRoute(builder: (_) => const ChatBotView()),
+              );
+            },
+          ),
+          Consumer<NotificationProvider>(
+            builder: (context, notificationProvider, _) {
+              final unreadCount = notificationProvider.unreadCount;
+              return Badge(
+                isLabelVisible: unreadCount > 0,
+                label: Text(unreadCount.toString()),
+                child: IconButton(
+                  icon: const Icon(Icons.notifications_outlined, color: AppColors.primary),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const NotificationsView()),
+                    );
+                  },
+                ),
               );
             },
           ),
@@ -453,16 +475,57 @@ class _HomeTabState extends State<HomeTab> {
                                   margin: const EdgeInsets.only(right: 16),
                                   child: Card(
                                     clipBehavior: Clip.antiAlias,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        Expanded(
-                                          child: Image.network(
-                                            photo['avatarUrl'] ?? 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?q=80&w=200',
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 40),
+                                    child: InkWell(
+                                      onTap: () async {
+                                        final String? otherUserId = photo['userId']?.toString();
+                                        if (otherUserId == null) return;
+
+                                        // Show loading spinner dialog
+                                        showDialog(
+                                          context: context,
+                                          barrierDismissible: false,
+                                          builder: (_) => const Center(
+                                            child: CircularProgressIndicator(color: AppColors.primary),
                                           ),
-                                        ),
+                                        );
+
+                                        try {
+                                          final chatProvider = context.read<UserChatProvider>();
+                                          final roomId = await chatProvider.startChat(otherUserId);
+
+                                          if (context.mounted) {
+                                            Navigator.pop(context); // dismiss loading spinner
+                                            chatProvider.enterRoom(roomId);
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => ChatView(
+                                                  roomId: roomId,
+                                                  otherParticipantName: photo['businessName'] ?? 'Nhiếp ảnh gia',
+                                                  otherParticipantAvatar: photo['avatarUrl'],
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (context.mounted) {
+                                            Navigator.pop(context); // dismiss loading spinner
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('Không thể kết nối chat: $e')),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          Expanded(
+                                            child: Image.network(
+                                              photo['avatarUrl'] ?? 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?q=80&w=200',
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 40),
+                                            ),
+                                          ),
                                         Padding(
                                           padding: const EdgeInsets.all(8.0),
                                           child: Column(
@@ -485,6 +548,7 @@ class _HomeTabState extends State<HomeTab> {
                                         )
                                       ],
                                     ),
+                                  ),
                                   ),
                                 );
                               },

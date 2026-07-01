@@ -19,6 +19,7 @@ import { BookingsController } from './controllers/bookings.controller';
 import { BookingsService } from './services/bookings.service';
 import { ProductsModule } from '../products/products.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 export const bookingModels = MongooseModule.forFeature([
   { name: Cart.name, schema: CartSchema },
@@ -30,7 +31,12 @@ export const bookingModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [bookingModels, ProductsModule, forwardRef(() => PaymentsModule)],
+  imports: [
+    bookingModels,
+    ProductsModule,
+    forwardRef(() => PaymentsModule),
+    NotificationsModule,
+  ],
   controllers: [BookingsController],
   providers: [BookingsService],
   exports: [bookingModels, BookingsService],
