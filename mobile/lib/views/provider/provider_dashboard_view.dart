@@ -8,6 +8,8 @@ import 'schedule_manager_view.dart';
 import 'portfolio_manager_view.dart';
 import 'voucher_manager_view.dart';
 import 'reviews_dashboard_view.dart';
+import 'product_manager_view.dart';
+
 
 class ProviderDashboardView extends StatefulWidget {
   const ProviderDashboardView({super.key});
@@ -166,7 +168,70 @@ class ProviderHomeTab extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
+              // Manage Products Card Button
+              Card(
+                elevation: 3,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                color: AppColors.primaryTrans,
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ProductManagerView(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 18.0, horizontal: 16.0),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.dry_cleaning,
+                          color: AppColors.primary,
+                          size: 36,
+                        ),
+                        SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Quản lý phục trang Áo Dài',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Thêm mới, sửa giá, mô tả và số lượng tồn kho',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          color: AppColors.primary,
+                          size: 16,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
               // Active Bookings list
+
               Text(
                 'Lịch đặt khách hàng mới nhất',
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),

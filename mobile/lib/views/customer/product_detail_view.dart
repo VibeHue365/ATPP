@@ -4,6 +4,7 @@ import '../../core/constants/colors.dart';
 import '../../models/product.dart';
 import '../../models/cart_item.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/auth_provider.dart';
 import 'checkout_view.dart';
 
 class ProductDetailView extends StatefulWidget {
@@ -33,7 +34,31 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     return Scaffold(
       appBar: AppBar(
         title: Text(product.name),
+        actions: [
+          Consumer<AuthProvider>(
+            builder: (context, authProvider, _) {
+              final user = authProvider.user;
+              if (user == null) return const SizedBox.shrink();
+              final isFavorited = user.favorites.any((f) =>
+                  f.targetId == product.id && f.targetType == 'PRODUCT');
+              return IconButton(
+                icon: Icon(
+                  isFavorited ? Icons.favorite : Icons.favorite_border,
+                  color: isFavorited ? Colors.red : null,
+                ),
+                onPressed: () {
+                  authProvider.toggleFavorite(
+                    targetType: 'PRODUCT',
+                    targetId: product.id,
+                  );
+                },
+              );
+            },
+          ),
+        ],
       ),
+
+
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -44,13 +69,14 @@ class _ProductDetailViewState extends State<ProductDetailView> {
               child: Hero(
                 tag: 'product_image_${product.id}',
                 child: Image.network(
-                  product.imageUrl ?? 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600',
+                  product.fullImageUrl,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
                     color: AppColors.primaryTrans,
                     child: const Icon(Icons.image, size: 64, color: AppColors.primary),
                   ),
                 ),
+
               ),
             ),
             

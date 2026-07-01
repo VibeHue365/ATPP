@@ -12,7 +12,10 @@ import 'customer_dashboard_view.dart';
 import 'cart_view.dart';
 import 'map_view.dart';
 import 'notifications_view.dart';
+import 'favorites_view.dart';
+import 'edit_profile_view.dart';
 import '../onboarding/onboarding_view.dart';
+
 
 class LandingView extends StatefulWidget {
   const LandingView({super.key});
@@ -552,7 +555,18 @@ class ProfileTab extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          ListTile(
+            leading: const Icon(Icons.person_outline, color: AppColors.primary),
+            title: const Text('Chỉnh sửa thông tin'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EditProfileView()),
+              );
+            },
+          ),
+          const Divider(),
           ListTile(
             leading: const Icon(Icons.lock_reset, color: AppColors.primary),
             title: const Text('Đổi mật khẩu'),
@@ -560,6 +574,20 @@ class ProfileTab extends StatelessWidget {
             onTap: () {},
           ),
           const Divider(),
+
+          ListTile(
+            leading: const Icon(Icons.favorite, color: AppColors.primary),
+            title: const Text('Danh sách yêu thích'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const FavoritesView()),
+              );
+            },
+          ),
+          const Divider(),
+
           Consumer<ThemeProvider>(
             builder: (context, themeProvider, _) {
               return SwitchListTile(

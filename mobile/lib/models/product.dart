@@ -1,3 +1,5 @@
+import '../core/network/api_client.dart';
+
 class Product {
   final String id;
   final String name;
@@ -6,10 +8,22 @@ class Product {
   final double depositPrice;
   final String? imageUrl;
   final String category;
+  final String categoryId;
   final String providerId;
   final List<String> availableSizes;
 
+  String get fullImageUrl {
+    if (imageUrl == null || imageUrl!.isEmpty) {
+      return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600';
+    }
+    if (imageUrl!.startsWith('http')) {
+      return imageUrl!;
+    }
+    return '${ApiClient.baseUrl}$imageUrl';
+  }
+
   Product({
+
     required this.id,
     required this.name,
     required this.description,
@@ -17,6 +31,7 @@ class Product {
     required this.depositPrice,
     this.imageUrl,
     required this.category,
+    required this.categoryId,
     required this.providerId,
     this.availableSizes = const [],
   });
@@ -32,6 +47,7 @@ class Product {
           ? (json['images'] as List).first as String
           : (json['imageUrl'] ?? json['image']),
       category: (json['categoryId'] is Map ? json['categoryId']['name'] : null) ?? json['category'] ?? 'Ao Dai',
+      categoryId: (json['categoryId'] is Map ? (json['categoryId']['_id'] ?? json['categoryId']['id']) : json['categoryId']) ?? '',
       providerId: (json['providerId'] is Map ? (json['providerId']['_id'] ?? json['providerId']['id']) : json['providerId']) ?? (json['provider'] is Map ? (json['provider']['_id'] ?? json['provider']['id']) : json['provider']) ?? '',
       availableSizes: List<String>.from(json['sizes'] ?? json['availableSizes'] ?? []),
     );
@@ -46,8 +62,10 @@ class Product {
       'depositPrice': depositPrice,
       'imageUrl': imageUrl,
       'category': category,
+      'categoryId': categoryId,
       'providerId': providerId,
       'availableSizes': availableSizes,
     };
   }
 }
+

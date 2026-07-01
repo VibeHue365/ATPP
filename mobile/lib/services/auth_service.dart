@@ -145,4 +145,47 @@ class AuthService {
       throw e.response?.data?['message'] ?? 'Failed to reset password';
     }
   }
+
+  Future<void> toggleFavorite({
+    required String targetType,
+    required String targetId,
+  }) async {
+    try {
+      await _dio.patch('/users/me/favorites', data: {
+        'targetType': targetType,
+        'targetId': targetId,
+      });
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to update favorites';
+    }
+  }
+
+  Future<User> updateProfile({
+    required String fullName,
+    required String phone,
+  }) async {
+    try {
+      final response = await _dio.patch('/users/me', data: {
+        'fullName': fullName,
+        'phone': phone,
+      });
+      return User.fromJson(response.data);
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to update profile';
+    }
+  }
+
+  Future<User> updateAvatar(String filePath) async {
+    try {
+      final fileName = filePath.split('/').last;
+      final formData = FormData.fromMap({
+        'avatar': await MultipartFile.fromFile(filePath, filename: fileName),
+      });
+      final response = await _dio.patch('/users/me/avatar', data: formData);
+      return User.fromJson(response.data);
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to update avatar';
+    }
+  }
 }
+

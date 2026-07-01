@@ -17,7 +17,9 @@ void main() {
         depositPrice: 500000.0,
         imageUrl: 'https://example.com/image.jpg',
         category: 'Áo ngũ thân',
+        categoryId: 'cat1',
         providerId: 'prov1',
+
         availableSizes: ['M', 'L'],
       );
     });
