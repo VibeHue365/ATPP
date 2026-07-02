@@ -8,6 +8,7 @@ import { BookingItem } from '../../bookings/schemas/booking-item.schema';
 import { InventoryItem, InventoryItemStatus } from '../../products/schemas/inventory-item.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { MockBankingService } from '../../payments/services/mock-banking.service';
+import { EscrowStatus } from '../../payments/schemas/booking-escrow.schema';
 
 @Injectable()
 export class DisputesService {
@@ -176,19 +177,43 @@ export class DisputesService {
     }
 
     // 3. Thực hiện Profit Split tiền dịch vụ & hoàn thành đơn đặt lịch
-    incident.status = IncidentStatus.Accepted;
-    await incident.save();
+    const escrow = await this.bookingModel.db
+      .model('BookingEscrow')
+      .findOneAndUpdate(
+        { bookingId: booking._id, status: EscrowStatus.Held },
+        { $set: { status: EscrowStatus.DisputedResolved } },
+        { new: false },
+      );
 
-    booking.status = BookingStatus.Completed;
-    booking.statusTimeline.push({
-      status: BookingStatus.Completed,
-      changedAt: new Date(),
-      note: `Khách hàng đồng ý đền bù ${incident.requestedAmount.toLocaleString()}đ. Đơn đặt lịch hoàn tất thành công.`,
-    });
-    await booking.save();
+    if (!escrow) {
+      throw new BadRequestException(
+        'Đơn hàng đã được đối soát hoặc không tìm thấy thông tin ký quỹ hợp lệ',
+      );
+    }
 
-    // Thực hiện Profit Split trực tiếp chuyển khoản tiền dịch vụ cho Provider
-    await this.paymentsService.executeProfitSplit(booking);
+    try {
+      incident.status = IncidentStatus.Accepted;
+      await incident.save();
+
+      booking.status = BookingStatus.Completed;
+      booking.statusTimeline.push({
+        status: BookingStatus.Completed,
+        changedAt: new Date(),
+        note: `Khách hàng đồng ý đền bù ${incident.requestedAmount.toLocaleString()}đ. Đơn đặt lịch hoàn tất thành công.`,
+      });
+      await booking.save();
+
+      // Thực hiện Profit Split trực tiếp chuyển khoản tiền dịch vụ cho Provider
+      await this.paymentsService.executeProfitSplit(booking);
+    } catch (err) {
+      await this.bookingModel.db
+        .model('BookingEscrow')
+        .updateOne(
+          { bookingId: booking._id },
+          { $set: { status: EscrowStatus.Held } },
+        );
+      throw err;
+    }
 
     return {
       success: true,
@@ -316,42 +341,78 @@ export class DisputesService {
       refundResult = await this.paymentsService.refundDeposit(booking._id.toString(), booking.pricingSummary.depositTotal);
     }
 
-    // Cập nhật trạng thái sự cố và tranh chấp
-    incident.status = IncidentStatus.Resolved;
-    incident.adminNotes = notes;
-    incident.resolvedAt = new Date();
-    await incident.save();
+    // Cập nhật trạng thái Escrow sang Settled/DisputedResolved một cách atomic để tránh double split
+    const escrow = await this.bookingModel.db
+      .model('BookingEscrow')
+      .findOneAndUpdate(
+        { bookingId: booking._id, status: EscrowStatus.Held },
+        { $set: { status: EscrowStatus.DisputedResolved } },
+        { new: false },
+      );
 
-    await this.disputeModel.findOneAndUpdate(
-      { bookingId },
-      {
-        $set: {
-          status: DisputeStatus.Resolved,
-          adminDecision: {
-            decision: decision === 'SHOP_RIGHT' ? DisputeDecision.ProviderFullPay : DisputeDecision.CustomerFullRefund,
-            faultParty: decision === 'SHOP_RIGHT' ? FaultParty.Customer : FaultParty.Provider,
-            refundAmount: decision === 'SHOP_RIGHT' ? booking.pricingSummary.depositTotal - incident.requestedAmount : booking.pricingSummary.depositTotal,
-            compensationAmount: decision === 'SHOP_RIGHT' ? incident.requestedAmount : 0,
-            penaltyAmount: 0,
-            decisionNote: notes,
-            decidedBy: new Types.ObjectId(adminUserId),
-            decidedAt: new Date(),
+    if (!escrow) {
+      throw new BadRequestException(
+        'Đơn hàng đã được đối soát hoặc không tìm thấy thông tin ký quỹ hợp lệ',
+      );
+    }
+
+    try {
+      // Cập nhật trạng thái sự cố và tranh chấp
+      incident.status = IncidentStatus.Resolved;
+      incident.adminNotes = notes;
+      incident.resolvedAt = new Date();
+      await incident.save();
+
+      await this.disputeModel.findOneAndUpdate(
+        { bookingId },
+        {
+          $set: {
+            status: DisputeStatus.Resolved,
+            adminDecision: {
+              decision:
+                decision === 'SHOP_RIGHT'
+                  ? DisputeDecision.ProviderFullPay
+                  : DisputeDecision.CustomerFullRefund,
+              faultParty:
+                decision === 'SHOP_RIGHT'
+                  ? FaultParty.Customer
+                  : FaultParty.Provider,
+              refundAmount:
+                decision === 'SHOP_RIGHT'
+                  ? booking.pricingSummary.depositTotal -
+                    incident.requestedAmount
+                  : booking.pricingSummary.depositTotal,
+              compensationAmount:
+                decision === 'SHOP_RIGHT' ? incident.requestedAmount : 0,
+              penaltyAmount: 0,
+              decisionNote: notes,
+              decidedBy: new Types.ObjectId(adminUserId),
+              decidedAt: new Date(),
+            },
           },
         },
-      },
-    );
+      );
 
-    // Chuyển đơn hàng sang Completed
-    booking.status = BookingStatus.Completed;
-    booking.statusTimeline.push({
-      status: BookingStatus.Completed,
-      changedAt: new Date(),
-      note: `Admin giải quyết tranh chấp hỏng đồ. Quyết định: ${decision === 'SHOP_RIGHT' ? 'Shop Đúng' : 'Khách hàng Đúng'}. Ghi chú: ${notes}`,
-    });
-    await booking.save();
+      // Chuyển đơn hàng sang Completed
+      booking.status = BookingStatus.Completed;
+      booking.statusTimeline.push({
+        status: BookingStatus.Completed,
+        changedAt: new Date(),
+        note: `Admin giải quyết tranh chấp hỏng đồ. Quyết định: ${decision === 'SHOP_RIGHT' ? 'Shop Đúng' : 'Khách hàng Đúng'}. Ghi chú: ${notes}`,
+      });
+      await booking.save();
 
-    // Thực hiện Profit Split trực tiếp chuyển khoản tiền dịch vụ cho Provider
-    await this.paymentsService.executeProfitSplit(booking);
+      // Thực hiện Profit Split trực tiếp chuyển khoản tiền dịch vụ cho Provider
+      await this.paymentsService.executeProfitSplit(booking);
+    } catch (err) {
+      await this.bookingModel.db
+        .model('BookingEscrow')
+        .updateOne(
+          { bookingId: booking._id },
+          { $set: { status: EscrowStatus.Held } },
+        );
+      throw err;
+    }
 
     return {
       success: true,

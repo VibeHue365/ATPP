@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -57,6 +58,8 @@ interface TransferResult {
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
@@ -153,46 +156,68 @@ export class PaymentsService {
   }
 
   async confirmPayment(paymentCode: string): Promise<PaymentDocument> {
-    const payment = await this.paymentModel.findOne({ paymentCode });
+    const payment = await this.paymentModel.findOneAndUpdate(
+      { paymentCode, status: PaymentStatus.Pending },
+      { $set: { status: PaymentStatus.Success, paidAt: new Date() } },
+      { new: true },
+    );
+
     if (!payment) {
-      throw new NotFoundException('Payment not found');
-    }
-
-    if (payment.status === PaymentStatus.Success) {
-      return payment;
-    }
-
-    payment.status = PaymentStatus.Success;
-    payment.paidAt = new Date();
-    await payment.save();
-
-    const booking = await this.bookingModel.findById(payment.bookingId);
-    if (booking) {
-      booking.paymentSummary.totalPaid += payment.amount;
-
-      if (
-        booking.paymentSummary.totalPaid >= booking.pricingSummary.grandTotal
-      ) {
-        booking.paymentSummary.paymentStatus = BookingPaymentStatus.Paid;
-        booking.status = BookingStatus.Confirmed;
-      } else if (booking.paymentSummary.totalPaid > 0) {
-        booking.paymentSummary.paymentStatus =
-          BookingPaymentStatus.PartiallyPaid;
+      const existing = await this.paymentModel.findOne({ paymentCode });
+      if (!existing) {
+        throw new NotFoundException('Payment not found');
       }
+      if (existing.status === PaymentStatus.Success) {
+        return existing;
+      }
+      throw new BadRequestException(
+        `Cannot confirm payment with status: ${existing.status}`,
+      );
+    }
 
-      booking.statusTimeline.push({
-        status: booking.status,
-        changedAt: new Date(),
-        note: 'Thanh toán thành công đơn hàng',
-      });
+    const updatedBooking = await this.bookingModel.findOneAndUpdate(
+      { _id: payment.bookingId },
+      { $inc: { 'paymentSummary.totalPaid': payment.amount } },
+      { new: true },
+    );
 
-      await booking.save();
+    if (updatedBooking) {
+      const isPaid =
+        updatedBooking.paymentSummary.totalPaid >=
+        updatedBooking.pricingSummary.grandTotal;
+
+      const newStatus = isPaid
+        ? BookingStatus.Confirmed
+        : updatedBooking.status;
+
+      const newPaymentStatus = isPaid
+        ? BookingPaymentStatus.Paid
+        : updatedBooking.paymentSummary.totalPaid > 0
+          ? BookingPaymentStatus.PartiallyPaid
+          : BookingPaymentStatus.Unpaid;
+
+      await this.bookingModel.updateOne(
+        { _id: payment.bookingId },
+        {
+          $set: {
+            status: newStatus,
+            'paymentSummary.paymentStatus': newPaymentStatus,
+          },
+          $push: {
+            statusTimeline: {
+              status: newStatus,
+              changedAt: new Date(),
+              note: 'Thanh toán thành công đơn hàng',
+            },
+          },
+        },
+      );
 
       // Tạo Escrow Entry ghi nhận tiền ký quỹ
       await this.createEscrowEntry(
-        booking._id,
-        booking.pricingSummary.grandTotal,
-        booking.pricingSummary.depositTotal,
+        updatedBooking._id,
+        updatedBooking.pricingSummary.grandTotal,
+        updatedBooking.pricingSummary.depositTotal,
       );
     }
 
@@ -284,6 +309,19 @@ export class PaymentsService {
       const providerReceivable = providerReceivableRaw - platformCommission;
 
       if (providerReceivable > 0) {
+        // Kiểm tra đối soát trùng lặp
+        const existingSettlement = await this.settlementModel.findOne({
+          bookingId: booking._id,
+          providerId: new Types.ObjectId(providerIdStr),
+        });
+
+        if (existingSettlement) {
+          this.logger.warn(
+            `Đối soát cho đơn hàng ${booking.bookingCode} với Provider ${providerIdStr} đã tồn tại. Bỏ qua để tránh trùng lặp.`,
+          );
+          continue;
+        }
+
         const provider = await this.bookingModel.db
           .model('Provider')
           .findById(new Types.ObjectId(providerIdStr));
@@ -354,29 +392,41 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     }
 
-    let escrow = await this.escrowModel.findOne({ bookingId });
-    if (escrow && escrow.status === EscrowStatus.Settled) {
-      return { message: 'Booking already settled' };
-    }
-
-    // 1. Chuyển khoản trực tiếp chia tiền dịch vụ cho các Provider
-    await this.executeProfitSplit(booking);
-
-    // 2. Tự động hoàn cọc giữ đồ (depositTotal) cho khách hàng
-    if (booking.pricingSummary.depositTotal > 0) {
-      await this.refundDeposit(bookingIdStr, booking.pricingSummary.depositTotal);
-    }
+    // Cập nhật trạng thái Escrow sang Settled một cách atomic để chặn các request song song
+    const escrow = await this.escrowModel.findOneAndUpdate(
+      { bookingId, status: EscrowStatus.Held },
+      { $set: { status: EscrowStatus.Settled } },
+      { new: false },
+    );
 
     if (!escrow) {
-      escrow = await this.escrowModel.create({
-        bookingId,
-        totalAmountCollected: booking.pricingSummary.grandTotal,
-        damageDepositAmount: booking.pricingSummary.depositTotal,
-        status: EscrowStatus.Settled,
-      });
-    } else {
-      escrow.status = EscrowStatus.Settled;
-      await escrow.save();
+      const currentEscrow = await this.escrowModel.findOne({ bookingId });
+      if (currentEscrow && currentEscrow.status === EscrowStatus.Settled) {
+        return { message: 'Booking already settled' };
+      }
+      throw new BadRequestException(
+        'Booking escrow is not in Held status or not found',
+      );
+    }
+
+    try {
+      // 1. Chuyển khoản trực tiếp chia tiền dịch vụ cho các Provider
+      await this.executeProfitSplit(booking);
+
+      // 2. Tự động hoàn cọc giữ đồ (depositTotal) cho khách hàng
+      if (booking.pricingSummary.depositTotal > 0) {
+        await this.refundDeposit(
+          bookingIdStr,
+          booking.pricingSummary.depositTotal,
+        );
+      }
+    } catch (err) {
+      // Revert lại trạng thái Held nếu gặp lỗi để có thể retry
+      await this.escrowModel.updateOne(
+        { bookingId },
+        { $set: { status: EscrowStatus.Held } },
+      );
+      throw err;
     }
 
     return {

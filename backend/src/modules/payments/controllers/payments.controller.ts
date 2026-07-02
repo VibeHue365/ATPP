@@ -20,6 +20,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { PaymentsService } from '../services/payments.service';
 import { Payment, PaymentPurpose } from '../schemas/payment.schema';
+import { PaymentWebhookEvent } from '../schemas/payment-webhook-event.schema';
 
 export class CreatePaymentLinkDto {
   @IsString()
@@ -70,6 +71,8 @@ export class PaymentsController {
     private readonly paymentsService: PaymentsService,
     private readonly configService: ConfigService,
     @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
+    @InjectModel(PaymentWebhookEvent.name)
+    private readonly webhookEventModel: Model<PaymentWebhookEvent>,
   ) {}
 
   @Post('create-link')
@@ -105,16 +108,46 @@ export class PaymentsController {
 
   @Post('webhook')
   async handlePayOSWebhook(@Body() body: WebhookBodyDto) {
+    const webhookData = body.data as WebhookData;
+    const orderCode = webhookData.orderCode;
+    const status = webhookData.status;
+
+    if (orderCode !== undefined && status) {
+      const webhookId = `payos_${orderCode}_${status}`;
+      try {
+        const event = await this.webhookEventModel.findOneAndUpdate(
+          { webhookId },
+          {
+            $setOnInsert: {
+              provider: 'PAYOS',
+              payload: body.data,
+              signature: body.signature,
+              processed: false,
+            },
+          },
+          { upsert: true, new: false },
+        );
+
+        if (event && event.processed) {
+          this.logger.log(
+            `Webhook ${webhookId} was already processed. Bypassing.`,
+          );
+          return { status: 'success', note: 'already_processed' };
+        }
+      } catch (err) {
+        this.logger.log(
+          `Conflict/Duplicate writing WebhookEvent ${webhookId}. Bypassing.`,
+        );
+        return { status: 'success', note: 'duplicate_ignored' };
+      }
+    }
+
     const checksumKey = this.configService.get<string>(
       'PAYOS_CHECKSUM_KEY',
       '',
     );
 
-    if (!checksumKey || checksumKey.includes('your_')) {
-      this.logger.warn(
-        `PAYOS_CHECKSUM_KEY not configured or is placeholder. Bypassing signature check for simulation.`,
-      );
-    } else {
+    if (checksumKey && !checksumKey.includes('your_')) {
       const isVerified = this.verifyPayOSSignature(
         body.data,
         body.signature,
@@ -122,13 +155,20 @@ export class PaymentsController {
       );
       if (!isVerified) {
         this.logger.warn(`Invalid signature detected in payOS webhook!`);
+        if (orderCode !== undefined && status) {
+          const webhookId = `payos_${orderCode}_${status}`;
+          await this.webhookEventModel.updateOne(
+            { webhookId },
+            { $set: { error: 'Signature verification failed' } },
+          );
+        }
         throw new BadRequestException('Signature verification failed');
       }
+    } else {
+      this.logger.warn(
+        `PAYOS_CHECKSUM_KEY not configured or is placeholder. Bypassing signature check for simulation.`,
+      );
     }
-
-    const webhookData = body.data as WebhookData;
-    const orderCode = webhookData.orderCode;
-    const status = webhookData.status;
 
     this.logger.log(`Received payOS webhook for orderCode: ${orderCode}`);
 
@@ -139,6 +179,14 @@ export class PaymentsController {
       if (payment) {
         await this.paymentsService.confirmPayment(payment.paymentCode);
       }
+    }
+
+    if (orderCode !== undefined && status) {
+      const webhookId = `payos_${orderCode}_${status}`;
+      await this.webhookEventModel.updateOne(
+        { webhookId },
+        { $set: { processed: true, processedAt: new Date() } },
+      );
     }
 
     return { status: 'success' };

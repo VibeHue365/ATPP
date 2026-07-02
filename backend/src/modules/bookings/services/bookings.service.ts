@@ -5,6 +5,7 @@ import {
   Inject,
   forwardRef,
   ForbiddenException,
+  OnApplicationBootstrap,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -31,6 +32,11 @@ import {
   BookingScheduleType,
   BookingScheduleStatus,
 } from '../schemas/booking-schedule.schema';
+import { InventoryItem } from '../../products/schemas/inventory-item.schema';
+import {
+  InventoryReservation,
+  ReservationStatus,
+} from '../../products/schemas/inventory-reservation.schema';
 import { IsString, IsNotEmpty, IsOptional, IsEnum, IsNumber, IsArray, Min } from 'class-validator';
 
 // ─── DTOs (dùng chung với controller) ────────────────────────────────────────
@@ -174,7 +180,7 @@ export class CreatePhotographyBookingDto {
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 @Injectable()
-export class BookingsService {
+export class BookingsService implements OnApplicationBootstrap {
   constructor(
     @InjectModel(Booking.name)
     private readonly bookingModel: Model<Booking>,
@@ -188,11 +194,63 @@ export class BookingsService {
     private readonly priceVersionModel: Model<PriceVersion>,
     @InjectModel(BookingSchedule.name)
     private readonly bookingScheduleModel: Model<BookingSchedule>,
+    @InjectModel(InventoryItem.name)
+    private readonly inventoryItemModel: Model<InventoryItem>,
+    @InjectModel(InventoryReservation.name)
+    private readonly inventoryReservationModel: Model<InventoryReservation>,
     private readonly promotionsService: PromotionsService,
     @Inject(forwardRef(() => PaymentsService))
     private readonly paymentsService: PaymentsService,
     private readonly productsService: ProductsService,
   ) {}
+
+  onApplicationBootstrap() {
+    // Run cleanup background task every 5 minutes
+    setInterval(async () => {
+      try {
+        await this.cleanupExpiredPendingBookings();
+      } catch (err) {
+        console.error('Error running expired bookings cleanup:', err);
+      }
+    }, 5 * 60 * 1000);
+  }
+
+  async cleanupExpiredPendingBookings(): Promise<void> {
+    const cutoff = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes ago
+    
+    const expiredBookings = await this.bookingModel.find({
+      status: BookingStatus.PendingPayment,
+      createdAt: { $lt: cutoff },
+    });
+
+    if (expiredBookings.length === 0) return;
+
+    const bookingIds = expiredBookings.map((b) => b._id);
+    
+    await this.bookingModel.updateMany(
+      { _id: { $in: bookingIds } },
+      {
+        $set: { status: BookingStatus.Cancelled },
+        $push: {
+          statusTimeline: {
+            status: BookingStatus.Cancelled,
+            changedAt: new Date(),
+            note: 'Tự động hủy đơn hàng do quá hạn thanh toán (30 phút)',
+          },
+        },
+      },
+    );
+
+    await this.bookingScheduleModel.updateMany(
+      { bookingId: { $in: bookingIds } },
+      { $set: { status: BookingScheduleStatus.Cancelled } },
+    );
+
+    await this.inventoryReservationModel.updateMany(
+      { bookingId: { $in: bookingIds } },
+      { $set: { status: ReservationStatus.Cancelled } },
+    );
+  }
 
   // Getter để map photographyPackageModel sang photoPackageModel cho cả hai bên
   private get photographyPackageModel() {
@@ -212,152 +270,268 @@ export class BookingsService {
     let subTotal = 0;
     const itemDetails: Array<Partial<BookingItem>> = [];
     const providerIdsSet = new Set<string>();
+    const reservationsCreated: any[] = [];
+    let booking: any = null;
 
-    for (const item of dto.items) {
-      let unitPrice = 0;
-      let depositAmount = 0;
-      let providerId: Types.ObjectId | null = null;
-      let itemType: BookingItemType;
+    try {
+      for (const item of dto.items) {
+        let unitPrice = 0;
+        let depositAmount = 0;
+        let providerId: Types.ObjectId | null = null;
+        let itemType: BookingItemType;
+        let inventoryItemId: Types.ObjectId | null = null;
 
-      if (item.productId) {
-        const product = await this.productModel.findById(item.productId);
-        if (!product) {
-          throw new NotFoundException(`Product not found: ${item.productId}`);
-        }
-        unitPrice = product.basePrice;
-        depositAmount = product.depositAmount;
-        providerId = product.providerId;
-        itemType = BookingItemType.Product;
-      } else if (item.photographyPackageId) {
-        const pkg = await this.photoPackageModel.findById(
-          item.photographyPackageId,
-        );
-        if (!pkg) {
-          throw new NotFoundException(
-            `Photography package not found: ${item.photographyPackageId}`,
-          );
-        }
-        unitPrice = pkg.price;
-        depositAmount = 0;
-        providerId = pkg.providerId;
-        itemType = BookingItemType.PhotographyPackage;
-      } else {
-        throw new BadRequestException(
-          'Each item must contain either productId or photographyPackageId',
-        );
-      }
-
-      if (providerId) {
-        providerIdsSet.add(providerId.toString());
-      }
-
-      const quantity = item.quantity || 1;
-      subTotal += unitPrice * quantity;
-
-      itemDetails.push({
-        providerId,
-        itemType,
-        productId: item.productId ? new Types.ObjectId(item.productId) : null,
-        photographyPackageId: item.photographyPackageId
-          ? new Types.ObjectId(item.photographyPackageId)
-          : null,
-        priceVersionId: new Types.ObjectId(),
-        unitPrice,
-        depositAmount,
-        quantity,
-        rentalFrom: item.rentalFrom ? new Date(item.rentalFrom) : null,
-        rentalTo: item.rentalTo ? new Date(item.rentalTo) : null,
-        shootDate: item.shootDate ? new Date(item.shootDate) : null,
-        shootTimeSlot: item.shootTimeSlot || null,
-        customRequests: item.customRequests || '',
-        referenceImage: item.referenceImage || null,
-        selectedSize: item.selectedSize || null,
-        selectedColor: item.selectedColor || null,
-      });
-    }
-
-    const travelFee = dto.travelFee || 0;
-    let discountAmount = 0;
-    let promotionId: Types.ObjectId | null = null;
-
-    if (dto.promoCode) {
-      try {
-        const promotion = await this.promotionsService.validatePromotion(
-          dto.promoCode,
-          subTotal,
-          Array.from(providerIdsSet),
-        );
-        promotionId = promotion._id;
-
-        if (promotion.discountType === DiscountType.Percentage) {
-          discountAmount = Math.round(
-            (subTotal * promotion.discountValue) / 100,
-          );
-          if (
-            promotion.maxDiscountAmount &&
-            discountAmount > promotion.maxDiscountAmount
-          ) {
-            discountAmount = promotion.maxDiscountAmount;
+        if (item.productId) {
+          const product = await this.productModel.findById(item.productId);
+          if (!product) {
+            throw new NotFoundException(`Product not found: ${item.productId}`);
           }
+          unitPrice = product.basePrice;
+          depositAmount = product.depositAmount;
+          providerId = product.providerId;
+          itemType = BookingItemType.Product;
+
+          if (item.rentalFrom && item.rentalTo) {
+            const reservedFrom = new Date(item.rentalFrom);
+            reservedFrom.setHours(0, 0, 0, 0);
+            const reservedTo = new Date(item.rentalTo);
+            reservedTo.setHours(23, 59, 59, 999);
+
+            const inventoryItems = await this.inventoryItemModel.find({
+              productId: new Types.ObjectId(item.productId),
+              size: item.selectedSize ? item.selectedSize.toUpperCase() : 'M',
+              color: item.selectedColor ? item.selectedColor.toUpperCase() : 'WHITE',
+              status: 'AVAILABLE',
+              conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
+            } as any);
+
+            if (inventoryItems.length === 0) {
+              throw new BadRequestException(
+                `Sản phẩm hiện không còn sẵn sàng trong kho`,
+              );
+            }
+
+            const conflictingReservations = await this.inventoryReservationModel.find({
+              inventoryItemId: { $in: inventoryItems.map((i) => i._id) },
+              status: {
+                $in: [
+                  ReservationStatus.TempReserved,
+                  ReservationStatus.Confirmed,
+                ],
+              },
+              reservedFrom: { $lte: reservedTo },
+              reservedTo: { $gte: reservedFrom },
+            });
+
+            const busyInventoryItemIds = new Set(
+              conflictingReservations.map((res) => res.inventoryItemId.toString()),
+            );
+
+            const availableItem = inventoryItems.find(
+              (i) => !busyInventoryItemIds.has(i._id.toString()),
+            );
+
+            if (!availableItem) {
+              throw new BadRequestException(
+                `Sản phẩm đã được đặt kín lịch trong khoảng thời gian này`,
+              );
+            }
+
+            // Post-Insert Conflict Check
+            const itemReservation = await this.inventoryReservationModel.create({
+              inventoryItemId: availableItem._id,
+              bookingId: new Types.ObjectId(),
+              bookingItemId: new Types.ObjectId(),
+              reservedFrom,
+              reservedTo,
+              status: ReservationStatus.TempReserved,
+              expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+            });
+
+            const allOverlapping = await this.inventoryReservationModel
+              .find({
+                inventoryItemId: availableItem._id,
+                status: {
+                  $in: [
+                    ReservationStatus.TempReserved,
+                    ReservationStatus.Confirmed,
+                  ],
+                },
+                reservedFrom: { $lte: reservedTo },
+                reservedTo: { $gte: reservedFrom },
+              })
+              .sort({ _id: 1 });
+
+            if (allOverlapping.length > 1) {
+              const winner = allOverlapping[0];
+              if (winner._id.toString() !== itemReservation._id.toString()) {
+                await this.inventoryReservationModel.deleteOne({
+                  _id: itemReservation._id,
+                });
+                throw new BadRequestException(
+                  `Sản phẩm vừa bị người khác nhanh tay đặt trước. Vui lòng thử lại!`,
+                );
+              }
+            }
+
+            inventoryItemId = availableItem._id as Types.ObjectId;
+            reservationsCreated.push(itemReservation);
+          }
+        } else if (item.photographyPackageId) {
+          const pkg = await this.photoPackageModel.findById(
+            item.photographyPackageId,
+          );
+          if (!pkg) {
+            throw new NotFoundException(
+              `Photography package not found: ${item.photographyPackageId}`,
+            );
+          }
+          unitPrice = pkg.price;
+          depositAmount = 0;
+          providerId = pkg.providerId;
+          itemType = BookingItemType.PhotographyPackage;
         } else {
-          discountAmount = promotion.discountValue;
+          throw new BadRequestException(
+            'Each item must contain either productId or photographyPackageId',
+          );
         }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        throw new BadRequestException(`Failed to apply coupon: ${msg}`);
+
+        if (providerId) {
+          providerIdsSet.add(providerId.toString());
+        }
+
+        const quantity = item.quantity || 1;
+        subTotal += unitPrice * quantity;
+
+        itemDetails.push({
+          providerId,
+          itemType,
+          productId: item.productId ? new Types.ObjectId(item.productId) : null,
+          inventoryItemId,
+          photographyPackageId: item.photographyPackageId
+            ? new Types.ObjectId(item.photographyPackageId)
+            : null,
+          priceVersionId: new Types.ObjectId(),
+          unitPrice,
+          depositAmount,
+          quantity,
+          rentalFrom: item.rentalFrom ? new Date(item.rentalFrom) : null,
+          rentalTo: item.rentalTo ? new Date(item.rentalTo) : null,
+          shootDate: item.shootDate ? new Date(item.shootDate) : null,
+          shootTimeSlot: item.shootTimeSlot || null,
+          customRequests: item.customRequests || '',
+          referenceImage: item.referenceImage || null,
+          selectedSize: item.selectedSize || null,
+          selectedColor: item.selectedColor || null,
+        });
       }
-    }
 
-    let depositTotal = 0;
-    for (const item of itemDetails) {
-      depositTotal += (item.depositAmount || 0) * (item.quantity || 1);
-    }
-    const grandTotal = Math.max(subTotal - discountAmount + travelFee, 0) + depositTotal;
+      const travelFee = dto.travelFee || 0;
+      let discountAmount = 0;
+      let promotionId: Types.ObjectId | null = null;
 
-    const booking = (await this.bookingModel.create({
-      bookingCode,
-      customerId,
-      providerIds: Array.from(providerIdsSet).map(
-        (id) => new Types.ObjectId(id),
-      ),
-      bookingType: dto.bookingType || BookingType.AoDaiRental,
-      status: BookingStatus.PendingPayment,
-      pricingSummary: {
-        subTotal,
-        depositTotal,
-        discountAmount,
-        travelFee,
-        overtimeFee: 0,
-        lateFee: 0,
-        damageFee: 0,
-        grandTotal,
-      },
-      paymentSummary: {
-        totalPaid: 0,
-        totalRefunded: 0,
-        paymentStatus: PaymentStatus.Unpaid,
-      },
-      statusTimeline: [
-        {
-          status: BookingStatus.PendingPayment,
-          changedAt: new Date(),
-          note: 'Đơn hàng được khởi tạo',
+      if (dto.promoCode) {
+        try {
+          const promotion = await this.promotionsService.validatePromotion(
+            dto.promoCode,
+            subTotal,
+            Array.from(providerIdsSet),
+          );
+          promotionId = promotion._id;
+
+          if (promotion.discountType === DiscountType.Percentage) {
+            discountAmount = Math.round(
+              (subTotal * promotion.discountValue) / 100,
+            );
+            if (
+              promotion.maxDiscountAmount &&
+              discountAmount > promotion.maxDiscountAmount
+            ) {
+              discountAmount = promotion.maxDiscountAmount;
+            }
+          } else {
+            discountAmount = promotion.discountValue;
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          throw new BadRequestException(`Failed to apply coupon: ${msg}`);
+        }
+      }
+
+      let depositTotal = 0;
+      for (const item of itemDetails) {
+        depositTotal += (item.depositAmount || 0) * (item.quantity || 1);
+      }
+      const grandTotal = Math.max(subTotal - discountAmount + travelFee, 0) + depositTotal;
+
+      booking = (await this.bookingModel.create({
+        bookingCode,
+        customerId,
+        providerIds: Array.from(providerIdsSet).map(
+          (id) => new Types.ObjectId(id),
+        ),
+        bookingType: dto.bookingType || BookingType.AoDaiRental,
+        status: BookingStatus.PendingPayment,
+        pricingSummary: {
+          subTotal,
+          depositTotal,
+          discountAmount,
+          travelFee,
+          overtimeFee: 0,
+          lateFee: 0,
+          damageFee: 0,
+          grandTotal,
         },
-      ],
-    })) as BookingDocument;
+        paymentSummary: {
+          totalPaid: 0,
+          totalRefunded: 0,
+          paymentStatus: PaymentStatus.Unpaid,
+        },
+        statusTimeline: [
+          {
+            status: BookingStatus.PendingPayment,
+            changedAt: new Date(),
+            note: 'Đơn hàng được khởi tạo',
+          },
+        ],
+      })) as BookingDocument;
 
-    for (const detail of itemDetails) {
-      await this.bookingItemModel.create({
-        ...detail,
-        bookingId: booking._id,
-      });
+      for (const detail of itemDetails) {
+        const savedItem = await this.bookingItemModel.create({
+          ...detail,
+          bookingId: booking._id,
+        });
+
+        // Update corresponding reservation
+        if (detail.inventoryItemId) {
+          const matchedRes = reservationsCreated.find(
+            (r) =>
+              r.inventoryItemId.toString() === detail.inventoryItemId!.toString(),
+          );
+          if (matchedRes) {
+            matchedRes.bookingId = booking._id;
+            matchedRes.bookingItemId = savedItem._id;
+            await matchedRes.save();
+          }
+        }
+      }
+
+      if (promotionId) {
+        await this.promotionsService.incrementUsage(promotionId);
+      }
+
+      return booking;
+    } catch (err) {
+      // Rollback
+      for (const res of reservationsCreated) {
+        await this.inventoryReservationModel.deleteOne({ _id: res._id });
+      }
+      if (booking && booking._id) {
+        await this.bookingModel.deleteOne({ _id: booking._id });
+        await this.bookingItemModel.deleteMany({ bookingId: booking._id });
+      }
+      throw err;
     }
-
-    if (promotionId) {
-      await this.promotionsService.incrementUsage(promotionId);
-    }
-
-    return booking;
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -399,6 +573,8 @@ export class BookingsService {
     let rentalTo: Date | null = null;
     let shootDate: Date | null = null;
     let shootTimeSlot: string | null = null;
+    let startDateTime: Date | null = null;
+    let endDateTime: Date | null = null;
 
     if (rentalType === 'HOURLY') {
       if (!startTime || !endTime) {
@@ -411,9 +587,9 @@ export class BookingsService {
       const [sh, sm] = startTime.split(':').map(Number);
       const [eh, em] = endTime.split(':').map(Number);
 
-      const startDateTime = new Date(start);
+      startDateTime = new Date(start);
       startDateTime.setHours(sh, sm, 0, 0);
-      const endDateTime = new Date(start);
+      endDateTime = new Date(start);
       endDateTime.setHours(eh, em, 0, 0);
 
       const durationHours =
@@ -474,88 +650,195 @@ export class BookingsService {
     }
 
     const bookingCode = `BK${Math.floor(10000 + Math.random() * 90000)}`;
+    const reservedFrom = rentalFrom ? new Date(rentalFrom) : new Date(startDateTime!);
+    const reservedTo = rentalTo ? new Date(rentalTo) : new Date(endDateTime!);
+    if (rentalType === 'DAILY') {
+      reservedFrom.setHours(0, 0, 0, 0);
+      reservedTo.setHours(23, 59, 59, 999);
+    }
 
-    const booking = new this.bookingModel({
-      bookingCode,
-      customerId: new Types.ObjectId(customerId),
-      providerIds: [product.providerId],
-      bookingType: BookingType.AoDaiRental,
-      status: BookingStatus.PendingPayment,
-      pricingSummary: {
-        subTotal,
-        depositTotal,
-        discountAmount: 0,
-        travelFee: 0,
-        overtimeFee: 0,
-        lateFee: 0,
-        damageFee: 0,
-        grandTotal,
-      },
-      paymentSummary: {
-        totalPaid: 0,
-        totalRefunded: 0,
-        paymentStatus: PaymentStatus.Unpaid,
-      },
-      statusTimeline: [
-        {
-          status: BookingStatus.PendingPayment,
-          changedAt: new Date(),
-          note: `Booking tạo bởi khách hàng — hình thức: ${rentalType === 'HOURLY' ? 'Thuê theo giờ' : 'Thuê theo ngày'}`,
+    let reservation: any = null;
+    let savedBooking: any = null;
+    let savedBookingItem: any = null;
+
+    try {
+      // Find available InventoryItem
+      const inventoryItems = await this.inventoryItemModel.find({
+        productId: product._id,
+        size: size.toUpperCase(),
+        color: color.toUpperCase(),
+        status: 'AVAILABLE',
+        conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
+      } as any);
+
+      if (inventoryItems.length === 0) {
+        throw new BadRequestException(
+          'Sản phẩm với size và màu sắc đã chọn hiện không còn sẵn sàng trong kho',
+        );
+      }
+
+      const conflictingReservations = await this.inventoryReservationModel.find({
+        inventoryItemId: { $in: inventoryItems.map((item) => item._id) },
+        status: {
+          $in: [
+            ReservationStatus.TempReserved,
+            ReservationStatus.Confirmed,
+          ],
         },
-      ],
-    });
+        reservedFrom: { $lte: reservedTo },
+        reservedTo: { $gte: reservedFrom },
+      });
 
-    const savedBooking = await booking.save();
+      const busyInventoryItemIds = new Set(
+        conflictingReservations.map((res) => res.inventoryItemId.toString()),
+      );
 
-    const bookingItem = new this.bookingItemModel({
-      bookingId: savedBooking._id,
-      providerId: product.providerId,
-      itemType: BookingItemType.Product,
-      productId: product._id,
-      priceVersionId: priceVersion._id,
-      unitPrice,
-      depositAmount: product.depositAmount,
-      quantity,
-      rentalFrom,
-      rentalTo,
-      shootDate,
-      shootTimeSlot,
-      rentalType,
-      selectedSize: size.toUpperCase(),
-      selectedColor: color.toUpperCase(),
-      customRequests: null,
-    });
+      const availableItem = inventoryItems.find(
+        (item) => !busyInventoryItemIds.has(item._id.toString()),
+      );
 
-    const savedBookingItem = await bookingItem.save();
+      if (!availableItem) {
+        throw new BadRequestException(
+          'Sản phẩm đã được đặt kín lịch trong khoảng thời gian này',
+        );
+      }
 
-    // Create BookingSchedule entries
-    if (rentalType === 'DAILY' && rentalFrom && rentalTo) {
-      const start = new Date(rentalFrom);
-      const end = new Date(rentalTo);
-      const current = new Date(start);
-      while (current <= end) {
+      // Post-Insert Conflict Check
+      reservation = await this.inventoryReservationModel.create({
+        inventoryItemId: availableItem._id,
+        bookingId: new Types.ObjectId(),
+        bookingItemId: new Types.ObjectId(),
+        reservedFrom,
+        reservedTo,
+        status: ReservationStatus.TempReserved,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      });
+
+      const allOverlapping = await this.inventoryReservationModel
+        .find({
+          inventoryItemId: availableItem._id,
+          status: {
+            $in: [
+              ReservationStatus.TempReserved,
+              ReservationStatus.Confirmed,
+            ],
+          },
+          reservedFrom: { $lte: reservedTo },
+          reservedTo: { $gte: reservedFrom },
+        })
+        .sort({ _id: 1 });
+
+      if (allOverlapping.length > 1) {
+        const winner = allOverlapping[0];
+        if (winner._id.toString() !== reservation._id.toString()) {
+          await this.inventoryReservationModel.deleteOne({ _id: reservation._id });
+          throw new BadRequestException(
+            'Sản phẩm vừa bị người khác nhanh tay đặt trước. Vui lòng thử lại!',
+          );
+        }
+      }
+
+      const booking = new this.bookingModel({
+        bookingCode,
+        customerId: new Types.ObjectId(customerId),
+        providerIds: [product.providerId],
+        bookingType: BookingType.AoDaiRental,
+        status: BookingStatus.PendingPayment,
+        pricingSummary: {
+          subTotal,
+          depositTotal,
+          discountAmount: 0,
+          travelFee: 0,
+          overtimeFee: 0,
+          lateFee: 0,
+          damageFee: 0,
+          grandTotal,
+        },
+        paymentSummary: {
+          totalPaid: 0,
+          totalRefunded: 0,
+          paymentStatus: PaymentStatus.Unpaid,
+        },
+        statusTimeline: [
+          {
+            status: BookingStatus.PendingPayment,
+            changedAt: new Date(),
+            note: `Booking tạo bởi khách hàng — hình thức: ${rentalType === 'HOURLY' ? 'Thuê theo giờ' : 'Thuê theo ngày'}`,
+          },
+        ],
+      });
+
+      savedBooking = await booking.save();
+
+      const bookingItem = new this.bookingItemModel({
+        bookingId: savedBooking._id,
+        providerId: product.providerId,
+        itemType: BookingItemType.Product,
+        productId: product._id,
+        inventoryItemId: availableItem._id,
+        priceVersionId: priceVersion._id,
+        unitPrice,
+        depositAmount: product.depositAmount,
+        quantity,
+        rentalFrom,
+        rentalTo,
+        shootDate,
+        shootTimeSlot,
+        rentalType,
+        selectedSize: size.toUpperCase(),
+        selectedColor: color.toUpperCase(),
+        customRequests: null,
+      });
+
+      savedBookingItem = await bookingItem.save();
+
+      // Update reservation with actual ids
+      reservation.bookingId = savedBooking._id;
+      reservation.bookingItemId = savedBookingItem._id;
+      await reservation.save();
+
+      // Create BookingSchedule entries
+      if (rentalType === 'DAILY' && rentalFrom && rentalTo) {
+        const startDay = new Date(rentalFrom);
+        const endDay = new Date(rentalTo);
+        const current = new Date(startDay);
+        while (current <= endDay) {
+          await this.bookingScheduleModel.create({
+            bookingId: savedBooking._id,
+            bookingItemId: savedBookingItem._id,
+            scheduleType: BookingScheduleType.RentalPeriod,
+            scheduledDate: new Date(current),
+            timeSlot: null,
+            status: BookingScheduleStatus.Scheduled,
+          });
+          current.setDate(current.getDate() + 1);
+        }
+      } else if (rentalType === 'HOURLY' && shootDate) {
         await this.bookingScheduleModel.create({
           bookingId: savedBooking._id,
           bookingItemId: savedBookingItem._id,
           scheduleType: BookingScheduleType.RentalPeriod,
-          scheduledDate: new Date(current),
-          timeSlot: null,
+          scheduledDate: shootDate,
+          timeSlot: shootTimeSlot,
           status: BookingScheduleStatus.Scheduled,
         });
-        current.setDate(current.getDate() + 1);
       }
-    } else if (rentalType === 'HOURLY' && shootDate) {
-      await this.bookingScheduleModel.create({
-        bookingId: savedBooking._id,
-        bookingItemId: savedBookingItem._id,
-        scheduleType: BookingScheduleType.RentalPeriod,
-        scheduledDate: shootDate,
-        timeSlot: shootTimeSlot,
-        status: BookingScheduleStatus.Scheduled,
-      });
-    }
 
-    return savedBooking;
+      return savedBooking;
+    } catch (error) {
+      // Rollback
+      if (reservation && reservation._id) {
+        await this.inventoryReservationModel.deleteOne({ _id: reservation._id });
+      }
+      if (savedBookingItem && savedBookingItem._id) {
+        await this.bookingItemModel.deleteOne({ _id: savedBookingItem._id });
+      }
+      if (savedBooking && savedBooking._id) {
+        await this.bookingModel.deleteOne({ _id: savedBooking._id });
+        await this.bookingScheduleModel.deleteMany({ bookingId: savedBooking._id });
+      }
+      throw error;
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -591,13 +874,20 @@ export class BookingsService {
       throw new BadRequestException('Định dạng ngày chụp không hợp lệ');
     }
 
-    // Kiểm tra trùng lịch chụp
+    // Kiểm tra trùng lịch chụp (chỉ đếm active bookings)
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
+    const activeBookings = await this.bookingModel.find({
+      providerIds: pkg.providerId,
+      status: { $ne: BookingStatus.Cancelled },
+    }).select('_id');
+    const activeBookingIds = activeBookings.map((b) => b._id);
+
     const isSlotBusy = await this.bookingItemModel.findOne({
+      bookingId: { $in: activeBookingIds },
       providerId: pkg.providerId,
       itemType: BookingItemType.PhotographyPackage,
       shootDate: { $gte: startOfDay, $lte: endOfDay },
@@ -635,69 +925,106 @@ export class BookingsService {
 
     const bookingCode = `BK${Math.floor(10000 + Math.random() * 90000)}`;
 
-    const booking = new this.bookingModel({
-      bookingCode,
-      customerId: new Types.ObjectId(customerId),
-      providerIds: [pkg.providerId],
-      bookingType: BookingType.Photography,
-      status: BookingStatus.PendingPayment,
-      pricingSummary: {
-        subTotal,
-        depositTotal,
-        discountAmount: 0,
-        travelFee: 0,
-        overtimeFee: 0,
-        lateFee: 0,
-        damageFee: 0,
-        grandTotal,
-      },
-      paymentSummary: {
-        totalPaid: 0,
-        totalRefunded: 0,
-        paymentStatus: PaymentStatus.Unpaid,
-      },
-      statusTimeline: [
-        {
-          status: BookingStatus.PendingPayment,
-          changedAt: new Date(),
-          note: `Booking gói chụp tạo bởi khách hàng — Concept: ${concept}, Địa điểm: ${shootLocation}`,
+    let savedBooking: any = null;
+    let savedBookingItem: any = null;
+
+    try {
+      const booking = new this.bookingModel({
+        bookingCode,
+        customerId: new Types.ObjectId(customerId),
+        providerIds: [pkg.providerId],
+        bookingType: BookingType.Photography,
+        status: BookingStatus.PendingPayment,
+        pricingSummary: {
+          subTotal,
+          depositTotal,
+          discountAmount: 0,
+          travelFee: 0,
+          overtimeFee: 0,
+          lateFee: 0,
+          damageFee: 0,
+          grandTotal,
         },
-      ],
-    });
+        paymentSummary: {
+          totalPaid: 0,
+          totalRefunded: 0,
+          paymentStatus: PaymentStatus.Unpaid,
+        },
+        statusTimeline: [
+          {
+            status: BookingStatus.PendingPayment,
+            changedAt: new Date(),
+            note: `Booking gói chụp tạo bởi khách hàng — Concept: ${concept}, Địa điểm: ${shootLocation}`,
+          },
+        ],
+      });
 
-    const savedBooking = await booking.save();
+      savedBooking = await booking.save();
 
-    const bookingItem = new this.bookingItemModel({
-      bookingId: savedBooking._id,
-      providerId: pkg.providerId,
-      itemType: BookingItemType.PhotographyPackage,
-      photographyPackageId: pkg._id,
-      priceVersionId: priceVersion._id,
-      unitPrice,
-      depositAmount: depositTotal,
-      quantity: 1,
-      shootDate: date,
-      shootTimeSlot,
-      shootLocation,
-      shootConcept: concept,
-      referenceImage: referenceImage || null,
-      rentalType: 'DAILY',
-      customRequests: customRequests || null,
-    });
+      const bookingItem = new this.bookingItemModel({
+        bookingId: savedBooking._id,
+        providerId: pkg.providerId,
+        itemType: BookingItemType.PhotographyPackage,
+        photographyPackageId: pkg._id,
+        priceVersionId: priceVersion._id,
+        unitPrice,
+        depositAmount: depositTotal,
+        quantity: 1,
+        shootDate: date,
+        shootTimeSlot,
+        shootLocation,
+        shootConcept: concept,
+        referenceImage: referenceImage || null,
+        rentalType: 'DAILY',
+        customRequests: customRequests || null,
+      });
 
-    const savedBookingItem = await bookingItem.save();
+      savedBookingItem = await bookingItem.save();
 
-    // Create BookingSchedule entry for the photoshoot
-    await this.bookingScheduleModel.create({
-      bookingId: savedBooking._id,
-      bookingItemId: savedBookingItem._id,
-      scheduleType: BookingScheduleType.Photoshoot,
-      scheduledDate: date,
-      timeSlot: shootTimeSlot,
-      status: BookingScheduleStatus.Scheduled,
-    });
+      // Post-Insert Conflict Check for Photographer Concurrency
+      const activeBookingIdsWithNew = [...activeBookingIds, savedBooking._id];
+      const allOverlapping = await this.bookingItemModel
+        .find({
+          bookingId: { $in: activeBookingIdsWithNew },
+          providerId: pkg.providerId,
+          itemType: BookingItemType.PhotographyPackage,
+          shootDate: { $gte: startOfDay, $lte: endOfDay },
+          shootTimeSlot,
+        })
+        .sort({ _id: 1 });
 
-    return savedBooking;
+      if (allOverlapping.length > 1) {
+        const winner = allOverlapping[0];
+        if (winner._id.toString() !== savedBookingItem._id.toString()) {
+          await this.bookingItemModel.deleteOne({ _id: savedBookingItem._id });
+          await this.bookingModel.deleteOne({ _id: savedBooking._id });
+          throw new BadRequestException(
+            'Nhiếp ảnh gia vừa nhận lịch chụp từ một khách hàng khác. Vui lòng chọn khung giờ hoặc ngày khác.',
+          );
+        }
+      }
+
+      // Create BookingSchedule entry for the photoshoot
+      await this.bookingScheduleModel.create({
+        bookingId: savedBooking._id,
+        bookingItemId: savedBookingItem._id,
+        scheduleType: BookingScheduleType.Photoshoot,
+        scheduledDate: date,
+        timeSlot: shootTimeSlot,
+        status: BookingScheduleStatus.Scheduled,
+      });
+
+      return savedBooking;
+    } catch (err) {
+      if (savedBookingItem && savedBookingItem._id) {
+        await this.bookingItemModel.deleteOne({ _id: savedBookingItem._id });
+      }
+      if (savedBooking && savedBooking._id) {
+        await this.bookingModel.deleteOne({ _id: savedBooking._id });
+        await this.bookingScheduleModel.deleteMany({ bookingId: savedBooking._id });
+      }
+      throw err;
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -1098,7 +1425,7 @@ export class BookingsService {
 
   async getBusySchedulesForProduct(productId: string): Promise<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }> {
     const activeBookings = await this.bookingModel.find({
-      status: { $ne: BookingStatus.Cancelled }
+      status: { $nin: [BookingStatus.Cancelled, BookingStatus.PendingPayment] }
     }).select('_id');
     const activeBookingIds = activeBookings.map(b => b._id);
 
@@ -1133,7 +1460,7 @@ export class BookingsService {
 
   async getBusySchedulesForProvider(providerId: string): Promise<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }> {
     const activeBookings = await this.bookingModel.find({
-      status: { $ne: BookingStatus.Cancelled }
+      status: { $nin: [BookingStatus.Cancelled, BookingStatus.PendingPayment] }
     }).select('_id');
     const activeBookingIds = activeBookings.map(b => b._id);
 
