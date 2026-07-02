@@ -61,7 +61,9 @@ export const LoginForm: React.FC = () => {
       const loggedInUser = (await login({ email, password, rememberMe })) as any;
       toast.success("Đăng nhập thành công. Chào mừng bạn trở lại.");
 
-      if (loggedInUser?.roles?.includes('PROVIDER')) {
+      if (loggedInUser?.roles?.includes('ADMIN') || loggedInUser?.roles?.includes('admin')) {
+        navigate(ROUTES.ADMIN_DASHBOARD, { replace: true });
+      } else if (loggedInUser?.roles?.includes('PROVIDER')) {
         navigate(ROUTES.PROVIDER_DASHBOARD, { replace: true });
       } else {
         const destination =

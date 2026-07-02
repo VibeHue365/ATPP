@@ -219,6 +219,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    if (user.accountStatus === UserStatus.Banned) {
+      await this.recordLogin(
+        user._id,
+        email,
+        LoginProvider.Local,
+        LoginStatus.Failed,
+        'ACCOUNT_BANNED',
+        context,
+      );
+      throw new ForbiddenException('Tài khoản của bạn đã bị khóa bởi quản trị viên.');
+    }
+
     if (user.accountStatus !== UserStatus.Active || !user.auth.emailVerified) {
       await this.recordLogin(
         user._id,
@@ -229,7 +241,7 @@ export class AuthService {
         context,
       );
       throw new ForbiddenException(
-        'Account is not active or email is not verified',
+        'Tài khoản chưa được kích hoạt hoặc email chưa được xác minh.',
       );
     }
 
@@ -453,8 +465,10 @@ export class AuthService {
         },
       });
       await this.rolesService.assignDefaultCustomerRole(user._id);
+    } else if (user.accountStatus === UserStatus.Banned) {
+      throw new ForbiddenException('Tài khoản của bạn đã bị khóa bởi quản trị viên.');
     } else if (user.accountStatus !== UserStatus.Active) {
-      throw new ForbiddenException('Account is not active');
+      throw new ForbiddenException('Tài khoản chưa được kích hoạt hoặc không hoạt động.');
     } else if (!hasGoogleProvider) {
       await this.usersRepository.addAuthProvider(user._id, {
         provider: AuthProviderType.Google,
@@ -498,8 +512,14 @@ export class AuthService {
     }
 
     const user = await this.usersRepository.findUserById(token.userId);
-    if (!user || user.accountStatus !== UserStatus.Active) {
-      throw new UnauthorizedException('User is not active');
+    if (!user) {
+      throw new UnauthorizedException('Tài khoản không tồn tại');
+    }
+    if (user.accountStatus === UserStatus.Banned) {
+      throw new UnauthorizedException('Tài khoản của bạn đã bị khóa bởi quản trị viên.');
+    }
+    if (user.accountStatus !== UserStatus.Active) {
+      throw new UnauthorizedException('Tài khoản chưa được kích hoạt hoặc không hoạt động.');
     }
 
     const tokens = await this.issueTokens(

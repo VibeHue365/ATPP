@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { ROUTES } from '../config/routes';
-import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X } from 'lucide-react';
+import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X, ShieldCheck } from 'lucide-react';
 import { API_BASE_URL } from '../config/env';
 import { AIChatBot } from '../features/dashboard/components/AIChatBot';
 import { useCart } from '../context/CartContext';
@@ -31,9 +31,15 @@ export const MainLayout: React.FC = () => {
     };
   }, []);
   // Redirect to onboarding if user is logged in but hasn't completed onboarding
+  // Also redirect Admin to Admin Dashboard automatically if they access customer layouts
   useEffect(() => {
-    if (isAuthenticated && user && user.hasCompletedOnboarding === false) {
-      if (location.pathname !== ROUTES.ONBOARDING) {
+    if (isAuthenticated && user) {
+      const isAdmin = user.roles?.includes('ADMIN') || user.roles?.includes('admin');
+      if (isAdmin) {
+        navigate(ROUTES.ADMIN_DASHBOARD, { replace: true });
+        return;
+      }
+      if (user.hasCompletedOnboarding === false && location.pathname !== ROUTES.ONBOARDING) {
         navigate(ROUTES.ONBOARDING);
       }
     }

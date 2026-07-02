@@ -28,7 +28,9 @@ export const OAuthCallback: React.FC = () => {
           const user = await setSession(session.accessToken, session.refreshToken);
           toast.success("Đăng nhập bằng tài khoản Google thành công.");
           
-          if (user?.roles?.includes('PROVIDER')) {
+          if (user?.roles?.includes('ADMIN') || user?.roles?.includes('admin')) {
+            navigate(ROUTES.ADMIN_DASHBOARD, { replace: true });
+          } else if (user?.roles?.includes('PROVIDER')) {
             navigate(ROUTES.PROVIDER_DASHBOARD, { replace: true });
           } else {
             navigate(ROUTES.LANDING, { replace: true });

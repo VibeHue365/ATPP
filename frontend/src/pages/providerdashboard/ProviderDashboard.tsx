@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
   HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,
-  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut
+  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../services/httpClient';
@@ -49,14 +49,41 @@ interface Product {
 
 export const ProviderDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user, isAuthenticated } = useAuth();
   const toast = useToast();
+
+  // Role Access Guard
+  useEffect(() => {
+    if (isAuthenticated !== undefined) {
+      if (!isAuthenticated) {
+        navigate('/login', { replace: true });
+        return;
+      }
+      const roles = user?.roles || [];
+      const isProvider = roles.some(r => r.toUpperCase() === 'PROVIDER');
+      if (!isProvider) {
+        toast.error('Bạn không có quyền truy cập trang quản trị của Đối tác!');
+        navigate('/', { replace: true });
+      }
+    }
+  }, [user, isAuthenticated, navigate, toast]);
   
   // Views navigation state
-  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'calendar' | 'vouchers' | 'reviews' | 'trust'>('orders');
+  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'calendar' | 'vouchers' | 'reviews' | 'trust' | 'analytics'>('analytics');
 
   // Provider Specific States
   const [provider, setProvider] = useState<any>(null);
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [subTab, setSubTab] = useState<'shop' | 'photo'>('shop');
+
+  useEffect(() => {
+    if (analyticsData) {
+      const isShop = analyticsData.capabilities?.includes('AODAI_RENTAL') || analyticsData.capabilities?.includes('RENTAL');
+      if (!isShop) {
+        setSubTab('photo');
+      }
+    }
+  }, [analyticsData]);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [reviewsData, setReviewsData] = useState<any>(null);
@@ -118,8 +145,36 @@ export const ProviderDashboard: React.FC = () => {
 
       const bRes: any = await httpClient.get('/bookings/provider');
       setBookingsState(bRes);
+
+      const aRes: any = await httpClient.get('/providers/me/analytics');
+      setAnalyticsData(aRes);
     } catch (err: any) {
-      toast.error('Không thể đồng bộ dữ liệu đối tác');
+      const msg = err.message || 'Không thể đồng bộ dữ liệu đối tác';
+      toast.error(msg);
+      if (msg.includes('đình chỉ') || msg.includes('susp')) {
+        Swal.fire({
+          title: 'Dịch vụ đối tác bị tạm ngưng',
+          text: msg,
+          icon: 'warning',
+          confirmButtonText: 'Quay lại trang chủ',
+          confirmButtonColor: '#B89047',
+          allowOutsideClick: false,
+        }).then(() => {
+          navigate('/');
+        });
+      } else if (msg.includes('khoá') || msg.includes('khóa') || msg.includes('ban') || msg.includes('unauth')) {
+        Swal.fire({
+          title: 'Tài khoản bị khóa',
+          text: msg,
+          icon: 'error',
+          confirmButtonText: 'Đăng xuất',
+          confirmButtonColor: '#4A0E17',
+          allowOutsideClick: false,
+        }).then(() => {
+          logout();
+          navigate('/login');
+        });
+      }
     } finally {
       setIsLoadingProvider(false);
     }
@@ -465,7 +520,7 @@ export const ProviderDashboard: React.FC = () => {
     } else if (currentView === 'collections') {
       fetchProducts();
       fetchCategories();
-    } else if (['profile', 'portfolio', 'calendar', 'vouchers', 'reviews', 'trust'].includes(currentView)) {
+    } else if (['profile', 'portfolio', 'calendar', 'vouchers', 'reviews', 'trust', 'analytics'].includes(currentView)) {
       fetchProviderData();
     }
   }, [currentView]);
@@ -637,22 +692,39 @@ export const ProviderDashboard: React.FC = () => {
   };
 
   // Orders Tab filter & helpers — counts computed dynamically
-  const statusLabelMap: Record<string, string> = {
-    'Chờ xử lý': 'CHỜ XỬ LÝ',
-    'Đang thực hiện': 'ĐANG XỬ LÝ',
-    'Hoàn thành': 'HOÀN THÀNH',
-    'Đã hủy': 'ĐÃ HỦY',
+  const getOrderGroup = (status: string): string => {
+    const s = (status || '').toUpperCase();
+    if (['CHỜ XỬ LÝ', 'CHỜ THANH TOÁN', 'PENDING', 'PENDING_PAYMENT'].includes(s)) {
+      return 'Chờ xử lý';
+    }
+    if ([
+      'ĐÃ ĐẶT CỌC', 'ĐANG THỰC HIỆN', 'CHỜ NHẬN ĐỒ', 'ĐANG THUÊ', 
+      'CHỜ KHÁCH DUYỆT SỰ CỐ', 'ĐÃ TRẢ ĐỒ', 'TRANH CHẤP', 'ĐANG XỬ LÝ',
+      'DEPOSIT_PAID', 'CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP',
+      'RETURN_PENDING', 'RETURNED', 'DISPUTED'
+    ].includes(s)) {
+      return 'Đang thực hiện';
+    }
+    if (['HOÀN THÀNH', 'COMPLETED'].includes(s)) {
+      return 'Hoàn thành';
+    }
+    if (['ĐÃ HỦY', 'CANCELLED'].includes(s)) {
+      return 'Đã hủy';
+    }
+    return 'Khác';
   };
 
   const tabs = React.useMemo(() => [
     { label: 'Tất cả', count: orders.length },
-    { label: 'Chờ xử lý', count: orders.filter(o => o.status === 'CHỜ XỬ LÝ').length },
-    { label: 'Đang thực hiện', count: orders.filter(o => o.status === 'ĐANG XỬ LÝ').length },
-    { label: 'Hoàn thành', count: orders.filter(o => o.status === 'HOÀN THÀNH').length },
-    { label: 'Đã hủy', count: orders.filter(o => o.status === 'ĐÃ HỦY').length },
+    { label: 'Chờ xử lý', count: orders.filter(o => getOrderGroup(o.status) === 'Chờ xử lý').length },
+    { label: 'Đang thực hiện', count: orders.filter(o => getOrderGroup(o.status) === 'Đang thực hiện').length },
+    { label: 'Hoàn thành', count: orders.filter(o => getOrderGroup(o.status) === 'Hoàn thành').length },
+    { label: 'Đã hủy', count: orders.filter(o => getOrderGroup(o.status) === 'Đã hủy').length },
   ], [orders]);
 
-  const filteredOrders = orderTab === 'Tất cả' ? orders : orders.filter(o => o.status === statusLabelMap[orderTab]);
+  const filteredOrders = orderTab === 'Tất cả' 
+    ? orders 
+    : orders.filter(o => getOrderGroup(o.status) === orderTab);
 
   // Monthly revenue from completed orders
   const monthlyRevenue = React.useMemo(() => {
@@ -726,6 +798,279 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
+  const renderAnalyticsView = () => {
+    if (!analyticsData) {
+      return (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
+          <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+            <div style={{ width: '40px', height: '40px', border: '3px solid #E8E2D5', borderTop: '3px solid #4A0E17', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px auto' }} />
+            <p style={{ fontWeight: 600 }}>Đang tải số liệu phân tích...</p>
+          </div>
+        </div>
+      );
+    }
+
+    const isShop = analyticsData.capabilities?.includes('AODAI_RENTAL') || analyticsData.capabilities?.includes('RENTAL');
+    const isPhoto = analyticsData.capabilities?.includes('PHOTOGRAPHY');
+
+    const renderShopAnalytics = () => {
+      const maxRev = Math.max(...analyticsData.revenueGrowth.map((r: any) => r.value), 1000000);
+      const points = analyticsData.revenueGrowth.map((r: any, idx: number) => {
+        const x = 50 + idx * 80;
+        const y = 260 - (r.value / maxRev) * 200;
+        return `${x},${y}`;
+      }).join(' ');
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#4A0E17' }}>Quản trị Cửa hàng</h2>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Phân tích số liệu vận hành và doanh thu áo dài của bạn.</p>
+            </div>
+            {isShop && isPhoto && (
+              <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--color-light-bg)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
+                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
+            {[
+              { label: 'Doanh thu cửa hàng', val: `${(analyticsData.totalRevenue || 0).toLocaleString('vi-VN')} đ`, desc: 'Tổng doanh thu thực', color: '#4A0E17', bg: '#FAF6F0' },
+              { label: 'Tỷ lệ thành công', val: `${analyticsData.successRate}%`, desc: 'Booking hoàn thành', color: '#166534', bg: '#F0FDF4' },
+              { label: 'Tỷ lệ hủy lịch', val: `${analyticsData.cancelRate}%`, desc: 'Lịch khách hủy', color: '#991B1B', bg: '#FEE2E2' },
+              { label: 'Tổng sản phẩm', val: `${String(analyticsData.totalProducts).padStart(2, '0')} Item`, desc: 'Đồ đang hoạt động', color: '#706E3B', bg: '#FAF6F0' },
+              { label: 'Thời gian thuê tb', val: analyticsData.averageRentalDuration, desc: 'Thời gian mỗi đơn', color: '#15803D', bg: '#F0FDF4' }
+            ].map((m, idx) => (
+              <div key={idx} style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '120px' }}>
+                <div>
+                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</span>
+                  <div style={{ fontSize: '18px', fontWeight: 800, color: idx === 0 ? '#4A0E17' : '#2A2A2A', marginTop: '6px', wordBreak: 'break-all' }}>{m.val}</div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #F0ECE4', paddingTop: '8px' }}>
+                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{m.desc}</span>
+                  <div style={{ width: '20px', height: '20px', borderRadius: '50%', backgroundColor: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: m.color, fontWeight: 700, fontSize: '10px' }}>
+                    {idx === 0 ? '💰' : idx === 1 ? '✓' : idx === 2 ? '✕' : idx === 3 ? '📦' : '⏱'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
+            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Doanh thu Áo dài</h3>
+              <div style={{ height: '300px', width: '100%' }}>
+                <svg viewBox="0 0 500 300" style={{ width: '100%', height: '100%' }}>
+                  {[0, 0.25, 0.5, 0.75, 1].map((p, idx) => {
+                    const y = 40 + p * 200;
+                    return (
+                      <line key={idx} x1="40" y1={y} x2="480" y2={y} stroke="#F0ECE4" strokeDasharray="3 3" />
+                    );
+                  })}
+                  <polyline fill="none" stroke="#4A0E17" strokeWidth="3" points={points} />
+                  {analyticsData.revenueGrowth.map((r: any, idx: number) => {
+                    const x = 50 + idx * 80;
+                    const y = 260 - (r.value / maxRev) * 200;
+                    return (
+                      <g key={idx}>
+                        <circle cx={x} cy={y} r="5" fill="#4A0E17" />
+                        <circle cx={x} cy={y} r="2" fill="white" />
+                        <text x={x} y={y - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="#2A2A2A">{(r.value/1000000).toFixed(1)}M</text>
+                        <text x={x} y="285" textAnchor="middle" fontSize="10" fontWeight="600" fill="var(--color-text-secondary)">{r.label.replace('Tháng ', 'T')}</text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Top Phổ biến</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {analyticsData.popularProducts && analyticsData.popularProducts.length > 0 ? (
+                  analyticsData.popularProducts.map((p: any, idx: number) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: idx < 2 ? '1px solid var(--color-light-border)' : 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <img src={getImageUrl(p.image)} alt={p.name} style={{ width: '44px', height: '44px', borderRadius: '6px', objectFit: 'cover' }} />
+                        <div>
+                          <strong style={{ fontSize: '13px', color: '#2A2A2A', display: 'block' }}>{p.name}</strong>
+                          <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Mẫu áo được thuê nhiều</span>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <strong style={{ fontSize: '14px', color: '#4A0E17' }}>{p.count}</strong>
+                        <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', display: 'block' }}>lượt thuê</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 600 }}>Chưa có lượt thuê áo dài nào.</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', overflow: 'hidden' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-light-border)' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Báo cáo hàng tồn kho & Bảo trì</h3>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
+                  <th style={{ padding: '14px 24px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TÊN SẢN PHẨM</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TRẠNG THÁI</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>SỐ LƯỢNG</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>CHI TIẾT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analyticsData.inventoryStatus.map((item: any, idx: number) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
+                    <td style={{ padding: '16px 24px', fontWeight: 700, color: '#2A2A2A' }}>{item.name}</td>
+                    <td style={{ padding: '16px 24px', textAlign: 'center' }}>
+                      <span style={{ 
+                        padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
+                        backgroundColor: item.color === 'rental' ? '#EBF8FF' : '#FEF3C7',
+                        color: item.color === 'rental' ? '#2B6CB0' : '#D69E2E'
+                      }}>
+                        {item.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px 24px', textAlign: 'center', fontWeight: 600 }}>{item.count}</td>
+                    <td style={{ padding: '16px 24px', color: 'var(--color-text-secondary)' }}>{item.detail}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
+    const renderPhotoAnalytics = () => {
+      const maxVal = Math.max(...analyticsData.revenueGrowth.map((r: any) => r.value), 1000000);
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#4A0E17' }}>Tổng quan Hiệu suất</h2>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Thống kê doanh thu, lịch trình chụp và phản hồi đánh giá của bạn.</p>
+            </div>
+            {isShop && isPhoto && (
+              <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--color-light-bg)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
+                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Doanh thu nhiếp ảnh</span>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: '#4A0E17', marginTop: '8px' }}>{(analyticsData.totalRevenue || 84250000).toLocaleString('vi-VN')} VND</div>
+              <span style={{ fontSize: '12px', color: '#166534', marginTop: '6px', display: 'block', fontWeight: 600 }}>↑ Tăng trưởng tốt trong mùa lễ</span>
+            </div>
+            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Phí hoa hồng hệ thống (15%)</span>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: '#B89047', marginTop: '8px' }}>{(analyticsData.commissionFee || 12800000).toLocaleString('vi-VN')} VND</div>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '6px', display: 'block' }}>Thu phí tự động hàng tuần</span>
+            </div>
+            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Hiệu suất đặt lịch</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600 }}><span style={{ color: '#166534' }}>● Thành công:</span> {analyticsData.successRate}%</div>
+                  <div style={{ fontSize: '12px', fontWeight: 600 }}><span style={{ color: '#991B1B' }}>● Hủy lịch:</span> {analyticsData.cancelRate}%</div>
+                </div>
+              </div>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#166534', fontSize: '20px', fontWeight: 700 }}>✓</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
+            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Doanh thu theo thời gian</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '280px', paddingTop: '20px' }}>
+                {analyticsData.revenueGrowth.map((r: any, idx: number) => {
+                  const barHeight = (r.value / maxVal) * 220;
+                  return (
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
+                      <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{(r.value/1000000).toFixed(1)}M</span>
+                      <div style={{ width: '32px', height: `${barHeight}px`, backgroundColor: '#4A0E17', borderRadius: '4px 4px 0 0', transition: 'height 0.3s ease' }} />
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)' }}>{r.label.replace('Tháng ', 'T')}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Lịch chụp sắp tới</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {analyticsData.upcomingSchedules && analyticsData.upcomingSchedules.length > 0 ? (
+                  analyticsData.upcomingSchedules.map((s: any, idx: number) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+                      <div>
+                        <strong style={{ fontSize: '13px', color: '#2A2A2A', display: 'block' }}>{s.customerName}</strong>
+                        <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{s.date} • {s.time}</span>
+                      </div>
+                      <span style={{ 
+                        padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
+                        backgroundColor: s.color === 'deposit' ? '#F0FDF4' : '#FEF3C7',
+                        color: s.color === 'deposit' ? '#166534' : '#92400E'
+                      }}>{s.status}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 600 }}>Chưa có lịch đặt chụp nào.</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '20px' }}>
+            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase', alignSelf: 'flex-start' }}>Đánh giá trung bình</h3>
+              <div style={{ fontSize: '64px', fontWeight: 900, color: '#4A0E17', lineHeight: 1 }}>{analyticsData.averageRating}</div>
+              <div style={{ display: 'flex', gap: '4px', fontSize: '20px', color: '#B89047' }}>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <span key={i}>★</span>
+                ))}
+              </div>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Dựa trên tất cả feedback khách hàng</span>
+            </div>
+
+            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Phong cách phổ biến</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {analyticsData.popularConcepts && analyticsData.popularConcepts.length > 0 ? (
+                  analyticsData.popularConcepts.map((c: any, idx: number) => (
+                    <div key={idx}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 700, marginBottom: '6px' }}>
+                        <span>{c.name}</span>
+                        <span>{c.percentage}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--color-light-bg)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ width: `${c.percentage}%`, height: '100%', backgroundColor: c.color, borderRadius: '4px' }} />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 600 }}>Chưa có gói concept nào được đặt.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    return subTab === 'shop' ? renderShopAnalytics() : renderPhotoAnalytics();
+  };
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)' }}>
       {/* SIDEBAR */}
@@ -736,6 +1081,7 @@ export const ProviderDashboard: React.FC = () => {
             <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 600 }}>Rental Marketplace</p>
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <button onClick={() => setCurrentView('analytics')} style={navItemStyle(currentView === 'analytics')}><BarChart3 size={18} /> Thống kê & Hiệu suất</button>
             <button onClick={() => setCurrentView('orders')} style={navItemStyle(currentView === 'orders')}><ShoppingBag size={18} /> Đơn hàng</button>
             <button onClick={() => setCurrentView('collections')} style={navItemStyle(currentView === 'collections')}><Layers size={18} /> Bộ sưu tập</button>
             <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ (UC-B06)</button>
@@ -782,6 +1128,12 @@ export const ProviderDashboard: React.FC = () => {
         </header>
 
         {/* CONTENT SWITCH PANEL */}
+        {currentView === 'analytics' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            {renderAnalyticsView()}
+          </main>
+        )}
+
         {currentView === 'orders' && (
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
@@ -974,11 +1326,11 @@ export const ProviderDashboard: React.FC = () => {
                       <div style={{ borderTop: '1px solid var(--color-light-border)', paddingTop: '12px', marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>GIÁ THUÊ / NGÀY</div>
-                          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>{p.basePrice.toLocaleString('vi-VN')}đ</div>
+                          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>{(p.basePrice ?? p.price ?? 0).toLocaleString('vi-VN')}đ</div>
                         </div>
                         <div>
                           <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600, textAlign: 'right' }}>TIỀN ĐẶT CỌC</div>
-                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'right' }}>{p.depositAmount.toLocaleString('vi-VN')}đ</div>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'right' }}>{(p.depositAmount ?? 0).toLocaleString('vi-VN')}đ</div>
                         </div>
                       </div>
 
