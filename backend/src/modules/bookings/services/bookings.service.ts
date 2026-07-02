@@ -83,6 +83,10 @@ export class CreateBookingItemDto {
   @IsString()
   @IsOptional()
   selectedColor?: string;
+
+  @IsString()
+  @IsOptional()
+  rentalType?: string;
 }
 
 export class CreateBookingDto {
@@ -276,7 +280,48 @@ export class BookingsService {
         referenceImage: item.referenceImage || null,
         selectedSize: item.selectedSize || null,
         selectedColor: item.selectedColor || null,
+        rentalType: (item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY') as 'DAILY' | 'HOURLY',
       });
+    }
+
+    // Validate busy schedules for each item before booking to prevent double bookings
+    for (const detail of itemDetails) {
+      if (detail.itemType === BookingItemType.Product && detail.productId) {
+        if (detail.rentalType === 'DAILY' && detail.rentalFrom && detail.rentalTo) {
+          const busySchedules = await this.getBusySchedulesForProduct(detail.productId.toString());
+          const busyDatesSet = new Set(busySchedules.bookedDates);
+          const start = new Date(detail.rentalFrom);
+          const end = new Date(detail.rentalTo);
+          const current = new Date(start);
+          while (current <= end) {
+            const dateStr = current.toISOString().split('T')[0];
+            if (busyDatesSet.has(dateStr)) {
+              throw new BadRequestException(`Sản phẩm đã được đặt lịch thuê vào ngày ${dateStr}. Vui lòng chọn thời gian khác.`);
+            }
+            current.setDate(current.getDate() + 1);
+          }
+        } else if (detail.rentalType === 'HOURLY' && detail.shootDate) {
+          const busySchedules = await this.getBusySchedulesForProduct(detail.productId.toString());
+          const dateStr = new Date(detail.shootDate).toISOString().split('T')[0];
+          const isSlotConflict = detail.shootTimeSlot != null && busySchedules.bookedSlots.some(slot => 
+            slot.date === dateStr && slot.timeSlot && this.isTimeSlotOverlap(slot.timeSlot, detail.shootTimeSlot!)
+          );
+          if (isSlotConflict) {
+            throw new BadRequestException(`Sản phẩm đã được đặt thuê vào ngày ${dateStr} khung giờ ${detail.shootTimeSlot}. Vui lòng chọn khung giờ khác.`);
+          }
+        }
+      } else if (detail.itemType === BookingItemType.PhotographyPackage && detail.photographyPackageId) {
+        if (detail.shootDate && detail.providerId) {
+          const busySchedules = await this.getBusySchedulesForProvider(detail.providerId.toString());
+          const dateStr = new Date(detail.shootDate).toISOString().split('T')[0];
+          const isSlotConflict = detail.shootTimeSlot != null && busySchedules.bookedSlots.some(slot => 
+            slot.date === dateStr && slot.timeSlot && this.isTimeSlotOverlap(slot.timeSlot, detail.shootTimeSlot!)
+          );
+          if (isSlotConflict) {
+            throw new BadRequestException(`Nhiếp ảnh gia đã có lịch chụp vào ngày ${dateStr} khung giờ ${detail.shootTimeSlot}. Vui lòng chọn khung giờ khác.`);
+          }
+        }
+      }
     }
 
     const travelFee = dto.travelFee || 0;
@@ -350,10 +395,50 @@ export class BookingsService {
     })) as BookingDocument;
 
     for (const detail of itemDetails) {
-      await this.bookingItemModel.create({
+      const savedBookingItem = await this.bookingItemModel.create({
         ...detail,
         bookingId: booking._id,
       });
+
+      // Create BookingSchedule entries for each multi-item booking
+      if (detail.itemType === BookingItemType.Product) {
+        if (detail.rentalType === 'DAILY' && detail.rentalFrom && detail.rentalTo) {
+          const start = new Date(detail.rentalFrom);
+          const end = new Date(detail.rentalTo);
+          const current = new Date(start);
+          while (current <= end) {
+            await this.bookingScheduleModel.create({
+              bookingId: booking._id,
+              bookingItemId: savedBookingItem._id,
+              scheduleType: BookingScheduleType.RentalPeriod,
+              scheduledDate: new Date(current),
+              timeSlot: null,
+              status: BookingScheduleStatus.Scheduled,
+            });
+            current.setDate(current.getDate() + 1);
+          }
+        } else if (detail.rentalType === 'HOURLY' && detail.shootDate) {
+          await this.bookingScheduleModel.create({
+            bookingId: booking._id,
+            bookingItemId: savedBookingItem._id,
+            scheduleType: BookingScheduleType.RentalPeriod,
+            scheduledDate: detail.shootDate,
+            timeSlot: detail.shootTimeSlot,
+            status: BookingScheduleStatus.Scheduled,
+          });
+        }
+      } else if (detail.itemType === BookingItemType.PhotographyPackage) {
+        if (detail.shootDate) {
+          await this.bookingScheduleModel.create({
+            bookingId: booking._id,
+            bookingItemId: savedBookingItem._id,
+            scheduleType: BookingScheduleType.Photoshoot,
+            scheduledDate: detail.shootDate,
+            timeSlot: detail.shootTimeSlot,
+            status: BookingScheduleStatus.Scheduled,
+          });
+        }
+      }
     }
 
     if (promotionId) {
@@ -464,6 +549,31 @@ export class BookingsService {
       subTotal = unitPrice * durationDays * quantity;
       rentalFrom = start;
       rentalTo = end;
+    }
+
+    // Validate busy schedules before creating booking to prevent double bookings
+    if (rentalType === 'DAILY' && rentalFrom && rentalTo) {
+      const busySchedules = await this.getBusySchedulesForProduct(productId);
+      const busyDatesSet = new Set(busySchedules.bookedDates);
+      const start = new Date(rentalFrom);
+      const end = new Date(rentalTo);
+      const current = new Date(start);
+      while (current <= end) {
+        const dateStr = current.toISOString().split('T')[0];
+        if (busyDatesSet.has(dateStr)) {
+          throw new BadRequestException(`Sản phẩm đã được đặt lịch thuê vào ngày ${dateStr}. Vui lòng chọn thời gian khác.`);
+        }
+        current.setDate(current.getDate() + 1);
+      }
+    } else if (rentalType === 'HOURLY' && shootDate) {
+      const busySchedules = await this.getBusySchedulesForProduct(productId);
+      const dateStr = new Date(shootDate).toISOString().split('T')[0];
+      const isSlotConflict = shootTimeSlot != null && busySchedules.bookedSlots.some(slot => 
+        slot.date === dateStr && slot.timeSlot && this.isTimeSlotOverlap(slot.timeSlot, shootTimeSlot!)
+      );
+      if (isSlotConflict) {
+        throw new BadRequestException(`Sản phẩm đã được đặt thuê vào ngày ${dateStr} khung giờ ${shootTimeSlot}. Vui lòng chọn khung giờ khác.`);
+      }
     }
 
     const depositTotal = product.depositAmount * quantity;
@@ -1159,22 +1269,27 @@ export class BookingsService {
       bookingId: { $in: activeBookingIds },
       productId: new Types.ObjectId(productId)
     });
-    const bookingItemIds = items.map(item => item._id);
-
-    const schedules = await this.bookingScheduleModel.find({
-      bookingItemId: { $in: bookingItemIds },
-      status: { $ne: BookingScheduleStatus.Cancelled }
-    });
 
     const bookedDates = new Set<string>();
     const bookedSlots: { date: string, timeSlot: string }[] = [];
 
-    schedules.forEach(sched => {
-      const dateStr = sched.scheduledDate.toISOString().split('T')[0];
-      if (sched.timeSlot) {
-        bookedSlots.push({ date: dateStr, timeSlot: sched.timeSlot });
-      } else {
-        bookedDates.add(dateStr);
+    items.forEach(item => {
+      if (item.rentalType === 'DAILY') {
+        if (item.rentalFrom && item.rentalTo) {
+          const start = new Date(item.rentalFrom);
+          const end = new Date(item.rentalTo);
+          const current = new Date(start);
+          while (current <= end) {
+            const dateStr = current.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+            bookedDates.add(dateStr);
+            current.setDate(current.getDate() + 1);
+          }
+        }
+      } else if (item.rentalType === 'HOURLY') {
+        if (item.shootDate && item.shootTimeSlot) {
+          const dateStr = new Date(item.shootDate).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+          bookedSlots.push({ date: dateStr, timeSlot: item.shootTimeSlot });
+        }
       }
     });
 
@@ -1195,22 +1310,14 @@ export class BookingsService {
       providerId: new Types.ObjectId(providerId),
       itemType: BookingItemType.PhotographyPackage
     });
-    const bookingItemIds = items.map(item => item._id);
-
-    const schedules = await this.bookingScheduleModel.find({
-      bookingItemId: { $in: bookingItemIds },
-      status: { $ne: BookingScheduleStatus.Cancelled }
-    });
 
     const bookedDates = new Set<string>();
     const bookedSlots: { date: string, timeSlot: string }[] = [];
 
-    schedules.forEach(sched => {
-      const dateStr = sched.scheduledDate.toISOString().split('T')[0];
-      if (sched.timeSlot) {
-        bookedSlots.push({ date: dateStr, timeSlot: sched.timeSlot });
-      } else {
-        bookedDates.add(dateStr);
+    items.forEach(item => {
+      if (item.shootDate && item.shootTimeSlot) {
+        const dateStr = new Date(item.shootDate).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+        bookedSlots.push({ date: dateStr, timeSlot: item.shootTimeSlot });
       }
     });
 
@@ -1218,5 +1325,23 @@ export class BookingsService {
       bookedDates: Array.from(bookedDates),
       bookedSlots
     };
+  }
+
+  private parseTimeSlot(slot: string): { start: number; end: number } {
+    // Format: "07:00-15:00" — find the "-" separator after "HH:MM"
+    const dashIdx = slot.indexOf('-');
+    const startHour = parseInt(slot.substring(0, dashIdx).split(':')[0]);
+    const endHour = parseInt(slot.substring(dashIdx + 1).split(':')[0]);
+    return { start: startHour, end: endHour };
+  }
+
+  private isTimeSlotOverlap(slot1: string, slot2: string): boolean {
+    try {
+      const t1 = this.parseTimeSlot(slot1);
+      const t2 = this.parseTimeSlot(slot2);
+      return t1.start < t2.end && t2.start < t1.end;
+    } catch (_) {
+      return false;
+    }
   }
 }

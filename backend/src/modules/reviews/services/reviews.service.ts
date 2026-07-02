@@ -64,6 +64,11 @@ export class ReviewsService {
     const bookingId = new Types.ObjectId(dto.bookingId);
     const bookingItemId = new Types.ObjectId(dto.bookingItemId);
 
+    const existingReview = await this.reviewModel.findOne({ bookingItemId });
+    if (existingReview) {
+      throw new BadRequestException('Quý khách đã gửi đánh giá cho sản phẩm này của đơn hàng rồi.');
+    }
+
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
       throw new NotFoundException('Booking not found');
@@ -83,6 +88,10 @@ export class ReviewsService {
       rating: dto.rating,
       comment: dto.comment || '',
       images: dto.images || [],
+    });
+
+    await this.bookingItemModel.findByIdAndUpdate(bookingItemId, {
+      isReviewed: true,
     });
 
     // Recalculate ratings

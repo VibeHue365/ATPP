@@ -187,6 +187,16 @@ class ApiService {
     }
   }
 
+  Future<List<Review>> getReviewsForItem(String itemId) async {
+    try {
+      final response = await _publicDio.get('/reviews/item/$itemId');
+      final List data = response.data;
+      return data.map((x) => Review.fromJson(x)).toList();
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to fetch reviews';
+    }
+  }
+
   Future<Review> createReview(Map<String, dynamic> data) async {
     try {
       final response = await _dio.post('/reviews', data: data);
@@ -363,6 +373,20 @@ class ApiService {
       throw e.response?.data?['message'] ?? 'Failed to upload images';
     }
   }
+
+  Future<Map<String, dynamic>> getProductBusyDates(String productId) async {
+    try {
+      // Endpoint yêu cầu JWT auth (class-level guard trên controller)
+      final response = await _dio.get('/bookings/busy-dates/product/$productId');
+      return response.data;
+    } on DioException catch (e) {
+      // Nếu 401 (chưa đăng nhập) thì trả về rỗng thay vì throw, tránh crash
+      if (e.response?.statusCode == 401) {
+        return {'bookedDates': [], 'bookedSlots': []};
+      }
+      throw e.response?.data?['message'] ?? 'Failed to fetch busy schedules';
+    }
+  }
 }
 
 class CategoryItem {
@@ -378,4 +402,3 @@ class CategoryItem {
     );
   }
 }
-

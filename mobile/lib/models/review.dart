@@ -1,6 +1,7 @@
 class Review {
   final String id;
   final String bookingId;
+  final String? bookingItemId;
   final String customerId;
   final String customerName;
   final String? customerAvatar;
@@ -14,6 +15,7 @@ class Review {
   Review({
     required this.id,
     required this.bookingId,
+    this.bookingItemId,
     required this.customerId,
     required this.customerName,
     this.customerAvatar,
@@ -26,12 +28,31 @@ class Review {
   });
 
   factory Review.fromJson(Map<String, dynamic> json) {
+    final rawCust = json['customerId'] ?? json['customer'];
+    String cid = '';
+    String cname = 'Khách hàng';
+    String? cavatar;
+    
+    if (rawCust is Map) {
+      cid = rawCust['_id'] ?? '';
+      final profile = rawCust['profile'];
+      if (profile is Map) {
+        cname = profile['fullName'] ?? 'Khách hàng';
+        cavatar = profile['avatarUrl'];
+      }
+    } else {
+      cid = rawCust?.toString() ?? '';
+      cname = json['customerName'] ?? 'Khách hàng';
+      cavatar = json['customerAvatar'];
+    }
+
     return Review(
       id: json['_id'] ?? json['id'] ?? '',
       bookingId: json['bookingId'] ?? '',
-      customerId: json['customerId'] ?? json['customer']?['_id'] ?? '',
-      customerName: json['customerName'] ?? json['customer']?['name'] ?? '',
-      customerAvatar: json['customerAvatar'] ?? json['customer']?['avatarUrl'],
+      bookingItemId: json['bookingItemId'],
+      customerId: cid,
+      customerName: cname,
+      customerAvatar: cavatar,
       providerId: json['providerId'] ?? '',
       rating: json['rating'] ?? 5,
       comment: json['comment'] ?? '',
@@ -45,6 +66,7 @@ class Review {
     return {
       'id': id,
       'bookingId': bookingId,
+      'bookingItemId': bookingItemId,
       'customerId': customerId,
       'customerName': customerName,
       'customerAvatar': customerAvatar,

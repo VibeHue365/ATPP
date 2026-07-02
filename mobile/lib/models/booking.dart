@@ -153,6 +153,7 @@ class BookingItem {
   final String? selectedSize;
   final String? selectedColor;
   final String? customRequests;
+  final bool isReviewed;
 
   BookingItem({
     required this.id,
@@ -173,6 +174,7 @@ class BookingItem {
     this.selectedSize,
     this.selectedColor,
     this.customRequests,
+    this.isReviewed = false,
   });
 
   factory BookingItem.fromJson(Map<String, dynamic> json) {
@@ -195,6 +197,7 @@ class BookingItem {
       selectedSize: json['selectedSize'],
       selectedColor: json['selectedColor'],
       customRequests: json['customRequests'],
+      isReviewed: json['isReviewed'] ?? false,
     );
   }
 }

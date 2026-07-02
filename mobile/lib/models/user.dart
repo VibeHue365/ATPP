@@ -65,7 +65,7 @@ class User {
         : [];
 
     return User(
-      id: json['id'] ?? '',
+      id: json['_id'] ?? json['id'] ?? '',
       email: json['email'] ?? '',
       phone: json['phone'],
       emailVerified: json['emailVerified'] ?? false,

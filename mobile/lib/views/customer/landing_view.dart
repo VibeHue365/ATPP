@@ -19,6 +19,7 @@ import 'edit_profile_view.dart';
 import '../../providers/user_chat_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../onboarding/onboarding_view.dart';
+import 'product_listing_view.dart';
 
 class LandingView extends StatefulWidget {
   const LandingView({super.key});
@@ -231,15 +232,9 @@ class _HomeTabState extends State<HomeTab> {
                     // Heritage Banner
                     Container(
                       margin: const EdgeInsets.all(16),
-                      padding: const EdgeInsets.all(20),
+                      height: 160,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppColors.primaryDark, AppColors.primary],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.gold, width: 1.5),
                         boxShadow: [
                           BoxShadow(
                             color: AppColors.primary.withOpacity(0.2),
@@ -248,26 +243,47 @@ class _HomeTabState extends State<HomeTab> {
                           )
                         ],
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Kính chào quý khách',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: AppColors.goldLight,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Tìm phục trang xưa đẹp nhất cho chuyến du hành Cố Đô',
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.asset(
+                          'assets/images/hero_banner.png',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [AppColors.primaryDark, AppColors.primary],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                border: Border.all(color: AppColors.gold, width: 1.5),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Kính chào quý khách',
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      color: AppColors.goldLight,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Tìm phục trang xưa đẹp nhất cho chuyến du hành Cổ Đô',
+                                    style: theme.textTheme.headlineMedium?.copyWith(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -361,12 +377,43 @@ class _HomeTabState extends State<HomeTab> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Products Grid
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Text(
-                        'Trang phục cổ phong',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    // Products Grid Title with "See All" button
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Trang phục cổ phong',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ProductListingView(
+                                    initialCategory: _selectedCategory,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: const Row(
+                              children: [
+                                Text(
+                                  'Xem tất cả',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                SizedBox(width: 4),
+                                Icon(Icons.arrow_forward_ios, size: 10, color: AppColors.primary),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -387,7 +434,7 @@ class _HomeTabState extends State<HomeTab> {
                               crossAxisSpacing: 16,
                               mainAxisSpacing: 16,
                             ),
-                            itemCount: filteredProducts.length,
+                            itemCount: filteredProducts.length > 4 ? 4 : filteredProducts.length,
                             itemBuilder: (context, index) {
                               final product = filteredProducts[index];
                               return Card(

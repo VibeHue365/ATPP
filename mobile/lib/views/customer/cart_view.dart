@@ -134,7 +134,16 @@ class CartView extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${item.product.price.toStringAsFixed(0)}đ / ngày',
+                                  item.rentalType == 'HOURLY'
+                                      ? 'Thuê theo giờ: ${item.startDate.day}/${item.startDate.month}/${item.startDate.year} (${item.startTime} - ${item.endTime})'
+                                      : 'Thuê theo ngày: ${item.startDate.day}/${item.startDate.month} - ${item.endDate.day}/${item.endDate.month}',
+                                  style: const TextStyle(fontSize: 11, color: AppColors.goldDark, fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  item.rentalType == 'HOURLY'
+                                      ? '${item.product.hourlyRate.toStringAsFixed(0)}đ / giờ'
+                                      : '${item.product.price.toStringAsFixed(0)}đ / ngày',
                                   style: const TextStyle(
                                     color: AppColors.primary,
                                     fontWeight: FontWeight.bold,
