@@ -23,6 +23,7 @@ import { PromotionsService } from '../../products/services/promotions.service';
 import { DiscountType } from '../../products/schemas/promotion.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { ProductsService } from '../../products/services/products.service';
+import { Provider } from '../../providers/schemas/provider.schema';
 import {
   PriceVersion,
   PriceTargetType,
@@ -209,7 +210,8 @@ export class BookingsService implements OnApplicationBootstrap {
     private readonly paymentsService: PaymentsService,
     private readonly productsService: ProductsService,
     private readonly notificationsService: NotificationsService,
-
+    @InjectModel(Provider.name)
+    private readonly providerModel: Model<Provider>,
   ) { }
 
   onApplicationBootstrap() {
@@ -459,6 +461,12 @@ export class BookingsService implements OnApplicationBootstrap {
 
         if (providerId) {
           providerIdsSet.add(providerId.toString());
+          const provider = await this.providerModel.findById(providerId);
+          if (!provider || provider.status !== 'ACTIVE') {
+            throw new BadRequestException(
+              'Cửa hàng đối tác hoặc nhiếp ảnh gia hiện không hoạt động hoặc đang bị tạm đình chỉ.',
+            );
+          }
         }
 
         const quantity = item.quantity || 1;
@@ -714,6 +722,11 @@ export class BookingsService implements OnApplicationBootstrap {
     const product = await this.productsService.getProductById(productId);
     if (!product) {
       throw new NotFoundException(`Không tìm thấy sản phẩm với ID: ${productId}`);
+    }
+
+    const provider = await this.providerModel.findById(product.providerId);
+    if (!provider || provider.status !== 'ACTIVE') {
+      throw new BadRequestException('Cửa hàng đối tác hiện không hoạt động hoặc đang bị tạm đình chỉ.');
     }
 
     const start = new Date(startDate);
@@ -1056,6 +1069,11 @@ export class BookingsService implements OnApplicationBootstrap {
       throw new NotFoundException(
         `Không tìm thấy gói chụp ảnh với ID: ${packageId}`,
       );
+    }
+
+    const provider = await this.providerModel.findById(pkg.providerId);
+    if (!provider || provider.status !== 'ACTIVE') {
+      throw new BadRequestException('Nhiếp ảnh gia hiện không hoạt động hoặc đang bị tạm đình chỉ.');
     }
 
     const date = new Date(shootDate);

@@ -5,6 +5,8 @@ import '../../providers/provider_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../onboarding/onboarding_view.dart';
 import '../customer/chat_rooms_view.dart';
+import '../customer/notifications_view.dart';
+import '../../providers/notification_provider.dart';
 import 'voucher_manager_view.dart';
 import 'reviews_dashboard_view.dart';
 import 'product_manager_view.dart';
@@ -27,6 +29,7 @@ class _ProviderDashboardViewState extends State<ProviderDashboardView> {
       context.read<ProviderProvider>().loadProviderProfile();
       context.read<ProviderProvider>().loadProviderBookings();
       context.read<ProviderProvider>().loadReviewStats();
+      context.read<NotificationProvider>().fetchNotifications();
     });
   }
 
@@ -144,6 +147,50 @@ class _ProviderHomeTabState extends State<ProviderHomeTab> {
       appBar: AppBar(
         title: const Text('Bảng quản trị tiệm'),
         actions: [
+          Consumer<NotificationProvider>(
+            builder: (context, notificationProvider, _) {
+              final unreadCount = notificationProvider.unreadCount;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined, color: AppColors.primary),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const NotificationsView()),
+                      );
+                    },
+                  ),
+                  if (unreadCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          '$unreadCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
             onPressed: () {
@@ -174,6 +221,7 @@ class _ProviderHomeTabState extends State<ProviderHomeTab> {
           await provider.loadProviderProfile();
           await provider.loadProviderBookings();
           await provider.loadReviewStats();
+          await context.read<NotificationProvider>().fetchNotifications();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -192,6 +240,49 @@ class _ProviderHomeTabState extends State<ProviderHomeTab> {
               const SizedBox(height: 4),
               const Text('Xem báo cáo chi tiết và thống kê hoạt động bên dưới.'),
               const SizedBox(height: 20),
+
+              if (provider.providerProfile['status'] == 'SUSPENDED') ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.shade300, width: 1.5),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 36),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              'CỬA HÀNG ĐANG BỊ ĐÌNH CHỈ',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.error,
+                                fontSize: 14,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Tài khoản đối tác của bạn đã bị tạm đình chỉ hoạt động. Tất cả các sản phẩm đã được ẩn khỏi cửa hàng và bạn không thể thực hiện giao dịch hay quản lý đơn hàng mới. Vui lòng liên hệ Admin để giải quyết.',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 12,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
 
               // Monthly Revenue Card
               Card(

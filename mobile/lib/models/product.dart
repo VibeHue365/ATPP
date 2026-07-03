@@ -13,6 +13,7 @@ class Product {
   final String categoryId;
   final String providerId;
   final String? providerUserId;
+  final String? providerName;
   final List<String> availableSizes;
   final List<String> availableColors;
 
@@ -39,6 +40,7 @@ class Product {
     required this.categoryId,
     required this.providerId,
     this.providerUserId,
+    this.providerName,
     this.availableSizes = const [],
     this.availableColors = const [],
   });
@@ -93,6 +95,9 @@ class Product {
               ? (json['providerId']['userId']['_id'] ?? json['providerId']['userId']['id'])
               : json['providerId']['userId'])
           : null)?.toString(),
+      providerName: (json['providerId'] is Map
+          ? json['providerId']['businessName']
+          : (json['provider'] is Map ? json['provider']['businessName'] : null))?.toString(),
       availableSizes: sizesRaw is List ? List<String>.from(sizesRaw.map((x) => x.toString())) : const <String>[],
       availableColors: colorsRaw is List ? List<String>.from(colorsRaw.map((x) => x.toString())) : const <String>[],
     );
@@ -111,6 +116,7 @@ class Product {
       'categoryId': categoryId,
       'providerId': providerId,
       'providerUserId': providerUserId,
+      'providerName': providerName,
       'availableSizes': availableSizes,
       'availableColors': availableColors,
     };

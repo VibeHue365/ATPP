@@ -6,20 +6,39 @@ class AdminStats {
   final int totalProviders;
   final int totalBookings;
   final double totalRevenue;
+  final List<Map<String, dynamic>> revenueByWeek;
+  final List<Map<String, dynamic>> revenueByMonth;
+  final List<Map<String, dynamic>> revenueByYear;
 
   AdminStats({
     required this.totalCustomers,
     required this.totalProviders,
     required this.totalBookings,
     required this.totalRevenue,
+    required this.revenueByWeek,
+    required this.revenueByMonth,
+    required this.revenueByYear,
   });
 
   factory AdminStats.fromJson(Map<String, dynamic> json) {
+    final listWeek = json['revenueByWeek'] != null
+        ? List<Map<String, dynamic>>.from(json['revenueByWeek'])
+        : <Map<String, dynamic>>[];
+    final listMonth = json['revenueByMonth'] != null
+        ? List<Map<String, dynamic>>.from(json['revenueByMonth'])
+        : <Map<String, dynamic>>[];
+    final listYear = json['revenueByYear'] != null
+        ? List<Map<String, dynamic>>.from(json['revenueByYear'])
+        : <Map<String, dynamic>>[];
+
     return AdminStats(
       totalCustomers: json['totalCustomers'] ?? 0,
       totalProviders: json['totalProviders'] ?? 0,
       totalBookings: json['totalBookings'] ?? 0,
       totalRevenue: (json['totalRevenue'] ?? 0.0).toDouble(),
+      revenueByWeek: listWeek,
+      revenueByMonth: listMonth,
+      revenueByYear: listYear,
     );
   }
 }
@@ -106,21 +125,41 @@ class AdminService {
     }
   }
 
-  Future<List<AdminCustomer>> getCustomers() async {
+  Future<Map<String, dynamic>> getCustomers({int page = 1, int limit = 10}) async {
     try {
-      final response = await _dio.get('/admin/dashboard/customers');
-      final List data = response.data;
-      return data.map((x) => AdminCustomer.fromJson(x)).toList();
+      final response = await _dio.get(
+        '/admin/dashboard/customers',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      final Map<String, dynamic> data = response.data;
+      final List itemsRaw = data['items'] ?? [];
+      final list = itemsRaw.map((x) => AdminCustomer.fromJson(x)).toList();
+      return {
+        'items': list,
+        'total': data['total'] ?? 0,
+        'page': data['page'] ?? 1,
+        'totalPages': data['totalPages'] ?? 1,
+      };
     } on DioException catch (e) {
       throw e.response?.data?['message'] ?? 'Lỗi khi lấy danh sách khách hàng';
     }
   }
 
-  Future<List<AdminProviderModel>> getProviders() async {
+  Future<Map<String, dynamic>> getProviders({int page = 1, int limit = 10}) async {
     try {
-      final response = await _dio.get('/admin/dashboard/providers');
-      final List data = response.data;
-      return data.map((x) => AdminProviderModel.fromJson(x)).toList();
+      final response = await _dio.get(
+        '/admin/dashboard/providers',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      final Map<String, dynamic> data = response.data;
+      final List itemsRaw = data['items'] ?? [];
+      final list = itemsRaw.map((x) => AdminProviderModel.fromJson(x)).toList();
+      return {
+        'items': list,
+        'total': data['total'] ?? 0,
+        'page': data['page'] ?? 1,
+        'totalPages': data['totalPages'] ?? 1,
+      };
     } on DioException catch (e) {
       throw e.response?.data?['message'] ?? 'Lỗi khi lấy danh sách đối tác';
     }

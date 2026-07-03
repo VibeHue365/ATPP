@@ -21,6 +21,7 @@ class ProductDetailView extends StatefulWidget {
 }
 
 class _ProductDetailViewState extends State<ProductDetailView> {
+  Product? _detailedProduct;
   String? _selectedSize;
   String? _selectedColor;
 
@@ -76,6 +77,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   @override
   void initState() {
     super.initState();
+    _detailedProduct = widget.product;
     if (widget.product.availableSizes.isNotEmpty) {
       _selectedSize = widget.product.availableSizes.first;
     }
@@ -86,6 +88,26 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     }
     _loadReviews();
     _loadBusyDates();
+    _loadProductDetail();
+  }
+
+  Future<void> _loadProductDetail() async {
+    try {
+      final detail = await ApiService().getProductById(widget.product.id);
+      if (mounted) {
+        setState(() {
+          _detailedProduct = detail;
+          if (_selectedSize == null && detail.availableSizes.isNotEmpty) {
+            _selectedSize = detail.availableSizes.first;
+          }
+          if (_selectedColor == null && detail.availableColors.isNotEmpty) {
+            _selectedColor = detail.availableColors.first;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading product detail: $e');
+    }
   }
 
   Future<void> _loadBusyDates() async {
@@ -506,7 +528,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final product = widget.product;
+    final product = _detailedProduct ?? widget.product;
 
     return Scaffold(
       appBar: AppBar(
@@ -1118,7 +1140,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
-              if (product.providerUserId != null) ...[
+              if ((_detailedProduct ?? widget.product).providerUserId != null) ...[
                 Container(
                   margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
@@ -1128,7 +1150,13 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                   child: IconButton(
                     icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
                     onPressed: () async {
-                      final otherUserId = product.providerUserId!;
+                      final auth = context.read<AuthProvider>();
+                      if (!auth.isAuthenticated) {
+                        _showLoginRequiredDialog();
+                        return;
+                      }
+
+                      final otherUserId = (_detailedProduct ?? widget.product).providerUserId!;
 
                       // Show loading spinner
                       showDialog(
@@ -1151,7 +1179,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                             MaterialPageRoute(
                               builder: (_) => ChatView(
                                 roomId: roomId,
-                                otherParticipantName: 'Chủ tiệm',
+                                otherParticipantName: product.providerName ?? 'Chủ tiệm',
                               ),
                             ),
                           );

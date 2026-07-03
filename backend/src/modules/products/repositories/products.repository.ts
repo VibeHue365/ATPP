@@ -54,10 +54,16 @@ export class ProductsRepository {
       query.materials = { $in: options.materials.map(m => new RegExp(`^${m}$`, 'i')) };
     }
 
-    return this.productModel
+    const products = await this.productModel
       .find(query)
       .populate('categoryId')
+      .populate('providerId')
       .exec();
+
+    return products.filter(p => {
+      const provider = p.providerId as any;
+      return provider && provider.status === 'ACTIVE';
+    });
   }
 
   async create(data: Partial<Product>): Promise<ProductDocument> {

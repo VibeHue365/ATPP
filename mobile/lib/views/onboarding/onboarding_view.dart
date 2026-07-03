@@ -208,7 +208,7 @@ class _OnboardingViewState extends State<OnboardingView> {
                                 foregroundColor: AppColors.goldLight,
                                 padding: const EdgeInsets.symmetric(vertical: 16),
                               ),
-                              child: const Text('TÔI LÀ NHÀ CUNG CẤP / PHOTOGRAPHER'),
+                              child: const Text('TÔI LÀ NHÀ CUNG CẤP'),
                             ),
                           ],
                         )
