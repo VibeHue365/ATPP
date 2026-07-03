@@ -282,6 +282,23 @@ class BookingProvider extends ChangeNotifier {
     }
   }
 
+  /// Hủy đặt lịch và trả về kết quả chi tiết (isFreeCancel, refundAmount, penaltyReason)
+  Future<Map<String, dynamic>> cancelBookingWithResult(String bookingId, String reason) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final result = await _apiService.cancelBookingWithResult(bookingId, reason);
+      await loadMyBookings();
+      return result;
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> submitReview({
     required String bookingId,
     required String bookingItemId,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/colors.dart';
 import '../../models/booking.dart';
@@ -20,39 +21,236 @@ class _CustomerDashboardViewState extends State<CustomerDashboardView> {
     });
   }
 
-  void _showCancelDialog(String bookingId) {
+  void _showCancelDialog(Booking booking) {
     final reasonController = TextEditingController();
+    bool isSubmitting = false;
+
+    // Statuses mà hủy sẽ bị phạt (đã thanh toán cọc trở lên)
+    final isPaidStatus = !['DRAFT', 'PENDING_PAYMENT'].contains(booking.status);
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Hủy lịch đặt'),
-        content: TextField(
-          controller: reasonController,
-          decoration: const InputDecoration(
-            hintText: 'Nhập lý do hủy lịch...',
+      barrierDismissible: !isSubmitting,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'Xác nhận hủy lịch đặt',
+                style: GoogleFonts.playfairDisplay(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red.shade800,
+                  fontSize: 17,
+                ),
+              ),
+            ],
           ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Mã đơn
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryTrans,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'Mã đơn: ${booking.bookingCode}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 13),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Cảnh báo chính sách hoàn tiền
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 15, color: Colors.red.shade700),
+                          const SizedBox(width: 6),
+                          Text(
+                            'QUY ĐỊNH HOÀN TIỀN CỌC',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: Colors.red.shade800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildPolicyRow('Hủy trước 72 giờ:', 'Hoàn trả 100% tiền cọc'),
+                      const SizedBox(height: 4),
+                      _buildPolicyRow('Hủy trong vòng 72 giờ:', 'Phạt 100% tiền thuê dịch vụ'),
+                      const SizedBox(height: 4),
+                      _buildPolicyRow('Đơn chưa thanh toán:', 'Hủy miễn phí bất kỳ lúc nào'),
+                      if (isPaidStatus) ...[
+                        const SizedBox(height: 6),
+                        const Divider(height: 1),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Đơn này đã thanh toán cọc — áp dụng chính sách phạt nếu hủy sát giờ.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.red.shade700,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Nhập lý do hủy
+                Text(
+                  'Lý do hủy lịch (bắt buộc)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: reasonController,
+                  maxLines: 3,
+                  enabled: !isSubmitting,
+                  decoration: InputDecoration(
+                    hintText: 'Vui lòng cung cấp lý do để chúng tôi cải thiện dịch vụ...',
+                    hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.primary),
+                    ),
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+              child: const Text('QUAY LẠI', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton.icon(
+              icon: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cancel_outlined, size: 16),
+              label: Text(isSubmitting ? 'ĐANG HỦY...' : 'XÁC NHẬN HỦY'),
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final reason = reasonController.text.trim();
+                      if (reason.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Vui lòng nhập lý do hủy lịch!'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        return;
+                      }
+
+                      setStateDialog(() => isSubmitting = true);
+                      Navigator.pop(ctx);
+
+                      try {
+                        final result = await context
+                            .read<BookingProvider>()
+                            .cancelBookingWithResult(booking.id, reason);
+
+                        if (context.mounted) {
+                          final isFree = result['isFreeCancel'] as bool? ?? true;
+                          final refund = result['refundAmount'] as double? ?? 0.0;
+                          final penaltyReason = result['penaltyReason'] as String? ?? '';
+
+                          if (isFree) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Hủy đơn thành công! Hoàn trả 100% (${_formatCurrency(refund)}).',
+                                ),
+                                backgroundColor: Colors.green,
+                                duration: const Duration(seconds: 4),
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Đã hủy lịch. $penaltyReason Hoàn lại: ${_formatCurrency(refund)}.',
+                                ),
+                                backgroundColor: Colors.orange,
+                                duration: const Duration(seconds: 5),
+                              ),
+                            );
+                          }
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Không thể hủy đơn: $e'),
+                              backgroundColor: AppColors.error,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('ĐÓNG'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (reasonController.text.trim().isNotEmpty) {
-                Navigator.pop(ctx);
-                await context.read<BookingProvider>().cancelBooking(
-                      bookingId,
-                      reasonController.text.trim(),
-                    );
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('HỦY LỊCH'),
-          ),
-        ],
       ),
     );
+  }
+
+  Widget _buildPolicyRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('• ', style: TextStyle(fontSize: 11.5, color: Colors.red)),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 11.5, color: Color(0xFF7F1D1D)),
+              children: [
+                TextSpan(text: label, style: const TextStyle(fontWeight: FontWeight.bold)),
+                TextSpan(text: ' $value'),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatCurrency(double amount) {
+    return '${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ';
   }
 
   void _showReviewDialog(Booking booking, BookingItem item) {
@@ -254,19 +452,24 @@ class _CustomerDashboardViewState extends State<CustomerDashboardView> {
                                 ],
                               ),
                               
-                              if (booking.status == 'PENDING_PAYMENT' || booking.status == 'DRAFT') ...[
+                              if (booking.status != 'CANCELLED' &&
+                                  booking.status != 'COMPLETED' &&
+                                  booking.status != 'RETURNED' &&
+                                  booking.status != 'PICKED_UP' &&
+                                  booking.status != 'DISPUTED') ...[
                                 const SizedBox(height: 12),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
-                                    OutlinedButton(
-                                      onPressed: () => _showCancelDialog(booking.id),
+                                    OutlinedButton.icon(
+                                      icon: const Icon(Icons.cancel_outlined, size: 16),
+                                      label: const Text('HỦY LỊCH'),
+                                      onPressed: () => _showCancelDialog(booking),
                                       style: OutlinedButton.styleFrom(
-                                        foregroundColor: AppColors.error,
-                                        side: const BorderSide(color: AppColors.error),
+                                        foregroundColor: Colors.red.shade700,
+                                        side: BorderSide(color: Colors.red.shade700),
                                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                       ),
-                                      child: const Text('HỦY LỊCH'),
                                     ),
                                   ],
                                 )

@@ -71,6 +71,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   // Feedback State
   List<Review> _reviews = [];
   bool _isReviewsLoading = true;
+  bool _hasAlreadyReviewed = false;
 
   @override
   void initState() {
@@ -209,9 +210,22 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     try {
       final apiService = ApiService();
       final reviews = await apiService.getReviewsForItem(widget.product.id);
+      if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      final currentUser = auth.user;
+      bool alreadyReviewed = false;
+      if (currentUser != null) {
+        alreadyReviewed = reviews.any((r) =>
+          r.customerId == currentUser.id ||
+          r.customerName == currentUser.name ||
+          (currentUser.profile?.fullName != null &&
+              r.customerName == currentUser.profile!.fullName),
+        );
+      }
       setState(() {
         _reviews = reviews;
         _isReviewsLoading = false;
+        _hasAlreadyReviewed = alreadyReviewed;
       });
     } catch (e) {
       setState(() {
@@ -949,11 +963,35 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                           ],
                         ],
                       ),
-                      TextButton.icon(
-                        icon: const Icon(Icons.rate_review_outlined, size: 16, color: AppColors.primary),
-                        label: const Text('Viết đánh giá', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
-                        onPressed: _startReviewFlow,
-                      ),
+                      _hasAlreadyReviewed
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.green.shade300),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle, size: 14, color: Colors.green.shade600),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Đã đánh giá',
+                                    style: TextStyle(
+                                      color: Colors.green.shade700,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : TextButton.icon(
+                              icon: const Icon(Icons.rate_review_outlined, size: 16, color: AppColors.primary),
+                              label: const Text('Viết đánh giá', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                              onPressed: _startReviewFlow,
+                            ),
                     ],
                   ),
                   const SizedBox(height: 12),

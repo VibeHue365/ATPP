@@ -464,6 +464,7 @@ class PayOSWebView extends StatefulWidget {
 class _PayOSWebViewState extends State<PayOSWebView> {
   late final WebViewController _controller;
   bool _isLoading = true;
+  bool _redirectHandled = false;
 
   @override
   void initState() {
@@ -496,20 +497,32 @@ class _PayOSWebViewState extends State<PayOSWebView> {
   }
 
   bool _checkRedirect(String url) {
-    // PayOS success or cancel URL detection
-    if (url.contains('status=PAID') || 
-        url.contains('status=SUCCESS') || 
-        url.contains('/success') || 
-        url.contains('/dashboard/profile') || 
-        url.contains('profile?tab=payments')) {
+    if (_redirectHandled) return false;
+
+    // Chỉ detect đúng deep link của app — không dùng pattern lỏng lẻ
+    if (url.startsWith('vibehue://payment/success')) {
+      _redirectHandled = true;
       widget.onSuccess();
       return true;
-    } else if (url.contains('status=CANCELLED') || 
-               url.contains('/cancel') || 
-               url.contains('/cart')) {
+    }
+    if (url.startsWith('vibehue://payment/cancel')) {
+      _redirectHandled = true;
       widget.onCancel();
       return true;
     }
+
+    // Fallback: vẫn detect URL của PayOS thật (nếu có tích hợp thật)
+    if (url.contains('status=PAID') || url.contains('status=SUCCESS')) {
+      _redirectHandled = true;
+      widget.onSuccess();
+      return true;
+    }
+    if (url.contains('status=CANCELLED') || url.contains('status=CANCEL')) {
+      _redirectHandled = true;
+      widget.onCancel();
+      return true;
+    }
+
     return false;
   }
 
