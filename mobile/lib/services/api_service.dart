@@ -325,6 +325,16 @@ class ApiService {
     }
   }
 
+  Future<List<Voucher>> getPromotionsByProvider(String providerId) async {
+    try {
+      final response = await _dio.get('/promotions/provider-promotions/$providerId');
+      final List data = response.data;
+      return data.map((x) => Voucher.fromJson(x)).toList();
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to fetch provider promotions';
+    }
+  }
+
   Future<Voucher> createVoucher(Map<String, dynamic> data) async {
     try {
       final response = await _dio.post('/promotions', data: data);

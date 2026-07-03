@@ -13,6 +13,9 @@ class CustomerDashboardView extends StatefulWidget {
 }
 
 class _CustomerDashboardViewState extends State<CustomerDashboardView> {
+  int _currentPage = 1;
+  final int _pageSize = 5;
+
   @override
   void initState() {
     super.initState();
@@ -339,6 +342,16 @@ class _CustomerDashboardViewState extends State<CustomerDashboardView> {
     final bp = context.watch<BookingProvider>();
     final theme = Theme.of(context);
 
+    final totalBookings = bp.myBookings.length;
+    final totalPages = (totalBookings / _pageSize).ceil();
+    if (_currentPage > totalPages && totalPages > 0) {
+      _currentPage = totalPages;
+    }
+    final paginatedBookings = bp.myBookings
+        .skip((_currentPage - 1) * _pageSize)
+        .take(_pageSize)
+        .toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lịch sử đặt hàng'),
@@ -352,133 +365,172 @@ class _CustomerDashboardViewState extends State<CustomerDashboardView> {
                 ? const Center(
                     child: Text('Quý khách chưa có đơn đặt lịch nào.'),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: bp.myBookings.length,
-                    itemBuilder: (context, index) {
-                      final booking = bp.myBookings[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Mã đơn: ${booking.bookingCode}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
-                                  ),
-                                  Chip(
-                                    label: Text(booking.status),
-                                    visualDensity: VisualDensity.compact,
-                                  )
-                                ],
-                              ),
-                              const Divider(height: 20),
-                              
-                              // Items list inside booking
-                              ...booking.items.map((item) {
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        item.itemType == 'PRODUCT' ? 'Thuê trang phục' : 'Gói chụp ảnh',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary),
-                                      ),
-                                      const SizedBox(height: 2),
+                : Column(
+                    children: [
+                      Expanded(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: paginatedBookings.length,
+                          itemBuilder: (context, index) {
+                            final booking = paginatedBookings[index];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Mã đơn: ${booking.bookingCode}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                                        ),
+                                        Chip(
+                                          label: Text(booking.status),
+                                          visualDensity: VisualDensity.compact,
+                                        )
+                                      ],
+                                    ),
+                                    const Divider(height: 20),
+                                    
+                                    // Items list inside booking
+                                    ...booking.items.map((item) {
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item.itemType == 'PRODUCT' ? 'Thuê trang phục' : 'Gói chụp ảnh',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text('Kích cỡ: ${item.selectedSize ?? 'M'} | SL: ${item.quantity}'),
+                                                Text(
+                                                  '${item.unitPrice.toStringAsFixed(0)}đ',
+                                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                                ),
+                                              ],
+                                            ),
+                                            // Render date details
+                                            if (item.shootTimeSlot != null && item.shootTimeSlot!.isNotEmpty)
+                                              Text(
+                                                'Thuê theo giờ: ${_formatDate(item.shootDate ?? item.rentalFrom)} (${item.shootTimeSlot})',
+                                                style: const TextStyle(fontSize: 12, color: AppColors.goldDark, fontWeight: FontWeight.w600),
+                                              )
+                                            else if (item.rentalFrom != null)
+                                              Text(
+                                                'Thời gian: ${_formatDate(item.rentalFrom)} - ${_formatDate(item.rentalTo)}',
+                                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                              ),
+                                            if (booking.status == 'COMPLETED') ...[
+                                              const SizedBox(height: 6),
+                                              Align(
+                                                alignment: Alignment.centerRight,
+                                                child: item.isReviewed
+                                                    ? const Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+                                                          SizedBox(width: 4),
+                                                          Text(
+                                                            'Đã đánh giá',
+                                                            style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold),
+                                                          ),
+                                                        ],
+                                                      )
+                                                    : TextButton.icon(
+                                                        icon: const Icon(Icons.star, size: 16, color: AppColors.gold),
+                                                        label: const Text('Đánh giá dịch vụ', style: TextStyle(fontSize: 12)),
+                                                        onPressed: () => _showReviewDialog(booking, item),
+                                                      ),
+                                              )
+                                            ]
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                    
+                                    const Divider(height: 20),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text('Tổng tiền:'),
+                                        Text(
+                                          '${booking.pricingSummary.grandTotal.toStringAsFixed(0)}đ',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 16),
+                                        ),
+                                      ],
+                                    ),
+                                    
+                                    if (booking.status != 'CANCELLED' &&
+                                        booking.status != 'COMPLETED' &&
+                                        booking.status != 'RETURNED' &&
+                                        booking.status != 'PICKED_UP' &&
+                                        booking.status != 'DISPUTED') ...[
+                                      const SizedBox(height: 12),
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        mainAxisAlignment: MainAxisAlignment.end,
                                         children: [
-                                          Text('Kích cỡ: ${item.selectedSize ?? 'M'} | SL: ${item.quantity}'),
-                                          Text(
-                                            '${item.unitPrice.toStringAsFixed(0)}đ',
-                                            style: const TextStyle(fontWeight: FontWeight.bold),
+                                          OutlinedButton.icon(
+                                            icon: const Icon(Icons.cancel_outlined, size: 16),
+                                            label: const Text('HỦY LỊCH'),
+                                            onPressed: () => _showCancelDialog(booking),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.red.shade700,
+                                              side: BorderSide(color: Colors.red.shade700),
+                                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                            ),
                                           ),
                                         ],
-                                      ),
-                                      // Render date details
-                                      if (item.shootTimeSlot != null && item.shootTimeSlot!.isNotEmpty)
-                                        Text(
-                                          'Thuê theo giờ: ${_formatDate(item.shootDate ?? item.rentalFrom)} (${item.shootTimeSlot})',
-                                          style: const TextStyle(fontSize: 12, color: AppColors.goldDark, fontWeight: FontWeight.w600),
-                                        )
-                                      else if (item.rentalFrom != null)
-                                        Text(
-                                          'Thời gian: ${_formatDate(item.rentalFrom)} - ${_formatDate(item.rentalTo)}',
-                                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                                        ),
-                                      if (booking.status == 'COMPLETED') ...[
-                                        const SizedBox(height: 6),
-                                        Align(
-                                          alignment: Alignment.centerRight,
-                                          child: item.isReviewed
-                                              ? const Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
-                                                    SizedBox(width: 4),
-                                                    Text(
-                                                      'Đã đánh giá',
-                                                      style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold),
-                                                    ),
-                                                  ],
-                                                )
-                                              : TextButton.icon(
-                                                  icon: const Icon(Icons.star, size: 16, color: AppColors.gold),
-                                                  label: const Text('Đánh giá dịch vụ', style: TextStyle(fontSize: 12)),
-                                                  onPressed: () => _showReviewDialog(booking, item),
-                                                ),
-                                        )
-                                      ]
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                              
-                              const Divider(height: 20),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('Tổng tiền:'),
-                                  Text(
-                                    '${booking.pricingSummary.grandTotal.toStringAsFixed(0)}đ',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 16),
-                                  ),
-                                ],
-                              ),
-                              
-                              if (booking.status != 'CANCELLED' &&
-                                  booking.status != 'COMPLETED' &&
-                                  booking.status != 'RETURNED' &&
-                                  booking.status != 'PICKED_UP' &&
-                                  booking.status != 'DISPUTED') ...[
-                                const SizedBox(height: 12),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    OutlinedButton.icon(
-                                      icon: const Icon(Icons.cancel_outlined, size: 16),
-                                      label: const Text('HỦY LỊCH'),
-                                      onPressed: () => _showCancelDialog(booking),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.red.shade700,
-                                        side: BorderSide(color: Colors.red.shade700),
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                      ),
-                                    ),
+                                      )
+                                    ]
                                   ],
-                                )
-                              ]
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      if (totalPages > 1)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.arrow_back_ios, size: 16),
+                                onPressed: _currentPage > 1
+                                    ? () {
+                                        setState(() {
+                                          _currentPage--;
+                                        });
+                                      }
+                                    : null,
+                              ),
+                              Text(
+                                'Trang $_currentPage / $totalPages',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                                onPressed: _currentPage < totalPages
+                                    ? () {
+                                        setState(() {
+                                          _currentPage++;
+                                        });
+                                      }
+                                    : null,
+                              ),
                             ],
                           ),
                         ),
-                      );
-                    },
+                    ],
                   ),
       ),
     );
