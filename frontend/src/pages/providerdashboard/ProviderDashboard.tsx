@@ -1328,7 +1328,7 @@ export const ProviderDashboard: React.FC = () => {
                       <div style={{ borderTop: '1px solid var(--color-light-border)', paddingTop: '12px', marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>GIÁ THUÊ / NGÀY</div>
-                          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>{(p.basePrice ?? p.price ?? 0).toLocaleString('vi-VN')}đ</div>
+                          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>{(p.basePrice ?? (p as any).price ?? 0).toLocaleString('vi-VN')}đ</div>
                         </div>
                         <div>
                           <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600, textAlign: 'right' }}>TIỀN ĐẶT CỌC</div>

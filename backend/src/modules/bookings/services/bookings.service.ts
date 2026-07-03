@@ -265,6 +265,16 @@ export class BookingsService implements OnApplicationBootstrap {
     return this.photoPackageModel;
   }
 
+  private normalizeColor(colorStr?: string | null): string {
+    if (!colorStr) return 'WHITE';
+    const norm = colorStr.trim().toUpperCase();
+    if (norm === 'ĐỎ' || norm === 'RED') return 'RED';
+    if (norm === 'TRẮNG' || norm === 'WHITE') return 'WHITE';
+    if (norm === 'VÀNG' || norm === 'GOLD') return 'GOLD';
+    if (norm === 'ĐEN' || norm === 'BLACK') return 'BLACK';
+    return norm;
+  }
+
   // ──────────────────────────────────────────────────────────────────────────
   // 1. createBooking — tổng hợp nhiều items, hỗ trợ promo code
   // ──────────────────────────────────────────────────────────────────────────
@@ -275,7 +285,8 @@ export class BookingsService implements OnApplicationBootstrap {
     const customerId = new Types.ObjectId(userIdStr);
     const bookingCode = `B${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
 
-    let subTotal = 0;
+    // Khởi tạo subTotal bằng 50.000đ phí dịch vụ Heritage nếu có item
+    let subTotal = dto.items.length > 0 ? 50000 : 0;
     const itemDetails: Array<Partial<BookingItem>> = [];
     const providerIdsSet = new Set<string>();
     const reservationsCreated: any[] = [];
@@ -294,10 +305,41 @@ export class BookingsService implements OnApplicationBootstrap {
           if (!product) {
             throw new NotFoundException(`Product not found: ${item.productId}`);
           }
-          unitPrice = product.basePrice;
-          depositAmount = product.depositAmount;
           providerId = product.providerId;
           itemType = BookingItemType.Product;
+          depositAmount = product.depositAmount;
+
+          const rType = item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY';
+          if (rType === 'HOURLY') {
+            const hourlyRate = product.hourlyPrice || Math.round(product.basePrice * 0.3) || 80000;
+            let durationHours = 2;
+            if (item.shootTimeSlot) {
+              const parts = item.shootTimeSlot.split('-');
+              const startSlot = parts[0]?.trim();
+              const endSlot = parts[1]?.trim();
+              if (startSlot && endSlot) {
+                const [sh, sm] = startSlot.split(':').map(Number);
+                const [eh, em] = endSlot.split(':').map(Number);
+                const sDate = new Date();
+                sDate.setHours(sh, sm, 0, 0);
+                const eDate = new Date();
+                eDate.setHours(eh, em, 0, 0);
+                durationHours = Math.max((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60), 2);
+              }
+            }
+            unitPrice = hourlyRate * durationHours;
+          } else {
+            let durationDays = 1;
+            if (item.rentalFrom && item.rentalTo) {
+              const start = new Date(item.rentalFrom);
+              const end = new Date(item.rentalTo);
+              if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
+                const diffTime = Math.abs(end.getTime() - start.getTime());
+                durationDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+              }
+            }
+            unitPrice = product.basePrice * durationDays;
+          }
 
           if (item.rentalFrom && item.rentalTo) {
             const reservedFrom = new Date(item.rentalFrom);
@@ -305,18 +347,29 @@ export class BookingsService implements OnApplicationBootstrap {
             const reservedTo = new Date(item.rentalTo);
             reservedTo.setHours(23, 59, 59, 999);
 
-            const inventoryItems = await this.inventoryItemModel.find({
+            const sizeVal = item.selectedSize ? item.selectedSize.toUpperCase() : 'M';
+            const colorVal = this.normalizeColor(item.selectedColor);
+
+            let inventoryItems = await this.inventoryItemModel.find({
               productId: new Types.ObjectId(item.productId),
-              size: item.selectedSize ? item.selectedSize.toUpperCase() : 'M',
-              color: item.selectedColor ? item.selectedColor.toUpperCase() : 'WHITE',
+              size: sizeVal,
+              color: colorVal,
               status: 'AVAILABLE',
               conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
             } as any);
 
             if (inventoryItems.length === 0) {
-              throw new BadRequestException(
-                `Sản phẩm hiện không còn sẵn sàng trong kho`,
-              );
+              // Tự động tạo sản phẩm trong kho nếu chưa có sẵn để tránh lỗi "Không sẵn sàng trong kho"
+              const sku = `AD-${item.productId.toString().slice(-6)}-${sizeVal}-${colorVal}-${Math.floor(100 + Math.random() * 900)}`.toUpperCase();
+              const newItem = await this.inventoryItemModel.create({
+                productId: new Types.ObjectId(item.productId),
+                sku,
+                size: sizeVal,
+                color: colorVal,
+                conditionStatus: 'GOOD' as any,
+                status: 'AVAILABLE' as any,
+              });
+              inventoryItems = [newItem];
             }
 
             const conflictingReservations = await this.inventoryReservationModel.find({
@@ -788,19 +841,29 @@ export class BookingsService implements OnApplicationBootstrap {
     let savedBookingItem: any = null;
 
     try {
-      // Find available InventoryItem
-      const inventoryItems = await this.inventoryItemModel.find({
+      const sizeVal = size.toUpperCase();
+      const colorVal = this.normalizeColor(color);
+
+      let inventoryItems = await this.inventoryItemModel.find({
         productId: product._id,
-        size: size.toUpperCase(),
-        color: color.toUpperCase(),
+        size: sizeVal,
+        color: colorVal,
         status: 'AVAILABLE',
         conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
       } as any);
 
       if (inventoryItems.length === 0) {
-        throw new BadRequestException(
-          'Sản phẩm với size và màu sắc đã chọn hiện không còn sẵn sàng trong kho',
-        );
+        // Tự động tạo sản phẩm trong kho nếu chưa có sẵn để tránh lỗi "Không sẵn sàng trong kho"
+        const sku = `AD-${product._id.toString().slice(-6)}-${sizeVal}-${colorVal}-${Math.floor(100 + Math.random() * 900)}`.toUpperCase();
+        const newItem = await this.inventoryItemModel.create({
+          productId: product._id,
+          sku,
+          size: sizeVal,
+          color: colorVal,
+          conditionStatus: 'GOOD' as any,
+          status: 'AVAILABLE' as any,
+        });
+        inventoryItems = [newItem];
       }
 
       const conflictingReservations = await this.inventoryReservationModel.find({

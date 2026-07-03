@@ -108,7 +108,7 @@ export const PhotographerDetailPage: React.FC = () => {
   const [agreeTerms, setAgreeTerms] = useState<boolean>(false);
 
   // Calendar navigation & booking state
-  const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 5, 1));
+  const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const [isBookingNow, setIsBookingNow] = useState<boolean>(false);
   const [bookingSuccess, setBookingSuccess] = useState<boolean>(false);
   const [busyDates, setBusyDates] = useState<string[]>([]);

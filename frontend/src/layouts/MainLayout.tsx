@@ -149,7 +149,7 @@ export const MainLayout: React.FC = () => {
                   justifyContent: 'center',
                   boxShadow: 'var(--shadow-sm)'
                 }}>
-                  {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                  {cart.length}
                 </span>
               )}
             </Link>

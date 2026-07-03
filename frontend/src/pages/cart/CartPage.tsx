@@ -381,6 +381,11 @@ export const CartPage: React.FC = () => {
             quantity: item.quantity || 1,
             rentalFrom,
             rentalTo,
+            selectedSize: item.size || null,
+            selectedColor: item.color || null,
+            rentalType: item.rentalType || 'DAILY',
+            shootDate: item.startDate || item.rentalFrom || null,
+            shootTimeSlot: item.shootTimeSlot || (item.startTime && item.endTime ? `${item.startTime}-${item.endTime}` : null),
           };
         } else {
           // PHOTOGRAPHY_PACKAGE

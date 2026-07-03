@@ -229,6 +229,17 @@ export class ReviewsService {
       throw new NotFoundException('Booking not found');
     }
 
+    // Kiểm tra đã đánh giá khách hàng cho đơn hàng này chưa (chỉ cho phép 1 lần)
+    const existingReview = await this.customerReviewModel.findOne({
+      bookingId,
+      providerId: provider._id,
+    });
+    if (existingReview) {
+      throw new BadRequestException(
+        'Đã gửi đánh giá cho khách hàng của đơn hàng này rồi.',
+      );
+    }
+
     return this.customerReviewModel.create({
       bookingId,
       customerId: booking.customerId,

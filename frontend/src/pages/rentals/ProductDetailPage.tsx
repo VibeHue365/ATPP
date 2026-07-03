@@ -237,8 +237,8 @@ export const ProductDetailPage: React.FC = () => {
             productId: product?._id,
             name: product?.name,
             image: product?.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
-            basePrice: product?.basePrice || 200000,
-            depositAmount: product?.depositAmount || 500000,
+            basePrice: product?.basePrice || 0,
+            depositAmount: product?.depositAmount || 0,
             size: sizeVal,
             color: colorVal,
             rentalType: 'DAILY',
@@ -541,7 +541,7 @@ export const ProductDetailPage: React.FC = () => {
   const [suggestedPhotographers, setSuggestedPhotographers] = useState<any[]>([]);
 
   // Calendar states
-  const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 5, 1));
+  const [calendarDate, setCalendarDate] = useState<Date>(new Date());
 
   const calendarDays = React.useMemo(() => {
     const today = new Date();

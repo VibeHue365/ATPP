@@ -76,82 +76,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Failed to parse cart', e);
       }
     } else if (cartKey === 'vh_cart_guest') {
-      // Seed default items for guest/mockup presentation if guest cart is empty
-      parsedCart = [
-        {
-          id: 'product_gam_do',
-          itemType: 'PRODUCT',
-          productId: 'prod_gam_do',
-          productName: 'Áo dài Gấm Đỏ Hoàng Triều',
-          productImage: 'https://images.unsplash.com/photo-1621184455862-c163dfb30e0f?q=80&w=600',
-          basePrice: 800000,
-          depositAmount: 1500000,
-          rentalFrom: '2024-10-12',
-          rentalTo: '2024-10-14',
-          size: 'M',
-          color: 'Đỏ',
-          quantity: 1,
-          providerCity: 'Thừa Thiên Huế',
-          providerAddress: '12 Đại Nội, TP. Huế'
-        },
-        {
-          id: 'photographer_hoang_minh_1',
-          itemType: 'PHOTOGRAPHY_PACKAGE',
-          photographyPackageId: 'pkg_hoang_minh_art',
-          photographerName: 'Hoàng Minh',
-          photographerAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-          packageName: 'Gói Nghệ Thuật',
-          shootDate: '2024-10-13',
-          shootTimeSlot: '8:00 - 11:00',
-          shootLocation: 'Văn Miếu, Hà Nội',
-          basePrice: 2000000,
-          quantity: 1,
-          photographerCity: 'Hà Nội'
-        },
-        {
-          id: 'product_to_tam',
-          itemType: 'PRODUCT',
-          productId: 'prod_to_tam',
-          productName: 'Áo dài Tơ Tằm Thủy Mặc',
-          productImage: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600',
-          basePrice: 1200000,
-          depositAmount: 1800000,
-          rentalFrom: '2024-10-15',
-          rentalTo: '2024-10-17',
-          size: 'L',
-          color: 'Xanh Thủy Mặc',
-          quantity: 1,
-          providerCity: 'Thừa Thiên Huế',
-          providerAddress: '24 Lê Lợi, TP. Huế'
-        },
-        {
-          id: 'photographer_hoang_minh_2',
-          itemType: 'PHOTOGRAPHY_PACKAGE',
-          photographyPackageId: 'pkg_hoang_minh_mismatch',
-          photographerName: 'Hoàng Minh',
-          photographerAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-          packageName: 'Gói Nghệ Thuật',
-          shootDate: '2024-10-18',
-          shootTimeSlot: '14:00 - 17:00',
-          shootLocation: 'Văn Miếu, Hà Nội',
-          basePrice: 2000000,
-          quantity: 1,
-          photographerCity: 'Hà Nội'
-        },
-        {
-          id: 'product_ai_cinematic',
-          itemType: 'PRODUCT',
-          productId: 'prod_ai_cinematic',
-          productName: 'Gói chỉnh sửa AI Cinematic',
-          productImage: '',
-          basePrice: 350000,
-          depositAmount: 0,
-          rentalFrom: null,
-          rentalTo: null,
-          quantity: 1
-        }
-      ];
-      localStorage.setItem('vh_cart_guest', JSON.stringify(parsedCart));
+      // Giỏ hàng guest bắt đầu rỗng — không seed mock data
+      parsedCart = [];
     }
 
     // Merge guest cart to user cart upon login

@@ -219,21 +219,21 @@ export class PaymentsService {
       try {
         // Bắn thông báo cho khách hàng
         await this.notificationsService.createNotification(
-          booking.customerId.toString(),
+          updatedBooking.customerId.toString(),
           `Thanh toán thành công`,
-          `Bạn đã thanh toán thành công số tiền ${payment.amount.toLocaleString('vi-VN')}đ cho đơn hàng ${booking.bookingCode}.`,
+          `Bạn đã thanh toán thành công số tiền ${payment.amount.toLocaleString('vi-VN')}đ cho đơn hàng ${updatedBooking.bookingCode}.`,
           NotificationType.Payment,
-          { bookingId: booking._id },
+          { bookingId: updatedBooking._id },
         );
 
         // Bắn thông báo cho các nhà cung cấp liên quan
-        for (const providerId of booking.providerIds) {
+        for (const providerId of updatedBooking.providerIds) {
           await this.notificationsService.createNotification(
             providerId.toString(),
             `Lịch đặt mới được thanh toán`,
-            `Đơn đặt lịch ${booking.bookingCode} đã được khách hàng thanh toán cọc thành công.`,
+            `Đơn đặt lịch ${updatedBooking.bookingCode} đã được khách hàng thanh toán cọc thành công.`,
             NotificationType.Booking,
-            { bookingId: booking._id },
+            { bookingId: updatedBooking._id },
           );
         }
       } catch (e) {

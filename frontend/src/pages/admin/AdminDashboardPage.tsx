@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  ShieldAlert, ShieldCheck, AlertTriangle, CheckCircle, XCircle, 
-  ArrowLeft, MessageSquare, DollarSign, Image as ImageIcon, Calendar, User, Eye,
-  LayoutDashboard, Users, Store, TrendingUp, FileCheck, LogOut,
-  Search, Bell, Check, X, Shield, ChevronRight, FileText, Ban, Trash2, Award, Info, Lock, CheckSquare, BarChart3
+  AlertTriangle, 
+  Image as ImageIcon, Calendar, Eye,
+  LayoutDashboard, Users, Store, TrendingUp, FileCheck,
+  Search, Bell, Ban, Lock, CheckSquare, BarChart3
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../services/httpClient';
@@ -285,7 +285,7 @@ export const AdminDashboardPage: React.FC = () => {
       toast.success('Đã bắt đầu đánh giá hồ sơ');
       fetchVerifications();
       setVerifications(prev => prev.map(v => v._id === id ? { ...v, status: 'UNDER_REVIEW' } : v));
-      setSelectedDetailItem(prev => prev ? { ...prev, status: 'UNDER_REVIEW' } : null);
+      setSelectedDetailItem((prev: any) => prev ? { ...prev, status: 'UNDER_REVIEW' } : null);
     } catch (err: any) {
       toast.error(err.message || 'Lỗi khi bắt đầu đánh giá');
     }
