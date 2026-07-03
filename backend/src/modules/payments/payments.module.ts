@@ -27,6 +27,7 @@ import { PaymentsService } from './services/payments.service';
 import { PayOSRefundService } from './services/payos-refund.service';
 import { MockBankingService } from './services/mock-banking.service';
 import { BookingsModule } from '../bookings/bookings.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 export const paymentModels = MongooseModule.forFeature([
   { name: Payment.name, schema: PaymentSchema },
@@ -38,7 +39,12 @@ export const paymentModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [paymentModels, ConfigModule, forwardRef(() => BookingsModule)],
+  imports: [
+    paymentModels,
+    ConfigModule,
+    forwardRef(() => BookingsModule),
+    NotificationsModule,
+  ],
   controllers: [PaymentsController],
   providers: [PaymentsService, PayOSRefundService, MockBankingService],
   exports: [

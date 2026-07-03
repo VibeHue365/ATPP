@@ -12,7 +12,14 @@ import 'customer_dashboard_view.dart';
 import 'cart_view.dart';
 import 'map_view.dart';
 import 'notifications_view.dart';
+import 'chat_rooms_view.dart';
+import 'chat_view.dart';
+import 'favorites_view.dart';
+import 'edit_profile_view.dart';
+import '../../providers/user_chat_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../onboarding/onboarding_view.dart';
+import 'product_listing_view.dart';
 
 class LandingView extends StatefulWidget {
   const LandingView({super.key});
@@ -30,6 +37,7 @@ class _LandingViewState extends State<LandingView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<BookingProvider>().loadProducts();
       context.read<BookingProvider>().loadPhotographers();
+      context.read<NotificationProvider>().fetchNotifications();
     });
   }
 
@@ -37,7 +45,7 @@ class _LandingViewState extends State<LandingView> {
   Widget build(BuildContext context) {
     final List<Widget> tabs = [
       const HomeTab(),
-      const ChatBotView(),
+      const ChatRoomsView(),
       const CustomerDashboardView(),
       const ProfileTab(),
     ];
@@ -63,9 +71,9 @@ class _LandingViewState extends State<LandingView> {
             label: 'Cửa hàng',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: 'Trợ lý AI',
+            icon: Icon(Icons.message_outlined),
+            activeIcon: Icon(Icons.message),
+            label: 'Tin nhắn',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.receipt_long_outlined),
@@ -150,11 +158,29 @@ class _HomeTabState extends State<HomeTab> {
             ],
           ),
           IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: AppColors.primary),
+            icon: const Icon(Icons.assistant, color: AppColors.primary),
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const NotificationsView()),
+                MaterialPageRoute(builder: (_) => const ChatBotView()),
+              );
+            },
+          ),
+          Consumer<NotificationProvider>(
+            builder: (context, notificationProvider, _) {
+              final unreadCount = notificationProvider.unreadCount;
+              return Badge(
+                isLabelVisible: unreadCount > 0,
+                label: Text(unreadCount.toString()),
+                child: IconButton(
+                  icon: const Icon(Icons.notifications_outlined, color: AppColors.primary),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const NotificationsView()),
+                    );
+                  },
+                ),
               );
             },
           ),
@@ -206,15 +232,9 @@ class _HomeTabState extends State<HomeTab> {
                     // Heritage Banner
                     Container(
                       margin: const EdgeInsets.all(16),
-                      padding: const EdgeInsets.all(20),
+                      height: 160,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppColors.primaryDark, AppColors.primary],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.gold, width: 1.5),
                         boxShadow: [
                           BoxShadow(
                             color: AppColors.primary.withOpacity(0.2),
@@ -223,26 +243,47 @@ class _HomeTabState extends State<HomeTab> {
                           )
                         ],
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Kính chào quý khách',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: AppColors.goldLight,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Tìm phục trang xưa đẹp nhất cho chuyến du hành Cố Đô',
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.asset(
+                          'assets/images/hero_banner.png',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [AppColors.primaryDark, AppColors.primary],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                border: Border.all(color: AppColors.gold, width: 1.5),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Kính chào quý khách',
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      color: AppColors.goldLight,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Tìm phục trang xưa đẹp nhất cho chuyến du hành Cổ Đô',
+                                    style: theme.textTheme.headlineMedium?.copyWith(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -336,12 +377,43 @@ class _HomeTabState extends State<HomeTab> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Products Grid
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Text(
-                        'Trang phục cổ phong',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    // Products Grid Title with "See All" button
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Trang phục cổ phong',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ProductListingView(
+                                    initialCategory: _selectedCategory,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: const Row(
+                              children: [
+                                Text(
+                                  'Xem tất cả',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                SizedBox(width: 4),
+                                Icon(Icons.arrow_forward_ios, size: 10, color: AppColors.primary),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -362,7 +434,7 @@ class _HomeTabState extends State<HomeTab> {
                               crossAxisSpacing: 16,
                               mainAxisSpacing: 16,
                             ),
-                            itemCount: filteredProducts.length,
+                            itemCount: filteredProducts.length > 4 ? 4 : filteredProducts.length,
                             itemBuilder: (context, index) {
                               final product = filteredProducts[index];
                               return Card(
@@ -450,16 +522,57 @@ class _HomeTabState extends State<HomeTab> {
                                   margin: const EdgeInsets.only(right: 16),
                                   child: Card(
                                     clipBehavior: Clip.antiAlias,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        Expanded(
-                                          child: Image.network(
-                                            photo['avatarUrl'] ?? 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?q=80&w=200',
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 40),
+                                    child: InkWell(
+                                      onTap: () async {
+                                        final String? otherUserId = photo['userId']?.toString();
+                                        if (otherUserId == null) return;
+
+                                        // Show loading spinner dialog
+                                        showDialog(
+                                          context: context,
+                                          barrierDismissible: false,
+                                          builder: (_) => const Center(
+                                            child: CircularProgressIndicator(color: AppColors.primary),
                                           ),
-                                        ),
+                                        );
+
+                                        try {
+                                          final chatProvider = context.read<UserChatProvider>();
+                                          final roomId = await chatProvider.startChat(otherUserId);
+
+                                          if (context.mounted) {
+                                            Navigator.pop(context); // dismiss loading spinner
+                                            chatProvider.enterRoom(roomId);
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => ChatView(
+                                                  roomId: roomId,
+                                                  otherParticipantName: photo['businessName'] ?? 'Nhiếp ảnh gia',
+                                                  otherParticipantAvatar: photo['avatarUrl'],
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (context.mounted) {
+                                            Navigator.pop(context); // dismiss loading spinner
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('Không thể kết nối chat: $e')),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          Expanded(
+                                            child: Image.network(
+                                              photo['avatarUrl'] ?? 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?q=80&w=200',
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 40),
+                                            ),
+                                          ),
                                         Padding(
                                           padding: const EdgeInsets.all(8.0),
                                           child: Column(
@@ -482,6 +595,7 @@ class _HomeTabState extends State<HomeTab> {
                                         )
                                       ],
                                     ),
+                                  ),
                                   ),
                                 );
                               },
@@ -552,7 +666,18 @@ class ProfileTab extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          ListTile(
+            leading: const Icon(Icons.person_outline, color: AppColors.primary),
+            title: const Text('Chỉnh sửa thông tin'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EditProfileView()),
+              );
+            },
+          ),
+          const Divider(),
           ListTile(
             leading: const Icon(Icons.lock_reset, color: AppColors.primary),
             title: const Text('Đổi mật khẩu'),
@@ -560,6 +685,20 @@ class ProfileTab extends StatelessWidget {
             onTap: () {},
           ),
           const Divider(),
+
+          ListTile(
+            leading: const Icon(Icons.favorite, color: AppColors.primary),
+            title: const Text('Danh sách yêu thích'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const FavoritesView()),
+              );
+            },
+          ),
+          const Divider(),
+
           Consumer<ThemeProvider>(
             builder: (context, themeProvider, _) {
               return SwitchListTile(

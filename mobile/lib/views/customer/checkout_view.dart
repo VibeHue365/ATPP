@@ -5,6 +5,7 @@ import '../../core/constants/colors.dart';
 import '../../models/product.dart';
 import '../../models/cart_item.dart';
 import '../../providers/booking_provider.dart';
+import 'customer_dashboard_view.dart';
 
 class CheckoutView extends StatefulWidget {
   final List<CartItem> cartItems;
@@ -24,11 +25,35 @@ class _CheckoutViewState extends State<CheckoutView> {
   final _voucherController = TextEditingController();
   final _notesController = TextEditingController();
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.cartItems.isNotEmpty) {
+      _startDate = widget.cartItems.first.startDate;
+      _endDate = widget.cartItems.first.endDate;
+    }
+  }
+
   int get rentalDays => _endDate.difference(_startDate).inDays > 0
       ? _endDate.difference(_startDate).inDays
       : 1;
 
-  double get subTotal => widget.cartItems.fold(0.0, (sum, item) => sum + (item.product.price * item.quantity)) * rentalDays;
+  double get subTotal {
+    return widget.cartItems.fold(0.0, (sum, item) {
+      if (item.rentalType == 'HOURLY') {
+        final sh = int.parse((item.startTime ?? '08:00').split(':').first);
+        final eh = int.parse((item.endTime ?? '10:00').split(':').first);
+        final hours = (eh - sh) > 0 ? (eh - sh) : 2;
+        final hourlyRate = item.product.hourlyRate;
+        return sum + (hourlyRate * hours * item.quantity);
+      } else {
+        final days = item.endDate.difference(item.startDate).inDays;
+        final rentalDays = days > 0 ? days : 1;
+        return sum + (item.product.price * rentalDays * item.quantity);
+      }
+    });
+  }
+
   double get depositTotal => widget.cartItems.fold(0.0, (sum, item) => sum + (item.product.depositPrice * item.quantity));
   double get grandTotal {
     final discount = context.watch<BookingProvider>().voucherDiscount;
@@ -112,11 +137,6 @@ class _CheckoutViewState extends State<CheckoutView> {
                   context,
                   MaterialPageRoute(builder: (_) => const SuccessScreen()),
                 );
-                Future.delayed(const Duration(milliseconds: 2500), () {
-                  if (context.mounted) {
-                    Navigator.pop(context); // Close SuccessScreen
-                  }
-                });
               },
               onCancel: () {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -197,7 +217,16 @@ class _CheckoutViewState extends State<CheckoutView> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '${item.product.price.toStringAsFixed(0)}đ / ngày',
+                              item.rentalType == 'HOURLY'
+                                  ? 'Thuê theo giờ: ${item.startDate.day}/${item.startDate.month}/${item.startDate.year} (${item.startTime} - ${item.endTime})'
+                                  : 'Thuê theo ngày: ${item.startDate.day}/${item.startDate.month} - ${item.endDate.day}/${item.endDate.month}',
+                              style: const TextStyle(fontSize: 11, color: AppColors.goldDark, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              item.rentalType == 'HOURLY'
+                                  ? '${item.product.hourlyRate.toStringAsFixed(0)}đ / giờ'
+                                  : '${item.product.price.toStringAsFixed(0)}đ / ngày',
                               style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
                             ),
                           ],
@@ -210,18 +239,38 @@ class _CheckoutViewState extends State<CheckoutView> {
             }).toList(),
             const SizedBox(height: 16),
 
-            // Date picker box
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.calendar_month, color: AppColors.primary),
-                title: const Text('Thời gian thuê'),
-                subtitle: Text(
-                  'Từ ${_startDate.day}/${_startDate.month} đến ${_endDate.day}/${_endDate.month} (${rentalDays} ngày)',
+            // Date picker box (Only editable if all items are DAILY)
+            if (widget.cartItems.every((item) => item.rentalType == 'DAILY')) ...[
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.calendar_month, color: AppColors.primary),
+                  title: const Text('Thời gian thuê (Tất cả sản phẩm)'),
+                  subtitle: Text(
+                    'Từ ${_startDate.day}/${_startDate.month} đến ${_endDate.day}/${_endDate.month} (${rentalDays} ngày)',
+                  ),
+                  trailing: const Icon(Icons.edit_calendar),
+                  onTap: _selectDateRange,
                 ),
-                trailing: const Icon(Icons.edit_calendar),
-                onTap: _selectDateRange,
               ),
-            ),
+            ] else ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: AppColors.primary),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Thời gian đặt thuê cụ thể đã được cấu hình cho từng sản phẩm trong chi tiết đơn hàng.',
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Color and custom notes
@@ -602,6 +651,49 @@ class _SuccessScreenState extends State<SuccessScreen> with SingleTickerProvider
                   fontSize: 14,
                   fontStyle: FontStyle.italic,
                   color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 40),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: Column(
+                  children: [
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).popUntil((route) => route.isFirst);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text(
+                        'QUAY LẠI MUA SẮM',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(context).popUntil((route) => route.isFirst);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const CustomerDashboardView()),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.primary, width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text(
+                        'XEM LỊCH SỬ ĐƠN',
+                        style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

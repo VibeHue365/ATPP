@@ -15,8 +15,16 @@ export class ProductsService {
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
-  async getAllActiveProducts(): Promise<ProductDocument[]> {
-    return this.productsRepository.findAllActive();
+  async getAllActiveProducts(options?: {
+    search?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    minRating?: number;
+    colors?: string[];
+    sizes?: string[];
+    materials?: string[];
+  }): Promise<ProductDocument[]> {
+    return this.productsRepository.findAllActive(options);
   }
 
   async getCategories(): Promise<any[]> {
@@ -40,6 +48,11 @@ export class ProductsService {
     if (!user || !user.provider || !user.provider.providerId) {
       throw new BadRequestException('User is not a provider or lacks provider ID');
     }
+
+    if (dto.depositAmount >= dto.basePrice) {
+      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
+    }
+
 
     const slug = dto.name
       .toLowerCase()
@@ -79,6 +92,13 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
+    const checkBasePrice = dto.basePrice !== undefined ? dto.basePrice : product.basePrice;
+    const checkDeposit = dto.depositAmount !== undefined ? dto.depositAmount : product.depositAmount;
+    if (checkDeposit >= checkBasePrice) {
+      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
+    }
+
+
     const productProviderId = product.providerId && typeof product.providerId === 'object' && '_id' in product.providerId
       ? (product.providerId as any)._id
       : product.providerId;
@@ -89,6 +109,7 @@ export class ProductsService {
 
     const updateData: any = {};
     if (dto.name !== undefined) {
+
       updateData.name = dto.name;
       updateData.slug = dto.name
         .toLowerCase()

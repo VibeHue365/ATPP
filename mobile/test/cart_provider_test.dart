@@ -6,9 +6,13 @@ void main() {
   group('CartProvider Unit Tests', () {
     late CartProvider cartProvider;
     late Product sampleProduct;
+    late DateTime today;
+    late DateTime tomorrow;
 
     setUp(() {
       cartProvider = CartProvider();
+      today = DateTime.now().add(const Duration(days: 1));
+      tomorrow = today.add(const Duration(days: 1));
       sampleProduct = Product(
         id: 'p1',
         name: 'Áo ngũ thân truyền thống',
@@ -17,7 +21,9 @@ void main() {
         depositPrice: 500000.0,
         imageUrl: 'https://example.com/image.jpg',
         category: 'Áo ngũ thân',
+        categoryId: 'cat1',
         providerId: 'prov1',
+
         availableSizes: ['M', 'L'],
       );
     });
@@ -31,7 +37,7 @@ void main() {
     });
 
     test('Add item to cart should update totals', () {
-      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 2);
+      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 2, rentalType: 'DAILY', startDate: today, endDate: tomorrow);
 
       expect(cartProvider.items.length, 1);
       expect(cartProvider.totalItemsCount, 2);
@@ -41,8 +47,8 @@ void main() {
     });
 
     test('Add identical item should increment quantity', () {
-      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 1);
-      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 2);
+      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 1, rentalType: 'DAILY', startDate: today, endDate: tomorrow);
+      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 2, rentalType: 'DAILY', startDate: today, endDate: tomorrow);
 
       expect(cartProvider.items.length, 1);
       expect(cartProvider.totalItemsCount, 3);
@@ -50,15 +56,15 @@ void main() {
     });
 
     test('Add same product with different size should create new item', () {
-      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 1);
-      cartProvider.addItem(sampleProduct, 'L', 'Đỏ Đô', quantity: 1);
+      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 1, rentalType: 'DAILY', startDate: today, endDate: tomorrow);
+      cartProvider.addItem(sampleProduct, 'L', 'Đỏ Đô', quantity: 1, rentalType: 'DAILY', startDate: today, endDate: tomorrow);
 
       expect(cartProvider.items.length, 2);
       expect(cartProvider.totalItemsCount, 2);
     });
 
     test('Remove item should update list and totals', () {
-      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 1);
+      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 1, rentalType: 'DAILY', startDate: today, endDate: tomorrow);
       final item = cartProvider.items[0];
       
       cartProvider.removeItem(item);
@@ -68,7 +74,7 @@ void main() {
     });
 
     test('Update quantity should work correctly', () {
-      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 1);
+      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 1, rentalType: 'DAILY', startDate: today, endDate: tomorrow);
       final item = cartProvider.items[0];
       
       cartProvider.updateQuantity(item, 5);
@@ -79,7 +85,7 @@ void main() {
     });
 
     test('Clear should empty the cart', () {
-      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 2);
+      cartProvider.addItem(sampleProduct, 'M', 'Đỏ Đô', quantity: 2, rentalType: 'DAILY', startDate: today, endDate: tomorrow);
       expect(cartProvider.items.length, 1);
 
       cartProvider.clear();

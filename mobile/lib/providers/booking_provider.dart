@@ -126,13 +126,19 @@ class BookingProvider extends ChangeNotifier {
 
     try {
       final List<Map<String, dynamic>> itemsList = cartItems.map((item) {
+        final isHourly = item.rentalType == 'HOURLY';
         return {
           'productId': item.product.id,
           'quantity': item.quantity,
-          'rentalFrom': formatDate(rentalFrom),
-          'rentalTo': formatDate(rentalTo),
+          'rentalType': item.rentalType,
+          'rentalFrom': item.rentalType == 'DAILY' ? formatDate(rentalFrom) : formatDate(item.startDate),
+          'rentalTo': item.rentalType == 'DAILY' ? formatDate(rentalTo) : formatDate(item.endDate),
           'selectedSize': item.selectedSize.toUpperCase(),
           'selectedColor': item.selectedColor.toUpperCase(),
+          if (isHourly) ...{
+            'shootDate': formatDate(item.startDate),
+            'shootTimeSlot': '${item.startTime ?? "08:00"}-${item.endTime ?? "10:00"}',
+          },
           if (customRequests != null && customRequests.isNotEmpty)
             'customRequests': customRequests,
         };

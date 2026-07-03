@@ -92,6 +92,9 @@ export class BookingItem {
 
   @Prop({ type: String, default: null, trim: true })
   customRequests?: string | null;
+
+  @Prop({ type: Boolean, default: false })
+  isReviewed?: boolean;
 }
 
 export const BookingItemSchema = SchemaFactory.createForClass(BookingItem);

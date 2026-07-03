@@ -30,6 +30,8 @@ import {
 } from '../schemas/booking-settlement.schema';
 import { PayOSRefundService } from './payos-refund.service';
 import { MockBankingService } from './mock-banking.service';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/schemas/notification.schema';
 
 interface PaymentAccountDoc {
   bankName?: string;
@@ -71,6 +73,7 @@ export class PaymentsService {
     private readonly settlementModel: Model<BookingSettlement>,
     private readonly refundService: PayOSRefundService,
     private readonly bankingService: MockBankingService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createPaymentLink(
@@ -212,6 +215,30 @@ export class PaymentsService {
           },
         },
       );
+
+      try {
+        // Bắn thông báo cho khách hàng
+        await this.notificationsService.createNotification(
+          booking.customerId.toString(),
+          `Thanh toán thành công`,
+          `Bạn đã thanh toán thành công số tiền ${payment.amount.toLocaleString('vi-VN')}đ cho đơn hàng ${booking.bookingCode}.`,
+          NotificationType.Payment,
+          { bookingId: booking._id },
+        );
+
+        // Bắn thông báo cho các nhà cung cấp liên quan
+        for (const providerId of booking.providerIds) {
+          await this.notificationsService.createNotification(
+            providerId.toString(),
+            `Lịch đặt mới được thanh toán`,
+            `Đơn đặt lịch ${booking.bookingCode} đã được khách hàng thanh toán cọc thành công.`,
+            NotificationType.Booking,
+            { bookingId: booking._id },
+          );
+        }
+      } catch (e) {
+        console.error('Failed to create payment/booking notifications:', e);
+      }
 
       // Tạo Escrow Entry ghi nhận tiền ký quỹ
       await this.createEscrowEntry(

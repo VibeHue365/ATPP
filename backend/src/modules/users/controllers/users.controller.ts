@@ -100,6 +100,32 @@ export class UsersController {
     );
   }
 
+  @Patch('me/preferences')
+  updatePreferences(
+    @CurrentUser() user: AuthUser,
+    @Body() preferences: any,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.updatePreferences(
+      user.sub,
+      preferences,
+      user.roles,
+    );
+  }
+
+  @Patch('me/favorites')
+  toggleFavorite(
+    @CurrentUser() user: AuthUser,
+    @Body('targetType') targetType: string,
+    @Body('targetId') targetId: string,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.toggleFavorite(
+      user.sub,
+      targetType,
+      targetId,
+      user.roles,
+    );
+  }
+
   private userAgent(request: RequestMeta): string | undefined {
     const value = request.headers['user-agent'];
     return Array.isArray(value) ? value[0] : value;

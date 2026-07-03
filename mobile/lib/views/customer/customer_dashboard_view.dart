@@ -115,6 +115,7 @@ class _CustomerDashboardViewState extends State<CustomerDashboardView> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Cảm ơn bạn đã gửi đánh giá!')),
                   );
+                  context.read<BookingProvider>().loadMyBookings();
                 }
               },
               child: const Text('GỬI ĐÁNH GIÁ'),
@@ -203,7 +204,12 @@ class _CustomerDashboardViewState extends State<CustomerDashboardView> {
                                         ],
                                       ),
                                       // Render date details
-                                      if (item.rentalFrom != null)
+                                      if (item.shootTimeSlot != null && item.shootTimeSlot!.isNotEmpty)
+                                        Text(
+                                          'Thuê theo giờ: ${_formatDate(item.shootDate ?? item.rentalFrom)} (${item.shootTimeSlot})',
+                                          style: const TextStyle(fontSize: 12, color: AppColors.goldDark, fontWeight: FontWeight.w600),
+                                        )
+                                      else if (item.rentalFrom != null)
                                         Text(
                                           'Thời gian: ${_formatDate(item.rentalFrom)} - ${_formatDate(item.rentalTo)}',
                                           style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
@@ -212,11 +218,23 @@ class _CustomerDashboardViewState extends State<CustomerDashboardView> {
                                         const SizedBox(height: 6),
                                         Align(
                                           alignment: Alignment.centerRight,
-                                          child: TextButton.icon(
-                                            icon: const Icon(Icons.star, size: 16, color: AppColors.gold),
-                                            label: const Text('Đánh giá dịch vụ', style: TextStyle(fontSize: 12)),
-                                            onPressed: () => _showReviewDialog(booking, item),
-                                          ),
+                                          child: item.isReviewed
+                                              ? const Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+                                                    SizedBox(width: 4),
+                                                    Text(
+                                                      'Đã đánh giá',
+                                                      style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold),
+                                                    ),
+                                                  ],
+                                                )
+                                              : TextButton.icon(
+                                                  icon: const Icon(Icons.star, size: 16, color: AppColors.gold),
+                                                  label: const Text('Đánh giá dịch vụ', style: TextStyle(fontSize: 12)),
+                                                  onPressed: () => _showReviewDialog(booking, item),
+                                                ),
                                         )
                                       ]
                                     ],

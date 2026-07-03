@@ -6,6 +6,7 @@ import 'register_view.dart';
 import 'verify_otp_view.dart';
 import '../customer/landing_view.dart';
 import '../provider/provider_dashboard_view.dart';
+import '../admin/admin_dashboard_view.dart';
 
 class LoginView extends StatefulWidget {
   final String defaultRole;
@@ -59,7 +60,13 @@ class _LoginViewState extends State<LoginView> {
               ),
             );
           } else {
-            if (user.role == 'PROVIDER') {
+            final roles = user.roles.map((r) => r.toUpperCase()).toList();
+            if (roles.contains('ADMIN')) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const AdminDashboardView()),
+              );
+            } else if (roles.contains('PROVIDER')) {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (_) => const ProviderDashboardView()),
