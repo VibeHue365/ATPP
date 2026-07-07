@@ -171,6 +171,9 @@ export class Provider {
   approvedBy?: Types.ObjectId | null;
 
   @Prop({ type: Number, default: 0 })
+  comboDiscountPercent: number;
+
+  @Prop({ type: Number, default: 0 })
   violationCount: number;
 }
 

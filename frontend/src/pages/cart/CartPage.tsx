@@ -11,7 +11,10 @@ import {
   Calendar, 
   QrCode, 
   Building, 
-  CreditCard 
+  CreditCard,
+  Pencil,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { ROUTES } from '../../config/routes';
 import { Link } from 'react-router-dom';
@@ -66,8 +69,33 @@ const isSameCity = (city1?: string | null, city2?: string | null) => {
 
 const isMongoObjectId = (id?: string | null) => /^[a-f\d]{24}$/i.test(id || '');
 
+const productSlots = [
+  { start: '07:00', end: '09:00', label: '07:00 - 09:00' },
+  { start: '09:00', end: '11:00', label: '09:00 - 11:00' },
+  { start: '11:00', end: '13:00', label: '11:00 - 13:00' },
+  { start: '13:00', end: '15:00', label: '13:00 - 15:00' },
+  { start: '15:00', end: '17:00', label: '15:00 - 17:00' },
+  { start: '17:00', end: '19:00', label: '17:00 - 19:00' },
+  { start: '19:00', end: '21:00', label: '19:00 - 21:00' },
+];
+
+const isTimeSlotOverlap = (slot1: string, slot2: string) => {
+  const parseTime = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const [start1Str, end1Str] = slot1.split('-').map(s => s.trim());
+  const [start2Str, end2Str] = slot2.split('-').map(s => s.trim());
+  if (!start1Str || !end1Str || !start2Str || !end2Str) return false;
+  const s1 = parseTime(start1Str);
+  const e1 = parseTime(end1Str);
+  const s2 = parseTime(start2Str);
+  const e2 = parseTime(end2Str);
+  return s1 < e2 && s2 < e1;
+};
+
 export const CartPage: React.FC = () => {
-  const { cart, removeFromCart, updateCartItemDate, updateCartItemTimeSlot } = useCart();
+  const { cart, removeFromCart, updateCartItemDate, updateCartItemTimeSlot, updateCartItemQuantity, updateCartItemSize, updateCartItemColor, updateCartItemDates } = useCart();
   const toast = useToast();
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isCheckoutSuccess, setIsCheckoutSuccess] = useState(false);
@@ -76,6 +104,212 @@ export const CartPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [realProductList, setRealProductList] = useState<any[]>([]);
   const [realPhotographersList, setRealPhotographersList] = useState<any[]>([]);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+
+  // New calendar and busy date/slot states
+  const [calendarDate, setCalendarDate] = useState<Date>(new Date());
+  const [busyDates, setBusyDates] = useState<string[]>([]);
+  const [busySlots, setBusySlots] = useState<{ date: string, timeSlot: string }[]>([]);
+
+  const editingItem = cart.find(i => i.id === editingItemId);
+  const editingItemType = editingItem?.rentalType || 'DAILY';
+
+  useEffect(() => {
+    if (!editingItemId) {
+      setBusyDates([]);
+      setBusySlots([]);
+      return;
+    }
+    const item = cart.find(i => i.id === editingItemId);
+    if (!item || item.itemType !== 'PRODUCT') return;
+    
+    const pId = item.productId || item.id;
+    if (!pId) return;
+
+    httpClient.get<any>(`/api/bookings/busy-dates/product/${pId}`)
+      .then(res => {
+        setBusyDates(res.bookedDates || []);
+        setBusySlots(res.bookedSlots || []);
+      })
+      .catch(err => {
+        console.error('Error fetching busy dates/slots:', err);
+      });
+  }, [editingItemId, cart]);
+
+  const calendarDays = React.useMemo(() => {
+    if (!editingItem) return [];
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let firstDayOfWeek = new Date(year, month, 1).getDay();
+    firstDayOfWeek = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+    const days: any[] = [];
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      days.push({ day: 0, dateStr: '', isWeekend: false, isAvailable: false, isEmpty: true });
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      const dayOfWeek = new Date(dateStr).getDay();
+      
+      let isAvailable = !busyDates.includes(dateStr) && dateStr >= todayStr;
+      if (editingItemType === 'HOURLY' && dateStr === todayStr) {
+        const currentHour = today.getHours();
+        const currentMinute = today.getMinutes();
+        const hasTimeSlotsLeft = productSlots.some(block => {
+          const [h, m] = block.start.split(':').map(Number);
+          return h > currentHour || (h === currentHour && m > currentMinute);
+        });
+        isAvailable = isAvailable && hasTimeSlotsLeft;
+      }
+      
+      days.push({
+        day: i,
+        dateStr,
+        isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
+        isAvailable,
+        isEmpty: false,
+      });
+    }
+    return days;
+  }, [calendarDate, busyDates, editingItemType, editingItem]);
+
+  const handleCalendarDayClick = (dateStr: string) => {
+    if (!editingItem) return;
+    if (editingItemType === 'HOURLY') {
+      updateCartItemDates(editingItem.id, dateStr, dateStr);
+    } else {
+      if (busyDates.includes(dateStr)) {
+        toast.error('Ngày này đã bị đặt lịch!');
+        return;
+      }
+      const currentFrom = editingItem.rentalFrom || editingItem.startDate || '';
+      const currentTo = editingItem.rentalTo || editingItem.endDate || '';
+      
+      if (!currentFrom || (currentFrom && currentTo)) {
+        updateCartItemDates(editingItem.id, dateStr, '');
+      } else {
+        if (dateStr < currentFrom) {
+          updateCartItemDates(editingItem.id, dateStr, '');
+        } else {
+          const hasUnavailable = calendarDays.some(d => 
+            !d.isEmpty && !d.isAvailable && d.dateStr >= currentFrom && d.dateStr <= dateStr
+          );
+          if (hasUnavailable) {
+            toast.error('Khoảng thời gian chọn chứa ngày đã bị đặt!');
+            return;
+          }
+          updateCartItemDates(editingItem.id, currentFrom, dateStr);
+        }
+      }
+    }
+  };
+
+  const bookedSlotsOnSelectedDate = React.useMemo(() => {
+    const singleDate = editingItem?.rentalFrom || editingItem?.startDate || '';
+    if (!singleDate) return [];
+    return busySlots.filter(s => s.date === singleDate).map(s => s.timeSlot);
+  }, [editingItem, busySlots]);
+
+  const startSlotIndex = React.useMemo(() => {
+    const startTime = editingItem?.startTime || '07:00';
+    return productSlots.findIndex(s => s.start === startTime);
+  }, [editingItem]);
+
+  const endSlotIndex = React.useMemo(() => {
+    const endTime = editingItem?.endTime || '09:00';
+    return productSlots.findIndex(s => s.end === endTime);
+  }, [editingItem]);
+
+  const handleSlotClick = (i: number) => {
+    if (!editingItem) return;
+    const block = productSlots[i];
+    const singleDate = editingItem.rentalFrom || editingItem.startDate || '';
+    
+    const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+      isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
+    );
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const isPast = singleDate === todayStr && (() => {
+      const [sh, sm] = block.start.split(':').map(Number);
+      return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+    })();
+    
+    if (isBusy || isPast) return;
+
+    const currentStartTime = editingItem.startTime || '07:00';
+    const currentEndTime = editingItem.endTime || '09:00';
+    const currentStartIdx = productSlots.findIndex(s => s.start === currentStartTime);
+    const currentEndIdx = productSlots.findIndex(s => s.end === currentEndTime);
+
+    if (currentStartIdx === -1 || currentStartIdx !== currentEndIdx || i < currentStartIdx) {
+      updateCartItemTimeSlot(editingItem.id, `${block.start}-${block.end}`);
+    } else {
+      let hasBusyOrPastInRange = false;
+      for (let idx = currentStartIdx; idx <= i; idx++) {
+        const checkBlock = productSlots[idx];
+        const checkBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+          isTimeSlotOverlap(`${checkBlock.start}-${checkBlock.end}`, bookedSlot)
+        );
+        const checkPast = singleDate === todayStr && (() => {
+          const [sh, sm] = checkBlock.start.split(':').map(Number);
+          return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+        })();
+        if (checkBusy || checkPast) {
+          hasBusyOrPastInRange = true;
+          break;
+        }
+      }
+
+      if (hasBusyOrPastInRange) {
+        toast.error('Khoảng thời gian chọn chứa khung giờ đã bận hoặc đã qua!');
+        updateCartItemTimeSlot(editingItem.id, `${block.start}-${block.end}`);
+      } else {
+        const targetStartTime = productSlots[currentStartIdx].start;
+        const targetEndTime = productSlots[i].end;
+        updateCartItemTimeSlot(editingItem.id, `${targetStartTime}-${targetEndTime}`);
+      }
+    }
+  };
+
+  // Reset and auto-select first available slot when date changes
+  useEffect(() => {
+    if (!editingItem || editingItemType !== 'HOURLY') return;
+    const singleDate = editingItem.rentalFrom || editingItem.startDate || '';
+    if (!singleDate) return;
+    
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    const currentStartTime = editingItem.startTime || '07:00';
+    const currentEndTime = editingItem.endTime || '09:00';
+    const isCurrentBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+      isTimeSlotOverlap(`${currentStartTime}-${currentEndTime}`, bookedSlot)
+    );
+    const isCurrentPast = singleDate === todayStr && (() => {
+      const [sh, sm] = currentStartTime.split(':').map(Number);
+      return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+    })();
+
+    if (isCurrentBusy || isCurrentPast) {
+      const firstAvailableIndex = productSlots.findIndex((block) => {
+        const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+          isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
+        );
+        const isPast = singleDate === todayStr && (() => {
+          const [sh, sm] = block.start.split(':').map(Number);
+          return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+        })();
+        return !isBusy && !isPast;
+      });
+
+      if (firstAvailableIndex !== -1) {
+        updateCartItemTimeSlot(editingItem.id, `${productSlots[firstAvailableIndex].start}-${productSlots[firstAvailableIndex].end}`);
+      }
+    }
+  }, [editingItemId, editingItem?.rentalFrom, editingItem?.startDate, bookedSlotsOnSelectedDate, editingItemType]);
 
   useEffect(() => {
     const fetchRealData = async () => {
@@ -143,9 +377,58 @@ export const CartPage: React.FC = () => {
     return dateStr;
   };
 
+  // Enrich cart items with up-to-date product database values
+  const enrichedCart = cart.map(item => {
+    if (item.itemType === 'PRODUCT') {
+      const dbProduct = realProductList.find(p => 
+        p._id === item.productId || 
+        p._id === item.id || 
+        p.slug === item.productId ||
+        p.slug === item.id ||
+        (item.productId && p._id.toString() === item.productId.toString())
+      );
+      if (dbProduct) {
+        let days = 1;
+        const rentalFrom = item.rentalFrom || item.startDate;
+        const rentalTo = item.rentalTo || item.endDate;
+        if (rentalFrom && rentalTo) {
+          const start = new Date(rentalFrom);
+          const end = new Date(rentalTo);
+          if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
+            const diffTime = Math.abs(end.getTime() - start.getTime());
+            days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+          }
+        }
+        
+        let hours = 2;
+        if (item.startTime && item.endTime) {
+          const [sh, sm] = item.startTime.split(':').map(Number);
+          const [eh, em] = item.endTime.split(':').map(Number);
+          const sDate = new Date();
+          sDate.setHours(sh, sm, 0, 0);
+          const eDate = new Date();
+          eDate.setHours(eh, em, 0, 0);
+          hours = Math.max((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60), 2);
+        }
+        
+        const hourlyRate = dbProduct.hourlyPrice || Math.round(dbProduct.basePrice * 0.3) || 80000;
+        const basePrice = item.rentalType === 'HOURLY' ? hourlyRate * hours : dbProduct.basePrice * days;
+
+        return {
+          ...item,
+          depositAmount: dbProduct.depositAmount,
+          basePrice,
+          providerCity: dbProduct.providerId?.address?.city || item.providerCity,
+          providerAddress: dbProduct.providerId?.address?.addressLine || item.providerAddress,
+        };
+      }
+    }
+    return item;
+  });
+
   // Grouping logic for items (Combo 1, Combo 2, Others)
-  const checkedItems = cart.filter(item => selectedItemIds.includes(item.id));
-  const uncheckedItems = cart.filter(item => !selectedItemIds.includes(item.id));
+  const checkedItems = enrichedCart.filter(item => selectedItemIds.includes(item.id));
+  const uncheckedItems = enrichedCart.filter(item => !selectedItemIds.includes(item.id));
 
   // Helper to find combos in a list of items
   const findCombos = (itemsList: CartItem[], startIndex: number) => {
@@ -280,13 +563,13 @@ export const CartPage: React.FC = () => {
   }
 
   // Checkbox functions
-  const isAllSelected = cart.length > 0 && selectedItemIds.length === cart.length;
+  const isAllSelected = enrichedCart.length > 0 && selectedItemIds.length === enrichedCart.length;
 
   const toggleSelectAll = () => {
     if (isAllSelected) {
       setSelectedItemIds([]);
     } else {
-      setSelectedItemIds(cart.map(item => item.id));
+      setSelectedItemIds(enrichedCart.map(item => item.id));
     }
   };
 
@@ -314,7 +597,7 @@ export const CartPage: React.FC = () => {
   };
 
   // Calculations for checkout (only selected items)
-  const selectedItems = cart.filter(item => selectedItemIds.includes(item.id));
+  const selectedItems = enrichedCart.filter(item => selectedItemIds.includes(item.id));
   
   const totalProductRental = selectedItems
     .filter(item => item.itemType === 'PRODUCT' && (item.rentalFrom || item.startDate))
@@ -332,14 +615,36 @@ export const CartPage: React.FC = () => {
     .filter(item => item.itemType === 'PRODUCT' && !(item.rentalFrom || item.startDate))
     .reduce((sum, item) => sum + (item.basePrice || 0) * item.quantity, 0);
 
-  // Flat service fee of 50.000đ if any items are selected
-  const serviceFee = selectedItems.length > 0 ? 50000 : 0;
+  // Removed platform service fee per user request
+  const serviceFee = 0;
+
+  // Tính giảm giá Combo của các nhóm combo thành công trong selectedItems
+  const comboDiscountTotal = checkedGroups
+    .filter(group => group.type === 'SUCCESS')
+    .reduce((sum, group) => {
+      const prodItem = group.items.find((i: any) => i.itemType === 'PRODUCT');
+      const photoItem = group.items.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+      
+      let prodDiscount = 0;
+      let photoDiscount = 0;
+
+      if (prodItem) {
+        const pct = prodItem.comboDiscountPercent !== undefined ? prodItem.comboDiscountPercent : 10;
+        prodDiscount = (prodItem.basePrice || 0) * prodItem.quantity * (pct / 100);
+      }
+      if (photoItem) {
+        const pct = photoItem.comboDiscountPercent !== undefined ? photoItem.comboDiscountPercent : 10;
+        photoDiscount = (photoItem.basePrice || 0) * photoItem.quantity * (pct / 100);
+      }
+
+      return sum + prodDiscount + photoDiscount;
+    }, 0);
 
   const totalPhotographerDeposit = Math.round(totalPhotographerFee * 0.3);
   const totalPhotographerRemaining = totalPhotographerFee - totalPhotographerDeposit;
 
-  const grandTotal = totalProductRental + totalPhotographerFee + totalOthersFee;
-  const depositToPayNow = totalProductRental + totalPhotographerDeposit + totalOthersFee + serviceFee + totalProductDeposit;
+  const grandTotal = Math.max(totalProductRental + totalPhotographerFee + totalOthersFee - comboDiscountTotal, 0);
+  const depositToPayNow = Math.max(totalProductRental + totalPhotographerDeposit + totalOthersFee + serviceFee + totalProductDeposit - comboDiscountTotal, 0);
   const remainingToPayLater = totalPhotographerRemaining;
 
   const handleCheckout = async () => {
@@ -427,6 +732,7 @@ export const CartPage: React.FC = () => {
         bookingType,
         items: itemsPayload,
         travelFee: 0,
+        serviceFee,
       };
 
       const bookingRes: any = await httpClient.post('/bookings', bookingPayload);
@@ -434,7 +740,7 @@ export const CartPage: React.FC = () => {
 
       const paymentRes: any = await httpClient.post('/payments/create-link', {
         bookingId: bookingRes._id,
-        purpose: 'FULL_PAYMENT',
+        purpose: bookingType === 'AODAI_RENTAL' ? 'FULL_PAYMENT' : 'DEPOSIT_PAYMENT',
       });
 
       if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
@@ -761,9 +1067,326 @@ export const CartPage: React.FC = () => {
                             <div style={{ fontSize: '13px', color: '#7E6D5B', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               {isRentalProduct ? (
                                 <>
-                                  <span>Kích cỡ: <strong>{item.size}</strong></span>
-                                  <span>Ngày thuê: <strong>{formatDateRange(item.rentalFrom || item.startDate, item.rentalTo || item.endDate)}{item.startTime && item.endTime ? ` (${item.startTime} - ${item.endTime})` : ''}</strong></span>
-                                  <span>Nơi nhận: <strong>{item.providerCity || 'Thừa Thiên Huế'}</strong></span>
+                                  {/* Inline edit panel for product items */}
+                                  {editingItemId === item.id ? (
+                                    <div style={{
+                                      backgroundColor: '#FAF5EE',
+                                      border: '1px solid #E8D9C0',
+                                      borderRadius: '8px',
+                                      padding: '14px 16px',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '12px',
+                                      marginTop: '4px',
+                                      animation: 'fadeIn 0.2s ease'
+                                    }}>
+                                      {/* Size selector */}
+                                      {(() => {
+                                        const dbProd = realProductList.find(p => p._id === item.productId || p._id === item.id);
+                                        const sizes: string[] = dbProd?.sizes || ['S', 'M', 'L', 'XL'];
+                                        const colors: string[] = dbProd?.colors || [];
+                                        return (
+                                          <>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                              <label style={{ fontSize: '11px', fontWeight: 700, color: '#8B1E22', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kích cỡ</label>
+                                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                                {sizes.map(sz => (
+                                                  <button
+                                                    key={sz}
+                                                    onClick={() => updateCartItemSize(item.id, sz)}
+                                                    style={{
+                                                      padding: '5px 12px',
+                                                      borderRadius: '4px',
+                                                      border: `1.5px solid ${(item.size || '').toUpperCase() === sz.toUpperCase() ? '#8B1E22' : '#D5C2AD'}`,
+                                                      backgroundColor: (item.size || '').toUpperCase() === sz.toUpperCase() ? '#8B1E22' : 'white',
+                                                      color: (item.size || '').toUpperCase() === sz.toUpperCase() ? 'white' : '#5D4037',
+                                                      fontSize: '12px',
+                                                      fontWeight: 700,
+                                                      cursor: 'pointer',
+                                                      transition: 'all 0.15s'
+                                                    }}
+                                                  >
+                                                    {sz}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            </div>
+
+                                            {colors.length > 0 && (
+                                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                <label style={{ fontSize: '11px', fontWeight: 700, color: '#8B1E22', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Màu sắc</label>
+                                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                                  {colors.map(cl => (
+                                                    <button
+                                                      key={cl}
+                                                      onClick={() => updateCartItemColor(item.id, cl)}
+                                                      style={{
+                                                        padding: '5px 12px',
+                                                        borderRadius: '4px',
+                                                        border: `1.5px solid ${(item.color || '').toUpperCase() === cl.toUpperCase() ? '#8B1E22' : '#D5C2AD'}`,
+                                                        backgroundColor: (item.color || '').toUpperCase() === cl.toUpperCase() ? '#8B1E22' : 'white',
+                                                        color: (item.color || '').toUpperCase() === cl.toUpperCase() ? 'white' : '#5D4037',
+                                                        fontSize: '12px',
+                                                        fontWeight: 700,
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.15s'
+                                                      }}
+                                                    >
+                                                      {cl}
+                                                    </button>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+                                          </>
+                                        );
+                                      })()}
+
+                                      {/* Calendar & Timeslot Grid */}
+                                      <div style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '16px',
+                                        backgroundColor: '#FFFFFF',
+                                        border: '1px solid #EAE1D4',
+                                        borderRadius: '8px',
+                                        padding: '16px',
+                                        marginTop: '8px'
+                                      }}>
+                                        <div style={{
+                                          display: 'grid',
+                                          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                          gap: '20px',
+                                          alignItems: 'start'
+                                        }}>
+                                          {/* Calendar Section */}
+                                          <div>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                              <button
+                                                type="button"
+                                                onClick={() => { const d = new Date(calendarDate); d.setMonth(d.getMonth() - 1); setCalendarDate(d); }}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#8B1E22', display: 'flex', alignItems: 'center' }}
+                                              >
+                                                <ChevronLeft size={16} />
+                                              </button>
+                                              <span style={{ fontSize: '13px', fontWeight: 750, color: '#2D2926' }}>
+                                                Tháng {calendarDate.getMonth() + 1}, {calendarDate.getFullYear()}
+                                              </span>
+                                              <button
+                                                type="button"
+                                                onClick={() => { const d = new Date(calendarDate); d.setMonth(d.getMonth() + 1); setCalendarDate(d); }}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#8B1E22', display: 'flex', alignItems: 'center' }}
+                                              >
+                                                <ChevronRight size={16} />
+                                              </button>
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
+                                              {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((w) => (
+                                                <span key={w} style={{ fontSize: '10px', fontWeight: 800, color: '#8C827A', padding: '2px 0' }}>{w}</span>
+                                              ))}
+                                              {calendarDays.map((d, idx) => {
+                                                if (d.isEmpty) return <div key={`e-${idx}`} />;
+                                                
+                                                const startDateVal = item.rentalFrom || item.startDate || '';
+                                                const endDateVal = item.rentalTo || item.endDate || '';
+                                                
+                                                const isDaySelected = editingItemType === 'HOURLY'
+                                                  ? startDateVal === d.dateStr
+                                                  : (startDateVal === d.dateStr || endDateVal === d.dateStr);
+                                                  
+                                                const isDayInRange = editingItemType === 'DAILY' && startDateVal && endDateVal && d.dateStr > startDateVal && d.dateStr < endDateVal;
+                                                
+                                                return (
+                                                  <button
+                                                    key={d.day}
+                                                    type="button"
+                                                    disabled={!d.isAvailable}
+                                                    onClick={() => handleCalendarDayClick(d.dateStr)}
+                                                    style={{
+                                                      aspectRatio: '1',
+                                                      border: isDaySelected ? '1.5px solid #8B1E22' : '1px solid transparent',
+                                                      borderRadius: '6px',
+                                                      backgroundColor: isDaySelected
+                                                        ? '#8B1E22'
+                                                        : isDayInRange
+                                                          ? '#FFF0F1'
+                                                          : !d.isAvailable
+                                                            ? '#F5F5F5'
+                                                            : d.isWeekend
+                                                              ? '#FCF9F2'
+                                                              : '#FFFFFF',
+                                                      color: !d.isAvailable
+                                                        ? '#CCCCCC'
+                                                        : isDaySelected
+                                                          ? '#FFFFFF'
+                                                          : isDayInRange
+                                                            ? '#8B1E22'
+                                                            : '#4A4440',
+                                                      fontWeight: isDaySelected || isDayInRange ? 700 : 500,
+                                                      fontSize: '11px',
+                                                      cursor: !d.isAvailable ? 'not-allowed' : 'pointer',
+                                                      display: 'flex',
+                                                      alignItems: 'center',
+                                                      justifyContent: 'center',
+                                                      transition: 'all 0.15s ease',
+                                                      padding: 0
+                                                    }}
+                                                  >
+                                                    {d.day}
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+
+                                          {/* Time Slots Section (HOURLY) or Info Section (DAILY) */}
+                                          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                            {editingItemType === 'HOURLY' ? (
+                                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                <span style={{ fontSize: '11px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>CHỌN GIỜ THUÊ (MỖI Ô 2 TIẾNG)</span>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+                                                  {productSlots.map((block, idx) => {
+                                                    const singleDate = item.rentalFrom || item.startDate || '';
+                                                    const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+                                                      isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
+                                                    );
+                                                    const today = new Date();
+                                                    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                                                    const isPast = singleDate === todayStr && (() => {
+                                                      const [sh, sm] = block.start.split(':').map(Number);
+                                                      return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
+                                                    })();
+
+                                                    const isSelected = idx >= startSlotIndex && idx <= endSlotIndex;
+
+                                                    return (
+                                                      <button
+                                                        key={block.label}
+                                                        type="button"
+                                                        disabled={isBusy || isPast}
+                                                        onClick={() => handleSlotClick(idx)}
+                                                        style={{
+                                                          padding: '6px 4px',
+                                                          borderRadius: '6px',
+                                                          fontSize: '11px',
+                                                          fontWeight: 700,
+                                                          display: 'flex',
+                                                          flexDirection: 'column',
+                                                          alignItems: 'center',
+                                                          gap: '2px',
+                                                          cursor: (isBusy || isPast) ? 'not-allowed' : 'pointer',
+                                                          backgroundColor: isSelected
+                                                            ? '#8B1E22'
+                                                            : (isBusy || isPast)
+                                                              ? '#EAEAE8'
+                                                              : '#FFFFFF',
+                                                          color: isSelected
+                                                            ? '#FFFFFF'
+                                                            : (isBusy || isPast)
+                                                              ? '#A0A09E'
+                                                              : '#5D4037',
+                                                          border: isSelected
+                                                            ? '1.5px solid #8B1E22'
+                                                            : '1.5px solid rgba(45, 41, 38, 0.15)',
+                                                          transition: 'all 0.15s ease',
+                                                        }}
+                                                      >
+                                                        <span>{block.label}</span>
+                                                        <span style={{ fontSize: '8px', fontWeight: 600, opacity: 0.85 }}>
+                                                          {isBusy ? 'Đã bận' : isPast ? 'Đã qua' : isSelected ? 'Đã chọn' : 'Trống'}
+                                                        </span>
+                                                      </button>
+                                                    );
+                                                  })}
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div style={{
+                                                backgroundColor: '#FCF9F2',
+                                                border: '1px solid #EAE1D4',
+                                                borderRadius: '6px',
+                                                padding: '12px',
+                                                fontSize: '12px',
+                                                color: '#5D4037',
+                                                lineHeight: 1.5
+                                              }}>
+                                                <div style={{ fontWeight: 700, color: '#8B1E22', marginBottom: '4px' }}>Thời gian chọn thuê:</div>
+                                                {item.rentalFrom && item.rentalTo ? (
+                                                  <>
+                                                    <div>Từ ngày: <strong>{formatSingleDate(item.rentalFrom)}</strong></div>
+                                                    <div>Đến ngày: <strong>{formatSingleDate(item.rentalTo)}</strong></div>
+                                                    <div style={{ marginTop: '6px', fontSize: '11px', fontStyle: 'italic', color: '#8C7355' }}>
+                                                      * Click chọn Ngày nhận đầu tiên, sau đó click Ngày trả.
+                                                    </div>
+                                                  </>
+                                                ) : (
+                                                  <div style={{ fontStyle: 'italic', color: '#8C827A' }}>
+                                                    Vui lòng chọn ngày nhận và ngày trả trên lịch.
+                                                  </div>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {editingItemType === 'HOURLY' && (
+                                          <span style={{ fontSize: '10px', fontStyle: 'italic', color: '#8C7355', lineHeight: 1.4 }}>
+                                            * Bạn có thể chọn liên tiếp nhiều ô để thuê nhiều giờ (Ví dụ: click ô 9h-11h rồi click ô 11h-13h).
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <button
+                                        onClick={() => setEditingItemId(null)}
+                                        style={{
+                                          alignSelf: 'flex-end',
+                                          padding: '5px 14px',
+                                          borderRadius: '6px',
+                                          border: 'none',
+                                          backgroundColor: '#8B1E22',
+                                          color: 'white',
+                                          fontSize: '12px',
+                                          fontWeight: 700,
+                                          cursor: 'pointer',
+                                          marginTop: '2px'
+                                        }}
+                                      >
+                                        ✓ Xong
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                          <span>Kích cỡ: <strong>{item.size}</strong> {item.color && <> • Màu: <strong>{item.color}</strong></>}</span>
+                                          <span>Ngày thuê: <strong>{formatDateRange(item.rentalFrom || item.startDate, item.rentalTo || item.endDate)}{item.startTime && item.endTime ? ` (${item.startTime} - ${item.endTime})` : ''}</strong></span>
+                                          <span>Nơi nhận: <strong>{item.providerCity || 'Thừa Thiên Huế'}</strong></span>
+                                        </div>
+                                        <button
+                                          onClick={() => setEditingItemId(item.id)}
+                                          title="Chỉnh sửa kích cỡ & lịch thuê"
+                                          style={{
+                                            background: 'none',
+                                            border: '1px solid #D5C2AD',
+                                            borderRadius: '6px',
+                                            padding: '4px 8px',
+                                            cursor: 'pointer',
+                                            color: '#8B1E22',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            fontSize: '11px',
+                                            fontWeight: 700,
+                                            whiteSpace: 'nowrap',
+                                            flexShrink: 0
+                                          }}
+                                        >
+                                          <Pencil size={11} /> Sửa
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
                                 </>
                               ) : item.itemType === 'PHOTOGRAPHY_PACKAGE' ? (
                                 <>
@@ -776,9 +1399,64 @@ export const CartPage: React.FC = () => {
                               )}
                             </div>
 
-                            {/* Price label */}
-                            <div style={{ fontSize: '16px', fontWeight: 700, color: '#2D2926', marginTop: '8px' }}>
-                              {item.basePrice?.toLocaleString('vi-VN')}đ
+                            {/* Price and Quantity Selector */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', maxWidth: '350px' }}>
+                              <div style={{ fontSize: '16px', fontWeight: 700, color: '#2D2926' }}>
+                                {item.basePrice?.toLocaleString('vi-VN')}đ
+                              </div>
+
+                              {/* Premium Quantity Selector */}
+                              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #EAE1D4', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FAF5EE' }}>
+                                <button
+                                  onClick={() => updateCartItemQuantity(item.id, item.quantity - 1)}
+                                  disabled={item.quantity <= 1}
+                                  style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    width: '28px',
+                                    height: '28px',
+                                    cursor: item.quantity <= 1 ? 'not-allowed' : 'pointer',
+                                    color: item.quantity <= 1 ? '#C5B39E' : '#2D2926',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '14px',
+                                    fontWeight: 'bold',
+                                    transition: 'all 0.2s'
+                                  }}
+                                >
+                                  -
+                                </button>
+                                <span style={{
+                                  width: '28px',
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  fontWeight: '700',
+                                  color: '#2D2926',
+                                  userSelect: 'none'
+                                }}>
+                                  {item.quantity}
+                                </span>
+                                <button
+                                  onClick={() => updateCartItemQuantity(item.id, item.quantity + 1)}
+                                  style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    width: '28px',
+                                    height: '28px',
+                                    cursor: 'pointer',
+                                    color: '#2D2926',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '14px',
+                                    fontWeight: 'bold',
+                                    transition: 'all 0.2s'
+                                  }}
+                                >
+                                  +
+                                </button>
+                              </div>
                             </div>
 
                             {/* Special Badges */}
@@ -841,13 +1519,7 @@ export const CartPage: React.FC = () => {
                       {grandTotal.toLocaleString('vi-VN')}đ
                     </span>
                   </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#5D4037' }}>
-                    <span>Phí dịch vụ Heritage</span>
-                    <span style={{ color: '#2D2926', fontWeight: 700 }}>
-                      {serviceFee.toLocaleString('vi-VN')}đ
-                    </span>
-                  </div>
+
 
                   {totalProductDeposit > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#5D4037' }}>
@@ -856,6 +1528,38 @@ export const CartPage: React.FC = () => {
                         {totalProductDeposit.toLocaleString('vi-VN')}đ
                       </span>
                     </div>
+                  )}
+
+                  {comboDiscountTotal > 0 && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#27AE60', marginTop: '4px' }}>
+                        <span>Giảm giá Combo</span>
+                        <span style={{ fontWeight: 700 }}>
+                          -{comboDiscountTotal.toLocaleString('vi-VN')}đ
+                        </span>
+                      </div>
+                      <div style={{ padding: '8px 12px', backgroundColor: '#E8F8F5', borderRadius: '6px', fontSize: '12px', color: '#27AE60', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px', textAlign: 'left' }}>
+                        {checkedGroups
+                          .filter((g: any) => g.type === 'SUCCESS')
+                          .map((group, gIdx) => {
+                            const prod = group.items.find((i: any) => i.itemType === 'PRODUCT');
+                            const photo = group.items.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+                            return (
+                              <div key={gIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                {prod && (prod.comboDiscountPercent !== 0) && (
+                                  <div>• Cửa hàng giảm {(prod.comboDiscountPercent ?? 10)}% áo dài (-{((prod.basePrice || 0) * (prod.comboDiscountPercent ?? 10) / 100).toLocaleString('vi-VN')}đ)</div>
+                                )}
+                                {photo && (photo.comboDiscountPercent !== 0) && (
+                                  <div>• Thợ ảnh giảm {(photo.comboDiscountPercent ?? 10)}% gói chụp (-{((photo.basePrice || 0) * (photo.comboDiscountPercent ?? 10) / 100).toLocaleString('vi-VN')}đ)</div>
+                                )}
+                                {photo && (photo.comboDiscountPercent === 0) && (
+                                  <div style={{ color: '#7F8C8D' }}>• Thợ ảnh {photo.photographerName} không áp dụng giảm giá Combo</div>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </>
                   )}
                 </div>
 

@@ -21,6 +21,7 @@ class ProductDetailView extends StatefulWidget {
 }
 
 class _ProductDetailViewState extends State<ProductDetailView> {
+  Product? _detailedProduct;
   String? _selectedSize;
   String? _selectedColor;
 
@@ -71,10 +72,12 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   // Feedback State
   List<Review> _reviews = [];
   bool _isReviewsLoading = true;
+  bool _hasAlreadyReviewed = false;
 
   @override
   void initState() {
     super.initState();
+    _detailedProduct = widget.product;
     if (widget.product.availableSizes.isNotEmpty) {
       _selectedSize = widget.product.availableSizes.first;
     }
@@ -85,19 +88,83 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     }
     _loadReviews();
     _loadBusyDates();
+    _loadProductDetail();
+  }
+
+  Future<void> _loadProductDetail() async {
+    try {
+      final detail = await ApiService().getProductById(widget.product.id);
+      if (mounted) {
+        setState(() {
+          _detailedProduct = detail;
+          if (_selectedSize == null && detail.availableSizes.isNotEmpty) {
+            _selectedSize = detail.availableSizes.first;
+          }
+          if (_selectedColor == null && detail.availableColors.isNotEmpty) {
+            _selectedColor = detail.availableColors.first;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading product detail: $e');
+    }
   }
 
   Future<void> _loadBusyDates() async {
     try {
       final apiService = ApiService();
       final data = await apiService.getProductBusyDates(widget.product.id);
+      final loadedBookedDates = List<String>.from(data['bookedDates'] ?? []);
       setState(() {
-        _busyDates = List<String>.from(data['bookedDates'] ?? []);
+        _busyDates = loadedBookedDates;
         _busySlots = List<Map<String, dynamic>>.from(
           (data['bookedSlots'] ?? []).map((x) => Map<String, dynamic>.from(x))
         );
-        _isBusyLoading = false;
         
+        // Tự động tìm khoảng 3 ngày liên tiếp khả dụng đầu tiên bắt đầu từ ngày mai
+        DateTime startCandidate = DateTime.now().add(const Duration(days: 1));
+        bool foundRange = false;
+        const maxSearchDays = 60;
+
+        for (int offset = 0; offset < maxSearchDays; offset++) {
+          final checkStart = DateTime.now().add(Duration(days: 1 + offset));
+          final checkEnd = checkStart.add(const Duration(days: 2));
+          
+          bool hasBusy = false;
+          DateTime temp = checkStart;
+          while (temp.isBefore(checkEnd) || temp.isAtSameMomentAs(checkEnd)) {
+            final tempStr = '${temp.year}-${temp.month.toString().padLeft(2, '0')}-${temp.day.toString().padLeft(2, '0')}';
+            if (loadedBookedDates.contains(tempStr)) {
+              hasBusy = true;
+              break;
+            }
+            temp = temp.add(const Duration(days: 1));
+          }
+
+          if (!hasBusy) {
+            _startDate = checkStart;
+            _endDate = checkEnd;
+            _hourlyDate = checkStart;
+            foundRange = true;
+            break;
+          }
+        }
+
+        if (!foundRange) {
+          // Fallback: Tìm 1 ngày rảnh duy nhất
+          for (int offset = 0; offset < maxSearchDays; offset++) {
+            final checkStart = DateTime.now().add(Duration(days: 1 + offset));
+            final tempStr = '${checkStart.year}-${checkStart.month.toString().padLeft(2, '0')}-${checkStart.day.toString().padLeft(2, '0')}';
+            if (!loadedBookedDates.contains(tempStr)) {
+              _startDate = checkStart;
+              _endDate = checkStart;
+              _hourlyDate = checkStart;
+              break;
+            }
+          }
+        }
+
+        _isBusyLoading = false;
         _autoSelectFirstAvailableSlot();
       });
     } catch (_) {
@@ -209,9 +276,22 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     try {
       final apiService = ApiService();
       final reviews = await apiService.getReviewsForItem(widget.product.id);
+      if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      final currentUser = auth.user;
+      bool alreadyReviewed = false;
+      if (currentUser != null) {
+        alreadyReviewed = reviews.any((r) =>
+          r.customerId == currentUser.id ||
+          r.customerName == currentUser.name ||
+          (currentUser.profile?.fullName != null &&
+              r.customerName == currentUser.profile!.fullName),
+        );
+      }
       setState(() {
         _reviews = reviews;
         _isReviewsLoading = false;
+        _hasAlreadyReviewed = alreadyReviewed;
       });
     } catch (e) {
       setState(() {
@@ -273,18 +353,21 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       if (!mounted) return;
       Navigator.pop(context); // Close loading dialog
 
-      // Check if user has rented this product before
-      bool hasRentedBefore = false;
+      // Check if user has completed renting this product before
+      bool hasCompletedRented = false;
       for (final booking in bookings) {
-        for (final item in booking.items) {
-          if (item.productId == widget.product.id) {
-            hasRentedBefore = true;
-            break;
+        if (booking.status == 'COMPLETED') {
+          for (final item in booking.items) {
+            if (item.productId == widget.product.id) {
+              hasCompletedRented = true;
+              break;
+            }
           }
         }
+        if (hasCompletedRented) break;
       }
 
-      if (!hasRentedBefore) {
+      if (!hasCompletedRented) {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -293,7 +376,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
               style: GoogleFonts.playfairDisplay(fontWeight: FontWeight.bold, color: AppColors.primary),
             ),
             content: const Text(
-              'Quý khách chưa từng thuê sản phẩm này. Hãy đặt lịch trải nghiệm trang phục để gửi đánh giá nhé!',
+              'Quý khách cần hoàn thành ít nhất 01 đơn thuê trang phục này trước khi gửi đánh giá.',
             ),
             actions: [
               TextButton(
@@ -309,23 +392,25 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       // Find any booking item containing this product that has NOT been reviewed yet
       Map<String, dynamic>? targetBookingAndItem;
       for (final booking in bookings) {
-        for (final item in booking.items) {
-          if (item.productId == widget.product.id) {
-             final alreadyReviewed = _reviews.any((r) => 
-               r.bookingItemId == item.id || 
-               (r.bookingId == booking.id && (
-                 r.customerId == auth.user?.id || 
-                 r.customerName == auth.user?.name || 
-                 (auth.user?.profile?.fullName != null && r.customerName == auth.user!.profile!.fullName)
-               ))
-             );
-            
-            if (!alreadyReviewed) {
-              targetBookingAndItem = {
-                'bookingId': booking.id,
-                'bookingItemId': item.id,
-              };
-              break;
+        if (booking.status == 'COMPLETED') {
+          for (final item in booking.items) {
+            if (item.productId == widget.product.id) {
+               final alreadyReviewed = item.isReviewed || _reviews.any((r) => 
+                 r.bookingItemId == item.id || 
+                 (r.bookingId == booking.id && (
+                   r.customerId == auth.user?.id || 
+                   r.customerName == auth.user?.name || 
+                   (auth.user?.profile?.fullName != null && r.customerName == auth.user!.profile!.fullName)
+                 ))
+               );
+              
+              if (!alreadyReviewed) {
+                targetBookingAndItem = {
+                  'bookingId': booking.id,
+                  'bookingItemId': item.id,
+                };
+                break;
+              }
             }
           }
         }
@@ -341,7 +426,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
               style: GoogleFonts.playfairDisplay(fontWeight: FontWeight.bold, color: AppColors.primary),
             ),
             content: const Text(
-              'Quý khách đã gửi đánh giá cho tất cả các đơn đặt thuê sản phẩm này rồi. Cảm ơn sự ủng hộ và phản hồi nhiệt tình của quý khách!',
+              'Quý khách đã gửi đánh giá cho tất cả các đơn đặt thuê hoàn thành của trang phục này rồi. Cảm ơn sự ủng hộ và phản hồi nhiệt tình của quý khách!',
             ),
             actions: [
               TextButton(
@@ -492,7 +577,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final product = widget.product;
+    final product = _detailedProduct ?? widget.product;
 
     return Scaffold(
       appBar: AppBar(
@@ -772,12 +857,46 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                             firstDate: DateTime.now(),
                             lastDate: DateTime.now().add(const Duration(days: 90)),
                             initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
+                            builder: (context, child) {
+                              return Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: const ColorScheme.light(
+                                    primary: AppColors.primary,
+                                    onPrimary: Colors.white,
+                                    surface: Colors.white,
+                                    onSurface: AppColors.textPrimary,
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            },
                           );
                           if (picked != null) {
-                            setState(() {
-                              _startDate = picked.start;
-                              _endDate = picked.end;
-                            });
+                            // Kiểm tra xem khoảng ngày được chọn có chứa ngày bận không
+                            bool hasBusyDate = false;
+                            DateTime temp = picked.start;
+                            while (temp.isBefore(picked.end) || temp.isAtSameMomentAs(picked.end)) {
+                              final dateStr = '${temp.year}-${temp.month.toString().padLeft(2, '0')}-${temp.day.toString().padLeft(2, '0')}';
+                              if (_busyDates.contains(dateStr)) {
+                                hasBusyDate = true;
+                                break;
+                              }
+                              temp = temp.add(const Duration(days: 1));
+                            }
+
+                            if (hasBusyDate) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Khoảng thời gian chọn chứa ngày đã được đặt lịch!'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                            } else {
+                              setState(() {
+                                _startDate = picked.start;
+                                _endDate = picked.end;
+                              });
+                            }
                           }
                         },
                       ),
@@ -949,11 +1068,35 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                           ],
                         ],
                       ),
-                      TextButton.icon(
-                        icon: const Icon(Icons.rate_review_outlined, size: 16, color: AppColors.primary),
-                        label: const Text('Viết đánh giá', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
-                        onPressed: _startReviewFlow,
-                      ),
+                      _hasAlreadyReviewed
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.green.shade300),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle, size: 14, color: Colors.green.shade600),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Đã đánh giá',
+                                    style: TextStyle(
+                                      color: Colors.green.shade700,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : TextButton.icon(
+                              icon: const Icon(Icons.rate_review_outlined, size: 16, color: AppColors.primary),
+                              label: const Text('Viết đánh giá', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                              onPressed: _startReviewFlow,
+                            ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -1080,7 +1223,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
-              if (product.providerUserId != null) ...[
+              if ((_detailedProduct ?? widget.product).providerUserId != null) ...[
                 Container(
                   margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
@@ -1090,7 +1233,13 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                   child: IconButton(
                     icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
                     onPressed: () async {
-                      final otherUserId = product.providerUserId!;
+                      final auth = context.read<AuthProvider>();
+                      if (!auth.isAuthenticated) {
+                        _showLoginRequiredDialog();
+                        return;
+                      }
+
+                      final otherUserId = (_detailedProduct ?? widget.product).providerUserId!;
 
                       // Show loading spinner
                       showDialog(
@@ -1113,7 +1262,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                             MaterialPageRoute(
                               builder: (_) => ChatView(
                                 roomId: roomId,
-                                otherParticipantName: 'Chủ tiệm',
+                                otherParticipantName: product.providerName ?? 'Chủ tiệm',
                               ),
                             ),
                           );

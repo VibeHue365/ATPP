@@ -137,6 +137,25 @@ class ApiService {
     }
   }
 
+  /// Trả về raw Map gồm: isFreeCancel, refundAmount, penaltyReason (giống web ProfilePage)
+  Future<Map<String, dynamic>> cancelBookingWithResult(String bookingId, String reason) async {
+    try {
+      final response = await _dio.post('/bookings/$bookingId/cancel', data: {'reason': reason});
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        return {
+          'isFreeCancel': data['isFreeCancel'] ?? true,
+          'refundAmount': (data['refundAmount'] ?? data['booking']?['cancellation']?['refundAmount'] ?? 0).toDouble(),
+          'penaltyReason': data['penaltyReason'] ?? '',
+        };
+      }
+      // Nếu server trả về booking object trực tiếp (không có isFreeCancel) → mặc định miễn phí
+      return {'isFreeCancel': true, 'refundAmount': 0.0, 'penaltyReason': ''};
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to cancel booking';
+    }
+  }
+
   // Voucher / Promotion
   Future<Voucher> validateVoucher({
     required String code,
@@ -299,6 +318,16 @@ class ApiService {
   Future<List<Voucher>> getProviderVouchers() async {
     try {
       final response = await _dio.get('/promotions/provider');
+      final List data = response.data;
+      return data.map((x) => Voucher.fromJson(x)).toList();
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to fetch provider promotions';
+    }
+  }
+
+  Future<List<Voucher>> getPromotionsByProvider(String providerId) async {
+    try {
+      final response = await _dio.get('/promotions/provider-promotions/$providerId');
       final List data = response.data;
       return data.map((x) => Voucher.fromJson(x)).toList();
     } on DioException catch (e) {

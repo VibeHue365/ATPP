@@ -30,6 +30,7 @@ export interface UpdateProviderProfileDto {
   address?: ProviderAddress;
   policies?: ProviderPolicies;
   media?: ProviderMedia;
+  comboDiscountPercent?: number;
 }
 
 @Injectable()

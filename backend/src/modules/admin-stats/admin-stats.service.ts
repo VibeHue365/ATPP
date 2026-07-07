@@ -23,7 +23,7 @@ export class AdminStatsService {
     const customerFilter = {
       $and: [
         { roles: 'CUSTOMER' },
-        { roles: { $nin: ['ADMIN', 'admin'] } }
+        { roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } }
       ]
     };
 
@@ -136,7 +136,7 @@ export class AdminStatsService {
     const filter = {
       $and: [
         { roles: 'CUSTOMER' },
-        { roles: { $nin: ['ADMIN', 'admin'] } }
+        { roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } }
       ]
     };
     const total = await this.userModel.countDocuments(filter as any);
@@ -297,7 +297,7 @@ export class AdminStatsService {
     const customerFilter = {
       $and: [
         { roles: 'CUSTOMER' },
-        { roles: { $nin: ['ADMIN', 'admin'] } }
+        { roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } }
       ]
     };
     

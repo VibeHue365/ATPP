@@ -6,6 +6,8 @@ import '../../models/product.dart';
 import '../../models/cart_item.dart';
 import '../../providers/booking_provider.dart';
 import 'customer_dashboard_view.dart';
+import '../../models/voucher.dart';
+import '../../services/api_service.dart';
 
 class CheckoutView extends StatefulWidget {
   final List<CartItem> cartItems;
@@ -83,6 +85,123 @@ class _CheckoutViewState extends State<CheckoutView> {
       context.read<BookingProvider>().removeVoucher();
       _voucherController.clear();
     }
+  }
+
+  void _showVoucherSelectionBottomSheet() async {
+    final apiService = ApiService();
+    final providerIds = widget.cartItems.map((item) => item.product.providerId).toSet().toList();
+    
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return FutureBuilder<List<Voucher>>(
+          future: Future.wait(
+            providerIds.map((pid) => apiService.getPromotionsByProvider(pid))
+          ).then((value) => value.expand((x) => x).toList()),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(
+                height: 300,
+                child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+              );
+            }
+            if (snapshot.hasError) {
+              return SizedBox(
+                height: 300,
+                child: Center(
+                  child: Text('Lỗi tải voucher: ${snapshot.error}', style: const TextStyle(color: AppColors.error)),
+                ),
+              );
+            }
+            final vouchers = snapshot.data ?? [];
+            // Remove duplicates
+            final seen = <String>{};
+            final uniqueVouchers = vouchers.where((v) => seen.add(v.id)).toList();
+
+            if (uniqueVouchers.isEmpty) {
+              return const SizedBox(
+                height: 250,
+                child: Center(
+                  child: Text('Tiệm hiện không có chương trình khuyến mãi nào.'),
+                ),
+              );
+            }
+
+            return Container(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Chọn mã giảm giá của tiệm',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: uniqueVouchers.length,
+                      itemBuilder: (context, index) {
+                        final voucher = uniqueVouchers[index];
+                        final isPercentage = voucher.discountType == 'PERCENTAGE';
+                        final isApplicable = subTotal >= voucher.minOrderValue;
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          color: isApplicable ? Colors.white : Colors.grey.shade100,
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: isApplicable ? AppColors.primaryTrans : Colors.grey.shade300,
+                              child: Icon(
+                                Icons.local_offer,
+                                color: isApplicable ? AppColors.primary : Colors.grey,
+                              ),
+                            ),
+                            title: Text(
+                              voucher.code,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isApplicable ? AppColors.primary : Colors.grey,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Giảm: ${voucher.discountValue.toStringAsFixed(0)}${isPercentage ? "%" : "đ"}\nĐơn tối thiểu: ${voucher.minOrderValue.toStringAsFixed(0)}đ',
+                              style: TextStyle(fontSize: 12, color: isApplicable ? Colors.black87 : Colors.grey),
+                            ),
+                            trailing: ElevatedButton(
+                              onPressed: isApplicable
+                                  ? () {
+                                      _voucherController.text = voucher.code;
+                                      Navigator.pop(context);
+                                      _applyVoucher();
+                                    }
+                                  : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                disabledBackgroundColor: Colors.grey.shade300,
+                              ),
+                              child: Text(
+                                isApplicable ? 'Chọn' : 'Chưa đủ điều kiện',
+                                style: const TextStyle(fontSize: 11, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _applyVoucher() async {
@@ -310,9 +429,14 @@ class _CheckoutViewState extends State<CheckoutView> {
                         Expanded(
                           child: TextField(
                             controller: _voucherController,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               hintText: 'Mã giảm giá (ví dụ: GIAM20)',
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.loyalty, color: AppColors.primary),
+                                tooltip: 'Chọn mã giảm giá',
+                                onPressed: _showVoucherSelectionBottomSheet,
+                              ),
                             ),
                           ),
                         ),
@@ -464,6 +588,7 @@ class PayOSWebView extends StatefulWidget {
 class _PayOSWebViewState extends State<PayOSWebView> {
   late final WebViewController _controller;
   bool _isLoading = true;
+  bool _redirectHandled = false;
 
   @override
   void initState() {
@@ -496,20 +621,32 @@ class _PayOSWebViewState extends State<PayOSWebView> {
   }
 
   bool _checkRedirect(String url) {
-    // PayOS success or cancel URL detection
-    if (url.contains('status=PAID') || 
-        url.contains('status=SUCCESS') || 
-        url.contains('/success') || 
-        url.contains('/dashboard/profile') || 
-        url.contains('profile?tab=payments')) {
+    if (_redirectHandled) return false;
+
+    // Chỉ detect đúng deep link của app — không dùng pattern lỏng lẻ
+    if (url.startsWith('vibehue://payment/success')) {
+      _redirectHandled = true;
       widget.onSuccess();
       return true;
-    } else if (url.contains('status=CANCELLED') || 
-               url.contains('/cancel') || 
-               url.contains('/cart')) {
+    }
+    if (url.startsWith('vibehue://payment/cancel')) {
+      _redirectHandled = true;
       widget.onCancel();
       return true;
     }
+
+    // Fallback: vẫn detect URL của PayOS thật (nếu có tích hợp thật)
+    if (url.contains('status=PAID') || url.contains('status=SUCCESS')) {
+      _redirectHandled = true;
+      widget.onSuccess();
+      return true;
+    }
+    if (url.contains('status=CANCELLED') || url.contains('status=CANCEL')) {
+      _redirectHandled = true;
+      widget.onCancel();
+      return true;
+    }
+
     return false;
   }
 

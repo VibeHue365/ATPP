@@ -40,6 +40,7 @@ export interface CartItem {
   providerCity?: string | null;
   providerAddress?: string | null;
   photographerCity?: string | null;
+  comboDiscountPercent?: number;
 }
 
 interface CartContextType {
@@ -48,6 +49,10 @@ interface CartContextType {
   removeFromCart: (itemId: string) => void;
   updateCartItemDate: (itemId: string, date: string) => void;
   updateCartItemTimeSlot: (itemId: string, timeSlot: string) => void;
+  updateCartItemQuantity: (itemId: string, quantity: number) => void;
+  updateCartItemSize: (itemId: string, size: string) => void;
+  updateCartItemColor: (itemId: string, color: string) => void;
+  updateCartItemDates: (itemId: string, rentalFrom: string, rentalTo: string) => void;
   clearCart: () => void;
 }
 
@@ -92,10 +97,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
               const duplicateIndex = mergedCart.findIndex((item) => {
                 if (item.itemType !== guestItem.itemType) return false;
                 if (item.itemType === 'PRODUCT') {
+                  const itemStart = item.rentalFrom || item.startDate;
+                  const itemEnd = item.rentalTo || item.endDate;
+                  const guestStart = guestItem.rentalFrom || guestItem.startDate;
+                  const guestEnd = guestItem.rentalTo || guestItem.endDate;
+
                   return (
                     item.productId === guestItem.productId &&
-                    item.rentalFrom === guestItem.rentalFrom &&
-                    item.rentalTo === guestItem.rentalTo &&
+                    item.rentalType === guestItem.rentalType &&
+                    itemStart === guestStart &&
+                    itemEnd === guestEnd &&
+                    item.startTime === guestItem.startTime &&
+                    item.endTime === guestItem.endTime &&
                     item.size === guestItem.size &&
                     item.color === guestItem.color
                   );
@@ -141,10 +154,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const existingItemIndex = prevCart.findIndex((item) => {
         if (item.itemType !== newItem.itemType) return false;
         if (item.itemType === 'PRODUCT') {
+          const itemStart = item.rentalFrom || item.startDate;
+          const itemEnd = item.rentalTo || item.endDate;
+          const newStart = newItem.rentalFrom || newItem.startDate;
+          const newEnd = newItem.rentalTo || newItem.endDate;
+
           return (
             item.productId === newItem.productId &&
-            item.rentalFrom === newItem.rentalFrom &&
-            item.rentalTo === newItem.rentalTo &&
+            item.rentalType === newItem.rentalType &&
+            itemStart === newStart &&
+            itemEnd === newEnd &&
+            item.startTime === newItem.startTime &&
+            item.endTime === newItem.endTime &&
             item.size === newItem.size &&
             item.color === newItem.color
           );
@@ -204,12 +225,58 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  const updateCartItemQuantity = (itemId: string, newQuantity: number) => {
+    if (newQuantity < 1) return;
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        if (item.id !== itemId) return item;
+        return { ...item, quantity: newQuantity };
+      })
+    );
+  };
+
+  const updateCartItemSize = (itemId: string, newSize: string) => {
+    setCart((prevCart) =>
+      prevCart.map((item) =>
+        item.id === itemId ? { ...item, size: newSize } : item
+      )
+    );
+  };
+
+  const updateCartItemColor = (itemId: string, newColor: string) => {
+    setCart((prevCart) =>
+      prevCart.map((item) =>
+        item.id === itemId ? { ...item, color: newColor } : item
+      )
+    );
+  };
+
+  const updateCartItemDates = (itemId: string, newFrom: string, newTo: string) => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        if (item.id !== itemId) return item;
+        return {
+          ...item,
+          rentalFrom: newFrom,
+          rentalTo: newTo,
+          startDate: newFrom,
+          endDate: newTo,
+        };
+      })
+    );
+  };
+
   const clearCart = () => {
     setCart([]);
   };
 
   return (
-    <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateCartItemDate, updateCartItemTimeSlot, clearCart }}>
+    <CartContext.Provider value={{
+      cart, addToCart, removeFromCart,
+      updateCartItemDate, updateCartItemTimeSlot, updateCartItemQuantity,
+      updateCartItemSize, updateCartItemColor, updateCartItemDates,
+      clearCart
+    }}>
       {children}
     </CartContext.Provider>
   );

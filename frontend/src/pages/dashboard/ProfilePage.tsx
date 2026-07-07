@@ -35,6 +35,15 @@ export const ProfilePage: React.FC = () => {
   const [bookingToCancel, setBookingToCancel] = useState<any>(null);
   const [cancelReason, setCancelReason] = useState('');
 
+  // Reschedule state (UC-E06)
+  const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
+  const [rescheduleItem, setRescheduleItem] = useState<any>(null);
+  const [rescheduleFrom, setRescheduleFrom] = useState('');
+  const [rescheduleTo, setRescheduleTo] = useState('');
+  const [rescheduleShootDate, setRescheduleShootDate] = useState('');
+  const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
+  const [rescheduleReason, setRescheduleReason] = useState('');
+
   // Bookings list state
   const [bookings, setBookings] = useState<any[]>([]);
 
@@ -312,6 +321,42 @@ export const ProfilePage: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Lỗi khi kết nối đến cổng thanh toán.');
+    }
+  };
+
+  // ── UC-E06: Reschedule handler ──
+  const handleReschedule = async () => {
+    if (!rescheduleItem || !activeDetailBooking) return;
+    const isProduct = rescheduleItem.itemType === 'PRODUCT';
+    if (isProduct && (!rescheduleFrom || !rescheduleTo)) {
+      toast.error('Vui lòng chọn ngày nhận và ngày trả mới');
+      return;
+    }
+    if (!isProduct && !rescheduleShootDate) {
+      toast.error('Vui lòng chọn ngày chụp mới');
+      return;
+    }
+    try {
+      await httpClient.patch<any>(`/api/bookings/${activeDetailBooking._id}/reschedule`, {
+        itemId: rescheduleItem._id,
+        ...(isProduct ? { newRentalFrom: rescheduleFrom, newRentalTo: rescheduleTo } : {
+          newShootDate: rescheduleShootDate,
+          newShootTimeSlot: rescheduleTimeSlot || undefined,
+        }),
+        reason: rescheduleReason || undefined,
+      });
+      toast.success('Đổi lịch thành công!');
+      setIsRescheduleOpen(false);
+      setRescheduleItem(null);
+      setRescheduleFrom('');
+      setRescheduleTo('');
+      setRescheduleShootDate('');
+      setRescheduleTimeSlot('');
+      setRescheduleReason('');
+      fetchBookings();
+      setActiveDetailBooking(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể đổi lịch. Vui lòng thử lại!');
     }
   };
 
@@ -774,6 +819,41 @@ export const ProfilePage: React.FC = () => {
 
             {/* Footer action buttons */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px', borderTop: '1px solid #EAEAE8', paddingTop: '16px' }}>
+              {/* Reschedule button - allowed only for CONFIRMED/DEPOSIT_PAID */}
+              {(activeDetailBooking.status === 'CONFIRMED' || activeDetailBooking.status === 'DEPOSIT_PAID') && (
+                <button
+                  className="vh-btn"
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    backgroundColor: '#2980B9',
+                    color: 'white',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  onClick={() => {
+                    if (activeDetailBooking.items && activeDetailBooking.items.length > 0) {
+                      setRescheduleItem(activeDetailBooking.items[0]);
+                      const item = activeDetailBooking.items[0];
+                      if (item.itemType === 'PRODUCT') {
+                        setRescheduleFrom(item.startDate || item.rentalFrom || '');
+                        setRescheduleTo(item.endDate || item.rentalTo || '');
+                      } else {
+                        setRescheduleShootDate(item.shootDate || '');
+                        setRescheduleTimeSlot(item.shootTimeSlot || '');
+                      }
+                      setIsRescheduleOpen(true);
+                    }
+                  }}
+                >
+                  <Calendar size={14} /> Đổi lịch hẹn
+                </button>
+              )}
+
               {/* Only show Cancel button if status is cancellable */}
               {activeDetailBooking.status !== 'CANCELLED' && 
                activeDetailBooking.status !== 'COMPLETED' && 
@@ -827,7 +907,100 @@ export const ProfilePage: React.FC = () => {
         </Modal>
       )}
 
-      {/* 3. Modal View: Xác nhận hủy lịch và chính sách hoàn tiền */}
+      {/* 3. Modal View: Đổi lịch hẹn (UC-E06) */}
+      {isRescheduleOpen && rescheduleItem && activeDetailBooking && (
+        <Modal
+          isOpen={true}
+          onClose={() => { setIsRescheduleOpen(false); setRescheduleItem(null); }}
+          title={`ĐỔI LỊCH: ${activeDetailBooking.bookingCode}`}
+          maxWidth="480px"
+        >
+          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
+            <div style={{ backgroundColor: '#EBF5FB', borderRadius: '8px', padding: '12px 14px', fontSize: '13px', color: '#1A5276', lineHeight: 1.5 }}>
+              <strong>Lưu ý:</strong> Chỉ có thể đổi lịch trước giờ bắt đầu ít nhất <strong>24 tiếng</strong>. Lịch mới phải còn trống và không trùng với đơn khác.
+            </div>
+
+            {rescheduleItem.itemType === 'PRODUCT' ? (
+              <>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>NGÀY NHẬN MỚI</label>
+                    <input
+                      type="date"
+                      min={new Date().toISOString().split('T')[0]}
+                      value={rescheduleFrom}
+                      onChange={e => setRescheduleFrom(e.target.value)}
+                      style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
+                    />
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>NGÀY TRẢ MỚI</label>
+                    <input
+                      type="date"
+                      min={rescheduleFrom || new Date().toISOString().split('T')[0]}
+                      value={rescheduleTo}
+                      onChange={e => setRescheduleTo(e.target.value)}
+                      style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>NGÀY CHỤP MỚI</label>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().split('T')[0]}
+                    value={rescheduleShootDate}
+                    onChange={e => setRescheduleShootDate(e.target.value)}
+                    style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>KHUNG GIỜ MỚI (tùy chọn)</label>
+                  <input
+                    type="text"
+                    placeholder="VD: 09:00 - 11:00"
+                    value={rescheduleTimeSlot}
+                    onChange={e => setRescheduleTimeSlot(e.target.value)}
+                    style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
+                  />
+                </div>
+              </>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>LÝ DO ĐỔI LỊCH (tùy chọn)</label>
+              <textarea
+                placeholder="Nhập lý do đổi lịch..."
+                value={rescheduleReason}
+                onChange={e => setRescheduleReason(e.target.value)}
+                style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%', minHeight: '64px', fontFamily: 'inherit', resize: 'none' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #EAEAE8', paddingTop: '14px' }}>
+              <button
+                className="vh-btn vh-btn-outline"
+                style={{ padding: '8px 20px', borderRadius: '8px', fontSize: '13px' }}
+                onClick={() => { setIsRescheduleOpen(false); setRescheduleItem(null); }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                className="vh-btn"
+                style={{ padding: '8px 24px', borderRadius: '8px', fontSize: '13px', backgroundColor: '#2980B9', color: 'white', border: 'none', cursor: 'pointer' }}
+                onClick={handleReschedule}
+              >
+                Xác nhận đổi lịch
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* 4. Modal View: Xác nhận hủy lịch và chính sách hoàn tiền */}
       {isCancelConfirmOpen && bookingToCancel && (
         <Modal 
           isOpen={true} 

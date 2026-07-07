@@ -307,8 +307,8 @@ export class PaymentsController {
 
               <!-- Back link -->
               <div class="mt-8 pt-4 border-t border-stone-100">
-                <a href="http://localhost:5173/cart" class="text-xs font-bold text-stone-500 hover:text-stone-700 flex items-center gap-1">
-                  ← Quay lại giỏ hàng
+                <a href="vibehue://payment/cancel" class="text-xs font-bold text-stone-500 hover:text-stone-700 flex items-center gap-1">
+                  ← Hủy thanh toán
                 </a>
               </div>
             </div>
@@ -386,8 +386,8 @@ export class PaymentsController {
             <p class="text-sm text-stone-500 mb-6 leading-relaxed">
               Hệ thống đã xác nhận khoản chuyển tiền cọc trị giá <strong>${amount.toLocaleString('vi-VN')}đ</strong> cho giao dịch <strong>${payment.paymentCode}</strong> hoàn tất thành công.
             </p>
-            <a href="http://localhost:5173/dashboard/profile?tab=payments" class="w-full py-3.5 vh-bg-red vh-bg-red-hover text-white font-bold text-sm rounded-xl transition inline-flex items-center justify-center shadow-md">
-              Quay lại Cửa Hàng
+            <a href="vibehue://payment/success" class="w-full py-3.5 vh-bg-red vh-bg-red-hover text-white font-bold text-sm rounded-xl transition inline-flex items-center justify-center shadow-md">
+              Xác nhận và quay lại
             </a>
           </div>
 
@@ -485,7 +485,9 @@ export class PaymentsController {
                   setTimeout(() => {
                     successCard.classList.remove('opacity-0', 'scale-95');
                     successCard.classList.add('opacity-100', 'scale-100');
-                  }, 50);
+                    // Redirect mobile WebView về deep link thành công
+                    window.location.href = 'vibehue://payment/success';
+                  }, 800);
                 } else {
                   alert('Xác nhận thanh toán thất bại. Vui lòng thử lại!');
                   confirmBtn.disabled = false;

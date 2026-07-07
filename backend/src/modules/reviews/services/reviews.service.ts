@@ -6,7 +6,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Review, CustomerReview } from '../schemas/review.schema';
-import { Booking } from '../../bookings/schemas/booking.schema';
+import { Booking, BookingStatus } from '../../bookings/schemas/booking.schema';
 import { BookingItem } from '../../bookings/schemas/booking-item.schema';
 import { Product } from '../../products/schemas/product.schema';
 import { PhotographyPackage } from '../../products/schemas/photography-package.schema';
@@ -72,6 +72,18 @@ export class ReviewsService {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
       throw new NotFoundException('Booking not found');
+    }
+
+    // Verify booking belongs to this customer
+    if (booking.customerId.toString() !== customerIdStr) {
+      throw new BadRequestException('Bạn không có quyền đánh giá đơn hàng này.');
+    }
+
+    // Only allow review when booking is COMPLETED
+    if (booking.status !== BookingStatus.Completed) {
+      throw new BadRequestException(
+        'Chỉ có thể đánh giá sau khi đơn hàng được hoàn thành. Đơn hàng hiện tại chưa ở trạng thái Hoàn thành.',
+      );
     }
 
     // Determine the provider
@@ -319,6 +331,59 @@ export class ReviewsService {
         },
       },
     );
+  }
+
+  /**
+   * Kiểm tra nhanh: user hiện tại có thể review sản phẩm này không?
+   * Trả về: { canReview, hasCompletedBooking, alreadyReviewed, bookingId, bookingItemId }
+   */
+  async getMyReviewStatus(
+    customerIdStr: string,
+    productId: string,
+  ): Promise<Record<string, any>> {
+    const customerId = new Types.ObjectId(customerIdStr);
+    const prodId = new Types.ObjectId(productId);
+
+    // Tìm tất cả booking COMPLETED của customer
+    const completedBookings = await this.bookingModel.find({
+      customerId,
+      status: BookingStatus.Completed,
+    }).select('_id providerIds');
+
+    if (completedBookings.length === 0) {
+      return { canReview: false, hasCompletedBooking: false, alreadyReviewed: false };
+    }
+
+    const completedBookingIds = completedBookings.map((b) => b._id);
+
+    // Tìm booking items chứa sản phẩm này trong các đơn COMPLETED
+    const matchingItems = await this.bookingItemModel.find({
+      bookingId: { $in: completedBookingIds },
+      productId: prodId,
+    }).select('_id bookingId isReviewed');
+
+    if (matchingItems.length === 0) {
+      return { canReview: false, hasCompletedBooking: false, alreadyReviewed: false };
+    }
+
+    // Tìm item chưa được review
+    const unreviewedItem = matchingItems.find((item) => !item.isReviewed);
+
+    if (!unreviewedItem) {
+      return {
+        canReview: false,
+        hasCompletedBooking: true,
+        alreadyReviewed: true,
+      };
+    }
+
+    return {
+      canReview: true,
+      hasCompletedBooking: true,
+      alreadyReviewed: false,
+      bookingId: unreviewedItem.bookingId.toString(),
+      bookingItemId: unreviewedItem._id.toString(),
+    };
   }
 
   private async updatePhotoPackageRating(

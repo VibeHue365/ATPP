@@ -314,7 +314,12 @@ export const PhotographerDetailPage: React.FC = () => {
   useEffect(() => {
     const rentalDate = aoDaiInCart?.rentalFrom || aoDaiInCart?.startDate;
     if (rentalDate) {
-      setSelectedDate(rentalDate);
+      if (busyDates.includes(rentalDate)) {
+        setSelectedDate('');
+        toast.error(`Nhiếp ảnh gia đã bận vào ngày thuê Áo dài của bạn (${formatSingleDate(rentalDate)}). Vui lòng chọn ngày chụp khác!`);
+      } else {
+        setSelectedDate(rentalDate);
+      }
     }
     
     if (photographer) {
@@ -340,7 +345,7 @@ export const PhotographerDetailPage: React.FC = () => {
         setSelectedLocation(defaultLoc);
       }
     }
-  }, [aoDaiInCart, photographer, photographerCity]);
+  }, [aoDaiInCart, photographer, photographerCity, busyDates]);
 
   const bookedSlotsOnSelectedDate = useMemo(() => {
     if (!selectedDate) return [];
@@ -550,6 +555,10 @@ export const PhotographerDetailPage: React.FC = () => {
 
     if (!selectedPkg) { toast.error('Vui lòng chọn gói dịch vụ!'); return; }
     if (!selectedDate) { toast.error('Vui lòng chọn ngày dự kiến chụp!'); return; }
+    if (busyDates.includes(selectedDate)) {
+      toast.error('Nhiếp ảnh gia đã có lịch chụp vào ngày này. Vui lòng chọn ngày chụp khác!');
+      return;
+    }
     if (!agreeTerms) { toast.error('Vui lòng đồng ý với điều khoản đặt lịch!'); return; }
     if (!isCitySynced) {
       toast.error(`Không thể đặt: Thợ ảnh và Áo dài trong giỏ hàng đang lệch khu vực (${photographerCity} vs ${aoDaiInCart?.providerCity}).`);
@@ -614,6 +623,7 @@ export const PhotographerDetailPage: React.FC = () => {
       shootLocation: finalLocation,
       shootConcept: selectedConcept,
       photographerCity: photographerCity,
+      comboDiscountPercent: (photographer as any).comboDiscountPercent,
       customRequests: customRequest || null,
       referenceImage: referenceImageUrl
     });
@@ -630,6 +640,10 @@ export const PhotographerDetailPage: React.FC = () => {
 
     if (!selectedPkg) { toast.error('Vui lòng chọn gói dịch vụ!'); return; }
     if (!selectedDate) { toast.error('Vui lòng chọn ngày dự kiến chụp!'); return; }
+    if (busyDates.includes(selectedDate)) {
+      toast.error('Nhiếp ảnh gia đã có lịch chụp vào ngày này. Vui lòng chọn ngày chụp khác!');
+      return;
+    }
     if (!agreeTerms) { toast.error('Vui lòng đồng ý với điều khoản đặt lịch!'); return; }
     if (!isCitySynced) {
       toast.error(`Không thể đặt: Thợ ảnh và Áo dài trong giỏ hàng đang lệch khu vực (${photographerCity} vs ${aoDaiInCart?.providerCity}).`);

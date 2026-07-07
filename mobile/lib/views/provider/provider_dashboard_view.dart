@@ -5,8 +5,8 @@ import '../../providers/provider_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../onboarding/onboarding_view.dart';
 import '../customer/chat_rooms_view.dart';
-import 'schedule_manager_view.dart';
-import 'portfolio_manager_view.dart';
+import '../customer/notifications_view.dart';
+import '../../providers/notification_provider.dart';
 import 'voucher_manager_view.dart';
 import 'reviews_dashboard_view.dart';
 import 'product_manager_view.dart';
@@ -29,6 +29,7 @@ class _ProviderDashboardViewState extends State<ProviderDashboardView> {
       context.read<ProviderProvider>().loadProviderProfile();
       context.read<ProviderProvider>().loadProviderBookings();
       context.read<ProviderProvider>().loadReviewStats();
+      context.read<NotificationProvider>().fetchNotifications();
     });
   }
 
@@ -36,8 +37,6 @@ class _ProviderDashboardViewState extends State<ProviderDashboardView> {
   Widget build(BuildContext context) {
     final List<Widget> tabs = [
       const ProviderHomeTab(),
-      const ScheduleManagerView(),
-      const PortfolioManagerView(),
       const VoucherManagerView(),
       const ReviewsDashboardView(),
     ];
@@ -63,16 +62,6 @@ class _ProviderDashboardViewState extends State<ProviderDashboardView> {
             label: 'Tổng quan',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month_outlined),
-            activeIcon: Icon(Icons.calendar_month),
-            label: 'Lịch rảnh',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.collections_outlined),
-            activeIcon: Icon(Icons.collections),
-            label: 'Portfolio',
-          ),
-          BottomNavigationBarItem(
             icon: Icon(Icons.local_offer_outlined),
             activeIcon: Icon(Icons.local_offer),
             label: 'Khuyến mãi',
@@ -88,8 +77,16 @@ class _ProviderDashboardViewState extends State<ProviderDashboardView> {
   }
 }
 
-class ProviderHomeTab extends StatelessWidget {
+class ProviderHomeTab extends StatefulWidget {
   const ProviderHomeTab({super.key});
+
+  @override
+  State<ProviderHomeTab> createState() => _ProviderHomeTabState();
+}
+
+class _ProviderHomeTabState extends State<ProviderHomeTab> {
+  int _currentPage = 1;
+  final int _pageSize = 5;
 
   @override
   Widget build(BuildContext context) {
@@ -136,10 +133,64 @@ class ProviderHomeTab extends StatelessWidget {
       return b.status.toUpperCase() == 'COMPLETED';
     }).length;
 
+    final totalBookings = bookings.length;
+    final totalPages = (totalBookings / _pageSize).ceil();
+    if (_currentPage > totalPages && totalPages > 0) {
+      _currentPage = totalPages;
+    }
+    final paginatedBookings = bookings
+        .skip((_currentPage - 1) * _pageSize)
+        .take(_pageSize)
+        .toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bảng quản trị tiệm'),
         actions: [
+          Consumer<NotificationProvider>(
+            builder: (context, notificationProvider, _) {
+              final unreadCount = notificationProvider.unreadCount;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined, color: AppColors.primary),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const NotificationsView()),
+                      );
+                    },
+                  ),
+                  if (unreadCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          '$unreadCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
             onPressed: () {
@@ -170,6 +221,7 @@ class ProviderHomeTab extends StatelessWidget {
           await provider.loadProviderProfile();
           await provider.loadProviderBookings();
           await provider.loadReviewStats();
+          await context.read<NotificationProvider>().fetchNotifications();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -188,6 +240,49 @@ class ProviderHomeTab extends StatelessWidget {
               const SizedBox(height: 4),
               const Text('Xem báo cáo chi tiết và thống kê hoạt động bên dưới.'),
               const SizedBox(height: 20),
+
+              if (provider.providerProfile['status'] == 'SUSPENDED') ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.shade300, width: 1.5),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 36),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              'CỬA HÀNG ĐANG BỊ ĐÌNH CHỈ',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.error,
+                                fontSize: 14,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Tài khoản đối tác của bạn đã bị tạm đình chỉ hoạt động. Tất cả các sản phẩm đã được ẩn khỏi cửa hàng và bạn không thể thực hiện giao dịch hay quản lý đơn hàng mới. Vui lòng liên hệ Admin để giải quyết.',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 12,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
 
               // Monthly Revenue Card
               Card(
@@ -347,7 +442,7 @@ class ProviderHomeTab extends StatelessWidget {
               const SizedBox(height: 12),
               provider.isLoading
                   ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-                  : provider.providerBookings.isEmpty
+                  : bookings.isEmpty
                       ? const Card(
                           child: Padding(
                             padding: EdgeInsets.all(24.0),
@@ -356,29 +451,66 @@ class ProviderHomeTab extends StatelessWidget {
                             ),
                           ),
                         )
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: provider.providerBookings.length,
-                          itemBuilder: (context, index) {
-                            final booking = provider.providerBookings[index];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              child: ListTile(
-                                title: Text(
-                                  'Đơn hàng: ${booking.bookingCode}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                      : Column(
+                          children: [
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: paginatedBookings.length,
+                              itemBuilder: (context, index) {
+                                final booking = paginatedBookings[index];
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  child: ListTile(
+                                    title: Text(
+                                      'Đơn hàng: ${booking.bookingCode}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    subtitle: Text(
+                                      'Tổng cộng: ${booking.pricingSummary.grandTotal.toStringAsFixed(0)}đ | Trạng thái: ${booking.status}',
+                                    ),
+                                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                    onTap: () {
+                                      // Can build detail/action screen if needed
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                            if (totalPages > 1)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 12.0),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.arrow_back_ios, size: 16),
+                                      onPressed: _currentPage > 1
+                                          ? () {
+                                              setState(() {
+                                                _currentPage--;
+                                              });
+                                            }
+                                          : null,
+                                    ),
+                                    Text(
+                                      'Trang $_currentPage / $totalPages',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                                      onPressed: _currentPage < totalPages
+                                          ? () {
+                                              setState(() {
+                                                _currentPage++;
+                                              });
+                                            }
+                                          : null,
+                                    ),
+                                  ],
                                 ),
-                                subtitle: Text(
-                                  'Tổng cộng: ${booking.pricingSummary.grandTotal.toStringAsFixed(0)}đ | Trạng thái: ${booking.status}',
-                                ),
-                                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                                onTap: () {
-                                  // Can build detail/action screen if needed
-                                },
                               ),
-                            );
-                          },
+                          ],
                         ),
             ],
           ),

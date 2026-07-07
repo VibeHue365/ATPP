@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, UseGuards, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Patch, Param, UseGuards, ForbiddenException, NotFoundException, Query } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -6,7 +6,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { User, UserStatus } from '../users/schemas/user.schema';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema';
-import { Provider } from '../providers/schemas/provider.schema';
+import { Provider, ProviderCapability } from '../providers/schemas/provider.schema';
 
 @Controller('admin/dashboard')
 @UseGuards(JwtAuthGuard)
@@ -29,11 +29,13 @@ export class AdminController {
     this.checkAdmin(user);
 
     const totalCustomers = await this.userModel.countDocuments({
-      roles: { $ne: 'PROVIDER' },
+      roles: { $all: ['CUSTOMER'], $nin: ['PROVIDER', 'ADMIN', 'admin'] },
       deletedAt: null,
     });
 
-    const totalProviders = await this.providerModel.countDocuments();
+    const totalProviders = await this.providerModel.countDocuments({
+      capabilities: { $in: [ProviderCapability.AoDaiRental, 'RENTAL' as any] },
+    });
 
     const totalBookings = await this.bookingModel.countDocuments({
       status: { $ne: BookingStatus.Draft }
@@ -47,24 +49,97 @@ export class AdminController {
       0,
     );
 
+    // 1. Group completed bookings by week (last 7 days)
+    const revenueByWeek: { month: string; revenue: number }[] = [];
+    const now = new Date();
+    const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const label = `${dayNames[d.getDay()]} (${d.getDate()}/${d.getMonth() + 1})`;
+      revenueByWeek.push({ month: label, revenue: 0 });
+    }
+
+    for (const b of completedBookings) {
+      const bDate = (b as any).createdAt ? new Date((b as any).createdAt) : null;
+      if (bDate) {
+        const mLabel = `${dayNames[bDate.getDay()]} (${bDate.getDate()}/${bDate.getMonth() + 1})`;
+        const dayObj = revenueByWeek.find(d => d.month === mLabel);
+        if (dayObj) {
+          dayObj.revenue += b.pricingSummary?.grandTotal || 0;
+        }
+      }
+    }
+
+    // 2. Group completed bookings by month (last 6 months)
+    const revenueByMonth: { month: string; revenue: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const label = `${d.getMonth() + 1}/${d.getFullYear().toString().slice(-2)}`;
+      revenueByMonth.push({ month: label, revenue: 0 });
+    }
+
+    for (const b of completedBookings) {
+      const bDate = (b as any).createdAt ? new Date((b as any).createdAt) : null;
+      if (bDate) {
+        const mLabel = `${bDate.getMonth() + 1}/${bDate.getFullYear().toString().slice(-2)}`;
+        const monthObj = revenueByMonth.find(m => m.month === mLabel);
+        if (monthObj) {
+          monthObj.revenue += b.pricingSummary?.grandTotal || 0;
+        }
+      }
+    }
+
+    // 3. Group completed bookings by year (last 10 years)
+    const revenueByYear: { month: string; revenue: number }[] = [];
+    const currentYear = now.getFullYear();
+    for (let i = 9; i >= 0; i--) {
+      const label = `${currentYear - i}`;
+      revenueByYear.push({ month: label, revenue: 0 });
+    }
+
+    for (const b of completedBookings) {
+      const bDate = (b as any).createdAt ? new Date((b as any).createdAt) : null;
+      if (bDate) {
+        const yLabel = `${bDate.getFullYear()}`;
+        const yearObj = revenueByYear.find(y => y.month === yLabel);
+        if (yearObj) {
+          yearObj.revenue += b.pricingSummary?.grandTotal || 0;
+        }
+      }
+    }
+
     return {
       totalCustomers,
       totalProviders,
       totalBookings,
       totalRevenue,
+      revenueByWeek,
+      revenueByMonth,
+      revenueByYear,
     };
   }
 
   @Get('customers')
-  async getCustomers(@CurrentUser() user: AuthUser) {
+  async getCustomers(
+    @CurrentUser() user: AuthUser,
+    @Query('page') page = '1',
+    @Query('limit') limit = '10',
+  ) {
     this.checkAdmin(user);
 
-    const customers = await this.userModel.find({
-      roles: { $ne: 'PROVIDER' },
+    const filter = {
+      roles: { $all: ['CUSTOMER'], $nin: ['PROVIDER', 'ADMIN', 'admin'] },
+      accountStatus: { $ne: UserStatus.PendingEmailVerification },
       deletedAt: null,
-    });
+    };
 
-    return customers.map(c => ({
+    const total = await this.userModel.countDocuments(filter);
+    const customers = await this.userModel.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit));
+
+    const items = customers.map(c => ({
       id: c._id,
       fullName: c.profile?.fullName || 'Khách hàng',
       avatarUrl: c.profile?.avatarUrl || '',
@@ -74,14 +149,35 @@ export class AdminController {
       accountStatus: c.accountStatus || 'ACTIVE',
       createdAt: (c as any).createdAt,
     }));
+
+    return {
+      items,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      totalPages: Math.ceil(total / Number(limit)),
+    };
   }
 
   @Get('providers')
-  async getProviders(@CurrentUser() user: AuthUser) {
+  async getProviders(
+    @CurrentUser() user: AuthUser,
+    @Query('page') page = '1',
+    @Query('limit') limit = '10',
+  ) {
     this.checkAdmin(user);
 
-    const providers = await this.providerModel.find();
-    return providers.map(p => ({
+    const filter = {
+      capabilities: { $in: [ProviderCapability.AoDaiRental, 'RENTAL' as any] },
+    };
+
+    const total = await this.providerModel.countDocuments(filter);
+    const providers = await this.providerModel.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit));
+
+    const items = providers.map(p => ({
       id: p._id,
       businessName: p.businessName,
       email: p.contact?.email || '',
@@ -91,6 +187,14 @@ export class AdminController {
       status: p.status || 'PENDING_APPROVAL',
       createdAt: (p as any).createdAt,
     }));
+
+    return {
+      items,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      totalPages: Math.ceil(total / Number(limit)),
+    };
   }
 
   @Patch('customers/:id/ban')

@@ -36,7 +36,6 @@ class _LandingViewState extends State<LandingView> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<BookingProvider>().loadProducts();
-      context.read<BookingProvider>().loadPhotographers();
       context.read<NotificationProvider>().fetchNotifications();
     });
   }
@@ -222,7 +221,6 @@ class _HomeTabState extends State<HomeTab> {
               color: AppColors.primary,
               onRefresh: () async {
                 await provider.loadProducts();
-                await provider.loadPhotographers();
               },
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -491,115 +489,6 @@ class _HomeTabState extends State<HomeTab> {
                                 ),
                               );
                             },
-                          ),
-                    const SizedBox(height: 24),
-
-                    // Photographers Section
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Text(
-                        'Nhiếp ảnh gia chuyên nghiệp',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    provider.photographers.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: Text('Đang tải danh sách nhiếp ảnh gia...'),
-                          )
-                        : SizedBox(
-                            height: 180,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              itemCount: provider.photographers.length,
-                              itemBuilder: (context, index) {
-                                final photo = provider.photographers[index];
-                                final contact = photo['contact'] ?? {};
-                                return Container(
-                                  width: 140,
-                                  margin: const EdgeInsets.only(right: 16),
-                                  child: Card(
-                                    clipBehavior: Clip.antiAlias,
-                                    child: InkWell(
-                                      onTap: () async {
-                                        final String? otherUserId = photo['userId']?.toString();
-                                        if (otherUserId == null) return;
-
-                                        // Show loading spinner dialog
-                                        showDialog(
-                                          context: context,
-                                          barrierDismissible: false,
-                                          builder: (_) => const Center(
-                                            child: CircularProgressIndicator(color: AppColors.primary),
-                                          ),
-                                        );
-
-                                        try {
-                                          final chatProvider = context.read<UserChatProvider>();
-                                          final roomId = await chatProvider.startChat(otherUserId);
-
-                                          if (context.mounted) {
-                                            Navigator.pop(context); // dismiss loading spinner
-                                            chatProvider.enterRoom(roomId);
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) => ChatView(
-                                                  roomId: roomId,
-                                                  otherParticipantName: photo['businessName'] ?? 'Nhiếp ảnh gia',
-                                                  otherParticipantAvatar: photo['avatarUrl'],
-                                                ),
-                                              ),
-                                            );
-                                          }
-                                        } catch (e) {
-                                          if (context.mounted) {
-                                            Navigator.pop(context); // dismiss loading spinner
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(content: Text('Không thể kết nối chat: $e')),
-                                            );
-                                          }
-                                        }
-                                      },
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                                        children: [
-                                          Expanded(
-                                            child: Image.network(
-                                              photo['avatarUrl'] ?? 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?q=80&w=200',
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 40),
-                                            ),
-                                          ),
-                                        Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Column(
-                                            children: [
-                                              Text(
-                                                photo['businessName'] ?? 'Photographer',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                                textAlign: TextAlign.center,
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                contact['phone'] ?? '0901234567',
-                                                style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
-                                                textAlign: TextAlign.center,
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      ],
-                                    ),
-                                  ),
-                                  ),
-                                );
-                              },
-                            ),
                           ),
                     const SizedBox(height: 32),
                   ],

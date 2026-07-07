@@ -97,7 +97,7 @@ class _ChatRoomsViewState extends State<ChatRoomsView> {
                           child: Text(
                             currentUser?.role == 'PROVIDER'
                                 ? 'Các cuộc nhắn tin liên hệ của khách hàng khi đặt lịch sẽ xuất hiện ở đây.'
-                                : 'Bạn có thể nhắn tin trực tiếp với Nhà cung cấp/Nhiếp ảnh gia từ trang chi tiết sản phẩm hoặc thợ chụp.',
+                                : 'Bạn có thể nhắn tin trực tiếp với Nhà cung cấp từ trang chi tiết sản phẩm.',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 12,
@@ -136,11 +136,6 @@ class _ChatRoomsViewState extends State<ChatRoomsView> {
                         String roleLabel = 'Khách hàng';
                         if (otherUser.roles.contains('PROVIDER')) {
                           roleLabel = 'Nhà cung cấp';
-                        }
-                        if (otherUser.roles.contains('PHOTOGRAPHER') ||
-                            otherUser.fullName.toLowerCase().contains('photo') ||
-                            otherUser.fullName.toLowerCase().contains('nhiếp ảnh')) {
-                          roleLabel = 'Thợ chụp ảnh';
                         }
 
                         return ListTile(
@@ -290,12 +285,6 @@ class _ChatRoomsViewState extends State<ChatRoomsView> {
                       },
                     ),
                   ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showNewChatBottomSheet(context),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        child: const Icon(Icons.add_comment_outlined),
       ),
     );
   }

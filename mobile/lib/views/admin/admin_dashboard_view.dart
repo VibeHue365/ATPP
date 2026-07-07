@@ -103,6 +103,9 @@ class _AdminStatsTabState extends State<AdminStatsTab> {
   final AdminService _adminService = AdminService();
   AdminStats? _stats;
   bool _isLoading = false;
+  String _selectedChartFilter = 'Tháng'; // 'Tuần' | 'Tháng' | 'Năm'
+  int? _startYearFilter;
+  int? _endYearFilter;
 
   @override
   void initState() {
@@ -158,9 +161,7 @@ class _AdminStatsTabState extends State<AdminStatsTab> {
               'Tổng quan hệ thống',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
             ),
-            const SizedBox(height: 4),
-            const Text('Báo cáo doanh số và tài khoản trên toàn nền tảng Di Sản Áo Dài.'),
-            const SizedBox(height: 20),
+            
 
             // Giant Revenue Card
             Container(
@@ -218,40 +219,317 @@ class _AdminStatsTabState extends State<AdminStatsTab> {
             ),
             const SizedBox(height: 20),
 
-            // 3 Small Metric Cards Grid
-            GridView.count(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 1.35,
+            Row(
               children: [
-                _buildMetricCard(
-                  'Tổng khách hàng',
-                  '${stats?.totalCustomers ?? 0} thành viên',
-                  Icons.people,
-                  Colors.blue,
+                Expanded(
+                  child: _buildMetricCard(
+                    'Tổng khách hàng',
+                    '${stats?.totalCustomers ?? 0} thành viên',
+                    Icons.people,
+                    Colors.blue,
+                  ),
                 ),
-                _buildMetricCard(
-                  'Tổng đối tác',
-                  '${stats?.totalProviders ?? 0} đối tác',
-                  Icons.storefront,
-                  Colors.teal,
-                ),
-                _buildMetricCard(
-                  'Tổng đơn đặt lịch',
-                  '${stats?.totalBookings ?? 0} giao dịch',
-                  Icons.receipt_long,
-                  Colors.deepOrange,
-                ),
-                _buildMetricCard(
-                  'Chất lượng dịch vụ',
-                  'Khợp lệnh 100%',
-                  Icons.verified_user,
-                  Colors.green,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildMetricCard(
+                    'Tổng đối tác',
+                    '${stats?.totalProviders ?? 0} đối tác',
+                    Icons.storefront,
+                    Colors.teal,
+                  ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            _buildMetricCard(
+              'Tổng đơn đặt lịch',
+              '${stats?.totalBookings ?? 0} giao dịch',
+              Icons.receipt_long,
+              Colors.deepOrange,
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Thống kê doanh thu',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  child: Row(
+                    children: ['Tuần', 'Tháng', 'Năm'].map((filter) {
+                      final isSelected = _selectedChartFilter == filter;
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedChartFilter = filter;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.primary : Colors.transparent,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            filter,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected ? Colors.white : AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_selectedChartFilter == 'Năm' && stats != null) ...[
+              Builder(
+                builder: (context) {
+                  final yearsList = stats.revenueByYear;
+                  final availableYears = yearsList
+                      .map((e) => int.tryParse(e['month'] ?? ''))
+                      .whereType<int>()
+                      .toList()
+                    ..sort();
+
+                  if (availableYears.isEmpty) return const SizedBox.shrink();
+                  
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        const Text('Từ năm: ', style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            value: _startYearFilter ?? availableYears.first,
+                            dropdownColor: Colors.white,
+                            style: const TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                            items: availableYears.map((y) {
+                              return DropdownMenuItem<int>(
+                                value: y,
+                                child: Text('$y'),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _startYearFilter = val;
+                                  if (_endYearFilter != null && _endYearFilter! < val) {
+                                    _endYearFilter = val;
+                                  }
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        const Text('Đến năm: ', style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            value: _endYearFilter ?? availableYears.last,
+                            dropdownColor: Colors.white,
+                            style: const TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                            items: availableYears.where((y) => y >= (_startYearFilter ?? availableYears.first)).map((y) {
+                              return DropdownMenuItem<int>(
+                                value: y,
+                                child: Text('$y'),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _endYearFilter = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+            Builder(
+              builder: (context) {
+                List<Map<String, dynamic>> activeList = [];
+                if (_selectedChartFilter == 'Tuần') {
+                  activeList = stats?.revenueByWeek ?? [];
+                } else if (_selectedChartFilter == 'Năm') {
+                  final yearsList = stats?.revenueByYear ?? [];
+                  final availableYears = yearsList
+                      .map((e) => int.tryParse(e['month'] ?? ''))
+                      .whereType<int>()
+                      .toList()
+                    ..sort();
+
+                  if (availableYears.isNotEmpty) {
+                    _startYearFilter ??= availableYears.first;
+                    _endYearFilter ??= availableYears.last;
+                    
+                    if (!availableYears.contains(_startYearFilter)) {
+                      _startYearFilter = availableYears.first;
+                    }
+                    if (!availableYears.contains(_endYearFilter)) {
+                      _endYearFilter = availableYears.last;
+                    }
+                  } else {
+                    _startYearFilter ??= DateTime.now().year - 9;
+                    _endYearFilter ??= DateTime.now().year;
+                  }
+
+                  activeList = yearsList.where((e) {
+                    final y = int.tryParse(e['month'] ?? '') ?? 0;
+                    return y >= _startYearFilter! && y <= _endYearFilter!;
+                  }).toList();
+                } else {
+                  activeList = stats?.revenueByMonth ?? [];
+                }
+
+                return Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: Colors.grey.shade200, width: 1),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (activeList.isEmpty)
+                          const SizedBox(
+                            height: 180,
+                            child: Center(
+                              child: Text(
+                                'Chưa có dữ liệu thống kê doanh thu.',
+                                style: TextStyle(color: AppColors.textSecondary),
+                              ),
+                            ),
+                          )
+                        else ...[
+                          Builder(
+                            builder: (context) {
+                              double maxVal = 0.0;
+                              for (var data in activeList) {
+                                final double rev = (data['revenue'] ?? 0.0).toDouble();
+                                if (rev > maxVal) maxVal = rev;
+                              }
+                              if (maxVal == 0.0) maxVal = 1.0;
+
+                              final bool shouldScroll = activeList.length > 6;
+                              
+                              final List<Widget> barWidgets = activeList.map((data) {
+                                final String month = data['month'] ?? '';
+                                final double rev = (data['revenue'] ?? 0.0).toDouble();
+                                final double percentage = rev / maxVal;
+                                
+                                String formattedVal = '0';
+                                if (rev >= 1000000) {
+                                  formattedVal = '${(rev / 1000000).toStringAsFixed(1)}Tr';
+                                } else if (rev >= 1000) {
+                                  formattedVal = '${(rev / 1000).toStringAsFixed(0)}k';
+                                } else if (rev > 0) {
+                                  formattedVal = rev.toStringAsFixed(0);
+                                }
+
+                                final content = Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      formattedVal,
+                                      style: const TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      height: (120 * percentage).clamp(6.0, 120.0),
+                                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [AppColors.primary, AppColors.gold],
+                                          begin: Alignment.bottomCenter,
+                                          end: Alignment.topCenter,
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppColors.primary.withOpacity(0.15),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      month,
+                                      style: const TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                );
+
+                                if (shouldScroll) {
+                                  return SizedBox(
+                                    width: 52,
+                                    child: content,
+                                  );
+                                } else {
+                                  return Expanded(
+                                    child: content,
+                                  );
+                                }
+                              }).toList();
+
+                              if (shouldScroll) {
+                                return SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: barWidgets,
+                                  ),
+                                );
+                              } else {
+                                return Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: barWidgets,
+                                );
+                              }
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -269,23 +547,21 @@ class _AdminStatsTabState extends State<AdminStatsTab> {
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircleAvatar(
-              backgroundColor: color.withOpacity(0.1),
-              radius: 18,
-              child: Icon(icon, color: color, size: 20),
-            ),
+            Icon(icon, color: color, size: 28),
             const SizedBox(height: 12),
             Text(
               title,
-              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
             Text(
               value,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -310,6 +586,10 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
   List<AdminCustomer> _filteredCustomers = [];
   bool _isLoading = false;
   final TextEditingController _searchController = TextEditingController();
+  int _currentPage = 1;
+  int _totalPages = 1;
+  int _totalItems = 0;
+  final int _limit = 10;
 
   @override
   void initState() {
@@ -329,11 +609,14 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
       _isLoading = true;
     });
     try {
-      final data = await _adminService.getCustomers();
+      final res = await _adminService.getCustomers(page: _currentPage, limit: _limit);
       setState(() {
-        _customers = data;
-        _filteredCustomers = data;
+        _customers = res['items'];
+        _filteredCustomers = res['items'];
+        _totalItems = res['total'];
+        _totalPages = res['totalPages'];
       });
+      _onSearchChanged();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -341,9 +624,11 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
         );
       }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -408,6 +693,13 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
     );
   }
 
+  Future<void> _refreshCustomers() async {
+    setState(() {
+      _currentPage = 1;
+    });
+    await _loadCustomers();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -439,7 +731,7 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
         Expanded(
           child: RefreshIndicator(
             color: AppColors.primary,
-            onRefresh: _loadCustomers,
+            onRefresh: _refreshCustomers,
             child: _isLoading && _customers.isEmpty
                 ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : _filteredCustomers.isEmpty
@@ -462,6 +754,22 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
                         itemBuilder: (context, index) {
                           final customer = _filteredCustomers[index];
                           final isBanned = customer.accountStatus == 'BANNED';
+                          final isPending = customer.accountStatus == 'PENDING_EMAIL_VERIFICATION';
+                          
+                          Color badgeBgColor = Colors.green.shade50;
+                          Color badgeTextColor = Colors.green.shade700;
+                          String statusText = 'ACTIVE';
+
+                          if (isBanned) {
+                            badgeBgColor = Colors.red.shade50;
+                            badgeTextColor = Colors.red.shade700;
+                            statusText = 'BỊ KHÓA';
+                          } else if (isPending) {
+                            badgeBgColor = Colors.orange.shade50;
+                            badgeTextColor = Colors.orange.shade800;
+                            statusText = 'CHỜ XÁC THỰC';
+                          }
+
                           final String initials = customer.fullName.isNotEmpty
                               ? customer.fullName.trim().split(' ').last[0].toUpperCase()
                               : 'K';
@@ -505,15 +813,15 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
                               trailing: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: isBanned ? Colors.red.shade50 : Colors.green.shade50,
+                                  color: badgeBgColor,
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  customer.accountStatus,
+                                  statusText,
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
-                                    color: isBanned ? Colors.red.shade700 : Colors.green.shade700,
+                                    color: badgeTextColor,
                                   ),
                                 ),
                               ),
@@ -523,6 +831,50 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
                       ),
           ),
         ),
+
+        // Pagination Panel
+        if (_totalPages > 1)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+            color: Colors.white,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                ElevatedButton(
+                  onPressed: _currentPage > 1 && !_isLoading
+                      ? () {
+                          setState(() {
+                            _currentPage--;
+                          });
+                          _loadCustomers();
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                  ),
+                  child: const Text('Trước', style: TextStyle(color: Colors.white)),
+                ),
+                Text(
+                  'Trang $_currentPage / $_totalPages',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                ElevatedButton(
+                  onPressed: _currentPage < _totalPages && !_isLoading
+                      ? () {
+                          setState(() {
+                            _currentPage++;
+                          });
+                          _loadCustomers();
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                  ),
+                  child: const Text('Sau', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -544,6 +896,10 @@ class _AdminProvidersTabState extends State<AdminProvidersTab> {
   List<AdminProviderModel> _filteredProviders = [];
   bool _isLoading = false;
   final TextEditingController _searchController = TextEditingController();
+  int _currentPage = 1;
+  int _totalPages = 1;
+  int _totalItems = 0;
+  final int _limit = 10;
 
   @override
   void initState() {
@@ -563,11 +919,14 @@ class _AdminProvidersTabState extends State<AdminProvidersTab> {
       _isLoading = true;
     });
     try {
-      final data = await _adminService.getProviders();
+      final res = await _adminService.getProviders(page: _currentPage, limit: _limit);
       setState(() {
-        _providers = data;
-        _filteredProviders = data;
+        _providers = res['items'];
+        _filteredProviders = res['items'];
+        _totalItems = res['total'];
+        _totalPages = res['totalPages'];
       });
+      _onSearchChanged();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -575,9 +934,11 @@ class _AdminProvidersTabState extends State<AdminProvidersTab> {
         );
       }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -697,6 +1058,13 @@ class _AdminProvidersTabState extends State<AdminProvidersTab> {
     }
   }
 
+  Future<void> _refreshProviders() async {
+    setState(() {
+      _currentPage = 1;
+    });
+    await _loadProviders();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -728,7 +1096,7 @@ class _AdminProvidersTabState extends State<AdminProvidersTab> {
         Expanded(
           child: RefreshIndicator(
             color: AppColors.primary,
-            onRefresh: _loadProviders,
+            onRefresh: _refreshProviders,
             child: _isLoading && _providers.isEmpty
                 ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : _filteredProviders.isEmpty
@@ -814,6 +1182,50 @@ class _AdminProvidersTabState extends State<AdminProvidersTab> {
                       ),
           ),
         ),
+
+        // Pagination Panel
+        if (_totalPages > 1)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+            color: Colors.white,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                ElevatedButton(
+                  onPressed: _currentPage > 1 && !_isLoading
+                      ? () {
+                          setState(() {
+                            _currentPage--;
+                          });
+                          _loadProviders();
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                  ),
+                  child: const Text('Trước', style: TextStyle(color: Colors.white)),
+                ),
+                Text(
+                  'Trang $_currentPage / $_totalPages',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                ElevatedButton(
+                  onPressed: _currentPage < _totalPages && !_isLoading
+                      ? () {
+                          setState(() {
+                            _currentPage++;
+                          });
+                          _loadProviders();
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                  ),
+                  child: const Text('Sau', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }

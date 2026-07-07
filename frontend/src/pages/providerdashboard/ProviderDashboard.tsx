@@ -102,6 +102,7 @@ export const ProviderDashboard: React.FC = () => {
   const [addressLine, setAddressLine] = useState('');
   const [city, setCity] = useState('');
   const [cancellationPolicy, setCancellationPolicy] = useState('');
+  const [comboDiscountPercent, setComboDiscountPercent] = useState(0);
 
   // Form states - Voucher
   const [vCode, setVCode] = useState('');
@@ -139,6 +140,7 @@ export const ProviderDashboard: React.FC = () => {
       setAddressLine(pRes.address?.addressLine || '');
       setCity(pRes.address?.city || '');
       setCancellationPolicy(pRes.policies?.cancellationPolicy || '');
+      setComboDiscountPercent(pRes.comboDiscountPercent ?? 0);
 
       const sRes: any = await httpClient.get('/providers/me/schedules');
       setSchedules(sRes);
@@ -215,6 +217,7 @@ export const ProviderDashboard: React.FC = () => {
         contact: { ...provider?.contact, phone },
         address: { ...provider?.address, addressLine, city },
         policies: { ...provider?.policies, cancellationPolicy },
+        comboDiscountPercent: Number(comboDiscountPercent),
       });
       toast.success('Cập nhật thông tin dịch vụ thành công!');
       fetchProviderData();
@@ -1446,6 +1449,18 @@ export const ProviderDashboard: React.FC = () => {
                       type="text"
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
+                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      required
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TỶ LỆ GIẢM GIÁ COMBO (%)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={comboDiscountPercent}
+                      onChange={(e) => setComboDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
                       style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
                       required
                     />
