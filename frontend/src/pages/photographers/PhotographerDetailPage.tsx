@@ -316,7 +316,7 @@ export const PhotographerDetailPage: React.FC = () => {
     if (rentalDate) {
       if (busyDates.includes(rentalDate)) {
         setSelectedDate('');
-        toast.warning(`Nhiếp ảnh gia đã bận vào ngày thuê Áo dài của bạn (${formatSingleDate(rentalDate)}). Vui lòng chọn ngày chụp khác!`);
+        toast.error(`Nhiếp ảnh gia đã bận vào ngày thuê Áo dài của bạn (${formatSingleDate(rentalDate)}). Vui lòng chọn ngày chụp khác!`);
       } else {
         setSelectedDate(rentalDate);
       }
@@ -623,7 +623,7 @@ export const PhotographerDetailPage: React.FC = () => {
       shootLocation: finalLocation,
       shootConcept: selectedConcept,
       photographerCity: photographerCity,
-      comboDiscountPercent: photographer.comboDiscountPercent,
+      comboDiscountPercent: (photographer as any).comboDiscountPercent,
       customRequests: customRequest || null,
       referenceImage: referenceImageUrl
     });

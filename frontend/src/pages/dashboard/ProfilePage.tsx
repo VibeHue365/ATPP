@@ -20,7 +20,6 @@ import { API_BASE_URL } from '../../config/env';
 import { ROUTES } from '../../config/routes';
 import { Modal } from '../../components/common/Modal';
 import { CustomerDashboard } from '../../features/dashboard/components/CustomerDashboard';
-import { ProviderDashboard } from '../../features/dashboard/components/ProviderDashboard';
 
 export const ProfilePage: React.FC = () => {
   const { user } = useAuth();
@@ -400,16 +399,51 @@ export const ProfilePage: React.FC = () => {
 
       {/* Tabs System Container */}
       <section className="vh-profile-tabs-section-container">
-        {user?.roles?.includes('PROVIDER') ? (
-          <ProviderDashboard />
-        ) : (
-          <CustomerDashboard 
-            user={user} 
-            bookings={bookings} 
-            onViewDetails={(b) => setActiveDetailBooking(b)} 
-            onRefresh={fetchBookings} 
-          />
+        {user?.roles?.includes('PROVIDER') && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            backgroundColor: '#FAF6F0',
+            border: '1px solid #E8E2D5',
+            padding: '16px 24px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            fontFamily: 'Inter, sans-serif'
+          }}>
+            <div>
+              <h4 style={{ margin: 0, color: '#4A0E17', fontSize: '14px', fontWeight: 700 }}>Kênh quản trị của Đối tác</h4>
+              <p style={{ margin: '4px 0 0 0', color: '#7A7A7A', fontSize: '12.5px' }}>Bạn đang đăng nhập với quyền đối tác. Để quản lý bộ sưu tập áo dài, lịch chụp ảnh, mã giảm giá và đối soát quyết toán, vui lòng truy cập Kênh Đối tác.</p>
+            </div>
+            <button
+              onClick={() => navigate(ROUTES.PROVIDER_DASHBOARD)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#4A0E17',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'background-color 0.15s',
+                whiteSpace: 'nowrap',
+                marginLeft: '16px'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#360A10'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#4A0E17'}
+            >
+              Truy cập Kênh Đối Tác →
+            </button>
+          </div>
         )}
+
+        <CustomerDashboard 
+          user={user} 
+          bookings={bookings} 
+          onViewDetails={(b) => setActiveDetailBooking(b)} 
+          onRefresh={fetchBookings} 
+        />
       </section>
 
       {/* AI Recommendation Showcase Section */}

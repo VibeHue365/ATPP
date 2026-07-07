@@ -87,6 +87,12 @@ export class PaymentsController {
     return this.paymentsService.getTransactions(user.sub, user.roles);
   }
 
+  @Get('settlement-transfers/provider')
+  @UseGuards(JwtAuthGuard)
+  async getProviderSettlementTransfers(@CurrentUser() user: AuthUser) {
+    return this.paymentsService.getProviderSettlementTransfers(user.sub);
+  }
+
   @Post(':code/confirm')
   @UseGuards(JwtAuthGuard)
   async confirmManual(@Param('code') code: string) {

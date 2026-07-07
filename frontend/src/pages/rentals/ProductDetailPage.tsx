@@ -1046,7 +1046,7 @@ export const ProductDetailPage: React.FC = () => {
       endTime: rentalMode === 'HOURLY' ? endTime : undefined,
       providerCity: product?.providerId?.address?.city || 'Thừa Thiên Huế',
       providerAddress: product?.providerId?.address?.addressLine || '',
-      comboDiscountPercent: product?.providerId?.comboDiscountPercent,
+      comboDiscountPercent: (product?.providerId as any)?.comboDiscountPercent,
       quantity: 1,
     };
 
@@ -1087,7 +1087,7 @@ export const ProductDetailPage: React.FC = () => {
       endTime: rentalMode === 'HOURLY' ? endTime : undefined,
       providerCity: product?.providerId?.address?.city || 'Thừa Thiên Huế',
       providerAddress: product?.providerId?.address?.addressLine || '',
-      comboDiscountPercent: product?.providerId?.comboDiscountPercent,
+      comboDiscountPercent: (product?.providerId as any)?.comboDiscountPercent,
       quantity: 1,
     };
 

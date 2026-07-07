@@ -13,7 +13,6 @@ import {
   Building, 
   CreditCard,
   Pencil,
-  ChevronDown,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
@@ -623,8 +622,8 @@ export const CartPage: React.FC = () => {
   const comboDiscountTotal = checkedGroups
     .filter(group => group.type === 'SUCCESS')
     .reduce((sum, group) => {
-      const prodItem = group.items.find(i => i.itemType === 'PRODUCT');
-      const photoItem = group.items.find(i => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+      const prodItem = group.items.find((i: any) => i.itemType === 'PRODUCT');
+      const photoItem = group.items.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
       
       let prodDiscount = 0;
       let photoDiscount = 0;
@@ -1541,10 +1540,10 @@ export const CartPage: React.FC = () => {
                       </div>
                       <div style={{ padding: '8px 12px', backgroundColor: '#E8F8F5', borderRadius: '6px', fontSize: '12px', color: '#27AE60', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px', textAlign: 'left' }}>
                         {checkedGroups
-                          .filter(g => g.type === 'SUCCESS')
+                          .filter((g: any) => g.type === 'SUCCESS')
                           .map((group, gIdx) => {
-                            const prod = group.items.find(i => i.itemType === 'PRODUCT');
-                            const photo = group.items.find(i => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+                            const prod = group.items.find((i: any) => i.itemType === 'PRODUCT');
+                            const photo = group.items.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
                             return (
                               <div key={gIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                 {prod && (prod.comboDiscountPercent !== 0) && (

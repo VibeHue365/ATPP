@@ -234,29 +234,29 @@ export class AdminStatsService {
   }
 
   async getAllTransactions(page = 1, limit = 10) {
-    const total = await this.paymentModel.countDocuments({} as any);
-    const payments = await this.paymentModel.find({} as any)
-      .populate({
-        path: 'bookingId',
-        populate: {
-          path: 'providerIds'
-        }
-      })
+    // Query SettlementTransfer (actual payouts to providers) instead of Payment (customer payments)
+    const transferModel = this.bookingModel.db.model('SettlementTransfer');
+    const total = await transferModel.countDocuments({});
+    const transfers = await transferModel.find({})
+      .populate('bookingId')
+      .populate('providerId')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
 
-    const items = payments.map(p => {
-      const bookingObj = p.bookingId as any;
-      const provObj = (bookingObj?.providerIds && bookingObj.providerIds.length > 0) ? (bookingObj.providerIds[0] as any) : null;
+    const items = transfers.map((t: any) => {
+      const bookingObj = t.bookingId as any;
+      const provObj = t.providerId as any;
       return {
-        id: p.paymentCode || p._id.toString(),
+        id: t.transactionReference || t._id.toString(),
+        bookingId: bookingObj?._id || '',
+        bookingCode: bookingObj?.bookingCode || '',
         providerName: provObj?.businessName || 'Nhà cung cấp',
-        amount: p.amount || 0,
-        date: p.paidAt ? new Date(p.paidAt).toLocaleDateString('vi-VN') : ((p as any).createdAt ? new Date((p as any).createdAt).toLocaleDateString('vi-VN') : '2026-01-01'),
-        bank: p.paymentMethod || 'PAYOS',
-        account: '*********',
-        status: p.status === 'SUCCESS' ? 'PAID' : p.status === 'PENDING' ? 'PENDING' : 'FAILED',
+        amount: t.amountSent || 0,
+        date: t.createdAt ? new Date(t.createdAt).toLocaleDateString('vi-VN') : '',
+        bank: t.destinationBankAccount?.bankName || 'Ngân hàng',
+        account: t.destinationBankAccount?.accountNumber || '*********',
+        status: t.status === 'SUCCESS' ? 'PAID' : t.status === 'PENDING' ? 'PENDING' : 'FAILED',
       };
     });
 
