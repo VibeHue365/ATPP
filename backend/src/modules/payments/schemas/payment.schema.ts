@@ -13,6 +13,7 @@ export enum PaymentPurpose {
   PlatformCommission = 'PLATFORM_COMMISSION',
   SubscriptionFee = 'SUBSCRIPTION_FEE',
   PromotionFee = 'PROMOTION_FEE',
+  DepositRefund = 'DEPOSIT_REFUND',
 }
 
 export enum PaymentStatus {

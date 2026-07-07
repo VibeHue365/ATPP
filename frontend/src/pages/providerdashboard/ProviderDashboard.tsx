@@ -1242,12 +1242,11 @@ export const ProviderDashboard: React.FC = () => {
                               { label: 'Hoàn thành', status: 'HOÀN THÀNH', icon: <CheckCircle size={14} />, color: '#2e7d32' },
                               { label: 'Đang thực hiện', status: 'ĐANG XỬ LÝ', icon: <Play size={14} />, color: 'var(--color-gold)' },
                               { label: 'Chờ xử lý', status: 'CHỜ XỬ LÝ', icon: <FileText size={14} />, color: 'var(--color-primary)' },
-                              { label: 'Hủy đơn', status: 'ĐÃ HỦY', icon: <Trash2 size={14} />, color: 'var(--color-error)' },
                             ].map(a => (
                               <button key={a.label} onClick={() => changeOrderStatus(o._id, a.status)} style={{
                                 width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
                                 fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: a.color,
-                                fontWeight: a.label === 'Hủy đơn' ? 700 : 500, textAlign: 'left',
+                                fontWeight: 500, textAlign: 'left',
                               }}>{a.icon} {a.label}</button>
                             ))}
                             {(o.rawStatus === 'CONFIRMED' || o.rawStatus === 'COMPLETED' || o.rawStatus === 'PICKED_UP' || o.rawStatus === 'RETURNED' || o.rawStatus === 'RETURN_PENDING' || o.rawStatus === 'DISPUTED') && (
@@ -2499,6 +2498,7 @@ export const ProviderDashboard: React.FC = () => {
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
         onCustomerClick={viewCustomerTrust}
+        viewerRole="provider"
       />
     </div>
   );

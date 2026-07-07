@@ -300,7 +300,7 @@ export class PaymentsController {
                   </div>
                   <div class="flex justify-between text-sm py-1 border-b border-stone-100">
                     <span class="text-stone-500 font-medium">Hình thức:</span>
-                    <strong class="text-stone-800 font-bold">Đặt cọc giữ lịch (20%)</strong>
+                    <strong class="text-stone-800 font-bold">Đặt cọc giữ lịch</strong>
                   </div>
                 </div>
               </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
-import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck } from 'lucide-react';
+import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle } from 'lucide-react';
 import { BookingDetailModal } from '../../../components/common/BookingDetailModal';
 
 interface CustomerDashboardProps {
@@ -27,10 +27,30 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [realProductList, setRealProductList] = useState<any[]>([]);
   const [realPhotographersList, setRealPhotographersList] = useState<any[]>([]);
 
-  // Review modal states
   const [reviewingItem, setReviewingItem] = useState<any>(null);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
+
+  const handleContinuePayment = async (bookingId: string) => {
+    try {
+      toast.info('Đang tải liên kết thanh toán...');
+      const paymentRes: any = await httpClient.post('/payments/create-link', {
+        bookingId,
+        purpose: 'FULL_PAYMENT',
+      });
+      if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
+        toast.success('Đang chuyển hướng tới cổng thanh toán PayOS Simulator...');
+        setTimeout(() => {
+          window.location.href = paymentRes.payos.checkoutUrl;
+        }, 1200);
+      } else {
+        toast.error('Không tìm thấy liên kết thanh toán cho đơn hàng này.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Lỗi khi kết nối đến cổng thanh toán.');
+    }
+  };
 
   const fetchPayments = async () => {
     try {
@@ -188,9 +208,161 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     return list;
   }, [user?.favorites, realProductList, realPhotographersList]);
 
+  const pendingBookings = (bookings || []).filter(
+    (b) => b.status === 'PENDING_PAYMENT' || b.status === 'WAITING_PAYMENT'
+  );
+
+  const pendingIncidents = (bookings || []).filter(
+    (b) => b.status === 'RETURN_PENDING'
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
       
+      {/* Pending incident compensation notification section */}
+      {pendingIncidents.length > 0 && (
+        <div style={{
+          backgroundColor: '#FDF2F2',
+          border: '1px solid #FDE8E8',
+          borderRadius: '16px',
+          padding: '20px',
+          fontFamily: 'Inter, sans-serif'
+        }}>
+          <h4 style={{ margin: 0, color: '#9B1C1C', fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            <AlertTriangle size={18} style={{ color: '#E53E3E' }} />
+            Yêu cầu đền bù hỏng đồ cần phản hồi ({pendingIncidents.length})
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {pendingIncidents.map((b) => {
+              return (
+                <div key={b._id} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  backgroundColor: 'white',
+                  border: '1px solid #FEE2E2',
+                  padding: '14px 20px',
+                  borderRadius: '12px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#1F2937' }}>Mã đơn: {b.bookingCode}</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#E53E3E', backgroundColor: '#FEE2E2', padding: '2px 8px', borderRadius: '6px' }}>CHỜ XÁC NHẬN SỰ CỐ</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                      Đơn hàng bị báo cáo gặp sự cố hỏng đồ. Vui lòng bấm vào chi tiết để xem hình ảnh bằng chứng và thực hiện Đồng ý đền bù hoặc Khiếu nại.
+                    </div>
+                  </div>
+                  <div>
+                    <button
+                      onClick={() => onViewDetails(b)}
+                      style={{
+                        padding: '8px 20px',
+                        backgroundColor: '#C0392B',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s',
+                        whiteSpace: 'nowrap'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#A93226'}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#C0392B'}
+                    >
+                      Xem & Phản hồi
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Pending payments notification section */}
+      {pendingBookings.length > 0 && (
+        <div style={{
+          backgroundColor: '#FFFBEB',
+          border: '1px solid #FDE68A',
+          borderRadius: '16px',
+          padding: '20px',
+          fontFamily: 'Inter, sans-serif'
+        }}>
+          <h4 style={{ margin: 0, color: '#92400E', fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            <Clock size={18} style={{ color: '#D97706' }} />
+            Đơn hàng chờ cọc / thanh toán ({pendingBookings.length})
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {pendingBookings.map((b) => {
+              const formattedDate = b.createdAt ? new Date(b.createdAt).toLocaleString('vi-VN') : 'Vừa xong';
+              return (
+                <div key={b._id} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  backgroundColor: 'white',
+                  border: '1px solid #F3F4F6',
+                  padding: '14px 20px',
+                  borderRadius: '12px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#1F2937' }}>Mã đơn: {b.bookingCode}</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#D97706', backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '6px' }}>CHỜ THANH TOÁN</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                      Thời gian tạo: {formattedDate} • Tổng tiền: <strong style={{ color: '#8B1E22' }}>{(b.pricingSummary?.grandTotal || 0).toLocaleString('vi-VN')}đ</strong>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => onViewDetails(b)}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#F3F4F6',
+                        color: '#4B5563',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#E5E7EB'}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                    >
+                      Chi tiết
+                    </button>
+                    <button
+                      onClick={() => handleContinuePayment(b._id)}
+                      style={{
+                        padding: '8px 20px',
+                        backgroundColor: '#8B1E22',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#72181B'}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8B1E22'}
+                    >
+                      Tiếp tục thanh toán
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Navigation tabs row */}
       <div className="vh-profile-tabs-navigation-row">
         <button
@@ -315,6 +487,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             ) : (
               displayRentals.map((item) => {
                 const isReturned = item.status === 'RETURNED' || item.status === 'COMPLETED';
+                const isIncidentPending = item.status === 'RETURN_PENDING';
+                const isDisputed = item.status === 'DISPUTED';
                 const rentalDateFormatted = item.rentalType === 'DAILY'
                   ? `${formatDate(item.startDate)} - ${formatDate(item.endDate)}`
                   : `Ngày ${formatDate(item.startDate)} (${item.startTime} - ${item.endTime})`;
@@ -323,8 +497,15 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   <div key={item.id} className="vh-profile-rental-product-card">
                     <div className="vh-profile-rental-img-wrapper" style={{ height: '280px' }}>
                       <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
-                      <span className={`vh-profile-rental-status-badge ${isReturned ? 'status-returned' : 'status-renting'}`}>
-                        {isReturned ? 'ĐÃ TRẢ ĐỒ' : 'ĐANG THUÊ'}
+                      <span 
+                        className={`vh-profile-rental-status-badge ${isReturned ? 'status-returned' : 'status-renting'}`}
+                        style={{
+                          backgroundColor: isIncidentPending ? '#FEF3C7' : isDisputed ? '#FEE2E2' : undefined,
+                          color: isIncidentPending ? '#D97706' : isDisputed ? '#B91C1C' : undefined,
+                          border: isIncidentPending ? '1px solid #FDE68A' : isDisputed ? '1px solid #FCA5A5' : undefined
+                        }}
+                      >
+                        {isReturned ? 'ĐÃ TRẢ ĐỒ' : isIncidentPending ? 'YÊU CẦU ĐỀN BÙ' : isDisputed ? 'ĐANG TRANH CHẤP' : 'ĐANG THUÊ'}
                       </span>
                     </div>
                     <div className="vh-profile-rental-details">
@@ -348,10 +529,17 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         {item.booking ? (
                           <button 
                             className="vh-appointment-action-link"
-                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                            style={{ 
+                              background: 'none', 
+                              border: 'none', 
+                              padding: 0, 
+                              cursor: 'pointer',
+                              color: (isIncidentPending || isDisputed) ? '#C0392B' : undefined,
+                              fontWeight: (isIncidentPending || isDisputed) ? 700 : undefined
+                            }}
                             onClick={() => onViewDetails(item.booking)}
                           >
-                            Hóa đơn
+                            {isIncidentPending ? 'Phản hồi đền bù' : isDisputed ? 'Chi tiết tranh chấp' : 'Hóa đơn'}
                           </button>
                         ) : (
                           <span className="vh-appointment-action-link" style={{ cursor: 'pointer' }}>
@@ -445,14 +633,28 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     >
                       <td style={{ fontWeight: 700 }}>{p.paymentCode}</td>
                       <td style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                        {p.purpose === 'DEPOSIT_PAYMENT' ? 'Đặt cọc giữ chỗ' : 'Thanh toán hoàn tất'}
+                        {p.purpose === 'DEPOSIT_PAYMENT' 
+                          ? 'Đặt cọc giữ chỗ' 
+                          : p.purpose === 'DEPOSIT_REFUND' 
+                            ? 'Hoàn trả tiền cọc' 
+                            : 'Thanh toán hoàn tất'}
                       </td>
-                      <td style={{ fontWeight: 800, color: 'var(--color-primary-dark)' }}>
-                        {p.amount?.toLocaleString('vi-VN')}đ
+                      <td style={{ 
+                        fontWeight: 800, 
+                        color: p.purpose === 'DEPOSIT_REFUND' ? '#2e7d32' : 'var(--color-primary-dark)' 
+                      }}>
+                        {p.purpose === 'DEPOSIT_REFUND' ? '+' : ''}{p.amount?.toLocaleString('vi-VN')}đ
                       </td>
-                      <td>{p.paymentMethod || 'PayOS (VietQR)'}</td>
                       <td>
-                        <span className="vh-profile-payment-status-success-badge">
+                        {p.paymentMethod === 'PAYOS_REFUND' 
+                          ? 'Hoàn tiền (PayOS)' 
+                          : p.paymentMethod || 'PayOS (VietQR)'}
+                      </td>
+                      <td>
+                        <span className="vh-profile-payment-status-success-badge" style={{
+                          backgroundColor: p.purpose === 'DEPOSIT_REFUND' ? '#e8f5e9' : undefined,
+                          color: p.purpose === 'DEPOSIT_REFUND' ? '#2e7d32' : undefined,
+                        }}>
                           <ShieldCheck size={12} style={{ marginRight: '4px' }} />
                           <span>Thành công</span>
                         </span>
@@ -518,6 +720,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
         bookingId={selectedBookingId}
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
+        viewerRole="customer"
+        onBookingChanged={onRefresh}
       />
     </div>
   );

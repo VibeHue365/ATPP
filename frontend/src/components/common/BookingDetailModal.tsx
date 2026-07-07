@@ -1,30 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { httpClient } from '../../services/httpClient';
 import { Modal } from './Modal';
-import { ShieldAlert, User, Clock, FileText } from 'lucide-react';
+import { ShieldAlert, User, Clock, FileText, CheckCircle, XCircle } from 'lucide-react';
 
 interface BookingDetailModalProps {
   bookingId: string | null;
   isOpen: boolean;
   onClose: () => void;
   onCustomerClick?: (customerId: string) => void;
+  viewerRole?: 'customer' | 'provider' | 'admin';
+  onBookingChanged?: () => void;
 }
 
 export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   bookingId,
   isOpen,
   onClose,
-  onCustomerClick
+  onCustomerClick,
+  viewerRole = 'admin',
+  onBookingChanged
 }) => {
   const [booking, setBooking] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [respondingIncident, setRespondingIncident] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [incident, setIncident] = useState<any>(null);
 
   useEffect(() => {
     if (isOpen && bookingId) {
       fetchBookingDetails();
+      fetchIncidentDetails();
     } else {
       setBooking(null);
+      setIncident(null);
       setError(null);
     }
   }, [isOpen, bookingId]);
@@ -40,6 +48,47 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
       setError('Không thể tải chi tiết đơn hàng này. Vui lòng thử lại sau.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchIncidentDetails = async () => {
+    try {
+      const res = await httpClient.get<any>(`/api/disputes/incidents/booking/${bookingId}`);
+      setIncident(res);
+    } catch {
+      setIncident(null);
+    }
+  };
+
+  const handleAgreeIncident = async () => {
+    if (!incident?._id) return;
+    setRespondingIncident(true);
+    try {
+      await httpClient.post(`/api/disputes/incidents/${incident._id}/agree`);
+      alert('Bạn đã đồng ý đền bù sự cố. Số tiền đền bù sẽ được khấu trừ từ tiền cọc.');
+      fetchBookingDetails();
+      fetchIncidentDetails();
+      onBookingChanged?.();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Có lỗi xảy ra khi xử lý. Vui lòng thử lại.');
+    } finally {
+      setRespondingIncident(false);
+    }
+  };
+
+  const handleDisagreeIncident = async () => {
+    if (!incident?._id) return;
+    setRespondingIncident(true);
+    try {
+      await httpClient.post(`/api/disputes/incidents/${incident._id}/disagree`);
+      alert('Bạn đã gửi khiếu nại. Đơn hàng sẽ được chuyển sang trạng thái Tranh chấp để Admin xem xét.');
+      fetchBookingDetails();
+      fetchIncidentDetails();
+      onBookingChanged?.();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Có lỗi xảy ra khi gửi khiếu nại. Vui lòng thử lại.');
+    } finally {
+      setRespondingIncident(false);
     }
   };
 
@@ -94,6 +143,122 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
       endDate = dates.reduce((max: string, d: any) => d.to < max ? d.to : max, dates[0].to);
     }
   }
+
+  const renderRefundOrDisputeInfo = () => {
+    if (!booking) return null;
+
+    let infoText = '';
+    let titleText = 'Thông tin hoàn cọc';
+    let bgColor = '#F9FAFB';
+    let borderColor = '#E5E7EB';
+    let textColor = '#374151';
+    let hasInfo = false;
+
+    const adminTimeline = booking.statusTimeline?.find((t: any) =>
+      t.note?.includes('Admin giải quyết tranh chấp')
+    );
+
+    if (booking.status === 'COMPLETED') {
+      if (incident) {
+        if (incident.status === 'ACCEPTED') {
+          hasInfo = true;
+          titleText = 'Quyết định đền bù (Thỏa thuận giữa hai bên)';
+          bgColor = '#FFFBEB';
+          borderColor = '#FDE68A';
+          textColor = '#92400E';
+          const remaining = (booking.pricingSummary?.depositTotal || 0) - (incident.requestedAmount || 0);
+          infoText = `Khách hàng đã đồng ý đền bù sự cố hỏng đồ cho cửa hàng.\nSố tiền đền bù (khấu trừ từ cọc): ${formatCurrency(incident.requestedAmount)}.${remaining > 0 ? `\nSố tiền cọc hoàn trả lại cho khách hàng: ${formatCurrency(remaining)}.` : ''}`;
+        } else if (incident.status === 'RESOLVED') {
+          hasInfo = true;
+          titleText = 'Phán quyết sự cố từ Ban quản trị (Admin)';
+          bgColor = '#EFF6FF';
+          borderColor = '#BFDBFE';
+          textColor = '#1E40AF';
+          let decisionText = 'Đã giải quyết.';
+          if (adminTimeline) {
+            const isShopRight = adminTimeline.note?.includes('Shop Đúng');
+            decisionText = isShopRight
+              ? '✅ Shop (Nhà cung cấp) Đúng — Khấu trừ tiền cọc đền bù cho Shop.'
+              : '✅ Khách hàng Đúng — Hoàn trả 100% tiền cọc cho Khách hàng.';
+          }
+          infoText = `${decisionText}\n\nLý do / Ghi chú của Admin: "${incident.adminNotes || 'Không có ghi chú thêm.'}"`;
+        }
+      } else {
+        if ((booking.pricingSummary?.depositTotal || 0) > 0) {
+          hasInfo = true;
+          bgColor = '#ECFDF5';
+          borderColor = '#A7F3D0';
+          textColor = '#065F46';
+          infoText = `Đơn hàng hoàn thành an toàn. Hệ thống đã tự động hoàn trả 100% tiền cọc giữ đồ (${formatCurrency(booking.pricingSummary.depositTotal)}) cho khách hàng.`;
+        }
+      }
+    } else if (booking.status === 'CANCELLED') {
+      if ((booking.paymentSummary?.totalPaid || 0) > 0) {
+        hasInfo = true;
+        titleText = 'Thông tin hủy đơn & cọc';
+        const refundNote = booking.statusTimeline?.find((t: any) =>
+          t.note?.includes('hoàn trả') || t.note?.includes('hoàn cọc') || t.note?.includes('100%')
+        );
+        const penaltyNote = booking.statusTimeline?.find((t: any) =>
+          t.note?.includes('phạt') || t.note?.includes('mất cọc')
+        );
+        if (refundNote) {
+          bgColor = '#EFF6FF';
+          borderColor = '#BFDBFE';
+          textColor = '#1E40AF';
+          infoText = `Đơn hàng đã được hủy thành công. Khách hàng được hoàn trả tiền cọc giữ chỗ theo chính sách hủy lịch.`;
+        } else if (penaltyNote) {
+          bgColor = '#FEF2F2';
+          borderColor = '#FCA5A5';
+          textColor = '#991B1B';
+          infoText = `Đơn hàng hủy sát giờ. Khách hàng bị phạt 100% tiền cọc (${formatCurrency(booking.pricingSummary?.depositTotal)}) chuyển trả cho đối tác.`;
+        } else {
+          bgColor = '#F9FAFB';
+          borderColor = '#E5E7EB';
+          textColor = '#374151';
+          infoText = `Đơn đặt lịch đã bị hủy. Trạng thái cọc giữ đồ được cập nhật dựa trên thời gian hủy thực tế.`;
+        }
+      }
+    } else if (booking.status === 'DISPUTED') {
+      hasInfo = true;
+      titleText = 'Tranh chấp đang xử lý';
+      bgColor = '#FFF1F2';
+      borderColor = '#FECDD3';
+      textColor = '#9F1239';
+      infoText = `Đơn hàng đang trong trạng thái tranh chấp sự cố hỏng đồ. Ban quản trị đang tiến hành xác minh bằng chứng để đưa ra phán quyết cuối cùng.`;
+    } else if (booking.status === 'RETURN_PENDING') {
+      hasInfo = true;
+      titleText = 'Yêu cầu đền bù sự cố hỏng đồ';
+      bgColor = '#FFFBEB';
+      borderColor = '#FDE68A';
+      textColor = '#92400E';
+      infoText = incident
+        ? `Cửa hàng yêu cầu đền bù sự cố hỏng đồ với số tiền: ${formatCurrency(incident.requestedAmount)}.\nMô tả sự cố: "${incident.description || ''}".\nĐang chờ khách hàng phản hồi (Đồng ý đền bù hoặc Khiếu nại).`
+        : 'Đơn hàng đang chờ xác nhận sự cố hỏng đồ từ phía khách hàng.';
+    }
+
+    if (!hasInfo) return null;
+
+    return (
+      <div style={{
+        backgroundColor: bgColor,
+        border: `1px solid ${borderColor}`,
+        borderRadius: '12px',
+        padding: '16px',
+        fontSize: '13px',
+        color: textColor,
+        whiteSpace: 'pre-line',
+        fontFamily: 'Inter, sans-serif'
+      }}>
+        <h5 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 800, textTransform: 'uppercase' }}>
+          {titleText}
+        </h5>
+        <p style={{ margin: 0, lineHeight: 1.6, fontSize: '12.5px' }}>
+          {infoText}
+        </p>
+      </div>
+    );
+  };
 
   return (
     <Modal
@@ -252,6 +417,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             </div>
           </div>
 
+          {/* Refund / Dispute Decision Info */}
+          {renderRefundOrDisputeInfo()}
+
           {/* Pricing & Billing Summary */}
           <div style={{
             backgroundColor: '#FAF9F6',
@@ -289,6 +457,84 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               <span style={{ color: '#047857', fontWeight: 800 }}>{formatCurrency(booking.paymentSummary?.totalPaid)}</span>
             </div>
           </div>
+
+          {/* Customer Incident Response Buttons */}
+          {viewerRole === 'customer' && booking.status === 'RETURN_PENDING' && incident && incident.status === 'PENDING' && (
+            <div style={{
+              backgroundColor: '#FFF7ED',
+              border: '1px solid #FDE68A',
+              borderRadius: '12px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              fontFamily: 'Inter, sans-serif'
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#92400E' }}>
+                ⚠️ Cửa hàng yêu cầu đền bù sự cố hỏng đồ — Vui lòng chọn phương án xử lý:
+              </div>
+              {incident.description && (
+                <div style={{ fontSize: '12px', color: '#78350F', backgroundColor: '#FFFBEB', padding: '10px 12px', borderRadius: '8px', border: '1px solid #FDE68A' }}>
+                  <strong>Mô tả sự cố:</strong> {incident.description}
+                </div>
+              )}
+              <div style={{ fontSize: '13px', color: '#92400E', fontWeight: 600 }}>
+                Số tiền yêu cầu đền bù: <span style={{ color: '#DC2626', fontWeight: 800 }}>{formatCurrency(incident.requestedAmount)}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={handleAgreeIncident}
+                  disabled={respondingIncident}
+                  style={{
+                    flex: 1,
+                    padding: '10px 16px',
+                    backgroundColor: respondingIncident ? '#D1D5DB' : '#059669',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: respondingIncident ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'background-color 0.15s'
+                  }}
+                  onMouseOver={(e) => !respondingIncident && (e.currentTarget.style.backgroundColor = '#047857')}
+                  onMouseOut={(e) => !respondingIncident && (e.currentTarget.style.backgroundColor = '#059669')}
+                >
+                  <CheckCircle size={16} />
+                  {respondingIncident ? 'Đang xử lý...' : 'Đồng ý đền bù'}
+                </button>
+                <button
+                  onClick={handleDisagreeIncident}
+                  disabled={respondingIncident}
+                  style={{
+                    flex: 1,
+                    padding: '10px 16px',
+                    backgroundColor: respondingIncident ? '#D1D5DB' : '#DC2626',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: respondingIncident ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'background-color 0.15s'
+                  }}
+                  onMouseOver={(e) => !respondingIncident && (e.currentTarget.style.backgroundColor = '#B91C1C')}
+                  onMouseOut={(e) => !respondingIncident && (e.currentTarget.style.backgroundColor = '#DC2626')}
+                >
+                  <XCircle size={16} />
+                  {respondingIncident ? 'Đang xử lý...' : 'Khiếu nại (Không đồng ý)'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ textAlign: 'center', padding: '24px', color: '#6B7280' }}>

@@ -174,7 +174,7 @@ export const ProfilePage: React.FC = () => {
   const statusLabels: Record<string, { label: string, color: string, bg: string }> = {
     DRAFT: { label: 'Nháp', color: '#7F8C8D', bg: '#F2F4F4' },
     PENDING_PAYMENT: { label: 'Chờ cọc', color: '#D35400', bg: '#FDEBD0' },
-    DEPOSIT_PAID: { label: 'Đã cọc (20%)', color: '#2980B9', bg: '#EBF5FB' },
+    DEPOSIT_PAID: { label: 'Đã đặt cọc', color: '#2980B9', bg: '#EBF5FB' },
     CONFIRMED: { label: 'Đã xác nhận', color: '#27AE60', bg: '#E8F8F5' },
     PICKUP_PENDING: { label: 'Chờ nhận đồ', color: '#8E44AD', bg: '#F5EEF8' },
     PICKED_UP: { label: 'Đang thuê', color: '#16A085', bg: '#E8F8F5' },
@@ -291,6 +291,27 @@ export const ProfilePage: React.FC = () => {
     } catch (err: any) {
       console.error('Lỗi khi hủy đơn hàng:', err);
       toast.error(err.message || 'Không thể hủy đơn đặt lịch này. Vui lòng kiểm tra lại!');
+    }
+  };
+
+  const handleContinuePayment = async (bookingId: string) => {
+    try {
+      toast.info('Đang tải liên kết thanh toán...');
+      const paymentRes: any = await httpClient.post('/payments/create-link', {
+        bookingId,
+        purpose: 'FULL_PAYMENT',
+      });
+      if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
+        toast.success('Đang chuyển hướng tới cổng thanh toán PayOS Simulator...');
+        setTimeout(() => {
+          window.location.href = paymentRes.payos.checkoutUrl;
+        }, 1200);
+      } else {
+        toast.error('Không tìm thấy liên kết thanh toán cho đơn hàng này.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Lỗi khi kết nối đến cổng thanh toán.');
     }
   };
 
@@ -772,6 +793,24 @@ export const ProfilePage: React.FC = () => {
                   onClick={() => handleCancelClick(activeDetailBooking)}
                 >
                   Hủy lịch / Trả hàng
+                </button>
+              )}
+
+              {activeDetailBooking.status === 'PENDING_PAYMENT' && (
+                <button 
+                  className="vh-btn" 
+                  style={{ 
+                    padding: '8px 24px', 
+                    borderRadius: '8px', 
+                    fontSize: '13px', 
+                    backgroundColor: '#8B1E22', 
+                    color: 'white', 
+                    border: 'none', 
+                    cursor: 'pointer' 
+                  }} 
+                  onClick={() => handleContinuePayment(activeDetailBooking._id)}
+                >
+                  Tiếp tục thanh toán
                 </button>
               )}
               

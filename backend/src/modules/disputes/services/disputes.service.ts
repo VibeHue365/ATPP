@@ -135,48 +135,7 @@ export class DisputesService {
       throw new BadRequestException('Bạn không có quyền thực hiện thao tác này');
     }
 
-    // 1. Chuyển khoản trực tiếp số tiền đền bù sang tài khoản ngân hàng của Shop
-    const provider = await this.bookingModel.db
-      .model('Provider')
-      .findById(incident.reportedBy);
-    if (!provider) {
-      throw new NotFoundException('Không tìm thấy thông tin shop');
-    }
-
-    let bankName = 'VietinBank';
-    let accountNumber = '1029384756';
-    let accountHolder = 'PROVIDER STUDIO';
-
-    if (provider.paymentAccounts && provider.paymentAccounts.length > 0) {
-      const activeAccount = provider.paymentAccounts.find((a: any) => a.isDefault) || provider.paymentAccounts[0];
-      bankName = activeAccount.bankName || bankName;
-      accountNumber = activeAccount.accountNumberMasked
-        ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
-        : accountNumber;
-      accountHolder = activeAccount.accountHolder || accountHolder;
-    }
-
-    const transferRef = `COMPENSATION_${booking.bookingCode}`;
-    const transferResult = await this.bankingService.executeAutoTransfer(
-      bankName,
-      accountNumber,
-      accountHolder,
-      incident.requestedAmount,
-      transferRef,
-    );
-
-    if (!transferResult.success) {
-      throw new BadRequestException(`Chuyển tiền đền bù cho Shop thất bại: ${transferResult.error}`);
-    }
-
-    // 2. Hoàn trả số tiền cọc giữ đồ còn lại cho Khách hàng
-    const remainingRefund = booking.pricingSummary.depositTotal - incident.requestedAmount;
-    let refundResult = null;
-    if (remainingRefund > 0) {
-      refundResult = await this.paymentsService.refundDeposit(booking._id.toString(), remainingRefund);
-    }
-
-    // 3. Thực hiện Profit Split tiền dịch vụ & hoàn thành đơn đặt lịch
+    // 1. Cập nhật trạng thái Escrow sang DisputedResolved một cách atomic trước để tránh double click/double split
     const escrow = await this.bookingModel.db
       .model('BookingEscrow')
       .findOneAndUpdate(
@@ -191,7 +150,67 @@ export class DisputesService {
       );
     }
 
+    let transferResult = null;
+    let refundResult = null;
+
     try {
+      // 2. Chuyển khoản trực tiếp số tiền đền bù sang tài khoản ngân hàng của Shop
+      const provider = await this.bookingModel.db
+        .model('Provider')
+        .findById(incident.reportedBy);
+      if (!provider) {
+        throw new NotFoundException('Không tìm thấy thông tin shop');
+      }
+
+      let bankName = 'VietinBank';
+      let accountNumber = '1029384756';
+      let accountHolder = 'PROVIDER STUDIO';
+
+      if (provider.paymentAccounts && provider.paymentAccounts.length > 0) {
+        const activeAccount = provider.paymentAccounts.find((a: any) => a.isDefault) || provider.paymentAccounts[0];
+        bankName = activeAccount.bankName || bankName;
+        accountNumber = activeAccount.accountNumberMasked
+          ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
+          : accountNumber;
+        accountHolder = activeAccount.accountHolder || accountHolder;
+      }
+
+      const transferRef = `COMPENSATION_${booking.bookingCode}`;
+      transferResult = await this.bankingService.executeAutoTransfer(
+        bankName,
+        accountNumber,
+        accountHolder,
+        incident.requestedAmount,
+        transferRef,
+      );
+
+      // Tạo lịch sử giao dịch chuyển khoản đền bù cho Provider
+      await this.bookingModel.db.model('SettlementTransfer').create({
+        bookingId: booking._id,
+        providerId: provider._id,
+        amountSent: incident.requestedAmount,
+        destinationBankAccount: {
+          bankName,
+          accountNumber,
+          accountHolder,
+        },
+        status: transferResult.success
+          ? 'SUCCESS'
+          : 'FAILED',
+        transactionReference: transferRef,
+        errorMessage: transferResult.error || null,
+      });
+
+      if (!transferResult.success) {
+        throw new BadRequestException(`Chuyển tiền đền bù cho Shop thất bại: ${transferResult.error}`);
+      }
+
+      // 3. Hoàn trả số tiền cọc giữ đồ còn lại cho Khách hàng
+      const remainingRefund = booking.pricingSummary.depositTotal - incident.requestedAmount;
+      if (remainingRefund > 0) {
+        refundResult = await this.paymentsService.refundDeposit(booking._id.toString(), remainingRefund);
+      }
+
       incident.status = IncidentStatus.Accepted;
       await incident.save();
 
@@ -206,6 +225,7 @@ export class DisputesService {
       // Thực hiện Profit Split trực tiếp chuyển khoản tiền dịch vụ cho Provider
       await this.paymentsService.executeProfitSplit(booking);
     } catch (err) {
+      // Revert lại trạng thái Held nếu gặp lỗi
       await this.bookingModel.db
         .model('BookingEscrow')
         .updateOne(
@@ -293,55 +313,7 @@ export class DisputesService {
       throw new BadRequestException('Sự cố này không ở trạng thái tranh chấp');
     }
 
-    let transferResult = null;
-    let refundResult = null;
-
-    if (decision === 'SHOP_RIGHT') {
-      // 1. Phán quyết Shop đúng -> Chuyển số tiền đền bù cho Shop
-      const provider = await this.bookingModel.db
-        .model('Provider')
-        .findById(incident.reportedBy);
-      if (!provider) {
-        throw new NotFoundException('Không tìm thấy thông tin shop');
-      }
-
-      let bankName = 'VietinBank';
-      let accountNumber = '1029384756';
-      let accountHolder = 'PROVIDER STUDIO';
-
-      if (provider.paymentAccounts && provider.paymentAccounts.length > 0) {
-        const activeAccount = provider.paymentAccounts.find((a: any) => a.isDefault) || provider.paymentAccounts[0];
-        bankName = activeAccount.bankName || bankName;
-        accountNumber = activeAccount.accountNumberMasked
-          ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
-          : accountNumber;
-        accountHolder = activeAccount.accountHolder || accountHolder;
-      }
-
-      const transferRef = `COMPENSATION_RESOLVED_${booking.bookingCode}`;
-      transferResult = await this.bankingService.executeAutoTransfer(
-        bankName,
-        accountNumber,
-        accountHolder,
-        incident.requestedAmount,
-        transferRef,
-      );
-
-      if (!transferResult.success) {
-        throw new BadRequestException(`Chuyển khoản đền bù cho Shop thất bại: ${transferResult.error}`);
-      }
-
-      // Hoàn trả phần cọc còn lại cho khách
-      const remainingRefund = booking.pricingSummary.depositTotal - incident.requestedAmount;
-      if (remainingRefund > 0) {
-        refundResult = await this.paymentsService.refundDeposit(booking._id.toString(), remainingRefund);
-      }
-    } else {
-      // 2. Phán quyết Khách đúng -> Hoàn 100% tiền cọc giữ đồ cho Khách
-      refundResult = await this.paymentsService.refundDeposit(booking._id.toString(), booking.pricingSummary.depositTotal);
-    }
-
-    // Cập nhật trạng thái Escrow sang Settled/DisputedResolved một cách atomic để tránh double split
+    // 1. Cập nhật trạng thái Escrow sang DisputedResolved một cách atomic trước để tránh double split
     const escrow = await this.bookingModel.db
       .model('BookingEscrow')
       .findOneAndUpdate(
@@ -356,7 +328,72 @@ export class DisputesService {
       );
     }
 
+    let transferResult = null;
+    let refundResult = null;
+
     try {
+      if (decision === 'SHOP_RIGHT') {
+        // 2. Phán quyết Shop đúng -> Chuyển số tiền đền bù cho Shop
+        const provider = await this.bookingModel.db
+          .model('Provider')
+          .findById(incident.reportedBy);
+        if (!provider) {
+          throw new NotFoundException('Không tìm thấy thông tin shop');
+        }
+
+        let bankName = 'VietinBank';
+        let accountNumber = '1029384756';
+        let accountHolder = 'PROVIDER STUDIO';
+
+        if (provider.paymentAccounts && provider.paymentAccounts.length > 0) {
+          const activeAccount = provider.paymentAccounts.find((a: any) => a.isDefault) || provider.paymentAccounts[0];
+          bankName = activeAccount.bankName || bankName;
+          accountNumber = activeAccount.accountNumberMasked
+            ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
+            : accountNumber;
+          accountHolder = activeAccount.accountHolder || accountHolder;
+        }
+
+        const transferRef = `COMPENSATION_RESOLVED_${booking.bookingCode}`;
+        transferResult = await this.bankingService.executeAutoTransfer(
+          bankName,
+          accountNumber,
+          accountHolder,
+          incident.requestedAmount, // Chỉ chuyển số tiền đền bù yêu cầu
+          transferRef,
+        );
+
+        // Tạo lịch sử giao dịch chuyển khoản đền bù cho Provider
+        await this.bookingModel.db.model('SettlementTransfer').create({
+          bookingId: booking._id,
+          providerId: provider._id,
+          amountSent: incident.requestedAmount,
+          destinationBankAccount: {
+            bankName,
+            accountNumber,
+            accountHolder,
+          },
+          status: transferResult.success
+            ? 'SUCCESS'
+            : 'FAILED',
+          transactionReference: transferRef,
+          errorMessage: transferResult.error || null,
+        });
+
+        if (!transferResult.success) {
+          throw new BadRequestException(`Chuyển khoản đền bù cho Shop thất bại: ${transferResult.error}`);
+        }
+
+        // Hoàn trả phần cọc còn lại cho khách
+        const remainingRefund = booking.pricingSummary.depositTotal - incident.requestedAmount;
+        if (remainingRefund > 0) {
+          refundResult = await this.paymentsService.refundDeposit(booking._id.toString(), remainingRefund);
+        }
+      } else {
+        // 3. Phán quyết Khách đúng -> Hoàn 100% tiền cọc giữ đồ cho Khách
+        refundResult = await this.paymentsService.refundDeposit(booking._id.toString(), booking.pricingSummary.depositTotal);
+      }
+
       // Cập nhật trạng thái sự cố và tranh chấp
       incident.status = IncidentStatus.Resolved;
       incident.adminNotes = notes;
@@ -379,8 +416,7 @@ export class DisputesService {
                   : FaultParty.Provider,
               refundAmount:
                 decision === 'SHOP_RIGHT'
-                  ? booking.pricingSummary.depositTotal -
-                    incident.requestedAmount
+                  ? booking.pricingSummary.depositTotal - incident.requestedAmount
                   : booking.pricingSummary.depositTotal,
               compensationAmount:
                 decision === 'SHOP_RIGHT' ? incident.requestedAmount : 0,
@@ -405,6 +441,7 @@ export class DisputesService {
       // Thực hiện Profit Split trực tiếp chuyển khoản tiền dịch vụ cho Provider
       await this.paymentsService.executeProfitSplit(booking);
     } catch (err) {
+      // Revert lại trạng thái Held nếu gặp lỗi
       await this.bookingModel.db
         .model('BookingEscrow')
         .updateOne(

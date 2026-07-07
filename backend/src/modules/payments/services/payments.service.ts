@@ -86,6 +86,15 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     }
 
+    // Check for existing PENDING payment for the same booking — reuse if found
+    const existingPendingPayment = await this.paymentModel.findOne({
+      bookingId,
+      status: PaymentStatus.Pending,
+    });
+    if (existingPendingPayment) {
+      return existingPendingPayment;
+    }
+
     let amount = 0;
     if (purpose === PaymentPurpose.DepositPayment) {
       amount = booking.pricingSummary.depositTotal;
@@ -523,6 +532,22 @@ export class PaymentsService {
       orderCode,
       amountToRefund,
     );
+
+    // Create a Payment record representing the deposit refund for transaction history
+    try {
+      const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
+      await this.paymentModel.create({
+        bookingId,
+        paymentCode: refundPaymentCode,
+        amount: amountToRefund,
+        purpose: PaymentPurpose.DepositRefund,
+        paymentMethod: 'PAYOS_REFUND',
+        status: PaymentStatus.Success,
+        paidAt: new Date(),
+      });
+    } catch (createRefundErr) {
+      this.logger.error(`Failed to create refund payment record for booking ${bookingIdStr}:`, createRefundErr);
+    }
 
     const escrow = await this.escrowModel.findOne({ bookingId });
     if (escrow) {
