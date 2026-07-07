@@ -1269,11 +1269,24 @@ export class BookingsService implements OnApplicationBootstrap {
 
   async getBookingById(bookingIdStr: string): Promise<Record<string, any>> {
     const bookingId = new Types.ObjectId(bookingIdStr);
-    const booking = await this.bookingModel.findById(bookingId);
+    const booking = await this.bookingModel.findById(bookingId)
+      .populate('customerId');
     if (!booking) throw new NotFoundException('Booking not found');
 
-    const items = await this.bookingItemModel.find({ bookingId });
-    return { ...booking.toObject(), items };
+    const items = await this.bookingItemModel.find({ bookingId })
+      .populate('productId')
+      .populate('photographyPackageId');
+
+    const bookingObj = booking.toObject();
+    const customerUser = booking.customerId as any;
+
+    return {
+      ...bookingObj,
+      customerName: customerUser?.profile?.fullName || '',
+      customerPhone: customerUser?.auth?.phone || '',
+      customerEmail: customerUser?.auth?.email || '',
+      items
+    };
   }
 
   /** Hoàn thành đơn → trigger đối soát chia tiền (PaymentsService.settleBooking) */

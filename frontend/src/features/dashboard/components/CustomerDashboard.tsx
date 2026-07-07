@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
 import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck } from 'lucide-react';
+import { BookingDetailModal } from '../../../components/common/BookingDetailModal';
 
 interface CustomerDashboardProps {
   user: any;
@@ -18,6 +19,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   onRefresh
 }) => {
   const toast = useToast();
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'appointments' | 'rentals' | 'favorites' | 'payments'>('appointments');
   const [payments, setPayments] = useState<any[]>([]);
@@ -428,7 +431,18 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 </thead>
                 <tbody>
                   {payments.map((p) => (
-                    <tr key={p._id || p.paymentCode}>
+                    <tr 
+                      key={p._id || p.paymentCode} 
+                      onClick={() => {
+                        const bId = p.bookingId?._id || p.bookingId;
+                        if (bId) {
+                          setSelectedBookingId(bId);
+                          setIsDetailModalOpen(true);
+                        }
+                      }}
+                      style={{ cursor: 'pointer' }}
+                      className="hover:bg-stone-50 transition"
+                    >
                       <td style={{ fontWeight: 700 }}>{p.paymentCode}</td>
                       <td style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
                         {p.purpose === 'DEPOSIT_PAYMENT' ? 'Đặt cọc giữ chỗ' : 'Thanh toán hoàn tất'}
@@ -499,6 +513,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
         </div>
       )}
 
+      {/* Booking Details Modal */}
+      <BookingDetailModal 
+        bookingId={selectedBookingId}
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+      />
     </div>
   );
 };

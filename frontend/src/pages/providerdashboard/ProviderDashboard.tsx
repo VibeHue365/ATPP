@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
   HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,
-  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3
+  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign
 } from 'lucide-react';
+import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
@@ -71,7 +72,7 @@ export const ProviderDashboard: React.FC = () => {
   }, [user, isAuthenticated, navigate, toast]);
   
   // Views navigation state
-  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'calendar' | 'vouchers' | 'reviews' | 'trust' | 'analytics'>('analytics');
+  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'calendar' | 'vouchers' | 'reviews' | 'trust' | 'analytics' | 'payouts'>('analytics');
 
   // Provider Specific States
   const [provider, setProvider] = useState<any>(null);
@@ -90,6 +91,9 @@ export const ProviderDashboard: React.FC = () => {
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [reviewsData, setReviewsData] = useState<any>(null);
   const [bookingsState, setBookingsState] = useState<any[]>([]);
+  const [payouts, setPayouts] = useState<any[]>([]);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isLoadingProvider, setIsLoadingProvider] = useState(false);
 
   // Form states - Profile
@@ -179,6 +183,27 @@ export const ProviderDashboard: React.FC = () => {
       }
     } finally {
       setIsLoadingProvider(false);
+    }
+  };
+
+  const fetchPayouts = async () => {
+    try {
+      const res: any = await httpClient.get('/payments/settlement-transfers/provider');
+      setPayouts(res || []);
+    } catch (err: any) {
+      console.error('Không thể tải lịch sử quyết toán:', err);
+    }
+  };
+
+  const viewCustomerTrust = async (custId: string) => {
+    setIsDetailModalOpen(false);
+    setCurrentView('trust');
+    setSearchCustId(custId);
+    try {
+      const res = await httpClient.get(`/users/${custId}/trust-score`);
+      setTrustScoreResult(res);
+    } catch (err) {
+      console.error('Không thể tải điểm tín nhiệm:', err);
     }
   };
 
@@ -522,6 +547,8 @@ export const ProviderDashboard: React.FC = () => {
     } else if (currentView === 'collections') {
       fetchProducts();
       fetchCategories();
+    } else if (currentView === 'payouts') {
+      fetchPayouts();
     } else if (['profile', 'portfolio', 'calendar', 'vouchers', 'reviews', 'trust', 'analytics'].includes(currentView)) {
       fetchProviderData();
     }
@@ -1086,12 +1113,13 @@ export const ProviderDashboard: React.FC = () => {
             <button onClick={() => setCurrentView('analytics')} style={navItemStyle(currentView === 'analytics')}><BarChart3 size={18} /> Thống kê & Hiệu suất</button>
             <button onClick={() => setCurrentView('orders')} style={navItemStyle(currentView === 'orders')}><ShoppingBag size={18} /> Đơn hàng</button>
             <button onClick={() => setCurrentView('collections')} style={navItemStyle(currentView === 'collections')}><Layers size={18} /> Bộ sưu tập</button>
-            <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ (UC-B06)</button>
-            <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio (UC-B08)</button>
-            <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn (UC-F01)</button>
-            <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi (UC-P01)</button>
-            <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi (UC-H04/05)</button>
-            <button onClick={() => setCurrentView('trust')} style={navItemStyle(currentView === 'trust')}><Users size={18} /> Đánh giá khách hàng (UC-H06)</button>
+            <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ</button>
+            <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio</button>
+            <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn</button>
+            <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi</button>
+            <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi</button>
+            <button onClick={() => setCurrentView('trust')} style={navItemStyle(currentView === 'trust')}><Users size={18} /> Đánh giá khách hàng</button>
+            <button onClick={() => setCurrentView('payouts')} style={navItemStyle(currentView === 'payouts')}><DollarSign size={18} /> Lịch sử quyết toán</button>
           </nav>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
@@ -1373,7 +1401,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Thông tin dịch vụ (UC-B06)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Thông tin dịch vụ</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Thiết lập thông tin thương hiệu, showroom nhận đồ và chính sách hủy dịch vụ.</p>
               </div>
             </div>
@@ -1424,7 +1452,7 @@ export const ProviderDashboard: React.FC = () => {
                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>CHÍNH SÁCH HỦY DỊCH VỤ / HOÀN CỌC (UC-B06)</label>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>CHÍNH SÁCH HỦY DỊCH VỤ / HOÀN CỌC</label>
                     <textarea
                       value={cancellationPolicy}
                       onChange={(e) => setCancellationPolicy(e.target.value)}
@@ -1449,7 +1477,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Portfolio (UC-B08)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Portfolio</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Đăng tải các tác phẩm thiết kế mẫu hoặc các dự án đã hoàn thành của bạn.</p>
               </div>
               <button
@@ -1493,7 +1521,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Lịch làm việc & Chặn (UC-F01)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Lịch làm việc & Chặn</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Thiết lập khung giờ làm việc cố định hàng tuần và chặn các ngày bận đột xuất.</p>
               </div>
             </div>
@@ -1606,7 +1634,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Mã khuyến mãi (UC-P01)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Mã khuyến mãi</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Tạo các chương trình khuyến mãi, giảm giá trực tiếp theo % hoặc tiền mặt cho khách hàng.</p>
               </div>
             </div>
@@ -1706,7 +1734,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá & Phản hồi (UC-H04/H05/H03)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá & Phản hồi</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Theo dõi mức độ đánh giá trung bình và trả lời các thắc mắc, phản hồi từ khách hàng.</p>
               </div>
             </div>
@@ -1755,7 +1783,7 @@ export const ProviderDashboard: React.FC = () => {
                                 style={{ padding: '4px 10px', backgroundColor: '#FFF5F5', border: '1px solid #FEB2B2', borderRadius: '6px', color: '#C53030', fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                               >
                                 <Flag size={11} />
-                                Báo cáo Spam (UC-H03)
+                                Báo cáo Spam
                               </button>
                               <button
                                 onClick={() => { setReplyingReviewId(r._id); setReplyText(r.reply || ''); }}
@@ -1786,7 +1814,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá khách hàng & Tín nhiệm (UC-H06)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá khách hàng & Tín nhiệm</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Đánh giá hai chiều sau khi hoàn thành dịch vụ và tra cứu độ uy tín của khách hàng.</p>
               </div>
             </div>
@@ -1796,7 +1824,7 @@ export const ProviderDashboard: React.FC = () => {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
                 <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>TRA CỨU ĐỘ TÍN NHIỆM KHÁCH HÀNG (UC-B05)</h3>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>TRA CỨU ĐỘ TÍN NHIỆM KHÁCH HÀNG</h3>
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <input
                       type="text"
@@ -1845,6 +1873,83 @@ export const ProviderDashboard: React.FC = () => {
                           </button>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </main>
+        )}
+
+        {currentView === 'payouts' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Lịch sử quyết toán từ hệ thống</h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Danh sách các khoản thanh toán đã được hệ thống chuyển khoản cho bạn sau khi đơn hàng hoàn thành.</p>
+              </div>
+            </div>
+
+            {isLoadingProvider ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải dữ liệu quyết toán...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 20px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>DANH SÁCH CÁC KHOẢN QUYẾT TOÁN</h3>
+                  {payouts.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 24px', color: 'var(--color-text-secondary)' }}>
+                      <DollarSign size={40} style={{ margin: '0 auto 12px auto', opacity: 0.3 }} />
+                      <p style={{ fontWeight: 700 }}>Chưa có khoản quyết toán nào</p>
+                      <p style={{ fontSize: '12.5px', marginTop: '4px' }}>Khi đơn hàng được hoàn thành, tiền quyết toán sẽ tự động gửi vào tài khoản ngân hàng của bạn.</p>
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
+                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ QUYẾT TOÁN</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ BOOKING</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>SỐ TIỀN THỰC NHẬN</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TÀI KHOẢN NHẬN</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TRẠNG THÁI</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>NGÀY THỰC HIỆN</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {payouts.map((p: any) => (
+                            <tr 
+                              key={p.id} 
+                              onClick={() => {
+                                const bId = p.bookingId?._id || p.bookingId;
+                                if (bId) {
+                                  setSelectedBookingId(bId);
+                                  setIsDetailModalOpen(true);
+                                }
+                              }}
+                              style={{ borderBottom: '1px solid var(--color-light-border)', cursor: 'pointer' }}
+                              className="hover:bg-stone-50 transition"
+                            >
+                              <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.id}</td>
+                              <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingCode || '—'}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.amount || 0).toLocaleString('vi-VN')}đ</td>
+                              <td style={{ padding: '16px 20px' }}>
+                                <span style={{ fontWeight: 600, color: '#2A2A2A' }}>{p.bank}</span>
+                                <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{p.account} • {p.accountHolder}</span>
+                              </td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                                <span style={{ 
+                                  padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                                  backgroundColor: p.status === 'SUCCESS' ? '#F0FDF4' : p.status === 'PENDING' ? '#FEF3C7' : '#FEE2E2',
+                                  color: p.status === 'SUCCESS' ? '#166534' : p.status === 'PENDING' ? '#92400E' : '#991B1B'
+                                }}>
+                                  {p.status === 'SUCCESS' ? 'Thành công' : p.status === 'PENDING' ? 'Đang xử lý' : 'Thất bại'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>{p.date}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
@@ -2388,6 +2493,13 @@ export const ProviderDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Booking Details Modal */}
+      <BookingDetailModal 
+        bookingId={selectedBookingId}
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        onCustomerClick={viewCustomerTrust}
+      />
     </div>
   );
 };

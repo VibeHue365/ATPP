@@ -158,6 +158,38 @@ export class PaymentsService {
     }
   }
 
+  async getProviderSettlementTransfers(userIdStr: string): Promise<any[]> {
+    const userId = new Types.ObjectId(userIdStr);
+    const providerDoc = await this.bookingModel.db
+      .model('Provider')
+      .findOne({ userId })
+      .lean()
+      .exec();
+    if (!providerDoc) return [];
+
+    const transfers = await this.transferModel
+      .find({ providerId: (providerDoc as any)._id })
+      .populate('bookingId')
+      .sort({ createdAt: -1 })
+      .exec();
+
+    return transfers.map((t: any) => {
+      const bookingObj = t.bookingId as any;
+      return {
+        id: t.transactionReference || t._id?.toString(),
+        bookingId: bookingObj?._id || '',
+        bookingCode: bookingObj?.bookingCode || '',
+        amount: t.amountSent || 0,
+        bank: t.destinationBankAccount?.bankName || '',
+        account: t.destinationBankAccount?.accountNumber || '',
+        accountHolder: t.destinationBankAccount?.accountHolder || '',
+        status: t.status || 'PENDING',
+        date: t.createdAt ? new Date(t.createdAt).toLocaleDateString('vi-VN') : '',
+        errorMessage: t.errorMessage || null,
+      };
+    });
+  }
+
   async confirmPayment(paymentCode: string): Promise<PaymentDocument> {
     const payment = await this.paymentModel.findOneAndUpdate(
       { paymentCode, status: PaymentStatus.Pending },

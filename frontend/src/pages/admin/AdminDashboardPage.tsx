@@ -4,12 +4,14 @@ import {
   AlertTriangle, 
   Image as ImageIcon, Calendar, Eye,
   LayoutDashboard, Users, Store, TrendingUp, FileCheck,
-  Search, Bell, Ban, Lock, CheckSquare, BarChart3
+  Search, Bell, Ban, Lock, CheckSquare, BarChart3,
+  LogOut, Home
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 
 // --- TYPE INTERFACES ---
 interface DisputeItem {
@@ -65,7 +67,12 @@ interface VerificationItem {
 export const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const toast = useToast();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
   
   // Tabs: overview, customers, providers, bookings, revenue, verifications, disputes, behavior
   const [activeTab, setActiveTab] = useState<string>('overview');
@@ -78,6 +85,8 @@ export const AdminDashboardPage: React.FC = () => {
   const [customers, setCustomers] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   // Pagination states for different tabs
   const [customerPage, setCustomerPage] = useState(1);
@@ -706,7 +715,16 @@ export const AdminDashboardPage: React.FC = () => {
                 </tr>
               ) : (
                 transactions.slice(0, 3).map((tx) => (
-                  <tr key={tx.id} style={{ borderBottom: '1px solid #FAF6F0' }}>
+                  <tr 
+                    key={tx.id} 
+                    onClick={() => {
+                      if (tx.bookingId) {
+                        setSelectedBookingId(tx.bookingId);
+                        setIsDetailModalOpen(true);
+                      }
+                    }}
+                    style={{ borderBottom: '1px solid #FAF6F0', cursor: 'pointer' }}
+                  >
                     <td style={{ padding: '16px 20px', fontWeight: 700 }}>{tx.id}</td>
                     <td style={{ padding: '16px 20px', fontWeight: 600 }}>{tx.providerName}</td>
                     <td style={{ padding: '16px 20px', fontWeight: 700, color: '#4A0E17' }}>{tx.amount.toLocaleString()}đ</td>
@@ -1141,7 +1159,16 @@ export const AdminDashboardPage: React.FC = () => {
                 </tr>
               ) : (
                 transactions.map(tx => (
-                  <tr key={tx.id} style={{ borderBottom: '1px solid #FAF6F0' }}>
+                  <tr 
+                    key={tx.id} 
+                    onClick={() => {
+                      if (tx.bookingId) {
+                        setSelectedBookingId(tx.bookingId);
+                        setIsDetailModalOpen(true);
+                      }
+                    }}
+                    style={{ borderBottom: '1px solid #FAF6F0', cursor: 'pointer' }}
+                  >
                     <td style={{ padding: '16px 20px', fontWeight: 700 }}>{tx.id}</td>
                     <td style={{ padding: '16px 20px', fontWeight: 600 }}>{tx.providerName}</td>
                     <td style={{ padding: '16px 20px', color: '#7A7A7A' }}>{tx.date}</td>
@@ -1829,6 +1856,38 @@ export const AdminDashboardPage: React.FC = () => {
             })}
           </nav>
         </div>
+
+        {/* Sidebar Footer — Home & Logout */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '12px', width: '100%', padding: '10px 16px',
+              border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500,
+              backgroundColor: 'transparent', color: '#E8E2D5',
+              cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left' as const
+            }}
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#B89047'; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#E8E2D5'; }}
+          >
+            <Home size={16} color="#B89047" />
+            <span>Trở về Trang chủ</span>
+          </button>
+          <button
+            onClick={handleLogout}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '12px', width: '100%', padding: '10px 16px',
+              border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500,
+              backgroundColor: 'transparent', color: '#E8E2D5',
+              cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left' as const
+            }}
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = 'rgba(248,113,113,0.08)'; e.currentTarget.style.color = '#F87171'; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#E8E2D5'; }}
+          >
+            <LogOut size={16} color="#F87171" />
+            <span>Đăng xuất</span>
+          </button>
+        </div>
       </div>
 
       {/* RIGHT MAIN VIEW */}
@@ -1917,6 +1976,16 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
           )}
 
+      {/* Booking Details Modal */}
+      <BookingDetailModal 
+        bookingId={selectedBookingId}
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        onCustomerClick={(_custId) => {
+          setIsDetailModalOpen(false);
+          setActiveTab('customers');
+        }}
+      />
         </div>
       </div>
     </div>
