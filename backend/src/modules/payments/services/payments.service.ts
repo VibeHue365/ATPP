@@ -15,6 +15,7 @@ import {
 import {
   Booking,
   BookingStatus,
+  BookingType,
   PaymentStatus as BookingPaymentStatus,
 } from '../../bookings/schemas/booking.schema';
 import { BookingEscrow, EscrowStatus } from '../schemas/booking-escrow.schema';
@@ -88,7 +89,20 @@ export class PaymentsService {
 
     let amount = 0;
     if (purpose === PaymentPurpose.DepositPayment) {
-      amount = booking.pricingSummary.depositTotal;
+      if (booking.bookingType === BookingType.Combo) {
+        // Combo deposit = 100% Product rental + 100% Product deposit + 30% Photographer fee + serviceFee - comboDiscount
+        const items = await this.bookingModel.db.model('BookingItem').find({ bookingId: booking._id });
+        const prodItems = items.filter((i: any) => i.itemType === 'PRODUCT');
+        const photoItems = items.filter((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+
+        const prodRentalTotal = prodItems.reduce((sum: number, i: any) => sum + i.unitPrice * i.quantity, 0);
+        const prodDepositTotal = prodItems.reduce((sum: number, i: any) => sum + i.depositAmount * i.quantity, 0);
+        const photoDepositTotal = photoItems.reduce((sum: number, i: any) => sum + Math.round(i.unitPrice * 0.3) * i.quantity, 0);
+
+        amount = prodRentalTotal + prodDepositTotal + photoDepositTotal - (booking.pricingSummary.comboDiscountTotal || 0);
+      } else {
+        amount = booking.pricingSummary.depositTotal;
+      }
     } else if (purpose === PaymentPurpose.FullPayment) {
       amount = booking.pricingSummary.grandTotal;
     } else if (purpose === PaymentPurpose.RemainingPayment) {
@@ -178,6 +192,14 @@ export class PaymentsService {
       );
     }
 
+    const booking = await this.bookingModel.findById(payment.bookingId);
+    if (!booking) {
+      throw new NotFoundException('Không tìm thấy đơn đặt lịch tương ứng với giao dịch.');
+    }
+    if (booking.status === BookingStatus.Cancelled) {
+      throw new BadRequestException('Đơn đặt lịch đã bị hủy, không thể tiếp tục xác nhận thanh toán.');
+    }
+
     const updatedBooking = await this.bookingModel.findOneAndUpdate(
       { _id: payment.bookingId },
       { $inc: { 'paymentSummary.totalPaid': payment.amount } },
@@ -189,7 +211,24 @@ export class PaymentsService {
         updatedBooking.paymentSummary.totalPaid >=
         updatedBooking.pricingSummary.grandTotal;
 
-      const newStatus = isPaid
+      let isConfirmedEligible = false;
+      if (updatedBooking.bookingType === BookingType.Photography) {
+        isConfirmedEligible =
+          updatedBooking.paymentSummary.totalPaid >=
+          updatedBooking.pricingSummary.depositTotal;
+      } else if (updatedBooking.bookingType === BookingType.Combo) {
+        const items = await this.bookingModel.db.model('BookingItem').find({ bookingId: updatedBooking._id });
+        const photoItems = items.filter((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+        const photoRemainingTotal = photoItems.reduce((sum: number, i: any) => sum + Math.round(i.unitPrice * 0.7) * i.quantity, 0);
+
+        isConfirmedEligible =
+          updatedBooking.paymentSummary.totalPaid >=
+          (updatedBooking.pricingSummary.grandTotal - photoRemainingTotal);
+      } else {
+        isConfirmedEligible = isPaid;
+      }
+
+      const newStatus = isConfirmedEligible
         ? BookingStatus.Confirmed
         : updatedBooking.status;
 
@@ -246,6 +285,18 @@ export class PaymentsService {
         updatedBooking.pricingSummary.grandTotal,
         updatedBooking.pricingSummary.depositTotal,
       );
+
+      // Cập nhật trạng thái các Reservation tương ứng sang CONFIRMED
+      try {
+        await this.bookingModel.db
+          .model('InventoryReservation')
+          .updateMany(
+            { bookingId: payment.bookingId },
+            { $set: { status: 'CONFIRMED' } }
+          );
+      } catch (err) {
+        console.error('Failed to update InventoryReservation status to CONFIRMED:', err);
+      }
     }
 
     return payment;
@@ -310,30 +361,44 @@ export class PaymentsService {
     }
 
     const totalSubTotal = booking.pricingSummary.subTotal;
-    const discount = booking.pricingSummary.discountAmount || 0;
+    const voucherDiscount = booking.pricingSummary.voucherDiscountTotal || 0;
     const travelFee = booking.pricingSummary.travelFee || 0;
 
     for (const [providerIdStr, pItems] of providerItems.entries()) {
       let providerSubTotal = 0;
+      let providerComboDiscount = 0;
       let hasPhotography = false;
+      let photographySubTotal = 0;
       for (const item of pItems) {
         providerSubTotal += item.unitPrice * item.quantity;
+        providerComboDiscount += item.comboDiscountAmount || 0;
         if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
           hasPhotography = true;
+          photographySubTotal += item.unitPrice * item.quantity;
         }
       }
 
-      // Phân bổ mã giảm giá theo tỷ lệ
-      const providerDiscount = totalSubTotal > 0
-        ? Math.round((providerSubTotal / totalSubTotal) * discount)
+      // Phân bổ mã giảm giá voucher theo tỷ lệ subTotal
+      const providerVoucherDiscount = totalSubTotal > 0
+        ? Math.round((providerSubTotal / totalSubTotal) * voucherDiscount)
         : 0;
+
+      // Tổng giảm giá của Provider này = Combo Discount thực tế của họ + Voucher phân bổ
+      const providerDiscount = providerComboDiscount + providerVoucherDiscount;
 
       // Phân bổ phí đi lại cho nhiếp ảnh gia
       const providerTravelFee = hasPhotography ? travelFee : 0;
 
-      const providerReceivableRaw = providerSubTotal - providerDiscount + providerTravelFee;
-      const platformCommission = Math.round(providerReceivableRaw * 0.1);
-      const providerReceivable = providerReceivableRaw - platformCommission;
+      // Tính số tiền thực tế nền tảng thu được cho dịch vụ này (Với gói chụp ảnh thì chỉ thu cọc 30% giữ chỗ)
+      const platformCollectedRaw = hasPhotography
+        ? Math.round(photographySubTotal * 0.3) - providerDiscount + providerTravelFee
+        : providerSubTotal - providerDiscount + providerTravelFee;
+
+      // Hoa hồng sàn tính trên 10% của tổng tiền dịch vụ của Provider (chưa tính cọc sản phẩm)
+      const platformCommission = Math.round((providerSubTotal - providerDiscount) * 0.1);
+
+      // Số tiền chuyển khoản thực tế sàn trả cho Provider (Tiền thu được - Hoa hồng)
+      const providerReceivable = platformCollectedRaw - platformCommission;
 
       if (providerReceivable > 0) {
         // Kiểm tra đối soát trùng lặp
@@ -397,7 +462,7 @@ export class PaymentsService {
           await this.settlementModel.create({
             bookingId: booking._id,
             providerId: provider._id,
-            grossAmount: providerReceivableRaw,
+            grossAmount: platformCollectedRaw,
             platformCommission,
             providerReceivable,
             commissionCollection: {
@@ -608,5 +673,13 @@ export class PaymentsService {
       refundResult,
       transferResult,
     };
+  }
+
+  async cancelSettlementsForBooking(bookingIdStr: string): Promise<void> {
+    const bookingId = new Types.ObjectId(bookingIdStr);
+    await this.settlementModel.updateMany(
+      { bookingId },
+      { $set: { settlementStatus: SettlementStatus.Cancelled } }
+    );
   }
 }

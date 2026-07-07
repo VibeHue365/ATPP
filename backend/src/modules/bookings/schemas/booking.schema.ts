@@ -36,10 +36,13 @@ export interface BookingPricingSummary {
   subTotal: number;
   depositTotal: number;
   discountAmount: number;
+  comboDiscountTotal?: number;
+  voucherDiscountTotal?: number;
   travelFee: number;
   overtimeFee: number;
   lateFee: number;
   damageFee: number;
+  serviceFee?: number;
   grandTotal: number;
 }
 
@@ -100,10 +103,13 @@ export class Booking {
       subTotal: { type: Number, required: true, min: 0 },
       depositTotal: { type: Number, default: 0, min: 0 },
       discountAmount: { type: Number, default: 0, min: 0 },
+      comboDiscountTotal: { type: Number, default: 0, min: 0 },
+      voucherDiscountTotal: { type: Number, default: 0, min: 0 },
       travelFee: { type: Number, default: 0, min: 0 },
       overtimeFee: { type: Number, default: 0, min: 0 },
       lateFee: { type: Number, default: 0, min: 0 },
       damageFee: { type: Number, default: 0, min: 0 },
+      serviceFee: { type: Number, default: 0, min: 0 },
       grandTotal: { type: Number, required: true, min: 0 },
     },
     required: true,

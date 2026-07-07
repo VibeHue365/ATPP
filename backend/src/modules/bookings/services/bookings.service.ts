@@ -41,6 +41,7 @@ import {
 import { IsString, IsNotEmpty, IsOptional, IsEnum, IsNumber, IsArray, Min } from 'class-validator';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/schemas/notification.schema';
+import { SYSTEM_POLICIES } from '../../../common/config/system-policies.config';
 
 // ─── DTOs (dùng chung với controller) ────────────────────────────────────────
 
@@ -111,6 +112,10 @@ export class CreateBookingDto {
   @IsNumber()
   @IsOptional()
   travelFee?: number;
+
+  @IsNumber()
+  @IsOptional()
+  serviceFee?: number;
 }
 
 /** Dùng cho createProductBooking (thuê áo dài theo ngày/giờ) */
@@ -226,7 +231,7 @@ export class BookingsService implements OnApplicationBootstrap {
   }
 
   async cleanupExpiredPendingBookings(): Promise<void> {
-    const cutoff = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes ago
+    const cutoff = new Date(Date.now() - SYSTEM_POLICIES.BOOKING_HOLD_TIMEOUT_MS);
 
     const expiredBookings = await this.bookingModel.find({
       status: BookingStatus.PendingPayment,
@@ -278,6 +283,197 @@ export class BookingsService implements OnApplicationBootstrap {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
+  // UC-E06: rescheduleBooking — đổi lịch booking (áo dài hoặc chụp ảnh)
+  // Rules:
+  //   1. Booking phải ở trạng thái CONFIRMED hoặc DEPOSIT_PAID
+  //   2. Chỉ được đổi trước giờ bắt đầu ít nhất 24 tiếng
+  //   3. Khung lịch mới phải trống (không trùng reservation khác)
+  // ──────────────────────────────────────────────────────────────────────────
+  async rescheduleBooking(
+    bookingId: string,
+    userId: string,
+    dto: {
+      itemId: string;
+      newRentalFrom?: string;
+      newRentalTo?: string;
+      newShootDate?: string;
+      newShootTimeSlot?: string;
+      reason?: string;
+    },
+  ): Promise<Record<string, any>> {
+    const booking = await this.bookingModel.findById(bookingId);
+    if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
+
+    // Only customer who owns the booking can reschedule
+    if (booking.customerId.toString() !== userId) {
+      throw new BadRequestException('Bạn không có quyền đổi lịch đơn hàng này');
+    }
+
+    // Only allowed in CONFIRMED or DEPOSIT_PAID status
+    const allowedStatuses = [BookingStatus.Confirmed, BookingStatus.DepositPaid];
+    if (!allowedStatuses.includes(booking.status as BookingStatus)) {
+      throw new BadRequestException(
+        `Chỉ có thể đổi lịch khi đơn ở trạng thái Đã xác nhận hoặc Đã cọc. Trạng thái hiện tại: ${booking.status}`,
+      );
+    }
+
+    // Find the booking item to reschedule
+    const bookingItem = await this.bookingItemModel.findOne({
+      _id: new Types.ObjectId(dto.itemId),
+      bookingId: new Types.ObjectId(bookingId),
+    });
+    if (!bookingItem) throw new NotFoundException('Không tìm thấy mục đặt lịch');
+
+    // Must reschedule at least 24h before current start
+    const itemType = (bookingItem as any).itemType;
+    let currentStart: Date | null = null;
+    if (itemType === 'PRODUCT') {
+      currentStart = (bookingItem as any).rentalFrom || null;
+    } else {
+      currentStart = (bookingItem as any).shootDate ? new Date((bookingItem as any).shootDate) : null;
+    }
+
+    if (currentStart) {
+      const hoursDiff = (currentStart.getTime() - Date.now()) / (1000 * 60 * 60);
+      if (hoursDiff < 24) {
+        throw new BadRequestException(
+          'Chỉ có thể đổi lịch trước giờ bắt đầu ít nhất 24 tiếng',
+        );
+      }
+    }
+
+    // Validate new dates
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    if (itemType === 'PRODUCT') {
+      if (!dto.newRentalFrom || !dto.newRentalTo) {
+        throw new BadRequestException('Yêu cầu ngày nhận và ngày trả mới');
+      }
+      if (dto.newRentalFrom < todayStr) {
+        throw new BadRequestException('Ngày nhận mới không thể nằm trong quá khứ');
+      }
+      if (dto.newRentalTo < dto.newRentalFrom) {
+        throw new BadRequestException('Ngày trả phải sau hoặc bằng ngày nhận');
+      }
+
+      // Check for conflicts on the inventory reservation
+      const existingReservation = await this.inventoryReservationModel.findOne({
+        bookingId: new Types.ObjectId(bookingId),
+        bookingItemId: new Types.ObjectId(dto.itemId),
+        status: { $in: [ReservationStatus.Confirmed, ReservationStatus.TempReserved] },
+      } as any);
+
+      if (existingReservation) {
+        // Check if any OTHER reservation conflicts with new dates for same inventory item
+        const newFrom = new Date(dto.newRentalFrom);
+        newFrom.setHours(0, 0, 0, 0);
+        const newTo = new Date(dto.newRentalTo);
+        newTo.setHours(23, 59, 59, 999);
+
+        const conflict = await this.inventoryReservationModel.findOne({
+          inventoryItemId: (existingReservation as any).inventoryItemId,
+          _id: { $ne: (existingReservation as any)._id },
+          status: { $in: [ReservationStatus.Confirmed, ReservationStatus.TempReserved] },
+          $or: [
+            { reservedFrom: { $lte: newTo }, reservedTo: { $gte: newFrom } },
+          ],
+        } as any);
+
+        if (conflict) {
+          throw new BadRequestException(
+            `Sản phẩm đã được đặt lịch trong khoảng thời gian này. Vui lòng chọn ngày khác.`,
+          );
+        }
+
+        // Update the reservation dates
+        await this.inventoryReservationModel.updateOne(
+          { _id: (existingReservation as any)._id } as any,
+          { reservedFrom: newFrom, reservedTo: newTo } as any,
+        );
+      }
+
+      // Update booking item dates
+      await this.bookingItemModel.updateOne(
+        { _id: new Types.ObjectId(dto.itemId) },
+        {
+          rentalFrom: new Date(dto.newRentalFrom),
+          rentalTo: new Date(dto.newRentalTo),
+          startDate: dto.newRentalFrom,
+          endDate: dto.newRentalTo,
+        },
+      );
+
+      // Update or create booking schedule
+      await this.bookingScheduleModel.updateMany(
+        {
+          bookingId: new Types.ObjectId(bookingId),
+          bookingItemId: new Types.ObjectId(dto.itemId),
+          status: BookingScheduleStatus.Scheduled,
+        } as any,
+        { status: BookingScheduleStatus.Rescheduled } as any,
+      );
+
+    } else if (itemType === 'PHOTOGRAPHY_PACKAGE') {
+      if (!dto.newShootDate) {
+        throw new BadRequestException('Yêu cầu ngày chụp mới');
+      }
+      if (dto.newShootDate < todayStr) {
+        throw new BadRequestException('Ngày chụp mới không thể nằm trong quá khứ');
+      }
+
+      // Check photographer availability using existing busy schedules logic
+      const photographerId = (bookingItem as any).photographerId?.toString();
+      if (photographerId) {
+        const busySchedules = await this.getBusySchedulesForProvider(photographerId);
+        const isSlotConflict = dto.newShootTimeSlot &&
+          busySchedules.bookedSlots.some((slot: any) =>
+            slot.date === dto.newShootDate &&
+            slot.timeSlot &&
+            this.isTimeSlotOverlap(slot.timeSlot, dto.newShootTimeSlot!) &&
+            slot.bookingItemId !== dto.itemId,
+          );
+
+        if (isSlotConflict) {
+          throw new BadRequestException(
+            `Thợ ảnh đã có lịch vào ngày ${dto.newShootDate} khung giờ ${dto.newShootTimeSlot}`,
+          );
+        }
+      }
+
+      // Update booking item
+      await this.bookingItemModel.updateOne(
+        { _id: new Types.ObjectId(dto.itemId) },
+        {
+          shootDate: dto.newShootDate,
+          ...(dto.newShootTimeSlot ? { shootTimeSlot: dto.newShootTimeSlot } : {}),
+        },
+      );
+
+      await this.bookingScheduleModel.updateMany(
+        {
+          bookingId: new Types.ObjectId(bookingId),
+          bookingItemId: new Types.ObjectId(dto.itemId),
+          status: BookingScheduleStatus.Scheduled,
+        } as any,
+        { status: BookingScheduleStatus.Rescheduled } as any,
+      );
+    }
+
+    // Send notification (best effort)
+    try {
+      await this.notificationsService.createNotification(
+        booking.customerId.toString(),
+        'Đổi lịch thành công',
+        `Đơn hàng ${booking.bookingCode} đã được đổi lịch thành công.`,
+        NotificationType.Booking,
+        { bookingId: booking._id },
+      );
+    } catch (_e) { /* ignore notification error */ }
+
+    return { message: 'Đổi lịch thành công', bookingId };
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
   // 1. createBooking — tổng hợp nhiều items, hỗ trợ promo code
   // ──────────────────────────────────────────────────────────────────────────
   async createBooking(
@@ -293,6 +489,23 @@ export class BookingsService implements OnApplicationBootstrap {
     const providerIdsSet = new Set<string>();
     const reservationsCreated: any[] = [];
     let booking: any = null;
+
+    // Chặn đặt lịch trong quá khứ ở backend
+    const todayStr = new Date().toISOString().split('T')[0];
+    for (const item of dto.items) {
+      if (item.rentalFrom) {
+        const itemDateStr = new Date(item.rentalFrom).toISOString().split('T')[0];
+        if (itemDateStr < todayStr) {
+          throw new BadRequestException('Ngày bắt đầu thuê áo dài không thể nằm trong quá khứ.');
+        }
+      }
+      if (item.shootDate) {
+        const itemDateStr = new Date(item.shootDate).toISOString().split('T')[0];
+        if (itemDateStr < todayStr) {
+          throw new BadRequestException('Ngày đặt lịch chụp ảnh không thể nằm trong quá khứ.');
+        }
+      }
+    }
 
     try {
       for (const item of dto.items) {
@@ -337,7 +550,7 @@ export class BookingsService implements OnApplicationBootstrap {
               const end = new Date(item.rentalTo);
               if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
                 const diffTime = Math.abs(end.getTime() - start.getTime());
-                durationDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+                durationDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
               }
             }
             unitPrice = product.basePrice * durationDays;
@@ -351,6 +564,20 @@ export class BookingsService implements OnApplicationBootstrap {
 
             const sizeVal = item.selectedSize ? item.selectedSize.toUpperCase() : 'M';
             const colorVal = this.normalizeColor(item.selectedColor);
+
+            // Validate that product supports the requested size and color
+            if (product.sizes && product.sizes.length > 0) {
+              const isSizeSupported = product.sizes.some(s => s.trim().toUpperCase() === sizeVal);
+              if (!isSizeSupported) {
+                throw new BadRequestException(`Kích cỡ ${item.selectedSize || 'M'} không khả dụng cho sản phẩm ${product.name}. Các kích cỡ khả dụng: ${product.sizes.join(', ')}`);
+              }
+            }
+            if (product.colors && product.colors.length > 0) {
+              const isColorSupported = product.colors.some(c => this.normalizeColor(c) === colorVal);
+              if (!isColorSupported) {
+                throw new BadRequestException(`Màu sắc ${item.selectedColor || 'WHITE'} không khả dụng cho sản phẩm ${product.name}. Các màu khả dụng: ${product.colors.join(', ')}`);
+              }
+            }
 
             let inventoryItems = await this.inventoryItemModel.find({
               productId: new Types.ObjectId(item.productId),
@@ -459,10 +686,11 @@ export class BookingsService implements OnApplicationBootstrap {
           );
         }
 
+        let providerInfo = null;
         if (providerId) {
           providerIdsSet.add(providerId.toString());
-          const provider = await this.providerModel.findById(providerId);
-          if (!provider || provider.status !== 'ACTIVE') {
+          providerInfo = await this.providerModel.findById(providerId);
+          if (!providerInfo || providerInfo.status !== 'ACTIVE') {
             throw new BadRequestException(
               'Cửa hàng đối tác hoặc nhiếp ảnh gia hiện không hoạt động hoặc đang bị tạm đình chỉ.',
             );
@@ -471,6 +699,11 @@ export class BookingsService implements OnApplicationBootstrap {
 
         const quantity = item.quantity || 1;
         subTotal += unitPrice * quantity;
+
+        const comboDiscountPercent = (dto.bookingType === BookingType.Combo && providerInfo)
+          ? (providerInfo.comboDiscountPercent !== undefined ? providerInfo.comboDiscountPercent : 10)
+          : 0;
+        const comboDiscountAmount = Math.round(unitPrice * quantity * (comboDiscountPercent / 100));
 
         itemDetails.push({
           providerId,
@@ -493,6 +726,8 @@ export class BookingsService implements OnApplicationBootstrap {
           selectedSize: item.selectedSize || null,
           selectedColor: item.selectedColor || null,
           rentalType: (item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY') as 'DAILY' | 'HOURLY',
+          comboDiscountPercent,
+          comboDiscountAmount,
         });
       }
 
@@ -536,31 +771,83 @@ export class BookingsService implements OnApplicationBootstrap {
         }
       }
 
+      // Kiểm tra chéo (Cross-validation) điều kiện Combo ở Backend
+      if (dto.bookingType === BookingType.Combo) {
+        const prodItem = itemDetails.find(item => item.itemType === BookingItemType.Product);
+        const photoItem = itemDetails.find(item => item.itemType === BookingItemType.PhotographyPackage);
+
+        if (!prodItem || !photoItem) {
+          throw new BadRequestException('Đơn hàng Combo bắt buộc phải có cả sản phẩm áo dài và gói chụp ảnh.');
+        }
+
+        const prodProvider = await this.providerModel.findById(prodItem.providerId);
+        const photoProvider = await this.providerModel.findById(photoItem.providerId);
+        if (prodProvider && photoProvider) {
+          const prodCity = prodProvider.address?.city || 'Thừa Thiên Huế';
+          const photoCity = photoProvider.address?.city || 'Thừa Thiên Huế';
+          
+          const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^(thanh pho|tp\.?|tinh)\s+/i, '').replace(/\s+/g, ' ').trim();
+          if (!normalize(prodCity).includes(normalize(photoCity)) && !normalize(photoCity).includes(normalize(prodCity))) {
+            throw new BadRequestException(`Không thể đặt Combo lệch khu vực địa lý: Áo dài tại ${prodCity} nhưng thợ ảnh tại ${photoCity}.`);
+          }
+        }
+
+        const rentalFrom = prodItem.rentalFrom;
+        const rentalTo = prodItem.rentalTo;
+        const shootDate = photoItem.shootDate;
+
+        if (rentalFrom && rentalTo && shootDate) {
+          const start = new Date(rentalFrom);
+          start.setHours(0,0,0,0);
+          const end = new Date(rentalTo);
+          end.setHours(23,59,59,999);
+          const shoot = new Date(shootDate);
+
+          if (shoot < start || shoot > end) {
+            throw new BadRequestException('Ngày chụp ảnh phải nằm trong khoảng thời gian thuê Áo dài.');
+          }
+
+          if (prodItem.rentalType === 'HOURLY' && prodItem.shootTimeSlot && photoItem.shootTimeSlot) {
+            const [prodStartStr, prodEndStr] = prodItem.shootTimeSlot.split('-').map(s => s.trim());
+            const [photoStartStr, photoEndStr] = photoItem.shootTimeSlot.split('-').map(s => s.trim());
+            
+            if (prodStartStr && prodEndStr && photoStartStr && photoEndStr) {
+              if (photoStartStr < prodStartStr || photoEndStr > prodEndStr) {
+                throw new BadRequestException(`Khung giờ chụp (${photoItem.shootTimeSlot}) phải nằm trong khung giờ thuê Áo dài (${prodItem.shootTimeSlot}).`);
+              }
+            }
+          }
+        }
+      }
+
       const travelFee = dto.travelFee || 0;
-      let discountAmount = 0;
+      const comboDiscountTotal = itemDetails.reduce((sum, item) => sum + (item.comboDiscountAmount || 0), 0);
+      let voucherDiscountTotal = 0;
       let promotionId: Types.ObjectId | null = null;
+
+      const subTotalAfterCombo = Math.max(subTotal - comboDiscountTotal, 0);
 
       if (dto.promoCode) {
         try {
           const promotion = await this.promotionsService.validatePromotion(
             dto.promoCode,
-            subTotal,
+            subTotalAfterCombo,
             Array.from(providerIdsSet),
           );
           promotionId = promotion._id;
 
           if (promotion.discountType === DiscountType.Percentage) {
-            discountAmount = Math.round(
-              (subTotal * promotion.discountValue) / 100,
+            voucherDiscountTotal = Math.round(
+              (subTotalAfterCombo * promotion.discountValue) / 100,
             );
             if (
               promotion.maxDiscountAmount &&
-              discountAmount > promotion.maxDiscountAmount
+              voucherDiscountTotal > promotion.maxDiscountAmount
             ) {
-              discountAmount = promotion.maxDiscountAmount;
+              voucherDiscountTotal = promotion.maxDiscountAmount;
             }
           } else {
-            discountAmount = promotion.discountValue;
+            voucherDiscountTotal = promotion.discountValue;
           }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -568,10 +855,13 @@ export class BookingsService implements OnApplicationBootstrap {
         }
       }
 
+      const discountAmount = comboDiscountTotal + voucherDiscountTotal;
+
       let depositTotal = 0;
       for (const item of itemDetails) {
         depositTotal += (item.depositAmount || 0) * (item.quantity || 1);
       }
+      const serviceFee = 0;
       const grandTotal = Math.max(subTotal - discountAmount + travelFee, 0) + depositTotal;
 
       booking = (await this.bookingModel.create({
@@ -586,10 +876,13 @@ export class BookingsService implements OnApplicationBootstrap {
           subTotal,
           depositTotal,
           discountAmount,
+          comboDiscountTotal,
+          voucherDiscountTotal,
           travelFee,
           overtimeFee: 0,
           lateFee: 0,
           damageFee: 0,
+          serviceFee,
           grandTotal,
         },
         paymentSummary: {
@@ -734,6 +1027,13 @@ export class BookingsService implements OnApplicationBootstrap {
       throw new BadRequestException('Định dạng ngày bắt đầu không hợp lệ');
     }
 
+    // Chặn đặt lịch trong quá khứ ở backend
+    const todayStr = new Date().toISOString().split('T')[0];
+    const startDateStr = start.toISOString().split('T')[0];
+    if (startDateStr < todayStr) {
+      throw new BadRequestException('Ngày bắt đầu đặt lịch thuê không thể nằm trong quá khứ.');
+    }
+
     let subTotal = 0;
     let unitPrice = product.basePrice;
     let rentalFrom: Date | null = null;
@@ -785,8 +1085,7 @@ export class BookingsService implements OnApplicationBootstrap {
       }
 
       const durationDays =
-        Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) ||
-        1;
+        Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
       unitPrice = product.basePrice;
       subTotal = unitPrice * durationDays * quantity;
@@ -856,6 +1155,20 @@ export class BookingsService implements OnApplicationBootstrap {
     try {
       const sizeVal = size.toUpperCase();
       const colorVal = this.normalizeColor(color);
+
+      // Validate that product supports the requested size and color
+      if (product.sizes && product.sizes.length > 0) {
+        const isSizeSupported = product.sizes.some(s => s.trim().toUpperCase() === sizeVal);
+        if (!isSizeSupported) {
+          throw new BadRequestException(`Kích cỡ ${size} không khả dụng cho sản phẩm này. Các kích cỡ khả dụng: ${product.sizes.join(', ')}`);
+        }
+      }
+      if (product.colors && product.colors.length > 0) {
+        const isColorSupported = product.colors.some(c => this.normalizeColor(c) === colorVal);
+        if (!isColorSupported) {
+          throw new BadRequestException(`Màu sắc ${color} không khả dụng cho sản phẩm này. Các màu khả dụng: ${product.colors.join(', ')}`);
+        }
+      }
 
       let inventoryItems = await this.inventoryItemModel.find({
         productId: product._id,
@@ -1081,6 +1394,13 @@ export class BookingsService implements OnApplicationBootstrap {
       throw new BadRequestException('Định dạng ngày chụp không hợp lệ');
     }
 
+    // Chặn đặt lịch chụp ảnh trong quá khứ ở backend
+    const todayStr = new Date().toISOString().split('T')[0];
+    const shootDateStr = date.toISOString().split('T')[0];
+    if (shootDateStr < todayStr) {
+      throw new BadRequestException('Ngày đặt lịch chụp ảnh không thể nằm trong quá khứ.');
+    }
+
     // Kiểm tra trùng lịch chụp (chỉ đếm active bookings)
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
@@ -1089,7 +1409,14 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const activeBookings = await this.bookingModel.find({
       providerIds: pkg.providerId,
-      status: { $ne: BookingStatus.Cancelled },
+      status: { 
+        $nin: [
+          BookingStatus.Cancelled, 
+          BookingStatus.Completed, 
+          BookingStatus.Returned,
+          BookingStatus.Refunded
+        ] 
+      },
     }).select('_id');
     const activeBookingIds = activeBookings.map((b) => b._id);
 
@@ -1109,7 +1436,7 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const unitPrice = pkg.price;
     const subTotal = pkg.price;
-    const depositTotal = 0;
+    const depositTotal = Math.round(pkg.price * 0.3);
     const grandTotal = pkg.price;
 
     let priceVersion = await this.priceVersionModel
@@ -1285,20 +1612,41 @@ export class BookingsService implements OnApplicationBootstrap {
     return results;
   }
 
-  async getBookingById(bookingIdStr: string): Promise<Record<string, any>> {
+  async getBookingById(bookingIdStr: string, userId?: string, roles?: string[]): Promise<Record<string, any>> {
     const bookingId = new Types.ObjectId(bookingIdStr);
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) throw new NotFoundException('Booking not found');
+
+    if (userId) {
+      const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
+      const isCustomer = booking.customerId.toString() === userId;
+      
+      const userProviders = await this.providerModel.find({ userId: new Types.ObjectId(userId) });
+      const userProviderIds = userProviders.map(p => p._id.toString());
+      const isProvider = booking.providerIds.some(id => userProviderIds.includes(id.toString()));
+
+      if (!isAdmin && !isCustomer && !isProvider) {
+        throw new ForbiddenException('Bạn không có quyền xem thông tin đơn hàng này.');
+      }
+    }
 
     const items = await this.bookingItemModel.find({ bookingId });
     return { ...booking.toObject(), items };
   }
 
   /** Hoàn thành đơn → trigger đối soát chia tiền (PaymentsService.settleBooking) */
-  async completeBooking(bookingIdStr: string): Promise<BookingDocument> {
+  async completeBooking(bookingIdStr: string, userId?: string, roles?: string[]): Promise<BookingDocument> {
     const bookingId = new Types.ObjectId(bookingIdStr);
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) throw new NotFoundException('Booking not found');
+
+    if (userId) {
+      const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
+      const isCustomer = booking.customerId.toString() === userId;
+      if (!isAdmin && !isCustomer) {
+        throw new ForbiddenException('Chỉ khách hàng hoặc Admin mới có quyền xác nhận hoàn thành đơn hàng.');
+      }
+    }
 
     if (booking.status === BookingStatus.Completed) return booking;
 
@@ -1333,26 +1681,68 @@ export class BookingsService implements OnApplicationBootstrap {
     bookingIdStr: string,
     newStatus: string,
     note?: string,
+    userId?: string,
+    roles?: string[],
   ): Promise<BookingDocument> {
     const booking = await this.bookingModel.findById(bookingIdStr);
     if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
 
+    if (userId) {
+      const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
+      
+      const userProviders = await this.providerModel.find({ userId: new Types.ObjectId(userId) });
+      const userProviderIds = userProviders.map(p => p._id.toString());
+      const isProvider = booking.providerIds.some(id => userProviderIds.includes(id.toString()));
+
+      if (!isAdmin && !isProvider) {
+        throw new ForbiddenException('Chỉ nhà cung cấp hoặc Admin mới có quyền cập nhật trạng thái đơn hàng này.');
+      }
+    }
+
     // Nếu chuyển sang COMPLETED → dùng completeBooking để trigger settlement
     if (newStatus === BookingStatus.Completed) {
-      return this.completeBooking(bookingIdStr);
+      return this.completeBooking(bookingIdStr, userId, roles);
     }
 
     // Nếu chuyển sang CANCELLED → dùng cancelBooking để trigger refund
     if (newStatus === BookingStatus.Cancelled) {
-      return this.cancelBooking(bookingIdStr, 'provider', [], note || 'Provider hủy đơn');
+      return this.cancelBooking(bookingIdStr, userId || 'provider', roles || [], note || 'Provider hủy đơn');
     }
 
-    const validStatuses = Object.values(BookingStatus);
-    if (!validStatuses.includes(newStatus as BookingStatus)) {
-      throw new BadRequestException(`Trạng thái không hợp lệ: ${newStatus}`);
+    const currentStatus = booking.status;
+    const nextStatus = newStatus as BookingStatus;
+
+    if (currentStatus === nextStatus) return booking;
+
+    // Không cho phép thay đổi khi đơn hàng đã ở trạng thái cuối cùng
+    const finalStatuses = [BookingStatus.Completed, BookingStatus.Cancelled, BookingStatus.Refunded];
+    if (finalStatuses.includes(currentStatus)) {
+      throw new BadRequestException(`Không thể thay đổi trạng thái đơn hàng khi đã ở trạng thái cuối: ${currentStatus}`);
     }
 
-    booking.status = newStatus as BookingStatus;
+    // Định nghĩa các chuyển đổi trạng thái hợp lệ
+    const allowedTransitions: Record<BookingStatus, BookingStatus[]> = {
+      [BookingStatus.Draft]: [BookingStatus.PendingPayment, BookingStatus.Cancelled],
+      [BookingStatus.PendingPayment]: [BookingStatus.Confirmed, BookingStatus.DepositPaid, BookingStatus.Cancelled],
+      [BookingStatus.DepositPaid]: [BookingStatus.Confirmed, BookingStatus.PickupPending, BookingStatus.Cancelled],
+      [BookingStatus.Confirmed]: [BookingStatus.PickupPending, BookingStatus.Cancelled],
+      [BookingStatus.PickupPending]: [BookingStatus.PickedUp, BookingStatus.Cancelled],
+      [BookingStatus.PickedUp]: [BookingStatus.ReturnPending, BookingStatus.Disputed],
+      [BookingStatus.ReturnPending]: [BookingStatus.Returned, BookingStatus.Disputed],
+      [BookingStatus.Returned]: [BookingStatus.Completed, BookingStatus.Disputed],
+      [BookingStatus.Disputed]: [BookingStatus.Completed, BookingStatus.Refunded, BookingStatus.PartiallyRefunded],
+      [BookingStatus.Completed]: [],
+      [BookingStatus.Cancelled]: [],
+      [BookingStatus.Refunded]: [],
+      [BookingStatus.PartiallyRefunded]: [BookingStatus.Completed],
+    };
+
+    const allowed = allowedTransitions[currentStatus] || [];
+    if (!allowed.includes(nextStatus)) {
+      throw new BadRequestException(`Không được phép chuyển trạng thái đơn hàng từ ${currentStatus} sang ${nextStatus}`);
+    }
+
+    booking.status = nextStatus;
     booking.statusTimeline.push({
       status: newStatus as BookingStatus,
       changedAt: new Date(),
@@ -1406,7 +1796,12 @@ export class BookingsService implements OnApplicationBootstrap {
 
     // Check authorization: customer, provider or admin
     const isCustomer = booking.customerId.toString() === userId;
-    const isProvider = booking.providerIds.map(id => id.toString()).includes(userId);
+    
+    // Tìm các provider ứng với userId này để so sánh Provider ID thật sự
+    const userProviders = userId ? await this.providerModel.find({ userId: new Types.ObjectId(userId) }) : [];
+    const userProviderIds = userProviders.map(p => p._id.toString());
+    const isProvider = booking.providerIds.some(id => userProviderIds.includes(id.toString()));
+    
     const isAdmin = roles.includes('ADMIN') || roles.includes('admin');
 
     // Nếu không truyền userId (trường hợp HEAD cũ hoặc admin tự kích hoạt), cho phép đi tiếp
@@ -1476,35 +1871,35 @@ export class BookingsService implements OnApplicationBootstrap {
         const diffInMs = earliestStartTime.getTime() - now.getTime();
         const diffInHours = diffInMs / (1000 * 60 * 60);
 
-        if (diffInHours >= 72) {
+        if (diffInHours >= SYSTEM_POLICIES.FREE_CANCEL_LIMIT_HOURS) {
           isFreeCancel = true;
         } else {
           // Kiểm tra xem đơn hàng có được tạo trong vòng 72 giờ trước giờ bắt đầu hay không (last-minute booking)
           const createdAtDate = new Date((booking as any).createdAt || now);
           const startMinusCreatedHours = (earliestStartTime.getTime() - createdAtDate.getTime()) / (1000 * 60 * 60);
-          if (startMinusCreatedHours < 72) {
+          if (startMinusCreatedHours < SYSTEM_POLICIES.FREE_CANCEL_LIMIT_HOURS) {
             const minsSinceCreation = (now.getTime() - createdAtDate.getTime()) / (1000 * 60);
             if (diffInHours >= 2) {
               // Hạn ân hạn là 60 phút
-              if (minsSinceCreation <= 60) {
+              if (minsSinceCreation <= SYSTEM_POLICIES.LAST_MIN_GRACE_MINUTES) {
                 isFreeCancel = true;
               } else {
                 isFreeCancel = false;
-                penaltyReason = `Đã quá thời gian ân hạn 60 phút đối với đơn hàng đặt sát giờ (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
+                penaltyReason = `Đã quá thời gian ân hạn ${SYSTEM_POLICIES.LAST_MIN_GRACE_MINUTES} phút đối với đơn hàng đặt sát giờ (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
               }
             } else {
               // Siêu gấp: Hạn ân hạn là 5 phút
-              if (minsSinceCreation <= 5) {
+              if (minsSinceCreation <= SYSTEM_POLICIES.URGENT_GRACE_MINUTES) {
                 isFreeCancel = true;
               } else {
                 isFreeCancel = false;
-                penaltyReason = `Đã quá thời gian ân hạn 5 phút đối với đơn hàng đặt siêu gấp (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
+                penaltyReason = `Đã quá thời gian ân hạn ${SYSTEM_POLICIES.URGENT_GRACE_MINUTES} phút đối với đơn hàng đặt siêu gấp (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
               }
             }
           } else {
             // Hủy trễ bình thường
             isFreeCancel = false;
-            penaltyReason = 'Hủy đơn trễ (dưới 72 giờ trước giờ hẹn).';
+            penaltyReason = `Hủy đơn trễ (dưới ${SYSTEM_POLICIES.FREE_CANCEL_LIMIT_HOURS} giờ trước giờ hẹn).`;
           }
         }
       }
@@ -1529,9 +1924,9 @@ export class BookingsService implements OnApplicationBootstrap {
       const items = await this.bookingItemModel.find({ bookingId: booking._id });
       for (const item of items) {
         if (item.itemType === 'PRODUCT') {
-          penaltyAmount += item.unitPrice * item.quantity; // 100% tiền thuê
+          penaltyAmount += Math.round(item.unitPrice * SYSTEM_POLICIES.PRODUCT_CANCEL_PENALTY_RATE) * item.quantity;
         } else {
-          penaltyAmount += Math.round(item.unitPrice * 0.3) * item.quantity; // 30% tiền chụp
+          penaltyAmount += Math.round(item.unitPrice * SYSTEM_POLICIES.PHOTOGRAPHY_CANCEL_PENALTY_RATE) * item.quantity;
         }
       }
 
@@ -1550,9 +1945,9 @@ export class BookingsService implements OnApplicationBootstrap {
         let providerPenalty = 0;
         for (const item of pItems) {
           if (item.itemType === 'PRODUCT') {
-            providerPenalty += item.unitPrice * item.quantity;
+            providerPenalty += Math.round(item.unitPrice * SYSTEM_POLICIES.PRODUCT_CANCEL_PENALTY_RATE) * item.quantity;
           } else {
-            providerPenalty += Math.round(item.unitPrice * 0.3) * item.quantity;
+            providerPenalty += Math.round(item.unitPrice * SYSTEM_POLICIES.PHOTOGRAPHY_CANCEL_PENALTY_RATE) * item.quantity;
           }
         }
 
@@ -1627,6 +2022,12 @@ export class BookingsService implements OnApplicationBootstrap {
       { status: BookingScheduleStatus.Cancelled }
     );
 
+    // Giải phóng các Reservation trong kho để tránh khóa lịch vĩnh viễn
+    await this.inventoryReservationModel.updateMany(
+      { bookingId: booking._id },
+      { $set: { status: ReservationStatus.Cancelled } }
+    );
+
     // Kích hoạt hoàn tiền cọc / hoàn tiền dịch vụ cho khách hàng
     if (refundAmount > 0) {
       try {
@@ -1634,6 +2035,13 @@ export class BookingsService implements OnApplicationBootstrap {
       } catch (err) {
         console.error('PaymentsService.refundDeposit failed during cancelBooking:', err);
       }
+    }
+
+    // Hủy các đối soát (settlements) liên quan nếu có
+    try {
+      await this.paymentsService.cancelSettlementsForBooking(booking._id.toString());
+    } catch (err) {
+      console.error('PaymentsService.cancelSettlementsForBooking failed during cancelBooking:', err);
     }
 
     // Trả về định dạng phù hợp cho cả 2 luồng gọi
@@ -1670,7 +2078,14 @@ export class BookingsService implements OnApplicationBootstrap {
 
   async getBusySchedulesForProduct(productId: string): Promise<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }> {
     const activeBookings = await this.bookingModel.find({
-      status: { $nin: [BookingStatus.Cancelled, BookingStatus.PendingPayment] }
+      status: { 
+        $nin: [
+          BookingStatus.Cancelled, 
+          BookingStatus.Completed, 
+          BookingStatus.Returned,
+          BookingStatus.Refunded
+        ] 
+      }
     }).select('_id');
     const activeBookingIds = activeBookings.map(b => b._id);
 
@@ -1710,7 +2125,14 @@ export class BookingsService implements OnApplicationBootstrap {
 
   async getBusySchedulesForProvider(providerId: string): Promise<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }> {
     const activeBookings = await this.bookingModel.find({
-      status: { $nin: [BookingStatus.Cancelled, BookingStatus.PendingPayment] }
+      status: { 
+        $nin: [
+          BookingStatus.Cancelled, 
+          BookingStatus.Completed, 
+          BookingStatus.Returned,
+          BookingStatus.Refunded
+        ] 
+      }
     }).select('_id');
     const activeBookingIds = activeBookings.map(b => b._id);
 

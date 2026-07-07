@@ -108,6 +108,15 @@ export class ReviewsController {
     return this.reviewsService.getReviewsForProvider(providerId);
   }
 
+  @Get('my-status/:productId')
+  @UseGuards(JwtAuthGuard)
+  async getMyReviewStatus(
+    @CurrentUser() user: AuthUser,
+    @Param('productId') productId: string,
+  ) {
+    return this.reviewsService.getMyReviewStatus(user.sub, productId);
+  }
+
   @Get('item/:itemId')
   async getByItem(@Param('itemId') itemId: string) {
     return this.reviewsService.getReviewsForItem(itemId);

@@ -55,6 +55,12 @@ export class UpdateProviderProfileDto {
     cancellationPolicy?: string | null;
     rentalPolicy?: string | null;
   };
+
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  comboDiscountPercent?: number;
 }
 
 export class AddPortfolioImageDto {

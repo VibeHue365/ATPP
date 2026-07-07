@@ -97,6 +97,17 @@ export const ProductDetailPage: React.FC = () => {
   const [realReviews, setRealReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState<boolean>(true);
 
+  // Review permission & filter states
+  const [reviewStatus, setReviewStatus] = useState<{
+    canReview: boolean;
+    hasCompletedBooking: boolean;
+    alreadyReviewed: boolean;
+    bookingId?: string;
+    bookingItemId?: string;
+  } | null>(null);
+  const [reviewSortOrder, setReviewSortOrder] = useState<'newest' | 'highest' | 'lowest'>('newest');
+  const [reviewFilterHasImage, setReviewFilterHasImage] = useState<boolean>(false);
+
   // Write Review Modal States
   const [isWriteReviewOpen, setIsWriteReviewOpen] = useState<boolean>(false);
   const [writeRating, setWriteRating] = useState<number>(5);
@@ -104,6 +115,7 @@ export const ProductDetailPage: React.FC = () => {
   const [writeImages, setWriteImages] = useState<string[]>([]);
   const [reviewBookingDetails, setReviewBookingDetails] = useState<any>(null);
   const [submittingReview, setSubmittingReview] = useState<boolean>(false);
+  const [checkingReviewStatus, setCheckingReviewStatus] = useState<boolean>(false);
 
   const fetchRealReviews = async () => {
     if (!id) return;
@@ -118,9 +130,27 @@ export const ProductDetailPage: React.FC = () => {
     }
   };
 
+  const fetchReviewStatus = async () => {
+    if (!id || !isAuthenticated) {
+      setReviewStatus(null);
+      return;
+    }
+    try {
+      const res: any = await httpClient.get(`/reviews/my-status/${id}`);
+      setReviewStatus(res);
+    } catch (e) {
+      // Nếu chưa đăng nhập hoặc lỗi, không hiển thị trạng thái
+      setReviewStatus(null);
+    }
+  };
+
   useEffect(() => {
     fetchRealReviews();
   }, [id]);
+
+  useEffect(() => {
+    fetchReviewStatus();
+  }, [id, isAuthenticated]);
 
   const reviewStats = React.useMemo(() => {
     const totalReviews = realReviews.length;
@@ -157,6 +187,22 @@ export const ProductDetailPage: React.FC = () => {
     };
   }, [realReviews, product]);
 
+  // Sorted + filtered reviews
+  const displayedReviews = React.useMemo(() => {
+    let filtered = [...realReviews];
+    if (reviewFilterHasImage) {
+      filtered = filtered.filter((r) => r.images && r.images.length > 0);
+    }
+    if (reviewSortOrder === 'newest') {
+      filtered.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    } else if (reviewSortOrder === 'highest') {
+      filtered.sort((a, b) => b.rating - a.rating);
+    } else if (reviewSortOrder === 'lowest') {
+      filtered.sort((a, b) => a.rating - b.rating);
+    }
+    return filtered;
+  }, [realReviews, reviewSortOrder, reviewFilterHasImage]);
+
   const handleReportReview = async (reviewId: string) => {
     try {
       await httpClient.post(`/reviews/${reviewId}/report`, { reason: 'Spam hoặc không phù hợp' });
@@ -168,115 +214,106 @@ export const ProductDetailPage: React.FC = () => {
 
   const handleWriteReviewClick = async () => {
     if (!isAuthenticated) {
-      toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
+      toast.error('Vui lòng đăng nhập để viết đánh giá.');
       navigate(ROUTES.LOGIN);
       return;
     }
 
-    try {
-      const bookingsList: any = await httpClient.get('/api/bookings');
-      
-      const completedBooking = bookingsList.find((b: any) => 
-        b.status === 'COMPLETED' && 
-        b.items?.some((item: any) => {
-          const prodId = typeof item.productId === 'object' && item.productId !== null
-            ? item.productId._id
-            : item.productId;
-          return prodId === id;
-        })
-      );
-
-      if (completedBooking) {
-        const item = completedBooking.items.find((i: any) => {
-          const prodId = typeof i.productId === 'object' && i.productId !== null
-            ? i.productId._id
-            : i.productId;
-          return prodId === id;
-        });
-        setReviewBookingDetails({
-          bookingId: completedBooking._id,
-          bookingItemId: item._id,
-        });
-        setIsWriteReviewOpen(true);
-      } else {
-        const result = await Swal.fire({
+    // Nếu đã có reviewStatus từ cache, dùng ngay
+    if (reviewStatus) {
+      if (reviewStatus.alreadyReviewed) {
+        toast.success('Bạn đã gửi đánh giá cho sản phẩm này rồi. Cảm ơn bạn!');
+        return;
+      }
+      if (!reviewStatus.hasCompletedBooking) {
+        await Swal.fire({
           title: 'Chưa có đơn thuê hoàn thành',
-          text: 'Bạn cần hoàn thành một đơn thuê trang phục này trước khi viết đánh giá. Để chạy thử nghiệm và kiểm thử nhanh, hệ thống có thể tạo nhanh một Đơn thuê giả lập trạng thái "Hoàn thành" cho bạn ngay lập tức!',
+          html: `
+            <div style="text-align:left;font-size:14px;line-height:1.6;color:#4B4540">
+              <p>Để viết đánh giá, bạn cần hoàn thành ít nhất <strong>01 đơn thuê</strong> sản phẩm này.</p>
+              <br/>
+              <p>📌 <strong>Quy trình:</strong> Đặt lịch → Thanh toán → Nhà cung cấp xác nhận → Nhận đồ → Trả đồ → Hoàn thành → Viết đánh giá</p>
+            </div>`,
           icon: 'info',
-          showCancelButton: true,
           confirmButtonColor: 'var(--color-primary-dark)',
-          cancelButtonColor: '#9CA3AF',
-          confirmButtonText: 'Tạo đơn & Đánh giá ngay',
-          cancelButtonText: 'Hủy',
+          confirmButtonText: 'Đặt lịch ngay',
+          showCancelButton: true,
+          cancelButtonText: 'Đóng',
           background: 'white',
-          customClass: {
-            popup: 'font-body',
+        }).then((res) => {
+          if (res.isConfirmed) {
+            // Scroll lên phần đặt lịch
+            document.getElementById('booking-section')?.scrollIntoView({ behavior: 'smooth' });
           }
         });
+        return;
+      }
+      if (reviewStatus.canReview && reviewStatus.bookingId && reviewStatus.bookingItemId) {
+        setReviewBookingDetails({
+          bookingId: reviewStatus.bookingId,
+          bookingItemId: reviewStatus.bookingItemId,
+        });
+        setIsWriteReviewOpen(true);
+        return;
+      }
+    }
 
-        if (result.isConfirmed) {
-          Swal.fire({
-            title: 'Đang khởi tạo...',
-            text: 'Vui lòng chờ trong giây lát',
-            allowOutsideClick: false,
-            didOpen: () => {
-              Swal.showLoading();
-            }
-          });
+    // Fallback: Gọi API check lại nếu chưa có reviewStatus
+    setCheckingReviewStatus(true);
+    try {
+      const status: any = await httpClient.get(`/reviews/my-status/${id}`);
+      setReviewStatus(status);
 
-          const tomorrow = new Date();
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          const nextDay = new Date();
-          nextDay.setDate(nextDay.getDate() + 3);
+      if (status.alreadyReviewed) {
+        toast.success('Bạn đã gửi đánh giá cho sản phẩm này rồi!');
+        return;
+      }
 
-          const sizeVal = selectedSize || product?.sizes?.[0] || 'M';
-          const colorVal = selectedColor || product?.colors?.[0] || 'RED';
+      if (!status.hasCompletedBooking) {
+        await Swal.fire({
+          title: 'Chưa có đơn thuê hoàn thành',
+          html: `
+            <div style="text-align:left;font-size:14px;line-height:1.6;color:#4B4540">
+              <p>Để viết đánh giá, bạn cần hoàn thành ít nhất <strong>01 đơn thuê</strong> sản phẩm này.</p>
+              <br/>
+              <p>📌 <strong>Quy trình:</strong> Đặt lịch → Thanh toán → Nhà cung cấp xác nhận → Nhận đồ → Trả đồ → Hoàn thành → Viết đánh giá</p>
+            </div>`,
+          icon: 'info',
+          confirmButtonColor: 'var(--color-primary-dark)',
+          confirmButtonText: 'Đặt lịch ngay',
+          showCancelButton: true,
+          cancelButtonText: 'Đóng',
+          background: 'white',
+        }).then((res) => {
+          if (res.isConfirmed) {
+            document.getElementById('booking-section')?.scrollIntoView({ behavior: 'smooth' });
+          }
+        });
+        return;
+      }
 
-          const createPayload = {
-            itemType: 'PRODUCT' as const,
-            productId: product?._id,
-            name: product?.name,
-            image: product?.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
-            basePrice: product?.basePrice || 0,
-            depositAmount: product?.depositAmount || 0,
-            size: sizeVal,
-            color: colorVal,
-            rentalType: 'DAILY',
-            startDate: tomorrow.toISOString().split('T')[0],
-            endDate: nextDay.toISOString().split('T')[0],
-            providerCity: product?.providerId?.address?.city || 'Thừa Thiên Huế',
-            providerAddress: product?.providerId?.address?.addressLine || '',
-            quantity: 1,
-          };
-
-          const bookingRes: any = await httpClient.post('/api/bookings/product', createPayload);
-          const bookingId = bookingRes._id;
-
-          await httpClient.post(`/api/bookings/${bookingId}/complete`);
-
-          // Fetch full booking details to get populated items
-          const fullBooking: any = await httpClient.get(`/api/bookings/${bookingId}`);
-          const itemId = fullBooking.items?.[0]?._id;
-
-          Swal.close();
-          toast.success('Đã giả lập đơn hàng thuê hoàn thành thành công!');
-          
-          setReviewBookingDetails({
-            bookingId,
-            bookingItemId: itemId,
-          });
-          setIsWriteReviewOpen(true);
-        }
+      if (status.canReview && status.bookingId && status.bookingItemId) {
+        setReviewBookingDetails({
+          bookingId: status.bookingId,
+          bookingItemId: status.bookingItemId,
+        });
+        setIsWriteReviewOpen(true);
       }
     } catch (err: any) {
       console.error(err);
-      toast.error('Có lỗi xảy ra khi kiểm tra đơn hàng.');
+      toast.error('Có lỗi xảy ra khi kiểm tra quyền đánh giá.');
+    } finally {
+      setCheckingReviewStatus(false);
     }
   };
 
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reviewBookingDetails) return;
+    if (!writeComment.trim()) {
+      toast.error('Vui lòng nhập nội dung đánh giá.');
+      return;
+    }
 
     setSubmittingReview(true);
     try {
@@ -284,19 +321,22 @@ export const ProductDetailPage: React.FC = () => {
         bookingId: reviewBookingDetails.bookingId,
         bookingItemId: reviewBookingDetails.bookingItemId,
         rating: writeRating,
-        comment: writeComment,
+        comment: writeComment.trim(),
         images: writeImages,
         productId: id,
       });
 
-      toast.success('Gửi đánh giá dịch vụ thành công!');
+      toast.success('Gửi đánh giá thành công! Cảm ơn bạn đã chia sẻ trải nghiệm.');
       setIsWriteReviewOpen(false);
       setWriteComment('');
       setWriteRating(5);
       setWriteImages([]);
+      setReviewBookingDetails(null);
+      // Cập nhật lại trạng thái review và danh sách
       fetchRealReviews();
+      fetchReviewStatus();
     } catch (err: any) {
-      toast.error(err.message || 'Gửi đánh giá thất bại');
+      toast.error(err.message || 'Gửi đánh giá thất bại. Vui lòng thử lại.');
     } finally {
       setSubmittingReview(false);
     }
@@ -681,6 +721,10 @@ export const ProductDetailPage: React.FC = () => {
       setEndDate(dateStr);
     } else {
       // DAILY range selection
+      if (busyDates.includes(dateStr)) {
+        toast.error('Ngày này đã bị đặt lịch!');
+        return;
+      }
       if (!startDate || (startDate && endDate)) {
         setStartDate(dateStr);
         setEndDate('');
@@ -689,9 +733,9 @@ export const ProductDetailPage: React.FC = () => {
           setStartDate(dateStr);
           setEndDate('');
         } else {
-          // Check if there are any unavailable dates between startDate and dateStr!
+          // Check if there are any unavailable dates in the selected range!
           const hasUnavailable = calendarDays.some(d => 
-            !d.isEmpty && !d.isAvailable && d.dateStr > startDate && d.dateStr < dateStr
+            !d.isEmpty && !d.isAvailable && d.dateStr >= startDate && d.dateStr <= dateStr
           );
           if (hasUnavailable) {
             toast.error('Khoảng thời gian chọn chứa ngày đã bị đặt!');
@@ -712,9 +756,11 @@ export const ProductDetailPage: React.FC = () => {
         setProduct(data);
         
         // Load busy dates/slots
+        let loadedBookedDates: string[] = [];
         try {
           const busyData = await httpClient.get<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }>(`/api/bookings/busy-dates/product/${id}`);
-          setBusyDates(busyData.bookedDates || []);
+          loadedBookedDates = busyData.bookedDates || [];
+          setBusyDates(loadedBookedDates);
           setBusySlots(busyData.bookedSlots || []);
         } catch (e) {
           console.error('Lỗi tải lịch bận của sản phẩm:', e);
@@ -740,15 +786,72 @@ export const ProductDetailPage: React.FC = () => {
             console.log('Not logged in or failed to fetch profile for pre-selection:', e);
           }
         }
-        // Set default dates
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const nextDay = new Date();
-        nextDay.setDate(nextDay.getDate() + 3);
+        // Tìm 3 ngày liên tiếp khả dụng đầu tiên bắt đầu từ ngày mai
+        let foundRange = false;
+        let startDateVal = '';
+        let endDateVal = '';
+        const maxSearchDays = 60; // Tìm tối đa trong vòng 60 ngày tới
 
-        setStartDate(tomorrow.toISOString().split('T')[0]);
-        setEndDate(nextDay.toISOString().split('T')[0]);
-        setSingleDate(tomorrow.toISOString().split('T')[0]);
+        for (let offset = 0; offset < maxSearchDays; offset++) {
+          const checkStart = new Date();
+          checkStart.setDate(checkStart.getDate() + 1 + offset);
+          const startStr = checkStart.toISOString().split('T')[0];
+
+          const checkEnd = new Date(checkStart);
+          checkEnd.setDate(checkEnd.getDate() + 2); // Rent range: 3 days (e.g. 6 to 8)
+          const endStr = checkEnd.toISOString().split('T')[0];
+
+          let hasBusy = false;
+          const temp = new Date(checkStart);
+          while (temp <= checkEnd) {
+            const tempStr = temp.toISOString().split('T')[0];
+            if (loadedBookedDates.includes(tempStr)) {
+              hasBusy = true;
+              break;
+            }
+            temp.setDate(temp.getDate() + 1);
+          }
+
+          if (!hasBusy) {
+            startDateVal = startStr;
+            endDateVal = endStr;
+            foundRange = true;
+            break;
+          }
+        }
+
+        if (foundRange) {
+          setStartDate(startDateVal);
+          setEndDate(endDateVal);
+          setSingleDate(startDateVal);
+        } else {
+          // Fallback tìm 1 ngày rảnh duy nhất
+          let fallbackStart = new Date();
+          fallbackStart.setDate(fallbackStart.getDate() + 1);
+          let foundFallback = false;
+          for (let offset = 0; offset < maxSearchDays; offset++) {
+            const checkStart = new Date();
+            checkStart.setDate(checkStart.getDate() + 1 + offset);
+            const startStr = checkStart.toISOString().split('T')[0];
+            if (!loadedBookedDates.includes(startStr)) {
+              setStartDate(startStr);
+              setEndDate(startStr);
+              setSingleDate(startStr);
+              foundFallback = true;
+              break;
+            }
+          }
+          if (!foundFallback) {
+            // Cực hạn fallback: gán đại ngày mai
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const nextDay = new Date();
+            nextDay.setDate(nextDay.getDate() + 3);
+            setStartDate(tomorrow.toISOString().split('T')[0]);
+            setEndDate(nextDay.toISOString().split('T')[0]);
+            setSingleDate(tomorrow.toISOString().split('T')[0]);
+          }
+        }
       } catch (err: any) {
         console.error('Lỗi lấy chi tiết sản phẩm:', err);
         setError(err.message || 'Không thể lấy thông tin sản phẩm.');
@@ -884,7 +987,7 @@ export const ProductDetailPage: React.FC = () => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     const diff = Math.abs(end.getTime() - start.getTime());
-    return Math.ceil(diff / (1000 * 60 * 60 * 24)) || 1;
+    return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
   };
 
   const getHourDuration = () => {
@@ -943,6 +1046,7 @@ export const ProductDetailPage: React.FC = () => {
       endTime: rentalMode === 'HOURLY' ? endTime : undefined,
       providerCity: product?.providerId?.address?.city || 'Thừa Thiên Huế',
       providerAddress: product?.providerId?.address?.addressLine || '',
+      comboDiscountPercent: product?.providerId?.comboDiscountPercent,
       quantity: 1,
     };
 
@@ -983,6 +1087,7 @@ export const ProductDetailPage: React.FC = () => {
       endTime: rentalMode === 'HOURLY' ? endTime : undefined,
       providerCity: product?.providerId?.address?.city || 'Thừa Thiên Huế',
       providerAddress: product?.providerId?.address?.addressLine || '',
+      comboDiscountPercent: product?.providerId?.comboDiscountPercent,
       quantity: 1,
     };
 
@@ -1769,25 +1874,63 @@ export const ProductDetailPage: React.FC = () => {
 
             {/* Action write button */}
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <button 
-                onClick={handleWriteReviewClick}
-                className="vh-btn vh-btn-inverted font-header" 
-                style={{ borderRadius: '8px', padding: '12px 24px', fontSize: '14px' }}
-              >
-                VIẾT ĐÁNH GIÁ
-              </button>
+              {reviewStatus?.alreadyReviewed ? (
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  backgroundColor: '#F0FDF4', 
+                  color: '#15803D', 
+                  border: '1px solid #BBF7D0', 
+                  borderRadius: '8px', 
+                  padding: '12px 24px', 
+                  fontSize: '14px', 
+                  fontWeight: 700 
+                }}>
+                  <Check size={16} /> ĐÃ ĐÁNH GIÁ
+                </div>
+              ) : (
+                <button 
+                  onClick={handleWriteReviewClick}
+                  disabled={checkingReviewStatus}
+                  className="vh-btn vh-btn-inverted font-header" 
+                  style={{ borderRadius: '8px', padding: '12px 24px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  {checkingReviewStatus ? 'ĐANG KIỂM TRA...' : 'VIẾT ĐÁNH GIÁ'}
+                </button>
+              )}
             </div>
           </div>
 
           {/* Rating filter tools */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '16px', marginBottom: '24px' }}>
             <div style={{ display: 'flex', gap: '24px', fontSize: '13px', fontWeight: 700 }}>
-              <span style={{ color: 'var(--color-primary)', cursor: 'pointer' }}>Mới nhất</span>
-              <span style={{ color: 'var(--color-text-secondary)', cursor: 'pointer' }}>Đánh giá cao nhất</span>
-              <span style={{ color: 'var(--color-text-secondary)', cursor: 'pointer' }}>Đánh giá thấp nhất</span>
+              <span 
+                onClick={() => setReviewSortOrder('newest')} 
+                style={{ color: reviewSortOrder === 'newest' ? 'var(--color-primary)' : 'var(--color-text-secondary)', cursor: 'pointer', borderBottom: reviewSortOrder === 'newest' ? '2px solid var(--color-primary)' : 'none', paddingBottom: '4px', transition: 'all 0.2s' }}
+              >
+                Mới nhất
+              </span>
+              <span 
+                onClick={() => setReviewSortOrder('highest')} 
+                style={{ color: reviewSortOrder === 'highest' ? 'var(--color-primary)' : 'var(--color-text-secondary)', cursor: 'pointer', borderBottom: reviewSortOrder === 'highest' ? '2px solid var(--color-primary)' : 'none', paddingBottom: '4px', transition: 'all 0.2s' }}
+              >
+                Đánh giá cao nhất
+              </span>
+              <span 
+                onClick={() => setReviewSortOrder('lowest')} 
+                style={{ color: reviewSortOrder === 'lowest' ? 'var(--color-primary)' : 'var(--color-text-secondary)', cursor: 'pointer', borderBottom: reviewSortOrder === 'lowest' ? '2px solid var(--color-primary)' : 'none', paddingBottom: '4px', transition: 'all 0.2s' }}
+              >
+                Đánh giá thấp nhất
+              </span>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer', color: 'var(--color-text-secondary)' }}>
-              <input type="checkbox" style={{ accentColor: 'var(--color-primary)' }} />
+              <input 
+                type="checkbox" 
+                checked={reviewFilterHasImage}
+                onChange={(e) => setReviewFilterHasImage(e.target.checked)}
+                style={{ accentColor: 'var(--color-primary)' }} 
+              />
               <span>Có ảnh/video</span>
             </label>
           </div>
@@ -1798,12 +1941,12 @@ export const ProductDetailPage: React.FC = () => {
               <div style={{ textAlign: 'center', padding: '20px', color: 'var(--color-text-secondary)' }}>
                 Đang tải đánh giá...
               </div>
-            ) : realReviews.length === 0 ? (
+            ) : displayedReviews.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--color-text-secondary)', backgroundColor: 'white', borderRadius: '12px', border: '1px solid var(--color-light-border)' }}>
-                Chưa có đánh giá nào cho sản phẩm này. Hãy là người đầu tiên thuê và đánh giá!
+                {reviewFilterHasImage ? 'Không tìm thấy đánh giá nào có hình ảnh thực tế.' : 'Chưa có đánh giá nào cho sản phẩm này. Hãy là người đầu tiên thuê và đánh giá!'}
               </div>
             ) : (
-              realReviews.map((rev) => {
+              displayedReviews.map((rev) => {
                 const authorName = rev.customerId?.profile?.fullName || 'Khách hàng VibeHue';
                 const authorAvatar = rev.customerId?.profile?.avatarUrl || rev.customerId?.profile?.avatar;
                 const formattedDate = new Date(rev.createdAt || rev.date || Date.now()).toLocaleDateString('vi-VN');

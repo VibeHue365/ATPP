@@ -95,6 +95,12 @@ export class BookingItem {
 
   @Prop({ type: Boolean, default: false })
   isReviewed?: boolean;
+
+  @Prop({ type: Number, default: 0 })
+  comboDiscountPercent: number;
+
+  @Prop({ type: Number, default: 0 })
+  comboDiscountAmount: number;
 }
 
 export const BookingItemSchema = SchemaFactory.createForClass(BookingItem);

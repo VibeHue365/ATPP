@@ -311,7 +311,22 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               </div>
             ) : (
               displayRentals.map((item) => {
-                const isReturned = item.status === 'RETURNED' || item.status === 'COMPLETED';
+                let statusLabel = 'ĐANG THUÊ';
+                let badgeStyle: React.CSSProperties = {
+                  backgroundColor: '#A11E22', // primary red
+                };
+
+                if (item.status === 'RETURNED' || item.status === 'COMPLETED') {
+                  statusLabel = 'ĐÃ TRẢ ĐỒ';
+                  badgeStyle = { backgroundColor: '#27AE60' }; // success green
+                } else if (item.status === 'CANCELLED' || item.status === 'REFUNDED') {
+                  statusLabel = 'ĐÃ HỦY';
+                  badgeStyle = { backgroundColor: '#7F8C8D' }; // grey
+                } else if (item.status === 'PENDING_PAYMENT') {
+                  statusLabel = 'CHỜ THANH TOÁN';
+                  badgeStyle = { backgroundColor: '#F39C12' }; // orange
+                }
+
                 const rentalDateFormatted = item.rentalType === 'DAILY'
                   ? `${formatDate(item.startDate)} - ${formatDate(item.endDate)}`
                   : `Ngày ${formatDate(item.startDate)} (${item.startTime} - ${item.endTime})`;
@@ -320,8 +335,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   <div key={item.id} className="vh-profile-rental-product-card">
                     <div className="vh-profile-rental-img-wrapper" style={{ height: '280px' }}>
                       <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
-                      <span className={`vh-profile-rental-status-badge ${isReturned ? 'status-returned' : 'status-renting'}`}>
-                        {isReturned ? 'ĐÃ TRẢ ĐỒ' : 'ĐANG THUÊ'}
+                      <span 
+                        className="vh-profile-rental-status-badge"
+                        style={badgeStyle}
+                      >
+                        {statusLabel}
                       </span>
                     </div>
                     <div className="vh-profile-rental-details">
