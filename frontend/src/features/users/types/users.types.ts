@@ -10,6 +10,9 @@ export interface UserProfile {
   isEmailVerified: boolean;
   roles?: string[];
   status?: string;
+  hasCompletedOnboarding?: boolean;
+  preferences?: any;
+  favorites?: any[];
   createdAt?: string;
 }
 
@@ -20,6 +23,9 @@ export interface BackendUserProfileResponse {
   isEmailVerified?: boolean;
   status?: string;
   roles?: string[];
+  hasCompletedOnboarding?: boolean;
+  preferences?: any;
+  favorites?: any[];
   createdAt?: string;
   profile?: {
     fullName?: string;

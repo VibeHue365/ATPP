@@ -15,6 +15,7 @@ export enum InventoryItemStatus {
   Available = 'AVAILABLE',
   Rented = 'RENTED',
   Maintenance = 'MAINTENANCE',
+  Cleaning = 'CLEANING',
 }
 
 @Schema({ collection: 'inventory_items', timestamps: true })
@@ -22,7 +23,13 @@ export class InventoryItem {
   @Prop({ type: Types.ObjectId, ref: 'Product', required: true, index: true })
   productId: Types.ObjectId;
 
-  @Prop({ required: true, unique: true, index: true, trim: true, uppercase: true })
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    trim: true,
+    uppercase: true,
+  })
   sku: string;
 
   @Prop({ required: true, trim: true, uppercase: true })

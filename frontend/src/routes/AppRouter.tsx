@@ -13,6 +13,10 @@ import PublicRoute from './PublicRoute';
 // Pages
 import LandingPage from '../pages/LandingPage';
 import { AoDaiListingPage } from '../pages/rentals/AoDaiListingPage';
+import { ProductDetailPage } from '../pages/rentals/ProductDetailPage';
+import { PhotographersListingPage } from '../pages/photographers/PhotographersListingPage';
+import { PhotographerDetailPage } from '../pages/photographers/PhotographerDetailPage';
+import { CartPage } from '../pages/cart/CartPage';
 import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
 import VerifyOtpPage from '../pages/auth/VerifyOtpPage';
@@ -24,6 +28,8 @@ import SettingsPage from '../pages/dashboard/SettingsPage';
 import NotFoundPage from '../pages/errors/NotFoundPage';
 import OnboardingPage from '../pages/onboarding/OnboardingPage';
 import ProviderDashboard from '../pages/providerdashboard/ProviderDashboard';
+import BecomeProviderPage from '../pages/provider/BecomeProviderPage';
+import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
 
 export const AppRouter: React.FC = () => {
   return (
@@ -38,6 +44,10 @@ export const AppRouter: React.FC = () => {
       <Route element={<MainLayout />}>
         <Route path={ROUTES.LANDING} element={<LandingPage />} />
         <Route path={ROUTES.RENTALS} element={<AoDaiListingPage />} />
+        <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
+        <Route path={ROUTES.PHOTOGRAPHERS} element={<PhotographersListingPage />} />
+        <Route path={ROUTES.PHOTOGRAPHER_DETAIL} element={<PhotographerDetailPage />} />
+        <Route path={ROUTES.CART} element={<CartPage />} />
       </Route>
 
       {/* Google OAuth Callback Handler */}
@@ -61,7 +71,10 @@ export const AppRouter: React.FC = () => {
           <Route path={ROUTES.DASHBOARD} element={<Navigate to={ROUTES.PROFILE} replace />} />
           <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+          <Route path={ROUTES.PROVIDER_REGISTER} element={<BecomeProviderPage />} />
         </Route>
+        {/* Admin Dashboard Page (No MainLayout header/footer) */}
+        <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardPage />} />
       </Route>
 
       {/* 404 Route Fallback */}

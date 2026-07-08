@@ -6,10 +6,12 @@ import {
   Param,
   Patch,
   Post,
+  NotFoundException,
   UseGuards,
   UseInterceptors,
   UploadedFiles,
   UnsupportedMediaTypeException,
+  Query,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -28,8 +30,25 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Get()
-  async getAll(): Promise<ProductDocument[]> {
-    return this.productsService.getAllActiveProducts();
+  async getAll(
+    @Query('search') search?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('minRating') minRating?: string,
+    @Query('colors') colors?: string,
+    @Query('sizes') sizes?: string,
+    @Query('materials') materials?: string,
+  ): Promise<ProductDocument[]> {
+    const options = {
+      search,
+      minPrice: minPrice ? Number(minPrice) : undefined,
+      maxPrice: maxPrice ? Number(maxPrice) : undefined,
+      minRating: minRating ? Number(minRating) : undefined,
+      colors: colors ? colors.split(',').map(c => c.trim()).filter(Boolean) : undefined,
+      sizes: sizes ? sizes.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+      materials: materials ? materials.split(',').map(m => m.trim()).filter(Boolean) : undefined,
+    };
+    return this.productsService.getAllActiveProducts(options);
   }
 
   @Get('categories')
@@ -112,6 +131,15 @@ export class ProductsController {
   ): Promise<{ urls: string[] }> {
     const urls = (files || []).map(file => `/uploads/products/${file.filename}`);
     return { urls };
+  }
+
+  @Get(':id')
+  async getOne(@Param('id') id: string): Promise<ProductDocument> {
+    const product = await this.productsService.getProductById(id);
+    if (!product) {
+      throw new NotFoundException(`Product with ID ${id} not found`);
+    }
+    return product;
   }
 }
 

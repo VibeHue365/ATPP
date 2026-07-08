@@ -23,7 +23,7 @@ function readEnv() {
 async function seed() {
   const env = readEnv();
   const mongoUri = env.MONGODB_URI || 'mongodb://127.0.0.1:27017/vibehue_auth';
-  
+
   console.log(`Connecting to MongoDB at: ${mongoUri.replace(/:([^:@]+)@/, ':***@')}`);
   await mongoose.connect(mongoUri);
   console.log('Connected successfully!');
@@ -34,11 +34,8 @@ async function seed() {
   const collections = await db.listCollections().toArray();
   const collectionNames = collections.map(c => c.name);
   console.log(`Found ${collectionNames.length} existing collections. Clearing for fresh seed...`);
-  
-  for (const name of collectionNames) {
-    await db.collection(name).deleteMany({});
-    console.log(`Cleared collection: ${name}`);
-  }
+
+
 
   // Define realistic IDs
   const adminId = new mongoose.Types.ObjectId();
@@ -46,7 +43,7 @@ async function seed() {
   const providerAoDaiId = new mongoose.Types.ObjectId();
   const providerPhotoId = new mongoose.Types.ObjectId();
   const providerBothId = new mongoose.Types.ObjectId();
-  
+
   const providerAoDaiProfileId = new mongoose.Types.ObjectId();
   const providerPhotoProfileId = new mongoose.Types.ObjectId();
   const providerBothProfileId = new mongoose.Types.ObjectId();

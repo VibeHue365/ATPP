@@ -36,10 +36,13 @@ export interface BookingPricingSummary {
   subTotal: number;
   depositTotal: number;
   discountAmount: number;
+  comboDiscountTotal?: number;
+  voucherDiscountTotal?: number;
   travelFee: number;
   overtimeFee: number;
   lateFee: number;
   damageFee: number;
+  serviceFee?: number;
   grandTotal: number;
 }
 
@@ -65,7 +68,13 @@ export interface BookingStatusTimelineEntry {
 
 @Schema({ collection: 'bookings', timestamps: true })
 export class Booking {
-  @Prop({ required: true, unique: true, index: true, trim: true, uppercase: true })
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    trim: true,
+    uppercase: true,
+  })
   bookingCode: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
@@ -94,10 +103,13 @@ export class Booking {
       subTotal: { type: Number, required: true, min: 0 },
       depositTotal: { type: Number, default: 0, min: 0 },
       discountAmount: { type: Number, default: 0, min: 0 },
+      comboDiscountTotal: { type: Number, default: 0, min: 0 },
+      voucherDiscountTotal: { type: Number, default: 0, min: 0 },
       travelFee: { type: Number, default: 0, min: 0 },
       overtimeFee: { type: Number, default: 0, min: 0 },
       lateFee: { type: Number, default: 0, min: 0 },
       damageFee: { type: Number, default: 0, min: 0 },
+      serviceFee: { type: Number, default: 0, min: 0 },
       grandTotal: { type: Number, required: true, min: 0 },
     },
     required: true,
@@ -114,7 +126,11 @@ export class Booking {
         default: PaymentStatus.Unpaid,
       },
     },
-    default: { totalPaid: 0, totalRefunded: 0, paymentStatus: PaymentStatus.Unpaid },
+    default: {
+      totalPaid: 0,
+      totalRefunded: 0,
+      paymentStatus: PaymentStatus.Unpaid,
+    },
   })
   paymentSummary: BookingPaymentSummary;
 
@@ -136,7 +152,11 @@ export class Booking {
     type: [
       {
         _id: false,
-        status: { type: String, enum: Object.values(BookingStatus), required: true },
+        status: {
+          type: String,
+          enum: Object.values(BookingStatus),
+          required: true,
+        },
         changedAt: { type: Date, default: Date.now },
         changedBy: { type: Types.ObjectId, ref: 'User', default: null },
         note: { type: String, default: null },

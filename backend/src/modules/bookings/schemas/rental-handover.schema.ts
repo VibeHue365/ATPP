@@ -26,10 +26,20 @@ export class RentalHandover {
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
   bookingId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'BookingItem', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'BookingItem',
+    required: true,
+    index: true,
+  })
   bookingItemId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'InventoryItem', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'InventoryItem',
+    required: true,
+    index: true,
+  })
   inventoryItemId: Types.ObjectId;
 
   @Prop({
@@ -84,5 +94,6 @@ export class RentalHandover {
   status: HandoverStatus;
 }
 
-export const RentalHandoverSchema = SchemaFactory.createForClass(RentalHandover);
+export const RentalHandoverSchema =
+  SchemaFactory.createForClass(RentalHandover);
 RentalHandoverSchema.index({ bookingId: 1, handoverType: 1 });

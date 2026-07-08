@@ -24,7 +24,13 @@ export interface CartItem {
 
 @Schema({ collection: 'carts', timestamps: true })
 export class Cart {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, unique: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'User',
+    required: true,
+    unique: true,
+    index: true,
+  })
   customerId: Types.ObjectId;
 
   @Prop({
@@ -37,8 +43,16 @@ export class Cart {
           required: true,
         },
         productId: { type: Types.ObjectId, ref: 'Product', default: null },
-        inventoryItemId: { type: Types.ObjectId, ref: 'InventoryItem', default: null },
-        photographyPackageId: { type: Types.ObjectId, ref: 'PhotographyPackage', default: null },
+        inventoryItemId: {
+          type: Types.ObjectId,
+          ref: 'InventoryItem',
+          default: null,
+        },
+        photographyPackageId: {
+          type: Types.ObjectId,
+          ref: 'PhotographyPackage',
+          default: null,
+        },
         quantity: { type: Number, default: 1, min: 1 },
         rentalFrom: { type: Date, default: null },
         rentalTo: { type: Date, default: null },

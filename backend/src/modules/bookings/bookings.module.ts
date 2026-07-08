@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Cart, CartSchema } from './schemas/cart.schema';
 import { Booking, BookingSchema } from './schemas/booking.schema';
@@ -15,6 +15,12 @@ import {
   RentalHandover,
   RentalHandoverSchema,
 } from './schemas/rental-handover.schema';
+import { BookingsController } from './controllers/bookings.controller';
+import { BookingsService } from './services/bookings.service';
+import { ProductsModule } from '../products/products.module';
+import { PaymentsModule } from '../payments/payments.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { ProvidersModule } from '../providers/providers.module';
 
 export const bookingModels = MongooseModule.forFeature([
   { name: Cart.name, schema: CartSchema },
@@ -26,7 +32,15 @@ export const bookingModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [bookingModels],
-  exports: [bookingModels],
+  imports: [
+    bookingModels,
+    ProductsModule,
+    forwardRef(() => PaymentsModule),
+    NotificationsModule,
+    ProvidersModule,
+  ],
+  controllers: [BookingsController],
+  providers: [BookingsService],
+  exports: [bookingModels, BookingsService],
 })
 export class BookingsModule {}

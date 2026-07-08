@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from '../features/auth/hooks/useAuth';
 
 export type CartItemType = 'PRODUCT' | 'PHOTOGRAPHY_PACKAGE';
 
@@ -39,6 +40,7 @@ export interface CartItem {
   providerCity?: string | null;
   providerAddress?: string | null;
   photographerCity?: string | null;
+  comboDiscountPercent?: number;
 }
 
 interface CartContextType {
@@ -47,104 +49,104 @@ interface CartContextType {
   removeFromCart: (itemId: string) => void;
   updateCartItemDate: (itemId: string, date: string) => void;
   updateCartItemTimeSlot: (itemId: string, timeSlot: string) => void;
+  updateCartItemQuantity: (itemId: string, quantity: number) => void;
+  updateCartItemSize: (itemId: string, size: string) => void;
+  updateCartItemColor: (itemId: string, color: string) => void;
+  updateCartItemDates: (itemId: string, rentalFrom: string, rentalTo: string) => void;
   clearCart: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    const savedCart = localStorage.getItem('vh_cart');
+  const { user } = useAuth();
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
+
+  const cartKey = user ? `vh_cart_${user.id}` : 'vh_cart_guest';
+
+  // Load and merge cart when user/cartKey changes
+  useEffect(() => {
+    setIsLoaded(false);
+    const savedCart = localStorage.getItem(cartKey);
+    let parsedCart: CartItem[] = [];
+
     if (savedCart) {
       try {
         const parsed = JSON.parse(savedCart);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          parsedCart = parsed;
+        }
       } catch (e) {
         console.error('Failed to parse cart', e);
       }
+    } else if (cartKey === 'vh_cart_guest') {
+      // Giỏ hàng guest bắt đầu rỗng — không seed mock data
+      parsedCart = [];
     }
-    // Seed default items for premium mockup presentation
-    const defaultCart: CartItem[] = [
-      {
-        id: 'product_gam_do',
-        itemType: 'PRODUCT',
-        productId: 'prod_gam_do',
-        productName: 'Áo dài Gấm Đỏ Hoàng Triều',
-        productImage: 'https://images.unsplash.com/photo-1621184455862-c163dfb30e0f?q=80&w=600',
-        basePrice: 800000,
-        depositAmount: 1500000,
-        rentalFrom: '2024-10-12',
-        rentalTo: '2024-10-14',
-        size: 'M',
-        color: 'Đỏ',
-        quantity: 1,
-        providerCity: 'Thừa Thiên Huế',
-        providerAddress: '12 Đại Nội, TP. Huế'
-      },
-      {
-        id: 'photographer_hoang_minh_1',
-        itemType: 'PHOTOGRAPHY_PACKAGE',
-        photographyPackageId: 'pkg_hoang_minh_art',
-        photographerName: 'Hoàng Minh',
-        photographerAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-        packageName: 'Gói Nghệ Thuật',
-        shootDate: '2024-10-13',
-        shootTimeSlot: '8:00 - 11:00',
-        shootLocation: 'Văn Miếu, Hà Nội',
-        basePrice: 2000000,
-        quantity: 1,
-        photographerCity: 'Hà Nội'
-      },
-      {
-        id: 'product_to_tam',
-        itemType: 'PRODUCT',
-        productId: 'prod_to_tam',
-        productName: 'Áo dài Tơ Tằm Thủy Mặc',
-        productImage: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600',
-        basePrice: 1200000,
-        depositAmount: 1800000,
-        rentalFrom: '2024-10-15',
-        rentalTo: '2024-10-17',
-        size: 'L',
-        color: 'Xanh Thủy Mặc',
-        quantity: 1,
-        providerCity: 'Thừa Thiên Huế',
-        providerAddress: '24 Lê Lợi, TP. Huế'
-      },
-      {
-        id: 'photographer_hoang_minh_2',
-        itemType: 'PHOTOGRAPHY_PACKAGE',
-        photographyPackageId: 'pkg_hoang_minh_mismatch',
-        photographerName: 'Hoàng Minh',
-        photographerAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-        packageName: 'Gói Nghệ Thuật',
-        shootDate: '2024-10-18',
-        shootTimeSlot: '14:00 - 17:00',
-        shootLocation: 'Văn Miếu, Hà Nội',
-        basePrice: 2000000,
-        quantity: 1,
-        photographerCity: 'Hà Nội'
-      },
-      {
-        id: 'product_ai_cinematic',
-        itemType: 'PRODUCT',
-        productId: 'prod_ai_cinematic',
-        productName: 'Gói chỉnh sửa AI Cinematic',
-        productImage: '',
-        basePrice: 350000,
-        depositAmount: 0,
-        rentalFrom: null,
-        rentalTo: null,
-        quantity: 1
-      }
-    ];
-    localStorage.setItem('vh_cart', JSON.stringify(defaultCart));
-    return defaultCart;
-  });
 
+    // Merge guest cart to user cart upon login
+    if (user && cartKey !== 'vh_cart_guest') {
+      const guestCartJson = localStorage.getItem('vh_cart_guest');
+      if (guestCartJson) {
+        try {
+          const guestCart = JSON.parse(guestCartJson);
+          if (Array.isArray(guestCart) && guestCart.length > 0) {
+            const mergedCart = [...parsedCart];
+            guestCart.forEach((guestItem) => {
+              const duplicateIndex = mergedCart.findIndex((item) => {
+                if (item.itemType !== guestItem.itemType) return false;
+                if (item.itemType === 'PRODUCT') {
+                  const itemStart = item.rentalFrom || item.startDate;
+                  const itemEnd = item.rentalTo || item.endDate;
+                  const guestStart = guestItem.rentalFrom || guestItem.startDate;
+                  const guestEnd = guestItem.rentalTo || guestItem.endDate;
+
+                  return (
+                    item.productId === guestItem.productId &&
+                    item.rentalType === guestItem.rentalType &&
+                    itemStart === guestStart &&
+                    itemEnd === guestEnd &&
+                    item.startTime === guestItem.startTime &&
+                    item.endTime === guestItem.endTime &&
+                    item.size === guestItem.size &&
+                    item.color === guestItem.color
+                  );
+                } else {
+                  return (
+                    item.photographyPackageId === guestItem.photographyPackageId &&
+                    item.shootDate === guestItem.shootDate &&
+                    item.shootTimeSlot === guestItem.shootTimeSlot
+                  );
+                }
+              });
+
+              if (duplicateIndex > -1) {
+                mergedCart[duplicateIndex].quantity += guestItem.quantity;
+              } else {
+                mergedCart.push(guestItem);
+              }
+            });
+            parsedCart = mergedCart;
+            // Clear guest cart after successful merge
+            localStorage.removeItem('vh_cart_guest');
+          }
+        } catch (e) {
+          console.error('Failed to merge guest cart', e);
+        }
+      }
+    }
+
+    setCart(parsedCart);
+    setIsLoaded(true);
+  }, [user, cartKey]);
+
+  // Save changes to localStorage under cartKey (gated by isLoaded)
   useEffect(() => {
-    localStorage.setItem('vh_cart', JSON.stringify(cart));
-  }, [cart]);
+    if (isLoaded) {
+      localStorage.setItem(cartKey, JSON.stringify(cart));
+    }
+  }, [cart, cartKey, isLoaded]);
 
   const addToCart = (newItem: Omit<CartItem, 'id' | 'quantity'>) => {
     setCart((prevCart) => {
@@ -152,10 +154,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const existingItemIndex = prevCart.findIndex((item) => {
         if (item.itemType !== newItem.itemType) return false;
         if (item.itemType === 'PRODUCT') {
+          const itemStart = item.rentalFrom || item.startDate;
+          const itemEnd = item.rentalTo || item.endDate;
+          const newStart = newItem.rentalFrom || newItem.startDate;
+          const newEnd = newItem.rentalTo || newItem.endDate;
+
           return (
             item.productId === newItem.productId &&
-            item.rentalFrom === newItem.rentalFrom &&
-            item.rentalTo === newItem.rentalTo &&
+            item.rentalType === newItem.rentalType &&
+            itemStart === newStart &&
+            itemEnd === newEnd &&
+            item.startTime === newItem.startTime &&
+            item.endTime === newItem.endTime &&
             item.size === newItem.size &&
             item.color === newItem.color
           );
@@ -215,12 +225,58 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  const updateCartItemQuantity = (itemId: string, newQuantity: number) => {
+    if (newQuantity < 1) return;
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        if (item.id !== itemId) return item;
+        return { ...item, quantity: newQuantity };
+      })
+    );
+  };
+
+  const updateCartItemSize = (itemId: string, newSize: string) => {
+    setCart((prevCart) =>
+      prevCart.map((item) =>
+        item.id === itemId ? { ...item, size: newSize } : item
+      )
+    );
+  };
+
+  const updateCartItemColor = (itemId: string, newColor: string) => {
+    setCart((prevCart) =>
+      prevCart.map((item) =>
+        item.id === itemId ? { ...item, color: newColor } : item
+      )
+    );
+  };
+
+  const updateCartItemDates = (itemId: string, newFrom: string, newTo: string) => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        if (item.id !== itemId) return item;
+        return {
+          ...item,
+          rentalFrom: newFrom,
+          rentalTo: newTo,
+          startDate: newFrom,
+          endDate: newTo,
+        };
+      })
+    );
+  };
+
   const clearCart = () => {
     setCart([]);
   };
 
   return (
-    <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateCartItemDate, updateCartItemTimeSlot, clearCart }}>
+    <CartContext.Provider value={{
+      cart, addToCart, removeFromCart,
+      updateCartItemDate, updateCartItemTimeSlot, updateCartItemQuantity,
+      updateCartItemSize, updateCartItemColor, updateCartItemDates,
+      clearCart
+    }}>
       {children}
     </CartContext.Provider>
   );

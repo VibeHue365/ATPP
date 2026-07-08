@@ -9,11 +9,61 @@ export class ProductsRepository {
     @InjectModel(Product.name) private readonly productModel: Model<Product>,
   ) {}
 
-  async findAllActive(): Promise<ProductDocument[]> {
-    return this.productModel
-      .find({ status: ProductStatus.Active })
+  async findAllActive(options?: {
+    search?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    minRating?: number;
+    colors?: string[];
+    sizes?: string[];
+    materials?: string[];
+  }): Promise<ProductDocument[]> {
+    const query: any = { status: ProductStatus.Active };
+
+    if (options?.search) {
+      const searchRegex = new RegExp(options.search, 'i');
+      query.$or = [
+        { name: searchRegex },
+        { description: searchRegex },
+      ];
+    }
+
+    if (options?.minPrice !== undefined || options?.maxPrice !== undefined) {
+      query.basePrice = {};
+      if (options.minPrice !== undefined) {
+        query.basePrice.$gte = options.minPrice;
+      }
+      if (options.maxPrice !== undefined) {
+        query.basePrice.$lte = options.maxPrice;
+      }
+    }
+
+    if (options?.minRating !== undefined) {
+      query['rating.averageRating'] = { $gte: options.minRating };
+    }
+
+    if (options?.colors && options.colors.length > 0) {
+      query.colors = { $in: options.colors.map(c => new RegExp(`^${c}$`, 'i')) };
+    }
+
+    if (options?.sizes && options.sizes.length > 0) {
+      query.sizes = { $in: options.sizes.map(s => new RegExp(`^${s}$`, 'i')) };
+    }
+
+    if (options?.materials && options.materials.length > 0) {
+      query.materials = { $in: options.materials.map(m => new RegExp(`^${m}$`, 'i')) };
+    }
+
+    const products = await this.productModel
+      .find(query)
       .populate('categoryId')
+      .populate('providerId')
       .exec();
+
+    return products.filter(p => {
+      const provider = p.providerId as any;
+      return provider && provider.status === 'ACTIVE';
+    });
   }
 
   async create(data: Partial<Product>): Promise<ProductDocument> {
@@ -21,7 +71,7 @@ export class ProductsRepository {
   }
 
   async findById(id: Types.ObjectId): Promise<ProductDocument | null> {
-    return this.productModel.findById(id).populate('categoryId').exec();
+    return this.productModel.findById(id).populate('categoryId').populate('providerId').exec();
   }
 
   async findByProvider(providerId: Types.ObjectId): Promise<ProductDocument[]> {

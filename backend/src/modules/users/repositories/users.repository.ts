@@ -174,4 +174,53 @@ export class UsersRepository {
       },
     );
   }
+
+  async updatePreferences(
+    userId: Types.ObjectId,
+    preferences: any,
+  ): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          preferences,
+          hasCompletedOnboarding: true,
+        },
+      },
+    );
+  }
+
+  async toggleFavorite(
+    userId: Types.ObjectId,
+    targetType: string,
+    targetId: Types.ObjectId,
+  ): Promise<void> {
+    const user = await this.userModel.findById(userId);
+    if (!user) return;
+
+    const favorites = user.favorites || [];
+    const index = favorites.findIndex(
+      (fav) => fav.targetId.toString() === targetId.toString() && fav.targetType === targetType
+    );
+
+    if (index > -1) {
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $pull: { favorites: { targetId, targetType } } }
+      );
+    } else {
+      await this.userModel.updateOne(
+        { _id: userId },
+        {
+          $push: {
+            favorites: {
+              targetType,
+              targetId,
+              addedAt: new Date(),
+            },
+          },
+        }
+      );
+    }
+  }
 }

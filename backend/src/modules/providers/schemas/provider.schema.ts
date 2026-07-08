@@ -9,8 +9,8 @@ export enum ProviderCapability {
 }
 
 export enum ProviderStatus {
-  Pending = 'PENDING',
-  Approved = 'APPROVED',
+  PendingApproval = 'PENDING_APPROVAL',
+  Active = 'ACTIVE',
   Rejected = 'REJECTED',
   Suspended = 'SUSPENDED',
 }
@@ -64,7 +64,13 @@ export interface ProviderRating {
 
 @Schema({ collection: 'providers', timestamps: true })
 export class Provider {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, unique: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'User',
+    required: true,
+    unique: true,
+    index: true,
+  })
   userId: Types.ObjectId;
 
   @Prop({ required: true, trim: true })
@@ -153,7 +159,7 @@ export class Provider {
   @Prop({
     type: String,
     enum: Object.values(ProviderStatus),
-    default: ProviderStatus.Pending,
+    default: ProviderStatus.PendingApproval,
     index: true,
   })
   status: ProviderStatus;
@@ -163,6 +169,15 @@ export class Provider {
 
   @Prop({ type: Types.ObjectId, ref: 'User', default: null })
   approvedBy?: Types.ObjectId | null;
+
+  @Prop({ type: Number, default: 0 })
+  comboDiscountPercent: number;
+
+  @Prop({ type: Number, default: 0 })
+  violationCount: number;
 }
 
 export const ProviderSchema = SchemaFactory.createForClass(Provider);
+ProviderSchema.index({ userId: 1, status: 1 });
+ProviderSchema.index({ capabilities: 1 });
+ProviderSchema.index({ 'address.city': 1 });

@@ -33,7 +33,7 @@ export const Button: React.FC<ButtonProps> = ({
         </span>
       )}
       {!isLoading && leftIcon && <span className="vh-btn-icon-left">{leftIcon}</span>}
-      <span className="vh-btn-text">{children}</span>
+      <span className="vh-btn-label">{children}</span>
       {!isLoading && rightIcon && <span className="vh-btn-icon-right">{rightIcon}</span>}
     </button>
   );

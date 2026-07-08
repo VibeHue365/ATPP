@@ -14,6 +14,7 @@ backend/uploads/
 .vscode/
 .idea/
 
+
 # Environment variables / Secrets
 **/.env
 **/.env.local

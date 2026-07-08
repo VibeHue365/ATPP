@@ -26,10 +26,20 @@ export class BookingItem {
   @Prop({ type: Types.ObjectId, ref: 'Product', default: null, index: true })
   productId?: Types.ObjectId | null;
 
-  @Prop({ type: Types.ObjectId, ref: 'InventoryItem', default: null, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'InventoryItem',
+    default: null,
+    index: true,
+  })
   inventoryItemId?: Types.ObjectId | null;
 
-  @Prop({ type: Types.ObjectId, ref: 'PhotographyPackage', default: null, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'PhotographyPackage',
+    default: null,
+    index: true,
+  })
   photographyPackageId?: Types.ObjectId | null;
 
   @Prop({ type: Types.ObjectId, ref: 'PriceVersion', required: true })
@@ -56,8 +66,41 @@ export class BookingItem {
   @Prop({ type: String, default: null })
   shootTimeSlot?: string | null;
 
+  @Prop({ type: String, default: null })
+  shootLocation?: string | null;
+
+  @Prop({ type: String, default: null })
+  shootConcept?: string | null;
+
+  @Prop({ type: String, default: null })
+  referenceImage?: string | null;
+
+  @Prop({
+    type: String,
+    enum: ['DAILY', 'HOURLY'],
+    required: true,
+    default: 'DAILY',
+    index: true,
+  })
+  rentalType: 'DAILY' | 'HOURLY';
+
+  @Prop({ type: String, default: null, trim: true, uppercase: true })
+  selectedSize?: string | null;
+
+  @Prop({ type: String, default: null, trim: true, uppercase: true })
+  selectedColor?: string | null;
+
   @Prop({ type: String, default: null, trim: true })
   customRequests?: string | null;
+
+  @Prop({ type: Boolean, default: false })
+  isReviewed?: boolean;
+
+  @Prop({ type: Number, default: 0 })
+  comboDiscountPercent: number;
+
+  @Prop({ type: Number, default: 0 })
+  comboDiscountAmount: number;
 }
 
 export const BookingItemSchema = SchemaFactory.createForClass(BookingItem);

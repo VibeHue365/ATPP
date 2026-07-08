@@ -78,19 +78,24 @@ export const RegisterForm: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await register({
+      const result = await register({
         email,
         fullName,
         phone,
         password,
       });
 
-      toast.success("Đăng ký tài khoản thành công. Mã OTP đã được gửi.");
+      const demoOtpHint = result?.demoOtp
+        ? ` Mã OTP demo: ${result.demoOtp}`
+        : "";
+      toast.success(
+        `Đăng ký tài khoản thành công. Mã OTP đã được gửi.${demoOtpHint}`,
+      );
       navigate(ROUTES.VERIFY_EMAIL, {
         state: {
           email,
           message:
-            "Đăng ký thành công. Hãy nhập mã OTP 6 số để kích hoạt tài khoản.",
+            `Đăng ký thành công. Hãy nhập mã OTP 6 số để kích hoạt tài khoản.${demoOtpHint}`,
         },
       });
     } catch (err: any) {

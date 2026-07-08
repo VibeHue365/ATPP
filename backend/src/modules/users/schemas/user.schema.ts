@@ -33,9 +33,10 @@ export enum MembershipLevel {
 }
 
 export enum ProviderStatus {
-  Pending = 'PENDING',
-  Approved = 'APPROVED',
+  PendingApproval = 'PENDING_APPROVAL',
+  Active = 'ACTIVE',
   Rejected = 'REJECTED',
+  Suspended = 'SUSPENDED',
 }
 
 export interface UserAuthProvider {
@@ -155,6 +156,9 @@ export class User {
     index: true,
   })
   accountStatus: UserStatus;
+
+  @Prop({ type: Boolean, default: false })
+  hasCompletedOnboarding: boolean;
 
   @Prop({
     type: {

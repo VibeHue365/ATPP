@@ -16,6 +16,7 @@ import { UsersRepository } from '../../users/repositories/users.repository';
 import { ChangePasswordDto } from '../dto/change-password.dto';
 import { ForgotPasswordDto } from '../dto/forgot-password.dto';
 import { LoginDto } from '../dto/login.dto';
+import { OAuthExchangeDto } from '../dto/oauth-exchange.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterDto } from '../dto/register.dto';
 import { ResendVerificationDto } from '../dto/resend-verification.dto';
@@ -41,6 +42,14 @@ interface IssuedTokens {
   expiresIn: number;
 }
 
+interface AuthSession extends IssuedTokens {
+  user: Record<string, unknown>;
+}
+
+interface OAuthLoginCode {
+  code: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly accessTokenTtlSeconds = 15 * 60;
@@ -59,8 +68,27 @@ export class AuthService {
   async register(dto: RegisterDto): Promise<Record<string, unknown>> {
     const emailNormalized = this.normalizeEmail(dto.email);
     const phoneNormalized = this.normalizePhone(dto.phone);
-    const existing = await this.usersRepository.existsByEmail(emailNormalized);
-    if (existing) {
+
+    const existingUser =
+      await this.usersRepository.findUserByEmail(emailNormalized);
+    if (existingUser) {
+      const canResumeVerification =
+        existingUser.accountStatus === UserStatus.PendingEmailVerification &&
+        !existingUser.auth.emailVerified &&
+        existingUser.auth.phoneNormalized === phoneNormalized;
+
+      if (canResumeVerification) {
+        const otp = await this.sendFreshEmailVerificationOtp(
+          existingUser._id,
+          emailNormalized,
+        );
+
+        return {
+          message: 'Register success. Please verify your email.',
+          demoOtp: this.demoTokensEnabled() ? otp : undefined,
+        };
+      }
+
       throw new BadRequestException('Email already exists');
     }
 
@@ -175,7 +203,7 @@ export class AuthService {
   async login(
     dto: LoginDto,
     context: RequestContext,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<AuthSession> {
     const email = this.normalizeEmail(dto.email);
     const user = await this.usersRepository.findUserByEmail(email);
 
@@ -191,6 +219,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    if (user.accountStatus === UserStatus.Banned) {
+      await this.recordLogin(
+        user._id,
+        email,
+        LoginProvider.Local,
+        LoginStatus.Failed,
+        'ACCOUNT_BANNED',
+        context,
+      );
+      throw new ForbiddenException('Tài khoản của bạn đã bị khóa bởi quản trị viên.');
+    }
+
     if (user.accountStatus !== UserStatus.Active || !user.auth.emailVerified) {
       await this.recordLogin(
         user._id,
@@ -201,7 +241,7 @@ export class AuthService {
         context,
       );
       throw new ForbiddenException(
-        'Account is not active or email is not verified',
+        'Tài khoản chưa được kích hoạt hoặc email chưa được xác minh.',
       );
     }
 
@@ -267,7 +307,14 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token is invalid');
     }
 
-    await refreshToken.updateOne({ $set: { revokedAt: new Date() } });
+    const revoked = await this.authRepository.revokeRefreshTokenIfActive(
+      new Types.ObjectId(refreshTokenId),
+      refreshToken.userId,
+    );
+    if (!revoked) {
+      throw new UnauthorizedException('Refresh token is invalid');
+    }
+
     const user = await this.usersRepository.findUserById(refreshToken.userId);
     if (!user || user.accountStatus !== UserStatus.Active) {
       throw new UnauthorizedException('User is not active');
@@ -279,7 +326,6 @@ export class AuthService {
   async logout(
     userId: string,
     sessionId: string,
-    context: RequestContext,
   ): Promise<Record<string, unknown>> {
     const userObjectId = new Types.ObjectId(userId);
     await this.authRepository.revokeRefreshToken(
@@ -293,7 +339,6 @@ export class AuthService {
   async changePassword(
     userId: string,
     dto: ChangePasswordDto,
-    context: RequestContext,
   ): Promise<Record<string, unknown>> {
     const userObjectId = new Types.ObjectId(userId);
     const user = await this.usersRepository.findUserById(userObjectId);
@@ -339,10 +384,7 @@ export class AuthService {
     };
   }
 
-  async resetPassword(
-    dto: ResetPasswordDto,
-    context: RequestContext,
-  ): Promise<Record<string, unknown>> {
+  async resetPassword(dto: ResetPasswordDto): Promise<Record<string, unknown>> {
     const { tokenId } = this.parseResetToken(dto.token);
     const resetToken =
       await this.authRepository.findVerificationTokenById(tokenId);
@@ -375,7 +417,11 @@ export class AuthService {
   async handleGoogleLogin(
     profile: GoogleOAuthProfile,
     context: RequestContext,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<OAuthLoginCode> {
+    if (profile.emailVerified === false) {
+      throw new ForbiddenException('Google email is not verified');
+    }
+
     const email = this.normalizeEmail(profile.email);
     const providerUserId = profile.providerUserId;
     let user = await this.usersRepository.findUserByAuthProvider(
@@ -419,8 +465,10 @@ export class AuthService {
         },
       });
       await this.rolesService.assignDefaultCustomerRole(user._id);
+    } else if (user.accountStatus === UserStatus.Banned) {
+      throw new ForbiddenException('Tài khoản của bạn đã bị khóa bởi quản trị viên.');
     } else if (user.accountStatus !== UserStatus.Active) {
-      throw new ForbiddenException('Account is not active');
+      throw new ForbiddenException('Tài khoản chưa được kích hoạt hoặc không hoạt động.');
     } else if (!hasGoogleProvider) {
       await this.usersRepository.addAuthProvider(user._id, {
         provider: AuthProviderType.Google,
@@ -428,16 +476,65 @@ export class AuthService {
       });
     }
 
-    const tokens = await this.issueTokens(user._id, email, context);
+    await this.usersRepository.activateEmail(user._id);
+
+    return {
+      code: await this.createOAuthExchangeCode(user._id, email),
+    };
+  }
+
+  async exchangeOAuthCode(
+    dto: OAuthExchangeDto,
+    context: RequestContext,
+  ): Promise<AuthSession> {
+    const { tokenId } = this.parseOAuthCode(dto.code);
+    const token = await this.authRepository.findVerificationTokenById(tokenId);
+
+    if (
+      !token ||
+      token.purpose !== VerificationPurpose.OAuthLogin ||
+      token.verifiedAt ||
+      token.expiresAt.getTime() < Date.now()
+    ) {
+      throw new UnauthorizedException('OAuth code is expired or invalid');
+    }
+
+    const validCode = await bcrypt.compare(dto.code, token.codeHash);
+    if (!validCode) {
+      throw new UnauthorizedException('OAuth code is expired or invalid');
+    }
+
+    const verified = await this.authRepository.markVerificationTokenVerifiedIfActive(
+      new Types.ObjectId(tokenId),
+    );
+    if (!verified) {
+      throw new UnauthorizedException('OAuth code is expired or invalid');
+    }
+
+    const user = await this.usersRepository.findUserById(token.userId);
+    if (!user) {
+      throw new UnauthorizedException('Tài khoản không tồn tại');
+    }
+    if (user.accountStatus === UserStatus.Banned) {
+      throw new UnauthorizedException('Tài khoản của bạn đã bị khóa bởi quản trị viên.');
+    }
+    if (user.accountStatus !== UserStatus.Active) {
+      throw new UnauthorizedException('Tài khoản chưa được kích hoạt hoặc không hoạt động.');
+    }
+
+    const tokens = await this.issueTokens(
+      user._id,
+      user.auth.emailNormalized,
+      context,
+    );
     const { roles } = await this.rolesService.getRoleCodesAndPermissions(
       user._id,
     );
     await Promise.all([
       this.usersRepository.markLoggedIn(user._id),
-      this.usersRepository.activateEmail(user._id),
       this.recordLogin(
         user._id,
-        email,
+        user.auth.emailNormalized,
         LoginProvider.Google,
         LoginStatus.Success,
         null,
@@ -455,6 +552,20 @@ export class AuthService {
     return this.rolesService.getRoleCodesAndPermissions(
       new Types.ObjectId(userId),
     );
+  }
+
+  private async sendFreshEmailVerificationOtp(
+    userId: Types.ObjectId,
+    email: string,
+  ): Promise<string> {
+    await this.authRepository.revokeActiveVerificationTokens(
+      userId,
+      VerificationPurpose.VerifyEmail,
+    );
+    const otp = await this.createEmailVerificationOtp(userId, email);
+    await this.mailService.sendEmailVerificationOtp(email, otp);
+
+    return otp;
   }
 
   private async issueTokens(
@@ -512,6 +623,27 @@ export class AuthService {
     });
 
     return otp;
+  }
+
+  private async createOAuthExchangeCode(
+    userId: Types.ObjectId,
+    email: string,
+  ): Promise<string> {
+    const tokenId = new Types.ObjectId();
+    const code = `${tokenId.toString()}.${randomBytes(48).toString('hex')}`;
+    const codeHash = await bcrypt.hash(code, 12);
+
+    await this.authRepository.createVerificationToken({
+      _id: tokenId,
+      userId,
+      target: email,
+      targetType: VerificationTargetType.Email,
+      codeHash,
+      purpose: VerificationPurpose.OAuthLogin,
+      expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+    });
+
+    return code;
   }
 
   private async createPasswordResetToken(
@@ -580,7 +712,38 @@ export class AuthService {
     return { tokenId };
   }
 
+  private parseOAuthCode(code: string): { tokenId: string } {
+    const [tokenId] = code.split('.');
+    if (!Types.ObjectId.isValid(tokenId)) {
+      throw new UnauthorizedException('OAuth code is expired or invalid');
+    }
+
+    return { tokenId };
+  }
+
   private demoTokensEnabled(): boolean {
-    return this.configService.get<string>('NODE_ENV') !== 'production';
+    return this.configService.get<string>('AUTH_DEMO_TOKENS_ENABLED') === 'true';
+  }
+
+  private isDuplicateKeyError(error: unknown, field?: string): boolean {
+    const mongoError = error as
+      | {
+          code?: number;
+          keyPattern?: Record<string, unknown>;
+          keyValue?: Record<string, unknown>;
+        }
+      | undefined;
+
+    if (mongoError?.code !== 11000) {
+      return false;
+    }
+
+    if (!field) {
+      return true;
+    }
+
+    return Boolean(
+      mongoError.keyPattern?.[field] || mongoError.keyValue?.[field],
+    );
   }
 }

@@ -19,7 +19,13 @@ export class Promotion {
   @Prop({ type: Types.ObjectId, ref: 'Provider', default: null, index: true })
   providerId?: Types.ObjectId | null;
 
-  @Prop({ required: true, unique: true, index: true, trim: true, uppercase: true })
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    trim: true,
+    uppercase: true,
+  })
   code: string;
 
   @Prop({ required: true, trim: true })
