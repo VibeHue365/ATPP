@@ -1620,7 +1620,9 @@ export class BookingsService implements OnApplicationBootstrap {
 
     if (userId) {
       const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
-      const isCustomer = booking.customerId.toString() === userId;
+      // customerId has been populated into a User object, so extract _id safely
+      const customerIdRaw = (booking.customerId as any)?._id || booking.customerId;
+      const isCustomer = customerIdRaw.toString() === userId;
       
       const userProviders = await this.providerModel.find({ userId: new Types.ObjectId(userId) });
       const userProviderIds = userProviders.map(p => p._id.toString());
@@ -1656,8 +1658,19 @@ export class BookingsService implements OnApplicationBootstrap {
     if (userId) {
       const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
       const isCustomer = booking.customerId.toString() === userId;
-      if (!isAdmin && !isCustomer) {
-        throw new ForbiddenException('Chỉ khách hàng hoặc Admin mới có quyền xác nhận hoàn thành đơn hàng.');
+      
+      let isProvider = false;
+      if (roles?.includes('PROVIDER')) {
+        const provider = await this.providerModel.findOne({ userId: new Types.ObjectId(userId) });
+        if (provider) {
+          isProvider = booking.providerIds.some(
+            (pid) => pid.toString() === provider._id.toString()
+          );
+        }
+      }
+
+      if (!isAdmin && !isCustomer && !isProvider) {
+        throw new ForbiddenException('Chỉ khách hàng, Nhà cung cấp của đơn hàng hoặc Admin mới có quyền xác nhận hoàn thành đơn hàng.');
       }
     }
 

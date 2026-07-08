@@ -622,7 +622,10 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     <tr 
                       key={p._id || p.paymentCode} 
                       onClick={() => {
-                        const bId = p.bookingId?._id || p.bookingId;
+                        let bId = p.bookingId;
+                        if (bId && typeof bId === 'object') {
+                          bId = bId.id || bId._id;
+                        }
                         if (bId) {
                           setSelectedBookingId(bId);
                           setIsDetailModalOpen(true);

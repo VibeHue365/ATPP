@@ -237,10 +237,11 @@ export class PaymentsController {
         return res.status(404).send('Không tìm thấy thông tin thanh toán.');
       }
 
-      const booking = payment.bookingId as any;
+       const booking = payment.bookingId as any;
       const bookingCode = booking?.bookingCode || 'N/A';
       const amount = payment.amount;
       const memo = `VIBEHUE PAY ${payment.paymentCode}`;
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
       const html = `
         <!DOCTYPE html>
@@ -307,7 +308,7 @@ export class PaymentsController {
 
               <!-- Back link -->
               <div class="mt-8 pt-4 border-t border-stone-100">
-                <a href="vibehue://payment/cancel" class="text-xs font-bold text-stone-500 hover:text-stone-700 flex items-center gap-1">
+                <a id="cancel-back-btn" href="vibehue://payment/cancel" class="text-xs font-bold text-stone-500 hover:text-stone-700 flex items-center gap-1">
                   ← Hủy thanh toán
                 </a>
               </div>
@@ -386,7 +387,7 @@ export class PaymentsController {
             <p class="text-sm text-stone-500 mb-6 leading-relaxed">
               Hệ thống đã xác nhận khoản chuyển tiền cọc trị giá <strong>${amount.toLocaleString('vi-VN')}đ</strong> cho giao dịch <strong>${payment.paymentCode}</strong> hoàn tất thành công.
             </p>
-            <a href="vibehue://payment/success" class="w-full py-3.5 vh-bg-red vh-bg-red-hover text-white font-bold text-sm rounded-xl transition inline-flex items-center justify-center shadow-md">
+            <a id="success-back-btn" href="vibehue://payment/success" class="w-full py-3.5 vh-bg-red vh-bg-red-hover text-white font-bold text-sm rounded-xl transition inline-flex items-center justify-center shadow-md">
               Xác nhận và quay lại
             </a>
           </div>
@@ -396,6 +397,7 @@ export class PaymentsController {
             const amount = ${amount};
             const memo = "${memo}";
             const code = "${payment.paymentCode}";
+            const frontendUrl = "${frontendUrl}";
 
             const bankSelect = document.getElementById('bank-select');
             const accInput = document.getElementById('acc-input');
@@ -405,7 +407,7 @@ export class PaymentsController {
             
             const lblHolder = document.getElementById('lbl-holder');
             const lblBank = document.getElementById('lbl-bank');
-
+ 
             // Toggle Config panel drawer
             const toggleBtn = document.getElementById('toggle-config-btn');
             const configPanel = document.getElementById('config-panel');
@@ -462,6 +464,25 @@ export class PaymentsController {
             // Init
             updateQR();
 
+            // Setup deep link click handlers with web redirects fallbacks
+            const cancelBackBtn = document.getElementById('cancel-back-btn');
+            cancelBackBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              window.location.href = 'vibehue://payment/cancel';
+              setTimeout(() => {
+                window.location.href = frontendUrl + '/dashboard/profile';
+              }, 500);
+            });
+
+            const successBackBtn = document.getElementById('success-back-btn');
+            successBackBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              window.location.href = 'vibehue://payment/success';
+              setTimeout(() => {
+                window.location.href = frontendUrl + '/dashboard/profile';
+              }, 500);
+            });
+
             // Confirm payment API call
             const confirmBtn = document.getElementById('confirm-btn');
             const spinner = document.getElementById('spinner');
@@ -485,8 +506,11 @@ export class PaymentsController {
                   setTimeout(() => {
                     successCard.classList.remove('opacity-0', 'scale-95');
                     successCard.classList.add('opacity-100', 'scale-100');
-                    // Redirect mobile WebView về deep link thành công
+                    // Thử chuyển hướng ứng dụng di động trước, sau đó fallback về web sau 1.5s
                     window.location.href = 'vibehue://payment/success';
+                    setTimeout(() => {
+                      window.location.href = frontendUrl + '/dashboard/profile';
+                    }, 1500);
                   }, 800);
                 } else {
                   alert('Xác nhận thanh toán thất bại. Vui lòng thử lại!');

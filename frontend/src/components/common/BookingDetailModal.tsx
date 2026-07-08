@@ -40,12 +40,13 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   const fetchBookingDetails = async () => {
     setLoading(true);
     setError(null);
+    console.log('BookingDetailModal fetchBookingDetails for ID:', bookingId);
     try {
       const res = await httpClient.get<any>(`/bookings/${bookingId}`);
       setBooking(res);
     } catch (err: any) {
       console.error('Lỗi khi lấy chi tiết đơn hàng:', err);
-      setError('Không thể tải chi tiết đơn hàng này. Vui lòng thử lại sau.');
+      setError(`Không thể tải chi tiết đơn hàng này (ID: ${bookingId}). Lỗi: ${err?.message || err}. Vui lòng thử lại sau.`);
     } finally {
       setLoading(false);
     }
