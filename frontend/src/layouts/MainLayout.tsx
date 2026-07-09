@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { ROUTES } from '../config/routes';
-import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X, ShieldCheck } from 'lucide-react';
+import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X, ShieldCheck, Check, CheckCheck } from 'lucide-react';
 import { API_BASE_URL } from '../config/env';
 import { AIChatBot } from '../features/dashboard/components/AIChatBot';
 import { useCart } from '../context/CartContext';
+import { httpClient } from '../services/httpClient';
 
 export const MainLayout: React.FC = () => {
   const { isAuthenticated, user, logout } = useAuth();
@@ -15,13 +16,20 @@ export const MainLayout: React.FC = () => {
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isNotiOpen, setIsNotiOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingNoti, setLoadingNoti] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const notiRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdown / notification panel when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsDropdownOpen(false);
+      }
+      if (notiRef.current && !notiRef.current.contains(event.target as Node)) {
+        setIsNotiOpen(false);
       }
     };
 
@@ -30,6 +38,71 @@ export const MainLayout: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Fetch notifications
+  const fetchNotifications = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      setLoadingNoti(true);
+      const data = await httpClient.request<any[]>('/notifications');
+      setNotifications(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to fetch notifications', e);
+    } finally {
+      setLoadingNoti(false);
+    }
+  }, [isAuthenticated]);
+
+  // Load notifications on mount & periodically every 30s
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await httpClient.request(`/notifications/${id}/read`, { method: 'PATCH' });
+      setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n));
+    } catch (e) {
+      console.error('Failed to mark notification as read', e);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await httpClient.request('/notifications/read-all', { method: 'POST' });
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true, readAt: new Date().toISOString() })));
+    } catch (e) {
+      console.error('Failed to mark all notifications as read', e);
+    }
+  };
+
+  const getTimeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Vừa xong';
+    if (mins < 60) return `${mins} phút trước`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} giờ trước`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} ngày trước`;
+    return new Date(dateStr).toLocaleDateString('vi-VN');
+  };
+
+  const getNotiTypeColor = (type: string) => {
+    switch (type) {
+      case 'BOOKING': return { bg: '#EEF2FF', color: '#4338CA', icon: '📋' };
+      case 'PAYMENT': return { bg: '#F0FDF4', color: '#166534', icon: '💳' };
+      case 'HANDOVER': return { bg: '#FFF7ED', color: '#C2410C', icon: '🤝' };
+      case 'REFUND': return { bg: '#FEF3C7', color: '#92400E', icon: '💰' };
+      case 'DISPUTE': return { bg: '#FEE2E2', color: '#991B1B', icon: '⚠️' };
+      case 'SYSTEM': return { bg: '#F5F3FF', color: '#7C3AED', icon: '🔔' };
+      default: return { bg: '#F9FAFB', color: '#6B7280', icon: '📌' };
+    }
+  };
   // Redirect to onboarding if user is logged in but hasn't completed onboarding
   // Also redirect Admin to Admin Dashboard automatically if they access customer layouts
   useEffect(() => {
@@ -127,9 +200,210 @@ export const MainLayout: React.FC = () => {
           {/* Right Action Icons & User section */}
           <div className="vh-header-actions-redesigned">
             
-            <button className="vh-header-action-icon-custom" title="Thông báo">
-              <Bell size={20} />
-            </button>
+            <div style={{ position: 'relative' }} ref={notiRef}>
+              <button 
+                className="vh-header-action-icon-custom" 
+                title="Thông báo"
+                onClick={() => { setIsNotiOpen(!isNotiOpen); if (!isNotiOpen) fetchNotifications(); }}
+                style={{ position: 'relative' }}
+              >
+                <Bell size={20} />
+                {unreadCount > 0 && (
+                  <span style={{
+                    position: 'absolute', top: '-4px', right: '-4px',
+                    backgroundColor: 'var(--color-primary)', color: 'white',
+                    borderRadius: '50%', minWidth: '16px', height: '16px',
+                    fontSize: '9px', fontWeight: 'bold',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '0 3px', boxShadow: '0 1px 4px rgba(74,14,23,0.4)',
+                    animation: 'pulse-badge 2s infinite'
+                  }}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Dropdown Panel */}
+              {isNotiOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 12px)', right: '-60px',
+                  width: '400px', maxHeight: '520px',
+                  backgroundColor: 'white', borderRadius: '14px',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04)',
+                  zIndex: 9999, overflow: 'hidden',
+                  animation: 'noti-slide-in 0.2s ease-out'
+                }}>
+                  {/* Header */}
+                  <div style={{
+                    padding: '16px 20px', borderBottom: '1px solid #F0EBE3',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: 'linear-gradient(135deg, #FAF6F0 0%, #FFF 100%)'
+                  }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#4A0E17', letterSpacing: '-0.01em' }}>Thông báo</h3>
+                      {unreadCount > 0 && (
+                        <span style={{ fontSize: '11px', color: '#B89047', fontWeight: 600 }}>{unreadCount} thông báo chưa đọc</span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={handleMarkAllAsRead}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          padding: '5px 10px', border: '1px solid #E8E2D5', borderRadius: '6px',
+                          backgroundColor: 'white', color: '#706E3B', fontSize: '11px',
+                          fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s'
+                        }}
+                        onMouseOver={e => { e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
+                        onMouseOut={e => { e.currentTarget.style.backgroundColor = 'white'; }}
+                      >
+                        <CheckCheck size={12} />
+                        Đọc tất cả
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Notification List */}
+                  <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                    {loadingNoti ? (
+                      <div style={{ padding: '40px', textAlign: 'center', color: '#7A7A7A' }}>
+                        <div style={{ width: '24px', height: '24px', border: '2px solid #E8E2D5', borderTop: '2px solid #4A0E17', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 8px' }} />
+                        <span style={{ fontSize: '12px', fontWeight: 600 }}>Đang tải...</span>
+                      </div>
+                    ) : notifications.length === 0 ? (
+                      <div style={{ padding: '50px 20px', textAlign: 'center' }}>
+                        <Bell size={32} color="#D4C5A9" style={{ marginBottom: '12px' }} />
+                        <p style={{ margin: 0, fontSize: '13px', color: '#7A7A7A', fontWeight: 600 }}>Chưa có thông báo nào</p>
+                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#B0A89A' }}>Các thông báo mới sẽ hiển thị tại đây</p>
+                      </div>
+                    ) : (
+                      notifications.map((noti) => {
+                        const typeStyle = getNotiTypeColor(noti.type);
+                        return (
+                          <div
+                            key={noti._id}
+                            onClick={() => !noti.isRead && handleMarkAsRead(noti._id)}
+                            style={{
+                              padding: '14px 20px', cursor: 'pointer',
+                              borderBottom: '1px solid #F5F0E8',
+                              backgroundColor: noti.isRead ? 'white' : '#FFFCF7',
+                              transition: 'background 0.15s',
+                              display: 'flex', gap: '12px', alignItems: 'flex-start',
+                              position: 'relative'
+                            }}
+                            onMouseOver={e => { e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
+                            onMouseOut={e => { e.currentTarget.style.backgroundColor = noti.isRead ? 'white' : '#FFFCF7'; }}
+                          >
+                            {/* Unread dot */}
+                            {!noti.isRead && (
+                              <div style={{
+                                position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)',
+                                width: '6px', height: '6px', borderRadius: '50%',
+                                backgroundColor: '#4A0E17'
+                              }} />
+                            )}
+
+                            {/* Type icon */}
+                            <div style={{
+                              width: '36px', height: '36px', borderRadius: '10px',
+                              backgroundColor: typeStyle.bg, display: 'flex',
+                              alignItems: 'center', justifyContent: 'center',
+                              fontSize: '16px', flexShrink: 0
+                            }}>
+                              {typeStyle.icon}
+                            </div>
+
+                            {/* Content */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+                                <span style={{
+                                  fontSize: '13px', fontWeight: noti.isRead ? 600 : 750,
+                                  color: '#2A2A2A', lineHeight: '1.3'
+                                }}>
+                                  {noti.title}
+                                </span>
+                                <span style={{
+                                  padding: '1px 5px', borderRadius: '3px', fontSize: '8px',
+                                  fontWeight: 700, backgroundColor: typeStyle.bg, color: typeStyle.color,
+                                  textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0
+                                }}>
+                                  {noti.type}
+                                </span>
+                              </div>
+                              <p style={{
+                                margin: 0, fontSize: '12px', color: '#6B6B6B',
+                                lineHeight: '1.45', wordBreak: 'break-word',
+                                display: '-webkit-box', WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical' as any, overflow: 'hidden'
+                              }}>
+                                {noti.content}
+                              </p>
+                              <span style={{ fontSize: '10px', color: '#B0A89A', fontWeight: 500, marginTop: '4px', display: 'block' }}>
+                                {getTimeAgo(noti.createdAt)}
+                              </span>
+                            </div>
+
+                            {/* Read indicator */}
+                            {!noti.isRead && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleMarkAsRead(noti._id); }}
+                                title="Đánh dấu đã đọc"
+                                style={{
+                                  background: 'none', border: 'none', padding: '4px',
+                                  cursor: 'pointer', color: '#B89047', flexShrink: 0,
+                                  opacity: 0.6, transition: 'opacity 0.15s'
+                                }}
+                                onMouseOver={e => { e.currentTarget.style.opacity = '1'; }}
+                                onMouseOut={e => { e.currentTarget.style.opacity = '0.6'; }}
+                              >
+                                <Check size={14} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  {notifications.length > 0 && (
+                    <div style={{
+                      padding: '10px 20px', borderTop: '1px solid #F0EBE3',
+                      textAlign: 'center', background: '#FDFCFA'
+                    }}>
+                      <button
+                        onClick={() => { setIsNotiOpen(false); navigate('/dashboard/profile?tab=notifications'); }}
+                        style={{
+                          background: 'none', border: 'none', color: '#B89047',
+                          fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                          padding: '4px 12px', borderRadius: '4px', transition: 'all 0.15s'
+                        }}
+                        onMouseOver={e => { e.currentTarget.style.color = '#4A0E17'; }}
+                        onMouseOut={e => { e.currentTarget.style.color = '#B89047'; }}
+                      >
+                        Xem tất cả thông báo →
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Animations */}
+                  <style>{`
+                    @keyframes noti-slide-in {
+                      from { opacity: 0; transform: translateY(-8px); }
+                      to { opacity: 1; transform: translateY(0); }
+                    }
+                    @keyframes pulse-badge {
+                      0%, 100% { transform: scale(1); }
+                      50% { transform: scale(1.1); }
+                    }
+                    @keyframes spin {
+                      0% { transform: rotate(0deg); }
+                      100% { transform: rotate(360deg); }
+                    }
+                  `}</style>
+                </div>
+              )}
+            </div>
             <Link to={ROUTES.CART} className="vh-header-action-icon-custom" title="Giỏ hàng" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ShoppingBag size={20} />
               {cart.length > 0 && (

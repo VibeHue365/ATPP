@@ -5,13 +5,22 @@ import {
   Image as ImageIcon, Calendar, Eye,
   LayoutDashboard, Users, Store, TrendingUp, FileCheck,
   Search, Bell, Ban, Lock, CheckSquare, BarChart3,
-  LogOut, Home
+  LogOut, Home, Star
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
+import { API_BASE_URL } from '../../config/env';
+
+const getImageUrl = (url: string) => {
+  if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  return `${API_BASE_URL}${url}`;
+};
 
 // --- TYPE INTERFACES ---
 interface DisputeItem {
@@ -87,6 +96,62 @@ export const AdminDashboardPage: React.FC = () => {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  // Reported Reviews states
+  const [reportedReviews, setReportedReviews] = useState<any[]>([]);
+  const [loadingReportedReviews, setLoadingReportedReviews] = useState<boolean>(false);
+
+  const fetchReportedReviews = async () => {
+    setLoadingReportedReviews(true);
+    try {
+      const data = await httpClient.get<any[]>('/reviews/admin/reported');
+      setReportedReviews(data || []);
+    } catch (err: any) {
+      console.warn('Lỗi gọi API Reported Reviews:', err);
+      toast.error('Không thể tải danh sách báo cáo vi phạm');
+    } finally {
+      setLoadingReportedReviews(false);
+    }
+  };
+
+  const handleReviewReportAction = async (reviewId: string, action: 'DELETE' | 'DISMISS') => {
+    const actionText = action === 'DELETE' ? 'Gỡ bỏ đánh giá (Vi phạm)' : 'Bác bỏ báo cáo (Giữ lại)';
+    const confirmButtonColor = action === 'DELETE' ? '#DC2626' : '#2563EB';
+
+    const { value: reason, isConfirmed } = await Swal.fire({
+      title: `Xác nhận: ${actionText}`,
+      input: 'textarea',
+      inputLabel: 'Nhập lý do để gửi thông báo nguyên nhân cho khách hàng & đối tác:',
+      inputPlaceholder: 'Ví dụ: Đánh giá chứa ngôn từ thiếu chuẩn mực / Đánh giá phản ánh đúng trải nghiệm của khách hàng...',
+      inputAttributes: {
+        'aria-label': 'Nhập lý do chi tiết'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Xác nhận phán quyết',
+      cancelButtonText: 'Hủy bỏ',
+      confirmButtonColor,
+      background: 'white',
+      inputValidator: (value) => {
+        if (!value || !value.trim()) {
+          return 'Vui lòng nhập lý do xử lý cụ thể!';
+        }
+        return null;
+      }
+    });
+
+    if (isConfirmed && reason) {
+      try {
+        await httpClient.post(`/reviews/${reviewId}/handle-report`, {
+          action,
+          reason: reason.trim()
+        });
+        toast.success('Xử lý báo cáo đánh giá vi phạm thành công!');
+        fetchReportedReviews();
+      } catch (err: any) {
+        toast.error(`Xử lý thất bại: ${err.message || 'Không xác định'}`);
+      }
+    }
+  };
 
   // Pagination states for different tabs
   const [customerPage, setCustomerPage] = useState(1);
@@ -235,6 +300,12 @@ export const AdminDashboardPage: React.FC = () => {
     setSearchQuery('');
     setFilterStatus('ALL');
   }, [activeTab]);
+
+  useEffect(() => {
+    if (isAuthenticated && isAdmin && activeTab === 'reported-reviews') {
+      fetchReportedReviews();
+    }
+  }, [activeTab, isAuthenticated, isAdmin]);
 
   // --- ACTIONS HANDLERS ---
   const handleResolveDispute = async (decision: 'SHOP_RIGHT' | 'CUSTOMER_RIGHT') => {
@@ -1287,6 +1358,107 @@ export const AdminDashboardPage: React.FC = () => {
     );
   };
 
+  // Tab: Reported Reviews (Spam Management)
+  const renderReportedReviewsTab = () => {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', overflow: 'hidden' }}>
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid #E8E2D5', backgroundColor: '#FAF6F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17' }}>DANH SÁCH BÁO CÁO VI PHẠM & SPAM ĐÁNH GIÁ</h3>
+            <button 
+              onClick={fetchReportedReviews}
+              style={{ padding: '6px 12px', border: '1px solid #B89047', borderRadius: '6px', backgroundColor: 'white', color: '#B89047', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+            >
+              Làm mới
+            </button>
+          </div>
+          {loadingReportedReviews ? (
+            <div style={{ padding: '60px', textAlign: 'center', color: '#7A7A7A', fontWeight: 600 }}>Đang tải danh sách báo cáo vi phạm...</div>
+          ) : reportedReviews.length === 0 ? (
+            <div style={{ padding: '60px', textAlign: 'center', color: '#7A7A7A', fontWeight: 600 }}>Không có báo cáo vi phạm đánh giá nào cần xử lý.</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1px solid #E8E2D5' }}>
+                  <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>MÃ ĐƠN HÀNG</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>ĐỐI TÁC</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>KHÁCH HÀNG & ĐÁNH GIÁ</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>LÝ DO BÁO CÁO SPAM</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>NGÀY BÁO CÁO</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>HÀNH ĐỘNG HỆ THỐNG</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reportedReviews.map((r) => {
+                  const custName = r.customerId?.profile?.fullName || 'Khách hàng';
+                  const studioName = r.providerId?.businessName || 'Nhà cung cấp';
+                  const bCode = r.bookingId?.bookingCode || r.bookingId?._id?.toString()?.slice(-6)?.toUpperCase() || 'N/A';
+                  const ratingStars = r.rating || 5;
+                  
+                  return (
+                    <tr key={r._id} style={{ borderBottom: '1px solid #E8E2D5', transition: 'background 0.15s' }}>
+                      <td style={{ padding: '16px 20px', fontWeight: 700, color: '#4A0E17' }}>
+                        #{bCode}
+                      </td>
+                      <td style={{ padding: '16px 20px' }}>
+                        <strong style={{ display: 'block', color: '#2A2A2A' }}>{studioName}</strong>
+                        <span style={{ fontSize: '11px', color: '#7A7A7A' }}>ID: {r.providerId?._id}</span>
+                      </td>
+                      <td style={{ padding: '16px 20px', maxWidth: '350px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                          <strong style={{ color: '#2A2A2A' }}>{custName}</strong>
+                          <span style={{ display: 'flex', gap: '1px', color: '#B89047' }}>
+                            {Array.from({ length: ratingStars }).map((_, i) => (
+                              <Star key={i} size={10} fill="currentColor" color="currentColor" />
+                            ))}
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '12.5px', color: '#4A4A4A', lineHeight: '1.4', wordBreak: 'break-word' }}>
+                          "{r.comment || 'Không có bình luận.'}"
+                        </p>
+                        {r.images && r.images.length > 0 && (
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                            {r.images.map((img: string, idx: number) => (
+                              <a href={getImageUrl(img)} target="_blank" rel="noreferrer" key={idx} style={{ width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)', display: 'block' }}>
+                                <img src={getImageUrl(img)} alt="review attachment" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '16px 20px', color: '#991B1B', fontWeight: 600 }}>
+                        {r.reportReason || 'Spam / Vi phạm tiêu chuẩn'}
+                      </td>
+                      <td style={{ padding: '16px 20px', color: '#7A7A7A' }}>
+                        {r.reportedAt ? new Date(r.reportedAt).toLocaleDateString('vi-VN') : 'N/A'}
+                      </td>
+                      <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+                          <button
+                            onClick={() => handleReviewReportAction(r._id, 'DELETE')}
+                            style={{ width: '150px', padding: '6px 12px', border: 'none', borderRadius: '4px', backgroundColor: '#4A0E17', color: 'white', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            XÓA ĐÁNH GIÁ (SPAM)
+                          </button>
+                          <button
+                            onClick={() => handleReviewReportAction(r._id, 'DISMISS')}
+                            style={{ width: '150px', padding: '6px 12px', border: '1px solid #706E3B', borderRadius: '4px', backgroundColor: 'white', color: '#706E3B', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            BÁC BỎ (GIỮ REVIEW)
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Tab 7: Dispute Resolution
   const renderDisputesTab = () => {
     return (
@@ -1831,6 +2003,7 @@ export const AdminDashboardPage: React.FC = () => {
               { id: 'revenue', label: 'Báo cáo Doanh thu', icon: TrendingUp },
               { id: 'verifications', label: 'Phê duyệt hồ sơ đối tác', icon: FileCheck },
               { id: 'disputes', label: 'Giải quyết tranh chấp', icon: AlertTriangle },
+              { id: 'reported-reviews', label: 'Báo cáo Đánh giá (Spam)', icon: Ban },
               { id: 'behavior', label: 'Phân tích hành vi', icon: BarChart3 },
             ].map(item => {
               const Icon = item.icon;
@@ -1904,6 +2077,7 @@ export const AdminDashboardPage: React.FC = () => {
                activeTab === 'revenue' ? 'Thống kê Doanh thu Hệ thống' :
                activeTab === 'verifications' ? 'Phê duyệt hồ sơ đăng ký đối tác' :
                activeTab === 'behavior' ? 'Phân tích hành vi người dùng' :
+               activeTab === 'reported-reviews' ? 'Báo cáo vi phạm & Spam Đánh giá' :
                'Giải quyết tranh chấp sự cố'}
             </span>
           </div>
@@ -1947,6 +2121,7 @@ export const AdminDashboardPage: React.FC = () => {
                 {activeTab === 'verifications' && renderVerificationsTab()}
                 {activeTab === 'disputes' && renderDisputesTab()}
                 {activeTab === 'behavior' && renderBehaviorTab()}
+                {activeTab === 'reported-reviews' && renderReportedReviewsTab()}
               </>
             )}
           </div>

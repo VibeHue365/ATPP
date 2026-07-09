@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
   HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,
-  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign
+  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck
 } from 'lucide-react';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 import Swal from 'sweetalert2';
@@ -129,6 +129,81 @@ export const ProviderDashboard: React.FC = () => {
   // Trust search score
   const [searchCustId, setSearchCustId] = useState('');
   const [trustScoreResult, setTrustScoreResult] = useState<any>(null);
+
+  // Notification states
+  const [isNotiOpen, setIsNotiOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingNoti, setLoadingNoti] = useState(false);
+  const notiRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to close notification panel
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notiRef.current && !notiRef.current.contains(event.target as Node)) {
+        setIsNotiOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setLoadingNoti(true);
+      const data = await httpClient.request<any[]>('/notifications');
+      setNotifications(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to fetch notifications', e);
+    } finally {
+      setLoadingNoti(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  const providerUnreadCount = notifications.filter(n => !n.isRead).length;
+
+  const handleNotiMarkAsRead = async (id: string) => {
+    try {
+      await httpClient.request(`/notifications/${id}/read`, { method: 'PATCH' });
+      setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
+    } catch (e) { console.error(e); }
+  };
+
+  const handleNotiMarkAllAsRead = async () => {
+    try {
+      await httpClient.request('/notifications/read-all', { method: 'POST' });
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    } catch (e) { console.error(e); }
+  };
+
+  const getNotiTimeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Vừa xong';
+    if (mins < 60) return `${mins} phút trước`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} giờ trước`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} ngày trước`;
+    return new Date(dateStr).toLocaleDateString('vi-VN');
+  };
+
+  const getNotiTypeStyle = (type: string) => {
+    switch (type) {
+      case 'BOOKING': return { bg: '#EEF2FF', color: '#4338CA', icon: '📋' };
+      case 'PAYMENT': return { bg: '#F0FDF4', color: '#166534', icon: '💳' };
+      case 'HANDOVER': return { bg: '#FFF7ED', color: '#C2410C', icon: '🤝' };
+      case 'REFUND': return { bg: '#FEF3C7', color: '#92400E', icon: '💰' };
+      case 'DISPUTE': return { bg: '#FEE2E2', color: '#991B1B', icon: '⚠️' };
+      case 'SYSTEM': return { bg: '#F5F3FF', color: '#7C3AED', icon: '🔔' };
+      default: return { bg: '#F9FAFB', color: '#6B7280', icon: '📌' };
+    }
+  };
 
   const fetchProviderData = async () => {
     setIsLoadingProvider(true);
@@ -1141,7 +1216,158 @@ export const ProviderDashboard: React.FC = () => {
         }}>
           <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Hệ thống Quản lý nhà cung cấp</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <button style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', position: 'relative' }}><Bell size={18} /><span style={{ position: 'absolute', top: '0', right: '0', width: '7px', height: '7px', backgroundColor: 'var(--color-primary)', borderRadius: '50%', border: '1px solid white' }} /></button>
+            <div style={{ position: 'relative' }} ref={notiRef}>
+              <button 
+                onClick={() => { setIsNotiOpen(!isNotiOpen); if (!isNotiOpen) fetchNotifications(); }}
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', position: 'relative' }}
+              >
+                <Bell size={18} />
+                {providerUnreadCount > 0 && (
+                  <span style={{
+                    position: 'absolute', top: '-5px', right: '-5px',
+                    backgroundColor: 'var(--color-primary)', color: 'white',
+                    borderRadius: '50%', minWidth: '14px', height: '14px',
+                    fontSize: '8px', fontWeight: 'bold',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '0 2px', boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                  }}>
+                    {providerUnreadCount > 99 ? '99+' : providerUnreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Dropdown */}
+              {isNotiOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 10px)', right: '-20px',
+                  width: '380px', maxHeight: '480px',
+                  backgroundColor: 'white', borderRadius: '12px',
+                  boxShadow: '0 16px 48px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.04)',
+                  zIndex: 9999, overflow: 'hidden',
+                  animation: 'noti-slide-in 0.2s ease-out'
+                }}>
+                  {/* Header */}
+                  <div style={{
+                    padding: '14px 18px', borderBottom: '1px solid #F0EBE3',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: 'linear-gradient(135deg, #FAF6F0 0%, #FFF 100%)'
+                  }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--color-primary-dark)' }}>Thông báo</h3>
+                      {providerUnreadCount > 0 && (
+                        <span style={{ fontSize: '10px', color: 'var(--color-gold)', fontWeight: 600 }}>{providerUnreadCount} chưa đọc</span>
+                      )}
+                    </div>
+                    {providerUnreadCount > 0 && (
+                      <button
+                        onClick={handleNotiMarkAllAsRead}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          padding: '4px 8px', border: '1px solid #E8E2D5', borderRadius: '5px',
+                          backgroundColor: 'white', color: '#706E3B', fontSize: '10px',
+                          fontWeight: 600, cursor: 'pointer'
+                        }}
+                      >
+                        <CheckCheck size={11} />
+                        Đọc tất cả
+                      </button>
+                    )}
+                  </div>
+
+                  {/* List */}
+                  <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
+                    {loadingNoti ? (
+                      <div style={{ padding: '40px', textAlign: 'center', color: '#7A7A7A' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 600 }}>Đang tải...</span>
+                      </div>
+                    ) : notifications.length === 0 ? (
+                      <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+                        <Bell size={28} color="#D4C5A9" style={{ marginBottom: '8px' }} />
+                        <p style={{ margin: 0, fontSize: '12px', color: '#7A7A7A', fontWeight: 600 }}>Chưa có thông báo</p>
+                      </div>
+                    ) : (
+                      notifications.map((noti) => {
+                        const ts = getNotiTypeStyle(noti.type);
+                        return (
+                          <div
+                            key={noti._id}
+                            onClick={() => !noti.isRead && handleNotiMarkAsRead(noti._id)}
+                            style={{
+                              padding: '12px 18px', cursor: 'pointer',
+                              borderBottom: '1px solid #F5F0E8',
+                              backgroundColor: noti.isRead ? 'white' : '#FFFCF7',
+                              transition: 'background 0.15s',
+                              display: 'flex', gap: '10px', alignItems: 'flex-start',
+                              position: 'relative'
+                            }}
+                            onMouseOver={e => { e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
+                            onMouseOut={e => { e.currentTarget.style.backgroundColor = noti.isRead ? 'white' : '#FFFCF7'; }}
+                          >
+                            {!noti.isRead && (
+                              <div style={{
+                                position: 'absolute', left: '6px', top: '50%', transform: 'translateY(-50%)',
+                                width: '5px', height: '5px', borderRadius: '50%',
+                                backgroundColor: 'var(--color-primary)'
+                              }} />
+                            )}
+                            <div style={{
+                              width: '32px', height: '32px', borderRadius: '8px',
+                              backgroundColor: ts.bg, display: 'flex',
+                              alignItems: 'center', justifyContent: 'center',
+                              fontSize: '14px', flexShrink: 0
+                            }}>
+                              {ts.icon}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: noti.isRead ? 600 : 750, color: '#2A2A2A' }}>
+                                  {noti.title}
+                                </span>
+                                <span style={{
+                                  padding: '1px 4px', borderRadius: '3px', fontSize: '7px',
+                                  fontWeight: 700, backgroundColor: ts.bg, color: ts.color,
+                                  textTransform: 'uppercase', flexShrink: 0
+                                }}>
+                                  {noti.type}
+                                </span>
+                              </div>
+                              <p style={{
+                                margin: 0, fontSize: '11px', color: '#6B6B6B',
+                                lineHeight: '1.4', display: '-webkit-box', WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical' as any, overflow: 'hidden'
+                              }}>
+                                {noti.content}
+                              </p>
+                              <span style={{ fontSize: '9px', color: '#B0A89A', fontWeight: 500, marginTop: '3px', display: 'block' }}>
+                                {getNotiTimeAgo(noti.createdAt)}
+                              </span>
+                            </div>
+                            {!noti.isRead && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleNotiMarkAsRead(noti._id); }}
+                                title="Đánh dấu đã đọc"
+                                style={{ background: 'none', border: 'none', padding: '3px', cursor: 'pointer', color: 'var(--color-gold)', flexShrink: 0, opacity: 0.6 }}
+                                onMouseOver={e => { e.currentTarget.style.opacity = '1'; }}
+                                onMouseOut={e => { e.currentTarget.style.opacity = '0.6'; }}
+                              >
+                                <Check size={12} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <style>{`
+                    @keyframes noti-slide-in {
+                      from { opacity: 0; transform: translateY(-6px); }
+                      to { opacity: 1; transform: translateY(0); }
+                    }
+                  `}</style>
+                </div>
+              )}
+            </div>
             <button style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer' }}><HelpCircle size={18} /></button>
             <div style={{ height: '24px', width: '1px', backgroundColor: 'var(--color-light-border)' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

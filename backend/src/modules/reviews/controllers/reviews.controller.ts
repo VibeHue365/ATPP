@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  UnsupportedMediaTypeException,
+  ForbiddenException,
+} from '@nestjs/common';
 import {
   IsArray,
   IsNotEmpty,
@@ -8,6 +20,10 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
@@ -71,6 +87,16 @@ export class RateCustomerDto {
   comment?: string;
 }
 
+export class HandleReportDto {
+  @IsString()
+  @IsNotEmpty()
+  action: 'DELETE' | 'DISMISS';
+
+  @IsString()
+  @IsNotEmpty()
+  reason: string;
+}
+
 @Controller('reviews')
 export class ReviewsController {
   constructor(private readonly reviewsService: ReviewsService) {}
@@ -132,5 +158,80 @@ export class ReviewsController {
   @UseGuards(JwtAuthGuard)
   async getTrustScore(@Param('customerId') customerId: string) {
     return this.reviewsService.getCustomerTrustScore(customerId);
+  }
+
+  private checkAdmin(user: AuthUser) {
+    const roles = user.roles || [];
+    if (!roles.includes('ADMIN') && !roles.includes('admin')) {
+      throw new ForbiddenException('Bạn không có quyền truy cập chức năng Admin');
+    }
+  }
+
+  @Post('upload')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_request, file, callback) => {
+        const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedMimeTypes.includes(file.mimetype)) {
+          callback(
+            new UnsupportedMediaTypeException(
+              'Only jpg, png, and webp images are allowed',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+      storage: diskStorage({
+        destination: (_request, _file, callback) => {
+          const dest = join(process.cwd(), 'uploads', 'reviews');
+          if (!existsSync(dest)) {
+            mkdirSync(dest, { recursive: true });
+          }
+          callback(null, dest);
+        },
+        filename: (_request, file, callback) => {
+          const safeExt = extname(file.originalname).toLowerCase() || '.jpg';
+          callback(
+            null,
+            `rev-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`,
+          );
+        },
+      }),
+    }),
+  )
+  async uploadImage(
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ): Promise<{ url: string }> {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+    const url = `/uploads/reviews/${file.filename}`;
+    return { url };
+  }
+
+  @Get('admin/reported')
+  @UseGuards(JwtAuthGuard)
+  async getReportedReviews(@CurrentUser() user: AuthUser) {
+    this.checkAdmin(user);
+    return this.reviewsService.getReportedReviewsForAdmin();
+  }
+
+  @Post(':id/handle-report')
+  @UseGuards(JwtAuthGuard)
+  async handleReport(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: HandleReportDto,
+  ) {
+    this.checkAdmin(user);
+    return this.reviewsService.handleReportedReview(
+      id,
+      dto.action,
+      dto.reason,
+    );
   }
 }
