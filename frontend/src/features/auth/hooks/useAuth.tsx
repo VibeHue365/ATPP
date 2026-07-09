@@ -190,7 +190,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const toggleFavorite = async (targetType: 'PRODUCT' | 'PHOTOGRAPHER', targetId: string) => {
+  const toggleFavorite = async (targetType: 'PRODUCT' | 'PHOTOGRAPHER' | 'PROVIDER', targetId: string) => {
     setError(null);
     try {
       const updated = await userService.toggleFavorite(targetType, targetId);

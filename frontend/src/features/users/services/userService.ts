@@ -49,8 +49,9 @@ export const userService = {
     return normalizeUserProfile(response);
   },
 
-  async toggleFavorite(targetType: 'PRODUCT' | 'PHOTOGRAPHER', targetId: string): Promise<UserProfile> {
-    const response = await httpClient.patch<BackendUserProfileResponse>('/users/me/favorites', { targetType, targetId });
+  async toggleFavorite(targetType: 'PRODUCT' | 'PHOTOGRAPHER' | 'PROVIDER', targetId: string): Promise<UserProfile> {
+    const backendTargetType = targetType === 'PHOTOGRAPHER' ? 'PROVIDER' : targetType;
+    const response = await httpClient.patch<BackendUserProfileResponse>('/users/me/favorites', { targetType: backendTargetType, targetId });
     return normalizeUserProfile(response);
   },
 };
