@@ -11,6 +11,8 @@ import { BookingItem } from '../../bookings/schemas/booking-item.schema';
 import { Product } from '../../products/schemas/product.schema';
 import { PhotographyPackage } from '../../products/schemas/photography-package.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/schemas/notification.schema';
 
 export interface CreateReviewInput {
   bookingId: string;
@@ -54,6 +56,7 @@ export class ReviewsService {
     @InjectModel(PhotographyPackage.name)
     private readonly photoPackageModel: Model<PhotographyPackage>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createReview(
@@ -418,5 +421,122 @@ export class ReviewsService {
         },
       },
     );
+  }
+
+  async getReportedReviewsForAdmin(): Promise<Review[]> {
+    return this.reviewModel
+      .find({ isReported: true })
+      .populate('customerId')
+      .populate('providerId')
+      .populate('bookingId')
+      .sort({ reportedAt: -1 })
+      .exec();
+  }
+
+  async handleReportedReview(
+    reviewIdStr: string,
+    action: 'DELETE' | 'DISMISS',
+    reason: string,
+  ): Promise<{ success: boolean }> {
+    const reviewId = new Types.ObjectId(reviewIdStr);
+    const review = await this.reviewModel.findById(reviewId)
+      .populate('customerId')
+      .populate('providerId')
+      .populate('bookingId');
+
+    if (!review) {
+      throw new NotFoundException('Không tìm thấy đánh giá');
+    }
+
+    const customer = review.customerId as any;
+    const provider = review.providerId as any;
+    const booking = review.bookingId as any;
+
+    const bookingCode = booking?.bookingCode || booking?._id?.toString()?.slice(-6)?.toUpperCase() || 'N/A';
+
+    let providerUserIdStr = '';
+    if (provider) {
+      providerUserIdStr = provider.userId?.toString();
+    }
+
+    if (action === 'DELETE') {
+      // 1. Delete review
+      await this.reviewModel.findByIdAndDelete(reviewId);
+
+      // 2. Set booking item isReviewed to false so they can review again
+      if (review.bookingItemId) {
+        await this.bookingItemModel.findByIdAndUpdate(review.bookingItemId, {
+          isReviewed: false,
+        });
+      }
+
+      // 3. Recalculate average ratings
+      await this.updateProviderRating(review.providerId);
+      if (review.bookingItemId) {
+        const item = await this.bookingItemModel.findById(review.bookingItemId);
+        if (item) {
+          if (item.productId) {
+            await this.updateProductRating(item.productId);
+          } else if (item.photographyPackageId) {
+            await this.updatePhotoPackageRating(item.photographyPackageId);
+          }
+        }
+      }
+
+      // 4. Send Notifications
+      // To Customer
+      if (customer && customer._id) {
+        await this.notificationsService.createNotification(
+          customer._id.toString(),
+          'Đánh giá của bạn đã bị gỡ bỏ do vi phạm',
+          `Đơn thuê #${bookingCode}: Đánh giá của bạn đối với dịch vụ đã bị gỡ bỏ bởi quản trị viên hệ thống. Lý do: ${reason}`,
+          NotificationType.System,
+          { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() }
+        );
+      }
+
+      // To Provider
+      if (providerUserIdStr) {
+        await this.notificationsService.createNotification(
+          providerUserIdStr,
+          'Báo cáo vi phạm đánh giá đã được xử lý',
+          `Đơn thuê #${bookingCode}: Báo cáo của bạn về đánh giá spam/vi phạm đã được Admin chấp nhận. Đánh giá của khách hàng đã được gỡ bỏ khỏi hệ thống. Lý do: ${reason}`,
+          NotificationType.System,
+          { bookingId: review.bookingId?.toString() }
+        );
+      }
+
+    } else if (action === 'DISMISS') {
+      // Dismiss flag
+      review.isReported = false;
+      review.reportReason = null;
+      review.reportedAt = null;
+      await review.save();
+
+      // Send Notifications
+      // To Provider
+      if (providerUserIdStr) {
+        await this.notificationsService.createNotification(
+          providerUserIdStr,
+          'Kết quả kiểm duyệt báo cáo đánh giá',
+          `Đơn thuê #${bookingCode}: Báo cáo của bạn về đánh giá của khách hàng đã được Admin kiểm duyệt. Hệ thống xác nhận đánh giá này không vi phạm chính sách cộng đồng và sẽ tiếp tục được hiển thị. Lý do: ${reason}`,
+          NotificationType.System,
+          { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() }
+        );
+      }
+
+      // To Customer
+      if (customer && customer._id) {
+        await this.notificationsService.createNotification(
+          customer._id.toString(),
+          'Đánh giá của bạn đã được duyệt hợp lệ',
+          `Đơn thuê #${bookingCode}: Đánh giá của bạn đã được kiểm duyệt và xác nhận phù hợp với quy chuẩn cộng đồng. Trân trọng cảm ơn đóng góp của bạn!`,
+          NotificationType.System,
+          { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() }
+        );
+      }
+    }
+
+    return { success: true };
   }
 }

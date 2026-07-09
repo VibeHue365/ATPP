@@ -2381,49 +2381,65 @@ export const ProductDetailPage: React.FC = () => {
 
           <div>
             <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', display: 'block', marginBottom: '8px' }}>
-              Hình ảnh đính kèm (URL):
+              Hình ảnh thực tế đính kèm:
             </label>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
               <input
-                type="text"
-                placeholder="Nhập đường dẫn hình ảnh (URL)..."
-                id="write-image-input"
-                style={{
-                  flex: 1,
-                  padding: '10px',
-                  borderRadius: '8px',
-                  border: '1px solid #D5C2AD',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const target = e.target as HTMLInputElement;
-                    if (target.value.trim()) {
-                      setWriteImages([...writeImages, target.value.trim()]);
-                      target.value = '';
-                    }
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                id="write-image-file-input"
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const files = e.target.files;
+                  if (!files || files.length === 0) return;
+                  
+                  if (writeImages.length + files.length > 10) {
+                    toast.error('Bạn chỉ có thể đính kèm tối đa 10 hình ảnh!');
+                    return;
                   }
+
+                  const uploadPromises = Array.from(files).map(async (file) => {
+                    if (file.size > 5 * 1024 * 1024) {
+                      toast.error(`File ${file.name} vượt quá giới hạn 5MB!`);
+                      return null;
+                    }
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    try {
+                      const res = await httpClient.post<{ url: string }>('/reviews/upload', formData);
+                      return res.url;
+                    } catch (err: any) {
+                      toast.error(`Lỗi tải ảnh ${file.name}: ${err.message || 'Không xác định'}`);
+                      return null;
+                    }
+                  });
+
+                  const uploadedUrls = await Promise.all(uploadPromises);
+                  const validUrls = uploadedUrls.filter((url): url is string => url !== null);
+                  if (validUrls.length > 0) {
+                    setWriteImages(prev => [...prev, ...validUrls]);
+                    toast.success(`Đã thêm ${validUrls.length} ảnh thành công!`);
+                  }
+                  e.target.value = '';
                 }}
               />
               <button
                 type="button"
                 onClick={() => {
-                  const el = document.getElementById('write-image-input') as HTMLInputElement;
-                  if (el && el.value.trim()) {
-                    setWriteImages([...writeImages, el.value.trim()]);
-                    el.value = '';
-                  }
+                  document.getElementById('write-image-file-input')?.click();
                 }}
                 className="vh-btn vh-btn-secondary"
-                style={{ padding: '0 16px', fontSize: '13px', borderRadius: '8px' }}
+                style={{ padding: '10px 16px', fontSize: '13px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
-                Thêm ảnh
+                <span>Chọn ảnh từ thiết bị...</span>
               </button>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                (Tối đa 10 ảnh JPG, PNG, WEBP, tối đa 5MB/ảnh)
+              </span>
             </div>
             {writeImages.length > 0 && (
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '12px' }}>
                 {writeImages.map((img, idx) => (
                   <div key={idx} style={{ position: 'relative', width: '60px', height: '60px', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
                     <img src={getImageUrl(img)} alt="attached" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
