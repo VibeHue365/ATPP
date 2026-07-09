@@ -35,12 +35,29 @@ export class ProductsService {
     return this.productsRepository.findById(new Types.ObjectId(productId));
   }
 
-  async getMyProducts(userId: string): Promise<ProductDocument[]> {
+  async getMyProducts(
+    userId: string,
+    search?: string,
+    sortBy?: string,
+    page: number = 1,
+    limit: number = 10,
+    sizes?: string,
+    colors?: string,
+  ): Promise<{ items: ProductDocument[]; total: number }> {
     const user = await this.usersRepository.findUserById(new Types.ObjectId(userId));
     if (!user || !user.provider || !user.provider.providerId) {
       throw new BadRequestException('User is not a provider or lacks provider ID');
     }
-    return this.productsRepository.findByProvider(user.provider.providerId);
+    return this.productsRepository.findByProvider(user.provider.providerId, search, sortBy, page, limit, sizes, colors);
+  }
+
+  private normalizeColor(colorStr?: string | null): string {
+    if (!colorStr) return 'WHITE';
+    const norm = colorStr.trim().toUpperCase();
+    if (norm === 'ĐỎ' || norm === 'RED') return 'RED';
+    if (norm === 'TRẮNG' || norm === 'WHITE') return 'WHITE';
+    if (norm === 'VÀNG' || norm === 'GOLD') return 'GOLD';
+    return norm;
   }
 
   async createProduct(userId: string, dto: CreateProductDto): Promise<ProductDocument> {
@@ -62,7 +79,7 @@ export class ProductsService {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)+/g, '') + '-' + Date.now();
 
-    return this.productsRepository.create({
+    const product = await this.productsRepository.create({
       providerId: user.provider.providerId,
       categoryId: new Types.ObjectId(dto.categoryId),
       name: dto.name,
@@ -79,6 +96,31 @@ export class ProductsService {
       occasions: dto.occasions || [],
       rating: { averageRating: 0, totalReviews: 0 },
     });
+
+    const sizes = dto.sizes && dto.sizes.length > 0 ? dto.sizes : ['M'];
+    const colors = dto.colors && dto.colors.length > 0 ? dto.colors : ['WHITE'];
+    const initialQuantity = dto.initialQuantity !== undefined ? dto.initialQuantity : 2;
+
+    const inventoryItemModel = this.connection.model('InventoryItem');
+    for (const size of sizes) {
+      const sizeVal = size.trim().toUpperCase();
+      for (const color of colors) {
+        const colorVal = this.normalizeColor(color);
+        for (let i = 0; i < initialQuantity; i++) {
+          const sku = `AD-${product._id.toString().slice(-6)}-${sizeVal}-${colorVal}-${Math.floor(100 + Math.random() * 900)}`.toUpperCase();
+          await inventoryItemModel.create({
+            productId: product._id,
+            sku,
+            size: sizeVal,
+            color: colorVal,
+            conditionStatus: 'GOOD',
+            status: 'AVAILABLE',
+          });
+        }
+      }
+    }
+
+    return product;
   }
 
   async updateProduct(userId: string, productId: string, dto: UpdateProductDto): Promise<ProductDocument> {

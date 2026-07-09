@@ -29,6 +29,8 @@ import { PromotionsService } from './services/promotions.service';
 import { ProductsController } from './controllers/products.controller';
 import { ProductsService } from './services/products.service';
 import { ProductsRepository } from './repositories/products.repository';
+import { InventoryController } from './controllers/inventory.controller';
+import { InventoryService } from './services/inventory.service';
 import { UsersModule } from '../users/users.module';
 
 export const productModels = MongooseModule.forFeature([
@@ -45,8 +47,8 @@ export const productModels = MongooseModule.forFeature([
 
 @Module({
   imports: [productModels, UsersModule],
-  controllers: [PromotionsController, ProductsController],
-  providers: [PromotionsService, ProductsService, ProductsRepository],
-  exports: [productModels, PromotionsService, ProductsService],
+  controllers: [PromotionsController, ProductsController, InventoryController],
+  providers: [PromotionsService, ProductsService, ProductsRepository, InventoryService],
+  exports: [productModels, PromotionsService, ProductsService, InventoryService],
 })
 export class ProductsModule {}

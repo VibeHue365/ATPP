@@ -296,6 +296,17 @@ export class PaymentsService {
         },
       );
 
+      if (newStatus === BookingStatus.Confirmed || newStatus === BookingStatus.DepositPaid) {
+        const reservationModel = this.bookingModel.db.model('InventoryReservation');
+        await reservationModel.updateMany(
+          { bookingId: payment.bookingId },
+          {
+            $set: { status: 'CONFIRMED' },
+            $unset: { expiresAt: 1 }
+          }
+        );
+      }
+
       try {
         // Bắn thông báo cho khách hàng
         await this.notificationsService.createNotification(

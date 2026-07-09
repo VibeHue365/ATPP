@@ -47,8 +47,8 @@ export class InventoryReservation {
   })
   status: ReservationStatus;
 
-  @Prop({ type: Date, required: true, index: true })
-  expiresAt: Date;
+  @Prop({ type: Date, required: false, index: true, default: null })
+  expiresAt?: Date | null;
 }
 
 export const InventoryReservationSchema =

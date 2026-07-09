@@ -58,8 +58,18 @@ export class ProductsController {
 
   @Get('my-listings')
   @UseGuards(JwtAuthGuard)
-  async getMyProducts(@CurrentUser() user: AuthUser): Promise<ProductDocument[]> {
-    return this.productsService.getMyProducts(user.sub);
+  async getMyProducts(
+    @CurrentUser() user: AuthUser,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sizes') sizes?: string,
+    @Query('colors') colors?: string,
+  ): Promise<any> {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 10;
+    return this.productsService.getMyProducts(user.sub, search, sortBy, pageNum, limitNum, sizes, colors);
   }
 
   @Post()
