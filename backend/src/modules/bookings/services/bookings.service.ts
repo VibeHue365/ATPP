@@ -1693,8 +1693,15 @@ export class BookingsService implements OnApplicationBootstrap {
         NotificationType.Booking,
         { bookingId: booking._id },
       );
+      await this.notificationsService.createNotification(
+        booking.customerId.toString(),
+        `Yêu cầu đánh giá dịch vụ`,
+        `Đơn hàng ${booking.bookingCode} đã hoàn thành. Hãy chia sẻ trải nghiệm của bạn bằng cách để lại đánh giá nhé!`,
+        NotificationType.System,
+        { bookingId: booking._id, action: 'REVIEW' },
+      );
     } catch (e) {
-      console.error('Failed to create completeBooking notification:', e);
+      console.error('Failed to create completeBooking notifications:', e);
     }
 
     await this.paymentsService.settleBooking(bookingIdStr);
