@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { Provider, ProviderDocument } from '../providers/schemas/provider.schema';
+import { Provider, ProviderDocument, ProviderCapability } from '../providers/schemas/provider.schema';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
 import { Booking, BookingDocument } from '../bookings/schemas/booking.schema';
 import { Payment, PaymentDocument, PaymentStatus, PaymentPurpose } from '../payments/schemas/payment.schema';
@@ -33,7 +33,7 @@ export class AdminStatsService {
     const bannedCustomers = await this.userModel.countDocuments({ ...customerFilter, accountStatus: 'BANNED' } as any);
 
     // 2. UC-K20: Ao dai shop statistics (Actual count of shops and products in DB)
-    const totalShops = await this.providerModel.countDocuments({ capabilities: 'RENTAL' } as any);
+    const totalShops = await this.providerModel.countDocuments({ capabilities: ProviderCapability.AoDaiRental } as any);
     const activeProducts = await this.productModel.countDocuments({ status: 'ACTIVE' } as any);
 
     // 3. UC-K21: Photographer statistics (Actual count of photographers and bookings in DB)
@@ -107,6 +107,8 @@ export class AdminStatsService {
     // Get 6 months monthly growth data
     const registrationGrowth = await this.getCustomerGrowth();
     const revenueGrowth = await this.getRevenueGrowth();
+    const bookingGrowth = await this.getBookingGrowth();
+    const totalBookings = await this.bookingModel.countDocuments({} as any);
 
     return {
       customers: {
@@ -127,6 +129,10 @@ export class AdminStatsService {
         total: totalRevenue,
         commission: platformCommission,
         growth: revenueGrowth
+      },
+      bookings: {
+        total: totalBookings,
+        growth: bookingGrowth
       },
       userBehavior
     };
@@ -341,6 +347,28 @@ export class AdminStatsService {
       growth.push({
         label: labels[5 - i],
         value: total
+      });
+    }
+    return growth;
+  }
+
+  private async getBookingGrowth() {
+    const growth = [];
+    const labels = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+    
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const start = new Date(d.getFullYear(), d.getMonth(), 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+
+      const count = await this.bookingModel.countDocuments({
+        createdAt: { $gte: start, $lte: end }
+      } as any);
+
+      growth.push({
+        label: labels[5 - i],
+        value: count
       });
     }
     return growth;

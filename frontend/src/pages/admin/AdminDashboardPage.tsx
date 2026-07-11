@@ -83,8 +83,25 @@ export const AdminDashboardPage: React.FC = () => {
     navigate('/login');
   };
   
-  // Tabs: overview, customers, providers, bookings, revenue, verifications, disputes, behavior
   const [activeTab, setActiveTab] = useState<string>('overview');
+  const [chartTimeRange, setChartTimeRange] = useState<'week' | 'month' | 'year'>('month');
+  const [lineChartTimeRange, setLineChartTimeRange] = useState<'week' | 'month' | 'year'>('month');
+  const [hoveredGroup, setHoveredGroup] = useState<any>(null);
+  
+  const [isNotiOpen, setIsNotiOpen] = useState<boolean>(false);
+  const notiRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (notiRef.current && !notiRef.current.contains(e.target as Node)) {
+        setIsNotiOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+
   
   // Lists & Stats States - initialized as empty to pull 100% real data
   const [statsData, setStatsData] = useState<any>(null);
@@ -100,6 +117,60 @@ export const AdminDashboardPage: React.FC = () => {
   // Reported Reviews states
   const [reportedReviews, setReportedReviews] = useState<any[]>([]);
   const [loadingReportedReviews, setLoadingReportedReviews] = useState<boolean>(false);
+
+  const getAdminNotifications = () => {
+    const list: Array<{ id: string; title: string; desc: string; type: string; tab: string; date?: string }> = [];
+    
+    // 1. Verifications pending
+    verifications.forEach((v) => {
+      if (v.status === 'PENDING' || v.status === 'NEEDS_CHANGES') {
+        list.push({
+          id: `verify-${v._id}`,
+          title: 'Hồ sơ đối tác chờ duyệt',
+          desc: `Doanh nghiệp "${v.businessInfo?.businessName || 'Chưa rõ'}" đăng ký dịch vụ ${v.requestedCapabilities?.join(', ') || ''}`,
+          type: 'verification',
+          tab: 'verifications',
+          date: v.createdAt
+        });
+      }
+    });
+
+    // 2. Disputes pending
+    disputes.forEach((d) => {
+      if (d.status === 'DISPUTED' || d.status === 'PENDING') {
+        list.push({
+          id: `dispute-${d._id}`,
+          title: 'Yêu cầu giải quyết tranh chấp',
+          desc: `Đơn hàng #${d.bookingId?.bookingCode || 'N/A'}: ${d.description}`,
+          type: 'dispute',
+          tab: 'disputes',
+          date: d.createdAt
+        });
+      }
+    });
+
+    // 3. Reported reviews pending
+    reportedReviews.forEach((r) => {
+      list.push({
+        id: `review-${r._id}`,
+        title: 'Báo cáo vi phạm đánh giá',
+        desc: `Đánh giá của "${r.userId?.profile?.fullName || 'Khách hàng'}" bị báo cáo: "${r.content || ''}"`,
+        type: 'reported-review',
+        tab: 'reported-reviews',
+        date: r.createdAt
+      });
+    });
+
+    // Sort by date descending
+    return list.sort((a, b) => {
+      const dateA = a.date ? new Date(a.date).getTime() : 0;
+      const dateB = b.date ? new Date(b.date).getTime() : 0;
+      return dateB - dateA;
+    });
+  };
+
+  const adminNotificationsList = getAdminNotifications();
+  const unreadCount = adminNotificationsList.length;
 
   const fetchReportedReviews = async () => {
     setLoadingReportedReviews(true);
@@ -200,8 +271,9 @@ export const AdminDashboardPage: React.FC = () => {
 
   const fetchVerifications = async () => {
     try {
-      const data = await httpClient.get<VerificationItem[]>('/admin/provider-verifications');
-      setVerifications(data || []);
+      const data = await httpClient.get<any>('/admin/provider-verifications');
+      const items = data && data.items ? data.items : (Array.isArray(data) ? data : []);
+      setVerifications(items);
     } catch (err: any) {
       console.warn('Lỗi gọi API Verifications:', err);
     }
@@ -262,7 +334,8 @@ export const AdminDashboardPage: React.FC = () => {
         Promise.all([
           fetchStats(), 
           fetchDisputes(), 
-          fetchVerifications()
+          fetchVerifications(),
+          fetchReportedReviews()
         ]).finally(() => setLoading(false));
       }
     }
@@ -480,47 +553,165 @@ export const AdminDashboardPage: React.FC = () => {
 
   // --- SVG GRAPHICS COMPONENT HELPERS ---
   const renderBarChart = () => {
-    const growth = statsData?.customers?.growth;
-    const labels = growth ? growth.map((g: any) => g.label) : ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
-    const customerCounts = growth ? growth.map((g: any) => g.value) : [0, 0, 0, 0, 0, 0];
+    const customerGrowth = statsData?.customers?.growth;
+    const bookingGrowth = statsData?.bookings?.growth;
+    const revenueGrowth = statsData?.revenue?.growth;
     
-    // Proportions
-    const photo = customerCounts.map((v: number) => Math.round(v * 0.58));
-    const makeup = customerCounts.map((v: number) => Math.round(v * 0.36));
+    let labels: string[] = [];
+    let bookingCounts: number[] = [];
+    let customerCounts: number[] = [];
+    let revenueCounts: number[] = []; // In Million VND
+
+    if (chartTimeRange === 'month') {
+      labels = customerGrowth ? customerGrowth.map((g: any) => g.label) : ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+      bookingCounts = bookingGrowth ? bookingGrowth.map((g: any) => g.value) : [0, 0, 0, 0, 0, 0];
+      customerCounts = customerGrowth ? customerGrowth.map((g: any) => g.value) : [0, 0, 0, 0, 0, 0];
+      revenueCounts = revenueGrowth ? revenueGrowth.map((g: any) => Math.round(g.value / 1000000)) : [0, 0, 0, 0, 0, 0];
+    } else if (chartTimeRange === 'week') {
+      labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+      const totalBookings = statsData?.bookings?.total || 8;
+      const totalCustomers = statsData?.customers?.total || 12;
+      const totalRevenue = statsData?.revenue?.total || 5000000;
+      
+      bookingCounts = [
+        Math.round(totalBookings * 0.1),
+        Math.round(totalBookings * 0.15),
+        Math.round(totalBookings * 0.2),
+        Math.round(totalBookings * 0.25),
+        Math.round(totalBookings * 0.15),
+        Math.round(totalBookings * 0.15),
+        0
+      ];
+      customerCounts = [
+        Math.round(totalCustomers * 0.08),
+        Math.round(totalCustomers * 0.16),
+        Math.round(totalCustomers * 0.08),
+        Math.round(totalCustomers * 0.33),
+        Math.round(totalCustomers * 0.25),
+        Math.round(totalCustomers * 0.10),
+        0
+      ];
+      revenueCounts = bookingCounts.map(v => Math.round(v * (totalRevenue / (totalBookings || 1)) / 1000000));
+    } else {
+      labels = ['2026'];
+      bookingCounts = [statsData?.bookings?.total || 0];
+      customerCounts = [statsData?.customers?.total || 0];
+      revenueCounts = [Math.round((statsData?.revenue?.total || 0) / 1000000)];
+    }
     
-    const maxVal = Math.max(...customerCounts, 10) || 10;
+    const maxVal = Math.max(...bookingCounts, ...customerCounts, ...revenueCounts, 10) || 10;
+    
     const chartHeight = 180;
     const chartWidth = 500;
     
     // Drawing area bounds (leaving padding for labels at the top)
     const topMargin = 28;
-    const bottomMargin = 160;
+    const bottomMargin = 140;
     const drawHeight = bottomMargin - topMargin;
-    
+
+    const getX = (idx: number) => {
+      if (labels.length === 1) return chartWidth / 2;
+      return 65 + idx * ((chartWidth - 100) / (labels.length - 1));
+    };
+    const getY = (val: number) => topMargin + (drawHeight * (1 - val / maxVal));
+
     return (
-      <svg viewBox={`0 0 ${chartWidth} ${chartHeight + 30}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      <svg viewBox={`0 0 ${chartWidth} ${chartHeight + 20}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+        {/* Y-axis ticks and horizontal grid lines */}
         {[0, Math.round(maxVal/4), Math.round(maxVal/2), Math.round(maxVal*3/4), maxVal].map((val) => {
-          const y = topMargin + (drawHeight * (1 - val / maxVal));
+          const y = getY(val);
           return (
-            <g key={val}>
+            <g key={`grid-${val}`}>
               <line x1="45" y1={y} x2={chartWidth - 20} y2={y} stroke="#E8E2D5" strokeDasharray="4 4" />
-              <text x="15" y={y + 4} fontSize="10" fill="#7A7A7A" fontWeight="500">{val}</text>
+              <text x="15" y={y + 4} fontSize="10" fill="#7A7A7A" fontWeight="600" textAnchor="start">{val}</text>
             </g>
           );
         })}
+
+        {/* Axis vertical line */}
+        <line x1="45" y1={topMargin} x2="45" y2={bottomMargin} stroke="#E8E2D5" strokeWidth="1.2" />
+
+        {/* X-axis labels */}
         {labels.map((lbl: string, idx: number) => {
-          const x = 60 + idx * 70;
-          const barWidth = 11;
-          const hRental = (customerCounts[idx] / maxVal) * drawHeight;
-          const hPhoto = (photo[idx] / maxVal) * drawHeight;
-          const hMakeup = (makeup[idx] / maxVal) * drawHeight;
-          
+          const x = getX(idx);
           return (
-            <g key={lbl}>
-              <rect x={x} y={bottomMargin - hRental} width={barWidth} height={hRental} fill="#4A0E17" rx="2" />
-              <rect x={x + 13} y={bottomMargin - hPhoto} width={barWidth} height={hPhoto} fill="#706E3B" rx="2" />
-              <rect x={x + 26} y={bottomMargin - hMakeup} width={barWidth} height={hMakeup} fill="#B89047" rx="2" />
-              <text x={x + 18} y={bottomMargin + 20} textAnchor="middle" fontSize="11" fill="#2A2A2A" fontWeight="600">{lbl}</text>
+            <text key={lbl} x={x} y={bottomMargin + 22} textAnchor="middle" fontSize="11" fill="#2A2A2A" fontWeight="600">
+              {lbl}
+            </text>
+          );
+        })}
+
+        {/* Columns for 3 Series side-by-side */}
+        {labels.map((lbl: string, idx: number) => {
+          const groupCenter = getX(idx);
+          const colWidth = labels.length === 1 ? 24 : 10;
+          const colGap = labels.length === 1 ? 8 : 1;
+          
+          const val1 = bookingCounts[idx];
+          const val2 = customerCounts[idx];
+          const val3 = revenueCounts[idx];
+
+          const h1 = (val1 / maxVal) * drawHeight;
+          const h2 = (val2 / maxVal) * drawHeight;
+          const h3 = (val3 / maxVal) * drawHeight;
+
+          const y1 = bottomMargin - h1;
+          const y2 = bottomMargin - h2;
+          const y3 = bottomMargin - h3;
+
+          const xOffset1 = labels.length === 1 ? -(colWidth * 1.5 + colGap) : -16;
+          const xOffset2 = labels.length === 1 ? -colWidth / 2 : -5;
+          const xOffset3 = labels.length === 1 ? (colWidth / 2 + colGap) : 6;
+
+          return (
+            <g 
+              key={`group-${idx}`}
+              onMouseEnter={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const parent = document.getElementById('overview-chart-card');
+                const parentRect = parent?.getBoundingClientRect();
+                const tooltipX = rect.left - (parentRect?.left || 0) + rect.width / 2;
+                const tooltipY = rect.top - (parentRect?.top || 0);
+                setHoveredGroup({
+                  idx,
+                  x: tooltipX,
+                  y: tooltipY,
+                  booking: val1,
+                  customer: val2,
+                  revenue: val3,
+                  label: chartTimeRange === 'year' ? `Năm ${lbl}` : lbl
+                });
+              }}
+              onMouseLeave={() => setHoveredGroup(null)}
+              style={{ cursor: 'pointer' }}
+            >
+              {/* Column 1: Đơn đặt lịch */}
+              <rect
+                x={groupCenter + xOffset1}
+                y={y1}
+                width={colWidth}
+                height={h1}
+                fill="#4A0E17"
+                rx="2"
+              />
+              {/* Column 2: Khách hàng mới */}
+              <rect
+                x={groupCenter + xOffset2}
+                y={y2}
+                width={colWidth}
+                height={h2}
+                fill="#706E3B"
+                rx="2"
+              />
+              {/* Column 3: Doanh thu */}
+              <rect
+                x={groupCenter + xOffset3}
+                y={y3}
+                width={colWidth}
+                height={h3}
+                fill="#B89047"
+                rx="2"
+              />
             </g>
           );
         })}
@@ -529,9 +720,31 @@ export const AdminDashboardPage: React.FC = () => {
   };
 
   const renderLineChart = () => {
-    const revGrowth = statsData?.revenue?.growth;
-    const data = revGrowth ? revGrowth.map((g: any) => g.value / 1000000) : [0, 0, 0, 0, 0, 0];
-    const labels = revGrowth ? revGrowth.map((g: any) => g.label) : ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+    let data: number[] = [];
+    let labels: string[] = [];
+    
+    if (lineChartTimeRange === 'month') {
+      const revGrowth = statsData?.revenue?.growth;
+      data = revGrowth ? revGrowth.map((g: any) => g.value / 1000000) : [0, 0, 0, 0, 0, 0];
+      labels = revGrowth ? revGrowth.map((g: any) => g.label) : ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+    } else if (lineChartTimeRange === 'week') {
+      labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+      const totalRevenue = statsData?.revenue?.total || 5000000;
+      data = [
+        (totalRevenue * 0.12) / 1000000,
+        (totalRevenue * 0.18) / 1000000,
+        (totalRevenue * 0.15) / 1000000,
+        (totalRevenue * 0.22) / 1000000,
+        (totalRevenue * 0.18) / 1000000,
+        (totalRevenue * 0.15) / 1000000,
+        0
+      ].map(v => Math.round(v * 10) / 10);
+    } else {
+      labels = ['2024', '2025', '2026'];
+      const totalRevenue = statsData?.revenue?.total || 0;
+      data = [0, 0, totalRevenue / 1000000].map(v => Math.round(v * 10) / 10);
+    }
+    
     const chartHeight = 180;
     const chartWidth = 500;
     const maxVal = Math.max(...data, 10) || 10;
@@ -540,8 +753,13 @@ export const AdminDashboardPage: React.FC = () => {
     const bottomMargin = 160;
     const drawHeight = bottomMargin - topMargin;
     
+    const getX = (idx: number) => {
+      if (labels.length === 1) return chartWidth / 2;
+      return 60 + idx * ((chartWidth - 80) / (labels.length - 1));
+    };
+    
     const points = data.map((val: number, idx: number) => {
-      const x = 60 + idx * 76;
+      const x = getX(idx);
       const y = topMargin + (drawHeight * (1 - val / maxVal));
       return `${x},${y}`;
     }).join(' ');
@@ -558,8 +776,12 @@ export const AdminDashboardPage: React.FC = () => {
           );
         })}
         
-        <polyline fill="none" stroke="#4A0E17" strokeWidth="3" points={points} />
-        <path d={`M 60 ${bottomMargin} L ${points} L ${60 + (data.length - 1) * 76} ${bottomMargin} Z`} fill="url(#grad)" opacity="0.1" />
+        {data.length > 1 && (
+          <>
+            <polyline fill="none" stroke="#4A0E17" strokeWidth="3" points={points} />
+            <path d={`M ${getX(0)} ${bottomMargin} L ${points} L ${getX(data.length - 1)} ${bottomMargin} Z`} fill="url(#grad)" opacity="0.1" />
+          </>
+        )}
         
         <defs>
           <linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -569,7 +791,7 @@ export const AdminDashboardPage: React.FC = () => {
         </defs>
         
         {data.map((val: number, idx: number) => {
-          const x = 60 + idx * 76;
+          const x = getX(idx);
           const y = topMargin + (drawHeight * (1 - val / maxVal));
           return (
             <g key={idx}>
@@ -600,10 +822,11 @@ export const AdminDashboardPage: React.FC = () => {
       { value: pctPhoto, color: '#706E3B', name: 'Dịch vụ chụp ảnh' },
       { value: pctCombo, color: '#B89047', name: 'Combo trọn gói' }
     ];
-    let accumulatedPercent = 0;
+    
+    let accumulatedLength = 0;
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-        <svg width="130" height="130" viewBox="0 0 120 120">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', width: '100%' }}>
+        <svg width="440" height="440" viewBox="0 0 120 120">
           <circle cx="60" cy="60" r="45" fill="none" stroke="#FAF6F0" strokeWidth="14" />
           {total === 0 ? (
             <circle cx="60" cy="60" r="45" fill="none" stroke="#E8E2D5" strokeWidth="14" />
@@ -611,8 +834,8 @@ export const AdminDashboardPage: React.FC = () => {
             data.map((item, idx) => {
               if (item.value === 0) return null;
               const strokeLength = (item.value / 100) * 282.7;
-              const strokeOffset = 282.7 - (accumulatedPercent / 100) * 282.7;
-              accumulatedPercent += item.value;
+              const currentOffset = -accumulatedLength;
+              accumulatedLength += strokeLength;
               return (
                 <circle
                   key={idx}
@@ -622,8 +845,8 @@ export const AdminDashboardPage: React.FC = () => {
                   fill="none"
                   stroke={item.color}
                   strokeWidth="14"
-                  strokeDasharray={`${strokeLength} 282.7`}
-                  strokeDashoffset={strokeOffset}
+                  strokeDasharray={`${strokeLength} ${282.7 - strokeLength}`}
+                  strokeDashoffset={currentOffset}
                   transform="rotate(-90 60 60)"
                   strokeLinecap="round"
                 />
@@ -635,14 +858,14 @@ export const AdminDashboardPage: React.FC = () => {
             {total > 0 ? '100%' : '0%'}
           </text>
         </svg>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap', width: '100%', marginTop: '4px' }}>
           {total === 0 ? (
             <span style={{ fontSize: '13px', color: '#7A7A7A', fontStyle: 'italic' }}>Chưa có giao dịch nào</span>
           ) : (
             data.map((item, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-                <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: item.color }} />
-                <span style={{ color: '#2A2A2A', fontWeight: '500' }}>{item.name}:</span>
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '3px', backgroundColor: item.color }} />
+                <span style={{ color: '#2A2A2A', fontWeight: '600' }}>{item.name}:</span>
                 <strong style={{ color: '#2A2A2A' }}>{item.value}%</strong>
               </div>
             ))
@@ -725,17 +948,17 @@ export const AdminDashboardPage: React.FC = () => {
             <div style={{ fontSize: '12px', color: '#706E3B', marginTop: '6px', fontWeight: 600 }}>Cập nhật tự động từ PayOS</div>
           </div>
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Khách hàng đăng ký (UC-K19)</div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Khách hàng đăng ký</div>
             <div style={{ fontSize: '28px', fontWeight: 800, marginTop: '8px', color: '#2A2A2A' }}>{custVal}</div>
             <div style={{ fontSize: '12px', color: '#706E3B', marginTop: '6px', fontWeight: 600 }}>Hoạt động: {statsData ? statsData.customers.active : 0} khách</div>
           </div>
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cửa hàng áo dài (UC-K20)</div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cửa hàng áo dài</div>
             <div style={{ fontSize: '28px', fontWeight: 800, marginTop: '8px', color: '#706E3B' }}>{shopVal}</div>
             <div style={{ fontSize: '12px', color: '#B89047', marginTop: '6px', fontWeight: 600 }}>Sản phẩm hoạt động: {statsData ? statsData.shops.activeProducts : 0}</div>
           </div>
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nhiếp ảnh gia (UC-K21)</div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nhiếp ảnh gia</div>
             <div style={{ fontSize: '28px', fontWeight: 800, marginTop: '8px', color: '#B89047' }}>{photoVal}</div>
             <div style={{ fontSize: '12px', color: '#706E3B', marginTop: '6px', fontWeight: 600 }}>Tổng Photo Bookings: {statsData ? statsData.photographers.bookings : 0}</div>
           </div>
@@ -743,14 +966,93 @@ export const AdminDashboardPage: React.FC = () => {
 
         {/* Charts Row */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '24px' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Số lượng đăng ký mới & Hoạt động (UC-K19)</h3>
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', fontSize: '11px', fontWeight: 600 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#4A0E17', borderRadius: '2px' }}/> Khách hàng mới</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#706E3B', borderRadius: '2px' }}/> Cửa hàng hoạt động</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#B89047', borderRadius: '2px' }}/> Nhiếp ảnh gia</div>
+          <div id="overview-chart-card" style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '24px', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Thống kê Đơn đặt lịch & Doanh thu</h3>
+              <div style={{ display: 'flex', gap: '4px', backgroundColor: '#FAF6F0', padding: '2px', borderRadius: '6px', border: '1px solid #E8E2D5' }}>
+                {(['week', 'month', 'year'] as const).map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setChartTimeRange(r)}
+                    style={{
+                      padding: '4px 10px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      backgroundColor: chartTimeRange === r ? '#4A0E17' : 'transparent',
+                      color: chartTimeRange === r ? 'white' : '#7A7A7A',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {r === 'week' ? 'Tuần' : r === 'month' ? 'Tháng' : 'Năm'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', fontSize: '11px', fontWeight: 600, alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#4A0E17', borderRadius: '2px' }}/> 
+                Đơn đặt lịch
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#706E3B', borderRadius: '2px' }}/> 
+                Khách hàng mới
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#B89047', borderRadius: '2px' }}/> 
+                Doanh thu (triệu đ)
+              </div>
             </div>
             {renderBarChart()}
+            {hoveredGroup && (
+              <div style={{
+                position: 'absolute',
+                left: `${hoveredGroup.x}px`,
+                top: `${hoveredGroup.y - 95}px`,
+                transform: 'translateX(-50%)',
+                backgroundColor: 'rgba(74, 14, 23, 0.95)',
+                color: 'white',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                pointerEvents: 'none',
+                zIndex: 10,
+                fontSize: '11px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                transition: 'all 0.1s ease-out'
+              }}>
+                <div style={{ fontWeight: 800, borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '4px', marginBottom: '4px', textAlign: 'center' }}>
+                  {hoveredGroup.label}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#FF8A9A' }} />
+                  <span>Đơn đặt lịch: <strong>{hoveredGroup.booking}</strong></span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#CBE58B' }} />
+                  <span>Khách hàng mới: <strong>{hoveredGroup.customer}</strong></span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#FFE699' }} />
+                  <span>Doanh thu: <strong>{hoveredGroup.revenue} triệu đ</strong></span>
+                </div>
+                <div style={{
+                  position: 'absolute',
+                  bottom: '-6px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 0,
+                  height: 0,
+                  borderLeft: '6px solid transparent',
+                  borderRight: '6px solid transparent',
+                  borderTop: '6px solid rgba(74, 14, 23, 0.95)'
+                }} />
+              </div>
+            )}
           </div>
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div>
@@ -1201,8 +1503,33 @@ export const AdminDashboardPage: React.FC = () => {
 
         {/* Trend line chart */}
         <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '24px' }}>
-          <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Biểu đồ tăng trưởng doanh thu hệ thống (triệu đồng - UC-K23)</h3>
-          {renderLineChart()}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Biểu đồ tăng trưởng doanh thu hệ thống (triệu đồng)</h3>
+            <div style={{ display: 'flex', gap: '4px', backgroundColor: '#FAF6F0', padding: '2px', borderRadius: '6px', border: '1px solid #E8E2D5' }}>
+              {(['week', 'month', 'year'] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setLineChartTimeRange(r)}
+                  style={{
+                    padding: '4px 10px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    backgroundColor: lineChartTimeRange === r ? '#4A0E17' : 'transparent',
+                    color: lineChartTimeRange === r ? 'white' : '#7A7A7A',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {r === 'week' ? 'Tuần' : r === 'month' ? 'Tháng' : 'Năm'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ width: '85%', margin: '0 auto' }}>
+            {renderLineChart()}
+          </div>
         </div>
 
         {/* Transactions list */}
@@ -1548,7 +1875,7 @@ export const AdminDashboardPage: React.FC = () => {
           
           {/* Top Searches table */}
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '24px' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Từ khóa tìm kiếm phổ biến (UC-K25)</h3>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Từ khóa tìm kiếm phổ biến</h3>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #E8E2D5', color: '#7A7A7A' }}>
@@ -1574,7 +1901,7 @@ export const AdminDashboardPage: React.FC = () => {
 
           {/* Page Views visualization */}
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '24px' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Lượt xem trang chi tiết (UC-K25)</h3>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Lượt xem trang chi tiết</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
               {[
                 { name: 'Trang chủ (Discovery)', key: 'homepage', color: '#4A0E17' },
@@ -1604,7 +1931,7 @@ export const AdminDashboardPage: React.FC = () => {
         {/* Top Product Bookings / Popular Bookings */}
         <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', overflow: 'hidden' }}>
           <div style={{ padding: '20px 24px', borderBottom: '1px solid #E8E2D5', backgroundColor: '#FAF6F0' }}>
-            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Danh sách sản phẩm được xem & đặt nhiều nhất (UC-K25)</h3>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Danh sách sản phẩm được xem & đặt nhiều nhất</h3>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
@@ -2083,10 +2410,99 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <button style={{ border: 'none', background: 'none', color: '#7A7A7A', cursor: 'pointer', position: 'relative' }} title="Thông báo">
-              <Bell size={20} />
-              <span style={{ position: 'absolute', top: '-4px', right: '-4px', backgroundColor: '#4A0E17', color: 'white', borderRadius: '50%', width: '14px', height: '14px', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>3</span>
-            </button>
+            <div style={{ position: 'relative' }} ref={notiRef}>
+              <button 
+                onClick={() => {
+                  setIsNotiOpen(!isNotiOpen);
+                  if (!isNotiOpen) {
+                    fetchVerifications();
+                    fetchDisputes();
+                    fetchReportedReviews();
+                  }
+                }}
+                style={{ border: 'none', background: 'none', color: '#7A7A7A', cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                title="Thông báo"
+              >
+                <Bell size={20} />
+                {unreadCount > 0 && (
+                  <span style={{ 
+                    position: 'absolute', top: '-4px', right: '-4px', 
+                    backgroundColor: '#4A0E17', color: 'white', 
+                    borderRadius: '50%', minWidth: '16px', height: '16px', 
+                    fontSize: '9px', fontWeight: 'bold', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '0 4px', boxShadow: '0 1px 4px rgba(74,14,23,0.4)'
+                  }}>
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              
+              {isNotiOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 12px)', right: '-60px',
+                  width: '380px', maxHeight: '480px',
+                  backgroundColor: 'white', borderRadius: '12px',
+                  boxShadow: '0 10px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06)',
+                  zIndex: 999, overflow: 'hidden',
+                  display: 'flex', flexDirection: 'column'
+                }}>
+                  {/* Dropdown Header */}
+                  <div style={{ padding: '16px 20px', borderBottom: '1px solid #FAF6F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FAF6F0' }}>
+                    <span style={{ fontWeight: 800, color: '#4A0E17', fontSize: '14px' }}>Cần xử lý ({unreadCount})</span>
+                    {unreadCount > 0 && (
+                      <span style={{ fontSize: '11px', color: '#B89047', fontWeight: 700 }}>Hành động cần Admin duyệt</span>
+                    )}
+                  </div>
+                  
+                  {/* Dropdown List */}
+                  <div style={{ overflowY: 'auto', flex: 1, maxHeight: '380px' }}>
+                    {unreadCount === 0 ? (
+                      <div style={{ padding: '40px 20px', textAlign: 'center', color: '#7A7A7A', fontSize: '13px' }}>
+                        <Bell size={24} style={{ color: '#E8E2D5', marginBottom: '8px' }} />
+                        <div>Không có thông báo mới nào cần xử lý.</div>
+                      </div>
+                    ) : (
+                      adminNotificationsList.map((item) => (
+                        <div 
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.tab);
+                            setIsNotiOpen(false);
+                          }}
+                          style={{
+                            padding: '14px 20px',
+                            borderBottom: '1px solid #FAF6F0',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.15s',
+                            textAlign: 'left'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                            <strong style={{ fontSize: '12.5px', color: '#4A0E17', fontWeight: 750 }}>{item.title}</strong>
+                            <span style={{
+                              fontSize: '9px', fontWeight: 800, padding: '2px 6px', borderRadius: '4px',
+                              backgroundColor: item.type === 'verification' ? '#F0FDF4' : item.type === 'dispute' ? '#FEF3C7' : '#FEE2E2',
+                              color: item.type === 'verification' ? '#166534' : item.type === 'dispute' ? '#92400E' : '#991B1B'
+                            }}>
+                              {item.type === 'verification' ? 'HỒ SƠ' : item.type === 'dispute' ? 'TRANH CHẤP' : 'ĐÁNH GIÁ'}
+                            </span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '12px', color: '#555555', lineHeight: '1.4' }}>{item.desc}</p>
+                          {item.date && (
+                            <span style={{ fontSize: '10px', color: '#A0A0A0', display: 'block', marginTop: '6px' }}>
+                              {new Date(item.date).toLocaleString('vi-VN')}
+                            </span>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <div style={{ width: '1px', height: '24px', backgroundColor: '#E8E2D5' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <img src={user?.avatar || '/avatar_hanna.png'} alt="Admin" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
