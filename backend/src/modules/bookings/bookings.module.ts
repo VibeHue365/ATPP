@@ -17,6 +17,7 @@ import {
 } from './schemas/rental-handover.schema';
 import { BookingsController } from './controllers/bookings.controller';
 import { BookingsService } from './services/bookings.service';
+import { BookingsSchedulerService } from './services/bookings-scheduler.service';
 import { ProductsModule } from '../products/products.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -42,7 +43,7 @@ export const bookingModels = MongooseModule.forFeature([
     SettlementsModule,
   ],
   controllers: [BookingsController],
-  providers: [BookingsService],
+  providers: [BookingsService, BookingsSchedulerService],
   exports: [bookingModels, BookingsService],
 })
 export class BookingsModule {}

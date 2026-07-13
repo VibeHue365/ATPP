@@ -82,7 +82,6 @@ export const authModels = MongooseModule.forFeature([
     GoogleStrategy,
     GoogleAuthGuard,
   ],
-  exports: [JwtModule,SecurityLogModule],
-
+  exports: [JwtModule, SecurityLogModule, MailService],
 })
 export class AuthModule {}
