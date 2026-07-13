@@ -22,6 +22,9 @@ import { PhotographyPackage } from '../../products/schemas/photography-package.s
 import { PromotionsService } from '../../products/services/promotions.service';
 import { DiscountType } from '../../products/schemas/promotion.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
+import { RefundWorkflowService } from '../../payments/services/refund-workflow.service';
+import { RefundType } from '../../payments/schemas/refund-request.schema';
+import { SettlementsService } from '../../settlements/services/settlements.service';
 import { ProductsService } from '../../products/services/products.service';
 import { Provider } from '../../providers/schemas/provider.schema';
 import {
@@ -213,6 +216,9 @@ export class BookingsService implements OnApplicationBootstrap {
     private readonly promotionsService: PromotionsService,
     @Inject(forwardRef(() => PaymentsService))
     private readonly paymentsService: PaymentsService,
+    @Inject(forwardRef(() => RefundWorkflowService))
+    private readonly refundWorkflowService: RefundWorkflowService,
+    private readonly settlementsService: SettlementsService,
     private readonly productsService: ProductsService,
     private readonly notificationsService: NotificationsService,
     @InjectModel(Provider.name)
@@ -2057,9 +2063,16 @@ export class BookingsService implements OnApplicationBootstrap {
     // Kích hoạt hoàn tiền cọc / hoàn tiền dịch vụ cho khách hàng
     if (refundAmount > 0) {
       try {
-        await this.paymentsService.refundDeposit(booking._id.toString(), refundAmount);
+        await this.refundWorkflowService.createFromCancellation({
+          bookingId: booking._id.toString(),
+          requestedBy: booking.customerId.toString(),
+          amount: refundAmount,
+          reason,
+          type: RefundType.Cancellation,
+          sourceEventId: `refund:cancellation:${booking._id}`,
+        });
       } catch (err) {
-        console.error('PaymentsService.refundDeposit failed during cancelBooking:', err);
+        console.error('Refund workflow failed during cancelBooking:', err);
       }
     }
 

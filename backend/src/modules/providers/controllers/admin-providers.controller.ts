@@ -1,5 +1,7 @@
 import { Body, Controller, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import { Roles } from '../../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { AdminReviewDecisionDto } from '../dto/provider-verification.dto';
@@ -11,7 +13,8 @@ interface RequestMeta {
 }
 
 @Controller('admin/providers')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 export class AdminProvidersController {
   constructor(
     private readonly providerVerificationService: ProviderVerificationService,

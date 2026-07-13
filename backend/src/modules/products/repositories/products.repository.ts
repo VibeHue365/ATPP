@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Product, ProductDocument, ProductStatus } from '../schemas/product.schema';
+import {
+  Product,
+  ProductDocument,
+  ProductModerationStatus,
+  ProductStatus,
+} from '../schemas/product.schema';
 
 @Injectable()
 export class ProductsRepository {
@@ -17,8 +22,16 @@ export class ProductsRepository {
     colors?: string[];
     sizes?: string[];
     materials?: string[];
+    categoryId?: string;
   }): Promise<ProductDocument[]> {
-    const query: any = { status: ProductStatus.Active };
+    const query: any = {
+      status: ProductStatus.Active,
+      moderationStatus: ProductModerationStatus.Approved,
+    };
+
+    if (options?.categoryId && Types.ObjectId.isValid(options.categoryId)) {
+      query.categoryId = new Types.ObjectId(options.categoryId);
+    }
 
     if (options?.search) {
       const searchRegex = new RegExp(options.search, 'i');
@@ -74,6 +87,18 @@ export class ProductsRepository {
     return this.productModel.findById(id).populate('categoryId').populate('providerId').exec();
   }
 
+  async findPublicById(id: Types.ObjectId): Promise<ProductDocument | null> {
+    return this.productModel
+      .findOne({
+        _id: id,
+        status: ProductStatus.Active,
+        moderationStatus: ProductModerationStatus.Approved,
+      })
+      .populate('categoryId')
+      .populate('providerId')
+      .exec();
+  }
+
   async findByProvider(providerId: Types.ObjectId): Promise<ProductDocument[]> {
     return this.productModel
       .find({ providerId, status: { $ne: ProductStatus.Inactive } })
@@ -85,6 +110,47 @@ export class ProductsRepository {
     return this.productModel
       .findByIdAndUpdate(id, { $set: data }, { new: true })
       .populate('categoryId')
+      .exec();
+  }
+
+  async findModerationQueue(
+    status: ProductModerationStatus,
+  ): Promise<ProductDocument[]> {
+    return this.productModel
+      .find({ moderationStatus: status })
+      .sort({ updatedAt: 1 })
+      .populate('categoryId')
+      .populate('providerId')
+      .exec();
+  }
+
+  async moveLegacyProductsToPendingReview(): Promise<void> {
+    await this.productModel.updateMany(
+      { moderationStatus: { $exists: false } },
+      {
+        $set: {
+          moderationStatus: ProductModerationStatus.PendingReview,
+          moderationReason: null,
+          moderatedAt: null,
+          moderatedBy: null,
+        },
+      },
+    );
+  }
+
+  async moderate(
+    id: Types.ObjectId,
+    expectedStatus: ProductModerationStatus,
+    data: Partial<Product>,
+  ): Promise<ProductDocument | null> {
+    return this.productModel
+      .findOneAndUpdate(
+        { _id: id, moderationStatus: expectedStatus },
+        { $set: data },
+        { new: true },
+      )
+      .populate('categoryId')
+      .populate('providerId')
       .exec();
   }
 

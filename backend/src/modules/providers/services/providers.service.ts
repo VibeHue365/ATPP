@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -22,6 +23,9 @@ import { Booking } from '../../bookings/schemas/booking.schema';
 import { BookingItem } from '../../bookings/schemas/booking-item.schema';
 import { Review } from '../../reviews/schemas/review.schema';
 import { Payment } from '../../payments/schemas/payment.schema';
+import { ProductModerationStatus } from '../../products/schemas/product.schema';
+import { PortfolioItem, PortfolioItemDocument } from '../schemas/portfolio-item.schema';
+import { CreatePortfolioItemDto, ModeratePortfolioItemDto, UpdatePortfolioItemDto } from '../dto/portfolio-item.dto';
 
 export interface UpdateProviderProfileDto {
   businessName?: string;
@@ -42,6 +46,7 @@ export class ProvidersService {
     @InjectModel(BookingItem.name) private readonly bookingItemModel: Model<BookingItem>,
     @InjectModel(Review.name) private readonly reviewModel: Model<Review>,
     @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
+    @InjectModel(PortfolioItem.name) private readonly portfolioItemModel: Model<PortfolioItem>,
   ) {}
 
   async getOrCreateProvider(
@@ -138,6 +143,57 @@ export class ProvidersService {
     }
 
     return updated;
+  }
+
+  async listMyPortfolioItems(userIdStr: string): Promise<PortfolioItemDocument[]> {
+    const provider = await this.requireProvider(userIdStr);
+    return this.portfolioItemModel.find({ providerId: provider._id }).sort({ updatedAt: -1 }).exec();
+  }
+
+  async createPortfolioItem(userIdStr: string, dto: CreatePortfolioItemDto): Promise<PortfolioItemDocument> {
+    const provider = await this.requireProvider(userIdStr);
+    return this.portfolioItemModel.create({
+      providerId: provider._id,
+      title: dto.title,
+      description: dto.description || null,
+      images: dto.images,
+      moderationStatus: ProductModerationStatus.PendingReview,
+      moderationReason: null,
+    });
+  }
+
+  async updatePortfolioItem(userIdStr: string, itemId: string, dto: UpdatePortfolioItemDto): Promise<PortfolioItemDocument> {
+    const provider = await this.requireProvider(userIdStr);
+    const item = await this.portfolioItemModel.findOneAndUpdate(
+      { _id: this.toObjectId(itemId), providerId: provider._id },
+      { $set: { ...dto, moderationStatus: ProductModerationStatus.PendingReview, moderationReason: null, moderatedBy: null, moderatedAt: null } },
+      { new: true },
+    ).exec();
+    if (!item) throw new NotFoundException('Portfolio item not found');
+    return item;
+  }
+
+  async removePortfolioItem(userIdStr: string, itemId: string): Promise<void> {
+    const provider = await this.requireProvider(userIdStr);
+    const item = await this.portfolioItemModel.findOneAndDelete({ _id: this.toObjectId(itemId), providerId: provider._id }).exec();
+    if (!item) throw new NotFoundException('Portfolio item not found');
+  }
+
+  async listPortfolioModeration(status = ProductModerationStatus.PendingReview): Promise<PortfolioItemDocument[]> {
+    return this.portfolioItemModel.find({ moderationStatus: status }).sort({ updatedAt: 1 }).populate('providerId').exec();
+  }
+
+  async moderatePortfolioItem(adminId: string, itemId: string, dto: ModeratePortfolioItemDto): Promise<PortfolioItemDocument> {
+    const allowed = [ProductModerationStatus.Approved, ProductModerationStatus.Rejected, ProductModerationStatus.Hidden];
+    if (!allowed.includes(dto.action)) throw new BadRequestException('Unsupported moderation action');
+    const expected = dto.action === ProductModerationStatus.Hidden ? ProductModerationStatus.Approved : ProductModerationStatus.PendingReview;
+    const item = await this.portfolioItemModel.findOneAndUpdate(
+      { _id: this.toObjectId(itemId), moderationStatus: expected },
+      { $set: { moderationStatus: dto.action, moderationReason: dto.action === ProductModerationStatus.Approved ? null : dto.reason!.trim(), moderatedBy: this.toObjectId(adminId), moderatedAt: new Date() } },
+      { new: true },
+    ).exec();
+    if (!item) throw new ConflictException('Portfolio moderation state was already changed');
+    return item;
   }
 
   async getSchedules(userIdStr: string): Promise<ProviderScheduleDocument[]> {
@@ -384,5 +440,11 @@ export class ProvidersService {
       throw new BadRequestException('Invalid ID');
     }
     return new Types.ObjectId(id);
+  }
+
+  private async requireProvider(userIdStr: string): Promise<ProviderDocument> {
+    const provider = await this.providersRepository.findByUserId(this.toObjectId(userIdStr));
+    if (!provider) throw new NotFoundException('Provider profile not found');
+    return provider;
   }
 }

@@ -38,6 +38,7 @@ export class ProductsController {
     @Query('colors') colors?: string,
     @Query('sizes') sizes?: string,
     @Query('materials') materials?: string,
+    @Query('categoryId') categoryId?: string,
   ): Promise<ProductDocument[]> {
     const options = {
       search,
@@ -47,6 +48,7 @@ export class ProductsController {
       colors: colors ? colors.split(',').map(c => c.trim()).filter(Boolean) : undefined,
       sizes: sizes ? sizes.split(',').map(s => s.trim()).filter(Boolean) : undefined,
       materials: materials ? materials.split(',').map(m => m.trim()).filter(Boolean) : undefined,
+      categoryId,
     };
     return this.productsService.getAllActiveProducts(options);
   }

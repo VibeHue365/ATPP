@@ -1,17 +1,29 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { ProductsRepository } from '../repositories/products.repository';
 import { UsersRepository } from '../../users/repositories/users.repository';
-import { ProductDocument, ProductStatus } from '../schemas/product.schema';
+import {
+  ProductDocument,
+  ProductModerationStatus,
+  ProductStatus,
+} from '../schemas/product.schema';
 import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
+import { CategoriesService } from '../../categories/services/categories.service';
+import { ModerateProductDto } from '../dto/product-moderation.dto';
 
 @Injectable()
 export class ProductsService {
   constructor(
     private readonly productsRepository: ProductsRepository,
     private readonly usersRepository: UsersRepository,
+    private readonly categoriesService: CategoriesService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -23,16 +35,18 @@ export class ProductsService {
     colors?: string[];
     sizes?: string[];
     materials?: string[];
+    categoryId?: string;
   }): Promise<ProductDocument[]> {
     return this.productsRepository.findAllActive(options);
   }
 
   async getCategories(): Promise<any[]> {
-    return this.connection.db!.collection('categories').find({ status: 'ACTIVE' }).toArray();
+    return this.categoriesService.listActiveCategoriesForProducts();
   }
 
   async getProductById(productId: string): Promise<ProductDocument | null> {
-    return this.productsRepository.findById(new Types.ObjectId(productId));
+    if (!Types.ObjectId.isValid(productId)) return null;
+    return this.productsRepository.findPublicById(new Types.ObjectId(productId));
   }
 
   async getMyProducts(userId: string): Promise<ProductDocument[]> {
@@ -52,6 +66,8 @@ export class ProductsService {
     if (dto.depositAmount >= dto.basePrice) {
       throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
     }
+
+    await this.categoriesService.assertActiveProductCategory(dto.categoryId);
 
 
     const slug = dto.name
@@ -75,6 +91,8 @@ export class ProductsService {
       colors: dto.colors || [],
       materials: dto.materials || [],
       status: dto.status || ProductStatus.Draft,
+      moderationStatus: ProductModerationStatus.PendingReview,
+      moderationReason: null,
       style: dto.style || null,
       occasions: dto.occasions || [],
       rating: { averageRating: 0, totalReviews: 0 },
@@ -119,7 +137,10 @@ export class ProductsService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '') + '-' + Date.now();
     }
-    if (dto.categoryId !== undefined) updateData.categoryId = new Types.ObjectId(dto.categoryId);
+    if (dto.categoryId !== undefined) {
+      await this.categoriesService.assertActiveProductCategory(dto.categoryId);
+      updateData.categoryId = new Types.ObjectId(dto.categoryId);
+    }
     if (dto.description !== undefined) updateData.description = dto.description;
     if (dto.images !== undefined) updateData.images = dto.images;
     if (dto.basePrice !== undefined) updateData.basePrice = dto.basePrice;
@@ -131,10 +152,71 @@ export class ProductsService {
     if (dto.style !== undefined) updateData.style = dto.style;
     if (dto.occasions !== undefined) updateData.occasions = dto.occasions;
 
+    // Any provider change must be reviewed again before the product is public.
+    updateData.moderationStatus = ProductModerationStatus.PendingReview;
+    updateData.moderationReason = null;
+    updateData.moderatedAt = null;
+    updateData.moderatedBy = null;
+
     const updated = await this.productsRepository.update(new Types.ObjectId(productId), updateData);
     if (!updated) {
       throw new NotFoundException('Failed to update product');
     }
+    return updated;
+  }
+
+  async getModerationQueue(
+    status = ProductModerationStatus.PendingReview,
+  ): Promise<ProductDocument[]> {
+    await this.productsRepository.moveLegacyProductsToPendingReview();
+    return this.productsRepository.findModerationQueue(status);
+  }
+
+  async moderateProduct(
+    adminId: string,
+    productId: string,
+    dto: ModerateProductDto,
+  ): Promise<ProductDocument> {
+    if (!Types.ObjectId.isValid(productId)) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const id = new Types.ObjectId(productId);
+    const product = await this.productsRepository.findById(id);
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const expectedStatus = dto.action === ProductModerationStatus.Hidden
+      ? ProductModerationStatus.Approved
+      : ProductModerationStatus.PendingReview;
+    const allowedAction = dto.action === ProductModerationStatus.Approved ||
+      dto.action === ProductModerationStatus.Rejected ||
+      dto.action === ProductModerationStatus.Hidden;
+
+    if (!allowedAction) {
+      throw new BadRequestException('Unsupported moderation action');
+    }
+
+    if (product.moderationStatus !== expectedStatus) {
+      throw new ConflictException('Product moderation state was already changed');
+    }
+
+    const updated = await this.productsRepository.moderate(id, expectedStatus, {
+      moderationStatus: dto.action,
+      moderationReason:
+        dto.action === ProductModerationStatus.Rejected ||
+        dto.action === ProductModerationStatus.Hidden
+          ? dto.reason!.trim()
+          : null,
+      moderatedBy: new Types.ObjectId(adminId),
+      moderatedAt: new Date(),
+    });
+
+    if (!updated) {
+      throw new ConflictException('Product moderation state was already changed');
+    }
+
     return updated;
   }
 

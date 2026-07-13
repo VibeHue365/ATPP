@@ -25,6 +25,8 @@ import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { Permissions } from '../../../common/decorators/permissions.decorator';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { ReviewsService } from '../services/reviews.service';
@@ -214,14 +216,16 @@ export class ReviewsController {
   }
 
   @Get('admin/reported')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('moderation:read')
   async getReportedReviews(@CurrentUser() user: AuthUser) {
     this.checkAdmin(user);
     return this.reviewsService.getReportedReviewsForAdmin();
   }
 
   @Post(':id/handle-report')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('moderation:manage')
   async handleReport(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,

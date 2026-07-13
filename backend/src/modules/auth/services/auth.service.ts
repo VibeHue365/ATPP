@@ -5,14 +5,12 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
 import { Types } from 'mongoose';
 import { GoogleOAuthProfile } from '../../../common/strategies/google.strategy';
+import { UsersRepository } from '../../users/repositories/users.repository';
 import { AuthProviderType, UserStatus } from '../../users/schemas/user.schema';
 import { UsersService } from '../../users/services/users.service';
-import { UsersRepository } from '../../users/repositories/users.repository';
 import { ChangePasswordDto } from '../dto/change-password.dto';
 import { ForgotPasswordDto } from '../dto/forgot-password.dto';
 import { LoginDto } from '../dto/login.dto';
@@ -24,50 +22,60 @@ import { ResetPasswordDto } from '../dto/reset-password.dto';
 import { VerifyEmailDto } from '../dto/verify-email.dto';
 import { AuthRepository } from '../repositories/auth.repository';
 import { LoginProvider, LoginStatus } from '../schemas/login-history.schema';
+import { SecurityEventType } from '../schemas/security-event.schema';
 import {
-  VerificationPurpose,
-  VerificationTargetType,
-} from '../schemas/verification-token.schema';
-import { MailService } from './mail.service';
+  AuthSession,
+  IssuedTokens,
+  OAuthLoginCode,
+  RequestContext,
+} from '../types/auth.types';
+import { OAuthService } from './oauth.service';
+import { OtpService } from './otp.service';
+import { PasswordPolicyService } from './password-policy.service';
+import { PasswordResetService } from './password-reset.service';
+import { RateLimitService } from './rate-limit.service';
 import { RolesService } from './roles.service';
-
-interface RequestContext {
-  ipAddress?: string;
-  userAgent?: string;
-}
-
-interface IssuedTokens {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-}
-
-interface AuthSession extends IssuedTokens {
-  user: Record<string, unknown>;
-}
-
-interface OAuthLoginCode {
-  code: string;
-}
+import { SecurityLogService } from './security-log.service';
+import { SessionService } from './session.service';
+import { TokenService } from './token.service';
 
 @Injectable()
 export class AuthService {
-  private readonly accessTokenTtlSeconds = 15 * 60;
-  private readonly refreshTokenTtlDays = 30;
-
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly usersRepository: UsersRepository,
-    private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    private readonly mailService: MailService,
     private readonly rolesService: RolesService,
     private readonly usersService: UsersService,
+    private readonly securityLogService: SecurityLogService,
+    private readonly rateLimitService: RateLimitService,
+    private readonly tokenService: TokenService,
+    private readonly otpService: OtpService,
+    private readonly sessionService: SessionService,
+    private readonly passwordResetService: PasswordResetService,
+    private readonly oauthService: OAuthService,
+    private readonly passwordPolicyService: PasswordPolicyService,
   ) {}
 
-  async register(dto: RegisterDto): Promise<Record<string, unknown>> {
+  async register(
+    dto: RegisterDto,
+    context: RequestContext,
+  ): Promise<Record<string, unknown>> {
     const emailNormalized = this.normalizeEmail(dto.email);
     const phoneNormalized = this.normalizePhone(dto.phone);
+    this.passwordPolicyService.assertAcceptablePassword(dto.password);
+    await Promise.all([
+      this.rateLimitService.assertRateLimit(
+        `auth:register:ip:${this.rateLimitService.ipKey(context.ipAddress)}`,
+        5,
+        15 * 60,
+      ),
+      this.rateLimitService.assertRateLimit(
+        `auth:register:email:${emailNormalized}`,
+        3,
+        30 * 60,
+      ),
+    ]);
 
     const existingUser =
       await this.usersRepository.findUserByEmail(emailNormalized);
@@ -78,7 +86,7 @@ export class AuthService {
         existingUser.auth.phoneNormalized === phoneNormalized;
 
       if (canResumeVerification) {
-        const otp = await this.sendFreshEmailVerificationOtp(
+        const otp = await this.otpService.sendFreshEmailVerificationOtp(
           existingUser._id,
           emailNormalized,
         );
@@ -98,7 +106,9 @@ export class AuthService {
       throw new BadRequestException('Phone already exists');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const passwordHash = await this.passwordPolicyService.hashPassword(
+      dto.password,
+    );
     const user = await this.usersRepository.createUser({
       auth: {
         email: dto.email.trim(),
@@ -128,11 +138,10 @@ export class AuthService {
     });
 
     await this.rolesService.assignDefaultCustomerRole(user._id);
-    const otp = await this.createEmailVerificationOtp(
+    const otp = await this.otpService.createAndSendEmailVerificationOtp(
       user._id,
       emailNormalized,
     );
-    await this.mailService.sendEmailVerificationOtp(emailNormalized, otp);
 
     return {
       message: 'Register success. Please verify your email.',
@@ -140,74 +149,32 @@ export class AuthService {
     };
   }
 
-  async verifyEmail(dto: VerifyEmailDto): Promise<Record<string, unknown>> {
-    const email = this.normalizeEmail(dto.email);
-    const user = await this.usersRepository.findUserByEmail(email);
-    if (!user) {
-      throw new BadRequestException('Invalid verification request');
-    }
-
-    const token = await this.authRepository.findLatestActiveVerificationToken(
-      user._id,
-      email,
-      VerificationPurpose.VerifyEmail,
-    );
-
-    if (!token || token.expiresAt.getTime() < Date.now()) {
-      throw new BadRequestException('OTP is expired or invalid');
-    }
-
-    if (token.attemptCount >= token.maxAttempts) {
-      throw new ForbiddenException('OTP attempt limit exceeded');
-    }
-
-    const validOtp = await bcrypt.compare(dto.otp, token.codeHash);
-    if (!validOtp) {
-      await token.updateOne({ $inc: { attemptCount: 1 } });
-      throw new BadRequestException('OTP is incorrect');
-    }
-
-    await Promise.all([
-      this.usersRepository.activateEmail(user._id),
-      token.updateOne({ $set: { verifiedAt: new Date() } }),
-    ]);
-
-    return { message: 'Email verified successfully' };
+  verifyEmail(
+    dto: VerifyEmailDto,
+    context: RequestContext,
+  ): Promise<Record<string, unknown>> {
+    return this.otpService.verifyEmail(dto, context);
   }
 
-  async resendVerification(
+  resendVerification(
     dto: ResendVerificationDto,
   ): Promise<Record<string, unknown>> {
-    const email = this.normalizeEmail(dto.email);
-    const user = await this.usersRepository.findUserByEmail(email);
-
-    if (!user || user.auth.emailVerified) {
-      return {
-        message: 'If the email needs verification, a new OTP has been sent.',
-      };
-    }
-
-    await this.authRepository.revokeActiveVerificationTokens(
-      user._id,
-      VerificationPurpose.VerifyEmail,
-    );
-    const otp = await this.createEmailVerificationOtp(user._id, email);
-    await this.mailService.sendEmailVerificationOtp(email, otp);
-
-    return {
-      message: 'If the email needs verification, a new OTP has been sent.',
-      demoOtp: this.demoTokensEnabled() ? otp : undefined,
-    };
+    return this.otpService.resendVerification(dto);
   }
 
-  async login(
-    dto: LoginDto,
-    context: RequestContext,
-  ): Promise<AuthSession> {
+  async login(dto: LoginDto, context: RequestContext): Promise<AuthSession> {
     const email = this.normalizeEmail(dto.email);
+    const loginRateLimitKey = `auth:login:${email}:${this.rateLimitService.ipKey(
+      context.ipAddress,
+    )}`;
     const user = await this.usersRepository.findUserByEmail(email);
 
     if (!user || !user.auth.passwordHash) {
+      await this.rateLimitService.assertRateLimit(
+        loginRateLimitKey,
+        5,
+        15 * 60,
+      );
       await this.recordLogin(
         null,
         email,
@@ -232,6 +199,11 @@ export class AuthService {
     }
 
     if (user.accountStatus !== UserStatus.Active || !user.auth.emailVerified) {
+      await this.rateLimitService.assertRateLimit(
+        loginRateLimitKey,
+        5,
+        15 * 60,
+      );
       await this.recordLogin(
         user._id,
         email,
@@ -250,6 +222,11 @@ export class AuthService {
       user.auth.passwordHash,
     );
     if (!validPassword) {
+      await this.rateLimitService.assertRateLimit(
+        loginRateLimitKey,
+        5,
+        15 * 60,
+      );
       await this.recordLogin(
         user._id,
         email,
@@ -261,7 +238,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const tokens = await this.issueTokens(user._id, email, context);
+    const tokens = await this.tokenService.issueTokens(user._id, email, context);
     const { roles } = await this.rolesService.getRoleCodesAndPermissions(
       user._id,
     );
@@ -283,388 +260,65 @@ export class AuthService {
     };
   }
 
-  async refreshToken(
+  refreshToken(
     dto: RefreshTokenDto,
     context: RequestContext,
   ): Promise<IssuedTokens> {
-    const { refreshTokenId } = this.parseRefreshToken(dto.refreshToken);
-    const refreshToken =
-      await this.authRepository.findRefreshTokenById(refreshTokenId);
-
-    if (
-      !refreshToken ||
-      refreshToken.revokedAt ||
-      refreshToken.expiresAt.getTime() < Date.now()
-    ) {
-      throw new UnauthorizedException('Refresh token is invalid');
-    }
-
-    const validToken = await bcrypt.compare(
-      dto.refreshToken,
-      refreshToken.tokenHash,
-    );
-    if (!validToken) {
-      throw new UnauthorizedException('Refresh token is invalid');
-    }
-
-    const revoked = await this.authRepository.revokeRefreshTokenIfActive(
-      new Types.ObjectId(refreshTokenId),
-      refreshToken.userId,
-    );
-    if (!revoked) {
-      throw new UnauthorizedException('Refresh token is invalid');
-    }
-
-    const user = await this.usersRepository.findUserById(refreshToken.userId);
-    if (!user || user.accountStatus !== UserStatus.Active) {
-      throw new UnauthorizedException('User is not active');
-    }
-
-    return this.issueTokens(user._id, user.auth.emailNormalized, context);
+    return this.sessionService.refreshToken(dto, context);
   }
 
-  async logout(
-    userId: string,
-    sessionId: string,
-  ): Promise<Record<string, unknown>> {
-    const userObjectId = new Types.ObjectId(userId);
-    await this.authRepository.revokeRefreshToken(
-      new Types.ObjectId(sessionId),
-      userObjectId,
-    );
-
-    return { message: 'Logout success' };
+  logout(userId: string, sessionId: string): Promise<Record<string, unknown>> {
+    return this.sessionService.logout(userId, sessionId);
   }
 
-  async changePassword(
+  changePassword(
     userId: string,
     dto: ChangePasswordDto,
+    context: RequestContext,
   ): Promise<Record<string, unknown>> {
-    const userObjectId = new Types.ObjectId(userId);
-    const user = await this.usersRepository.findUserById(userObjectId);
-    if (!user?.auth.passwordHash) {
-      throw new BadRequestException(
-        'This account does not have a local password',
-      );
-    }
-
-    const validPassword = await bcrypt.compare(
-      dto.currentPassword,
-      user.auth.passwordHash,
-    );
-    if (!validPassword) {
-      throw new UnauthorizedException('Current password is incorrect');
-    }
-
-    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
-    await Promise.all([
-      this.usersRepository.updatePassword(userObjectId, passwordHash),
-      this.authRepository.revokeActiveRefreshTokens(userObjectId),
-    ]);
-
-    return { message: 'Password changed successfully. Please login again.' };
+    return this.passwordResetService.changePassword(userId, dto, context);
   }
 
-  async forgotPassword(
+  forgotPassword(
     dto: ForgotPasswordDto,
+    context: RequestContext,
   ): Promise<Record<string, unknown>> {
-    const email = this.normalizeEmail(dto.email);
-    const user = await this.usersRepository.findActiveUserByEmail(email);
-
-    if (!user) {
-      return { message: 'If the email exists, a reset link has been sent.' };
-    }
-
-    const token = await this.createPasswordResetToken(user._id, email);
-    await this.mailService.sendPasswordResetLink(email, token);
-
-    return {
-      message: 'If the email exists, a reset link has been sent.',
-      demoResetToken: this.demoTokensEnabled() ? token : undefined,
-    };
+    return this.passwordResetService.forgotPassword(dto, context);
   }
 
-  async resetPassword(dto: ResetPasswordDto): Promise<Record<string, unknown>> {
-    const { tokenId } = this.parseResetToken(dto.token);
-    const resetToken =
-      await this.authRepository.findVerificationTokenById(tokenId);
-
-    if (
-      !resetToken ||
-      resetToken.purpose !== VerificationPurpose.PasswordReset ||
-      resetToken.verifiedAt ||
-      resetToken.expiresAt.getTime() < Date.now()
-    ) {
-      throw new BadRequestException('Reset token is expired or invalid');
-    }
-
-    const validToken = await bcrypt.compare(dto.token, resetToken.codeHash);
-    if (!validToken) {
-      throw new BadRequestException('Reset token is expired or invalid');
-    }
-
-    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
-    await Promise.all([
-      this.usersRepository.updatePassword(resetToken.userId, passwordHash),
-      this.usersRepository.activateEmail(resetToken.userId),
-      resetToken.updateOne({ $set: { verifiedAt: new Date() } }),
-      this.authRepository.revokeActiveRefreshTokens(resetToken.userId),
-    ]);
-
-    return { message: 'Password reset successfully' };
+  resetPassword(
+    dto: ResetPasswordDto,
+    context: RequestContext,
+  ): Promise<Record<string, unknown>> {
+    return this.passwordResetService.resetPassword(dto, context);
   }
 
-  async handleGoogleLogin(
+  createGoogleOAuthState(context: RequestContext): Promise<string> {
+    return this.oauthService.createGoogleOAuthState(context);
+  }
+
+  validateGoogleOAuthState(state: string): Promise<void> {
+    return this.oauthService.validateGoogleOAuthState(state);
+  }
+
+  handleGoogleLogin(
     profile: GoogleOAuthProfile,
     context: RequestContext,
   ): Promise<OAuthLoginCode> {
-    if (profile.emailVerified === false) {
-      throw new ForbiddenException('Google email is not verified');
-    }
-
-    const email = this.normalizeEmail(profile.email);
-    const providerUserId = profile.providerUserId;
-    let user = await this.usersRepository.findUserByAuthProvider(
-      AuthProviderType.Google,
-      providerUserId,
-    );
-
-    user ??= await this.usersRepository.findUserByEmail(email);
-    const hasGoogleProvider = Boolean(
-      user?.auth.authProviders.some(
-        (authProvider) =>
-          authProvider.provider === AuthProviderType.Google &&
-          authProvider.providerUserId === providerUserId,
-      ),
-    );
-
-    if (!user) {
-      user = await this.usersRepository.createUser({
-        auth: {
-          email: profile.email,
-          emailNormalized: email,
-          passwordHash: null,
-          emailVerified: true,
-          phoneVerified: false,
-          authProviders: [
-            {
-              provider: AuthProviderType.Google,
-              providerUserId,
-            },
-          ],
-        },
-        roles: ['CUSTOMER'],
-        defaultRole: 'CUSTOMER',
-        accountStatus: UserStatus.Active,
-        profile: {
-          fullName: profile.fullName,
-          avatarUrl: profile.avatarUrl,
-        },
-        security: {
-          failedLoginAttempts: 0,
-        },
-      });
-      await this.rolesService.assignDefaultCustomerRole(user._id);
-    } else if (user.accountStatus === UserStatus.Banned) {
-      throw new ForbiddenException('Tài khoản của bạn đã bị khóa bởi quản trị viên.');
-    } else if (user.accountStatus !== UserStatus.Active) {
-      throw new ForbiddenException('Tài khoản chưa được kích hoạt hoặc không hoạt động.');
-    } else if (!hasGoogleProvider) {
-      await this.usersRepository.addAuthProvider(user._id, {
-        provider: AuthProviderType.Google,
-        providerUserId,
-      });
-    }
-
-    await this.usersRepository.activateEmail(user._id);
-
-    return {
-      code: await this.createOAuthExchangeCode(user._id, email),
-    };
+    return this.oauthService.handleGoogleLogin(profile, context);
   }
 
-  async exchangeOAuthCode(
+  exchangeOAuthCode(
     dto: OAuthExchangeDto,
     context: RequestContext,
   ): Promise<AuthSession> {
-    const { tokenId } = this.parseOAuthCode(dto.code);
-    const token = await this.authRepository.findVerificationTokenById(tokenId);
-
-    if (
-      !token ||
-      token.purpose !== VerificationPurpose.OAuthLogin ||
-      token.verifiedAt ||
-      token.expiresAt.getTime() < Date.now()
-    ) {
-      throw new UnauthorizedException('OAuth code is expired or invalid');
-    }
-
-    const validCode = await bcrypt.compare(dto.code, token.codeHash);
-    if (!validCode) {
-      throw new UnauthorizedException('OAuth code is expired or invalid');
-    }
-
-    const verified = await this.authRepository.markVerificationTokenVerifiedIfActive(
-      new Types.ObjectId(tokenId),
-    );
-    if (!verified) {
-      throw new UnauthorizedException('OAuth code is expired or invalid');
-    }
-
-    const user = await this.usersRepository.findUserById(token.userId);
-    if (!user) {
-      throw new UnauthorizedException('Tài khoản không tồn tại');
-    }
-    if (user.accountStatus === UserStatus.Banned) {
-      throw new UnauthorizedException('Tài khoản của bạn đã bị khóa bởi quản trị viên.');
-    }
-    if (user.accountStatus !== UserStatus.Active) {
-      throw new UnauthorizedException('Tài khoản chưa được kích hoạt hoặc không hoạt động.');
-    }
-
-    const tokens = await this.issueTokens(
-      user._id,
-      user.auth.emailNormalized,
-      context,
-    );
-    const { roles } = await this.rolesService.getRoleCodesAndPermissions(
-      user._id,
-    );
-    await Promise.all([
-      this.usersRepository.markLoggedIn(user._id),
-      this.recordLogin(
-        user._id,
-        user.auth.emailNormalized,
-        LoginProvider.Google,
-        LoginStatus.Success,
-        null,
-        context,
-      ),
-    ]);
-
-    return {
-      ...tokens,
-      user: await this.usersService.getMe(user._id.toString(), roles),
-    };
+    return this.oauthService.exchangeOAuthCode(dto, context);
   }
 
   async getPermissions(userId: string): Promise<Record<string, unknown>> {
     return this.rolesService.getRoleCodesAndPermissions(
       new Types.ObjectId(userId),
     );
-  }
-
-  private async sendFreshEmailVerificationOtp(
-    userId: Types.ObjectId,
-    email: string,
-  ): Promise<string> {
-    await this.authRepository.revokeActiveVerificationTokens(
-      userId,
-      VerificationPurpose.VerifyEmail,
-    );
-    const otp = await this.createEmailVerificationOtp(userId, email);
-    await this.mailService.sendEmailVerificationOtp(email, otp);
-
-    return otp;
-  }
-
-  private async issueTokens(
-    userId: Types.ObjectId,
-    email: string,
-    context: RequestContext,
-  ): Promise<IssuedTokens> {
-    const refreshTokenId = new Types.ObjectId();
-    const refreshToken = `${refreshTokenId.toString()}.${randomBytes(48).toString('hex')}`;
-    const tokenHash = await bcrypt.hash(refreshToken, 12);
-    const expiresAt = new Date(
-      Date.now() + this.refreshTokenTtlDays * 24 * 60 * 60 * 1000,
-    );
-
-    await this.authRepository.createRefreshToken({
-      _id: refreshTokenId,
-      userId,
-      tokenHash,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      deviceName: context.userAgent,
-      expiresAt,
-    });
-
-    const { roles, permissions } =
-      await this.rolesService.getRoleCodesAndPermissions(userId);
-    const accessToken = await this.jwtService.signAsync(
-      {
-        sub: userId.toString(),
-        email,
-        sessionId: refreshTokenId.toString(),
-        roles,
-        permissions,
-      },
-      { expiresIn: this.accessTokenTtlSeconds },
-    );
-
-    return { accessToken, refreshToken, expiresIn: this.accessTokenTtlSeconds };
-  }
-
-  private async createEmailVerificationOtp(
-    userId: Types.ObjectId,
-    email: string,
-  ): Promise<string> {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const codeHash = await bcrypt.hash(otp, 12);
-
-    await this.authRepository.createVerificationToken({
-      userId,
-      target: email,
-      targetType: VerificationTargetType.Email,
-      codeHash,
-      purpose: VerificationPurpose.VerifyEmail,
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-    });
-
-    return otp;
-  }
-
-  private async createOAuthExchangeCode(
-    userId: Types.ObjectId,
-    email: string,
-  ): Promise<string> {
-    const tokenId = new Types.ObjectId();
-    const code = `${tokenId.toString()}.${randomBytes(48).toString('hex')}`;
-    const codeHash = await bcrypt.hash(code, 12);
-
-    await this.authRepository.createVerificationToken({
-      _id: tokenId,
-      userId,
-      target: email,
-      targetType: VerificationTargetType.Email,
-      codeHash,
-      purpose: VerificationPurpose.OAuthLogin,
-      expiresAt: new Date(Date.now() + 2 * 60 * 1000),
-    });
-
-    return code;
-  }
-
-  private async createPasswordResetToken(
-    userId: Types.ObjectId,
-    email: string,
-  ): Promise<string> {
-    const tokenId = new Types.ObjectId();
-    const token = `${tokenId.toString()}.${randomBytes(48).toString('hex')}`;
-    const codeHash = await bcrypt.hash(token, 12);
-
-    await this.authRepository.createVerificationToken({
-      _id: tokenId,
-      userId,
-      target: email,
-      targetType: VerificationTargetType.Email,
-      codeHash,
-      purpose: VerificationPurpose.PasswordReset,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-    });
-
-    return token;
   }
 
   private async recordLogin(
@@ -684,6 +338,19 @@ export class AuthService {
       context.ipAddress,
       context.userAgent,
     );
+    await this.securityLogService.recordSecurityEvent({
+      type:
+        status === LoginStatus.Success
+          ? SecurityEventType.LoginSuccess
+          : SecurityEventType.LoginFailed,
+      userId,
+      email,
+      metadata: {
+        provider,
+        failureReason,
+      },
+      context,
+    });
   }
 
   private normalizeEmail(email: string): string {
@@ -694,56 +361,7 @@ export class AuthService {
     return phone.replace(/\s/g, '');
   }
 
-  private parseRefreshToken(refreshToken: string): { refreshTokenId: string } {
-    const [refreshTokenId] = refreshToken.split('.');
-    if (!Types.ObjectId.isValid(refreshTokenId)) {
-      throw new UnauthorizedException('Refresh token is invalid');
-    }
-
-    return { refreshTokenId };
-  }
-
-  private parseResetToken(token: string): { tokenId: string } {
-    const [tokenId] = token.split('.');
-    if (!Types.ObjectId.isValid(tokenId)) {
-      throw new BadRequestException('Reset token is expired or invalid');
-    }
-
-    return { tokenId };
-  }
-
-  private parseOAuthCode(code: string): { tokenId: string } {
-    const [tokenId] = code.split('.');
-    if (!Types.ObjectId.isValid(tokenId)) {
-      throw new UnauthorizedException('OAuth code is expired or invalid');
-    }
-
-    return { tokenId };
-  }
-
   private demoTokensEnabled(): boolean {
     return this.configService.get<string>('AUTH_DEMO_TOKENS_ENABLED') === 'true';
-  }
-
-  private isDuplicateKeyError(error: unknown, field?: string): boolean {
-    const mongoError = error as
-      | {
-          code?: number;
-          keyPattern?: Record<string, unknown>;
-          keyValue?: Record<string, unknown>;
-        }
-      | undefined;
-
-    if (mongoError?.code !== 11000) {
-      return false;
-    }
-
-    if (!field) {
-      return true;
-    }
-
-    return Boolean(
-      mongoError.keyPattern?.[field] || mongoError.keyValue?.[field],
-    );
   }
 }

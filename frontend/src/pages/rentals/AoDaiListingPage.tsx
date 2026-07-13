@@ -34,13 +34,21 @@ interface ProductFromDb {
   materials: string[];
   status: string;
   style?: string;
+  categoryId?: { _id: string; name: string; slug: string } | string;
   rating: {
     averageRating: number;
     totalReviews: number;
   };
 }
 
+interface ProductCategory {
+  _id: string;
+  name: string;
+  slug: string;
+}
+
 interface FilterState {
+  categoryId: string;
   colors: string[];
   sizes: string[];
   materials: string[];
@@ -66,6 +74,7 @@ export const AoDaiListingPage: React.FC = () => {
   const { user, toggleFavorite: apiToggleFavorite } = useAuth();
 
   const [products, setProducts] = useState<ProductFromDb[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductFromDb[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +86,7 @@ export const AoDaiListingPage: React.FC = () => {
 
   // Filters State passed to API
   const [filters, setFilters] = useState<FilterState>({
+    categoryId: '',
     colors: [],
     sizes: [],
     materials: [],
@@ -157,8 +167,12 @@ export const AoDaiListingPage: React.FC = () => {
   useEffect(() => {
     const fetchAllProducts = async () => {
       try {
-        const data = await httpClient.get<ProductFromDb[]>('/products');
-        setProducts(data);
+        const [productData, categoryData] = await Promise.all([
+          httpClient.get<ProductFromDb[]>('/products'),
+          httpClient.get<ProductCategory[]>('/products/categories'),
+        ]);
+        setProducts(productData);
+        setCategories(categoryData);
       } catch (err) {
         console.error('Lỗi tải danh mục gốc:', err);
       }
@@ -179,6 +193,7 @@ export const AoDaiListingPage: React.FC = () => {
       try {
         setLoading(true);
         const params = new URLSearchParams();
+        if (filters.categoryId) params.append('categoryId', filters.categoryId);
         if (filters.search) params.append('search', filters.search);
         if (filters.minPrice) params.append('minPrice', filters.minPrice);
         if (filters.maxPrice) params.append('maxPrice', filters.maxPrice);
@@ -313,6 +328,7 @@ export const AoDaiListingPage: React.FC = () => {
     setMinPriceVal('');
     setMaxPriceVal('');
     setFilters({
+      categoryId: '',
       colors: [],
       sizes: [],
       materials: [],
@@ -385,6 +401,37 @@ export const AoDaiListingPage: React.FC = () => {
               Xóa bộ lọc
             </button>
           </div>
+
+          <div className="vh-filter-section" style={{ marginBottom: '20px' }}>
+            <h4 className="vh-filter-section-title">DANH MỤC ÁO DÀI</h4>
+            <select
+              value={filters.categoryId}
+              onChange={(event) => setFilters((previous) => ({
+                ...previous,
+                categoryId: event.target.value,
+              }))}
+              style={{
+                width: '100%',
+                marginTop: '12px',
+                padding: '10px 12px',
+                borderRadius: '6px',
+                border: '1px solid var(--color-light-border)',
+                backgroundColor: 'white',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <option value="">Tất cả danh mục</option>
+              {categories.map((category) => (
+                <option key={category._id} value={category._id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="vh-filter-divider" />
+
           {/* SMART FILTER FOR ONBOARDED USERS */}
           {showPersonalization ? (
             <>

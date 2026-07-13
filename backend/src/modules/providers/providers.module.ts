@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Provider, ProviderSchema } from './schemas/provider.schema';
+import { PortfolioItem, PortfolioItemSchema } from './schemas/portfolio-item.schema';
 import {
   ProviderVerification,
   ProviderVerificationSchema,
@@ -23,6 +24,7 @@ import { ProviderVerificationsController } from './controllers/provider-verifica
 import { AdminProviderVerificationsController } from './controllers/admin-provider-verifications.controller';
 import { AdminProvidersController } from './controllers/admin-providers.controller';
 import { ProvidersController } from './controllers/providers.controller';
+import { AdminPortfolioModerationController } from './controllers/admin-portfolio-moderation.controller';
 import { ProvidersService } from './services/providers.service';
 import { ProvidersRepository } from './repositories/providers.repository';
 import { PhotographersController } from './controllers/photographers.controller';
@@ -32,6 +34,7 @@ import { ProviderVerificationService } from './services/provider-verification.se
 export const providerModels = MongooseModule.forFeature([
   { name: Provider.name, schema: ProviderSchema },
   { name: ProviderVerification.name, schema: ProviderVerificationSchema },
+  { name: PortfolioItem.name, schema: PortfolioItemSchema },
 ]);
 
 const providerSupportModels = MongooseModule.forFeature([
@@ -54,6 +57,7 @@ const providerSupportModels = MongooseModule.forFeature([
     ProviderVerificationsController,
     AdminProviderVerificationsController,
     AdminProvidersController,
+    AdminPortfolioModerationController,
   ],
   providers: [
     ProvidersService,

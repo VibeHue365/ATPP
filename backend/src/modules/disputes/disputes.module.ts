@@ -7,6 +7,8 @@ import { DisputesController } from './controllers/disputes.controller';
 import { BookingsModule } from '../bookings/bookings.module';
 import { ProductsModule } from '../products/products.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { SettlementsModule } from '../settlements/settlements.module';
+import { SystemPoliciesModule } from '../system-policies/system-policies.module';
 
 export const disputeModels = MongooseModule.forFeature([
   { name: Dispute.name, schema: DisputeSchema },
@@ -19,6 +21,8 @@ export const disputeModels = MongooseModule.forFeature([
     forwardRef(() => BookingsModule),
     forwardRef(() => ProductsModule),
     forwardRef(() => PaymentsModule),
+    SettlementsModule,
+    SystemPoliciesModule,
   ],
   controllers: [DisputesController],
   providers: [DisputesService],

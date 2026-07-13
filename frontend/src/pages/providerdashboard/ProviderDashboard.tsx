@@ -48,6 +48,8 @@ interface Product {
   style?: string;
   occasions?: string[];
   status: 'ACTIVE' | 'DRAFT' | 'INACTIVE';
+  moderationStatus?: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'HIDDEN';
+  moderationReason?: string | null;
 }
 
 export const ProviderDashboard: React.FC = () => {
@@ -76,6 +78,7 @@ export const ProviderDashboard: React.FC = () => {
 
   // Provider Specific States
   const [provider, setProvider] = useState<any>(null);
+  const [portfolioItems, setPortfolioItems] = useState<any[]>([]);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [subTab, setSubTab] = useState<'shop' | 'photo'>('shop');
 
@@ -210,6 +213,8 @@ export const ProviderDashboard: React.FC = () => {
     try {
       const pRes: any = await httpClient.get('/providers/me');
       setProvider(pRes);
+      const portfolioRes: any = await httpClient.get('/providers/me/portfolio-items');
+      setPortfolioItems(portfolioRes || []);
       setBusinessName(pRes.businessName || '');
       setPhone(pRes.contact?.phone || '');
       setAddressLine(pRes.address?.addressLine || '');
@@ -265,8 +270,22 @@ export const ProviderDashboard: React.FC = () => {
 
   const fetchPayouts = async () => {
     try {
-      const res: any = await httpClient.get('/payments/settlement-transfers/provider');
-      setPayouts(res || []);
+      const res: any = await httpClient.get('/provider/settlements');
+      const settlements = res.items || [];
+      const mapped = settlements.map((s: any) => {
+        return {
+          id: s.settlementCode,
+          bookingId: s.bookingId?._id || s.bookingId,
+          bookingCode: s.bookingId?.bookingCode || `BK-${(s.bookingId?._id || s.bookingId)?.slice(-6).toUpperCase()}`,
+          amount: s.payableAmount || 0,
+          bank: s.payoutReference ? 'Tài khoản Đã nhận' : 'Hệ thống đối soát',
+          account: s.payoutReference || 'Đang xử lý',
+          accountHolder: s.note || '',
+          status: s.status,
+          date: s.settledAt ? new Date(s.settledAt).toLocaleDateString('vi-VN') : new Date(s.createdAt).toLocaleDateString('vi-VN'),
+        };
+      });
+      setPayouts(mapped);
     } catch (err: any) {
       console.error('Không thể tải lịch sử quyết toán:', err);
     }
@@ -380,7 +399,10 @@ export const ProviderDashboard: React.FC = () => {
     });
     if (!isConfirmed || !imageUrl) return;
     try {
-      await httpClient.post('/providers/me/portfolio', { imageUrl });
+      await httpClient.post('/providers/me/portfolio-items', {
+        title: 'Portfolio item',
+        images: [imageUrl],
+      });
       toast.success('Đã thêm ảnh mẫu thiết kế vào Portfolio!');
       fetchProviderData();
     } catch (err: any) {
@@ -388,9 +410,9 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
-  const handleRemovePortfolio = async (imgUrl: string) => {
+  const handleRemovePortfolio = async (itemId: string) => {
     try {
-      await httpClient.delete(`/providers/me/portfolio?imageUrl=${encodeURIComponent(imgUrl)}`);
+      await httpClient.delete(`/providers/me/portfolio-items/${itemId}`);
       toast.success('Đã gỡ ảnh khỏi Portfolio');
       fetchProviderData();
     } catch (err: any) {
@@ -466,9 +488,37 @@ export const ProviderDashboard: React.FC = () => {
   const [reportingOrder, setReportingOrder] = useState<Order | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [incidentDesc, setIncidentDesc] = useState<string>('');
-  const [incidentEvidence, setIncidentEvidence] = useState<string>('');
+  const [incidentEvidence, setIncidentEvidence] = useState<string[]>([]);
   const [incidentAmount, setIncidentAmount] = useState<number>(0);
   const [incidentActionType, setIncidentActionType] = useState<'CLEANING' | 'MAINTENANCE'>('CLEANING');
+  const [submittingIncident, setSubmittingIncident] = useState(false);
+  const [uploadingIncidentEvidence, setUploadingIncidentEvidence] = useState(false);
+
+  const handleIncidentEvidenceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    if (incidentEvidence.length + files.length > 5) {
+      toast.error('Chỉ được gửi tối đa 5 ảnh bằng chứng.');
+      return;
+    }
+
+    setUploadingIncidentEvidence(true);
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append('images', file));
+      const response = await httpClient.post<{ urls: string[] }>(
+        '/api/disputes/incidents/upload-evidence',
+        formData,
+      );
+      setIncidentEvidence((current) => [...current, ...response.urls]);
+      toast.success('Đã tải ảnh bằng chứng lên.');
+    } catch (err: any) {
+      toast.error(err.message || 'Tải ảnh bằng chứng thất bại');
+    } finally {
+      setUploadingIncidentEvidence(false);
+    }
+  };
 
   const handleSendIncidentReport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -476,12 +526,25 @@ export const ProviderDashboard: React.FC = () => {
       toast.error('Vui lòng chọn sản phẩm gặp sự cố!');
       return;
     }
+    if (!incidentDesc.trim()) {
+      toast.error('Vui lòng nhập mô tả sự cố!');
+      return;
+    }
+    if (!Number.isInteger(incidentAmount) || incidentAmount <= 0) {
+      toast.error('Tiền đền bù phải là số nguyên lớn hơn 0.');
+      return;
+    }
     if (incidentAmount > (reportingOrder.depositTotal || 0)) {
       toast.error(`Tiền đền bù không được vượt quá số tiền cọc (${(reportingOrder.depositTotal || 0).toLocaleString()}đ)`);
       return;
     }
+    const photos = incidentEvidence;
+    if (photos.length > 5) {
+      toast.error('Chỉ được gửi tối đa 5 ảnh bằng chứng.');
+      return;
+    }
+    setSubmittingIncident(true);
     try {
-      const photos = incidentEvidence ? incidentEvidence.split(',').map(s => s.trim()).filter(Boolean) : [];
       await httpClient.post('/api/disputes/incidents', {
         bookingId: reportingOrder._id,
         bookingItemId: selectedItemId,
@@ -494,12 +557,14 @@ export const ProviderDashboard: React.FC = () => {
       setReportingOrder(null);
       setSelectedItemId('');
       setIncidentDesc('');
-      setIncidentEvidence('');
+      setIncidentEvidence([]);
       setIncidentAmount(0);
       setIncidentActionType('CLEANING');
       fetchOrders();
     } catch (err: any) {
       toast.error(err.message || 'Gửi báo cáo sự cố thất bại');
+    } finally {
+      setSubmittingIncident(false);
     }
   };
 
@@ -612,7 +677,7 @@ export const ProviderDashboard: React.FC = () => {
       const data = await httpClient.get<any[]>('/products/categories');
       setCategories(data);
       if (data.length > 0 && !prodCategoryId) {
-        setProdCategoryId(data[0]._id);
+        setProdCategoryId(data[0]._id || data[0].id || '');
       }
     } catch (err) {
       console.error('Lỗi tải danh mục:', err);
@@ -654,7 +719,7 @@ export const ProviderDashboard: React.FC = () => {
     setProdStyle('traditional');
     setProdOccasions(['wedding']);
     if (categories.length > 0) {
-      setProdCategoryId(categories[0]._id);
+      setProdCategoryId(categories[0]._id || categories[0].id || '');
     }
     setIsModalOpen(true);
   };
@@ -706,12 +771,12 @@ export const ProviderDashboard: React.FC = () => {
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prodName || !prodCategoryId || !prodBasePrice || !prodDepositAmount) {
+    if (!prodName.trim() || !prodCategoryId || !prodBasePrice || !prodDepositAmount || prodImages.length === 0) {
       toast.error('Vui lòng điền đầy đủ các thông tin bắt buộc');
       return;
     }
 
-    if (Number(prodDepositAmount) > Number(prodBasePrice)) {
+    if (Number(prodDepositAmount) >= Number(prodBasePrice)) {
       toast.error('Giá cọc không được lớn hơn giá thuê');
       return;
     }
@@ -727,7 +792,7 @@ export const ProviderDashboard: React.FC = () => {
       colors: prodColors,
       materials: prodMaterials,
       status: prodStatus,
-      images: prodImages.length > 0 ? prodImages : ['https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'],
+      images: prodImages,
       style: prodStyle,
       occasions: prodOccasions,
     };
@@ -1483,7 +1548,7 @@ export const ProviderDashboard: React.FC = () => {
                                 setReportingOrder(o);
                                 setSelectedItemId(o.items?.[0]?._id || '');
                                 setIncidentDesc('');
-                                setIncidentEvidence('');
+                                setIncidentEvidence([]);
                                 setIncidentAmount(o.depositTotal || 0);
                                 setIncidentActionType('CLEANING');
                                 setActionMenuId(null);
@@ -1565,6 +1630,12 @@ export const ProviderDashboard: React.FC = () => {
 
                     {/* Meta */}
                     <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
+                      {p.moderationStatus && p.moderationStatus !== 'APPROVED' && (
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: p.moderationStatus === 'REJECTED' || p.moderationStatus === 'HIDDEN' ? '#991B1B' : '#92400E', background: p.moderationStatus === 'REJECTED' || p.moderationStatus === 'HIDDEN' ? '#FEF2F2' : '#FEF3C7', padding: '6px 8px', borderRadius: '4px' }}>
+                          {p.moderationStatus === 'PENDING_REVIEW' ? 'CHO KIEM DUYET' : p.moderationStatus === 'REJECTED' ? 'BI TU CHOI' : 'DA BI AN'}
+                          {p.moderationReason ? `: ${p.moderationReason}` : ''}
+                        </div>
+                      )}
                       <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         {typeof p.categoryId === 'object' ? p.categoryId.name : 'Áo dài'}
                       </span>
@@ -1731,7 +1802,7 @@ export const ProviderDashboard: React.FC = () => {
 
             {isLoadingProvider ? (
               <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải portfolio...</div>
-            ) : !provider?.media?.images || provider.media.images.length === 0 ? (
+            ) : portfolioItems.length === 0 ? (
               <div style={{ padding: '80px 40px', textAlign: 'center', backgroundColor: 'white', border: '1px dashed var(--color-light-border)', borderRadius: 'var(--radius-md)' }}>
                 <Camera size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5, marginBottom: '16px', margin: '0 auto' }} />
                 <h4 style={{ fontSize: '16px', fontWeight: 700 }}>Chưa có tác phẩm nào trong Portfolio</h4>
@@ -1739,12 +1810,13 @@ export const ProviderDashboard: React.FC = () => {
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '20px' }}>
-                {provider.media.images.map((img: string, idx: number) => (
-                  <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)' }}>
-                    <img src={img.startsWith('http') ? img : getImageUrl(img)} alt="Portfolio item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {portfolioItems.map((item: any) => (
+                  <div key={item._id} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)' }}>
+                    <img src={item.images?.[0]?.startsWith('http') ? item.images[0] : getImageUrl(item.images?.[0])} alt={item.title || 'Portfolio item'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    {item.moderationStatus !== 'APPROVED' && <span style={{ position: 'absolute', top: '8px', left: '8px', padding: '4px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, background: '#FEF3C7', color: '#92400E' }}>{item.moderationStatus}</span>}
                     <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', opacity: 0, transition: 'opacity 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '1'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}>
                       <button
-                        onClick={() => handleRemovePortfolio(img)}
+                        onClick={() => handleRemovePortfolio(item._id)}
                         style={{ padding: '8px 12px', backgroundColor: '#EF4444', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '12px' }}
                       >
                         Gỡ ảnh
@@ -2179,10 +2251,10 @@ export const ProviderDashboard: React.FC = () => {
                               <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                                 <span style={{ 
                                   padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
-                                  backgroundColor: p.status === 'SUCCESS' ? '#F0FDF4' : p.status === 'PENDING' ? '#FEF3C7' : '#FEE2E2',
-                                  color: p.status === 'SUCCESS' ? '#166534' : p.status === 'PENDING' ? '#92400E' : '#991B1B'
+                                  backgroundColor: p.status === 'SETTLED' ? '#F0FDF4' : p.status === 'ON_HOLD' ? '#FEE2E2' : p.status === 'CANCELLED' ? '#F3F4F6' : '#FEF3C7',
+                                  color: p.status === 'SETTLED' ? '#166534' : p.status === 'ON_HOLD' ? '#991B1B' : p.status === 'CANCELLED' ? '#4B5563' : '#92400E'
                                 }}>
-                                  {p.status === 'SUCCESS' ? 'Thành công' : p.status === 'PENDING' ? 'Đang xử lý' : 'Thất bại'}
+                                  {p.status === 'SETTLED' ? 'Đã quyết toán' : p.status === 'ON_HOLD' ? 'Tạm giữ' : p.status === 'CANCELLED' ? 'Đã hủy' : 'Chờ quyết toán'}
                                 </span>
                               </td>
                               <td style={{ padding: '16px 20px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>{p.date}</td>
@@ -2245,7 +2317,7 @@ export const ProviderDashboard: React.FC = () => {
                 required
               >
                 {categories.map(c => (
-                  <option key={c._id} value={c._id}>{c.name}</option>
+                  <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
@@ -2653,14 +2725,25 @@ export const ProviderDashboard: React.FC = () => {
 
               {/* Ảnh bằng chứng */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ẢNH CHỤP BẰNG CHỨNG (CÁCH NHAU BẰNG DẤU PHẨY)</span>
-                <input
-                  type="text"
-                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none' }}
-                  placeholder="Link ảnh bằng chứng 1, Link ảnh bằng chứng 2..."
-                  value={incidentEvidence}
-                  onChange={(e) => setIncidentEvidence(e.target.value)}
-                />
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ẢNH CHỤP BẰNG CHỨNG (TỐI ĐA 5 ẢNH)</span>
+                <label style={{ minHeight: '86px', border: '1px dashed var(--color-primary)', borderRadius: '8px', backgroundColor: '#FDF8F8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--color-primary)', fontSize: '12px', fontWeight: 700, cursor: uploadingIncidentEvidence ? 'wait' : 'pointer', opacity: uploadingIncidentEvidence ? 0.65 : 1 }}>
+                  <Upload size={18} />
+                  {uploadingIncidentEvidence ? 'ĐANG TẢI ẢNH...' : 'CHỌN ẢNH JPG, PNG HOẶC WEBP'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden disabled={uploadingIncidentEvidence || incidentEvidence.length >= 5} onChange={handleIncidentEvidenceUpload} />
+                </label>
+                {incidentEvidence.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '8px' }}>
+                    {incidentEvidence.map((url, index) => (
+                      <div key={url} style={{ position: 'relative', aspectRatio: '1', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-light-border)' }}>
+                        <img src={getImageUrl(url)} alt={`Bằng chứng ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button type="button" aria-label={`Xóa ảnh bằng chứng ${index + 1}`} onClick={() => setIncidentEvidence((current) => current.filter((_, itemIndex) => itemIndex !== index))} style={{ position: 'absolute', top: '3px', right: '3px', width: '22px', height: '22px', display: 'grid', placeItems: 'center', border: 'none', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.72)', color: 'white', cursor: 'pointer' }}>
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Mỗi ảnh tối đa 5MB. Đã chọn {incidentEvidence.length}/5 ảnh.</span>
               </div>
 
               {/* Số tiền yêu cầu đền bù */}
@@ -2683,9 +2766,10 @@ export const ProviderDashboard: React.FC = () => {
 
               <button
                 type="submit"
-                style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em', marginTop: '8px' }}
+                disabled={submittingIncident || uploadingIncidentEvidence}
+                style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: submittingIncident || uploadingIncidentEvidence ? 'not-allowed' : 'pointer', opacity: submittingIncident || uploadingIncidentEvidence ? 0.65 : 1, letterSpacing: '0.05em', marginTop: '8px' }}
               >
-                GỬI BÁO CÁO SỰ CỐ
+                {submittingIncident ? 'ĐANG GỬI...' : 'GỬI BÁO CÁO SỰ CỐ'}
               </button>
             </div>
           </form>

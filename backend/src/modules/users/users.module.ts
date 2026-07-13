@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { SecurityLogModule } from '../auth/security-log.module';
 import { User, UserSchema } from './schemas/user.schema';
+import { AdminUsersController } from './controllers/admin-users.controller';
 import { UsersController } from './controllers/users.controller';
 import { UserProfileMapper } from './mappers/user-profile.mapper';
+import { AccountStatusMigrationService } from './services/account-status-migration.service';
 import { UsersRepository } from './repositories/users.repository';
 import { UsersService } from './services/users.service';
 
@@ -11,9 +14,14 @@ export const userModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [userModels],
-  controllers: [UsersController],
-  providers: [UsersService, UsersRepository, UserProfileMapper],
+  imports: [userModels, SecurityLogModule],
+  controllers: [UsersController, AdminUsersController],
+  providers: [
+    UsersService,
+    UsersRepository,
+    UserProfileMapper,
+    AccountStatusMigrationService,
+  ],
   exports: [UsersService, UsersRepository, userModels],
 })
 export class UsersModule {}

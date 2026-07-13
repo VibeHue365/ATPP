@@ -50,6 +50,12 @@ export class Payment {
   @Prop({ required: true, min: 0 })
   amount: number;
 
+  @Prop({ required: true, min: 0, default: 0 })
+  refundedAmount: number;
+
+  @Prop({ required: true, min: 0, default: 0 })
+  refundReservedAmount: number;
+
   @Prop({
     type: String,
     enum: Object.values(PaymentPurpose),

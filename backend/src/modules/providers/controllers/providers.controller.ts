@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Param,
   Patch,
   Post,
   Query,
@@ -24,6 +25,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { ProvidersService } from '../services/providers.service';
 import { ProviderCapability } from '../schemas/provider.schema';
+import { CreatePortfolioItemDto, UpdatePortfolioItemDto } from '../dto/portfolio-item.dto';
 
 export class UpdateProviderProfileDto {
   @IsString()
@@ -133,6 +135,27 @@ export class ProvidersController {
     @Query('imageUrl') imageUrl: string,
   ) {
     return this.providersService.removePortfolioImage(user.sub, imageUrl);
+  }
+
+  @Get('me/portfolio-items')
+  async listPortfolioItems(@CurrentUser() user: AuthUser) {
+    return this.providersService.listMyPortfolioItems(user.sub);
+  }
+
+  @Post('me/portfolio-items')
+  async createPortfolioItem(@CurrentUser() user: AuthUser, @Body() dto: CreatePortfolioItemDto) {
+    return this.providersService.createPortfolioItem(user.sub, dto);
+  }
+
+  @Patch('me/portfolio-items/:id')
+  async updatePortfolioItem(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdatePortfolioItemDto) {
+    return this.providersService.updatePortfolioItem(user.sub, id, dto);
+  }
+
+  @Delete('me/portfolio-items/:id')
+  async deletePortfolioItem(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    await this.providersService.removePortfolioItem(user.sub, id);
+    return { message: 'Portfolio item deleted' };
   }
 
   @Get('me/schedules')

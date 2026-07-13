@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsEnum,
+  IsMongoId,
   IsNumber,
   IsOptional,
   IsString,
@@ -10,7 +11,7 @@ import { ProductStatus } from '../schemas/product.schema';
 
 export class UpdateProductDto {
   @IsOptional()
-  @IsString()
+  @IsMongoId()
   categoryId?: string;
 
   @IsOptional()

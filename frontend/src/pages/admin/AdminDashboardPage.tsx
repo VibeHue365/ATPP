@@ -5,7 +5,7 @@ import {
   Image as ImageIcon, Calendar, Eye,
   LayoutDashboard, Users, Store, TrendingUp, FileCheck,
   Search, Bell, Ban, Lock, CheckSquare, BarChart3,
-  LogOut, Home, Star
+  LogOut, Home, Star, Layers, Settings, DollarSign, ShieldCheck
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../services/httpClient';
@@ -13,6 +13,15 @@ import { useToast } from '../../components/feedback/Toast';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 import { API_BASE_URL } from '../../config/env';
+
+// Modular Sub-components
+import { CategoryManagement } from './components/CategoryManagement';
+import { SettlementManagement } from './components/SettlementManagement';
+import { PolicyManagement } from './components/PolicyManagement';
+import { AccessControl } from './components/AccessControl';
+import { ProductModerationManagement } from './components/ProductModerationManagement';
+import { PortfolioModerationManagement } from './components/PortfolioModerationManagement';
+import { RefundManagement } from './components/RefundManagement';
 
 const getImageUrl = (url: string) => {
   if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
@@ -175,6 +184,8 @@ export const AdminDashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [adminNotes, setAdminNotes] = useState('');
   const [resolving, setResolving] = useState(false);
+  const [splitRefundAmount, setSplitRefundAmount] = useState(0);
+  const [splitCompensationAmount, setSplitCompensationAmount] = useState(0);
 
   // Check role: must be Admin
   const isAdmin = user?.roles?.includes('ADMIN') || user?.roles?.includes('admin');
@@ -200,8 +211,9 @@ export const AdminDashboardPage: React.FC = () => {
 
   const fetchVerifications = async () => {
     try {
-      const data = await httpClient.get<VerificationItem[]>('/admin/provider-verifications');
-      setVerifications(data || []);
+      const res = await httpClient.get<any>('/admin/provider-verifications');
+      const items = Array.isArray(res) ? res : res.items || [];
+      setVerifications(items);
     } catch (err: any) {
       console.warn('Lỗi gọi API Verifications:', err);
     }
@@ -308,20 +320,35 @@ export const AdminDashboardPage: React.FC = () => {
   }, [activeTab, isAuthenticated, isAdmin]);
 
   // --- ACTIONS HANDLERS ---
-  const handleResolveDispute = async (decision: 'SHOP_RIGHT' | 'CUSTOMER_RIGHT') => {
+  const handleResolveDispute = async (decision: 'SHOP_RIGHT' | 'CUSTOMER_RIGHT' | 'SPLIT') => {
     if (!selectedDetailItem) return;
     if (!adminNotes.trim()) {
       toast.error('Vui lòng nhập ghi chú phán quyết của Admin!');
       return;
     }
 
-    const decisionText = decision === 'SHOP_RIGHT' 
-      ? 'Phán quyết Đối tác (Shop) đúng' 
-      : 'Phán quyết Khách hàng đúng';
+    const depositTotal = selectedDetailItem.bookingId?.pricingSummary?.depositTotal || 0;
+    if (
+      decision === 'SPLIT' &&
+      (splitRefundAmount < 0 ||
+        splitCompensationAmount < 0 ||
+        splitRefundAmount + splitCompensationAmount > depositTotal)
+    ) {
+      toast.error('Tổng tiền hoàn khách và bồi thường Shop không được vượt quá tiền cọc.');
+      return;
+    }
+
+    const decisionText = decision === 'SHOP_RIGHT'
+      ? 'Phán quyết Đối tác (Shop) đúng'
+      : decision === 'CUSTOMER_RIGHT'
+        ? 'Phán quyết Khách hàng đúng'
+        : 'Phân chia tiền cọc cho hai bên';
     
     const explanation = decision === 'SHOP_RIGHT'
       ? `Hệ thống sẽ chuyển ${(selectedDetailItem.requestedAmount || 0).toLocaleString()}đ tiền đền bù sang tài khoản ngân hàng của Shop, phần cọc còn lại (nếu có) hoàn cho Khách.`
-      : `Hệ thống sẽ hoàn trả lại 100% tiền cọc (${selectedDetailItem.bookingId?.pricingSummary?.depositTotal?.toLocaleString()}đ) cho Khách hàng. Shop không nhận được đền bù.`;
+      : decision === 'CUSTOMER_RIGHT'
+        ? `Hệ thống sẽ hoàn trả lại 100% tiền cọc (${depositTotal.toLocaleString()}đ) cho Khách hàng. Shop không nhận được đền bù.`
+        : `Hoàn khách ${splitRefundAmount.toLocaleString()}đ và bồi thường Shop ${splitCompensationAmount.toLocaleString()}đ.`;
 
     const result = await Swal.fire({
       title: 'Xác nhận phán quyết?',
@@ -346,9 +373,15 @@ export const AdminDashboardPage: React.FC = () => {
         await httpClient.post(`/api/disputes/admin/resolve/${bookingId}`, {
           decision,
           notes: adminNotes.trim(),
+          ...(decision === 'SPLIT' && {
+            refundAmount: splitRefundAmount,
+            compensationAmount: splitCompensationAmount,
+          }),
         });
         toast.success('Phán quyết tranh chấp thành công!');
         setAdminNotes('');
+        setSplitRefundAmount(0);
+        setSplitCompensationAmount(0);
         setSelectedDetailItem(null);
         fetchDisputes();
       } catch (err: any) {
@@ -1501,6 +1534,9 @@ export const AdminDashboardPage: React.FC = () => {
                           onClick={() => {
                             setSelectedDetailItem({ ...d, type: 'DISPUTE' });
                             setAdminNotes('');
+                            setSplitRefundAmount(0);
+                            setSplitCompensationAmount(0);
+                            setAdminNotes('');
                           }}
                           style={{ 
                             display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', 
@@ -1926,8 +1962,8 @@ export const AdminDashboardPage: React.FC = () => {
                 <span style={{ color: '#7A7A7A', display: 'flex', alignItems: 'center', gap: '4px' }}><ImageIcon size={14} /> Bằng chứng sự cố gửi lên:</span>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   {d.evidencePhotos.map((photo, idx) => (
-                    <a key={idx} href={photo} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: '6px', overflow: 'hidden', border: '1px solid #E8E2D5' }}>
-                      <img src={photo} alt={`Bằng chứng ${idx + 1}`} style={{ width: '65px', height: '65px', objectFit: 'cover' }} />
+                    <a key={idx} href={getImageUrl(photo)} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: '6px', overflow: 'hidden', border: '1px solid #E8E2D5' }}>
+                      <img src={getImageUrl(photo)} alt={`Bằng chứng ${idx + 1}`} style={{ width: '65px', height: '65px', objectFit: 'cover' }} />
                     </a>
                   ))}
                 </div>
@@ -1948,6 +1984,23 @@ export const AdminDashboardPage: React.FC = () => {
               />
             </div>
 
+            <div style={{ padding: '12px', backgroundColor: '#F8F6F1', border: '1px solid #E8E2D5', borderRadius: '6px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#4A0E17', marginBottom: '10px' }}>PHƯƠNG ÁN CHIA TIỀN CỌC</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px', color: '#7A7A7A' }}>
+                  Hoàn cho khách (VNĐ)
+                  <input type="number" min={0} max={depositTotal} value={splitRefundAmount} onChange={(e) => setSplitRefundAmount(Number(e.target.value))} style={{ padding: '9px', borderRadius: '6px', border: '1px solid #E8E2D5' }} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px', color: '#7A7A7A' }}>
+                  Bồi thường Shop (VNĐ)
+                  <input type="number" min={0} max={depositTotal} value={splitCompensationAmount} onChange={(e) => setSplitCompensationAmount(Number(e.target.value))} style={{ padding: '9px', borderRadius: '6px', border: '1px solid #E8E2D5' }} />
+                </label>
+              </div>
+              <div style={{ marginTop: '8px', fontSize: '11px', color: splitRefundAmount + splitCompensationAmount > depositTotal ? '#C53030' : '#7A7A7A' }}>
+                Đã phân bổ {(splitRefundAmount + splitCompensationAmount).toLocaleString()}đ / {depositTotal.toLocaleString()}đ tiền cọc
+              </div>
+            </div>
+
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={() => handleResolveDispute('SHOP_RIGHT')}
@@ -1963,6 +2016,13 @@ export const AdminDashboardPage: React.FC = () => {
               >
                 KHÁCH ĐÚNG (HOÀN CỌC)
               </button>
+              <button
+                onClick={() => handleResolveDispute('SPLIT')}
+                disabled={resolving}
+                style={{ flex: 1, padding: '12px 8px', backgroundColor: '#2B6CB0', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontSize: '11px' }}
+              >
+                CHIA TIỀN
+              </button>
             </div>
           </div>
         </div>
@@ -1977,15 +2037,15 @@ export const AdminDashboardPage: React.FC = () => {
       
       {/* SIDEBAR */}
       <div style={{ width: '280px', backgroundColor: '#4A0E17', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', color: 'white', flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: '1px solid #3E0B12' }}>
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', marginBottom: '16px' }}>
           {/* Logo brand */}
-          <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '32px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '32px', flexShrink: 0 }}>
             <span style={{ fontSize: '24px', fontWeight: 800, color: 'white', letterSpacing: '0.02em', fontFamily: 'serif' }}>Di sản Áo Dài</span>
             <span style={{ fontSize: '9px', fontWeight: 700, color: '#B89047', letterSpacing: '0.18em', marginTop: '2px' }}>CURATING ELEGANCE • ADMIN</span>
           </div>
 
           {/* User Profile Card */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '8px', marginBottom: '28px', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '8px', marginBottom: '28px', border: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
             <img src={user?.avatar || '/avatar_hanna.png'} alt="Admin" style={{ width: '38px', height: '38px', borderRadius: '50%', border: '1px solid #B89047', objectFit: 'cover' }} />
             <div>
               <strong style={{ display: 'block', fontSize: '13px', color: 'white' }}>{user?.fullName || 'Hanna Nguyễn'}</strong>
@@ -1994,16 +2054,21 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
 
           {/* Navigation Menu */}
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <nav style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', flex: 1, paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: '#B89047 transparent' }}>
             {[
               { id: 'overview', label: 'Tổng quan hệ thống', icon: LayoutDashboard },
               { id: 'customers', label: 'Quản lý Khách hàng', icon: Users },
               { id: 'providers', label: 'Quản lý Đối tác', icon: Store },
+              { id: 'categories', label: 'Quản lý Danh mục', icon: Layers },
               { id: 'bookings', label: 'Lịch trình & Đặt lịch', icon: Calendar },
+              { id: 'settlements', label: 'Đối soát & Quyết toán', icon: DollarSign },
               { id: 'revenue', label: 'Báo cáo Doanh thu', icon: TrendingUp },
               { id: 'verifications', label: 'Phê duyệt hồ sơ đối tác', icon: FileCheck },
               { id: 'disputes', label: 'Giải quyết tranh chấp', icon: AlertTriangle },
+              { id: 'product-moderation', label: 'Kiểm duyệt sản phẩm', icon: CheckSquare },
               { id: 'reported-reviews', label: 'Báo cáo Đánh giá (Spam)', icon: Ban },
+              { id: 'policies', label: 'Cấu hình Chính sách', icon: Settings },
+              { id: 'users-roles', label: 'Tài khoản & Phân quyền', icon: ShieldCheck },
               { id: 'behavior', label: 'Phân tích hành vi', icon: BarChart3 },
             ].map(item => {
               const Icon = item.icon;
@@ -2027,7 +2092,8 @@ export const AdminDashboardPage: React.FC = () => {
                 </button>
               );
             })}
-          </nav>
+              <button onClick={() => setActiveTab('refunds')} style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', padding: '12px 16px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: activeTab === 'refunds' ? 700 : 500, backgroundColor: activeTab === 'refunds' ? 'white' : 'transparent', color: activeTab === 'refunds' ? '#4A0E17' : '#E8E2D5', cursor: 'pointer', textAlign: 'left' }}><DollarSign size={16} color="#B89047" /><span>Quản lý hoàn tiền</span></button>
+            </nav>
         </div>
 
         {/* Sidebar Footer — Home & Logout */}
@@ -2073,11 +2139,16 @@ export const AdminDashboardPage: React.FC = () => {
               {activeTab === 'overview' ? 'Tổng quan hệ thống' :
                activeTab === 'customers' ? 'Quản lý Khách hàng' :
                activeTab === 'providers' ? 'Quản lý Đối tác & Nhà cung cấp' :
+               activeTab === 'categories' ? 'Quản lý Danh mục Dịch vụ' :
                activeTab === 'bookings' ? 'Quản lý Lịch trình & Booking' :
+               activeTab === 'settlements' ? 'Đối soát & Quyết toán Tài chính' :
                activeTab === 'revenue' ? 'Thống kê Doanh thu Hệ thống' :
                activeTab === 'verifications' ? 'Phê duyệt hồ sơ đăng ký đối tác' :
                activeTab === 'behavior' ? 'Phân tích hành vi người dùng' :
+               activeTab === 'product-moderation' ? 'Kiểm duyệt nội dung sản phẩm' :
                activeTab === 'reported-reviews' ? 'Báo cáo vi phạm & Spam Đánh giá' :
+               activeTab === 'policies' ? 'Cấu hình Chính sách Hệ thống' :
+               activeTab === 'users-roles' ? 'Tài khoản & Quản trị Phân quyền' :
                'Giải quyết tranh chấp sự cố'}
             </span>
           </div>
@@ -2116,12 +2187,18 @@ export const AdminDashboardPage: React.FC = () => {
                 {activeTab === 'overview' && renderOverviewTab()}
                 {activeTab === 'customers' && renderCustomersTab()}
                 {activeTab === 'providers' && renderProvidersTab()}
+                {activeTab === 'categories' && <CategoryManagement />}
                 {activeTab === 'bookings' && renderBookingsTab()}
+                {activeTab === 'settlements' && <SettlementManagement />}
+                {activeTab === 'refunds' && <RefundManagement />}
                 {activeTab === 'revenue' && renderRevenueTab()}
                 {activeTab === 'verifications' && renderVerificationsTab()}
                 {activeTab === 'disputes' && renderDisputesTab()}
                 {activeTab === 'behavior' && renderBehaviorTab()}
+                {activeTab === 'product-moderation' && <><ProductModerationManagement /><PortfolioModerationManagement /></>}
                 {activeTab === 'reported-reviews' && renderReportedReviewsTab()}
+                {activeTab === 'policies' && <PolicyManagement />}
+                {activeTab === 'users-roles' && <AccessControl />}
               </>
             )}
           </div>

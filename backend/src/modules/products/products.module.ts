@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Category, CategorySchema } from './schemas/category.schema';
 import { Product, ProductSchema } from './schemas/product.schema';
 import {
   PriceVersion,
@@ -24,15 +23,16 @@ import {
   ProviderScheduleSchema,
 } from './schemas/provider-schedule.schema';
 import { Provider, ProviderSchema } from '../providers/schemas/provider.schema';
+import { CategoriesModule } from '../categories/categories.module';
 import { PromotionsController } from './controllers/promotions.controller';
 import { PromotionsService } from './services/promotions.service';
 import { ProductsController } from './controllers/products.controller';
+import { AdminProductsModerationController } from './controllers/admin-products-moderation.controller';
 import { ProductsService } from './services/products.service';
 import { ProductsRepository } from './repositories/products.repository';
 import { UsersModule } from '../users/users.module';
 
 export const productModels = MongooseModule.forFeature([
-  { name: Category.name, schema: CategorySchema },
   { name: Product.name, schema: ProductSchema },
   { name: PriceVersion.name, schema: PriceVersionSchema },
   { name: Promotion.name, schema: PromotionSchema },
@@ -44,8 +44,12 @@ export const productModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [productModels, UsersModule],
-  controllers: [PromotionsController, ProductsController],
+  imports: [productModels, UsersModule, CategoriesModule],
+  controllers: [
+    PromotionsController,
+    ProductsController,
+    AdminProductsModerationController,
+  ],
   providers: [PromotionsService, ProductsService, ProductsRepository],
   exports: [productModels, PromotionsService, ProductsService],
 })

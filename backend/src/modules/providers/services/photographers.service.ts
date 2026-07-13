@@ -1,14 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Provider, ProviderCapability, ProviderStatus } from '../schemas/provider.schema';
+import { Provider, ProviderCapability, ProviderDocument, ProviderStatus } from '../schemas/provider.schema';
 import { PhotographyPackage } from '../../products/schemas/photography-package.schema';
+import { PortfolioItem } from '../schemas/portfolio-item.schema';
+import { ProductModerationStatus } from '../../products/schemas/product.schema';
 
 @Injectable()
 export class PhotographersService {
   constructor(
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
     @InjectModel(PhotographyPackage.name) private readonly packageModel: Model<PhotographyPackage>,
+    @InjectModel(PortfolioItem.name) private readonly portfolioItemModel: Model<PortfolioItem>,
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -24,10 +27,7 @@ export class PhotographersService {
       const packages = await this.packageModel.find({
         providerId: photographer._id,
       }).exec();
-      result.push({
-        ...photographer.toObject(),
-        packages,
-      });
+      result.push(await this.toPublicPhotographer(photographer, packages));
     }
     return result;
   }
@@ -45,10 +45,7 @@ export class PhotographersService {
       providerId: photographer._id,
     }).exec();
 
-    return {
-      ...photographer.toObject(),
-      packages,
-    };
+    return this.toPublicPhotographer(photographer, packages);
   }
 
   async findPackages(providerId: string): Promise<PhotographyPackage[]> {
@@ -58,5 +55,19 @@ export class PhotographersService {
     return this.packageModel.find({
       providerId: new Types.ObjectId(providerId),
     }).exec();
+  }
+
+  private async toPublicPhotographer(
+    photographer: ProviderDocument,
+    packages: PhotographyPackage[],
+  ): Promise<Record<string, unknown>> {
+    const portfolioItems = await this.portfolioItemModel.find({
+      providerId: photographer._id,
+      moderationStatus: ProductModerationStatus.Approved,
+    }).sort({ updatedAt: -1 }).lean();
+    const provider = photographer.toObject();
+    const media = { ...provider.media, images: [] };
+
+    return { ...provider, media, portfolioItems, packages };
   }
 }
