@@ -25,7 +25,7 @@ import type { AuthUser } from '../../../common/decorators/current-user.decorator
 import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
 
-@Controller('products')
+@Controller(['products', 'api/products'])
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 

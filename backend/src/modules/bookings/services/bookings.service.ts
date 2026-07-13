@@ -23,6 +23,7 @@ import { PromotionsService } from '../../products/services/promotions.service';
 import { DiscountType } from '../../products/schemas/promotion.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { ProductsService } from '../../products/services/products.service';
+import { DiscountCampaignService } from '../../products/services/discount-campaign.service';
 import { Provider } from '../../providers/schemas/provider.schema';
 import {
   PriceVersion,
@@ -217,6 +218,7 @@ export class BookingsService implements OnApplicationBootstrap {
     private readonly notificationsService: NotificationsService,
     @InjectModel(Provider.name)
     private readonly providerModel: Model<Provider>,
+    private readonly campaignService: DiscountCampaignService,
   ) { }
 
   async onApplicationBootstrap() {
@@ -683,7 +685,8 @@ export class BookingsService implements OnApplicationBootstrap {
                 durationDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
               }
             }
-            unitPrice = product.basePrice * durationDays;
+            const discountedDaily = await this.campaignService.getDiscountedPrice(product.basePrice, product.providerId);
+            unitPrice = discountedDaily * durationDays;
           }
 
           let reservedFrom: Date | null = null;
@@ -1123,7 +1126,7 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     let subTotal = 0;
-    let unitPrice = product.basePrice;
+    let unitPrice = await this.campaignService.getDiscountedPrice(product.basePrice, product.providerId);
     let rentalFrom: Date | null = null;
     let rentalTo: Date | null = null;
     let shootDate: Date | null = null;
@@ -1173,7 +1176,7 @@ export class BookingsService implements OnApplicationBootstrap {
 
       const durationDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-      unitPrice = product.basePrice;
+      unitPrice = await this.campaignService.getDiscountedPrice(product.basePrice, product.providerId);
       subTotal = unitPrice * durationDays * quantity;
       rentalFrom = start;
       rentalTo = end;
@@ -1213,13 +1216,13 @@ export class BookingsService implements OnApplicationBootstrap {
       const colorVal = this.normalizeColor(color);
 
       if (product.sizes && product.sizes.length > 0) {
-        const isSizeSupported = product.sizes.some(s => s.trim().toUpperCase() === sizeVal);
+        const isSizeSupported = product.sizes.some((s: string) => s.trim().toUpperCase() === sizeVal);
         if (!isSizeSupported) {
           throw new BadRequestException(`Kích cỡ ${size} không khả dụng cho sản phẩm này. Các kích cỡ khả dụng: ${product.sizes.join(', ')}`);
         }
       }
       if (product.colors && product.colors.length > 0) {
-        const isColorSupported = product.colors.some(c => this.normalizeColor(c) === colorVal);
+        const isColorSupported = product.colors.some((c: string) => this.normalizeColor(c) === colorVal);
         if (!isColorSupported) {
           throw new BadRequestException(`Màu sắc ${color} không khả dụng cho sản phẩm này. Các màu khả dụng: ${product.colors.join(', ')}`);
         }

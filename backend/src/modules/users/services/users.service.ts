@@ -7,6 +7,7 @@ import {
 import { Types } from 'mongoose';
 import { UserProfile } from '../schemas/user.schema';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
+import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
 import { UserProfileMapper } from '../mappers/user-profile.mapper';
 import { UsersRepository } from '../repositories/users.repository';
 
@@ -113,11 +114,11 @@ export class UsersService {
 
   async updatePreferences(
     userId: string,
-    preferences: any,
+    dto: UpdatePreferencesDto,
     roles: string[] = [],
   ): Promise<Record<string, unknown>> {
     const userObjectId = this.toObjectId(userId);
-    await this.usersRepository.updatePreferences(userObjectId, preferences);
+    await this.usersRepository.updatePreferences(userObjectId, dto);
     return this.getMe(userId, roles);
   }
 

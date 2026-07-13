@@ -45,7 +45,7 @@ export interface CartItem {
 
 interface CartContextType {
   cart: CartItem[];
-  addToCart: (item: Omit<CartItem, 'id' | 'quantity'>) => void;
+  addToCart: (item: Omit<CartItem, 'id' | 'quantity'> & { quantity?: number }) => void;
   removeFromCart: (itemId: string) => void;
   updateCartItemDate: (itemId: string, date: string) => void;
   updateCartItemTimeSlot: (itemId: string, timeSlot: string) => void;
@@ -148,8 +148,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [cart, cartKey, isLoaded]);
 
-  const addToCart = (newItem: Omit<CartItem, 'id' | 'quantity'>) => {
+  const addToCart = (newItem: Omit<CartItem, 'id' | 'quantity'> & { quantity?: number }) => {
     setCart((prevCart) => {
+      const qtyToAdd = newItem.quantity && newItem.quantity > 0 ? newItem.quantity : 1;
       // Check if exact same item already exists (same product/package and same dates)
       const existingItemIndex = prevCart.findIndex((item) => {
         if (item.itemType !== newItem.itemType) return false;
@@ -181,13 +182,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (existingItemIndex > -1) {
         // Increase quantity
         const updatedCart = [...prevCart];
-        updatedCart[existingItemIndex].quantity += 1;
+        updatedCart[existingItemIndex].quantity += qtyToAdd;
         return updatedCart;
       }
 
       // Add as new item
       const id = `${newItem.itemType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      return [...prevCart, { ...newItem, id, quantity: 1 }];
+      return [...prevCart, { ...newItem, id, quantity: qtyToAdd }];
     });
   };
 

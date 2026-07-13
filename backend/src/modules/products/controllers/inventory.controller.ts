@@ -6,7 +6,7 @@ import type { AuthUser } from '../../../common/decorators/current-user.decorator
 import { CreateInventoryItemDto } from '../dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from '../dto/update-inventory-item.dto';
 
-@Controller('inventory')
+@Controller(['inventory', 'api/inventory'])
 @UseGuards(JwtAuthGuard)
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}

@@ -35,6 +35,7 @@ export class InventoryService {
     if (norm === 'ĐỎ' || norm === 'RED') return 'RED';
     if (norm === 'TRẮNG' || norm === 'WHITE') return 'WHITE';
     if (norm === 'VÀNG' || norm === 'GOLD') return 'GOLD';
+    if (norm === 'ĐEN' || norm === 'BLACK') return 'BLACK';
     return norm;
   }
 
@@ -241,6 +242,10 @@ export class InventoryService {
     const item = await this.inventoryItemModel.findById(itemId);
     if (!item) {
       throw new NotFoundException('Không tìm thấy hiện vật tồn kho.');
+    }
+
+    if (item.conditionStatus === ConditionStatus.Retired) {
+      throw new BadRequestException('Hiện vật đã thanh lý, không thể cập nhật.');
     }
 
     const product = await this.productModel.findById(item.productId);

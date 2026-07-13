@@ -6,6 +6,7 @@ import { UsersRepository } from '../../users/repositories/users.repository';
 import { ProductDocument, ProductStatus } from '../schemas/product.schema';
 import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
+import { DiscountCampaignService } from './discount-campaign.service';
 
 @Injectable()
 export class ProductsService {
@@ -13,6 +14,7 @@ export class ProductsService {
     private readonly productsRepository: ProductsRepository,
     private readonly usersRepository: UsersRepository,
     @InjectConnection() private readonly connection: Connection,
+    private readonly campaignService: DiscountCampaignService,
   ) {}
 
   async getAllActiveProducts(options?: {
@@ -23,16 +25,56 @@ export class ProductsService {
     colors?: string[];
     sizes?: string[];
     materials?: string[];
-  }): Promise<ProductDocument[]> {
-    return this.productsRepository.findAllActive(options);
+  }): Promise<any[]> {
+    const products = await this.productsRepository.findAllActive(options);
+    
+    // Batch query active campaigns for all providers of retrieved products to prevent N+1 queries
+    const providerIds = [...new Set(products.map(p => {
+      return typeof p.providerId === 'object' && p.providerId ? (p.providerId as any)._id : p.providerId;
+    }))];
+    const campaigns = await this.campaignService.getActiveCampaignsForProviders(providerIds);
+
+    return products.map(product => {
+      const plain = product.toObject() as any;
+      const pId = typeof plain.providerId === 'object' && plain.providerId ? plain.providerId._id.toString() : plain.providerId.toString();
+      const campaign = campaigns[pId];
+      if (campaign) {
+        plain.activeCampaign = {
+          occasion: campaign.occasion,
+          discountPercent: campaign.discountPercent,
+          endDate: campaign.endDate,
+        };
+        plain.discountedPrice = Math.round(plain.basePrice * (1 - campaign.discountPercent / 100));
+      } else {
+        plain.activeCampaign = null;
+        plain.discountedPrice = plain.basePrice;
+      }
+      return plain;
+    });
   }
 
   async getCategories(): Promise<any[]> {
     return this.connection.db!.collection('categories').find({ status: 'ACTIVE' }).toArray();
   }
 
-  async getProductById(productId: string): Promise<ProductDocument | null> {
-    return this.productsRepository.findById(new Types.ObjectId(productId));
+  async getProductById(productId: string): Promise<any | null> {
+    const product = await this.productsRepository.findById(new Types.ObjectId(productId));
+    if (!product) return null;
+    const plain = product.toObject() as any;
+    const pId = typeof plain.providerId === 'object' && plain.providerId ? plain.providerId._id : plain.providerId;
+    const campaign = await this.campaignService.getActiveCampaign(pId);
+    if (campaign) {
+      plain.activeCampaign = {
+        occasion: campaign.occasion,
+        discountPercent: campaign.discountPercent,
+        endDate: campaign.endDate,
+      };
+      plain.discountedPrice = Math.round(plain.basePrice * (1 - campaign.discountPercent / 100));
+    } else {
+      plain.activeCampaign = null;
+      plain.discountedPrice = plain.basePrice;
+    }
+    return plain;
   }
 
   async getMyProducts(
@@ -43,12 +85,32 @@ export class ProductsService {
     limit: number = 10,
     sizes?: string,
     colors?: string,
-  ): Promise<{ items: ProductDocument[]; total: number }> {
+  ): Promise<{ items: any[]; total: number }> {
     const user = await this.usersRepository.findUserById(new Types.ObjectId(userId));
     if (!user || !user.provider || !user.provider.providerId) {
       throw new BadRequestException('User is not a provider or lacks provider ID');
     }
-    return this.productsRepository.findByProvider(user.provider.providerId, search, sortBy, page, limit, sizes, colors);
+    const result = await this.productsRepository.findByProvider(user.provider.providerId, search, sortBy, page, limit, sizes, colors);
+    
+    const campaign = await this.campaignService.getActiveCampaign(user.provider.providerId);
+
+    const items = result.items.map(product => {
+      const plain = product.toObject() as any;
+      if (campaign) {
+        plain.activeCampaign = {
+          occasion: campaign.occasion,
+          discountPercent: campaign.discountPercent,
+          endDate: campaign.endDate,
+        };
+        plain.discountedPrice = Math.round(plain.basePrice * (1 - campaign.discountPercent / 100));
+      } else {
+        plain.activeCampaign = null;
+        plain.discountedPrice = plain.basePrice;
+      }
+      return plain;
+    });
+
+    return { items, total: result.total };
   }
 
   private normalizeColor(colorStr?: string | null): string {
@@ -57,6 +119,7 @@ export class ProductsService {
     if (norm === 'ĐỎ' || norm === 'RED') return 'RED';
     if (norm === 'TRẮNG' || norm === 'WHITE') return 'WHITE';
     if (norm === 'VÀNG' || norm === 'GOLD') return 'GOLD';
+    if (norm === 'ĐEN' || norm === 'BLACK') return 'BLACK';
     return norm;
   }
 

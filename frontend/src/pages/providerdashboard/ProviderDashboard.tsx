@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
-  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,
+  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil, Copy,
   Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Package
 } from 'lucide-react';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
@@ -102,6 +102,15 @@ export const ProviderDashboard: React.FC = () => {
   const [inventorySummary, setInventorySummary] = useState<any[]>([]);
   const [myProductsList, setMyProductsList] = useState<any[]>([]);
   const [isLoadingInventory, setIsLoadingInventory] = useState(false);
+
+  // Discount Campaign State
+  const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
+  const [campaignOccasion, setCampaignOccasion] = useState('');
+  const [campaignPercent, setCampaignPercent] = useState('10');
+  const [campaignStart, setCampaignStart] = useState('');
+  const [campaignEnd, setCampaignEnd] = useState('');
+  const [activeCampaign, setActiveCampaign] = useState<any>(null);
+  const [submittingCampaign, setSubmittingCampaign] = useState(false);
 
   // Add Item Modal State
   const [isAddInventoryOpen, setIsAddInventoryOpen] = useState(false);
@@ -686,12 +695,36 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
+  const fetchActiveCampaign = async () => {
+    try {
+      const res = await httpClient.get('/campaigns/mine') as any;
+      if (res && res._id) {
+        setActiveCampaign(res);
+        setCampaignOccasion(res.occasion);
+        setCampaignPercent(res.discountPercent.toString());
+        setCampaignStart(new Date(res.startDate).toISOString().split('T')[0]);
+        setCampaignEnd(new Date(res.endDate).toISOString().split('T')[0]);
+      } else {
+        setActiveCampaign(null);
+        // Default dates
+        const today = new Date();
+        const nextWeek = new Date();
+        nextWeek.setDate(today.getDate() + 7);
+        setCampaignStart(today.toISOString().split('T')[0]);
+        setCampaignEnd(nextWeek.toISOString().split('T')[0]);
+      }
+    } catch (err) {
+      console.error('Error fetching campaign:', err);
+    }
+  };
+
   useEffect(() => {
     if (currentView === 'orders') {
       fetchOrders();
     } else if (currentView === 'collections') {
       fetchProducts();
       fetchCategories();
+      fetchActiveCampaign();
     } else if (currentView === 'payouts') {
       fetchPayouts();
     } else if (currentView === 'inventory') {
@@ -755,6 +788,89 @@ export const ProviderDashboard: React.FC = () => {
     setProdStyle(p.style || 'traditional');
     setProdOccasions(p.occasions || []);
     setIsModalOpen(true);
+  };
+
+  const handleDuplicateProduct = (p: Product) => {
+    setEditingProduct(null);
+    setProdName('');
+    setProdCategoryId(typeof p.categoryId === 'object' ? p.categoryId._id : p.categoryId);
+    setProdDescription(p.description || '');
+    setProdBasePrice(p.basePrice.toString());
+    setProdDepositAmount(p.depositAmount.toString());
+    setProdSizes(p.sizes || []);
+    setProdColors(p.colors || []);
+    setProdMaterials(p.materials || []);
+    setProdStatus(p.status);
+    setProdImages([]);
+    setProdStyle(p.style ? p.style.toLowerCase() : 'traditional');
+    setProdOccasions(p.occasions || []);
+    setIsModalOpen(true);
+  };
+
+  const openCampaignModal = () => {
+    setIsCampaignModalOpen(true);
+  };
+
+  const handleCreateCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!campaignOccasion.trim()) {
+      toast.error('Vui lòng nhập dịp khuyến mãi');
+      return;
+    }
+    const percent = parseInt(campaignPercent, 10);
+    if (isNaN(percent) || percent < 1 || percent > 90) {
+      toast.error('Phần trăm giảm giá phải từ 1% đến 90%');
+      return;
+    }
+    if (!campaignStart || !campaignEnd) {
+      toast.error('Vui lòng chọn đầy đủ ngày bắt đầu và kết thúc');
+      return;
+    }
+
+    setSubmittingCampaign(true);
+    try {
+      await httpClient.post('/campaigns', {
+        occasion: campaignOccasion.trim(),
+        discountPercent: percent,
+        startDate: new Date(campaignStart).toISOString(),
+        endDate: new Date(campaignEnd).toISOString(),
+      });
+      toast.success('Tạo chiến dịch khuyến mãi thành công');
+      setIsCampaignModalOpen(false);
+      fetchActiveCampaign();
+      fetchProducts();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.message || err.message || 'Lỗi khi tạo khuyến mãi');
+    } finally {
+      setSubmittingCampaign(false);
+    }
+  };
+
+  const handleDeactivateCampaign = async () => {
+    const confirm = window.confirm('Bạn có chắc chắn muốn tắt chương trình khuyến mãi và quay về giá gốc?');
+    if (!confirm) return;
+
+    setSubmittingCampaign(true);
+    try {
+      await httpClient.delete('/campaigns/active');
+      toast.success('Đã tắt khuyến mãi thành công, các sản phẩm quay về giá gốc');
+      setActiveCampaign(null);
+      setCampaignOccasion('');
+      setCampaignPercent('10');
+      const today = new Date();
+      const nextWeek = new Date();
+      nextWeek.setDate(today.getDate() + 7);
+      setCampaignStart(today.toISOString().split('T')[0]);
+      setCampaignEnd(nextWeek.toISOString().split('T')[0]);
+      setIsCampaignModalOpen(false);
+      fetchProducts();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.message || err.message || 'Lỗi khi tắt khuyến mãi');
+    } finally {
+      setSubmittingCampaign(false);
+    }
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1714,11 +1830,20 @@ export const ProviderDashboard: React.FC = () => {
                   Thêm mới, cập nhật giá, hình ảnh và quản lý kho áo dài của bạn.
                 </p>
               </div>
-              <button onClick={openAddModal} style={{
-                display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--color-primary)',
-                padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
-              }}><Plus size={14} /> Thêm Áo Dài mới</button>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={openCampaignModal} style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: activeCampaign ? '#B91C1C' : '#EF4444',
+                  padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                  color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
+                }}>
+                  <Tag size={14} /> {activeCampaign ? `Khuyến mãi (-${activeCampaign.discountPercent}%)` : 'Khuyến mãi'}
+                </button>
+                <button onClick={openAddModal} style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--color-primary)',
+                  padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                  color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
+                }}><Plus size={14} /> Thêm Áo Dài mới</button>
+              </div>
             </div>
 
             {/* Search and Sort controls */}
@@ -1845,6 +1970,17 @@ export const ProviderDashboard: React.FC = () => {
                           }}
                         >
                           <Pencil size={12} /> Chỉnh sửa
+                        </button>
+                        <button 
+                          onClick={() => handleDuplicateProduct(p)}
+                          style={{
+                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                            backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '8px',
+                            borderRadius: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)',
+                            cursor: 'pointer', transition: 'all 0.2s',
+                          }}
+                        >
+                          <Copy size={12} /> Nhân bản
                         </button>
                         <button 
                           onClick={() => handleDeleteProduct(p._id, p.name)}
@@ -2486,6 +2622,102 @@ export const ProviderDashboard: React.FC = () => {
           </div>
         </footer>
       </div>
+
+      {/* -------------------- MODAL: CAMPAIGN MANAGEMENT -------------------- */}
+      <Modal
+        isOpen={isCampaignModalOpen}
+        onClose={() => setIsCampaignModalOpen(false)}
+        title="Thiết lập chương trình khuyến mãi"
+        maxWidth="480px"
+      >
+        <form onSubmit={handleCreateCampaign} style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
+          {activeCampaign && (
+            <div style={{ padding: '12px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '6px', fontSize: '13px', color: '#B91C1C', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontWeight: 700 }}>Đang chạy chiến dịch: {activeCampaign.occasion} (-{activeCampaign.discountPercent}%)</span>
+              <span>Thời gian: {new Date(activeCampaign.startDate).toLocaleDateString('vi-VN')} - {new Date(activeCampaign.endDate).toLocaleDateString('vi-VN')}</span>
+              <button 
+                type="button" 
+                onClick={handleDeactivateCampaign} 
+                style={{ 
+                  marginTop: '8px', padding: '8px 12px', backgroundColor: '#EF4444', color: 'white', border: 'none', 
+                  borderRadius: '4px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', alignSelf: 'flex-start' 
+                }}
+              >
+                Về giá gốc (Hủy khuyến mãi)
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DỊP KHUYẾN MÃI *</label>
+            <input 
+              type="text" 
+              placeholder="Ví dụ: Sale Tết 2027, Khai xuân..." 
+              value={campaignOccasion}
+              onChange={(e) => setCampaignOccasion(e.target.value)}
+              required
+              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>PHẦN TRĂM GIẢM GIÁ (%) *</label>
+            <input 
+              type="number" 
+              min="1" 
+              max="90" 
+              placeholder="10" 
+              value={campaignPercent}
+              onChange={(e) => setCampaignPercent(e.target.value)}
+              required
+              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TỪ NGÀY *</label>
+              <input 
+                type="date" 
+                value={campaignStart}
+                onChange={(e) => setCampaignStart(e.target.value)}
+                required
+                style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>ĐẾN NGÀY *</label>
+              <input 
+                type="date" 
+                value={campaignEnd}
+                onChange={(e) => setCampaignEnd(e.target.value)}
+                required
+                style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px', borderTop: '1px solid var(--color-light-border)', paddingTop: '16px' }}>
+            <button 
+              type="button" 
+              onClick={() => setIsCampaignModalOpen(false)}
+              style={{ flex: 1, padding: '10px', backgroundColor: '#F3F4F6', color: '#4B5563', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+            >
+              Hủy
+            </button>
+            <button 
+              type="submit" 
+              disabled={submittingCampaign}
+              style={{ 
+                flex: 2, padding: '10px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', 
+                borderRadius: '6px', fontWeight: 700, fontSize: '13px', cursor: submittingCampaign ? 'not-allowed' : 'pointer' 
+              }}
+            >
+              {submittingCampaign ? 'Đang xử lý...' : activeCampaign ? 'Cập nhật khuyến mãi mới' : 'Kích hoạt khuyến mãi'}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* -------------------- MODALS: CREATE & EDIT PRODUCT -------------------- */}
       <Modal 

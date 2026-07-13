@@ -24,7 +24,7 @@ interface Step1Data {
 
 interface Step2Data {
   colorTone: 'pastel' | 'red_gold' | 'dark' | 'colorful' | null;
-  size: 'S' | 'M' | 'L' | 'XL' | null;
+  size: 'S' | 'M' | 'L' | 'XL' | 'XXL' | null;
   height: string;
   weight: string;
 }
@@ -64,7 +64,7 @@ export const OnboardingPage: React.FC = () => {
       
       if (!isSkipped) {
         payload.preferences = {
-          stylePreferences: step3.purpose ? [step3.purpose.toUpperCase()] : [],
+          preferredOccasions: step3.purpose ? [step3.purpose.toUpperCase()] : [],
           favoriteColors: step2.colorTone ? [step2.colorTone.toUpperCase()] : [],
           preferredAoDaiStyles: step1.style ? [step1.style.toUpperCase()] : [],
           sizeInfo: {
@@ -271,7 +271,7 @@ export const OnboardingPage: React.FC = () => {
               <h3 style={{ fontFamily: 'var(--font-header)', fontSize: '24px', fontWeight: 700, margin: '32px 0 16px 0' }}>Kích thước & Số đo</h3>
               <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '12px' }}>Size tiêu chuẩn</span>
               <div style={{ display: 'flex', gap: '12px', marginBottom: '32px' }}>
-                {(['S', 'M', 'L', 'XL'] as const).map((sz) => (
+                {(['S', 'M', 'L', 'XL', 'XXL'] as const).map((sz) => (
                   <button key={sz} onClick={() => setStep2(p => ({ ...p, size: sz }))} style={{
                     width: '48px', height: '40px', borderRadius: '8px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', transition: 'var(--transition-smooth)',
                     border: step2.size === sz ? '2px solid var(--color-primary)' : '1px solid var(--color-light-border)',

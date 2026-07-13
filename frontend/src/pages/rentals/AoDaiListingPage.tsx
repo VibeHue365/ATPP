@@ -38,6 +38,12 @@ interface ProductFromDb {
     averageRating: number;
     totalReviews: number;
   };
+  activeCampaign?: {
+    occasion: string;
+    discountPercent: number;
+    endDate: string;
+  } | null;
+  discountedPrice?: number;
 }
 
 interface FilterState {
@@ -758,7 +764,9 @@ export const AoDaiListingPage: React.FC = () => {
                         className="vh-card-image"
                       />
                       {/* Floating Badge (e.g. New or Hot) */}
-                      {p.basePrice >= 400000 ? (
+                      {p.activeCampaign ? (
+                        <span className="vh-listing-tag-new" style={{ backgroundColor: '#EF4444' }}>-{p.activeCampaign.discountPercent}%</span>
+                      ) : p.basePrice >= 400000 ? (
                         <span className="vh-listing-tag-new">BÁN CHẠY</span>
                       ) : (
                         <span className="vh-listing-tag-new" style={{ backgroundColor: 'var(--color-primary)' }}>NEW</span>
@@ -825,9 +833,20 @@ export const AoDaiListingPage: React.FC = () => {
                       {/* Price Block */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '6px' }}>
                         <div>
-                          <span style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>
-                            {p.basePrice.toLocaleString('vi-VN')} đ
-                          </span>
+                          {p.activeCampaign ? (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: '12px', textDecoration: 'line-through', color: 'var(--color-text-secondary)' }}>
+                                {p.basePrice.toLocaleString('vi-VN')} đ
+                              </span>
+                              <span style={{ fontSize: '16px', fontWeight: 800, color: '#EF4444' }}>
+                                {(p.discountedPrice || p.basePrice).toLocaleString('vi-VN')} đ
+                              </span>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>
+                              {p.basePrice.toLocaleString('vi-VN')} đ
+                            </span>
+                          )}
                           <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginLeft: '4px' }}>
                             / ngày
                           </span>

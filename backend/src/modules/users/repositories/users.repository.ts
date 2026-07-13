@@ -9,6 +9,7 @@ import {
   UserProfile,
   UserStatus,
 } from '../schemas/user.schema';
+import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
 
 @Injectable()
 export class UsersRepository {
@@ -177,17 +178,66 @@ export class UsersRepository {
 
   async updatePreferences(
     userId: Types.ObjectId,
-    preferences: any,
+    dto: UpdatePreferencesDto,
   ): Promise<void> {
-    await this.userModel.updateOne(
-      { _id: userId },
-      {
-        $set: {
-          preferences,
-          hasCompletedOnboarding: true,
-        },
-      },
-    );
+    const updateQuery: any = {};
+
+    if (dto.hasCompletedOnboarding !== undefined) {
+      updateQuery.hasCompletedOnboarding = dto.hasCompletedOnboarding;
+    }
+
+    if (dto.preferences) {
+      const prefs = dto.preferences;
+      if (prefs.stylePreferences !== undefined) {
+        updateQuery['preferences.stylePreferences'] = prefs.stylePreferences;
+      }
+      if (prefs.favoriteColors !== undefined) {
+        updateQuery['preferences.favoriteColors'] = prefs.favoriteColors;
+      }
+      if (prefs.preferredAoDaiStyles !== undefined) {
+        updateQuery['preferences.preferredAoDaiStyles'] = prefs.preferredAoDaiStyles;
+      }
+      if (prefs.preferredPhotographyStyles !== undefined) {
+        updateQuery['preferences.preferredPhotographyStyles'] = prefs.preferredPhotographyStyles;
+      }
+      if (prefs.sizeInfo) {
+        const size = prefs.sizeInfo;
+        if (size.height !== undefined) {
+          updateQuery['preferences.sizeInfo.height'] = size.height;
+        }
+        if (size.weight !== undefined) {
+          updateQuery['preferences.sizeInfo.weight'] = size.weight;
+        }
+        if (size.preferredSize !== undefined) {
+          updateQuery['preferences.sizeInfo.preferredSize'] = size.preferredSize;
+        }
+        if (size.bodyShape !== undefined) {
+          updateQuery['preferences.sizeInfo.bodyShape'] = size.bodyShape;
+        }
+      }
+      if (prefs.budgetRange) {
+        const budget = prefs.budgetRange;
+        if (budget.min !== undefined) {
+          updateQuery['preferences.budgetRange.min'] = budget.min;
+        }
+        if (budget.max !== undefined) {
+          updateQuery['preferences.budgetRange.max'] = budget.max;
+        }
+      }
+      if (prefs.preferredLocations !== undefined) {
+        updateQuery['preferences.preferredLocations'] = prefs.preferredLocations;
+      }
+      if (prefs.preferredOccasions !== undefined) {
+        updateQuery['preferences.preferredOccasions'] = prefs.preferredOccasions;
+      }
+    }
+
+    if (Object.keys(updateQuery).length > 0) {
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $set: updateQuery },
+      );
+    }
   }
 
   async toggleFavorite(
