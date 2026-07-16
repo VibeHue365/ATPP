@@ -5,9 +5,10 @@ import { useToast } from '../../components/feedback/Toast';
 import { httpClient } from '../../services/httpClient';
 import { ROUTES } from '../../config/routes';
 import { 
-  MapPin, Star, ArrowRight, Upload, ChevronLeft, ChevronRight, CheckCircle, AlertCircle
+  MapPin, Star, ArrowRight, Upload, ChevronLeft, ChevronRight, CheckCircle, AlertCircle, Heart
 } from 'lucide-react';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import Swal from 'sweetalert2';
 
 interface Package {
   _id: string;
@@ -49,60 +50,85 @@ interface PhotographerDetails {
   };
 }
 
-const getLocationsByCity = (city: string): string[] => {
-  const normalized = city.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-  if (normalized.includes('hue')) {
-    return ['Đại Nội Huế', 'Cung An Định', 'Lăng Tự Đức', 'Chùa Thiên Mụ', 'Cầu Trường Tiền', 'Sông Hương'];
-  }
-  if (normalized.includes('quang nam') || normalized.includes('hoi an')) {
-    return ['Phố Cổ Hội An', 'Chùa Cầu', 'Rừng Dừa Bảy Mẫu', 'Bãi Biển An Bàng', 'Thánh Địa Mỹ Sơn'];
-  }
-  if (normalized.includes('ha noi')) {
-    return ['Hồ Gươm', 'Văn Miếu Quốc Tử Giám', 'Phố Cổ Hà Nội', 'Cầu Long Biên', 'Hoàng Thành Thăng Long'];
-  }
-  if (normalized.includes('da nang')) {
-    return ['Cầu Rồng', 'Bán Đảo Sơn Trà', 'Bãi Biển Mỹ Khê', 'Ngũ Hành Sơn', 'Cầu Vàng (Bà Nà Hills)'];
-  }
-  return ['Đại Nội Huế', 'Cung An Định', 'Lăng Tự Đức']; // Fallback
+const toMinutes = (time: string): number => {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
 };
 
-const timeSlots = [
-  '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
-  '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'
-];
-
-const photographerSlots = [
-  { start: '07:00', end: '09:00', label: '07:00 - 09:00' },
-  { start: '09:00', end: '11:00', label: '09:00 - 11:00' },
-  { start: '11:00', end: '13:00', label: '11:00 - 13:00' },
-  { start: '13:00', end: '15:00', label: '13:00 - 15:00' },
-  { start: '15:00', end: '17:00', label: '15:00 - 17:00' },
-  { start: '17:00', end: '19:00', label: '17:00 - 19:00' },
-  { start: '19:00', end: '21:00', label: '19:00 - 21:00' },
-];
+const toTime = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 
 export const PhotographerDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
   const { cart, addToCart } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, toggleFavorite: apiToggleFavorite } = useAuth();
+  const [favorites, setFavorites] = useState<string[]>([]);
+
+  // Sync favorites with user context
+  useEffect(() => {
+    if (user?.favorites) {
+      const favIds = user.favorites
+        .filter((f: any) => f.targetType === 'PROVIDER' || f.targetType === 'Provider')
+        .map((f: any) => f.targetId.toString());
+      setFavorites(favIds);
+    } else {
+      setFavorites([]);
+    }
+  }, [user]);
+
+  const handleToggleFavorite = async (favId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Yêu cầu đăng nhập',
+        text: 'Vui lòng đăng nhập để lưu nhiếp ảnh gia yêu thích!',
+        confirmButtonColor: 'var(--color-primary-dark)',
+        confirmButtonText: 'Đăng nhập ngay',
+        showCancelButton: true,
+        cancelButtonText: 'Hủy',
+        background: 'white',
+        customClass: {
+          popup: 'font-body',
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate('/login');
+        }
+      });
+      return;
+    }
+    try {
+      const isAlreadyFavorite = favorites.includes(favId);
+      await apiToggleFavorite('PROVIDER', favId);
+      if (isAlreadyFavorite) {
+        toast.success('Đã xóa khỏi danh sách yêu thích!');
+      } else {
+        toast.success('Đã thêm vào danh sách yêu thích!');
+      }
+    } catch (err: any) {
+      toast.error('Có lỗi xảy ra khi cập nhật yêu thích');
+    }
+  };
   const location = useLocation();
 
   const [photographer, setPhotographer] = useState<PhotographerDetails | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState<boolean>(true);
 
   // Booking Form States
   const [selectedPkg, setSelectedPkg] = useState<Package | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(''); // YYYY-MM-DD
-  const [startTime, setStartTime] = useState<string>('10:30');
-  const [endTime, setEndTime] = useState<string>('12:30');
+  const [startTime, setStartTime] = useState<string>('');
+  const [endTime, setEndTime] = useState<string>('');
   const selectedTimeSlot = `${startTime} - ${endTime}`;
   const [selectedLocation, setSelectedLocation] = useState<string>('');
   const [customLocation, setCustomLocation] = useState<string>('');
-  const [selectedConcept, setSelectedConcept] = useState<string>('Cổ phục Huế');
+  const [selectedConcept, setSelectedConcept] = useState<string>('');
   const [customRequest, setCustomRequest] = useState<string>('');
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [agreeTerms, setAgreeTerms] = useState<boolean>(false);
@@ -113,6 +139,7 @@ export const PhotographerDetailPage: React.FC = () => {
   const [bookingSuccess, setBookingSuccess] = useState<boolean>(false);
   const [busyDates, setBusyDates] = useState<string[]>([]);
   const [busySlots, setBusySlots] = useState<{ date: string, timeSlot: string }[]>([]);
+  const [availableTimeRanges, setAvailableTimeRanges] = useState<Array<{ start: string; end: string }>>([]);
 
   // Check if cart has an Ao Dai to auto-fill details
   const aoDaiInCart = cart.find((item) => item.itemType === 'PRODUCT');
@@ -120,7 +147,7 @@ export const PhotographerDetailPage: React.FC = () => {
   const rentalFrom = aoDaiInCart?.rentalFrom || aoDaiInCart?.startDate;
   const rentalTo = aoDaiInCart?.rentalTo || aoDaiInCart?.endDate;
 
-  const photographerCity = photographer?.address?.city || 'Thừa Thiên Huế';
+  const photographerCity = photographer?.address?.city || "";
 
   const isCitySynced = useMemo(() => {
     if (!aoDaiInCart || !aoDaiInCart.providerCity) return true;
@@ -254,25 +281,15 @@ export const PhotographerDetailPage: React.FC = () => {
         setLoading(true);
         const data = await httpClient.get<any>(`/api/photographers/${id}`);
         
-        // Match specific names/quotes for premium experience
-        let quote = '"Lưu giữ nét kiêu sa cung đình Huế qua lăng kính độc bản"';
-        if (data.businessName?.includes('Hoàng Minh') || data.businessName?.includes('Minh Trí')) {
-          quote = '"Vẻ đẹp vĩnh cửu qua lăng kính đương đại"';
-        } else if (data.businessName?.includes('Lê Thảo') || data.businessName?.includes('Hoàng Lê')) {
-          quote = '"Ghi lại những khoảnh khắc dịu dàng nhất"';
-        } else if (data.businessName?.includes('Trần Bảo') || data.businessName?.includes('Thanh Thủy')) {
-          quote = '"Kể chuyện cổ phục bằng ngôn ngữ điện ảnh"';
-        }
-
         const details: PhotographerDetails = {
           ...data,
-          quote,
-          equipment: data.equipment || ['Sony A7R V', 'Lens 85mm f/1.4 GM', 'Flash Profoto A10'],
-          portfolio: data.portfolio || data.media?.images || [
-            'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
-            'https://images.unsplash.com/photo-1621184455862-c163dfb30e0f',
-            'https://images.unsplash.com/photo-1542038784456-1ea8e935640e'
-          ]
+          quote: data.quote,
+          equipment: Array.isArray(data.equipment) ? data.equipment : [],
+          portfolio: Array.isArray(data.portfolio)
+            ? data.portfolio
+            : Array.isArray(data.media?.images)
+              ? data.media.images
+              : [],
         };
 
         setPhotographer(details);
@@ -310,6 +327,24 @@ export const PhotographerDetailPage: React.FC = () => {
     fetchDetails();
   }, [id]);
 
+  // Load Photographer reviews
+  useEffect(() => {
+    const fetchReviews = async () => {
+      try {
+        setReviewsLoading(true);
+        const data = await httpClient.get<any[]>(`/reviews/provider/${id}`);
+        setReviews(data || []);
+      } catch (err) {
+        console.error('Failed to fetch reviews for photographer', err);
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+    if (id) {
+      fetchReviews();
+    }
+  }, [id]);
+
   // Handle Cart Autofill logic
   useEffect(() => {
     const rentalDate = aoDaiInCart?.rentalFrom || aoDaiInCart?.startDate;
@@ -322,30 +357,11 @@ export const PhotographerDetailPage: React.FC = () => {
       }
     }
     
-    if (photographer) {
-      const locs = getLocationsByCity(photographerCity);
-      const defaultLoc = locs[0] || '';
-      
-      if (aoDaiInCart) {
-        const name = (aoDaiInCart.productName || aoDaiInCart.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const matched = locs.find(l => {
-          const normL = l.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-          return name.includes(normL) || normL.includes(name);
-        });
-        setSelectedLocation(matched || defaultLoc);
-        
-        // Auto fill time slot if hourly
-        if (aoDaiInCart.startTime) {
-          setStartTime(aoDaiInCart.startTime);
-        }
-        if (aoDaiInCart.endTime) {
-          setEndTime(aoDaiInCart.endTime);
-        }
-      } else {
-        setSelectedLocation(defaultLoc);
-      }
+    if (aoDaiInCart) {
+      if (aoDaiInCart.startTime) setStartTime(aoDaiInCart.startTime);
+      if (aoDaiInCart.endTime) setEndTime(aoDaiInCart.endTime);
     }
-  }, [aoDaiInCart, photographer, photographerCity, busyDates]);
+  }, [aoDaiInCart, busyDates]);
 
   const bookedSlotsOnSelectedDate = useMemo(() => {
     if (!selectedDate) return [];
@@ -367,15 +383,6 @@ export const PhotographerDetailPage: React.FC = () => {
     return s1 < e2 && s2 < e1;
   };
 
-  // Set default location once photographer loads (if not already set by autofill)
-  useEffect(() => {
-    if (photographer && !selectedLocation) {
-      const locs = getLocationsByCity(photographerCity);
-      if (locs.length > 0) {
-        setSelectedLocation(locs[0]);
-      }
-    }
-  }, [photographer, photographerCity, selectedLocation]);
 
   // Dynamic calendar — must be BEFORE any early returns to follow Rules of Hooks
   const calendarDays = useMemo(() => {
@@ -394,16 +401,7 @@ export const PhotographerDetailPage: React.FC = () => {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
       const dayOfWeek = new Date(dateStr).getDay();
       
-      let isAvailable = !busyDates.includes(dateStr) && dateStr >= todayStr;
-      if (dateStr === todayStr) {
-        const currentHour = today.getHours();
-        const currentMinute = today.getMinutes();
-        const hasTimeSlotsLeft = timeSlots.slice(0, -2).some(t => {
-          const [h, m] = t.split(':').map(Number);
-          return h > currentHour || (h === currentHour && m > currentMinute);
-        });
-        isAvailable = isAvailable && hasTimeSlotsLeft;
-      }
+      const isAvailable = !busyDates.includes(dateStr) && dateStr >= todayStr;
 
       days.push({
         day: i, dateStr,
@@ -415,90 +413,52 @@ export const PhotographerDetailPage: React.FC = () => {
     return days;
   }, [calendarDate, busyDates]);
 
-  const startSlotIndex = useMemo(() => {
-    return photographerSlots.findIndex(s => s.start === startTime);
-  }, [startTime]);
-
-  const endSlotIndex = useMemo(() => {
-    return photographerSlots.findIndex(s => s.end === endTime);
-  }, [endTime]);
-
-  // Reset and auto-select first available slot when date changes
   useEffect(() => {
-    if (!selectedDate) {
-      setStartTime('10:30');
-      setEndTime('12:30');
+    if (!id || !selectedDate) {
+      setAvailableTimeRanges([]);
       return;
     }
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    
-    const firstAvailableIndex = photographerSlots.findIndex((block) => {
-      const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
-        isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
-      );
-      const isPast = selectedDate === todayStr && (() => {
-        const [sh, sm] = block.start.split(':').map(Number);
-        return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
-      })();
-      return !isBusy && !isPast;
+
+    httpClient
+      .get<{ timeRanges: Array<{ start: string; end: string }> }>(
+        `/api/photographers/${id}/availability?date=${selectedDate}`,
+      )
+      .then((availability) => setAvailableTimeRanges(availability.timeRanges || []))
+      .catch((availabilityError) => {
+        console.error("Unable to load photographer availability:", availabilityError);
+        setAvailableTimeRanges([]);
+      });
+  }, [id, selectedDate]);
+
+  const photographerSlots = useMemo(() => {
+    const durationMinutes = Math.max(Math.round((selectedPkg?.durationHours || 2) * 60), 30);
+    return availableTimeRanges.flatMap((range) => {
+      const start = toMinutes(range.start);
+      const end = toMinutes(range.end);
+      const slots: Array<{ start: string; end: string; label: string }> = [];
+      for (let current = start; current + durationMinutes <= end; current += 30) {
+        const slotEnd = current + durationMinutes;
+        slots.push({ start: toTime(current), end: toTime(slotEnd), label: `${toTime(current)} - ${toTime(slotEnd)}` });
+      }
+      return slots;
     });
+  }, [availableTimeRanges, selectedPkg?.durationHours]);
 
-    if (firstAvailableIndex !== -1) {
-      setStartTime(photographerSlots[firstAvailableIndex].start);
-      setEndTime(photographerSlots[firstAvailableIndex].end);
-    }
-  }, [selectedDate, bookedSlotsOnSelectedDate]);
+  useEffect(() => {
+    const firstAvailableSlot = photographerSlots.find((slot) => {
+      const busy = bookedSlotsOnSelectedDate.some((bookedSlot) =>
+        isTimeSlotOverlap(`${slot.start}-${slot.end}`, bookedSlot),
+      );
+      return !busy;
+    });
+    setStartTime(firstAvailableSlot?.start || "");
+    setEndTime(firstAvailableSlot?.end || "");
+  }, [photographerSlots, bookedSlotsOnSelectedDate]);
 
-  const handleSlotClick = (i: number) => {
-    const block = photographerSlots[i];
-    
-    // Check if busy or past
-    const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
-      isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
-    );
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const isPast = selectedDate === todayStr && (() => {
-      const [sh, sm] = block.start.split(':').map(Number);
-      return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
-    })();
-    
-    if (isBusy || isPast) return;
-
-    const currentStartIdx = photographerSlots.findIndex(s => s.start === startTime);
-    const currentEndIdx = photographerSlots.findIndex(s => s.end === endTime);
-
-    if (currentStartIdx === -1 || currentStartIdx !== currentEndIdx || i < currentStartIdx) {
-      setStartTime(block.start);
-      setEndTime(block.end);
-    } else {
-      let hasBusyOrPastInRange = false;
-      for (let idx = currentStartIdx; idx <= i; idx++) {
-        const checkBlock = photographerSlots[idx];
-        const checkBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
-          isTimeSlotOverlap(`${checkBlock.start}-${checkBlock.end}`, bookedSlot)
-        );
-        const checkPast = selectedDate === todayStr && (() => {
-          const [sh, sm] = checkBlock.start.split(':').map(Number);
-          return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
-        })();
-        if (checkBusy || checkPast) {
-          hasBusyOrPastInRange = true;
-          break;
-        }
-      }
-
-      if (hasBusyOrPastInRange) {
-        toast.error('Khoảng thời gian chọn chứa khung giờ đã bận hoặc đã qua!');
-        setStartTime(block.start);
-        setEndTime(block.end);
-      } else {
-        setEndTime(block.end);
-      }
-    }
+  const handleSlotClick = (slot: { start: string; end: string }) => {
+    setStartTime(slot.start);
+    setEndTime(slot.end);
   };
-
   const isCurrentTimeSlotBusy = useMemo(() => {
     return bookedSlotsOnSelectedDate.some(bookedSlot => {
       if (!bookedSlot) return false;
@@ -506,8 +466,16 @@ export const PhotographerDetailPage: React.FC = () => {
     });
   }, [selectedTimeSlot, bookedSlotsOnSelectedDate]);
 
-  // Dynamic location options based on photographer's city
-  const locations = useMemo(() => getLocationsByCity(photographerCity), [photographerCity]);
+  const locations = useMemo(() => {
+    if (!photographer?.address) return [];
+    const address = [
+      photographer.address.addressLine,
+      photographer.address.ward,
+      photographer.address.district,
+      photographer.address.city,
+    ].filter(Boolean).join(", ");
+    return address ? [address] : [];
+  }, [photographer]);
 
   if (loading) {
     return (
@@ -534,8 +502,6 @@ export const PhotographerDetailPage: React.FC = () => {
       </div>
     );
   }
-
-  const conceptOptions = ['Cổ phục Huế', 'Cô ba Sài Gòn', 'Nàng thơ', 'Hiện đại'];
 
 
 
@@ -726,9 +692,7 @@ export const PhotographerDetailPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Lỗi đặt lịch:', err);
-      // Fallback to demo mode if API fails
-      console.warn('Booking API failed, falling back to demo mode:', err);
-      setBookingSuccess(true);
+      toast.error(err.message || 'Could not create the booking. Please try again.');
     } finally {
       setIsBookingNow(false);
     }
@@ -844,9 +808,39 @@ export const PhotographerDetailPage: React.FC = () => {
             
             {/* Header info */}
             <div>
-              <h1 className="font-header" style={{ fontSize: '38px', color: 'var(--color-primary-dark)', fontWeight: 700, marginBottom: '12px' }}>
-                {photographer.businessName}
-              </h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px' }}>
+                <h1 className="font-header" style={{ fontSize: '38px', color: 'var(--color-primary-dark)', fontWeight: 700, margin: 0 }}>
+                  {photographer.businessName}
+                </h1>
+                <button
+                  onClick={(e) => handleToggleFavorite(photographer._id, e)}
+                  style={{
+                    backgroundColor: 'white',
+                    border: '1px solid rgba(182, 145, 91, 0.3)',
+                    borderRadius: '50%',
+                    width: '44px',
+                    height: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: 'var(--shadow-sm)',
+                    transition: 'all 0.2s ease',
+                    color: favorites.includes(photographer._id) ? '#A11E22' : '#8C827A'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+                  }}
+                  title={favorites.includes(photographer._id) ? 'Xóa khỏi danh sách yêu thích' : 'Lưu vào danh sách yêu thích'}
+                >
+                  <Heart size={20} fill={favorites.includes(photographer._id) ? '#A11E22' : 'none'} color={favorites.includes(photographer._id) ? '#A11E22' : '#8C827A'} />
+                </button>
+              </div>
               <p className="font-body" style={{ fontSize: '15px', fontStyle: 'italic', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                 {photographer.quote}
               </p>
@@ -981,9 +975,9 @@ export const PhotographerDetailPage: React.FC = () => {
 
                 {/* RIGHT: Time slots grid */}
                 <div>
-                  <h3 style={{ fontSize: '11.5px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>CHỌN GIỜ CHỤP (MỖI Ô 2 TIẾNG)</h3>
+                  <h3 style={{ fontSize: '11.5px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>CHỌN GIỜ CHỤP</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
-                    {photographerSlots.map((block, idx) => {
+                    {photographerSlots.map((block) => {
                       const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
                         isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
                       );
@@ -994,14 +988,14 @@ export const PhotographerDetailPage: React.FC = () => {
                         return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
                       })();
 
-                      const isSelected = idx >= startSlotIndex && idx <= endSlotIndex;
+                      const isSelected = startTime === block.start && endTime === block.end;
 
                       return (
                         <button
                           key={block.label}
                           type="button"
                           disabled={isBusy || isPast}
-                          onClick={() => handleSlotClick(idx)}
+                          onClick={() => handleSlotClick(block)}
                           style={{
                             padding: '12px 8px',
                             borderRadius: '8px',
@@ -1137,31 +1131,18 @@ export const PhotographerDetailPage: React.FC = () => {
               </h2>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                {/* Concept Selector Chips */}
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  {conceptOptions.map((con) => {
-                    const isSelected = selectedConcept === con;
-                    return (
-                      <button
-                        key={con}
-                        onClick={() => setSelectedConcept(con)}
-                        style={{
-                          padding: '8px 16px',
-                          borderRadius: '6px',
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          backgroundColor: isSelected ? 'var(--color-primary-dark)' : '#FFFFFF',
-                          color: isSelected ? '#FFFFFF' : '#8C827A',
-                          border: isSelected ? '1px solid var(--color-primary-dark)' : '1px solid rgba(45, 41, 38, 0.15)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {con}
-                      </button>
-                    );
-                  })}
+                <div>
+                  <label style={{ fontSize: '13px', color: '#8C827A', fontWeight: 650, display: 'block', marginBottom: '8px' }}>
+                    Concept mong muon:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Nhap concept ban muon chup"
+                    value={selectedConcept}
+                    onChange={(event) => setSelectedConcept(event.target.value)}
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(182, 145, 91, 0.25)', backgroundColor: 'var(--color-light-bg)' }}
+                  />
                 </div>
-
                 {/* Ideas Textarea */}
                 <div>
                   <label style={{ fontSize: '13px', color: '#8C827A', fontWeight: 650, display: 'block', marginBottom: '8px' }}>Ý tưởng chụp hoặc yêu cầu chi tiết:</label>
@@ -1229,6 +1210,96 @@ export const PhotographerDetailPage: React.FC = () => {
                   </div>
                 ))}
               </div>
+            </section>
+
+            {/* Reviews Section */}
+            <section style={{ backgroundColor: 'white', padding: '32px', borderRadius: '16px', border: '1px solid var(--color-light-border)', marginTop: '40px' }}>
+              <h3 className="font-header" style={{ fontSize: '22px', fontWeight: 750, color: 'var(--color-text-primary)', marginBottom: '24px', textAlign: 'left' }}>
+                Đánh giá từ khách hàng ({reviews.length})
+              </h3>
+
+              {reviewsLoading ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#8C827A' }}>Đang tải đánh giá...</div>
+              ) : reviews.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px', backgroundColor: 'var(--color-light-bg)', borderRadius: '12px', border: '1px solid #EAEAE8' }}>
+                  <Star size={32} style={{ color: '#CCCCCC', margin: '0 auto 12px' }} />
+                  <p style={{ fontSize: '14px', color: '#8C827A', margin: 0 }}>Chưa có đánh giá nào cho nhiếp ảnh gia này.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  {/* Summary row */}
+                  <div style={{ display: 'flex', gap: '40px', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', padding: '20px', borderRadius: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <h4 style={{ fontSize: '48px', fontWeight: 850, color: 'var(--color-primary-dark)', margin: 0 }}>
+                        {(reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1)}
+                      </h4>
+                      <div style={{ display: 'flex', gap: '2px', justifyContent: 'center', margin: '6px 0' }}>
+                        {[1, 2, 3, 4, 5].map((s) => {
+                          const avg = reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length;
+                          return (
+                            <Star key={s} size={16} fill={s <= Math.round(avg) ? 'var(--color-gold)' : 'none'} color="var(--color-gold)" />
+                          );
+                        })}
+                      </div>
+                      <span style={{ fontSize: '13px', color: '#8C827A', fontWeight: 600 }}>Đánh giá trung bình</span>
+                    </div>
+
+                    {/* Breakdown bars */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '200px' }}>
+                      {[5, 4, 3, 2, 1].map((stars) => {
+                        const count = reviews.filter(r => Math.floor(r.rating) === stars).length;
+                        const pct = (count / reviews.length) * 100;
+                        return (
+                          <div key={stars} style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12.5px', fontWeight: 600, color: '#2D2926' }}>
+                            <span style={{ width: '40px', textAlign: 'right' }}>{stars} sao</span>
+                            <div style={{ flex: 1, height: '8px', backgroundColor: '#EAEAE8', borderRadius: '9999px', overflow: 'hidden' }}>
+                              <div style={{ width: `${pct}%`, height: '100%', backgroundColor: 'var(--color-gold)', borderRadius: '9999px' }} />
+                            </div>
+                            <span style={{ width: '30px', color: '#8C827A' }}>{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Reviews List */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', borderTop: '1px solid #EAEAE8', paddingTop: '24px' }}>
+                    {reviews.map((rev) => {
+                      const custName = rev.customerId?.profile?.fullName || rev.customerId?.fullName || rev.customerId?.email || 'Khách hàng';
+                      const custAvatar = rev.customerId?.profile?.avatarUrl || rev.customerId?.avatarUrl || '/avatar_hanna.png';
+                      return (
+                        <div key={rev._id} style={{ display: 'flex', gap: '16px', borderBottom: '1px solid #F6F6F4', paddingBottom: '20px', textAlign: 'left' }}>
+                          <img
+                            src={custAvatar}
+                            alt={custName}
+                            style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover', border: '1px solid rgba(0,0,0,0.05)' }}
+                          />
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <strong style={{ fontSize: '14px', color: '#2D2926' }}>{custName}</strong>
+                              <span style={{ fontSize: '12px', color: '#8C827A' }}>{new Date(rev.createdAt).toLocaleDateString('vi-VN')}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '2px' }}>
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star key={s} size={12} fill={s <= rev.rating ? 'var(--color-gold)' : 'none'} color="var(--color-gold)" />
+                              ))}
+                            </div>
+                            <p style={{ fontSize: '13.5px', color: '#5C544F', margin: '4px 0 0 0', lineHeight: 1.5 }}>
+                              {rev.comment}
+                            </p>
+                            {rev.reply && (
+                              <div style={{ backgroundColor: 'var(--color-light-bg)', padding: '12px 16px', borderRadius: '8px', marginTop: '10px', borderLeft: '3px solid var(--color-primary-dark)' }}>
+                                <strong style={{ fontSize: '12.5px', color: 'var(--color-primary-dark)', display: 'block', marginBottom: '4px' }}>Phản hồi từ Nhiếp ảnh gia:</strong>
+                                <p style={{ fontSize: '13px', color: '#5C544F', margin: 0, lineHeight: 1.5 }}>{rev.reply}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </section>
 
           </div>
@@ -1304,7 +1375,7 @@ export const PhotographerDetailPage: React.FC = () => {
                   Thông tin thợ ảnh
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--color-text-secondary)', textAlign: 'left' }}>
-                  <span>Thiết bị: {photographer.equipment.join(' • ')}</span>
+                  <span>Thiết bị: {photographer.equipment?.length ? photographer.equipment.join(' • ') : 'Chưa cập nhật'}</span>
                   <span>Thời gian hủy: Lịch được hoàn cọc 100% khi báo trước 48 giờ.</span>
                 </div>
               </div>

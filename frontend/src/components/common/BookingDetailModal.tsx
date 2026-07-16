@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { PrivateEvidenceImage } from './PrivateEvidenceImage';
 import { httpClient } from '../../services/httpClient';
 import { Modal } from './Modal';
 import { ShieldAlert, User, Clock, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { CustomerRefundPanel } from './CustomerRefundPanel';
+import { API_BASE_URL } from '../../config/env';
 
 interface BookingDetailModalProps {
   bookingId: string | null;
@@ -10,6 +13,7 @@ interface BookingDetailModalProps {
   onCustomerClick?: (customerId: string) => void;
   viewerRole?: 'customer' | 'provider' | 'admin';
   onBookingChanged?: () => void;
+  onWriteReview?: (itemDetails: { bookingId: string, itemId: string, productId?: string, photographyPackageId?: string }) => void;
 }
 
 export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
@@ -18,8 +22,11 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   onClose,
   onCustomerClick,
   viewerRole = 'admin',
-  onBookingChanged
+  onBookingChanged,
+  onWriteReview
 }) => {
+  const getEvidenceUrl = (url: string) =>
+    url?.startsWith('http') ? url : `${API_BASE_URL}${url}`;
   const [booking, setBooking] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [respondingIncident, setRespondingIncident] = useState(false);
@@ -177,10 +184,13 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           textColor = '#1E40AF';
           let decisionText = 'Đã giải quyết.';
           if (adminTimeline) {
-            const isShopRight = adminTimeline.note?.includes('Shop Đúng');
-            decisionText = isShopRight
-              ? '✅ Shop (Nhà cung cấp) Đúng — Khấu trừ tiền cọc đền bù cho Shop.'
-              : '✅ Khách hàng Đúng — Hoàn trả 100% tiền cọc cho Khách hàng.';
+            if (adminTimeline.note?.includes('Provider đúng')) {
+              decisionText = 'Nhà cung cấp đúng. Tiền đền bù được khấu trừ từ tiền cọc.';
+            } else if (adminTimeline.note?.includes('Khách hàng đúng')) {
+              decisionText = 'Khách hàng đúng. Toàn bộ tiền cọc được hoàn cho khách hàng.';
+            } else if (adminTimeline.note?.includes('Chia tiền')) {
+              decisionText = 'Admin quyết định phân chia tiền cọc cho hai bên theo phán quyết.';
+            }
           }
           infoText = `${decisionText}\n\nLý do / Ghi chú của Admin: "${incident.adminNotes || 'Không có ghi chú thêm.'}"`;
         }
@@ -365,6 +375,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                     <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#4B5563', fontSize: '11px' }}>TÊN DỊCH VỤ / MẪU MÃ</th>
                     <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: '#4B5563', fontSize: '11px' }}>TÙY CHỌN</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, color: '#4B5563', fontSize: '11px' }}>ĐƠN GIÁ</th>
+                    {viewerRole === 'customer' && booking.status === 'COMPLETED' && (
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: '#4B5563', fontSize: '11px' }}>ĐÁNH GIÁ</th>
+                    )}
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, color: '#4B5563', fontSize: '11px' }}>THÀNH TIỀN</th>
                   </tr>
                 </thead>
@@ -400,6 +413,41 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                           <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                             {formatCurrency(item.unitPrice)}
                           </td>
+                          {viewerRole === 'customer' && booking.status === 'COMPLETED' && (
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              {item.isReviewed ? (
+                                <span style={{ color: '#10B981', fontSize: '12px', fontWeight: 650 }}>Đã đánh giá</span>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    if (onWriteReview) {
+                                      onWriteReview({
+                                        bookingId: booking._id,
+                                        itemId: item._id,
+                                        productId: item.productId?._id || item.productId,
+                                        photographyPackageId: item.photographyPackageId?._id || item.photographyPackageId
+                                      });
+                                    }
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    backgroundColor: 'var(--color-primary-dark)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    transition: 'background-color 0.2s'
+                                  }}
+                                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--color-primary)'}
+                                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'var(--color-primary-dark)'}
+                                >
+                                  Đánh giá
+                                </button>
+                              )}
+                            </td>
+                          )}
                           <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>
                             {formatCurrency(item.unitPrice * (item.quantity || 1))}
                           </td>
@@ -408,7 +456,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                     })
                   ) : (
                     <tr>
-                      <td colSpan={4} style={{ padding: '12px', textAlign: 'center', color: '#6B7280', fontStyle: 'italic' }}>
+                      <td colSpan={viewerRole === 'customer' && booking.status === 'COMPLETED' ? 5 : 4} style={{ padding: '12px', textAlign: 'center', color: '#6B7280', fontStyle: 'italic' }}>
                         Không có chi tiết mặt hàng
                       </td>
                     </tr>
@@ -420,6 +468,8 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
 
           {/* Refund / Dispute Decision Info */}
           {renderRefundOrDisputeInfo()}
+
+          {viewerRole === 'customer' && bookingId && <CustomerRefundPanel bookingId={bookingId} />}
 
           {/* Pricing & Billing Summary */}
           <div style={{
@@ -460,7 +510,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           </div>
 
           {/* Customer Incident Response Buttons */}
-          {viewerRole === 'customer' && booking.status === 'RETURN_PENDING' && incident && incident.status === 'PENDING' && (
+          {viewerRole === 'customer' && booking.status === 'RETURN_PENDING' && incident && incident.status === 'PENDING_CUSTOMER' && (
             <div style={{
               backgroundColor: '#FFF7ED',
               border: '1px solid #FDE68A',
@@ -477,6 +527,20 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               {incident.description && (
                 <div style={{ fontSize: '12px', color: '#78350F', backgroundColor: '#FFFBEB', padding: '10px 12px', borderRadius: '8px', border: '1px solid #FDE68A' }}>
                   <strong>Mô tả sự cố:</strong> {incident.description}
+                </div>
+              )}
+              {incident.evidencePhotos?.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: '8px' }}>
+                  {incident.evidencePhotos.map((photo: string, index: number) => (
+                    <PrivateEvidenceImage
+                      key={photo}
+                      reference={photo}
+                      legacyUrl={getEvidenceUrl(photo)}
+                      alt={`Bằng chứng sự cố ${index + 1}`}
+                      linkStyle={{ display: 'block', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #FDE68A' }}
+                      imageStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ))}
                 </div>
               )}
               <div style={{ fontSize: '13px', color: '#92400E', fontWeight: 600 }}>

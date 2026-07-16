@@ -1,30 +1,67 @@
-const mongoose = require('./node_modules/mongoose');
-const bcrypt = require('./node_modules/bcryptjs');
-const uri = 'mongodb+srv://tiendat5604:Dattien5604@cluster0.9tc4itm.mongodb.net/vibehue_db?appName=Cluster0';
+const fs = require('fs');
+const path = require('path');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
-const TEST_PASSWORD = 'Test@123456';
+const ACCOUNT_EMAILS = [
+  'admin@vibehue.com',
+  'customer@vibehue.com',
+  'aodai@vibehue.com',
+  'photo@vibehue.com',
+  'provider.demo@vibehue.com',
+];
 
-mongoose.connect(uri).then(async () => {
-  const hash = await bcrypt.hash(TEST_PASSWORD, 12);
-  const User = mongoose.model('User', new mongoose.Schema({}, { strict: false }));
+function readEnv() {
+  const envPath = path.resolve(__dirname, '.env');
+  if (!fs.existsSync(envPath)) {
+    return process.env;
+  }
 
-  // Set password + ensure emailVerified for customer@vibehue.com
-  const r1 = await User.updateOne(
-    { 'auth.emailNormalized': 'customer@vibehue.com' },
-    { $set: { 'auth.passwordHash': hash, 'auth.emailVerified': true, accountStatus: 'ACTIVE' } }
-  );
-  console.log('customer@vibehue.com updated:', r1.modifiedCount);
+  const values = { ...process.env };
+  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^([^#=]+)=(.*)$/);
+    if (match) {
+      values[match[1].trim()] = match[2].trim().replace(/^"(.*)"$/, '$1');
+    }
+  }
+  return values;
+}
 
-  // Set password + ensure emailVerified for provider.demo@vibehue.com
-  const r2 = await User.updateOne(
-    { 'auth.emailNormalized': 'provider.demo@vibehue.com' },
-    { $set: { 'auth.passwordHash': hash, 'auth.emailVerified': true, accountStatus: 'ACTIVE' } }
-  );
-  console.log('provider.demo@vibehue.com updated:', r2.modifiedCount);
+async function setupTestAccounts() {
+  const env = readEnv();
+  if (!env.MONGODB_URI) {
+    throw new Error('MONGODB_URI is required');
+  }
 
-  console.log('\n✅ TÀI KHOẢN TEST MỚI:');
-  console.log('👤 Khách hàng: customer@vibehue.com | Mật khẩu:', TEST_PASSWORD);
-  console.log('🏪 Đối tác:    provider.demo@vibehue.com | Mật khẩu:', TEST_PASSWORD);
+  const password = env.LOCAL_TEST_PASSWORD || 'Password@123';
+  await mongoose.connect(env.MONGODB_URI);
+  const users = mongoose.connection.db.collection('users');
 
-  mongoose.disconnect();
-}).catch(e => console.error('DB Error:', e.message));
+  for (const email of ACCOUNT_EMAILS) {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await users.updateOne(
+      { 'auth.emailNormalized': email },
+      {
+        $set: {
+          'auth.passwordHash': passwordHash,
+          'auth.emailVerified': true,
+          accountStatus: 'ACTIVE',
+          'security.passwordChangedAt': new Date(),
+          updatedAt: new Date(),
+        },
+      },
+    );
+
+    const status = result.matchedCount === 1 ? 'updated' : 'not found';
+    console.log(`${email}: ${status}`);
+  }
+}
+
+setupTestAccounts()
+  .catch((error) => {
+    console.error(`Failed to set up test accounts: ${error.message}`);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await mongoose.disconnect();
+  });

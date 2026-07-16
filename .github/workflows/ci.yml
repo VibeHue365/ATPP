@@ -1,0 +1,50 @@
+name: Kiểm tra code tự động (CI)
+
+on:
+  pull_request:
+    branches: [dev, main] # Tự động chạy mỗi khi có PR vào dev hoặc main
+
+jobs:
+  build-backend:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tải code từ Github
+        uses: actions/checkout@v4
+
+      - name: Cài đặt Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20 # NestJS 11 yêu cầu Node.js từ phiên bản 20 trở lên
+
+      - name: Cài đặt thư viện Backend
+        run: |
+          cd backend
+          npm ci
+
+      - name: Kiểm tra biên dịch (Build) Backend
+        run: |
+          cd backend
+          npm run build
+
+  build-frontend:
+    name: Build & Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tải code từ Github
+        uses: actions/checkout@v4
+
+      - name: Cài đặt Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cài đặt thư viện Frontend
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Kiểm tra biên dịch (Build) Frontend
+        run: |
+          cd frontend
+          npm run build

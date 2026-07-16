@@ -165,6 +165,15 @@ export class Booking {
     default: [],
   })
   statusTimeline: BookingStatusTimelineEntry[];
+
+  @Prop({ type: Date, default: null })
+  settlementsGeneratedAt?: Date | null;
+
+  @Prop({ type: Date, default: null })
+  settlementGenerationFailedAt?: Date | null;
+
+  @Prop({ type: String, default: null, trim: true })
+  settlementGenerationError?: string | null;
 }
 
 export const BookingSchema = SchemaFactory.createForClass(Booking);

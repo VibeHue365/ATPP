@@ -26,6 +26,11 @@ export class BookingItem {
   @Prop({ type: Types.ObjectId, ref: 'Product', default: null, index: true })
   productId?: Types.ObjectId | null;
 
+  /**
+   * @deprecated Nguồn chân lý cho tồn kho thực tế của đơn hàng sẽ là truy vấn bảng InventoryReservation:
+   * `InventoryReservation.find({ bookingItemId })`.
+   * Trường này chỉ được giữ lại để tương thích ngược.
+   */
   @Prop({
     type: Types.ObjectId,
     ref: 'InventoryItem',

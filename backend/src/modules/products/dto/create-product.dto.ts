@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsEnum,
+  IsMongoId,
   IsNumber,
   IsOptional,
   IsString,
@@ -9,7 +10,7 @@ import {
 import { ProductStatus } from '../schemas/product.schema';
 
 export class CreateProductDto {
-  @IsString()
+  @IsMongoId()
   categoryId: string;
 
   @IsString()
@@ -59,4 +60,9 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  initialQuantity?: number;
 }

@@ -23,12 +23,6 @@ import {
   SettlementTransfer,
   SettlementTransferStatus,
 } from '../schemas/settlement-transfer.schema';
-import {
-  BookingSettlement,
-  SettlementStatus,
-  CommissionCollectionMethod,
-  CommissionCollectionStatus,
-} from '../schemas/booking-settlement.schema';
 import { PayOSRefundService } from './payos-refund.service';
 import { MockBankingService } from './mock-banking.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -38,12 +32,32 @@ import { EscrowRepository } from '../repositories/escrow.repository';
 import { SettlementRepository } from '../repositories/settlement.repository';
 import { TransferRepository } from '../repositories/transfer.repository';
 import { SettlementTransferMapper } from '../mappers/settlement-transfer.mapper';
-import {
-  PaymentAccountDoc,
-  ProviderDoc,
-  RefundResult,
-  TransferResult,
-} from '../interfaces/payment.interfaces';
+import { SettlementsService } from '../../settlements/services/settlements.service';
+
+interface PaymentAccountDoc {
+  bankName?: string;
+  accountNumberMasked?: string;
+  accountHolder?: string;
+  isDefault?: boolean;
+}
+
+interface ProviderDoc {
+  _id: Types.ObjectId;
+  paymentAccounts?: PaymentAccountDoc[];
+}
+
+interface RefundResult {
+  status: string;
+  amount: number;
+  orderCode: number;
+  refundId?: string;
+}
+
+interface TransferResult {
+  success: boolean;
+  bankTxnId?: string;
+  error?: string;
+}
 
 @Injectable()
 export class PaymentsService {
@@ -59,6 +73,11 @@ export class PaymentsService {
     private readonly bankingService: MockBankingService,
     private readonly notificationsService: NotificationsService,
     private readonly transferMapper: SettlementTransferMapper,
+    @InjectModel(BookingEscrow.name)
+    private readonly escrowModel: Model<BookingEscrow>,
+    @InjectModel(SettlementTransfer.name)
+    private readonly transferModel: Model<SettlementTransfer>,
+    private readonly settlementsService: SettlementsService,
   ) {}
 
   async createPaymentLink(
@@ -245,6 +264,17 @@ export class PaymentsService {
         },
       );
 
+      if (newStatus === BookingStatus.Confirmed || newStatus === BookingStatus.DepositPaid) {
+        const reservationModel = this.bookingModel.db.model('InventoryReservation');
+        await reservationModel.updateMany(
+          { bookingId: payment.bookingId },
+          {
+            $set: { status: 'CONFIRMED' },
+            $unset: { expiresAt: 1 }
+          }
+        );
+      }
+
       try {
         // Bắn thông báo cho khách hàng
         await this.notificationsService.createNotification(
@@ -328,134 +358,12 @@ export class PaymentsService {
     );
   }
 
-  async executeProfitSplit(booking: any): Promise<void> {
-    const items = await this.bookingModel.db
-      .model('BookingItem')
-      .find({ bookingId: booking._id });
-
-    // Group items by provider
-    const providerItems = new Map<string, any[]>();
-    for (const item of items) {
-      const pId = item.providerId.toString();
-      if (!providerItems.has(pId)) providerItems.set(pId, []);
-      providerItems.get(pId)!.push(item);
-    }
-
-    const totalSubTotal = booking.pricingSummary.subTotal;
-    const voucherDiscount = booking.pricingSummary.voucherDiscountTotal || 0;
-    const travelFee = booking.pricingSummary.travelFee || 0;
-
-    for (const [providerIdStr, pItems] of providerItems.entries()) {
-      let providerSubTotal = 0;
-      let providerComboDiscount = 0;
-      let hasPhotography = false;
-      let photographySubTotal = 0;
-      for (const item of pItems) {
-        providerSubTotal += item.unitPrice * item.quantity;
-        providerComboDiscount += item.comboDiscountAmount || 0;
-        if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
-          hasPhotography = true;
-          photographySubTotal += item.unitPrice * item.quantity;
-        }
-      }
-
-      // Phân bổ mã giảm giá voucher theo tỷ lệ subTotal
-      const providerVoucherDiscount = totalSubTotal > 0
-        ? Math.round((providerSubTotal / totalSubTotal) * voucherDiscount)
-        : 0;
-
-      // Tổng giảm giá của Provider này = Combo Discount thực tế của họ + Voucher phân bổ
-      const providerDiscount = providerComboDiscount + providerVoucherDiscount;
-
-      // Phân bổ phí đi lại cho nhiếp ảnh gia
-      const providerTravelFee = hasPhotography ? travelFee : 0;
-
-      // Tính số tiền thực tế nền tảng thu được cho dịch vụ này (Với gói chụp ảnh thì chỉ thu cọc 30% giữ chỗ)
-      const platformCollectedRaw = hasPhotography
-        ? Math.round(photographySubTotal * 0.3) - providerDiscount + providerTravelFee
-        : providerSubTotal - providerDiscount + providerTravelFee;
-
-      // Hoa hồng sàn tính trên 10% của tổng tiền dịch vụ của Provider (chưa tính cọc sản phẩm)
-      const platformCommission = Math.round((providerSubTotal - providerDiscount) * 0.1);
-
-      // Số tiền chuyển khoản thực tế sàn trả cho Provider (Tiền thu được - Hoa hồng)
-      const providerReceivable = platformCollectedRaw - platformCommission;
-
-      if (providerReceivable > 0) {
-        // Kiểm tra đối soát trùng lặp
-        const existingSettlement = await this.settlementRepository.findSettlement(
-          booking._id,
-          new Types.ObjectId(providerIdStr),
-        );
-
-        if (existingSettlement) {
-          this.logger.warn(
-            `Đối soát cho đơn hàng ${booking.bookingCode} với Provider ${providerIdStr} đã tồn tại. Bỏ qua để tránh trùng lặp.`,
-          );
-          continue;
-        }
-
-        const provider = await this.bookingModel.db
-          .model('Provider')
-          .findById(new Types.ObjectId(providerIdStr));
-
-        if (provider) {
-          let bankName = 'VietinBank';
-          let accountNumber = '1029384756';
-          let accountHolder = 'PROVIDER STUDIO';
-
-          if (provider.paymentAccounts && provider.paymentAccounts.length > 0) {
-            const activeAccount = provider.paymentAccounts.find((a: any) => a.isDefault) || provider.paymentAccounts[0];
-            bankName = activeAccount.bankName || bankName;
-            accountNumber = activeAccount.accountNumberMasked
-              ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
-              : accountNumber;
-            accountHolder = activeAccount.accountHolder || accountHolder;
-          }
-
-          const transferRef = `SETTLE_${booking.bookingCode}`;
-          const transferResult = await this.bankingService.executeAutoTransfer(
-            bankName,
-            accountNumber,
-            accountHolder,
-            providerReceivable,
-            transferRef,
-          );
-
-          // Tạo lịch sử giao dịch chuyển khoản
-          await this.transferRepository.createTransfer({
-            bookingId: booking._id,
-            providerId: provider._id,
-            amountSent: providerReceivable,
-            destinationBankAccount: {
-              bankName,
-              accountNumber,
-              accountHolder,
-            },
-            status: transferResult.success
-              ? SettlementTransferStatus.Success
-              : SettlementTransferStatus.Failed,
-            transactionReference: transferRef,
-            errorMessage: transferResult.error || null,
-          });
-
-          // Tạo BookingSettlement lưu trữ
-          await this.settlementRepository.createSettlement({
-            bookingId: booking._id,
-            providerId: provider._id,
-            grossAmount: platformCollectedRaw,
-            platformCommission,
-            providerReceivable,
-            commissionCollection: {
-              method: CommissionCollectionMethod.DirectDeduction,
-              status: CommissionCollectionStatus.CommissionPaid,
-              paidAt: new Date(),
-            },
-            settlementStatus: SettlementStatus.Completed,
-          });
-        }
-      }
-    }
+  async executeProfitSplit(
+    booking: { _id: Types.ObjectId | string },
+  ): Promise<void> {
+    await this.settlementsService.createSettlementsForBooking(
+      booking._id.toString(),
+    );
   }
 
   async settleBooking(bookingIdStr: string): Promise<any> {
@@ -665,8 +573,10 @@ export class PaymentsService {
     };
   }
 
-  async cancelSettlementsForBooking(bookingIdStr: string): Promise<void> {
-    const bookingId = new Types.ObjectId(bookingIdStr);
-    await this.settlementRepository.cancelSettlementsForBooking(bookingId);
+    async cancelSettlementsForBooking(bookingIdStr: string): Promise<void> {
+    await this.settlementsService.cancelSettlementsForBooking(
+      bookingIdStr,
+      'PAYMENT_CANCELLED',
+    );
   }
 }

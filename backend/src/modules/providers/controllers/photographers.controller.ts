@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+﻿import { Controller, Get, Param, Query } from '@nestjs/common';
 import { PhotographersService } from '../services/photographers.service';
 import { PhotographyPackage } from '../../products/schemas/photography-package.schema';
 
@@ -11,14 +11,21 @@ export class PhotographersController {
     return this.photographersService.findAll();
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string): Promise<any> {
-    return this.photographersService.findOne(id);
-  }
-
   @Get(':id/packages')
   async findPackages(@Param('id') id: string): Promise<PhotographyPackage[]> {
     return this.photographersService.findPackages(id);
   }
-}
 
+  @Get(':id/availability')
+  async findAvailability(
+    @Param('id') id: string,
+    @Query('date') date: string,
+  ): Promise<{ date: string; timeRanges: Array<{ start: string; end: string }> }> {
+    return this.photographersService.findAvailability(id, date);
+  }
+
+  @Get(':id')
+  async findOne(@Param('id') id: string): Promise<any> {
+    return this.photographersService.findOne(id);
+  }
+}

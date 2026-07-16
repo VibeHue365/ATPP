@@ -19,6 +19,9 @@ export class PhotographyPackage {
   @Prop({ type: Types.ObjectId, ref: 'Provider', required: true, index: true })
   providerId: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'Category', default: null, index: true })
+  categoryId?: Types.ObjectId | null;
+
   @Prop({ required: true, trim: true })
   name: string;
 

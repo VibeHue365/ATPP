@@ -80,7 +80,7 @@ export const ChatPage: React.FC = () => {
         setLoadingMessages(true);
         const data = await chatService.getMessages(activeRoom.id);
         setMessages(data);
-        
+
         // Join socket room
         if (socket) {
           socket.emit('join_room', { roomId: activeRoom.id });
@@ -111,7 +111,7 @@ export const ChatPage: React.FC = () => {
         setMessages((prev) => [...prev, message]);
         socket.emit('mark_read', { roomId: activeRoom.id });
       }
-      
+
       // Refresh the rooms list to update last message preview
       fetchRooms(activeRoom?.id);
     };
@@ -227,7 +227,7 @@ export const ChatPage: React.FC = () => {
     if (diffMins < 1) return 'JUST NOW';
     if (diffMins < 60) return `${diffMins}M AGO`;
     if (diffHours < 24) return `${diffHours}H AGO`;
-    
+
     // Default format Date
     return date.toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' }).toUpperCase();
   };
@@ -350,7 +350,7 @@ export const ChatPage: React.FC = () => {
                         border: '1px solid #e7e5e4',
                       }}
                     />
-                    
+
                     {/* Unread badge dot */}
                     {isUnread && (
                       <span
@@ -385,7 +385,7 @@ export const ChatPage: React.FC = () => {
                           {formatTimeAgo(room.lastMessageAt || room.lastMessage?.createdAt)}
                         </span>
                       </div>
-                      
+
                       <div
                         style={{
                           fontSize: '11px',
@@ -586,7 +586,7 @@ export const ChatPage: React.FC = () => {
 
                     {messages.map((msg) => {
                       const isMe = msg.senderId === user?.id;
-                      
+
                       return (
                         <div
                           key={msg._id}

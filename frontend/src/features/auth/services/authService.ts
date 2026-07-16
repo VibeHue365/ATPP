@@ -35,6 +35,12 @@ export const authService = {
     return httpClient.post<MessageResponse>("/auth/logout");
   },
 
+  async getPermissions(): Promise<{ roles: string[]; permissions: string[] }> {
+    return httpClient.get<{ roles: string[]; permissions: string[] }>(
+      "/auth/me/permissions",
+    );
+  },
+
   async changePassword(payload: any): Promise<MessageResponse> {
     return httpClient.post<MessageResponse>("/auth/change-password", payload);
   },

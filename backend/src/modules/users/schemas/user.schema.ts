@@ -6,6 +6,7 @@ export type UserDocument = HydratedDocument<User>;
 export enum UserStatus {
   PendingEmailVerification = 'PENDING_EMAIL_VERIFICATION',
   Active = 'ACTIVE',
+  Suspended = 'SUSPENDED',
   Banned = 'BANNED',
   Deleted = 'DELETED',
 }
@@ -78,6 +79,7 @@ export interface UserPreferences {
     max?: number | null;
   };
   preferredLocations: string[];
+  preferredOccasions: string[];
 }
 
 export interface UserAddress {
@@ -110,6 +112,9 @@ export interface UserSecurity {
   passwordChangedAt?: Date | null;
   failedLoginAttempts: number;
   lockedUntil?: Date | null;
+  lockedAt?: Date | null;
+  lockedBy?: Types.ObjectId | null;
+  lockedReason?: string | null;
 }
 
 @Schema({ collection: 'users', timestamps: true })
@@ -188,6 +193,7 @@ export class User {
         max: { type: Number, default: null },
       },
       preferredLocations: { type: [String], default: [] },
+      preferredOccasions: { type: [String], default: [] },
     },
     default: {},
   })
@@ -256,6 +262,9 @@ export class User {
       passwordChangedAt: { type: Date, default: null },
       failedLoginAttempts: { type: Number, default: 0 },
       lockedUntil: { type: Date, default: null },
+      lockedAt: { type: Date, default: null },
+      lockedBy: { type: Types.ObjectId, ref: 'User', default: null },
+      lockedReason: { type: String, default: null, trim: true },
     },
     default: {},
   })
@@ -273,6 +282,8 @@ UserSchema.index(
     partialFilterExpression: { 'auth.emailNormalized': { $type: 'string' } },
   },
 );
+UserSchema.index({ accountStatus: 1, roles: 1, deletedAt: 1 });
+UserSchema.index({ roles: 1, deletedAt: 1 });
 UserSchema.index(
   { 'auth.phoneNormalized': 1 },
   {
@@ -288,6 +299,25 @@ UserSchema.index(
   {
     partialFilterExpression: {
       'auth.authProviders.providerUserId': { $type: 'string' },
+    },
+  },
+);
+UserSchema.index(
+  {
+    'profile.fullName': 'text',
+    'auth.email': 'text',
+    'auth.emailNormalized': 'text',
+    'auth.phone': 'text',
+    'auth.phoneNormalized': 'text',
+  },
+  {
+    name: 'users_keyword_text',
+    weights: {
+      'profile.fullName': 5,
+      'auth.email': 4,
+      'auth.emailNormalized': 4,
+      'auth.phone': 3,
+      'auth.phoneNormalized': 3,
     },
   },
 );

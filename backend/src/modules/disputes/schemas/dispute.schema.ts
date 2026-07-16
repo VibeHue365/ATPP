@@ -141,3 +141,4 @@ export class Dispute {
 }
 
 export const DisputeSchema = SchemaFactory.createForClass(Dispute);
+DisputeSchema.index({ bookingId: 1 }, { unique: true });

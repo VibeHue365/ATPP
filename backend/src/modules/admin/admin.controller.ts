@@ -2,19 +2,32 @@ import { Controller, Get, Patch, Param, UseGuards, ForbiddenException, NotFoundE
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { Permissions } from '../../common/decorators/permissions.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { User, UserStatus } from '../users/schemas/user.schema';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema';
 import { Provider, ProviderCapability } from '../providers/schemas/provider.schema';
+import {
+  ProviderVerification,
+  VerificationStatus,
+  VerificationType,
+} from '../providers/schemas/provider-verification.schema';
 
 @Controller('admin/dashboard')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@Roles('ADMIN')
+@Permissions('dashboard:read')
 export class AdminController {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
+    @InjectModel(ProviderVerification.name)
+    private readonly providerVerificationModel: Model<ProviderVerification>,
   ) {}
 
   private checkAdmin(user: AuthUser) {
@@ -24,13 +37,32 @@ export class AdminController {
     }
   }
 
+  private async getActiveProviderApplicantUserIds() {
+    return this.providerVerificationModel.distinct('userId', {
+      verificationType: VerificationType.NewProvider,
+      status: {
+        $in: [
+          VerificationStatus.Submitted,
+          VerificationStatus.UnderReview,
+          VerificationStatus.NeedsChanges,
+        ],
+      },
+    });
+  }
+
   @Get('stats')
   async getStats(@CurrentUser() user: AuthUser) {
     this.checkAdmin(user);
 
+    const activeProviderApplicantUserIds =
+      await this.getActiveProviderApplicantUserIds();
+
     const totalCustomers = await this.userModel.countDocuments({
       roles: { $all: ['CUSTOMER'], $nin: ['PROVIDER', 'ADMIN', 'admin'] },
       deletedAt: null,
+      ...(activeProviderApplicantUserIds.length > 0
+        ? { _id: { $nin: activeProviderApplicantUserIds } }
+        : {}),
     });
 
     const totalProviders = await this.providerModel.countDocuments({
@@ -127,10 +159,16 @@ export class AdminController {
   ) {
     this.checkAdmin(user);
 
+    const activeProviderApplicantUserIds =
+      await this.getActiveProviderApplicantUserIds();
+
     const filter = {
       roles: { $all: ['CUSTOMER'], $nin: ['PROVIDER', 'ADMIN', 'admin'] },
       accountStatus: { $ne: UserStatus.PendingEmailVerification },
       deletedAt: null,
+      ...(activeProviderApplicantUserIds.length > 0
+        ? { _id: { $nin: activeProviderApplicantUserIds } }
+        : {}),
     };
 
     const total = await this.userModel.countDocuments(filter);
@@ -198,6 +236,7 @@ export class AdminController {
   }
 
   @Patch('customers/:id/ban')
+  @Permissions('user:manage')
   async banCustomer(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     this.checkAdmin(user);
     const customer = await this.userModel.findById(id);
@@ -210,6 +249,7 @@ export class AdminController {
   }
 
   @Patch('customers/:id/unban')
+  @Permissions('user:manage')
   async unbanCustomer(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     this.checkAdmin(user);
     const customer = await this.userModel.findById(id);

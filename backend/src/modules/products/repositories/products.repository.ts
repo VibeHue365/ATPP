@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Product, ProductDocument, ProductStatus } from '../schemas/product.schema';
+import {
+  Product,
+  ProductDocument,
+  ProductModerationStatus,
+  ProductStatus,
+} from '../schemas/product.schema';
 
 @Injectable()
 export class ProductsRepository {
@@ -17,15 +22,20 @@ export class ProductsRepository {
     colors?: string[];
     sizes?: string[];
     materials?: string[];
+    categoryId?: string;
   }): Promise<ProductDocument[]> {
-    const query: any = { status: ProductStatus.Active };
+    const query: any = {
+      status: ProductStatus.Active,
+      moderationStatus: ProductModerationStatus.Approved,
+    };
+
+    if (options?.categoryId && Types.ObjectId.isValid(options.categoryId)) {
+      query.categoryId = new Types.ObjectId(options.categoryId);
+    }
 
     if (options?.search) {
       const searchRegex = new RegExp(options.search, 'i');
-      query.$or = [
-        { name: searchRegex },
-        { description: searchRegex },
-      ];
+      query.$or = [{ name: searchRegex }, { description: searchRegex }];
     }
 
     if (options?.minPrice !== undefined || options?.maxPrice !== undefined) {
@@ -43,15 +53,21 @@ export class ProductsRepository {
     }
 
     if (options?.colors && options.colors.length > 0) {
-      query.colors = { $in: options.colors.map(c => new RegExp(`^${c}$`, 'i')) };
+      query.colors = {
+        $in: options.colors.map((c) => new RegExp(`^${c}$`, 'i')),
+      };
     }
 
     if (options?.sizes && options.sizes.length > 0) {
-      query.sizes = { $in: options.sizes.map(s => new RegExp(`^${s}$`, 'i')) };
+      query.sizes = {
+        $in: options.sizes.map((s) => new RegExp(`^${s}$`, 'i')),
+      };
     }
 
     if (options?.materials && options.materials.length > 0) {
-      query.materials = { $in: options.materials.map(m => new RegExp(`^${m}$`, 'i')) };
+      query.materials = {
+        $in: options.materials.map((m) => new RegExp(`^${m}$`, 'i')),
+      };
     }
 
     const products = await this.productModel
@@ -60,7 +76,7 @@ export class ProductsRepository {
       .populate('providerId')
       .exec();
 
-    return products.filter(p => {
+    return products.filter((p) => {
       const provider = p.providerId as any;
       return provider && provider.status === 'ACTIVE';
     });
@@ -71,20 +87,125 @@ export class ProductsRepository {
   }
 
   async findById(id: Types.ObjectId): Promise<ProductDocument | null> {
-    return this.productModel.findById(id).populate('categoryId').populate('providerId').exec();
+    return this.productModel
+      .findById(id)
+      .populate('categoryId')
+      .populate('providerId')
+      .exec();
   }
 
-  async findByProvider(providerId: Types.ObjectId): Promise<ProductDocument[]> {
+  async findPublicById(id: Types.ObjectId): Promise<ProductDocument | null> {
     return this.productModel
-      .find({ providerId, status: { $ne: ProductStatus.Inactive } })
+      .findOne({
+        _id: id,
+        status: ProductStatus.Active,
+        moderationStatus: ProductModerationStatus.Approved,
+      })
+      .populate('categoryId')
+      .populate('providerId')
+      .exec();
+  }
+
+  async findByProvider(
+    providerId: Types.ObjectId,
+    search?: string,
+    sortBy?: string,
+    page: number = 1,
+    limit: number = 10,
+    sizes?: string,
+    colors?: string,
+  ): Promise<{ items: ProductDocument[]; total: number }> {
+    const filter: any = { providerId, status: { $ne: ProductStatus.Inactive } };
+    if (search) {
+      filter.name = { $regex: search, $options: 'i' };
+    }
+    if (sizes) {
+      const sizesArray = sizes.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+      if (sizesArray.length > 0) {
+        filter.sizes = { $in: sizesArray };
+      }
+    }
+    if (colors) {
+      const colorsArray = colors.split(',').map((c) => c.trim().toUpperCase()).filter(Boolean);
+      if (colorsArray.length > 0) {
+        filter.colors = { $in: colorsArray };
+      }
+    }
+
+    const total = await this.productModel.countDocuments(filter);
+
+    let query = this.productModel
+      .find(filter)
+      .populate('categoryId')
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    if (sortBy === 'price_asc') {
+      query = query.sort({ basePrice: 1 });
+    } else if (sortBy === 'price_desc') {
+      query = query.sort({ basePrice: -1 });
+    } else {
+      query = query.sort({ createdAt: -1 });
+    }
+
+    const items = await query.exec();
+    return { items, total };
+  }
+
+  async update(
+    id: Types.ObjectId,
+    data: Partial<Product>,
+    options?: { incrementTaggingRevision?: boolean },
+  ): Promise<ProductDocument | null> {
+    const update: Record<string, unknown> = { $set: data };
+    if (options?.incrementTaggingRevision) {
+      update.$inc = { taggingRevision: 1 };
+    }
+
+    return this.productModel
+      .findByIdAndUpdate(id, update, { new: true })
       .populate('categoryId')
       .exec();
   }
 
-  async update(id: Types.ObjectId, data: Partial<Product>): Promise<ProductDocument | null> {
+  async findModerationQueue(
+    status: ProductModerationStatus,
+  ): Promise<ProductDocument[]> {
     return this.productModel
-      .findByIdAndUpdate(id, { $set: data }, { new: true })
+      .find({ moderationStatus: status })
+      .sort({ updatedAt: 1 })
       .populate('categoryId')
+      .populate('providerId')
+      .exec();
+  }
+
+  async moveLegacyProductsToPendingReview(): Promise<void> {
+    await this.productModel.updateMany(
+      { moderationStatus: { $exists: false } },
+      {
+        $set: {
+          moderationStatus: ProductModerationStatus.PendingReview,
+          moderationReason: null,
+          moderatedAt: null,
+          moderatedBy: null,
+        },
+      },
+    );
+  }
+
+  async moderate(
+    id: Types.ObjectId,
+    expectedStatus: ProductModerationStatus,
+    data: Partial<Product>,
+  ): Promise<ProductDocument | null> {
+    return this.productModel
+      .findOneAndUpdate(
+        { _id: id, moderationStatus: expectedStatus },
+        { $set: data },
+        { new: true },
+      )
+      .populate('categoryId')
+      .populate('providerId')
       .exec();
   }
 

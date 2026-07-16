@@ -49,3 +49,7 @@ export class IncidentReport {
 }
 
 export const IncidentReportSchema = SchemaFactory.createForClass(IncidentReport);
+IncidentReportSchema.index(
+  { bookingId: 1, bookingItemId: 1 },
+  { unique: true },
+);

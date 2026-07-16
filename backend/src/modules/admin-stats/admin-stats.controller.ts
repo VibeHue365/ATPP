@@ -1,11 +1,17 @@
 import { Controller, Get, UseGuards, ForbiddenException, Query, Param, Patch } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { Permissions } from '../../common/decorators/permissions.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { AdminStatsService } from './admin-stats.service';
 
 @Controller('admin/stats')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@Roles('ADMIN')
+@Permissions('dashboard:read')
 export class AdminStatsController {
   constructor(private readonly adminStatsService: AdminStatsService) {}
 
@@ -56,6 +62,7 @@ export class AdminStatsController {
   }
 
   @Patch('customers/:id/ban')
+  @Permissions('user:manage')
   async banCustomer(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -65,6 +72,7 @@ export class AdminStatsController {
   }
 
   @Patch('customers/:id/unban')
+  @Permissions('user:manage')
   async unbanCustomer(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,

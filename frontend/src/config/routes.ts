@@ -18,4 +18,5 @@ export const ROUTES = {
   PHOTOGRAPHER_DETAIL: '/photographers/:id',
   CART: '/cart',
   ADMIN_DASHBOARD: '/admin/dashboard',
+  ADMIN_DASHBOARD_REFACTORED: '/admin/dashboard-refactored',
 } as const;
