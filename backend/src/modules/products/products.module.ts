@@ -60,9 +60,19 @@ export const productModels = MongooseModule.forFeature([
     InventoryController,
     DiscountCampaignController,
   ],
-  providers: [PromotionsService, ProductsService, ProductsRepository,InventoryController,
-  DiscountCampaignController,],
-  exports: [productModels, PromotionsService, ProductsService,InventoryService,
-  DiscountCampaignService,],
+  providers: [
+    PromotionsService,
+    ProductsService,
+    ProductsRepository,
+    InventoryService,
+    DiscountCampaignService,
+  ],
+  exports: [
+    productModels,
+    PromotionsService,
+    ProductsService,
+    InventoryService,
+    DiscountCampaignService,
+  ],
 })
 export class ProductsModule {}
