@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 // Helper to read .env file
 function readEnv() {
@@ -29,6 +30,8 @@ async function seed() {
   console.log('Connected successfully!');
 
   const db = mongoose.connection.db;
+  const seedPassword = env.SEED_DEFAULT_PASSWORD || 'Password@123';
+  const seedPasswordHash = await bcrypt.hash(seedPassword, 12);
 
   // Clear existing collections if they exist to start fresh
   const collections = await db.listCollections().toArray();
@@ -94,7 +97,7 @@ async function seed() {
         emailNormalized: 'admin@vibehue.com',
         phone: '+84900000001',
         phoneNormalized: '+84900000001',
-        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0', // dummy bcrypt hash
+        passwordHash: seedPasswordHash,
         emailVerified: true,
         phoneVerified: true,
         authProviders: [{ provider: 'LOCAL', providerUserId: null }]
@@ -132,7 +135,7 @@ async function seed() {
         emailNormalized: 'customer@vibehue.com',
         phone: '+84900000002',
         phoneNormalized: '+84900000002',
-        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0',
+        passwordHash: seedPasswordHash,
         emailVerified: true,
         phoneVerified: true,
         authProviders: [{ provider: 'LOCAL', providerUserId: null }]
@@ -181,7 +184,7 @@ async function seed() {
         emailNormalized: 'aodai@vibehue.com',
         phone: '+84900000003',
         phoneNormalized: '+84900000003',
-        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0',
+        passwordHash: seedPasswordHash,
         emailVerified: true,
         phoneVerified: true,
         authProviders: [{ provider: 'LOCAL', providerUserId: null }]
@@ -219,7 +222,7 @@ async function seed() {
         emailNormalized: 'photo@vibehue.com',
         phone: '+84900000004',
         phoneNormalized: '+84900000004',
-        passwordHash: '$2a$10$X87q8P6xVv1.K5n6WkS/Uu4d4u3l.6r9gHjTj5kL4U5v6w7x8y9z0',
+        passwordHash: seedPasswordHash,
         emailVerified: true,
         phoneVerified: true,
         authProviders: [{ provider: 'LOCAL', providerUserId: null }]
@@ -463,19 +466,27 @@ async function seed() {
       _id: categoryRentalId,
       name: 'Thuê Áo Dài',
       slug: 'thue-ao-dai',
+      type: 'AODAI_CATEGORY',
       description: 'Các mẫu áo dài truyền thống, cách tân cho thuê',
       parentId: null,
       status: 'ACTIVE',
-      createdAt: new Date()
+      displayOrder: 0,
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date()
     },
     {
       _id: categoryPhotoId,
       name: 'Gói Chụp Ảnh',
       slug: 'goi-chup-anh',
+      type: 'PHOTOGRAPHY_CATEGORY',
       description: 'Dịch vụ chụp ảnh áo dài chuyên nghiệp',
       parentId: null,
       status: 'ACTIVE',
-      createdAt: new Date()
+      displayOrder: 0,
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date()
     }
   ];
   await db.collection('categories').insertMany(categories);
@@ -650,6 +661,7 @@ async function seed() {
     {
       _id: photoPkgId,
       providerId: providerPhotoProfileId,
+      categoryId: categoryPhotoId,
       name: 'Gói Chụp Ảnh Huế Cổ Kính Ngoại Cảnh',
       slug: 'goi-chup-anh-hue-co-kinh-ngoai-canh',
       description: 'Chụp ảnh dạo quanh Đại Nội Huế, Chùa Thiên Mụ, Lăng Tẩm trong 3 giờ.',

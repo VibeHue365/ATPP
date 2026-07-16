@@ -1,7 +1,15 @@
 const { MongoClient, ObjectId } = require('mongodb');
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
+
+const minioPublicBaseUrl = (process.env.MINIO_PUBLIC_BASE_URL || 'http://127.0.0.1:9000').replace(/\/$/, '');
+const minioPublicBucket = process.env.MINIO_PUBLIC_BUCKET || 'public-media';
+const demoImageUrl = (fileName) => `${minioPublicBaseUrl}/${minioPublicBucket}/legacy/${encodeURIComponent(fileName)}`;
 
 async function main() {
-  const uri = 'mongodb+srv://tiendat5604:Dattien5604@cluster0.9tc4itm.mongodb.net/vibehue_db?appName=Cluster0';
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error('MONGODB_URI must be set in backend/.env');
+  }
   const client = new MongoClient(uri);
   try {
     await client.connect();
@@ -52,7 +60,7 @@ async function main() {
         slug: 'ao-da-phuong-bao-hoang-cung-demo',
         basePrice: 800000,
         depositAmount: 400000,
-        images: ['/hong_lien_hoa.png'],
+        images: [demoImageUrl('hong_lien_hoa.png')],
         status: 'ACTIVE',
         createdAt: new Date()
       },
@@ -63,7 +71,7 @@ async function main() {
         slug: 'ao-dai-co-phuc-nhat-binh-do-demo',
         basePrice: 500000,
         depositAmount: 250000,
-        images: ['/cuc_hoa_mi.png'],
+        images: [demoImageUrl('cuc_hoa_mi.png')],
         status: 'ACTIVE',
         createdAt: new Date()
       },
@@ -74,7 +82,7 @@ async function main() {
         slug: 'ao-dai-lua-ha-dong-truyen-thong-demo',
         basePrice: 350000,
         depositAmount: 150000,
-        images: ['/hong_lien_hoa.png'],
+        images: [demoImageUrl('hong_lien_hoa.png')],
         status: 'ACTIVE',
         createdAt: new Date()
       }

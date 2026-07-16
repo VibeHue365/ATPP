@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { PrivateEvidenceImage } from './PrivateEvidenceImage';
 import { httpClient } from '../../services/httpClient';
 import { Modal } from './Modal';
 import { ShieldAlert, User, Clock, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { CustomerRefundPanel } from './CustomerRefundPanel';
+import { API_BASE_URL } from '../../config/env';
 
 interface BookingDetailModalProps {
   bookingId: string | null;
@@ -22,6 +25,8 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   onBookingChanged,
   onWriteReview
 }) => {
+  const getEvidenceUrl = (url: string) =>
+    url?.startsWith('http') ? url : `${API_BASE_URL}${url}`;
   const [booking, setBooking] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [respondingIncident, setRespondingIncident] = useState(false);
@@ -179,10 +184,13 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           textColor = '#1E40AF';
           let decisionText = 'Đã giải quyết.';
           if (adminTimeline) {
-            const isShopRight = adminTimeline.note?.includes('Shop Đúng');
-            decisionText = isShopRight
-              ? '✅ Shop (Nhà cung cấp) Đúng — Khấu trừ tiền cọc đền bù cho Shop.'
-              : '✅ Khách hàng Đúng — Hoàn trả 100% tiền cọc cho Khách hàng.';
+            if (adminTimeline.note?.includes('Provider đúng')) {
+              decisionText = 'Nhà cung cấp đúng. Tiền đền bù được khấu trừ từ tiền cọc.';
+            } else if (adminTimeline.note?.includes('Khách hàng đúng')) {
+              decisionText = 'Khách hàng đúng. Toàn bộ tiền cọc được hoàn cho khách hàng.';
+            } else if (adminTimeline.note?.includes('Chia tiền')) {
+              decisionText = 'Admin quyết định phân chia tiền cọc cho hai bên theo phán quyết.';
+            }
           }
           infoText = `${decisionText}\n\nLý do / Ghi chú của Admin: "${incident.adminNotes || 'Không có ghi chú thêm.'}"`;
         }
@@ -461,6 +469,8 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           {/* Refund / Dispute Decision Info */}
           {renderRefundOrDisputeInfo()}
 
+          {viewerRole === 'customer' && bookingId && <CustomerRefundPanel bookingId={bookingId} />}
+
           {/* Pricing & Billing Summary */}
           <div style={{
             backgroundColor: '#FAF9F6',
@@ -500,7 +510,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           </div>
 
           {/* Customer Incident Response Buttons */}
-          {viewerRole === 'customer' && booking.status === 'RETURN_PENDING' && incident && incident.status === 'PENDING' && (
+          {viewerRole === 'customer' && booking.status === 'RETURN_PENDING' && incident && incident.status === 'PENDING_CUSTOMER' && (
             <div style={{
               backgroundColor: '#FFF7ED',
               border: '1px solid #FDE68A',
@@ -517,6 +527,20 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               {incident.description && (
                 <div style={{ fontSize: '12px', color: '#78350F', backgroundColor: '#FFFBEB', padding: '10px 12px', borderRadius: '8px', border: '1px solid #FDE68A' }}>
                   <strong>Mô tả sự cố:</strong> {incident.description}
+                </div>
+              )}
+              {incident.evidencePhotos?.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: '8px' }}>
+                  {incident.evidencePhotos.map((photo: string, index: number) => (
+                    <PrivateEvidenceImage
+                      key={photo}
+                      reference={photo}
+                      legacyUrl={getEvidenceUrl(photo)}
+                      alt={`Bằng chứng sự cố ${index + 1}`}
+                      linkStyle={{ display: 'block', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #FDE68A' }}
+                      imageStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ))}
                 </div>
               )}
               <div style={{ fontSize: '13px', color: '#92400E', fontWeight: 600 }}>

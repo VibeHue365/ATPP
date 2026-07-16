@@ -7,6 +7,9 @@ import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProvidersModule } from './modules/providers/providers.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { SystemPoliciesModule } from './modules/system-policies/system-policies.module';
+import { SettlementsModule } from './modules/settlements/settlements.module';
 import { ProductsModule } from './modules/products/products.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { PaymentsModule } from './modules/payments/payments.module';
@@ -18,10 +21,13 @@ import { AiModule } from './modules/ai/ai.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AdminStatsModule } from './modules/admin-stats/admin-stats.module';
+import { SmartTaggingModule } from './modules/smart-tagging/smart-tagging.module';
+import { validateEnv } from './common/config/env.validation';
+import { ApiDocsController } from './common/controllers/api-docs.controller';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
@@ -35,6 +41,9 @@ import { AdminStatsModule } from './modules/admin-stats/admin-stats.module';
     AuthModule,
     UsersModule,
     ProvidersModule,
+    CategoriesModule,
+    SystemPoliciesModule,
+    SettlementsModule,
     ProductsModule,
     BookingsModule,
     PaymentsModule,
@@ -46,8 +55,9 @@ import { AdminStatsModule } from './modules/admin-stats/admin-stats.module';
     ChatModule,
     AdminStatsModule,
     AdminModule,
+    SmartTaggingModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, ApiDocsController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

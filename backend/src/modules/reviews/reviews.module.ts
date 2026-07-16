@@ -12,6 +12,7 @@ import { BookingsModule } from '../bookings/bookings.module';
 import { ProductsModule } from '../products/products.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { StorageModule } from '../storage/storage.module';
 
 export const reviewModels = MongooseModule.forFeature([
   { name: Review.name, schema: ReviewSchema },
@@ -25,6 +26,7 @@ export const reviewModels = MongooseModule.forFeature([
     ProductsModule,
     ProvidersModule,
     NotificationsModule,
+    StorageModule,
   ],
   controllers: [ReviewsController],
   providers: [ReviewsService],

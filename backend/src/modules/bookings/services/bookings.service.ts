@@ -22,9 +22,12 @@ import { PhotographyPackage } from '../../products/schemas/photography-package.s
 import { PromotionsService } from '../../products/services/promotions.service';
 import { DiscountType } from '../../products/schemas/promotion.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
+import { RefundWorkflowService } from '../../payments/services/refund-workflow.service';
+import { RefundType } from '../../payments/schemas/refund-request.schema';
+import { SettlementsService } from '../../settlements/services/settlements.service';
 import { ProductsService } from '../../products/services/products.service';
 import { DiscountCampaignService } from '../../products/services/discount-campaign.service';
-import { Provider } from '../../providers/schemas/provider.schema';
+import { Provider, ProviderStatus } from '../../providers/schemas/provider.schema';
 import {
   PriceVersion,
   PriceTargetType,
@@ -42,7 +45,7 @@ import {
 import { IsString, IsNotEmpty, IsOptional, IsEnum, IsNumber, IsArray, Min } from 'class-validator';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/schemas/notification.schema';
-import { SYSTEM_POLICIES } from '../../../common/config/system-policies.config';
+import { PolicyResolverService } from '../../system-policies/services/policy-resolver.service';
 
 // ─── DTOs (dùng chung với controller) ────────────────────────────────────────
 
@@ -214,11 +217,15 @@ export class BookingsService implements OnApplicationBootstrap {
     private readonly promotionsService: PromotionsService,
     @Inject(forwardRef(() => PaymentsService))
     private readonly paymentsService: PaymentsService,
+    @Inject(forwardRef(() => RefundWorkflowService))
+    private readonly refundWorkflowService: RefundWorkflowService,
+    private readonly settlementsService: SettlementsService,
     private readonly productsService: ProductsService,
     private readonly notificationsService: NotificationsService,
     @InjectModel(Provider.name)
     private readonly providerModel: Model<Provider>,
     private readonly campaignService: DiscountCampaignService,
+    private readonly policyResolverService: PolicyResolverService,
   ) { }
 
   async onApplicationBootstrap() {
@@ -258,7 +265,10 @@ export class BookingsService implements OnApplicationBootstrap {
   }
 
   async cleanupExpiredPendingBookings(): Promise<void> {
-    const cutoff = new Date(Date.now() - SYSTEM_POLICIES.BOOKING_HOLD_TIMEOUT_MS);
+    const holdPolicy = await this.policyResolverService.getBookingHoldPolicy();
+    if (!holdPolicy.autoExpireEnabled) return;
+
+    const cutoff = new Date(Date.now() - holdPolicy.holdMinutes * 60 * 1000);
 
     const expiredBookings = await this.bookingModel.find({
       status: BookingStatus.PendingPayment,
@@ -277,7 +287,7 @@ export class BookingsService implements OnApplicationBootstrap {
           statusTimeline: {
             status: BookingStatus.Cancelled,
             changedAt: new Date(),
-            note: 'Tự động hủy đơn hàng do quá hạn thanh toán (30 phút)',
+            note: `Tự động hủy đơn hàng do quá hạn thanh toán (${holdPolicy.holdMinutes} phút)`,
           },
         },
       },
@@ -713,13 +723,17 @@ export class BookingsService implements OnApplicationBootstrap {
             const colorVal = this.normalizeColor(item.selectedColor);
 
             if (product.sizes && product.sizes.length > 0) {
-              const isSizeSupported = product.sizes.some(s => s.trim().toUpperCase() === sizeVal);
+              const isSizeSupported = product.sizes.some(
+          (s: string) => s.trim().toUpperCase() === sizeVal,
+        );
               if (!isSizeSupported) {
                 throw new BadRequestException(`Kích cỡ ${item.selectedSize || 'M'} không khả dụng cho sản phẩm ${product.name}. Các kích cỡ khả dụng: ${product.sizes.join(', ')}`);
               }
             }
             if (product.colors && product.colors.length > 0) {
-              const isColorSupported = product.colors.some(c => this.normalizeColor(c) === colorVal);
+              const isColorSupported = product.colors.some(
+          (c: string) => this.normalizeColor(c) === colorVal,
+        );
               if (!isColorSupported) {
                 throw new BadRequestException(`Màu sắc ${item.selectedColor || 'WHITE'} không khả dụng cho sản phẩm ${product.name}. Các màu khả dụng: ${product.colors.join(', ')}`);
               }
@@ -1216,13 +1230,17 @@ export class BookingsService implements OnApplicationBootstrap {
       const colorVal = this.normalizeColor(color);
 
       if (product.sizes && product.sizes.length > 0) {
-        const isSizeSupported = product.sizes.some((s: string) => s.trim().toUpperCase() === sizeVal);
+        const isSizeSupported = product.sizes.some(
+          (s: string) => s.trim().toUpperCase() === sizeVal,
+        );
         if (!isSizeSupported) {
           throw new BadRequestException(`Kích cỡ ${size} không khả dụng cho sản phẩm này. Các kích cỡ khả dụng: ${product.sizes.join(', ')}`);
         }
       }
       if (product.colors && product.colors.length > 0) {
-        const isColorSupported = product.colors.some((c: string) => this.normalizeColor(c) === colorVal);
+        const isColorSupported = product.colors.some(
+          (c: string) => this.normalizeColor(c) === colorVal,
+        );
         if (!isColorSupported) {
           throw new BadRequestException(`Màu sắc ${color} không khả dụng cho sản phẩm này. Các màu khả dụng: ${product.colors.join(', ')}`);
         }
@@ -1894,6 +1912,7 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     const now = new Date();
+    const cancellationPolicy = await this.policyResolverService.getCancellationPolicy();
     let isFreeCancel = true;
     let refundAmount = 0;
     let penaltyReason = '';
@@ -1941,35 +1960,35 @@ export class BookingsService implements OnApplicationBootstrap {
         const diffInMs = earliestStartTime.getTime() - now.getTime();
         const diffInHours = diffInMs / (1000 * 60 * 60);
 
-        if (diffInHours >= SYSTEM_POLICIES.FREE_CANCEL_LIMIT_HOURS) {
+        if (diffInHours >= cancellationPolicy.freeCancelBeforeHours) {
           isFreeCancel = true;
         } else {
           // Kiểm tra xem đơn hàng có được tạo trong vòng 72 giờ trước giờ bắt đầu hay không (last-minute booking)
           const createdAtDate = new Date((booking as any).createdAt || now);
           const startMinusCreatedHours = (earliestStartTime.getTime() - createdAtDate.getTime()) / (1000 * 60 * 60);
-          if (startMinusCreatedHours < SYSTEM_POLICIES.FREE_CANCEL_LIMIT_HOURS) {
+          if (startMinusCreatedHours < cancellationPolicy.freeCancelBeforeHours) {
             const minsSinceCreation = (now.getTime() - createdAtDate.getTime()) / (1000 * 60);
-            if (diffInHours >= 2) {
+            if (diffInHours >= cancellationPolicy.urgentBookingBeforeHours) {
               // Hạn ân hạn là 60 phút
-              if (minsSinceCreation <= SYSTEM_POLICIES.LAST_MIN_GRACE_MINUTES) {
+              if (minsSinceCreation <= cancellationPolicy.gracePeriodMinutesNormal) {
                 isFreeCancel = true;
               } else {
                 isFreeCancel = false;
-                penaltyReason = `Đã quá thời gian ân hạn ${SYSTEM_POLICIES.LAST_MIN_GRACE_MINUTES} phút đối với đơn hàng đặt sát giờ (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
+                penaltyReason = `Đã quá thời gian ân hạn ${cancellationPolicy.gracePeriodMinutesNormal} phút đối với đơn hàng đặt sát giờ (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
               }
             } else {
               // Siêu gấp: Hạn ân hạn là 5 phút
-              if (minsSinceCreation <= SYSTEM_POLICIES.URGENT_GRACE_MINUTES) {
+              if (minsSinceCreation <= cancellationPolicy.gracePeriodMinutesUrgent) {
                 isFreeCancel = true;
               } else {
                 isFreeCancel = false;
-                penaltyReason = `Đã quá thời gian ân hạn ${SYSTEM_POLICIES.URGENT_GRACE_MINUTES} phút đối với đơn hàng đặt siêu gấp (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
+                penaltyReason = `Đã quá thời gian ân hạn ${cancellationPolicy.gracePeriodMinutesUrgent} phút đối với đơn hàng đặt siêu gấp (Đặt lúc ${createdAtDate.toLocaleTimeString('vi-VN')}).`;
               }
             }
           } else {
             // Hủy trễ bình thường
             isFreeCancel = false;
-            penaltyReason = `Hủy đơn trễ (dưới ${SYSTEM_POLICIES.FREE_CANCEL_LIMIT_HOURS} giờ trước giờ hẹn).`;
+            penaltyReason = `Hủy đơn trễ (dưới ${cancellationPolicy.freeCancelBeforeHours} giờ trước giờ hẹn).`;
           }
         }
       }
@@ -1977,12 +1996,35 @@ export class BookingsService implements OnApplicationBootstrap {
 
     if (isProvider) {
       isFreeCancel = true;
-      // Provider tự hủy -> tăng violationCount của Provider đó
+      const violationPolicy = await this.policyResolverService.getProviderViolationPolicy();
+      const violationPoint = violationPolicy.lateCancelViolationPoint;
       await this.bookingModel.db
         .model('Provider')
         .findOneAndUpdate(
           { userId: new Types.ObjectId(userId) },
-          { $inc: { violationCount: 1 } }
+          [
+            {
+              $set: {
+                violationCount: {
+                  $add: [{ $ifNull: ['$violationCount', 0] }, violationPoint],
+                },
+                status: violationPolicy.autoSuspendEnabled
+                  ? {
+                      $cond: [
+                        {
+                          $gte: [
+                            { $add: [{ $ifNull: ['$violationCount', 0] }, violationPoint] },
+                            violationPolicy.maxWarningsBeforeSuspend,
+                          ],
+                        },
+                        ProviderStatus.Suspended,
+                        '$status',
+                      ],
+                    }
+                  : '$status',
+              },
+            },
+          ],
         );
     }
 
@@ -1994,9 +2036,9 @@ export class BookingsService implements OnApplicationBootstrap {
       const items = await this.bookingItemModel.find({ bookingId: booking._id });
       for (const item of items) {
         if (item.itemType === 'PRODUCT') {
-          penaltyAmount += Math.round(item.unitPrice * SYSTEM_POLICIES.PRODUCT_CANCEL_PENALTY_RATE) * item.quantity;
+          penaltyAmount += Math.round(item.unitPrice * cancellationPolicy.productLateCancelPenaltyRate) * item.quantity;
         } else {
-          penaltyAmount += Math.round(item.unitPrice * SYSTEM_POLICIES.PHOTOGRAPHY_CANCEL_PENALTY_RATE) * item.quantity;
+          penaltyAmount += Math.round(item.unitPrice * cancellationPolicy.photographyLateCancelPenaltyRate) * item.quantity;
         }
       }
 
@@ -2015,9 +2057,9 @@ export class BookingsService implements OnApplicationBootstrap {
         let providerPenalty = 0;
         for (const item of pItems) {
           if (item.itemType === 'PRODUCT') {
-            providerPenalty += Math.round(item.unitPrice * SYSTEM_POLICIES.PRODUCT_CANCEL_PENALTY_RATE) * item.quantity;
+            providerPenalty += Math.round(item.unitPrice * cancellationPolicy.productLateCancelPenaltyRate) * item.quantity;
           } else {
-            providerPenalty += Math.round(item.unitPrice * SYSTEM_POLICIES.PHOTOGRAPHY_CANCEL_PENALTY_RATE) * item.quantity;
+            providerPenalty += Math.round(item.unitPrice * cancellationPolicy.photographyLateCancelPenaltyRate) * item.quantity;
           }
         }
 
@@ -2101,9 +2143,17 @@ export class BookingsService implements OnApplicationBootstrap {
     // Kích hoạt hoàn tiền cọc / hoàn tiền dịch vụ cho khách hàng
     if (refundAmount > 0) {
       try {
-        await this.paymentsService.refundDeposit(booking._id.toString(), refundAmount);
+        await this.refundWorkflowService.createFromCancellation({
+          bookingId: booking._id.toString(),
+          requestedBy: booking.customerId.toString(),
+          amount: refundAmount,
+          reason,
+          type: RefundType.Cancellation,
+          sourceEventId: `refund:cancellation:${booking._id}`,
+          isFreeCancel,
+        });
       } catch (err) {
-        console.error('PaymentsService.refundDeposit failed during cancelBooking:', err);
+        console.error('Refund workflow failed during cancelBooking:', err);
       }
     }
 
@@ -2122,6 +2172,11 @@ export class BookingsService implements OnApplicationBootstrap {
       refundAmount,
       penaltyReason,
     } : savedBooking;
+  }
+
+  private async getBookingHoldExpiresAt(): Promise<Date> {
+    const policy = await this.policyResolverService.getBookingHoldPolicy();
+    return new Date(Date.now() + policy.holdMinutes * 60 * 1000);
   }
 
   async getCustomerBookings(customerId: string): Promise<any[]> {

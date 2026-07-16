@@ -14,9 +14,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { memoryStorage } from 'multer';
 import { ProductsService } from '../services/products.service';
 import { ProductDocument } from '../schemas/product.schema';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -24,10 +22,14 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
+import { PublicMediaService } from '../../storage/services/public-media.service';
 
 @Controller(['products', 'api/products'])
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly publicMedia: PublicMediaService,
+  ) {}
 
   @Get()
   async getAll(
@@ -38,7 +40,8 @@ export class ProductsController {
     @Query('colors') colors?: string,
     @Query('sizes') sizes?: string,
     @Query('materials') materials?: string,
-  ): Promise<ProductDocument[]> {
+    @Query('categoryId') categoryId?: string,
+  ): Promise<any[]> {
     const options = {
       search,
       minPrice: minPrice ? Number(minPrice) : undefined,
@@ -47,6 +50,7 @@ export class ProductsController {
       colors: colors ? colors.split(',').map(c => c.trim()).filter(Boolean) : undefined,
       sizes: sizes ? sizes.split(',').map(s => s.trim()).filter(Boolean) : undefined,
       materials: materials ? materials.split(',').map(m => m.trim()).filter(Boolean) : undefined,
+      categoryId,
     };
     return this.productsService.getAllActiveProducts(options);
   }
@@ -118,33 +122,20 @@ export class ProductsController {
         }
         callback(null, true);
       },
-      storage: diskStorage({
-        destination: (_request, _file, callback) => {
-          const productDestination = join(process.cwd(), 'uploads', 'products');
-          if (!existsSync(productDestination)) {
-            mkdirSync(productDestination, { recursive: true });
-          }
-          callback(null, productDestination);
-        },
-        filename: (_request, file, callback) => {
-          const safeExt = extname(file.originalname).toLowerCase() || '.jpg';
-          callback(
-            null,
-            `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`,
-          );
-        },
-      }),
+      storage: memoryStorage(),
     }),
   )
   async uploadImages(
     @UploadedFiles() files: Express.Multer.File[],
   ): Promise<{ urls: string[] }> {
-    const urls = (files || []).map(file => `/uploads/products/${file.filename}`);
-    return { urls };
+    const uploads = await Promise.all(
+      (files || []).map((file) => this.publicMedia.uploadImage('products', file)),
+    );
+    return { urls: uploads.map((upload) => upload.url) };
   }
 
   @Get(':id')
-  async getOne(@Param('id') id: string): Promise<ProductDocument> {
+  async getOne(@Param('id') id: string): Promise<any> {
     const product = await this.productsService.getProductById(id);
     if (!product) {
       throw new NotFoundException(`Product with ID ${id} not found`);

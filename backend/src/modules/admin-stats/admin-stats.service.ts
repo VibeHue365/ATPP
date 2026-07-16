@@ -47,7 +47,7 @@ export class AdminStatsService {
       status: PaymentStatus.Success,
       purpose: { $in: [PaymentPurpose.DepositPayment, PaymentPurpose.RemainingPayment, PaymentPurpose.FullPayment] }
     } as any);
-    
+
     const totalRevenue = successfulPayments.reduce((sum, p) => sum + p.amount, 0);
     const platformCommission = totalRevenue * 0.10; // 10% platform commission fee
 
@@ -179,7 +179,7 @@ export class AdminStatsService {
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
-      
+
     const items = providers.map(p => {
       const userObj = p.userId as any;
       return {
@@ -306,7 +306,7 @@ export class AdminStatsService {
         { roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } }
       ]
     };
-    
+
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
@@ -329,7 +329,7 @@ export class AdminStatsService {
   private async getRevenueGrowth() {
     const growth = [];
     const labels = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
-    
+
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
@@ -355,7 +355,7 @@ export class AdminStatsService {
   private async getBookingGrowth() {
     const growth = [];
     const labels = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
-    
+
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);

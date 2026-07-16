@@ -6,6 +6,7 @@ import { Input } from "../../../components/common/Input";
 import { useToast } from "../../../components/feedback/Toast";
 import { ROUTES } from "../../../config/routes";
 import { useAuth } from "../hooks/useAuth";
+import { translateError } from "../../../utils/errorTranslator";
 
 interface VerifyOtpFormProps {
   initialEmail?: string;
@@ -61,7 +62,7 @@ export const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({
         },
       });
     } catch (err: any) {
-      toast.error(err.message || "Mã OTP không hợp lệ hoặc đã hết hạn.");
+      toast.error(translateError(err.message) || "Mã OTP không hợp lệ hoặc đã hết hạn.");
     } finally {
       setIsSubmitting(false);
     }
@@ -80,7 +81,7 @@ export const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({
       setCooldown(60);
     } catch (err: any) {
       toast.error(
-        err.message || "Không thể gửi lại mã OTP. Vui lòng thử lại sau.",
+        translateError(err.message) || "Không thể gửi lại mã OTP. Vui lòng thử lại sau.",
       );
     } finally {
       setIsResending(false);

@@ -1,9 +1,19 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AoDaiProductGrid } from '../features/rentals/components/AoDaiProductGrid';
 import { PhotographerFeaturedList } from '../features/photographers/components/PhotographerFeaturedList';
 import { AIStylingBanner } from '../features/ai-styling/components/AIStylingBanner';
 import { TestimonialGrid } from '../features/testimonials/components/TestimonialGrid';
 import { Sparkles, ArrowRight, Compass, Bookmark, Cpu } from 'lucide-react';
+import { httpClient } from '../services/httpClient';
+
+interface Banner {
+  _id?: string;
+  imageUrl: string;
+  title?: string;
+  subtitle?: string;
+  linkUrl?: string;
+  isActive?: boolean;
+}
 
 export const LandingPage: React.FC = () => {
   const partners = [
@@ -14,12 +24,60 @@ export const LandingPage: React.FC = () => {
     'VIET FASHION WEEK',
   ];
 
+  const defaultBanners: Banner[] = [
+    {
+      imageUrl: '/hero_bg.png',
+      title: 'Hành trình Silk & Stone',
+      subtitle: 'Khai phóng vẻ đẹp di sản áo dài truyền thống Việt Nam',
+      linkUrl: '#rentals',
+    },
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=1000',
+      title: 'Bộ Sưu Tập Gấm Mới',
+      subtitle: 'Gấm hoàng gia thêu tay thủ công tinh xảo',
+      linkUrl: '#rentals',
+    },
+    {
+      imageUrl: 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?q=80&w=1000',
+      title: 'Huế - Heritage Concept',
+      subtitle: 'Giảm 15% gói chụp ảnh áo dài ngoại cảnh cổ kính',
+      linkUrl: '#photographers',
+    }
+  ];
+
+  const [banners, setBanners] = useState<Banner[]>(defaultBanners);
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  useEffect(() => {
+    const fetchBanners = async () => {
+      try {
+        const data = await httpClient.get<Banner[]>('/banners');
+        if (data && data.length > 0) {
+          setBanners(data);
+        }
+      } catch (err) {
+        console.warn('Lỗi tải banner động, sử dụng dữ liệu mặc định:', err);
+      }
+    };
+    fetchBanners();
+  }, []);
+
+  useEffect(() => {
+    if (banners.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % banners.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [banners]);
+
+  const activeBanner = banners[currentSlide] || defaultBanners[0];
+
   return (
     <div className="vh-landing-container" style={{ width: '100%' }}>
       {/* Hero Section */}
       <section className="vh-hero">
         {/* Left Hero Text */}
-        <div className="vh-hero-content" style={{ marginLeft: "85px" }}>
+        <div className="vh-hero-content">
           <div className="vh-hero-badge animate-bounce" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <Sparkles size={12} className="vh-txt-gold" />
             <span>Khai Phóng Vẻ Đẹp Di Sản</span>
@@ -41,29 +99,64 @@ export const LandingPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Hero Image */}
+        {/* Right Hero Image (Carousel Slideshow) */}
         <div className="vh-hero-visuals">
           {/* Decorative Orbs */}
           <div className="vh-orb vh-orb-1" style={{ filter: 'blur(80px)', opacity: 0.1 }} />
           <div className="vh-orb vh-orb-2" style={{ filter: 'blur(80px)', opacity: 0.1 }} />
 
           {/* Hero Image Container */}
-          <div className="vh-hero-card" style={{ width: '100%', maxWidth: '380px', height: '440px', padding: 0, overflow: 'hidden', border: '1px solid var(--color-light-border)' }}>
-            <img
-              src="/hero_bg.png"
-              alt="Silk & Stone Hero Premium"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
+          <div className="vh-hero-card" style={{ width: '100%', maxWidth: '380px', height: 'auto', aspectRatio: '380/440', padding: 0, overflow: 'hidden', border: '1px solid var(--color-light-border)', position: 'relative', cursor: activeBanner.linkUrl ? 'pointer' : 'default' }} onClick={() => { if (activeBanner.linkUrl) { if (activeBanner.linkUrl.startsWith('#')) { document.querySelector(activeBanner.linkUrl)?.scrollIntoView({ behavior: 'smooth' }); } else { window.location.href = activeBanner.linkUrl; } } }}>
+            {banners.map((banner, idx) => (
+              <img
+                key={idx}
+                src={banner.imageUrl}
+                alt={banner.title || 'Silk & Stone Hero Premium'}
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  objectFit: 'cover',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  opacity: currentSlide === idx ? 1 : 0,
+                  transition: 'opacity 1s ease-in-out',
+                  zIndex: currentSlide === idx ? 1 : 0
+                }}
+              />
+            ))}
             {/* Elegant Floating Stat Badge */}
-            <div style={{ position: 'absolute', bottom: '20px', left: '20px', right: '20px', padding: '16px', borderRadius: '16px', backgroundColor: 'rgba(255, 255, 255, 0.95)', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Compass className="vh-txt-purple" size={20} />
-                <span style={{ fontFamily: 'var(--font-header)', fontWeight: 700, color: 'var(--color-text-primary)', fontSize: '13px' }}>Hành trình Silk & Stone</span>
+            <div style={{ position: 'absolute', bottom: '20px', left: '20px', right: '20px', padding: '16px', borderRadius: '16px', backgroundColor: 'rgba(255, 255, 255, 0.95)', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 10 }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Compass className="vh-txt-purple" size={20} />
+                  <span style={{ fontFamily: 'var(--font-header)', fontWeight: 700, color: 'var(--color-text-primary)', fontSize: '13px' }}>{activeBanner.title || 'Hành trình Silk & Stone'}</span>
+                </div>
+                {/* Carousel indicators */}
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {banners.map((_, idx) => (
+                    <span
+                      key={idx}
+                      onClick={() => setCurrentSlide(idx)}
+                      style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        backgroundColor: currentSlide === idx ? 'var(--color-primary)' : '#e2e8f0',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.3s'
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
-              <div style={{ height: '1px', backgroundColor: 'var(--color-light-border)' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                <span><strong>1000+</strong> Mẫu khảo sát</span>
-                <span><strong>50+</strong> Nghệ tác ẩm thực</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%' }}>{activeBanner.subtitle}</span>
+                {activeBanner.linkUrl && (
+                  <a href={activeBanner.linkUrl} style={{ color: 'var(--color-primary)', fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '2px' }} onClick={(e) => { e.stopPropagation(); if (activeBanner.linkUrl?.startsWith('#')) { e.preventDefault(); document.querySelector(activeBanner.linkUrl)?.scrollIntoView({ behavior: 'smooth' }); } }}>
+                    Chi tiết <ArrowRight size={12} />
+                  </a>
+                )}
               </div>
             </div>
           </div>

@@ -33,6 +33,10 @@ export class Permission {
     index: true,
   })
   status: PermissionStatus;
+
+  createdAt?: Date;
+
+  updatedAt?: Date;
 }
 
 export const PermissionSchema = SchemaFactory.createForClass(Permission);

@@ -469,6 +469,19 @@ export const BecomeProviderPage: React.FC = () => {
     setVerification(normalized);
   };
 
+  useEffect(() => {
+    const isOcrPending = verification?.documents.some((document) => {
+      const executionStatus = document.current?.ocr?.executionStatus;
+      return ['NOT_STARTED', 'PROCESSING', 'TIMEOUT'].includes(executionStatus ?? '');
+    });
+    if (!isOcrPending || !verificationId) return;
+
+    const intervalId = window.setInterval(() => {
+      void refreshVerification(verificationId);
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [verification, verificationId]);
   const stepFromVerification = (detail: ProviderVerificationDetail) => {
     if (!['DRAFT', 'NEEDS_CHANGES'].includes(detail.status)) return 4;
     if (detail.requestedCapabilities.length === 0) return 0;
@@ -1674,6 +1687,15 @@ function UploadDropZone({
   const isUploaded = current?.uploadStatus === 'UPLOADED';
   const isRequired = document?.required;
   const isOcrFailed = current?.ocrStatus === 'OCR_FAILED';
+  const ocrNextAction = current?.ocr?.nextAction;
+  const ocrStatusMessage =
+    ocrNextAction === 'WAIT_FOR_OCR'
+      ? 'OCR is queued or processing. This page refreshes automatically.'
+      : ocrNextAction === 'UPLOAD_AGAIN'
+        ? 'OCR could not verify this document. Please upload a clearer image.'
+        : ocrNextAction === 'SUBMIT_WITH_MANUAL_REVIEW'
+          ? 'OCR needs manual review. You can continue and submit the application.'
+          : ocrNextAction === 'READY_TO_SUBMIT' ? 'OCR verification is complete.' : null;
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -1779,6 +1801,13 @@ function UploadDropZone({
             <span className={`vh-upload-status-badge ${isUploaded ? 'uploaded' : 'empty'}`}>
               {isUploaded ? 'Đã tải lên' : 'Chưa tải lên'}
             </span>
+            {ocrStatusMessage && (
+              <small
+                style={{ display: 'block', marginTop: 6, color: ocrNextAction === 'UPLOAD_AGAIN' ? '#B42318' : '#475467', fontWeight: 600 }}
+              >
+                {ocrStatusMessage}
+              </small>
+            )}
           </div>
 
           <div className="vh-upload-actions-row">
@@ -1827,9 +1856,6 @@ function ReviewStep({
     );
   }
 
-  const hasOcrFailedRequired = verification.documents.some(
-    (doc) => doc.required && doc.current && doc.current.ocrStatus === 'OCR_FAILED'
-  );
 
   return (
     <div className="vh-provider-section">
@@ -1851,16 +1877,7 @@ function ReviewStep({
         <div className="vh-provider-alert warning animate-fade-in">
           <AlertTriangle size={18} />
           <div>
-            <strong>Cảnh báo OCR đối soát:</strong> Có một vài tài liệu định danh bị lệch tên hoặc lệch mã số so với thông tin hồ sơ của bạn. Admin sẽ xét duyệt trực quan bổ sung, bạn vẫn có thể gửi hồ sơ.
-          </div>
-        </div>
-      )}
-
-      {hasOcrFailedRequired && (
-        <div className="vh-provider-alert error animate-fade-in">
-          <AlertCircle size={18} />
-          <div>
-            <strong>Không thể gửi duyệt:</strong> Có tài liệu bắt buộc bị lỗi đọc hình ảnh (OCR_FAILED). Vui lòng chụp lại tài liệu rõ nét hơn và tải lên phiên bản mới trước khi gửi hồ sơ.
+            <strong>OCR needs manual review:</strong> The document could not be fully verified automatically. You can still submit this application; an admin will review the uploaded files.
           </div>
         </div>
       )}
@@ -1886,7 +1903,7 @@ function ReviewStep({
           type="button"
           onClick={onSubmit}
           isLoading={isLoading}
-          disabled={!canSubmit || hasOcrFailedRequired}
+          disabled={!canSubmit}
         >
           Gửi hồ sơ duyệt
         </Button>
