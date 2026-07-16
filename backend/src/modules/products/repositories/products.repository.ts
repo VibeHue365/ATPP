@@ -74,11 +74,50 @@ export class ProductsRepository {
     return this.productModel.findById(id).populate('categoryId').populate('providerId').exec();
   }
 
-  async findByProvider(providerId: Types.ObjectId): Promise<ProductDocument[]> {
-    return this.productModel
-      .find({ providerId, status: { $ne: ProductStatus.Inactive } })
+  async findByProvider(
+    providerId: Types.ObjectId,
+    search?: string,
+    sortBy?: string,
+    page: number = 1,
+    limit: number = 10,
+    sizes?: string,
+    colors?: string,
+  ): Promise<{ items: ProductDocument[]; total: number }> {
+    const filter: any = { providerId, status: { $ne: ProductStatus.Inactive } };
+    if (search) {
+      filter.name = { $regex: search, $options: 'i' };
+    }
+    if (sizes) {
+      const sizesArray = sizes.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+      if (sizesArray.length > 0) {
+        filter.sizes = { $in: sizesArray };
+      }
+    }
+    if (colors) {
+      const colorsArray = colors.split(',').map((c) => c.trim().toUpperCase()).filter(Boolean);
+      if (colorsArray.length > 0) {
+        filter.colors = { $in: colorsArray };
+      }
+    }
+
+    const total = await this.productModel.countDocuments(filter);
+
+    let query = this.productModel
+      .find(filter)
       .populate('categoryId')
-      .exec();
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    if (sortBy === 'price_asc') {
+      query = query.sort({ basePrice: 1 });
+    } else if (sortBy === 'price_desc') {
+      query = query.sort({ basePrice: -1 });
+    } else {
+      query = query.sort({ createdAt: -1 });
+    }
+
+    const items = await query.exec();
+    return { items, total };
   }
 
   async update(id: Types.ObjectId, data: Partial<Product>): Promise<ProductDocument | null> {

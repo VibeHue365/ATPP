@@ -29,6 +29,11 @@ import { PromotionsService } from './services/promotions.service';
 import { ProductsController } from './controllers/products.controller';
 import { ProductsService } from './services/products.service';
 import { ProductsRepository } from './repositories/products.repository';
+import { InventoryController } from './controllers/inventory.controller';
+import { InventoryService } from './services/inventory.service';
+import { DiscountCampaign, DiscountCampaignSchema } from './schemas/discount-campaign.schema';
+import { DiscountCampaignService } from './services/discount-campaign.service';
+import { DiscountCampaignController } from './controllers/discount-campaign.controller';
 import { UsersModule } from '../users/users.module';
 
 export const productModels = MongooseModule.forFeature([
@@ -41,12 +46,13 @@ export const productModels = MongooseModule.forFeature([
   { name: PhotographyPackage.name, schema: PhotographyPackageSchema },
   { name: ProviderSchedule.name, schema: ProviderScheduleSchema },
   { name: Provider.name, schema: ProviderSchema },
+  { name: DiscountCampaign.name, schema: DiscountCampaignSchema },
 ]);
 
 @Module({
   imports: [productModels, UsersModule],
-  controllers: [PromotionsController, ProductsController],
-  providers: [PromotionsService, ProductsService, ProductsRepository],
-  exports: [productModels, PromotionsService, ProductsService],
+  controllers: [PromotionsController, ProductsController, InventoryController, DiscountCampaignController],
+  providers: [PromotionsService, ProductsService, ProductsRepository, InventoryService, DiscountCampaignService],
+  exports: [productModels, PromotionsService, ProductsService, InventoryService, DiscountCampaignService],
 })
 export class ProductsModule {}

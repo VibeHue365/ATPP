@@ -10,11 +10,13 @@ import {
   Camera,
   X,
   ChevronDown,
-  Sparkles
+  Sparkles,
+  Heart
 } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
 import { useCart } from '../../context/CartContext';
+import { useAuth } from '../../features/auth/hooks/useAuth';
 
 interface Photographer {
   id: string;
@@ -103,7 +105,56 @@ export const PhotographersListingPage: React.FC = () => {
   const toast = useToast();
   const navigate = useNavigate();
   const { cart } = useCart();
+  const { user, toggleFavorite: apiToggleFavorite } = useAuth();
+  const [favorites, setFavorites] = useState<string[]>([]);
   const hasAoDaiInCart = cart.some((item) => item.itemType === 'PRODUCT');
+
+  // Sync favorites with user context
+  useEffect(() => {
+    if (user?.favorites) {
+      const favIds = user.favorites
+        .filter((f: any) => f.targetType === 'PROVIDER' || f.targetType === 'Provider')
+        .map((f: any) => f.targetId.toString());
+      setFavorites(favIds);
+    } else {
+      setFavorites([]);
+    }
+  }, [user]);
+
+  const handleToggleFavorite = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Yêu cầu đăng nhập',
+        text: 'Vui lòng đăng nhập để lưu nhiếp ảnh gia yêu thích!',
+        confirmButtonColor: 'var(--color-primary-dark)',
+        confirmButtonText: 'Đăng nhập ngay',
+        showCancelButton: true,
+        cancelButtonText: 'Hủy',
+        background: 'white',
+        customClass: {
+          popup: 'font-body',
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate('/login');
+        }
+      });
+      return;
+    }
+    try {
+      const isAlreadyFavorite = favorites.includes(id);
+      await apiToggleFavorite('PROVIDER', id);
+      if (isAlreadyFavorite) {
+        toast.success('Đã xóa khỏi danh sách yêu thích!');
+      } else {
+        toast.success('Đã thêm vào danh sách yêu thích!');
+      }
+    } catch (err: any) {
+      toast.error('Có lỗi xảy ra khi cập nhật yêu thích');
+    }
+  };
 
   // Database photographers list state
   const [photographers, setPhotographers] = useState<Photographer[]>([]);
@@ -114,6 +165,8 @@ export const PhotographersListingPage: React.FC = () => {
   const [locationInput, setLocationInput] = useState('');
   const [dateInput, setDateInput] = useState('');
   const [conceptInput, setConceptInput] = useState('Tất cả');
+  const [minRatingInput, setMinRatingInput] = useState('');
+  const [sortOption, setSortOption] = useState('rating-desc');
 
   // Checkboxes state
   const [bodySony, setBodySony] = useState(false);
@@ -134,7 +187,8 @@ export const PhotographersListingPage: React.FC = () => {
     concept: 'Tất cả',
     bodies: [] as string[],
     lenses: [] as string[],
-    prices: [] as string[]
+    prices: [] as string[],
+    minRating: ''
   });
 
   // Active concept chip filter
@@ -268,7 +322,8 @@ export const PhotographersListingPage: React.FC = () => {
       concept: conceptInput,
       bodies: activeBodies,
       lenses: activeLenses,
-      prices: activePrices
+      prices: activePrices,
+      minRating: minRatingInput
     });
 
     toast.success('Đã áp dụng bộ lọc thành công!');
@@ -276,7 +331,7 @@ export const PhotographersListingPage: React.FC = () => {
 
   // Filtered photographers list
   const filteredPhotographers = useMemo(() => {
-    return photographers.filter((p) => {
+    let result = photographers.filter((p) => {
       // 1. Sidebar Location filter
       if (appliedFilters.location) {
         if (!p.location.toLowerCase().includes(appliedFilters.location.toLowerCase())) {
@@ -329,9 +384,28 @@ export const PhotographersListingPage: React.FC = () => {
         if (!matchesPrice) return false;
       }
 
+      // 7. Rating filter
+      if (appliedFilters.minRating) {
+        const minR = parseFloat(appliedFilters.minRating);
+        if (p.rating < minR) return false;
+      }
+
       return true;
     });
-  }, [photographers, appliedFilters, selectedChip]);
+
+    // Apply sorting
+    if (sortOption === 'rating-desc') {
+      result.sort((a, b) => b.rating - a.rating);
+    } else if (sortOption === 'reviews-desc') {
+      result.sort((a, b) => b.reviewsCount - a.reviewsCount);
+    } else if (sortOption === 'price-asc') {
+      result.sort((a, b) => a.price - b.price);
+    } else if (sortOption === 'price-desc') {
+      result.sort((a, b) => b.price - a.price);
+    }
+
+    return result;
+  }, [photographers, appliedFilters, selectedChip, sortOption]);
 
   // Handle comparison toggles
   const handleCompareToggle = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -610,6 +684,34 @@ export const PhotographersListingPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Dropdown Group 4: RATING */}
+            <div style={{ marginTop: '10px', textAlign: 'left' }}>
+              <h3 className="font-header" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-primary-dark)', letterSpacing: '0.05em', marginBottom: '12px', textTransform: 'uppercase' }}>
+                Đánh giá (Rating)
+              </h3>
+              <select
+                value={minRatingInput}
+                onChange={(e) => setMinRatingInput(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(182, 145, 91, 0.25)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: 'white',
+                  color: '#2D2926'
+                }}
+              >
+                <option value="">Tất cả đánh giá</option>
+                <option value="4.5">Từ 4.5 ⭐ trở lên (Xuất sắc)</option>
+                <option value="4.0">Từ 4.0 ⭐ trở lên (Rất tốt)</option>
+                <option value="3.5">Từ 3.5 ⭐ trở lên (Tốt)</option>
+              </select>
+            </div>
+
             {/* Apply filters button */}
             <button 
               type="submit"
@@ -675,24 +777,53 @@ export const PhotographersListingPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Map action link */}
-            <button 
-              onClick={() => toast.info('Chức năng bản đồ sẽ sớm được cập nhật!')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                color: 'var(--color-primary)',
-                background: 'none',
-                border: 'none',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              <Map size={16} />
-              <span style={{ letterSpacing: '0.05em' }}>XEM TRÊN BẢN ĐỒ</span>
-            </button>
+            {/* Actions: Map + Sort */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+              {/* Sort selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', position: 'relative' }}>
+                <span style={{ fontSize: '13px', color: '#8C827A', fontWeight: 600 }}>Sắp xếp:</span>
+                <select 
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value)}
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: '#2D2926',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    appearance: 'none',
+                    paddingRight: '16px',
+                  }}
+                >
+                  <option value="rating-desc">Đánh giá cao nhất</option>
+                  <option value="reviews-desc">Nhiều đánh giá nhất</option>
+                  <option value="price-asc">Giá: Thấp đến Cao</option>
+                  <option value="price-desc">Giá: Cao đến Thấp</option>
+                </select>
+                <ChevronDown size={14} style={{ position: 'absolute', right: 0, pointerEvents: 'none', color: '#2D2926' }} />
+              </div>
+
+              {/* Map action link */}
+              <button 
+                onClick={() => toast.info('Chức năng bản đồ sẽ sớm được cập nhật!')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  color: 'var(--color-primary)',
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                <Map size={16} />
+                <span style={{ letterSpacing: '0.05em' }}>BẢN ĐỒ</span>
+              </button>
+            </div>
           </div>
 
           {/* Loading, Error and Grid */}
@@ -860,6 +991,39 @@ export const PhotographersListingPage: React.FC = () => {
                         <span>{p.rating.toFixed(1)}</span>
                         <span style={{ color: '#8C827A', fontWeight: 400 }}>({p.reviewsCount})</span>
                       </div>
+
+                      {/* Favorite Button */}
+                      <button 
+                        onClick={(e) => handleToggleFavorite(p.id, e)}
+                        style={{
+                          position: 'absolute',
+                          top: '56px',
+                          right: '16px',
+                          zIndex: 10,
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                          transition: 'all 0.2s ease',
+                          color: favorites.includes(p.id) ? '#A11E22' : '#8C827A'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'scale(1.1)';
+                          e.currentTarget.style.backgroundColor = '#FFFFFF';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'scale(1)';
+                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                        }}
+                      >
+                        <Heart size={16} fill={favorites.includes(p.id) ? '#A11E22' : 'none'} color={favorites.includes(p.id) ? '#A11E22' : '#8C827A'} />
+                      </button>
                     </div>
 
                     {/* Bottom Info area */}

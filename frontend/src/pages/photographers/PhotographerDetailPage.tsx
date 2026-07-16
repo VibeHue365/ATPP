@@ -5,9 +5,10 @@ import { useToast } from '../../components/feedback/Toast';
 import { httpClient } from '../../services/httpClient';
 import { ROUTES } from '../../config/routes';
 import { 
-  MapPin, Star, ArrowRight, Upload, ChevronLeft, ChevronRight, CheckCircle, AlertCircle
+  MapPin, Star, ArrowRight, Upload, ChevronLeft, ChevronRight, CheckCircle, AlertCircle, Heart
 } from 'lucide-react';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import Swal from 'sweetalert2';
 
 interface Package {
   _id: string;
@@ -87,12 +88,62 @@ export const PhotographerDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const { cart, addToCart } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, toggleFavorite: apiToggleFavorite } = useAuth();
+  const [favorites, setFavorites] = useState<string[]>([]);
+
+  // Sync favorites with user context
+  useEffect(() => {
+    if (user?.favorites) {
+      const favIds = user.favorites
+        .filter((f: any) => f.targetType === 'PROVIDER' || f.targetType === 'Provider')
+        .map((f: any) => f.targetId.toString());
+      setFavorites(favIds);
+    } else {
+      setFavorites([]);
+    }
+  }, [user]);
+
+  const handleToggleFavorite = async (favId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Yêu cầu đăng nhập',
+        text: 'Vui lòng đăng nhập để lưu nhiếp ảnh gia yêu thích!',
+        confirmButtonColor: 'var(--color-primary-dark)',
+        confirmButtonText: 'Đăng nhập ngay',
+        showCancelButton: true,
+        cancelButtonText: 'Hủy',
+        background: 'white',
+        customClass: {
+          popup: 'font-body',
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate('/login');
+        }
+      });
+      return;
+    }
+    try {
+      const isAlreadyFavorite = favorites.includes(favId);
+      await apiToggleFavorite('PROVIDER', favId);
+      if (isAlreadyFavorite) {
+        toast.success('Đã xóa khỏi danh sách yêu thích!');
+      } else {
+        toast.success('Đã thêm vào danh sách yêu thích!');
+      }
+    } catch (err: any) {
+      toast.error('Có lỗi xảy ra khi cập nhật yêu thích');
+    }
+  };
   const location = useLocation();
 
   const [photographer, setPhotographer] = useState<PhotographerDetails | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState<boolean>(true);
 
   // Booking Form States
   const [selectedPkg, setSelectedPkg] = useState<Package | null>(null);
@@ -308,6 +359,24 @@ export const PhotographerDetailPage: React.FC = () => {
       }
     };
     fetchDetails();
+  }, [id]);
+
+  // Load Photographer reviews
+  useEffect(() => {
+    const fetchReviews = async () => {
+      try {
+        setReviewsLoading(true);
+        const data = await httpClient.get<any[]>(`/reviews/provider/${id}`);
+        setReviews(data || []);
+      } catch (err) {
+        console.error('Failed to fetch reviews for photographer', err);
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+    if (id) {
+      fetchReviews();
+    }
   }, [id]);
 
   // Handle Cart Autofill logic
@@ -844,9 +913,39 @@ export const PhotographerDetailPage: React.FC = () => {
             
             {/* Header info */}
             <div>
-              <h1 className="font-header" style={{ fontSize: '38px', color: 'var(--color-primary-dark)', fontWeight: 700, marginBottom: '12px' }}>
-                {photographer.businessName}
-              </h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px' }}>
+                <h1 className="font-header" style={{ fontSize: '38px', color: 'var(--color-primary-dark)', fontWeight: 700, margin: 0 }}>
+                  {photographer.businessName}
+                </h1>
+                <button
+                  onClick={(e) => handleToggleFavorite(photographer._id, e)}
+                  style={{
+                    backgroundColor: 'white',
+                    border: '1px solid rgba(182, 145, 91, 0.3)',
+                    borderRadius: '50%',
+                    width: '44px',
+                    height: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: 'var(--shadow-sm)',
+                    transition: 'all 0.2s ease',
+                    color: favorites.includes(photographer._id) ? '#A11E22' : '#8C827A'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+                  }}
+                  title={favorites.includes(photographer._id) ? 'Xóa khỏi danh sách yêu thích' : 'Lưu vào danh sách yêu thích'}
+                >
+                  <Heart size={20} fill={favorites.includes(photographer._id) ? '#A11E22' : 'none'} color={favorites.includes(photographer._id) ? '#A11E22' : '#8C827A'} />
+                </button>
+              </div>
               <p className="font-body" style={{ fontSize: '15px', fontStyle: 'italic', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                 {photographer.quote}
               </p>
@@ -1229,6 +1328,96 @@ export const PhotographerDetailPage: React.FC = () => {
                   </div>
                 ))}
               </div>
+            </section>
+
+            {/* Reviews Section */}
+            <section style={{ backgroundColor: 'white', padding: '32px', borderRadius: '16px', border: '1px solid var(--color-light-border)', marginTop: '40px' }}>
+              <h3 className="font-header" style={{ fontSize: '22px', fontWeight: 750, color: 'var(--color-text-primary)', marginBottom: '24px', textAlign: 'left' }}>
+                Đánh giá từ khách hàng ({reviews.length})
+              </h3>
+
+              {reviewsLoading ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#8C827A' }}>Đang tải đánh giá...</div>
+              ) : reviews.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px', backgroundColor: 'var(--color-light-bg)', borderRadius: '12px', border: '1px solid #EAEAE8' }}>
+                  <Star size={32} style={{ color: '#CCCCCC', margin: '0 auto 12px' }} />
+                  <p style={{ fontSize: '14px', color: '#8C827A', margin: 0 }}>Chưa có đánh giá nào cho nhiếp ảnh gia này.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  {/* Summary row */}
+                  <div style={{ display: 'flex', gap: '40px', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', padding: '20px', borderRadius: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <h4 style={{ fontSize: '48px', fontWeight: 850, color: 'var(--color-primary-dark)', margin: 0 }}>
+                        {(reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1)}
+                      </h4>
+                      <div style={{ display: 'flex', gap: '2px', justifyContent: 'center', margin: '6px 0' }}>
+                        {[1, 2, 3, 4, 5].map((s) => {
+                          const avg = reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length;
+                          return (
+                            <Star key={s} size={16} fill={s <= Math.round(avg) ? 'var(--color-gold)' : 'none'} color="var(--color-gold)" />
+                          );
+                        })}
+                      </div>
+                      <span style={{ fontSize: '13px', color: '#8C827A', fontWeight: 600 }}>Đánh giá trung bình</span>
+                    </div>
+
+                    {/* Breakdown bars */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '200px' }}>
+                      {[5, 4, 3, 2, 1].map((stars) => {
+                        const count = reviews.filter(r => Math.floor(r.rating) === stars).length;
+                        const pct = (count / reviews.length) * 100;
+                        return (
+                          <div key={stars} style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12.5px', fontWeight: 600, color: '#2D2926' }}>
+                            <span style={{ width: '40px', textAlign: 'right' }}>{stars} sao</span>
+                            <div style={{ flex: 1, height: '8px', backgroundColor: '#EAEAE8', borderRadius: '9999px', overflow: 'hidden' }}>
+                              <div style={{ width: `${pct}%`, height: '100%', backgroundColor: 'var(--color-gold)', borderRadius: '9999px' }} />
+                            </div>
+                            <span style={{ width: '30px', color: '#8C827A' }}>{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Reviews List */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', borderTop: '1px solid #EAEAE8', paddingTop: '24px' }}>
+                    {reviews.map((rev) => {
+                      const custName = rev.customerId?.profile?.fullName || rev.customerId?.fullName || rev.customerId?.email || 'Khách hàng';
+                      const custAvatar = rev.customerId?.profile?.avatarUrl || rev.customerId?.avatarUrl || '/avatar_hanna.png';
+                      return (
+                        <div key={rev._id} style={{ display: 'flex', gap: '16px', borderBottom: '1px solid #F6F6F4', paddingBottom: '20px', textAlign: 'left' }}>
+                          <img
+                            src={custAvatar}
+                            alt={custName}
+                            style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover', border: '1px solid rgba(0,0,0,0.05)' }}
+                          />
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <strong style={{ fontSize: '14px', color: '#2D2926' }}>{custName}</strong>
+                              <span style={{ fontSize: '12px', color: '#8C827A' }}>{new Date(rev.createdAt).toLocaleDateString('vi-VN')}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '2px' }}>
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star key={s} size={12} fill={s <= rev.rating ? 'var(--color-gold)' : 'none'} color="var(--color-gold)" />
+                              ))}
+                            </div>
+                            <p style={{ fontSize: '13.5px', color: '#5C544F', margin: '4px 0 0 0', lineHeight: 1.5 }}>
+                              {rev.comment}
+                            </p>
+                            {rev.reply && (
+                              <div style={{ backgroundColor: 'var(--color-light-bg)', padding: '12px 16px', borderRadius: '8px', marginTop: '10px', borderLeft: '3px solid var(--color-primary-dark)' }}>
+                                <strong style={{ fontSize: '12.5px', color: 'var(--color-primary-dark)', display: 'block', marginBottom: '4px' }}>Phản hồi từ Nhiếp ảnh gia:</strong>
+                                <p style={{ fontSize: '13px', color: '#5C544F', margin: 0, lineHeight: 1.5 }}>{rev.reply}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </section>
 
           </div>

@@ -59,4 +59,9 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  initialQuantity?: number;
 }

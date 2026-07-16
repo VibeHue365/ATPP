@@ -78,6 +78,7 @@ export interface UserPreferences {
     max?: number | null;
   };
   preferredLocations: string[];
+  preferredOccasions: string[];
 }
 
 export interface UserAddress {
@@ -188,6 +189,7 @@ export class User {
         max: { type: Number, default: null },
       },
       preferredLocations: { type: [String], default: [] },
+      preferredOccasions: { type: [String], default: [] },
     },
     default: {},
   })

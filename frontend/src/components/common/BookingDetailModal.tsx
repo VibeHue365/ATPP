@@ -10,6 +10,7 @@ interface BookingDetailModalProps {
   onCustomerClick?: (customerId: string) => void;
   viewerRole?: 'customer' | 'provider' | 'admin';
   onBookingChanged?: () => void;
+  onWriteReview?: (itemDetails: { bookingId: string, itemId: string, productId?: string, photographyPackageId?: string }) => void;
 }
 
 export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
@@ -18,7 +19,8 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   onClose,
   onCustomerClick,
   viewerRole = 'admin',
-  onBookingChanged
+  onBookingChanged,
+  onWriteReview
 }) => {
   const [booking, setBooking] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -365,6 +367,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                     <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#4B5563', fontSize: '11px' }}>TÊN DỊCH VỤ / MẪU MÃ</th>
                     <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: '#4B5563', fontSize: '11px' }}>TÙY CHỌN</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, color: '#4B5563', fontSize: '11px' }}>ĐƠN GIÁ</th>
+                    {viewerRole === 'customer' && booking.status === 'COMPLETED' && (
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: '#4B5563', fontSize: '11px' }}>ĐÁNH GIÁ</th>
+                    )}
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, color: '#4B5563', fontSize: '11px' }}>THÀNH TIỀN</th>
                   </tr>
                 </thead>
@@ -400,6 +405,41 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                           <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                             {formatCurrency(item.unitPrice)}
                           </td>
+                          {viewerRole === 'customer' && booking.status === 'COMPLETED' && (
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              {item.isReviewed ? (
+                                <span style={{ color: '#10B981', fontSize: '12px', fontWeight: 650 }}>Đã đánh giá</span>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    if (onWriteReview) {
+                                      onWriteReview({
+                                        bookingId: booking._id,
+                                        itemId: item._id,
+                                        productId: item.productId?._id || item.productId,
+                                        photographyPackageId: item.photographyPackageId?._id || item.photographyPackageId
+                                      });
+                                    }
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    backgroundColor: 'var(--color-primary-dark)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    transition: 'background-color 0.2s'
+                                  }}
+                                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--color-primary)'}
+                                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'var(--color-primary-dark)'}
+                                >
+                                  Đánh giá
+                                </button>
+                              )}
+                            </td>
+                          )}
                           <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>
                             {formatCurrency(item.unitPrice * (item.quantity || 1))}
                           </td>
@@ -408,7 +448,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                     })
                   ) : (
                     <tr>
-                      <td colSpan={4} style={{ padding: '12px', textAlign: 'center', color: '#6B7280', fontStyle: 'italic' }}>
+                      <td colSpan={viewerRole === 'customer' && booking.status === 'COMPLETED' ? 5 : 4} style={{ padding: '12px', textAlign: 'center', color: '#6B7280', fontStyle: 'italic' }}>
                         Không có chi tiết mặt hàng
                       </td>
                     </tr>

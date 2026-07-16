@@ -47,6 +47,35 @@ export const ProfilePage: React.FC = () => {
   // Bookings list state
   const [bookings, setBookings] = useState<any[]>([]);
 
+  // Review states (UC-B03/UC-D05)
+  const [reviewingItem, setReviewingItem] = useState<any>(null);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+
+  const handleCreateReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewingItem) return;
+
+    try {
+      await httpClient.post('/reviews', {
+        bookingId: reviewingItem.bookingId,
+        bookingItemId: reviewingItem.itemId,
+        rating,
+        comment,
+        productId: reviewingItem.productId || undefined,
+        photographyPackageId: reviewingItem.photographyPackageId || undefined,
+      });
+
+      toast.success('Gửi đánh giá dịch vụ thành công!');
+      setReviewingItem(null);
+      setComment('');
+      setRating(5);
+      fetchProfileData();
+    } catch (err: any) {
+      toast.error(err.message || 'Gửi đánh giá thất bại');
+    }
+  };
+
   // Incident & Dispute States for selected booking
   const [bookingIncident, setBookingIncident] = useState<any | null>(null);
 
@@ -637,9 +666,40 @@ export const ProfilePage: React.FC = () => {
                     
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                       <div>
-                        <h5 style={{ fontSize: '15px', fontWeight: 700, color: '#2D2926', margin: 0 }}>
-                          {item.name || (isProduct ? 'Sản phẩm áo dài' : 'Gói chụp ảnh cổ phục')}
-                        </h5>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <h5 style={{ fontSize: '15px', fontWeight: 700, color: '#2D2926', margin: 0 }}>
+                            {item.name || (isProduct ? 'Sản phẩm áo dài' : 'Gói chụp ảnh cổ phục')}
+                          </h5>
+                          {activeDetailBooking.status === 'COMPLETED' && (
+                            item.isReviewed ? (
+                              <span style={{ color: '#10B981', fontSize: '12px', fontWeight: 650 }}>Đã đánh giá</span>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setActiveDetailBooking(null);
+                                  setReviewingItem({
+                                    bookingId: activeDetailBooking._id,
+                                    itemId: item._id,
+                                    productId: item.productId?._id || item.productId,
+                                    photographyPackageId: item.photographyPackageId?._id || item.photographyPackageId
+                                  });
+                                }}
+                                style={{
+                                  padding: '4px 10px',
+                                  backgroundColor: 'var(--color-primary-dark)',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Đánh giá
+                              </button>
+                            )
+                          )}
+                        </div>
                         
                         <div style={{ fontSize: '12px', color: '#7E6D5B', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span>Thời gian: <strong>{formattedDateStr}</strong></span>
@@ -1074,6 +1134,56 @@ export const ProfilePage: React.FC = () => {
 
           </div>
         </Modal>
+      )}
+
+      {/* Review Modal popup */}
+      {reviewingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <form onSubmit={handleCreateReview} className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden" style={{ width: '100%', maxWidth: '448px', backgroundColor: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', fontFamily: 'Inter, sans-serif' }}>
+            <div style={{ backgroundColor: '#2D2926', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px' }}>
+              <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>Viết đánh giá dịch vụ</h4>
+              <button type="button" onClick={() => setReviewingItem(null)} style={{ background: 'none', border: 'none', color: '#A0A0A0', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+            </div>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '11px', color: '#7E6D5B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>CHỌN SỐ SAO ĐÁNH GIÁ</span>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setRating(star)}
+                      style={{ background: 'none', border: 'none', color: '#D4AF37', cursor: 'pointer', fontSize: '24px', transition: 'transform 0.15s', padding: 0 }}
+                      onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                      onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      <Star size={32} fill={star <= rating ? '#D4AF37' : 'none'} color="#D4AF37" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '11px', color: '#2D2926', fontWeight: 700, textTransform: 'uppercase' }}>NỘI DUNG NHẬN XÉT</label>
+                <textarea
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #D5C2AD', fontSize: '13px', minHeight: '96px', fontFamily: 'inherit', outline: 'none', resize: 'none', boxSizing: 'border-box' }}
+                  rows={4}
+                  placeholder="Chia sẻ trải nghiệm của bạn về phom dáng áo dài hoặc tác phong chụp ảnh..."
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                style={{ width: '100%', padding: '12px', backgroundColor: '#8B1E22', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'background-color 0.15s' }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#72181B'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8B1E22'}
+              >
+                GỬI ĐÁNH GIÁ NGAY
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
     </div>

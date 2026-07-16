@@ -61,6 +61,12 @@ interface ProductDetail {
       city?: string | null;
     };
   };
+  activeCampaign?: {
+    occasion: string;
+    discountPercent: number;
+    endDate: string;
+  } | null;
+  discountedPrice?: number;
 }
 
 const timeSlots = [
@@ -116,6 +122,7 @@ export const ProductDetailPage: React.FC = () => {
   const [reviewBookingDetails, setReviewBookingDetails] = useState<any>(null);
   const [submittingReview, setSubmittingReview] = useState<boolean>(false);
   const [checkingReviewStatus, setCheckingReviewStatus] = useState<boolean>(false);
+  const [bookingQty, setBookingQty] = useState<number>(1);
 
   const fetchRealReviews = async () => {
     if (!id) return;
@@ -999,13 +1006,14 @@ export const ProductDetailPage: React.FC = () => {
 
   const getDisplayPrice = (): string => {
     if (!product) return '0đ';
+    const base = product.activeCampaign && product.discountedPrice ? product.discountedPrice : product.basePrice;
     if (rentalMode === 'DAILY') {
       const days = getDayDuration();
-      const priceVal = product.basePrice * days;
+      const priceVal = base * days;
       return `${priceVal.toLocaleString('vi-VN')}đ / ${days} ngày`;
     } else {
       const hours = getHourDuration();
-      const hourlyRate = product.hourlyPrice || Math.round(product.basePrice * 0.3) || 80000;
+      const hourlyRate = product.hourlyPrice || Math.round(base * 0.3) || 80000;
       const priceVal = hourlyRate * hours;
       return `${priceVal.toLocaleString('vi-VN')}đ / ${hours} giờ`;
     }
@@ -1027,8 +1035,9 @@ export const ProductDetailPage: React.FC = () => {
 
     const days = getDayDuration();
     const hours = getHourDuration();
-    const hourlyRate = product?.hourlyPrice || Math.round((product?.basePrice || 0) * 0.3) || 80000;
-    const computedPrice = rentalMode === 'DAILY' ? (product?.basePrice || 0) * days : hourlyRate * hours;
+    const base = product?.activeCampaign && product?.discountedPrice ? product.discountedPrice : (product?.basePrice || 0);
+    const hourlyRate = product?.hourlyPrice || Math.round(base * 0.3) || 80000;
+    const computedPrice = rentalMode === 'DAILY' ? base * days : hourlyRate * hours;
 
     const cartPayload = {
       itemType: 'PRODUCT' as const,
@@ -1047,7 +1056,7 @@ export const ProductDetailPage: React.FC = () => {
       providerCity: product?.providerId?.address?.city || 'Thừa Thiên Huế',
       providerAddress: product?.providerId?.address?.addressLine || '',
       comboDiscountPercent: (product?.providerId as any)?.comboDiscountPercent,
-      quantity: 1,
+      quantity: bookingQty,
     };
 
     addToCart(cartPayload);
@@ -1068,8 +1077,9 @@ export const ProductDetailPage: React.FC = () => {
 
     const days = getDayDuration();
     const hours = getHourDuration();
-    const hourlyRate = product?.hourlyPrice || Math.round((product?.basePrice || 0) * 0.3) || 80000;
-    const computedPrice = rentalMode === 'DAILY' ? (product?.basePrice || 0) * days : hourlyRate * hours;
+    const baseForBooking = product?.activeCampaign && product?.discountedPrice ? product.discountedPrice : (product?.basePrice || 0);
+    const hourlyRate = product?.hourlyPrice || Math.round(baseForBooking * 0.3) || 80000;
+    const computedPrice = rentalMode === 'DAILY' ? baseForBooking * days : hourlyRate * hours;
 
     const cartPayload = {
       itemType: 'PRODUCT' as const,
@@ -1088,7 +1098,7 @@ export const ProductDetailPage: React.FC = () => {
       providerCity: product?.providerId?.address?.city || 'Thừa Thiên Huế',
       providerAddress: product?.providerId?.address?.addressLine || '',
       comboDiscountPercent: (product?.providerId as any)?.comboDiscountPercent,
-      quantity: 1,
+      quantity: bookingQty,
     };
 
     addToCart(cartPayload);
@@ -1124,6 +1134,16 @@ export const ProductDetailPage: React.FC = () => {
 
   return (
     <div style={{ backgroundColor: '#FCF9F2', minHeight: '100vh', padding: '40px 0' }}>
+      {product.activeCampaign && (
+        <div style={{ 
+          maxWidth: '1200px', margin: '0 auto 24px auto', padding: '16px 24px', 
+          backgroundColor: '#EF4444', color: 'white', borderRadius: '12px', 
+          fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', 
+          justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(239, 68, 68, 0.1)' 
+        }}>
+          <span>🎉 {product.activeCampaign.occasion} - Giảm giá siêu khủng {product.activeCampaign.discountPercent}% áp dụng đến hết ngày {new Date(product.activeCampaign.endDate).toLocaleDateString('vi-VN')}!</span>
+        </div>
+      )}
       <div style={{ maxWidth: '1280px', width: '100%', margin: '0 auto', padding: '0 40px' }}>
         
         {/* BREADCRUMB */}
@@ -1617,6 +1637,28 @@ export const ProductDetailPage: React.FC = () => {
                   ⚠️ Trang phục đã bận trong khung giờ này. Vui lòng chọn giờ hoặc ngày khác!
                 </div>
               )}
+
+            {/* Quantity Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '12px 18px', marginBottom: '8px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Số lượng thuê</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setBookingQty(q => Math.max(1, q - 1))}
+                  style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1.5px solid var(--color-primary-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '18px', cursor: 'pointer', backgroundColor: 'transparent', color: 'var(--color-primary-dark)', outline: 'none' }}
+                >
+                  -
+                </button>
+                <span style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)', minWidth: '20px', textAlign: 'center' }}>{bookingQty}</span>
+                <button 
+                  type="button" 
+                  onClick={() => setBookingQty(q => q + 1)}
+                  style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1.5px solid var(--color-primary-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '18px', cursor: 'pointer', backgroundColor: 'transparent', color: 'var(--color-primary-dark)', outline: 'none' }}
+                >
+                  +
+                </button>
+              </div>
+            </div>
 
               <button 
                 onClick={handleAddToCart}

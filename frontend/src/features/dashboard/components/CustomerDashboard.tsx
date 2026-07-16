@@ -23,6 +23,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'appointments' | 'rentals' | 'favorites' | 'payments'>('appointments');
+  const [favoriteSubTab, setFavoriteSubTab] = useState<'aodai' | 'photographer'>('aodai');
   const [payments, setPayments] = useState<any[]>([]);
   const [realProductList, setRealProductList] = useState<any[]>([]);
   const [realPhotographersList, setRealPhotographersList] = useState<any[]>([]);
@@ -190,17 +191,21 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             link: `/rentals/${prod._id}`
           });
         }
-      } else if (fav.targetType === 'PHOTOGRAPHER' || fav.targetType === 'Photographer') {
-        const photo = realPhotographersList.find(p => p._id === targetId);
+      } else if (fav.targetType === 'PROVIDER' || fav.targetType === 'Provider' || fav.targetType === 'PHOTOGRAPHER' || fav.targetType === 'Photographer') {
+        const photo = realPhotographersList.find(p => {
+          const pid = p._id?.toString() || p._id;
+          const provId = p.providerId?.toString() || p.providerId;
+          return pid === targetId || provId === targetId;
+        });
         if (photo) {
           list.push({
             id: photo._id,
             itemType: 'PHOTOGRAPHY_PACKAGE',
-            name: photo.businessName,
-            image: photo.portfolio?.[0] || '/avatar_hanna.png',
+            name: photo.businessName || photo.name,
+            image: photo.portfolio?.[0] || photo.image || '/avatar_hanna.png',
             price: photo.packages && photo.packages.length > 0 ? Math.min(...photo.packages.map((p: any) => p.price)) : 1500000,
             material: photo.quote || 'Nhiếp ảnh gia chuyên nghiệp',
-            link: `/photographers/${photo._id}`
+            link: `/photographers`
           });
         }
       }
@@ -557,42 +562,120 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
         {/* PANEL 3: FAVORITES */}
         {activeTab === 'favorites' && (
-          <div className="vh-profile-favorites-grid-layout">
-            {realFavorites.length === 0 ? (
-              <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', width: '100%' }}>
-                <Heart size={32} style={{ color: '#8C827A', margin: '0 auto 12px' }} />
-                <h5 className="font-header" style={{ fontSize: '16px', color: '#2D2926', marginBottom: '4px' }}>Chưa có yêu thích nào</h5>
-                <p style={{ fontSize: '13px', color: '#8C827A' }}>Bạn chưa lưu sản phẩm hay nhiếp ảnh gia yêu thích nào.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
+            {/* Sub-tabs header */}
+            <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid #EAEAE8', paddingBottom: '12px' }}>
+              <button
+                onClick={() => setFavoriteSubTab('aodai')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '8px 16px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  color: favoriteSubTab === 'aodai' ? 'var(--color-primary)' : '#8C827A',
+                  borderBottom: favoriteSubTab === 'aodai' ? '2px solid var(--color-primary)' : 'none',
+                  transition: 'all 0.2s',
+                  outline: 'none'
+                }}
+              >
+                Trang phục áo dài ({realFavorites.filter(item => item.itemType === 'PRODUCT').length})
+              </button>
+              <button
+                onClick={() => setFavoriteSubTab('photographer')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '8px 16px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  color: favoriteSubTab === 'photographer' ? 'var(--color-primary)' : '#8C827A',
+                  borderBottom: favoriteSubTab === 'photographer' ? '2px solid var(--color-primary)' : 'none',
+                  transition: 'all 0.2s',
+                  outline: 'none'
+                }}
+              >
+                Nhiếp ảnh gia ({realFavorites.filter(item => item.itemType === 'PHOTOGRAPHY_PACKAGE').length})
+              </button>
+            </div>
+
+            {/* Sub-tab content */}
+            {favoriteSubTab === 'aodai' ? (
+              <div className="vh-profile-favorites-grid-layout">
+                {realFavorites.filter(item => item.itemType === 'PRODUCT').length === 0 ? (
+                  <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', width: '100%' }}>
+                    <Heart size={32} style={{ color: '#8C827A', margin: '0 auto 12px' }} />
+                    <h5 className="font-header" style={{ fontSize: '16px', color: '#2D2926', marginBottom: '4px' }}>Chưa có áo dài yêu thích</h5>
+                    <p style={{ fontSize: '13px', color: '#8C827A' }}>Hãy tìm kiếm những bộ áo dài tuyệt vời và lưu lại tại đây.</p>
+                  </div>
+                ) : (
+                  realFavorites.filter(item => item.itemType === 'PRODUCT').map((item) => (
+                    <div key={item.id} className="vh-profile-rental-product-card">
+                      <div className="vh-profile-rental-img-wrapper" style={{ height: '280px' }}>
+                        <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
+                      </div>
+                      <div className="vh-profile-rental-details">
+                        <div>
+                          <h4 className="vh-profile-rental-name font-header">{item.name}</h4>
+                          <span className="vh-profile-rental-material" style={{ marginTop: '6px', display: 'block' }}>{item.material}</span>
+                        </div>
+                        <div className="vh-profile-rental-price-row">
+                          <div className="vh-profile-rental-price-sub">
+                            <span>Giá cọc / dịch vụ tham khảo</span>
+                            <strong>{item.price.toLocaleString('vi-VN')}đ</strong>
+                          </div>
+                          <button 
+                            className="vh-appointment-action-link"
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                            onClick={() => navigate(item.link)}
+                          >
+                            Xem chi tiết
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             ) : (
-              realFavorites.map((item) => (
-                <div key={item.id} className="vh-profile-rental-product-card">
-                  <div className="vh-profile-rental-img-wrapper" style={{ height: '280px' }}>
-                    <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
+              <div className="vh-profile-favorites-grid-layout">
+                {realFavorites.filter(item => item.itemType === 'PHOTOGRAPHY_PACKAGE').length === 0 ? (
+                  <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', width: '100%' }}>
+                    <Heart size={32} style={{ color: '#8C827A', margin: '0 auto 12px' }} />
+                    <h5 className="font-header" style={{ fontSize: '16px', color: '#2D2926', marginBottom: '4px' }}>Chưa có nhiếp ảnh gia yêu thích</h5>
+                    <p style={{ fontSize: '13px', color: '#8C827A' }}>Hãy khám phá các thợ chụp hình và lưu nhiếp ảnh gia bạn thích.</p>
                   </div>
-                  
-                  <div className="vh-profile-rental-details">
-                    <div>
-                      <h4 className="vh-profile-rental-name font-header">{item.name}</h4>
-                      <span className="vh-profile-rental-material" style={{ marginTop: '6px', display: 'block' }}>{item.material}</span>
-                    </div>
-                    
-                    <div className="vh-profile-rental-price-row">
-                      <div className="vh-profile-rental-price-sub">
-                        <span>Giá cọc / dịch vụ tham khảo</span>
-                        <strong>{item.price.toLocaleString('vi-VN')}đ</strong>
+                ) : (
+                  realFavorites.filter(item => item.itemType === 'PHOTOGRAPHY_PACKAGE').map((item) => (
+                    <div key={item.id} className="vh-profile-rental-product-card">
+                      <div className="vh-profile-rental-img-wrapper" style={{ height: '280px' }}>
+                        <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
                       </div>
-                      <button 
-                        className="vh-appointment-action-link"
-                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-                        onClick={() => navigate(item.link)}
-                      >
-                        Xem chi tiết
-                      </button>
+                      <div className="vh-profile-rental-details">
+                        <div>
+                          <h4 className="vh-profile-rental-name font-header">{item.name}</h4>
+                          <span className="vh-profile-rental-material" style={{ marginTop: '6px', display: 'block' }}>{item.material}</span>
+                        </div>
+                        <div className="vh-profile-rental-price-row">
+                          <div className="vh-profile-rental-price-sub">
+                            <span>Giá dịch vụ tham khảo</span>
+                            <strong>{item.price.toLocaleString('vi-VN')}đ</strong>
+                          </div>
+                          <button 
+                            className="vh-appointment-action-link"
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                            onClick={() => navigate(item.link)}
+                          >
+                            Xem chi tiết
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))
+                  ))
+                )}
+              </div>
             )}
           </div>
         )}
@@ -725,6 +808,10 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
         onClose={() => setIsDetailModalOpen(false)}
         viewerRole="customer"
         onBookingChanged={onRefresh}
+        onWriteReview={(itemDetails) => {
+          setIsDetailModalOpen(false);
+          setReviewingItem(itemDetails);
+        }}
       />
     </div>
   );
