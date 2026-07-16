@@ -33,48 +33,32 @@ import { PayOSRefundService } from './payos-refund.service';
 import { MockBankingService } from './mock-banking.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/schemas/notification.schema';
-
-interface PaymentAccountDoc {
-  bankName?: string;
-  accountNumberMasked?: string;
-  accountHolder?: string;
-  isDefault?: boolean;
-}
-
-interface ProviderDoc {
-  _id: Types.ObjectId;
-  paymentAccounts?: PaymentAccountDoc[];
-}
-
-interface RefundResult {
-  status: string;
-  amount: number;
-  orderCode: number;
-  refundId?: string;
-}
-
-interface TransferResult {
-  success: boolean;
-  bankTxnId?: string;
-  error?: string;
-}
+import { PaymentsRepository } from '../repositories/payments.repository';
+import { EscrowRepository } from '../repositories/escrow.repository';
+import { SettlementRepository } from '../repositories/settlement.repository';
+import { TransferRepository } from '../repositories/transfer.repository';
+import { SettlementTransferMapper } from '../mappers/settlement-transfer.mapper';
+import {
+  PaymentAccountDoc,
+  ProviderDoc,
+  RefundResult,
+  TransferResult,
+} from '../interfaces/payment.interfaces';
 
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
 
   constructor(
-    @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
+    private readonly paymentsRepository: PaymentsRepository,
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
-    @InjectModel(BookingEscrow.name)
-    private readonly escrowModel: Model<BookingEscrow>,
-    @InjectModel(SettlementTransfer.name)
-    private readonly transferModel: Model<SettlementTransfer>,
-    @InjectModel(BookingSettlement.name)
-    private readonly settlementModel: Model<BookingSettlement>,
+    private readonly escrowRepository: EscrowRepository,
+    private readonly transferRepository: TransferRepository,
+    private readonly settlementRepository: SettlementRepository,
     private readonly refundService: PayOSRefundService,
     private readonly bankingService: MockBankingService,
     private readonly notificationsService: NotificationsService,
+    private readonly transferMapper: SettlementTransferMapper,
   ) {}
 
   async createPaymentLink(
@@ -88,10 +72,7 @@ export class PaymentsService {
     }
 
     // Check for existing PENDING payment for the same booking — reuse if found
-    const existingPendingPayment = await this.paymentModel.findOne({
-      bookingId,
-      status: PaymentStatus.Pending,
-    });
+    const existingPendingPayment = await this.paymentsRepository.findPendingPaymentByBooking(bookingId);
     if (existingPendingPayment) {
       return existingPendingPayment;
     }
@@ -129,7 +110,7 @@ export class PaymentsService {
     const orderCode = Math.floor(100000 + Math.random() * 900000);
     const checkoutUrl = `http://127.0.0.1:3000/payments/checkout/${paymentCode}`;
 
-    const payment = await this.paymentModel.create({
+    const payment = await this.paymentsRepository.createPayment({
       bookingId,
       paymentCode,
       amount,
@@ -152,9 +133,6 @@ export class PaymentsService {
     const userId = new Types.ObjectId(userIdStr);
 
     if (roles.includes('PROVIDER')) {
-      interface ProviderDoc {
-        _id: Types.ObjectId;
-      }
       const providerDoc = await this.bookingModel.db
         .model('Provider')
         .findOne({ userId })
@@ -167,17 +145,11 @@ export class PaymentsService {
         providerIds: provider._id,
       });
       const bookingIds = bookings.map((b) => b._id);
-      return this.paymentModel
-        .find({ bookingId: { $in: bookingIds } })
-        .sort({ createdAt: -1 })
-        .populate('bookingId');
+      return this.paymentsRepository.findByBookingIds(bookingIds);
     } else {
       const bookings = await this.bookingModel.find({ customerId: userId });
       const bookingIds = bookings.map((b) => b._id);
-      return this.paymentModel
-        .find({ bookingId: { $in: bookingIds } })
-        .sort({ createdAt: -1 })
-        .populate('bookingId');
+      return this.paymentsRepository.findByBookingIds(bookingIds);
     }
   }
 
@@ -190,38 +162,15 @@ export class PaymentsService {
       .exec();
     if (!providerDoc) return [];
 
-    const transfers = await this.transferModel
-      .find({ providerId: (providerDoc as any)._id })
-      .populate('bookingId')
-      .sort({ createdAt: -1 })
-      .exec();
-
-    return transfers.map((t: any) => {
-      const bookingObj = t.bookingId as any;
-      return {
-        id: t.transactionReference || t._id?.toString(),
-        bookingId: bookingObj?._id || '',
-        bookingCode: bookingObj?.bookingCode || '',
-        amount: t.amountSent || 0,
-        bank: t.destinationBankAccount?.bankName || '',
-        account: t.destinationBankAccount?.accountNumber || '',
-        accountHolder: t.destinationBankAccount?.accountHolder || '',
-        status: t.status || 'PENDING',
-        date: t.createdAt ? new Date(t.createdAt).toLocaleDateString('vi-VN') : '',
-        errorMessage: t.errorMessage || null,
-      };
-    });
+    const transfers = await this.transferRepository.findTransfersByProvider((providerDoc as any)._id);
+    return this.transferMapper.toProviderResponseList(transfers);
   }
 
   async confirmPayment(paymentCode: string): Promise<PaymentDocument> {
-    const payment = await this.paymentModel.findOneAndUpdate(
-      { paymentCode, status: PaymentStatus.Pending },
-      { $set: { status: PaymentStatus.Success, paidAt: new Date() } },
-      { new: true },
-    );
+    const payment = await this.paymentsRepository.confirmPayment(paymentCode);
 
     if (!payment) {
-      const existing = await this.paymentModel.findOne({ paymentCode });
+      const existing = await this.paymentsRepository.findPaymentByCode(paymentCode);
       if (!existing) {
         throw new NotFoundException('Payment not found');
       }
@@ -344,13 +293,10 @@ export class PaymentsService {
   }
 
   async cancelPayment(paymentCode: string): Promise<PaymentDocument> {
-    const payment = await this.paymentModel.findOne({ paymentCode });
+    const payment = await this.paymentsRepository.updateStatus(paymentCode, PaymentStatus.Cancelled);
     if (!payment) {
       throw new NotFoundException('Payment not found');
     }
-
-    payment.status = PaymentStatus.Cancelled;
-    await payment.save();
     return payment;
   }
 
@@ -359,16 +305,10 @@ export class PaymentsService {
     totalAmountCollected: number,
     damageDepositAmount: number,
   ): Promise<BookingEscrow> {
-    return this.escrowModel.findOneAndUpdate(
-      { bookingId },
-      {
-        $set: {
-          totalAmountCollected,
-          damageDepositAmount,
-          status: EscrowStatus.Held,
-        },
-      },
-      { upsert: true, new: true },
+    return this.escrowRepository.createOrUpdateEscrow(
+      bookingId,
+      totalAmountCollected,
+      damageDepositAmount,
     );
   }
 
@@ -443,10 +383,10 @@ export class PaymentsService {
 
       if (providerReceivable > 0) {
         // Kiểm tra đối soát trùng lặp
-        const existingSettlement = await this.settlementModel.findOne({
-          bookingId: booking._id,
-          providerId: new Types.ObjectId(providerIdStr),
-        });
+        const existingSettlement = await this.settlementRepository.findSettlement(
+          booking._id,
+          new Types.ObjectId(providerIdStr),
+        );
 
         if (existingSettlement) {
           this.logger.warn(
@@ -483,7 +423,7 @@ export class PaymentsService {
           );
 
           // Tạo lịch sử giao dịch chuyển khoản
-          await this.transferModel.create({
+          await this.transferRepository.createTransfer({
             bookingId: booking._id,
             providerId: provider._id,
             amountSent: providerReceivable,
@@ -500,7 +440,7 @@ export class PaymentsService {
           });
 
           // Tạo BookingSettlement lưu trữ
-          await this.settlementModel.create({
+          await this.settlementRepository.createSettlement({
             bookingId: booking._id,
             providerId: provider._id,
             grossAmount: platformCollectedRaw,
@@ -526,14 +466,10 @@ export class PaymentsService {
     }
 
     // Cập nhật trạng thái Escrow sang Settled một cách atomic để chặn các request song song
-    const escrow = await this.escrowModel.findOneAndUpdate(
-      { bookingId, status: EscrowStatus.Held },
-      { $set: { status: EscrowStatus.Settled } },
-      { new: false },
-    );
+    const escrow = await this.escrowRepository.trySettleEscrow(bookingId);
 
     if (!escrow) {
-      const currentEscrow = await this.escrowModel.findOne({ bookingId });
+      const currentEscrow = await this.escrowRepository.findByBookingId(bookingId);
       if (currentEscrow && currentEscrow.status === EscrowStatus.Settled) {
         return { message: 'Booking already settled' };
       }
@@ -555,10 +491,7 @@ export class PaymentsService {
       }
     } catch (err) {
       // Revert lại trạng thái Held nếu gặp lỗi để có thể retry
-      await this.escrowModel.updateOne(
-        { bookingId },
-        { $set: { status: EscrowStatus.Held } },
-      );
+      await this.escrowRepository.updateEscrowStatus(bookingId, EscrowStatus.Held);
       throw err;
     }
 
@@ -585,10 +518,10 @@ export class PaymentsService {
       return { message: 'No deposit to refund' };
     }
 
-    const payment = await this.paymentModel.findOne({
+    const payment = await this.paymentsRepository.findPaymentByBookingAndStatus(
       bookingId,
-      status: PaymentStatus.Success,
-    });
+      PaymentStatus.Success,
+    );
 
     const orderCode =
       payment?.payos?.orderCode || Math.floor(100000 + Math.random() * 900000);
@@ -601,7 +534,7 @@ export class PaymentsService {
     // Create a Payment record representing the deposit refund for transaction history
     try {
       const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
-      await this.paymentModel.create({
+      await this.paymentsRepository.createPayment({
         bookingId,
         paymentCode: refundPaymentCode,
         amount: amountToRefund,
@@ -614,7 +547,7 @@ export class PaymentsService {
       this.logger.error(`Failed to create refund payment record for booking ${bookingIdStr}:`, createRefundErr);
     }
 
-    const escrow = await this.escrowModel.findOne({ bookingId });
+    const escrow = await this.escrowRepository.findByBookingId(bookingId);
     if (escrow) {
       escrow.status =
         refundAmount !== undefined &&
@@ -642,7 +575,7 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     }
 
-    const escrow = await this.escrowModel.findOne({ bookingId });
+    const escrow = await this.escrowRepository.findByBookingId(bookingId);
     if (!escrow) {
       throw new NotFoundException('Booking escrow not found');
     }
@@ -691,7 +624,7 @@ export class PaymentsService {
         transactionReference,
       );
 
-      await this.transferModel.create({
+      await this.transferRepository.createTransfer({
         bookingId,
         providerId: booking.providerIds[0],
         amountSent: payToProvider,
@@ -734,9 +667,6 @@ export class PaymentsService {
 
   async cancelSettlementsForBooking(bookingIdStr: string): Promise<void> {
     const bookingId = new Types.ObjectId(bookingIdStr);
-    await this.settlementModel.updateMany(
-      { bookingId },
-      { $set: { settlementStatus: SettlementStatus.Cancelled } }
-    );
+    await this.settlementRepository.cancelSettlementsForBooking(bookingId);
   }
 }

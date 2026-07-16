@@ -28,6 +28,12 @@ import { PayOSRefundService } from './services/payos-refund.service';
 import { MockBankingService } from './services/mock-banking.service';
 import { BookingsModule } from '../bookings/bookings.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PaymentsRepository } from './repositories/payments.repository';
+import { EscrowRepository } from './repositories/escrow.repository';
+import { SettlementRepository } from './repositories/settlement.repository';
+import { TransferRepository } from './repositories/transfer.repository';
+import { WebhookEventRepository } from './repositories/webhook-event.repository';
+import { SettlementTransferMapper } from './mappers/settlement-transfer.mapper';
 
 export const paymentModels = MongooseModule.forFeature([
   { name: Payment.name, schema: PaymentSchema },
@@ -46,12 +52,28 @@ export const paymentModels = MongooseModule.forFeature([
     NotificationsModule,
   ],
   controllers: [PaymentsController],
-  providers: [PaymentsService, PayOSRefundService, MockBankingService],
+  providers: [
+    PaymentsService,
+    PayOSRefundService,
+    MockBankingService,
+    PaymentsRepository,
+    EscrowRepository,
+    SettlementRepository,
+    TransferRepository,
+    WebhookEventRepository,
+    SettlementTransferMapper,
+  ],
   exports: [
     paymentModels,
     PaymentsService,
     PayOSRefundService,
     MockBankingService,
+    PaymentsRepository,
+    EscrowRepository,
+    SettlementRepository,
+    TransferRepository,
+    WebhookEventRepository,
+    SettlementTransferMapper,
   ],
 })
 export class PaymentsModule {}
