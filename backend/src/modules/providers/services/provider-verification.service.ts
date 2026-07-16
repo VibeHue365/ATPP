@@ -2,9 +2,11 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
-  ServiceUnavailableException,
+  InternalServerErrorException,
   StreamableFile,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
@@ -16,7 +18,7 @@ import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { promisify } from 'util';
 import { Readable } from 'stream';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import {
   AuditLog,
@@ -37,7 +39,11 @@ import {
 } from '../schemas/provider.schema';
 import {
   DocumentUploadStatus,
+  OcrAssessment,
+  OcrExecutionStatus,
   OcrStatus,
+  ProviderChangeRequestAction,
+  ProviderChangeRequestTarget,
   ProviderDocumentType,
   ProviderVerification,
   ProviderVerificationDocument,
@@ -47,9 +53,11 @@ import {
   VerificationStatus,
   VerificationType,
 } from '../schemas/provider-verification.schema';
+import { ProviderOcrOutboxService } from './provider-ocr-outbox.service';
 import {
   AcceptProviderVerificationConsentDto,
   AdminReviewDecisionDto,
+  ProviderChangeRequestDto,
   CreateProviderVerificationDto,
   UpdateProviderVerificationDto,
 } from '../dto/provider-verification.dto';
@@ -131,6 +139,7 @@ export class ProviderVerificationService {
     private readonly refreshTokenModel: Model<RefreshToken>,
     private readonly storageService: PrivateStorageService,
     private readonly configService: ConfigService,
+    private readonly ocrOutboxService: ProviderOcrOutboxService,
   ) {}
 
   async createVerification(
@@ -263,6 +272,7 @@ export class ProviderVerificationService {
       };
     }
 
+    verification.verificationRevision += 1;
     await verification.save();
 
     if (dto.requestedCapabilities) {
@@ -390,6 +400,15 @@ export class ProviderVerificationService {
         ocrConfidence: null,
         extractedFields: {},
         mismatchFlags: [],
+        ocr: {
+          executionStatus: OcrExecutionStatus.NotStarted,
+          assessment: null,
+          activeAttemptId: null,
+          operationId: null,
+          retryCount: 0,
+          warningCodes: [],
+          qualityIssues: [],
+        },
         uploadedAt: new Date(),
         processedAt: null,
         replacedAt: null,
@@ -398,9 +417,41 @@ export class ProviderVerificationService {
 
       document.versions.push(newVersion);
       document.currentVersion = nextVersionNo;
-      verification.markModified('documents');
-      await verification.save();
-
+      const currentVersion = document.versions.find((version) => version.versionNo === nextVersionNo && version.isCurrent);
+      if (!currentVersion) throw new InternalServerErrorException('Unable to create document version');
+      let ocrRequest: { attemptId: string; operationId: string } | null = null;
+      const requiresOcr = this.ocrOutboxService.isEnabled() && this.isOcrApplicable(documentType);
+      const persist = async (session?: ClientSession) => {
+        if (requiresOcr) {
+          ocrRequest = await this.ocrOutboxService.createRequest(
+            verification._id,
+            documentType,
+            nextVersionNo,
+            session,
+          );
+          currentVersion.ocr = {
+            executionStatus: OcrExecutionStatus.NotStarted,
+            assessment: null,
+            activeAttemptId: ocrRequest.attemptId,
+            operationId: ocrRequest.operationId,
+            retryCount: 0,
+            warningCodes: [],
+            qualityIssues: [],
+          };
+        }
+        verification.markModified('documents');
+        await verification.save({ session });
+      };
+      if (requiresOcr) {
+        const session = await this.verificationModel.db.startSession();
+        try {
+          await session.withTransaction(() => persist(session));
+        } finally {
+          await session.endSession();
+        }
+      } else {
+        await persist();
+      }
       await this.writeAudit(
         actor,
         'UPLOAD_PROVIDER_VERIFICATION_DOCUMENT',
@@ -423,6 +474,8 @@ export class ProviderVerificationService {
         versionNo: nextVersionNo,
         uploadStatus: DocumentUploadStatus.Uploaded,
         ocrStatus: OcrStatus.NotStarted,
+        executionStatus: currentVersion.ocr?.executionStatus ?? null,
+        operationId: currentVersion.ocr?.operationId ?? null,
       };
     });
   }
@@ -542,44 +595,123 @@ export class ProviderVerificationService {
       throw new ConflictException('Upload not completed');
     }
 
-    version.ocrStatus = OcrStatus.Processing;
-    verification.markModified('documents');
-    await verification.save();
-
-    const ocrResult = await this.extractSafeOcrResult(
-      version,
-      verification,
-      documentType,
-    );
-
-    version.ocrStatus = ocrResult.ocrStatus;
-    version.ocrConfidence = ocrResult.ocrConfidence;
-    version.extractedFields = ocrResult.extractedFields;
-    version.mismatchFlags = ocrResult.mismatchFlags;
-    version.processedAt = new Date();
-    verification.markModified('documents');
-    await verification.save();
-
+    await this.assertOcrRateLimit(actor, verification._id, documentType);
+    if (this.ocrOutboxService.isEnabled()) {
+      if (version.ocr?.executionStatus === OcrExecutionStatus.Processing) {
+        throw new ConflictException('OCR is already processing for this document');
+      }
+      let request: { attemptId: string; operationId: string };
+      const session = await this.verificationModel.db.startSession();
+      try {
+        request = await session.withTransaction(async () => {
+          const queuedRequest = await this.ocrOutboxService.createRequest(
+            verification._id,
+            documentType,
+            version.versionNo,
+            session,
+          );
+          version.ocr = {
+            executionStatus: OcrExecutionStatus.NotStarted,
+            assessment: null,
+            activeAttemptId: queuedRequest.attemptId,
+            operationId: queuedRequest.operationId,
+            retryCount: (version.ocr?.retryCount ?? 0) + 1,
+            warningCodes: [],
+            qualityIssues: [],
+          };
+          version.ocrStatus = OcrStatus.NotStarted;
+          verification.markModified('documents');
+          await verification.save({ session });
+          return queuedRequest;
+        });
+      } finally {
+        await session.endSession();
+      }
+      if (!request) throw new InternalServerErrorException('Unable to queue OCR request');
+      await this.writeAudit(
+        actor,
+        'RUN_PROVIDER_VERIFICATION_OCR',
+        verification._id,
+        {},
+        { documentType, versionNo: version.versionNo, stage: 'QUEUED', operationId: request.operationId },
+        meta,
+      );
+      return {
+        accepted: true,
+        operationId: request.operationId,
+        executionStatus: OcrExecutionStatus.NotStarted,
+      };
+    }
     await this.writeAudit(
       actor,
       'RUN_PROVIDER_VERIFICATION_OCR',
       verification._id,
       {},
-      {
-        documentType,
-        versionNo: version.versionNo,
-        ocrStatus: version.ocrStatus,
-        mismatchFlags: version.mismatchFlags,
-      },
+      { documentType, versionNo: version.versionNo, stage: 'STARTED' },
       meta,
     );
 
-    return {
-      ocrStatus: version.ocrStatus,
-      ocrConfidence: version.ocrConfidence,
-      extractedFields: version.extractedFields,
-      mismatchFlags: version.mismatchFlags,
-    };
+    version.ocrStatus = OcrStatus.Processing;
+    verification.markModified('documents');
+    await verification.save();
+
+    try {
+      const ocrResult = await this.extractSafeOcrResult(
+        version,
+        verification,
+        documentType,
+      );
+
+      version.ocrStatus = ocrResult.ocrStatus;
+      version.ocrConfidence = ocrResult.ocrConfidence;
+      version.extractedFields = ocrResult.extractedFields;
+      version.mismatchFlags = ocrResult.mismatchFlags;
+      version.processedAt = new Date();
+      verification.markModified('documents');
+      await verification.save();
+
+      await this.writeAudit(
+        actor,
+        'PROVIDER_VERIFICATION_OCR_RESULT',
+        verification._id,
+        {},
+        {
+          documentType,
+          versionNo: version.versionNo,
+          ocrStatus: version.ocrStatus,
+          mismatchFlags: version.mismatchFlags,
+        },
+        meta,
+      );
+
+      return {
+        ocrStatus: version.ocrStatus,
+        ocrConfidence: version.ocrConfidence,
+        extractedFields: version.extractedFields,
+        mismatchFlags: version.mismatchFlags,
+      };
+    } catch (error) {
+      version.ocrStatus = OcrStatus.NotStarted;
+      version.ocrConfidence = null;
+      version.extractedFields = {};
+      version.mismatchFlags = [];
+      verification.markModified('documents');
+      await verification.save();
+      await this.writeAudit(
+        actor,
+        'PROVIDER_VERIFICATION_OCR_RESULT',
+        verification._id,
+        {},
+        {
+          documentType,
+          versionNo: version.versionNo,
+          ocrStatus: OcrStatus.NotStarted,
+          errorCode: this.ocrErrorCode(error),
+        },
+        meta,
+      );
+      throw error;
+    }
   }
 
   async submitVerification(
@@ -812,8 +944,11 @@ export class ProviderVerificationService {
     dto: AdminReviewDecisionDto,
     meta: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    if (!dto.reason) {
-      throw new BadRequestException('Change request reason is required');
+    if (!dto.reason && !dto.changeRequests?.length) {
+      throw new BadRequestException('At least one change request is required');
+    }
+    if (!dto.reason && dto.changeRequests?.length) {
+      dto.reason = this.changeRequestSummary(dto.changeRequests);
     }
     return this.adminReviewTerminal(
       actor,
@@ -878,6 +1013,10 @@ export class ProviderVerificationService {
     this.assertReviewable(verification);
 
     const previousStatus = verification.status;
+    const changeRequests =
+      decision === VerificationReviewDecision.NeedsChanges
+        ? this.normalizeChangeRequests(dto.changeRequests ?? [], verification)
+        : [];
     verification.status = nextStatus;
     verification.review = {
       reviewedBy: this.toObjectId(actor.sub),
@@ -885,6 +1024,7 @@ export class ProviderVerificationService {
       decision,
       reason: dto.reason ?? null,
       note: dto.note ?? null,
+      changeRequests,
     };
     this.addTimeline(
       verification,
@@ -900,7 +1040,7 @@ export class ProviderVerificationService {
       auditAction,
       verification._id,
       { status: previousStatus },
-      { status: nextStatus, reason: dto.reason },
+      { status: nextStatus, reason: dto.reason, changeRequests },
       meta,
     );
     await this.notifyUser(
@@ -913,6 +1053,69 @@ export class ProviderVerificationService {
     return { status: verification.status, review: verification.review };
   }
 
+  private hasUnresolvedRequiredReupload(
+    verification: ProviderVerificationDocument,
+  ): boolean {
+    return (verification.review?.changeRequests ?? []).some((request) => {
+      if (
+        request.action !== ProviderChangeRequestAction.Reupload &&
+        request.requestedRevision != null &&
+        verification.verificationRevision <= request.requestedRevision
+      ) {
+        return true;
+      }
+      if (request.action !== ProviderChangeRequestAction.Reupload) return false;
+      const documentType =
+        request.target === ProviderChangeRequestTarget.IdentityCardFront
+          ? ProviderDocumentType.IdentityCardFront
+          : request.target === ProviderChangeRequestTarget.IdentityCardBack
+            ? ProviderDocumentType.IdentityCardBack
+            : null;
+      if (!documentType || request.documentVersionNo == null) return false;
+      const current = verification.documents
+        .find((document) => document.documentType === documentType)
+        ?.versions.find((version) => version.isCurrent);
+      return !current || current.versionNo <= request.documentVersionNo;
+    });
+  }
+  private normalizeChangeRequests(
+    requests: ProviderChangeRequestDto[],
+    verification: ProviderVerificationDocument,
+  ) {
+    const seen = new Set<string>();
+    return requests.flatMap((request) => {
+      const key = `${request.target}:${request.action}:${request.reasonCode}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
+
+      const documentType =
+        request.target === ProviderChangeRequestTarget.IdentityCardFront
+          ? ProviderDocumentType.IdentityCardFront
+          : request.target === ProviderChangeRequestTarget.IdentityCardBack
+            ? ProviderDocumentType.IdentityCardBack
+            : null;
+      const document = documentType
+        ? verification.documents.find((item) => item.documentType === documentType)
+        : null;
+      const currentVersion = document?.versions.find((item) => item.isCurrent);
+
+      return [{
+        target: request.target,
+        action: request.action,
+        reasonCode: request.reasonCode,
+        note: request.note?.trim() || null,
+        documentVersionNo: currentVersion?.versionNo ?? null,
+        requestedRevision: verification.verificationRevision,
+      }];
+    });
+  }
+
+  private changeRequestSummary(requests: ProviderChangeRequestDto[]): string {
+    return requests
+      .map((request) => request.note?.trim() || request.reasonCode)
+      .filter(Boolean)
+      .join('; ');
+  }
   private async adminChangeProviderStatus(
     actor: AuthUser,
     id: string,
@@ -969,7 +1172,9 @@ export class ProviderVerificationService {
     if (action === 'submit' && !EDITABLE_STATUSES.includes(verification.status)) {
       throw new ConflictException('Invalid verification status');
     }
-    if (action === 'approve' && !REVIEWABLE_STATUSES.includes(verification.status)) {
+    if (action === 'submit' && this.hasUnresolvedRequiredReupload(verification)) {
+      throw new ConflictException('Upload a new version of each requested identity document before resubmitting');
+    }    if (action === 'approve' && !REVIEWABLE_STATUSES.includes(verification.status)) {
       throw new ConflictException('Invalid verification status');
     }
     this.validateBusinessProfile(verification);
@@ -984,12 +1189,6 @@ export class ProviderVerificationService {
       const version = this.getDocumentVersion(verification, documentType);
       if (version.uploadStatus !== DocumentUploadStatus.Uploaded) {
         throw new BadRequestException(`Required document ${documentType} is not uploaded`);
-      }
-      if (
-        OCR_REQUIRED_TYPES.includes(documentType) &&
-        version.ocrStatus === OcrStatus.Failed
-      ) {
-        throw new BadRequestException(`Required OCR document ${documentType} failed`);
       }
     }
   }
@@ -1155,10 +1354,6 @@ export class ProviderVerificationService {
     if (!dimensions) {
       throw new BadRequestException('Unable to read image dimensions');
     }
-    if (dimensions.width < 800 || dimensions.height < 500) {
-      throw new BadRequestException('Image resolution must be at least 800x500');
-    }
-
     return {
       mimeType: isPng ? 'image/png' : 'image/jpeg',
       extension: isPng ? '.png' : '.jpg',
@@ -1228,11 +1423,17 @@ export class ProviderVerificationService {
     const idNumber = text.match(/\b\d{9,12}\b/)?.[0] ?? null;
     const mismatchFlags: string[] = [];
     const ownerName = verification.businessProfile.ownerName;
+    const ownerNameFound = Boolean(
+      ownerName &&
+        text &&
+        this.normalizeForOcrComparison(text).includes(
+          this.normalizeForOcrComparison(ownerName),
+        ),
+    );
 
-    if (ownerName && text && !text.toLowerCase().includes(ownerName.toLowerCase())) {
+    if (ownerName && text && !ownerNameFound) {
       mismatchFlags.push('OWNER_NAME_NOT_FOUND_IN_OCR_TEXT');
     }
-
     const confidence = ocrResult.confidence;
     let ocrStatus = OcrStatus.Passed;
     if (!text || (!idNumber && OCR_REQUIRED_TYPES.includes(documentType))) {
@@ -1247,7 +1448,7 @@ export class ProviderVerificationService {
       ocrStatus,
       ocrConfidence: confidence,
       extractedFields: {
-        fullName: ownerName ?? null,
+        fullName: ownerNameFound ? ownerName : null,
         idNumberMasked: idNumber ? this.maskIdNumber(idNumber) : null,
         idNumberHash: idNumber ? this.hashSensitiveValue(idNumber) : null,
       },
@@ -1309,11 +1510,11 @@ export class ProviderVerificationService {
       return this.parseTesseractTsv(tsv);
     } catch (error) {
       if (this.isMissingTesseractError(error)) {
-        throw new ServiceUnavailableException(
+        throw new InternalServerErrorException(
           'Tesseract OCR is not installed or TESSERACT_CMD is invalid',
         );
       }
-      throw new ServiceUnavailableException('OCR processing failed');
+      throw new InternalServerErrorException('OCR processing failed');
     } finally {
       await rm(inputPath, { force: true }).catch(() => undefined);
       await rm(outputPath, { force: true }).catch(() => undefined);
@@ -1342,10 +1543,21 @@ export class ProviderVerificationService {
         originalFileName || 'document',
       );
 
-      const response = await fetch(`${serviceUrl.replace(/\/$/, '')}/ocr`, {
-        method: 'POST',
-        body: formData,
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(),
+        this.readNumber('OCR_TIMEOUT_MS', 30000),
+      );
+      let response: Response;
+      try {
+        response = await fetch(`${serviceUrl.replace(/\/$/, '')}/ocr`, {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!response.ok) {
         throw new Error(`OCR service returned ${response.status}`);
@@ -1360,7 +1572,7 @@ export class ProviderVerificationService {
             : 0,
       };
     } catch {
-      throw new ServiceUnavailableException('Remote OCR service failed');
+      throw new InternalServerErrorException('Remote OCR service failed');
     }
   }
 
@@ -1411,6 +1623,49 @@ export class ProviderVerificationService {
     return maybeError.code === 'ENOENT';
   }
 
+  private async assertOcrRateLimit(
+    actor: AuthUser,
+    verificationId: Types.ObjectId,
+    documentType: ProviderDocumentType,
+  ): Promise<void> {
+    const now = Date.now();
+    const [userRuns, documentRuns] = await Promise.all([
+      this.auditLogModel.countDocuments({
+        actorId: this.toObjectId(actor.sub),
+        action: 'RUN_PROVIDER_VERIFICATION_OCR',
+        createdAt: { $gte: new Date(now - 60 * 60 * 1000) },
+      }),
+      this.auditLogModel.countDocuments({
+        resource: 'provider_verifications',
+        resourceId: verificationId,
+        action: 'RUN_PROVIDER_VERIFICATION_OCR',
+        'newValues.documentType': documentType,
+        createdAt: { $gte: new Date(now - 24 * 60 * 60 * 1000) },
+      }),
+    ]);
+    if (userRuns >= 5) {
+      throw new HttpException('OCR rate limit exceeded for this user', HttpStatus.TOO_MANY_REQUESTS);
+    }
+    if (documentRuns >= 3) {
+      throw new HttpException('OCR rate limit exceeded for this document', HttpStatus.TOO_MANY_REQUESTS);
+    }
+  }
+
+  private normalizeForOcrComparison(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+  }
+
+  private ocrErrorCode(error: unknown): string {
+    if (error instanceof InternalServerErrorException) {
+      return 'OCR_SERVICE_UNAVAILABLE';
+    }
+    return 'OCR_PROCESSING_FAILED';
+  }
   private toDetailResponse(
     verification: ProviderVerificationDocument,
     includeAdminData: boolean,
@@ -1430,6 +1685,7 @@ export class ProviderVerificationService {
       verificationId: verification._id,
       status: verification.status,
       verificationType: verification.verificationType,
+      verificationRevision: verification.verificationRevision,
       requestedCapabilities: verification.requestedCapabilities,
       businessProfile: verification.businessProfile,
       aodaiInfo: verification.aodaiInfo,
@@ -1460,6 +1716,7 @@ export class ProviderVerificationService {
       userId: verification.userId,
       status: verification.status,
       verificationType: verification.verificationType,
+      verificationRevision: verification.verificationRevision,
       requestedCapabilities: verification.requestedCapabilities,
       businessName: verification.businessProfile?.businessName ?? null,
       submittedAt: verification.submittedAt ?? null,
@@ -1500,6 +1757,25 @@ export class ProviderVerificationService {
       fileValidation: version.fileValidation,
       ocrStatus: version.ocrStatus,
       ocrConfidence: version.ocrConfidence ?? null,
+ocr: version.ocr
+        ? {
+            executionStatus: version.ocr.executionStatus,
+            assessment: version.ocr.assessment ?? null,
+            legacyStatus: version.ocrStatus,
+            operationId: version.ocr.operationId ?? null,
+            startedAt: version.ocr.startedAt ?? null,
+            heartbeatAt: version.ocr.heartbeatAt ?? null,
+            completedAt: version.ocr.completedAt ?? null,
+            retryCount: version.ocr.retryCount,
+            warningCodes: version.ocr.warningCodes,
+            qualityIssues: version.ocr.qualityIssues,
+            engine: version.ocr.engine ?? null,
+            engineVersion: version.ocr.engineVersion ?? null,
+            language: version.ocr.language ?? null,
+            psmMode: version.ocr.psmMode ?? null,
+            nextAction: this.ocrNextAction(version),
+          }
+        : null,
       extractedFields: version.extractedFields,
       mismatchFlags: version.mismatchFlags,
       uploadedAt: version.uploadedAt ?? null,
@@ -1509,6 +1785,16 @@ export class ProviderVerificationService {
     };
   }
 
+private isOcrApplicable(documentType: ProviderDocumentType): boolean {
+    return OCR_REQUIRED_TYPES.includes(documentType) || OCR_OPTIONAL_TYPES.includes(documentType);
+  }
+  private ocrNextAction(version: ProviderVerificationDocumentVersion): string | null {
+    const ocr = version.ocr;
+    if (!ocr) return null;
+    if (ocr.executionStatus === 'NOT_STARTED' || ocr.executionStatus === 'PROCESSING' || ocr.executionStatus === 'TIMEOUT') return 'WAIT_FOR_OCR';
+    if (ocr.assessment === 'REUPLOAD_REQUIRED' || ocr.executionStatus === 'FAILED') return 'UPLOAD_AGAIN';
+    return ocr.assessment === 'PASSED' ? 'READY_TO_SUBMIT' : 'SUBMIT_WITH_MANUAL_REVIEW';
+  }
   private ocrWarnings(
     verification: ProviderVerificationDocument,
   ): Array<Record<string, unknown>> {
@@ -1516,6 +1802,7 @@ export class ProviderVerificationService {
       OcrStatus.LowConfidence,
       OcrStatus.MismatchDetected,
       OcrStatus.NeedsManualReview,
+      OcrStatus.Failed,
     ];
     return verification.documents.flatMap((document) =>
       document.versions

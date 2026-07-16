@@ -94,10 +94,10 @@ export class ReleaseSettlementDto {
 }
 
 export class MarkSettlementSettledDto {
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(100)
-  payoutReference?: string;
+  payoutReference: string;
 
   @IsOptional()
   @IsString()

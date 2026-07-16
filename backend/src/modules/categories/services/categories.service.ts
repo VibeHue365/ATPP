@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -121,20 +122,25 @@ export class CategoriesService {
       dto.type,
     );
 
-    const category = await this.categoryModel.create({
-      name,
-      slug,
-      type: dto.type,
-      parentId: parentId ?? null,
-      description: this.nullableTrim(dto.description),
-      iconUrl: this.nullableTrim(dto.iconUrl),
-      coverImageUrl: this.nullableTrim(dto.coverImageUrl),
-      displayOrder: dto.displayOrder ?? 0,
-      metadata: dto.metadata ?? {},
-      status: CategoryStatus.Active,
-      createdBy: actorObjectId,
-      updatedBy: actorObjectId,
-    });
+    let category: CategoryDocument;
+    try {
+      category = await this.categoryModel.create({
+        name,
+        slug,
+        type: dto.type,
+        parentId: parentId ?? null,
+        description: this.nullableTrim(dto.description),
+        iconUrl: this.nullableTrim(dto.iconUrl),
+        coverImageUrl: this.nullableTrim(dto.coverImageUrl),
+        displayOrder: dto.displayOrder ?? 0,
+        metadata: dto.metadata ?? {},
+        status: CategoryStatus.Active,
+        createdBy: actorObjectId,
+        updatedBy: actorObjectId,
+      });
+    } catch (error) {
+      this.rethrowDuplicateSlug(error);
+    }
 
     await this.recordAudit({
       actorId: actorObjectId,
@@ -197,7 +203,11 @@ export class CategoriesService {
     }
 
     category.updatedBy = actorObjectId;
-    await category.save();
+    try {
+      await category.save();
+    } catch (error) {
+      this.rethrowDuplicateSlug(error);
+    }
 
     await this.recordAudit({
       actorId: actorObjectId,
@@ -232,6 +242,10 @@ export class CategoriesService {
 
     if (dto.status === CategoryStatus.Inactive) {
       await this.validationService.assertNoActiveChildren(category._id);
+    } else if (category.status !== CategoryStatus.Active) {
+      await this.validationService.assertParentActiveForActivation(
+        category.parentId,
+      );
     }
 
     category.status = dto.status;
@@ -386,7 +400,7 @@ export class CategoriesService {
       filter.parentId = new Types.ObjectId(query.parentId);
     }
     if (query.keyword?.trim()) {
-      const keyword = query.keyword.trim();
+      const keyword = this.escapeRegex(query.keyword.trim());
       filter.$or = [
         { name: { $regex: keyword, $options: 'i' } },
         { slug: { $regex: keyword, $options: 'i' } },
@@ -456,6 +470,23 @@ export class CategoriesService {
   private nullableTrim(value?: string): string | null {
     const normalized = value?.trim();
     return normalized ? normalized : null;
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private rethrowDuplicateSlug(error: unknown): never {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: number }).code === 11000
+    ) {
+      throw new ConflictException('CATEGORY_SLUG_ALREADY_EXISTS');
+    }
+
+    throw error;
   }
 
   private toResponse(category: Category | Record<string, any>) {

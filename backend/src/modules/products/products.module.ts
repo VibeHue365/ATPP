@@ -31,6 +31,8 @@ import { AdminProductsModerationController } from './controllers/admin-products-
 import { ProductsService } from './services/products.service';
 import { ProductsRepository } from './repositories/products.repository';
 import { UsersModule } from '../users/users.module';
+import { SmartTaggingModule } from '../smart-tagging/smart-tagging.module';
+import { StorageModule } from '../storage/storage.module';
 
 export const productModels = MongooseModule.forFeature([
   { name: Product.name, schema: ProductSchema },
@@ -44,7 +46,7 @@ export const productModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [productModels, UsersModule, CategoriesModule],
+  imports: [productModels, UsersModule, CategoriesModule, SmartTaggingModule, StorageModule],
   controllers: [
     PromotionsController,
     ProductsController,

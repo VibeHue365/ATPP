@@ -11,7 +11,7 @@ type PolicyType = 'BOOKING' | 'COMMISSION' | 'CANCELLATION' | 'REFUND' | 'PROVID
 type PolicyStatus = 'DRAFT' | 'ACTIVE' | 'INACTIVE';
 
 interface SystemPolicy {
-  _id: string;
+  id: string;
   code: PolicyCode;
   type: PolicyType;
   name: string;
@@ -241,7 +241,7 @@ export const PolicyManagement: React.FC = () => {
 
     setSaving(true);
     try {
-      await httpClient.patch(`/admin/system/policies/${selectedVersion._id}`, {
+      await httpClient.patch(`/admin/system/policies/${selectedVersion.id}`, {
         name: newName.trim(),
         description: newDescription.trim() || undefined,
         value: parsedValue,
@@ -583,7 +583,7 @@ export const PolicyManagement: React.FC = () => {
 
                   return (
                     <div
-                      key={v._id}
+                      key={v.id}
                       style={{
                         border: '1px solid #E8E2D5',
                         borderRadius: '8px',
@@ -640,18 +640,18 @@ export const PolicyManagement: React.FC = () => {
                         {isDraft && (
                           <>
                             <button
-                              onClick={() => handleActivateVersion(v._id, v.version)}
-                              disabled={actionVersionId === v._id}
+                              onClick={() => handleActivateVersion(v.id, v.version)}
+                              disabled={actionVersionId === v.id}
                               style={{
                                 padding: '6px 12px', border: 'none', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700,
                                 cursor: 'pointer', backgroundColor: '#706E3B', color: 'white'
                               }}
                             >
-                              {actionVersionId === v._id ? 'Đang xử lý...' : 'Kích hoạt'}
+                              {actionVersionId === v.id ? 'Đang xử lý...' : 'Kích hoạt'}
                             </button>
                             <button
-                              onClick={() => handleArchiveDraft(v._id)}
-                              disabled={actionVersionId === v._id}
+                              onClick={() => handleArchiveDraft(v.id)}
+                              disabled={actionVersionId === v.id}
                               style={{
                                 padding: '6px 12px', border: 'none', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700,
                                 cursor: 'pointer', backgroundColor: '#4A0E17', color: 'white'

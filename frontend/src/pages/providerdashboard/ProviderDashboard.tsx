@@ -1,17 +1,49 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  ShoppingBag, Layers, Camera, Plus, Download, Bell,
-  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,
-  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck
-} from 'lucide-react';
-import { BookingDetailModal } from '../../components/common/BookingDetailModal';
-import Swal from 'sweetalert2';
-import { httpClient } from '../../services/httpClient';
-import { useToast } from '../../components/feedback/Toast';
-import { Modal } from '../../components/common/Modal';
-import { useAuth } from '../../features/auth/hooks/useAuth';
-import { API_BASE_URL } from '../../config/env';
+  ShoppingBag,
+  Layers,
+  Camera,
+  Plus,
+  Download,
+  Bell,
+  HelpCircle,
+  MoreVertical,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle,
+  FileText,
+  Trash2,
+  Play,
+  Pencil,
+  Upload,
+  X,
+  Award,
+  Calendar,
+  Tag,
+  MessageSquare,
+  Users,
+  Save,
+  Flag,
+  Star,
+  ArrowLeft,
+  LogOut,
+  BarChart3,
+  DollarSign,
+  Check,
+  CheckCheck,
+  Eye,
+} from "lucide-react";
+import Swal from "sweetalert2";
+import { httpClient } from "../../services/httpClient";
+import { useToast } from "../../components/feedback/Toast";
+import { Modal } from "../../components/common/Modal";
+import { useAuth } from "../../features/auth/hooks/useAuth";
+import { API_BASE_URL } from "../../config/env";
+import { categoryService } from "../../features/categories/services/categoryService";
+import type { Category } from "../../features/categories/types";
+import { SmartTagEditor } from "../../features/smart-tagging/components/SmartTagEditor";
+import { PortfolioSmartTagPanel } from "../../features/smart-tagging/components/PortfolioSmartTagPanel";
 
 interface Order {
   _id: string;
@@ -34,10 +66,12 @@ interface Order {
 interface Product {
   _id: string;
   name: string;
-  categoryId: {
-    _id: string;
-    name: string;
-  } | string;
+  categoryId:
+    | {
+        _id: string;
+        name: string;
+      }
+    | string;
   description?: string;
   images: string[];
   basePrice: number;
@@ -47,9 +81,49 @@ interface Product {
   materials: string[];
   style?: string;
   occasions?: string[];
-  status: 'ACTIVE' | 'DRAFT' | 'INACTIVE';
-  moderationStatus?: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'HIDDEN';
+  status: "ACTIVE" | "DRAFT" | "INACTIVE";
+  moderationStatus?: "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "HIDDEN";
   moderationReason?: string | null;
+  taggingDecisionVersion?: number;
+}
+
+type SettlementStatus = "READY_TO_SETTLE" | "ON_HOLD" | "SETTLED" | "CANCELLED";
+
+interface ProviderSettlementItem {
+  bookingItemId: string;
+  itemType: string;
+  itemName?: string;
+  serviceAmount: number;
+  providerDiscountAmount: number;
+  commissionRate: number;
+  commissionAmount: number;
+  allocatedPlatformFee: number;
+  netAmount: number;
+}
+
+interface ProviderSettlement {
+  _id: string;
+  settlementCode: string;
+  bookingId: string | { _id: string; bookingCode?: string };
+  grossAmount: number;
+  commissionRate: number;
+  commissionAmount: number;
+  allocatedPlatformFee: number;
+  refundAmount: number;
+  penaltyAmount: number;
+  payableAmount: number;
+  status: SettlementStatus;
+  itemSnapshots: ProviderSettlementItem[];
+  policySnapshot: {
+    policyVersion: number;
+    appliedRateType: string;
+    fixedPlatformFee: number;
+  };
+  holdReason?: string;
+  payoutReference?: string;
+  note?: string;
+  settledAt?: string;
+  createdAt: string;
 }
 
 export const ProviderDashboard: React.FC = () => {
@@ -61,32 +135,45 @@ export const ProviderDashboard: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated !== undefined) {
       if (!isAuthenticated) {
-        navigate('/login', { replace: true });
+        navigate("/login", { replace: true });
         return;
       }
       const roles = user?.roles || [];
-      const isProvider = roles.some(r => r.toUpperCase() === 'PROVIDER');
+      const isProvider = roles.some((r) => r.toUpperCase() === "PROVIDER");
       if (!isProvider) {
-        toast.error('Bạn không có quyền truy cập trang quản trị của Đối tác!');
-        navigate('/', { replace: true });
+        toast.error("Bạn không có quyền truy cập trang quản trị của Đối tác!");
+        navigate("/", { replace: true });
       }
     }
   }, [user, isAuthenticated, navigate, toast]);
-  
+
   // Views navigation state
-  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'calendar' | 'vouchers' | 'reviews' | 'trust' | 'analytics' | 'payouts'>('analytics');
+  const [currentView, setCurrentView] = useState<
+    | "orders"
+    | "collections"
+    | "profile"
+    | "portfolio"
+    | "calendar"
+    | "vouchers"
+    | "reviews"
+    | "trust"
+    | "analytics"
+    | "payouts"
+  >("analytics");
 
   // Provider Specific States
   const [provider, setProvider] = useState<any>(null);
   const [portfolioItems, setPortfolioItems] = useState<any[]>([]);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
-  const [subTab, setSubTab] = useState<'shop' | 'photo'>('shop');
+  const [subTab, setSubTab] = useState<"shop" | "photo">("shop");
 
   useEffect(() => {
     if (analyticsData) {
-      const isShop = analyticsData.capabilities?.includes('AODAI_RENTAL') || analyticsData.capabilities?.includes('RENTAL');
+      const isShop =
+        analyticsData.capabilities?.includes("AODAI_RENTAL") ||
+        analyticsData.capabilities?.includes("RENTAL");
       if (!isShop) {
-        setSubTab('photo');
+        setSubTab("photo");
       }
     }
   }, [analyticsData]);
@@ -94,43 +181,57 @@ export const ProviderDashboard: React.FC = () => {
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [reviewsData, setReviewsData] = useState<any>(null);
   const [bookingsState, setBookingsState] = useState<any[]>([]);
-  const [payouts, setPayouts] = useState<any[]>([]);
-  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [payouts, setPayouts] = useState<ProviderSettlement[]>([]);
+  const [selectedPayout, setSelectedPayout] =
+    useState<ProviderSettlement | null>(null);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [payoutError, setPayoutError] = useState<string | null>(null);
+  const [payoutStatus, setPayoutStatus] = useState<"ALL" | SettlementStatus>(
+    "ALL",
+  );
+  const [payoutFromDate, setPayoutFromDate] = useState("");
+  const [payoutToDate, setPayoutToDate] = useState("");
+  const [payoutPage, setPayoutPage] = useState(1);
+  const [payoutPagination, setPayoutPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
   const [isLoadingProvider, setIsLoadingProvider] = useState(false);
 
   // Form states - Profile
-  const [businessName, setBusinessName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [addressLine, setAddressLine] = useState('');
-  const [city, setCity] = useState('');
-  const [cancellationPolicy, setCancellationPolicy] = useState('');
+  const [businessName, setBusinessName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [addressLine, setAddressLine] = useState("");
+  const [city, setCity] = useState("");
+  const [cancellationPolicy, setCancellationPolicy] = useState("");
   const [comboDiscountPercent, setComboDiscountPercent] = useState(0);
 
   // Form states - Voucher
-  const [vCode, setVCode] = useState('');
-  const [vName, setVName] = useState('');
-  const [vType, setVType] = useState('PERCENTAGE');
+  const [vCode, setVCode] = useState("");
+  const [vName, setVName] = useState("");
+  const [vType, setVType] = useState("PERCENTAGE");
   const [vValue, setVValue] = useState(10);
   const vMinOrder = 0;
 
   // Form states - Calendar
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(0);
-  const [startHour, setStartHour] = useState('08:00');
-  const [endHour, setEndHour] = useState('17:00');
-  const [blockedDate, setBlockedDate] = useState('');
+  const [startHour, setStartHour] = useState("08:00");
+  const [endHour, setEndHour] = useState("17:00");
+  const [blockedDate, setBlockedDate] = useState("");
 
   // Reply states
   const [replyingReviewId, setReplyingReviewId] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState('');
+  const [replyText, setReplyText] = useState("");
 
   // Two-way rating state
   const [ratingBooking, setRatingBooking] = useState<any>(null);
   const [cRating, setCRating] = useState(5);
-  const [cComment, setCComment] = useState('');
+  const [cComment, setCComment] = useState("");
 
   // Trust search score
-  const [searchCustId, setSearchCustId] = useState('');
+  const [searchCustId, setSearchCustId] = useState("");
   const [trustScoreResult, setTrustScoreResult] = useState<any>(null);
 
   // Notification states
@@ -146,17 +247,17 @@ export const ProviderDashboard: React.FC = () => {
         setIsNotiOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const fetchNotifications = useCallback(async () => {
     try {
       setLoadingNoti(true);
-      const data = await httpClient.request<any[]>('/notifications');
+      const data = await httpClient.request<any[]>("/notifications");
       setNotifications(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error('Failed to fetch notifications', e);
+      console.error("Failed to fetch notifications", e);
     } finally {
       setLoadingNoti(false);
     }
@@ -168,99 +269,121 @@ export const ProviderDashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
-  const providerUnreadCount = notifications.filter(n => !n.isRead).length;
+  const providerUnreadCount = notifications.filter((n) => !n.isRead).length;
 
   const handleNotiMarkAsRead = async (id: string) => {
     try {
-      await httpClient.request(`/notifications/${id}/read`, { method: 'PATCH' });
-      setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
-    } catch (e) { console.error(e); }
+      await httpClient.request(`/notifications/${id}/read`, {
+        method: "PATCH",
+      });
+      setNotifications((prev) =>
+        prev.map((n) => (n._id === id ? { ...n, isRead: true } : n)),
+      );
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleNotiMarkAllAsRead = async () => {
     try {
-      await httpClient.request('/notifications/read-all', { method: 'POST' });
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    } catch (e) { console.error(e); }
+      await httpClient.request("/notifications/read-all", { method: "POST" });
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const getNotiTimeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Vừa xong';
+    if (mins < 1) return "Vừa xong";
     if (mins < 60) return `${mins} phút trước`;
     const hours = Math.floor(mins / 60);
     if (hours < 24) return `${hours} giờ trước`;
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days} ngày trước`;
-    return new Date(dateStr).toLocaleDateString('vi-VN');
+    return new Date(dateStr).toLocaleDateString("vi-VN");
   };
 
   const getNotiTypeStyle = (type: string) => {
     switch (type) {
-      case 'BOOKING': return { bg: '#EEF2FF', color: '#4338CA', icon: '📋' };
-      case 'PAYMENT': return { bg: '#F0FDF4', color: '#166534', icon: '💳' };
-      case 'HANDOVER': return { bg: '#FFF7ED', color: '#C2410C', icon: '🤝' };
-      case 'REFUND': return { bg: '#FEF3C7', color: '#92400E', icon: '💰' };
-      case 'DISPUTE': return { bg: '#FEE2E2', color: '#991B1B', icon: '⚠️' };
-      case 'SYSTEM': return { bg: '#F5F3FF', color: '#7C3AED', icon: '🔔' };
-      default: return { bg: '#F9FAFB', color: '#6B7280', icon: '📌' };
+      case "BOOKING":
+        return { bg: "#EEF2FF", color: "#4338CA", icon: "📋" };
+      case "PAYMENT":
+        return { bg: "#F0FDF4", color: "#166534", icon: "💳" };
+      case "HANDOVER":
+        return { bg: "#FFF7ED", color: "#C2410C", icon: "🤝" };
+      case "REFUND":
+        return { bg: "#FEF3C7", color: "#92400E", icon: "💰" };
+      case "DISPUTE":
+        return { bg: "#FEE2E2", color: "#991B1B", icon: "⚠️" };
+      case "SYSTEM":
+        return { bg: "#F5F3FF", color: "#7C3AED", icon: "🔔" };
+      default:
+        return { bg: "#F9FAFB", color: "#6B7280", icon: "📌" };
     }
   };
 
   const fetchProviderData = async () => {
     setIsLoadingProvider(true);
     try {
-      const pRes: any = await httpClient.get('/providers/me');
+      const pRes: any = await httpClient.get("/providers/me");
       setProvider(pRes);
-      const portfolioRes: any = await httpClient.get('/providers/me/portfolio-items');
+      const portfolioRes: any = await httpClient.get(
+        "/providers/me/portfolio-items",
+      );
       setPortfolioItems(portfolioRes || []);
-      setBusinessName(pRes.businessName || '');
-      setPhone(pRes.contact?.phone || '');
-      setAddressLine(pRes.address?.addressLine || '');
-      setCity(pRes.address?.city || '');
-      setCancellationPolicy(pRes.policies?.cancellationPolicy || '');
+      setBusinessName(pRes.businessName || "");
+      setPhone(pRes.contact?.phone || "");
+      setAddressLine(pRes.address?.addressLine || "");
+      setCity(pRes.address?.city || "");
+      setCancellationPolicy(pRes.policies?.cancellationPolicy || "");
       setComboDiscountPercent(pRes.comboDiscountPercent ?? 0);
 
-      const sRes: any = await httpClient.get('/providers/me/schedules');
+      const sRes: any = await httpClient.get("/providers/me/schedules");
       setSchedules(sRes);
 
-      const vRes: any = await httpClient.get('/promotions/provider');
+      const vRes: any = await httpClient.get("/promotions/provider");
       setVouchers(vRes);
 
-      const rRes: any = await httpClient.get('/reviews/stats');
+      const rRes: any = await httpClient.get("/reviews/stats");
       setReviewsData(rRes);
 
-      const bRes: any = await httpClient.get('/bookings/provider');
+      const bRes: any = await httpClient.get("/bookings/provider");
       setBookingsState(bRes);
 
-      const aRes: any = await httpClient.get('/providers/me/analytics');
+      const aRes: any = await httpClient.get("/providers/me/analytics");
       setAnalyticsData(aRes);
     } catch (err: any) {
-      const msg = err.message || 'Không thể đồng bộ dữ liệu đối tác';
+      const msg = err.message || "Không thể đồng bộ dữ liệu đối tác";
       toast.error(msg);
-      if (msg.includes('đình chỉ') || msg.includes('susp')) {
+      if (msg.includes("đình chỉ") || msg.includes("susp")) {
         Swal.fire({
-          title: 'Dịch vụ đối tác bị tạm ngưng',
+          title: "Dịch vụ đối tác bị tạm ngưng",
           text: msg,
-          icon: 'warning',
-          confirmButtonText: 'Quay lại trang chủ',
-          confirmButtonColor: '#B89047',
+          icon: "warning",
+          confirmButtonText: "Quay lại trang chủ",
+          confirmButtonColor: "#B89047",
           allowOutsideClick: false,
         }).then(() => {
-          navigate('/');
+          navigate("/");
         });
-      } else if (msg.includes('khoá') || msg.includes('khóa') || msg.includes('ban') || msg.includes('unauth')) {
+      } else if (
+        msg.includes("khoá") ||
+        msg.includes("khóa") ||
+        msg.includes("ban") ||
+        msg.includes("unauth")
+      ) {
         Swal.fire({
-          title: 'Tài khoản bị khóa',
+          title: "Tài khoản bị khóa",
           text: msg,
-          icon: 'error',
-          confirmButtonText: 'Đăng xuất',
-          confirmButtonColor: '#4A0E17',
+          icon: "error",
+          confirmButtonText: "Đăng xuất",
+          confirmButtonColor: "#4A0E17",
           allowOutsideClick: false,
         }).then(() => {
           logout();
-          navigate('/login');
+          navigate("/login");
         });
       }
     } finally {
@@ -269,61 +392,82 @@ export const ProviderDashboard: React.FC = () => {
   };
 
   const fetchPayouts = async () => {
+    setPayoutLoading(true);
+    setPayoutError(null);
     try {
-      const res: any = await httpClient.get('/provider/settlements');
-      const settlements = res.items || [];
-      const mapped = settlements.map((s: any) => {
-        return {
-          id: s.settlementCode,
-          bookingId: s.bookingId?._id || s.bookingId,
-          bookingCode: s.bookingId?.bookingCode || `BK-${(s.bookingId?._id || s.bookingId)?.slice(-6).toUpperCase()}`,
-          amount: s.payableAmount || 0,
-          bank: s.payoutReference ? 'Tài khoản Đã nhận' : 'Hệ thống đối soát',
-          account: s.payoutReference || 'Đang xử lý',
-          accountHolder: s.note || '',
-          status: s.status,
-          date: s.settledAt ? new Date(s.settledAt).toLocaleDateString('vi-VN') : new Date(s.createdAt).toLocaleDateString('vi-VN'),
-        };
+      const params = new URLSearchParams({
+        page: String(payoutPage),
+        limit: "10",
       });
-      setPayouts(mapped);
-    } catch (err: any) {
-      console.error('Không thể tải lịch sử quyết toán:', err);
+      if (payoutStatus !== "ALL") params.set("status", payoutStatus);
+      if (payoutFromDate)
+        params.set("fromDate", `${payoutFromDate}T00:00:00.000Z`);
+      if (payoutToDate) params.set("toDate", `${payoutToDate}T23:59:59.999Z`);
+      const res = await httpClient.get<{
+        items: ProviderSettlement[];
+        pagination: typeof payoutPagination;
+      }>(`/provider/settlements?${params.toString()}`);
+      setPayouts(res.items || []);
+      setPayoutPagination(res.pagination);
+    } catch (err: unknown) {
+      setPayoutError(
+        err instanceof Error ? err.message : "Không thể tải lịch sử quyết toán",
+      );
+    } finally {
+      setPayoutLoading(false);
     }
   };
 
-  const viewCustomerTrust = async (custId: string) => {
-    setIsDetailModalOpen(false);
-    setCurrentView('trust');
-    setSearchCustId(custId);
+  const handleViewPayout = async (id: string) => {
     try {
-      const res = await httpClient.get(`/users/${custId}/trust-score`);
-      setTrustScoreResult(res);
-    } catch (err) {
-      console.error('Không thể tải điểm tín nhiệm:', err);
+      setSelectedPayout(
+        await httpClient.get<ProviderSettlement>(`/provider/settlements/${id}`),
+      );
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Không thể tải chi tiết quyết toán",
+      );
     }
   };
+
+  const settlementMoney = (value: number) =>
+    `${(value || 0).toLocaleString("vi-VN")}đ`;
+  const settlementBookingCode = (booking: ProviderSettlement["bookingId"]) =>
+    typeof booking === "string"
+      ? `BK-${booking.slice(-6).toUpperCase()}`
+      : booking.bookingCode || `BK-${booking._id.slice(-6).toUpperCase()}`;
+  const settlementStatusLabel = (status: SettlementStatus) =>
+    status === "SETTLED"
+      ? "Đã quyết toán"
+      : status === "ON_HOLD"
+        ? "Tạm giữ"
+        : status === "CANCELLED"
+          ? "Đã hủy"
+          : "Chờ quyết toán";
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await httpClient.patch('/providers/me', {
+      await httpClient.patch("/providers/me", {
         businessName,
         contact: { ...provider?.contact, phone },
         address: { ...provider?.address, addressLine, city },
         policies: { ...provider?.policies, cancellationPolicy },
         comboDiscountPercent: Number(comboDiscountPercent),
       });
-      toast.success('Cập nhật thông tin dịch vụ thành công!');
+      toast.success("Cập nhật thông tin dịch vụ thành công!");
       fetchProviderData();
     } catch (err: any) {
-      toast.error('Cập nhật thất bại');
+      toast.error("Cập nhật thất bại");
     }
   };
 
   const handleAddVoucher = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await httpClient.post('/promotions', {
+      await httpClient.post("/promotions", {
         code: vCode,
         name: vName,
         discountType: vType,
@@ -333,90 +477,110 @@ export const ProviderDashboard: React.FC = () => {
         endDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(), // 30 days expiry
       });
       toast.success(`Tạo mã ưu đãi "${vCode}" thành công!`);
-      setVCode('');
-      setVName('');
+      setVCode("");
+      setVName("");
       fetchProviderData();
     } catch (err: any) {
-      toast.error(err.message || 'Không thể tạo voucher');
+      toast.error(err.message || "Không thể tạo voucher");
     }
   };
 
   const handleDeleteVoucher = async (id: string) => {
     try {
       await httpClient.delete(`/promotions/${id}`);
-      toast.success('Đã xóa mã ưu đãi thành công!');
+      toast.success("Đã xóa mã ưu đãi thành công!");
       fetchProviderData();
     } catch (err: any) {
-      toast.error('Xóa voucher thất bại');
+      toast.error("Xóa voucher thất bại");
     }
   };
 
   const handleAddRecurringSchedule = async () => {
     try {
-      await httpClient.post('/providers/me/schedules/recurring', {
+      await httpClient.post("/providers/me/schedules/recurring", {
         dayOfWeek: Number(selectedDayOfWeek),
         workingHours: [{ start: startHour, end: endHour }],
       });
-      toast.success('Thiết lập khung giờ làm việc recurring thành công!');
+      toast.success("Thiết lập khung giờ làm việc recurring thành công!");
       fetchProviderData();
     } catch (err: any) {
-      toast.error('Lưu lịch làm việc thất bại');
+      toast.error("Lưu lịch làm việc thất bại");
     }
   };
 
   const handleBlockDate = async () => {
     if (!blockedDate) return;
     try {
-      await httpClient.post('/providers/me/schedules/specific-date', {
+      await httpClient.post("/providers/me/schedules/specific-date", {
         date: blockedDate,
         isOffDay: true,
         customSlots: [],
       });
       toast.success(`Đã chặn lịch bận ngày ${blockedDate}!`);
-      setBlockedDate('');
+      setBlockedDate("");
       fetchProviderData();
     } catch (err: any) {
-      toast.error('Không thể chặn lịch ngày bận');
+      toast.error("Không thể chặn lịch ngày bận");
     }
   };
 
   const handleAddPortfolio = async () => {
-    const { value: imageUrl, isConfirmed } = await Swal.fire({
-      title: 'Thêm ảnh mẫu Portfolio',
-      input: 'url',
-      inputLabel: 'Đường dẫn URL ảnh (JPEG/PNG)',
-      inputPlaceholder: 'https://example.com/image.jpg',
+    const { value: title, isConfirmed: hasTitle } = await Swal.fire({
+      title: "Thêm tác phẩm Portfolio",
+      input: "text",
+      inputLabel: "Tiêu đề tác phẩm",
+      inputPlaceholder: "Ví dụ: Áo dài Nhật Bình tại Đại Nội",
       showCancelButton: true,
-      confirmButtonColor: 'var(--color-primary-dark)',
-      cancelButtonColor: '#9CA3AF',
-      confirmButtonText: 'Thêm ảnh',
-      cancelButtonText: 'Hủy',
-      background: 'white',
+      confirmButtonColor: "var(--color-primary-dark)",
+      cancelButtonColor: "#9CA3AF",
+      confirmButtonText: "Tiếp tục",
+      cancelButtonText: "Hủy",
+      background: "white",
+      inputValidator: (value) =>
+        !value?.trim() ? "Vui lòng nhập tiêu đề." : undefined,
+    });
+    if (!hasTitle || !title?.trim()) return;
+
+    const { value: imageUrl, isConfirmed } = await Swal.fire({
+      title: "Thêm ảnh mẫu Portfolio",
+      input: "url",
+      inputLabel: "Đường dẫn URL ảnh (JPEG/PNG)",
+      inputPlaceholder: "https://example.com/image.jpg",
+      showCancelButton: true,
+      confirmButtonColor: "var(--color-primary-dark)",
+      cancelButtonColor: "#9CA3AF",
+      confirmButtonText: "Thêm ảnh",
+      cancelButtonText: "Hủy",
+      background: "white",
       inputValidator: (value) => {
-        if (!value) return 'Vui lòng nhập URL ảnh!';
-        try { new URL(value); } catch { return 'URL không hợp lệ!'; }
+        if (!value) return "Vui lòng nhập URL ảnh!";
+        try {
+          new URL(value);
+        } catch {
+          return "URL không hợp lệ!";
+        }
       },
     });
     if (!isConfirmed || !imageUrl) return;
     try {
-      await httpClient.post('/providers/me/portfolio-items', {
-        title: 'Portfolio item',
+      await httpClient.post("/providers/me/portfolio-items", {
+        title: title.trim(),
         images: [imageUrl],
       });
-      toast.success('Đã thêm ảnh mẫu thiết kế vào Portfolio!');
+      toast.success("Đã thêm ảnh mẫu thiết kế vào Portfolio!");
       fetchProviderData();
     } catch (err: any) {
-      toast.error('Tải ảnh portfolio thất bại');
+      toast.error("Tải ảnh portfolio thất bại");
     }
   };
 
   const handleRemovePortfolio = async (itemId: string) => {
     try {
       await httpClient.delete(`/providers/me/portfolio-items/${itemId}`);
-      toast.success('Đã gỡ ảnh khỏi Portfolio');
+      toast.success("Đã gỡ ảnh khỏi Portfolio");
       fetchProviderData();
     } catch (err: any) {
-      toast.error('Gỡ ảnh thất bại');
+      toast.error("Gỡ ảnh thất bại");
     }
   };
 
@@ -424,23 +588,27 @@ export const ProviderDashboard: React.FC = () => {
     e.preventDefault();
     if (!replyingReviewId) return;
     try {
-      await httpClient.post(`/reviews/${replyingReviewId}/reply`, { reply: replyText });
-      toast.success('Gửi phản hồi đánh giá thành công!');
+      await httpClient.post(`/reviews/${replyingReviewId}/reply`, {
+        reply: replyText,
+      });
+      toast.success("Gửi phản hồi đánh giá thành công!");
       setReplyingReviewId(null);
-      setReplyText('');
+      setReplyText("");
       fetchProviderData();
     } catch (err: any) {
-      toast.error('Không thể gửi phản hồi');
+      toast.error("Không thể gửi phản hồi");
     }
   };
 
   const handleReportReview = async (reviewId: string) => {
     try {
-      await httpClient.post(`/reviews/${reviewId}/report`, { reason: 'Spam, ngôn từ không phù hợp' });
-      toast.success('Đã gửi báo cáo vi phạm nội dung lên hệ thống admin!');
+      await httpClient.post(`/reviews/${reviewId}/report`, {
+        reason: "Spam, ngôn từ không phù hợp",
+      });
+      toast.success("Đã gửi báo cáo vi phạm nội dung lên hệ thống admin!");
       fetchProviderData();
     } catch (err: any) {
-      toast.error('Báo cáo review thất bại');
+      toast.error("Báo cáo review thất bại");
     }
   };
 
@@ -448,73 +616,88 @@ export const ProviderDashboard: React.FC = () => {
     e.preventDefault();
     if (!ratingBooking) return;
     try {
-      await httpClient.post('/reviews/customer', {
+      await httpClient.post("/reviews/customer", {
         bookingId: ratingBooking.bookingId,
         rating: cRating,
         comment: cComment,
       });
-      toast.success('Đã gửi đánh giá tín nhiệm khách hàng thành công!');
+      toast.success("Đã gửi đánh giá tín nhiệm khách hàng thành công!");
       setRatingBooking(null);
-      setCComment('');
+      setCComment("");
       setCRating(5);
       fetchProviderData();
     } catch (err: any) {
-      toast.error(err.message || 'Đánh giá khách hàng thất bại');
+      toast.error(err.message || "Đánh giá khách hàng thất bại");
     }
   };
 
   const handleSearchTrustScore = async () => {
     if (!searchCustId) return;
     try {
-      const res: any = await httpClient.get(`/reviews/customer/${searchCustId}/trust`);
+      const res: any = await httpClient.get(
+        `/reviews/customer/${searchCustId}/trust`,
+      );
       setTrustScoreResult(res);
-      toast.success('Đồng bộ tín nhiệm khách hàng hoàn tất!');
+      toast.success("Đồng bộ tín nhiệm khách hàng hoàn tất!");
     } catch (err: any) {
-      toast.error('Không thể tìm thấy khách hàng này');
+      toast.error("Không thể tìm thấy khách hàng này");
       setTrustScoreResult(null);
     }
   };
 
-  const daysOfWeekVn = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+  const daysOfWeekVn = [
+    "Chủ Nhật",
+    "Thứ Hai",
+    "Thứ Ba",
+    "Thứ Tư",
+    "Thứ Năm",
+    "Thứ Sáu",
+    "Thứ Bảy",
+  ];
 
   // Orders State — loaded from API via bookingsState
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
-  const [orderTab, setOrderTab] = useState('Tất cả');
+  const [orderTab, setOrderTab] = useState("Tất cả");
   const [activePage, setActivePage] = useState(1);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
 
   // Incident Report States
   const [reportingOrder, setReportingOrder] = useState<Order | null>(null);
-  const [selectedItemId, setSelectedItemId] = useState<string>('');
-  const [incidentDesc, setIncidentDesc] = useState<string>('');
+  const [selectedItemId, setSelectedItemId] = useState<string>("");
+  const [incidentDesc, setIncidentDesc] = useState<string>("");
   const [incidentEvidence, setIncidentEvidence] = useState<string[]>([]);
   const [incidentAmount, setIncidentAmount] = useState<number>(0);
-  const [incidentActionType, setIncidentActionType] = useState<'CLEANING' | 'MAINTENANCE'>('CLEANING');
+  const [incidentActionType, setIncidentActionType] = useState<
+    "CLEANING" | "MAINTENANCE"
+  >("CLEANING");
   const [submittingIncident, setSubmittingIncident] = useState(false);
-  const [uploadingIncidentEvidence, setUploadingIncidentEvidence] = useState(false);
+  const [uploadingIncidentEvidence, setUploadingIncidentEvidence] =
+    useState(false);
 
-  const handleIncidentEvidenceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleIncidentEvidenceUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const files = Array.from(e.target.files || []);
-    e.target.value = '';
+    e.target.value = "";
     if (!files.length) return;
     if (incidentEvidence.length + files.length > 5) {
-      toast.error('Chỉ được gửi tối đa 5 ảnh bằng chứng.');
+      toast.error("Chỉ được gửi tối đa 5 ảnh bằng chứng.");
       return;
     }
 
     setUploadingIncidentEvidence(true);
     try {
       const formData = new FormData();
-      files.forEach((file) => formData.append('images', file));
+      files.forEach((file) => formData.append("images", file));
       const response = await httpClient.post<{ urls: string[] }>(
-        '/api/disputes/incidents/upload-evidence',
+        "/api/disputes/incidents/upload-evidence",
         formData,
       );
       setIncidentEvidence((current) => [...current, ...response.urls]);
-      toast.success('Đã tải ảnh bằng chứng lên.');
+      toast.success("Đã tải ảnh bằng chứng lên.");
     } catch (err: any) {
-      toast.error(err.message || 'Tải ảnh bằng chứng thất bại');
+      toast.error(err.message || "Tải ảnh bằng chứng thất bại");
     } finally {
       setUploadingIncidentEvidence(false);
     }
@@ -523,29 +706,31 @@ export const ProviderDashboard: React.FC = () => {
   const handleSendIncidentReport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reportingOrder || !selectedItemId) {
-      toast.error('Vui lòng chọn sản phẩm gặp sự cố!');
+      toast.error("Vui lòng chọn sản phẩm gặp sự cố!");
       return;
     }
     if (!incidentDesc.trim()) {
-      toast.error('Vui lòng nhập mô tả sự cố!');
+      toast.error("Vui lòng nhập mô tả sự cố!");
       return;
     }
     if (!Number.isInteger(incidentAmount) || incidentAmount <= 0) {
-      toast.error('Tiền đền bù phải là số nguyên lớn hơn 0.');
+      toast.error("Tiền đền bù phải là số nguyên lớn hơn 0.");
       return;
     }
     if (incidentAmount > (reportingOrder.depositTotal || 0)) {
-      toast.error(`Tiền đền bù không được vượt quá số tiền cọc (${(reportingOrder.depositTotal || 0).toLocaleString()}đ)`);
+      toast.error(
+        `Tiền đền bù không được vượt quá số tiền cọc (${(reportingOrder.depositTotal || 0).toLocaleString()}đ)`,
+      );
       return;
     }
     const photos = incidentEvidence;
     if (photos.length > 5) {
-      toast.error('Chỉ được gửi tối đa 5 ảnh bằng chứng.');
+      toast.error("Chỉ được gửi tối đa 5 ảnh bằng chứng.");
       return;
     }
     setSubmittingIncident(true);
     try {
-      await httpClient.post('/api/disputes/incidents', {
+      await httpClient.post("/api/disputes/incidents", {
         bookingId: reportingOrder._id,
         bookingItemId: selectedItemId,
         description: incidentDesc,
@@ -553,16 +738,18 @@ export const ProviderDashboard: React.FC = () => {
         requestedAmount: incidentAmount,
         actionType: incidentActionType,
       });
-      toast.success('Báo cáo sự cố thành công! Đơn đặt lịch đã chuyển sang trạng thái chờ giải quyết.');
+      toast.success(
+        "Báo cáo sự cố thành công! Đơn đặt lịch đã chuyển sang trạng thái chờ giải quyết.",
+      );
       setReportingOrder(null);
-      setSelectedItemId('');
-      setIncidentDesc('');
+      setSelectedItemId("");
+      setIncidentDesc("");
       setIncidentEvidence([]);
       setIncidentAmount(0);
-      setIncidentActionType('CLEANING');
+      setIncidentActionType("CLEANING");
       fetchOrders();
     } catch (err: any) {
-      toast.error(err.message || 'Gửi báo cáo sự cố thất bại');
+      toast.error(err.message || "Gửi báo cáo sự cố thất bại");
     } finally {
       setSubmittingIncident(false);
     }
@@ -571,60 +758,76 @@ export const ProviderDashboard: React.FC = () => {
   const fetchOrders = async () => {
     setLoadingOrders(true);
     try {
-      const bRes: any = await httpClient.get('/bookings/provider');
-      const mapped: Order[] = (Array.isArray(bRes) ? bRes : []).map((b: any) => {
-        const cust = b.customerId;
-        const custName = cust?.profile?.fullName || cust?.email?.split('@')[0] || 'Khách hàng';
-        const custEmail = cust?.email || '';
-        const initials = custName.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
-        const firstItem = b.items?.[0];
-        const productName = firstItem?.name || firstItem?.productId?.name || firstItem?.photographyPackageId?.name || 'Sản phẩm thuê';
-        const dateStr = b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : '';
-        
-        let totalAmt = 0;
-        if (b.items && b.items.length > 0) {
-          totalAmt = b.items.reduce((sum: number, item: any) => {
-            const price = item.unitPrice ?? 0;
-            const qty = item.quantity ?? 1;
-            return sum + (price * qty);
-          }, 0);
-        }
-        if (totalAmt === 0 && b.pricingSummary?.grandTotal) {
-          totalAmt = b.pricingSummary.grandTotal;
-        }
+      const bRes: any = await httpClient.get("/bookings/provider");
+      const mapped: Order[] = (Array.isArray(bRes) ? bRes : []).map(
+        (b: any) => {
+          const cust = b.customerId;
+          const custName =
+            cust?.profile?.fullName ||
+            cust?.email?.split("@")[0] ||
+            "Khách hàng";
+          const custEmail = cust?.email || "";
+          const initials = custName
+            .split(" ")
+            .map((w: string) => w[0])
+            .slice(0, 2)
+            .join("")
+            .toUpperCase();
+          const firstItem = b.items?.[0];
+          const productName =
+            firstItem?.name ||
+            firstItem?.productId?.name ||
+            firstItem?.photographyPackageId?.name ||
+            "Sản phẩm thuê";
+          const dateStr = b.createdAt
+            ? new Date(b.createdAt).toLocaleDateString("vi-VN")
+            : "";
 
-        const statusMap: Record<string, string> = {
-          PENDING: 'CHỜ XỬ LÝ',
-          PENDING_PAYMENT: 'CHỜ THANH TOÁN',
-          DEPOSIT_PAID: 'ĐÃ ĐẶT CỌC',
-          CONFIRMED: 'ĐANG THỰC HIỆN',
-          PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
-          PICKED_UP: 'ĐANG THUÊ',
-          RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
-          RETURNED: 'ĐÃ TRẢ ĐỒ',
-          COMPLETED: 'HOÀN THÀNH',
-          CANCELLED: 'ĐÃ HỦY',
-          DISPUTED: 'TRANH CHẤP',
-        };
-        return {
-          _id: b._id,
-          id: `#${b._id?.slice(-6).toUpperCase()}`,
-          customerName: custName,
-          customerEmail: custEmail,
-          customerInitials: initials,
-          productName,
-          orderDate: dateStr,
-          total: `${totalAmt.toLocaleString('vi-VN')}đ`,
-          status: statusMap[b.status] || b.status,
-          totalAmount: totalAmt,
-          items: b.items,
-          depositTotal: b.pricingSummary?.depositTotal || 0,
-          rawStatus: b.status,
-        };
-      });
+          let totalAmt = 0;
+          if (b.items && b.items.length > 0) {
+            totalAmt = b.items.reduce((sum: number, item: any) => {
+              const price = item.unitPrice ?? 0;
+              const qty = item.quantity ?? 1;
+              return sum + price * qty;
+            }, 0);
+          }
+          if (totalAmt === 0 && b.pricingSummary?.grandTotal) {
+            totalAmt = b.pricingSummary.grandTotal;
+          }
+
+          const statusMap: Record<string, string> = {
+            PENDING: "CHỜ XỬ LÝ",
+            PENDING_PAYMENT: "CHỜ THANH TOÁN",
+            DEPOSIT_PAID: "ĐÃ ĐẶT CỌC",
+            CONFIRMED: "ĐANG THỰC HIỆN",
+            PICKUP_PENDING: "CHỜ NHẬN ĐỒ",
+            PICKED_UP: "ĐANG THUÊ",
+            RETURN_PENDING: "CHỜ KHÁCH DUYỆT SỰ CỐ",
+            RETURNED: "ĐÃ TRẢ ĐỒ",
+            COMPLETED: "HOÀN THÀNH",
+            CANCELLED: "ĐÃ HỦY",
+            DISPUTED: "TRANH CHẤP",
+          };
+          return {
+            _id: b._id,
+            id: `#${b._id?.slice(-6).toUpperCase()}`,
+            customerName: custName,
+            customerEmail: custEmail,
+            customerInitials: initials,
+            productName,
+            orderDate: dateStr,
+            total: `${totalAmt.toLocaleString("vi-VN")}đ`,
+            status: statusMap[b.status] || b.status,
+            totalAmount: totalAmt,
+            items: b.items,
+            depositTotal: b.pricingSummary?.depositTotal || 0,
+            rawStatus: b.status,
+          };
+        },
+      );
       setOrders(mapped);
     } catch (err: any) {
-      toast.error('Không thể tải danh sách đơn hàng');
+      toast.error("Không thể tải danh sách đơn hàng");
     } finally {
       setLoadingOrders(false);
     }
@@ -632,41 +835,52 @@ export const ProviderDashboard: React.FC = () => {
 
   // Products State
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
 
   // Add/Edit Product Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  
+
   // Product Form Fields
-  const [prodName, setProdName] = useState('');
-  const [prodCategoryId, setProdCategoryId] = useState('');
-  const [prodDescription, setProdDescription] = useState('');
-  const [prodBasePrice, setProdBasePrice] = useState('');
-  const [prodDepositAmount, setProdDepositAmount] = useState('');
+  const [prodName, setProdName] = useState("");
+  const [prodCategoryId, setProdCategoryId] = useState("");
+  const [prodDescription, setProdDescription] = useState("");
+  const [prodBasePrice, setProdBasePrice] = useState("");
+  const [prodDepositAmount, setProdDepositAmount] = useState("");
   const [prodSizes, setProdSizes] = useState<string[]>([]);
   const [prodColors, setProdColors] = useState<string[]>([]);
   const [prodMaterials, setProdMaterials] = useState<string[]>([]);
-  const [prodStatus, setProdStatus] = useState<'ACTIVE' | 'DRAFT' | 'INACTIVE'>('ACTIVE');
+  const [prodStatus, setProdStatus] = useState<"ACTIVE" | "DRAFT" | "INACTIVE">(
+    "ACTIVE",
+  );
   const [prodImages, setProdImages] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
-  const [prodStyle, setProdStyle] = useState('traditional');
+  const [prodStyle, setProdStyle] = useState("traditional");
   const [prodOccasions, setProdOccasions] = useState<string[]>([]);
 
-  const sizesOptions = ['S', 'M', 'L', 'XL', 'XXL'];
-  const colorsOptions = ['RED', 'WHITE', 'GOLD', 'BLACK', 'PINK', 'BLUE', 'GREEN', 'BROWN'];
-  const materialsOptions = ['SILK', 'VELVET', 'BROCADE', 'ORGANZA', 'LINEN'];
+  const sizesOptions = ["S", "M", "L", "XL", "XXL"];
+  const colorsOptions = [
+    "RED",
+    "WHITE",
+    "GOLD",
+    "BLACK",
+    "PINK",
+    "BLUE",
+    "GREEN",
+    "BROWN",
+  ];
+  const materialsOptions = ["SILK", "VELVET", "BROCADE", "ORGANZA", "LINEN"];
 
   // Fetch products and categories
   const fetchProducts = async () => {
     setLoadingProducts(true);
     try {
-      const data = await httpClient.get<Product[]>('/products/my-listings');
+      const data = await httpClient.get<Product[]>("/products/my-listings");
       setProducts(data);
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Lỗi tải danh sách sản phẩm');
+      toast.error(err.message || "Lỗi tải danh sách sản phẩm");
     } finally {
       setLoadingProducts(false);
     }
@@ -674,32 +888,45 @@ export const ProviderDashboard: React.FC = () => {
 
   const fetchCategories = async () => {
     try {
-      const data = await httpClient.get<any[]>('/products/categories');
+      const data = await categoryService.getPublic({
+        type: "AODAI_CATEGORY",
+      });
       setCategories(data);
       if (data.length > 0 && !prodCategoryId) {
-        setProdCategoryId(data[0]._id || data[0].id || '');
+        setProdCategoryId(data[0].id);
       }
     } catch (err) {
-      console.error('Lỗi tải danh mục:', err);
+      console.error("Lỗi tải danh mục:", err);
     }
   };
 
   useEffect(() => {
-    if (currentView === 'orders') {
+    if (currentView === "orders") {
       fetchOrders();
-    } else if (currentView === 'collections') {
+    } else if (currentView === "collections") {
       fetchProducts();
       fetchCategories();
-    } else if (currentView === 'payouts') {
+    } else if (currentView === "payouts") {
       fetchPayouts();
-    } else if (['profile', 'portfolio', 'calendar', 'vouchers', 'reviews', 'trust', 'analytics'].includes(currentView)) {
+    } else if (
+      [
+        "profile",
+        "portfolio",
+        "calendar",
+        "vouchers",
+        "reviews",
+        "trust",
+        "analytics",
+      ].includes(currentView)
+    ) {
       fetchProviderData();
     }
-  }, [currentView]);
+  }, [currentView, payoutPage, payoutStatus, payoutFromDate, payoutToDate]);
 
   const getImageUrl = (url: string) => {
-    if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
-    if (url.startsWith('http://') || url.startsWith('https://')) {
+    if (!url)
+      return "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b";
+    if (url.startsWith("http://") || url.startsWith("https://")) {
       return url;
     }
     return `${API_BASE_URL}${url}`;
@@ -707,19 +934,19 @@ export const ProviderDashboard: React.FC = () => {
 
   const openAddModal = () => {
     setEditingProduct(null);
-    setProdName('');
-    setProdDescription('');
-    setProdBasePrice('');
-    setProdDepositAmount('');
-    setProdSizes(['M']);
-    setProdColors(['RED']);
-    setProdMaterials(['SILK']);
-    setProdStatus('ACTIVE');
+    setProdName("");
+    setProdDescription("");
+    setProdBasePrice("");
+    setProdDepositAmount("");
+    setProdSizes(["M"]);
+    setProdColors(["RED"]);
+    setProdMaterials(["SILK"]);
+    setProdStatus("ACTIVE");
     setProdImages([]);
-    setProdStyle('traditional');
-    setProdOccasions(['wedding']);
+    setProdStyle("traditional");
+    setProdOccasions(["wedding"]);
     if (categories.length > 0) {
-      setProdCategoryId(categories[0]._id || categories[0].id || '');
+      setProdCategoryId(categories[0].id);
     }
     setIsModalOpen(true);
   };
@@ -727,8 +954,10 @@ export const ProviderDashboard: React.FC = () => {
   const openEditModal = (p: Product) => {
     setEditingProduct(p);
     setProdName(p.name);
-    setProdCategoryId(typeof p.categoryId === 'object' ? p.categoryId._id : p.categoryId);
-    setProdDescription(p.description || '');
+    setProdCategoryId(
+      typeof p.categoryId === "object" ? p.categoryId._id : p.categoryId,
+    );
+    setProdDescription(p.description || "");
     setProdBasePrice(p.basePrice.toString());
     setProdDepositAmount(p.depositAmount.toString());
     setProdSizes(p.sizes || []);
@@ -736,51 +965,61 @@ export const ProviderDashboard: React.FC = () => {
     setProdMaterials(p.materials || []);
     setProdStatus(p.status);
     setProdImages(p.images || []);
-    setProdStyle(p.style || 'traditional');
+    setProdStyle(p.style || "traditional");
     setProdOccasions(p.occasions || []);
     setIsModalOpen(true);
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    
+
     setUploadingImages(true);
     try {
       const formData = new FormData();
       for (let i = 0; i < e.target.files.length; i++) {
-        formData.append('images', e.target.files[i]);
+        formData.append("images", e.target.files[i]);
       }
-      const res = await httpClient.post<{ urls: string[] }>('/products/upload', formData);
-      setProdImages(prev => [...prev, ...res.urls]);
-      toast.success('Đã tải lên hình ảnh thành công!');
+      const res = await httpClient.post<{ urls: string[] }>(
+        "/products/upload",
+        formData,
+      );
+      setProdImages((prev) => [...prev, ...res.urls]);
+      toast.success("Đã tải lên hình ảnh thành công!");
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Tải ảnh lên thất bại');
+      toast.error(err.message || "Tải ảnh lên thất bại");
     } finally {
       setUploadingImages(false);
     }
   };
 
   const removeImage = (index: number) => {
-    setProdImages(prev => prev.filter((_, i) => i !== index));
+    setProdImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleOccasionToggle = (key: string) => {
-    setProdOccasions(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+    setProdOccasions((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prodName.trim() || !prodCategoryId || !prodBasePrice || !prodDepositAmount || prodImages.length === 0) {
-      toast.error('Vui lòng điền đầy đủ các thông tin bắt buộc');
+    if (
+      !prodName.trim() ||
+      !prodCategoryId ||
+      !prodBasePrice ||
+      !prodDepositAmount ||
+      prodImages.length === 0
+    ) {
+      toast.error("Vui lòng điền đầy đủ các thông tin bắt buộc");
       return;
     }
 
     if (Number(prodDepositAmount) >= Number(prodBasePrice)) {
-      toast.error('Giá cọc không được lớn hơn giá thuê');
+      toast.error("Giá cọc không được lớn hơn giá thuê");
       return;
     }
-
 
     const payload = {
       name: prodName,
@@ -802,30 +1041,30 @@ export const ProviderDashboard: React.FC = () => {
         await httpClient.patch(`/products/${editingProduct._id}`, payload);
         toast.success(`Cập nhật áo dài "${prodName}" thành công!`);
       } else {
-        await httpClient.post('/products', payload);
+        await httpClient.post("/products", payload);
         toast.success(`Thêm mới áo dài "${prodName}" thành công!`);
       }
       setIsModalOpen(false);
       fetchProducts();
     } catch (err: any) {
-      toast.error(err.message || 'Thao tác lưu sản phẩm thất bại.');
+      toast.error(err.message || "Thao tác lưu sản phẩm thất bại.");
     }
   };
 
   const handleDeleteProduct = async (id: string, name: string) => {
     const result = await Swal.fire({
-      title: 'Xác nhận xóa?',
+      title: "Xác nhận xóa?",
       text: `Bạn có chắc chắn muốn xóa áo dài "${name}" không?`,
-      icon: 'warning',
+      icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: 'var(--color-primary)',
-      cancelButtonColor: '#9CA3AF',
-      confirmButtonText: 'Đồng ý',
-      cancelButtonText: 'Hủy',
-      background: 'white',
+      confirmButtonColor: "var(--color-primary)",
+      cancelButtonColor: "#9CA3AF",
+      confirmButtonText: "Đồng ý",
+      cancelButtonText: "Hủy",
+      background: "white",
       customClass: {
-        popup: 'font-body',
-      }
+        popup: "font-body",
+      },
     });
 
     if (!result.isConfirmed) {
@@ -835,214 +1074,541 @@ export const ProviderDashboard: React.FC = () => {
     try {
       await httpClient.delete(`/products/${id}`);
       Swal.fire({
-        title: 'Đã xóa!',
+        title: "Đã xóa!",
         text: `Đã xóa thành công sản phẩm "${name}".`,
-        icon: 'success',
-        confirmButtonColor: 'var(--color-primary)',
+        icon: "success",
+        confirmButtonColor: "var(--color-primary)",
       });
       fetchProducts();
     } catch (err: any) {
       Swal.fire({
-        title: 'Thất bại!',
-        text: err.message || 'Xóa sản phẩm thất bại.',
-        icon: 'error',
-        confirmButtonColor: 'var(--color-primary)',
+        title: "Thất bại!",
+        text: err.message || "Xóa sản phẩm thất bại.",
+        icon: "error",
+        confirmButtonColor: "var(--color-primary)",
       });
     }
   };
 
   const handleSizeToggle = (size: string) => {
-    setProdSizes(prev => prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size]);
+    setProdSizes((prev) =>
+      prev.includes(size) ? prev.filter((s) => s !== size) : [...prev, size],
+    );
   };
 
   const handleColorToggle = (color: string) => {
-    setProdColors(prev => prev.includes(color) ? prev.filter(c => c !== color) : [...prev, color]);
+    setProdColors((prev) =>
+      prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color],
+    );
   };
 
   const handleMaterialToggle = (material: string) => {
-    setProdMaterials(prev => prev.includes(material) ? prev.filter(m => m !== material) : [...prev, material]);
+    setProdMaterials((prev) =>
+      prev.includes(material)
+        ? prev.filter((m) => m !== material)
+        : [...prev, material],
+    );
   };
 
   // Orders Tab filter & helpers — counts computed dynamically
   const getOrderGroup = (status: string): string => {
-    const s = (status || '').toUpperCase();
-    if (['CHỜ XỬ LÝ', 'CHỜ THANH TOÁN', 'PENDING', 'PENDING_PAYMENT'].includes(s)) {
-      return 'Chờ xử lý';
+    const s = (status || "").toUpperCase();
+    if (
+      ["CHỜ XỬ LÝ", "CHỜ THANH TOÁN", "PENDING", "PENDING_PAYMENT"].includes(s)
+    ) {
+      return "Chờ xử lý";
     }
-    if ([
-      'ĐÃ ĐẶT CỌC', 'ĐANG THỰC HIỆN', 'CHỜ NHẬN ĐỒ', 'ĐANG THUÊ', 
-      'CHỜ KHÁCH DUYỆT SỰ CỐ', 'ĐÃ TRẢ ĐỒ', 'TRANH CHẤP', 'ĐANG XỬ LÝ',
-      'DEPOSIT_PAID', 'CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP',
-      'RETURN_PENDING', 'RETURNED', 'DISPUTED'
-    ].includes(s)) {
-      return 'Đang thực hiện';
+    if (
+      [
+        "ĐÃ ĐẶT CỌC",
+        "ĐANG THỰC HIỆN",
+        "CHỜ NHẬN ĐỒ",
+        "ĐANG THUÊ",
+        "CHỜ KHÁCH DUYỆT SỰ CỐ",
+        "ĐÃ TRẢ ĐỒ",
+        "TRANH CHẤP",
+        "ĐANG XỬ LÝ",
+        "DEPOSIT_PAID",
+        "CONFIRMED",
+        "PICKUP_PENDING",
+        "PICKED_UP",
+        "RETURN_PENDING",
+        "RETURNED",
+        "DISPUTED",
+      ].includes(s)
+    ) {
+      return "Đang thực hiện";
     }
-    if (['HOÀN THÀNH', 'COMPLETED'].includes(s)) {
-      return 'Hoàn thành';
+    if (["HOÀN THÀNH", "COMPLETED"].includes(s)) {
+      return "Hoàn thành";
     }
-    if (['ĐÃ HỦY', 'CANCELLED'].includes(s)) {
-      return 'Đã hủy';
+    if (["ĐÃ HỦY", "CANCELLED"].includes(s)) {
+      return "Đã hủy";
     }
-    return 'Khác';
+    return "Khác";
   };
 
-  const tabs = React.useMemo(() => [
-    { label: 'Tất cả', count: orders.length },
-    { label: 'Chờ xử lý', count: orders.filter(o => getOrderGroup(o.status) === 'Chờ xử lý').length },
-    { label: 'Đang thực hiện', count: orders.filter(o => getOrderGroup(o.status) === 'Đang thực hiện').length },
-    { label: 'Hoàn thành', count: orders.filter(o => getOrderGroup(o.status) === 'Hoàn thành').length },
-    { label: 'Đã hủy', count: orders.filter(o => getOrderGroup(o.status) === 'Đã hủy').length },
-  ], [orders]);
+  const tabs = React.useMemo(
+    () => [
+      { label: "Tất cả", count: orders.length },
+      {
+        label: "Chờ xử lý",
+        count: orders.filter((o) => getOrderGroup(o.status) === "Chờ xử lý")
+          .length,
+      },
+      {
+        label: "Đang thực hiện",
+        count: orders.filter(
+          (o) => getOrderGroup(o.status) === "Đang thực hiện",
+        ).length,
+      },
+      {
+        label: "Hoàn thành",
+        count: orders.filter((o) => getOrderGroup(o.status) === "Hoàn thành")
+          .length,
+      },
+      {
+        label: "Đã hủy",
+        count: orders.filter((o) => getOrderGroup(o.status) === "Đã hủy")
+          .length,
+      },
+    ],
+    [orders],
+  );
 
-  const filteredOrders = orderTab === 'Tất cả' 
-    ? orders 
-    : orders.filter(o => getOrderGroup(o.status) === orderTab);
+  const filteredOrders =
+    orderTab === "Tất cả"
+      ? orders
+      : orders.filter((o) => getOrderGroup(o.status) === orderTab);
 
   // Monthly revenue from completed orders
   const monthlyRevenue = React.useMemo(() => {
     const now = new Date();
     return orders
-      .filter(o => {
-        const d = o.orderDate ? new Date(o.orderDate.split('/').reverse().join('-')) : null;
-        return o.status === 'HOÀN THÀNH' && d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      .filter((o) => {
+        const d = o.orderDate
+          ? new Date(o.orderDate.split("/").reverse().join("-"))
+          : null;
+        return (
+          o.status === "HOÀN THÀNH" &&
+          d &&
+          d.getMonth() === now.getMonth() &&
+          d.getFullYear() === now.getFullYear()
+        );
       })
       .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
   }, [orders]);
 
   const statusBadgeStyle = (status: string): React.CSSProperties => {
-    const base: React.CSSProperties = { display: 'inline-block', padding: '4px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', color: 'white' };
-    if (status === 'HOÀN THÀNH') return { ...base, backgroundColor: '#2e7d32' };
-    if (status === 'CHỜ KHÁCH DUYỆT SỰ CỐ') return { ...base, backgroundColor: '#ed6c02' };
-    if (status === 'TRANH CHẤP') return { ...base, backgroundColor: '#d32f2f' };
-    if (status === 'ĐÃ HỦY') return { ...base, backgroundColor: '#757575' };
-    if (status === 'CHỜ XỬ LÝ' || status === 'CHỜ THANH TOÁN') return { ...base, backgroundColor: 'var(--color-primary)' };
-    if (status === 'ĐANG XỬ LÝ' || status === 'ĐANG THỰC HIỆN' || status === 'ĐANG THUÊ') return { ...base, backgroundColor: 'var(--color-gold)' };
-    return { ...base, backgroundColor: '#ccc', color: '#555' };
+    const base: React.CSSProperties = {
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: "4px",
+      fontSize: "10px",
+      fontWeight: 700,
+      letterSpacing: "0.05em",
+      color: "white",
+    };
+    if (status === "HOÀN THÀNH") return { ...base, backgroundColor: "#2e7d32" };
+    if (status === "CHỜ KHÁCH DUYỆT SỰ CỐ")
+      return { ...base, backgroundColor: "#ed6c02" };
+    if (status === "TRANH CHẤP") return { ...base, backgroundColor: "#d32f2f" };
+    if (status === "ĐÃ HỦY") return { ...base, backgroundColor: "#757575" };
+    if (status === "CHỜ XỬ LÝ" || status === "CHỜ THANH TOÁN")
+      return { ...base, backgroundColor: "var(--color-primary)" };
+    if (
+      status === "ĐANG XỬ LÝ" ||
+      status === "ĐANG THỰC HIỆN" ||
+      status === "ĐANG THUÊ"
+    )
+      return { ...base, backgroundColor: "var(--color-gold)" };
+    return { ...base, backgroundColor: "#ccc", color: "#555" };
   };
 
   const navItemStyle = (active: boolean): React.CSSProperties => ({
-    display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', fontSize: '14px', fontWeight: 600,
-    color: active ? 'var(--color-primary)' : 'rgba(255,255,255,0.5)', textDecoration: 'none', borderRadius: '8px',
-    backgroundColor: active ? 'rgba(255,255,255,0.06)' : 'transparent', transition: 'var(--transition-smooth)', cursor: 'pointer',
-    borderRight: active ? '2px solid var(--color-primary)' : 'none',
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    padding: "10px 14px",
+    fontSize: "13px",
+    fontWeight: active ? 700 : 500,
+    color: active ? "#4A0E17" : "#E8E2D5",
+    textDecoration: "none",
+    borderRadius: "6px",
+    backgroundColor: active ? "white" : "transparent",
+    transition: "all 0.15s",
+    cursor: "pointer",
+    boxShadow: active ? "0 4px 12px rgba(0,0,0,0.08)" : "none",
+    border: "none",
+    textAlign: "left",
+    width: "100%",
   });
 
   // Map từ trạng thái tiếng Việt → BookingStatus enum value
   const statusApiMap: Record<string, string> = {
-    'HOÀN THÀNH': 'COMPLETED',
-    'ĐANG XỬ LÝ': 'CONFIRMED',
-    'CHỜ XỬ LÝ': 'PENDING_PAYMENT',
-    'ĐÃ HỦY': 'CANCELLED',
+    "HOÀN THÀNH": "COMPLETED",
+    "ĐANG XỬ LÝ": "CONFIRMED",
+    "CHỜ XỬ LÝ": "PENDING_PAYMENT",
+    "ĐÃ HỦY": "CANCELLED",
   };
 
   const changeOrderStatus = async (_id: string, s: string) => {
     const apiStatus = statusApiMap[s] || s;
     try {
       await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus });
-      setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: s } : o));
+      setOrders((prev) =>
+        prev.map((o) =>
+          o._id === _id || o.id === _id ? { ...o, status: s } : o,
+        ),
+      );
       toast.success(`Đã cập nhật trạng thái đơn hàng thành "${s}"!`);
     } catch (err: any) {
-      toast.error(err.message || 'Cập nhật trạng thái thất bại');
+      toast.error(err.message || "Cập nhật trạng thái thất bại");
     }
     setActionMenuId(null);
   };
 
   const handleLogoutClick = async () => {
     const result = await Swal.fire({
-      title: 'Đăng xuất?',
-      text: 'Bạn có chắc chắn muốn đăng xuất khỏi hệ thống không?',
-      icon: 'question',
+      title: "Đăng xuất?",
+      text: "Bạn có chắc chắn muốn đăng xuất khỏi hệ thống không?",
+      icon: "question",
       showCancelButton: true,
-      confirmButtonColor: 'var(--color-primary)',
-      cancelButtonColor: '#9CA3AF',
-      confirmButtonText: 'Đăng xuất',
-      cancelButtonText: 'Hủy',
-      background: 'white',
+      confirmButtonColor: "var(--color-primary)",
+      cancelButtonColor: "#9CA3AF",
+      confirmButtonText: "Đăng xuất",
+      cancelButtonText: "Hủy",
+      background: "white",
       customClass: {
-        popup: 'font-body',
-      }
+        popup: "font-body",
+      },
     });
 
     if (result.isConfirmed) {
       logout();
-      toast.success('Đã đăng xuất thành công!');
-      navigate('/');
+      toast.success("Đã đăng xuất thành công!");
+      navigate("/");
     }
   };
 
   const renderAnalyticsView = () => {
     if (!analyticsData) {
       return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
-          <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-            <div style={{ width: '40px', height: '40px', border: '3px solid #E8E2D5', borderTop: '3px solid #4A0E17', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px auto' }} />
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            height: "400px",
+          }}
+        >
+          <div
+            style={{
+              textAlign: "center",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            <div
+              style={{
+                width: "40px",
+                height: "40px",
+                border: "3px solid #E8E2D5",
+                borderTop: "3px solid #4A0E17",
+                borderRadius: "50%",
+                animation: "spin 1s linear infinite",
+                margin: "0 auto 16px auto",
+              }}
+            />
             <p style={{ fontWeight: 600 }}>Đang tải số liệu phân tích...</p>
           </div>
         </div>
       );
     }
 
-    const isShop = analyticsData.capabilities?.includes('AODAI_RENTAL') || analyticsData.capabilities?.includes('RENTAL');
-    const isPhoto = analyticsData.capabilities?.includes('PHOTOGRAPHY');
+    const isShop =
+      analyticsData.capabilities?.includes("AODAI_RENTAL") ||
+      analyticsData.capabilities?.includes("RENTAL");
+    const isPhoto = analyticsData.capabilities?.includes("PHOTOGRAPHY");
 
     const renderShopAnalytics = () => {
-      const maxRev = Math.max(...analyticsData.revenueGrowth.map((r: any) => r.value), 1000000);
-      const points = analyticsData.revenueGrowth.map((r: any, idx: number) => {
-        const x = 50 + idx * 80;
-        const y = 260 - (r.value / maxRev) * 200;
-        return `${x},${y}`;
-      }).join(' ');
+      const maxRev = Math.max(
+        ...analyticsData.revenueGrowth.map((r: any) => r.value),
+        1000000,
+      );
+      const points = analyticsData.revenueGrowth
+        .map((r: any, idx: number) => {
+          const x = 50 + idx * 80;
+          const y = 260 - (r.value / maxRev) * 200;
+          return `${x},${y}`;
+        })
+        .join(" ");
 
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
             <div>
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#4A0E17' }}>Quản trị Cửa hàng</h2>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Phân tích số liệu vận hành và doanh thu áo dài của bạn.</p>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: "20px",
+                  fontWeight: 800,
+                  color: "#4A0E17",
+                }}
+              >
+                Quản trị Cửa hàng
+              </h2>
+              <p
+                style={{
+                  margin: "4px 0 0 0",
+                  fontSize: "13px",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                Phân tích số liệu vận hành và doanh thu áo dài của bạn.
+              </p>
             </div>
             {isShop && isPhoto && (
-              <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--color-light-bg)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
-                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "4px",
+                  backgroundColor: "var(--color-light-bg)",
+                  padding: "4px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--color-light-border)",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSubTab("shop")}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    border: "none",
+                    cursor: "pointer",
+                    backgroundColor:
+                      subTab === "shop" ? "white" : "transparent",
+                    color:
+                      subTab === "shop"
+                        ? "#4A0E17"
+                        : "var(--color-text-secondary)",
+                    boxShadow: subTab === "shop" ? "var(--shadow-sm)" : "none",
+                  }}
+                >
+                  Cửa hàng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubTab("photo")}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    border: "none",
+                    cursor: "pointer",
+                    backgroundColor:
+                      subTab === "photo" ? "white" : "transparent",
+                    color:
+                      subTab === "photo"
+                        ? "#4A0E17"
+                        : "var(--color-text-secondary)",
+                    boxShadow: subTab === "photo" ? "var(--shadow-sm)" : "none",
+                  }}
+                >
+                  Nhiếp ảnh
+                </button>
               </div>
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap: "16px",
+            }}
+          >
             {[
-              { label: 'Doanh thu cửa hàng', val: `${(analyticsData.totalRevenue || 0).toLocaleString('vi-VN')} đ`, desc: 'Tổng doanh thu thực', color: '#4A0E17', bg: '#FAF6F0' },
-              { label: 'Tỷ lệ thành công', val: `${analyticsData.successRate}%`, desc: 'Booking hoàn thành', color: '#166534', bg: '#F0FDF4' },
-              { label: 'Tỷ lệ hủy lịch', val: `${analyticsData.cancelRate}%`, desc: 'Lịch khách hủy', color: '#991B1B', bg: '#FEE2E2' },
-              { label: 'Tổng sản phẩm', val: `${String(analyticsData.totalProducts).padStart(2, '0')} Item`, desc: 'Đồ đang hoạt động', color: '#706E3B', bg: '#FAF6F0' },
-              { label: 'Thời gian thuê tb', val: analyticsData.averageRentalDuration, desc: 'Thời gian mỗi đơn', color: '#15803D', bg: '#F0FDF4' }
+              {
+                label: "Doanh thu cửa hàng",
+                val: `${(analyticsData.totalRevenue || 0).toLocaleString("vi-VN")} đ`,
+                desc: "Tổng doanh thu thực",
+                color: "#4A0E17",
+                bg: "#FAF6F0",
+              },
+              {
+                label: "Tỷ lệ thành công",
+                val: `${analyticsData.successRate}%`,
+                desc: "Booking hoàn thành",
+                color: "#166534",
+                bg: "#F0FDF4",
+              },
+              {
+                label: "Tỷ lệ hủy lịch",
+                val: `${analyticsData.cancelRate}%`,
+                desc: "Lịch khách hủy",
+                color: "#991B1B",
+                bg: "#FEE2E2",
+              },
+              {
+                label: "Tổng sản phẩm",
+                val: `${String(analyticsData.totalProducts).padStart(2, "0")} Item`,
+                desc: "Đồ đang hoạt động",
+                color: "#706E3B",
+                bg: "#FAF6F0",
+              },
+              {
+                label: "Thời gian thuê tb",
+                val: analyticsData.averageRentalDuration,
+                desc: "Thời gian mỗi đơn",
+                color: "#15803D",
+                bg: "#F0FDF4",
+              },
             ].map((m, idx) => (
-              <div key={idx} style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '120px' }}>
+              <div
+                key={idx}
+                style={{
+                  backgroundColor: "white",
+                  border: "1px solid var(--color-light-border)",
+                  borderRadius: "12px",
+                  padding: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  minHeight: "120px",
+                }}
+              >
                 <div>
-                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</span>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: idx === 0 ? '#4A0E17' : '#2A2A2A', marginTop: '6px', wordBreak: 'break-all' }}>{m.val}</div>
+                  <span
+                    style={{
+                      fontSize: "10px",
+                      color: "var(--color-text-secondary)",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    {m.label}
+                  </span>
+                  <div
+                    style={{
+                      fontSize: "18px",
+                      fontWeight: 800,
+                      color: idx === 0 ? "#4A0E17" : "#2A2A2A",
+                      marginTop: "6px",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {m.val}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #F0ECE4', paddingTop: '8px' }}>
-                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{m.desc}</span>
-                  <div style={{ width: '20px', height: '20px', borderRadius: '50%', backgroundColor: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: m.color, fontWeight: 700, fontSize: '10px' }}>
-                    {idx === 0 ? '💰' : idx === 1 ? '✓' : idx === 2 ? '✕' : idx === 3 ? '📦' : '⏱'}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginTop: "12px",
+                    borderTop: "1px solid #F0ECE4",
+                    paddingTop: "8px",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "10px",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    {m.desc}
+                  </span>
+                  <div
+                    style={{
+                      width: "20px",
+                      height: "20px",
+                      borderRadius: "50%",
+                      backgroundColor: m.bg,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: m.color,
+                      fontWeight: 700,
+                      fontSize: "10px",
+                    }}
+                  >
+                    {idx === 0
+                      ? "💰"
+                      : idx === 1
+                        ? "✓"
+                        : idx === 2
+                          ? "✕"
+                          : idx === 3
+                            ? "📦"
+                            : "⏱"}
                   </div>
                 </div>
               </div>
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Doanh thu Áo dài</h3>
-              <div style={{ height: '300px', width: '100%' }}>
-                <svg viewBox="0 0 500 300" style={{ width: '100%', height: '100%' }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.4fr 1fr",
+              gap: "20px",
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: "white",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "12px",
+                padding: "24px",
+              }}
+            >
+              <h3
+                style={{
+                  margin: "0 0 20px 0",
+                  fontSize: "15px",
+                  fontWeight: 750,
+                  color: "#4A0E17",
+                  textTransform: "uppercase",
+                }}
+              >
+                Doanh thu Áo dài
+              </h3>
+              <div style={{ height: "300px", width: "100%" }}>
+                <svg
+                  viewBox="0 0 500 300"
+                  style={{ width: "100%", height: "100%" }}
+                >
                   {[0, 0.25, 0.5, 0.75, 1].map((p, idx) => {
                     const y = 40 + p * 200;
                     return (
-                      <line key={idx} x1="40" y1={y} x2="480" y2={y} stroke="#F0ECE4" strokeDasharray="3 3" />
+                      <line
+                        key={idx}
+                        x1="40"
+                        y1={y}
+                        x2="480"
+                        y2={y}
+                        stroke="#F0ECE4"
+                        strokeDasharray="3 3"
+                      />
                     );
                   })}
-                  <polyline fill="none" stroke="#4A0E17" strokeWidth="3" points={points} />
+                  <polyline
+                    fill="none"
+                    stroke="#4A0E17"
+                    strokeWidth="3"
+                    points={points}
+                  />
                   {analyticsData.revenueGrowth.map((r: any, idx: number) => {
                     const x = 50 + idx * 80;
                     const y = 260 - (r.value / maxRev) * 200;
@@ -1050,8 +1616,26 @@ export const ProviderDashboard: React.FC = () => {
                       <g key={idx}>
                         <circle cx={x} cy={y} r="5" fill="#4A0E17" />
                         <circle cx={x} cy={y} r="2" fill="white" />
-                        <text x={x} y={y - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="#2A2A2A">{(r.value/1000000).toFixed(1)}M</text>
-                        <text x={x} y="285" textAnchor="middle" fontSize="10" fontWeight="600" fill="var(--color-text-secondary)">{r.label.replace('Tháng ', 'T')}</text>
+                        <text
+                          x={x}
+                          y={y - 12}
+                          textAnchor="middle"
+                          fontSize="9"
+                          fontWeight="700"
+                          fill="#2A2A2A"
+                        >
+                          {(r.value / 1000000).toFixed(1)}M
+                        </text>
+                        <text
+                          x={x}
+                          y="285"
+                          textAnchor="middle"
+                          fontSize="10"
+                          fontWeight="600"
+                          fill="var(--color-text-secondary)"
+                        >
+                          {r.label.replace("Tháng ", "T")}
+                        </text>
                       </g>
                     );
                   })}
@@ -1059,60 +1643,254 @@ export const ProviderDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Top Phổ biến</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {analyticsData.popularProducts && analyticsData.popularProducts.length > 0 ? (
+            <div
+              style={{
+                backgroundColor: "white",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "12px",
+                padding: "24px",
+              }}
+            >
+              <h3
+                style={{
+                  margin: "0 0 20px 0",
+                  fontSize: "15px",
+                  fontWeight: 750,
+                  color: "#4A0E17",
+                  textTransform: "uppercase",
+                }}
+              >
+                Top Phổ biến
+              </h3>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px",
+                }}
+              >
+                {analyticsData.popularProducts &&
+                analyticsData.popularProducts.length > 0 ? (
                   analyticsData.popularProducts.map((p: any, idx: number) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: idx < 2 ? '1px solid var(--color-light-border)' : 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <img src={getImageUrl(p.image)} alt={p.name} style={{ width: '44px', height: '44px', borderRadius: '6px', objectFit: 'cover' }} />
+                    <div
+                      key={idx}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        paddingBottom: "12px",
+                        borderBottom:
+                          idx < 2
+                            ? "1px solid var(--color-light-border)"
+                            : "none",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "12px",
+                        }}
+                      >
+                        <img
+                          src={getImageUrl(p.image)}
+                          alt={p.name}
+                          style={{
+                            width: "44px",
+                            height: "44px",
+                            borderRadius: "6px",
+                            objectFit: "cover",
+                          }}
+                        />
                         <div>
-                          <strong style={{ fontSize: '13px', color: '#2A2A2A', display: 'block' }}>{p.name}</strong>
-                          <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Mẫu áo được thuê nhiều</span>
+                          <strong
+                            style={{
+                              fontSize: "13px",
+                              color: "#2A2A2A",
+                              display: "block",
+                            }}
+                          >
+                            {p.name}
+                          </strong>
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              color: "var(--color-text-secondary)",
+                            }}
+                          >
+                            Mẫu áo được thuê nhiều
+                          </span>
                         </div>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <strong style={{ fontSize: '14px', color: '#4A0E17' }}>{p.count}</strong>
-                        <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', display: 'block' }}>lượt thuê</span>
+                      <div style={{ textAlign: "right" }}>
+                        <strong style={{ fontSize: "14px", color: "#4A0E17" }}>
+                          {p.count}
+                        </strong>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "var(--color-text-secondary)",
+                            display: "block",
+                          }}
+                        >
+                          lượt thuê
+                        </span>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 600 }}>Chưa có lượt thuê áo dài nào.</div>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "24px",
+                      color: "var(--color-text-secondary)",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Chưa có lượt thuê áo dài nào.
+                  </div>
                 )}
               </div>
             </div>
           </div>
 
-          <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', overflow: 'hidden' }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-light-border)' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Báo cáo hàng tồn kho & Bảo trì</h3>
+          <div
+            style={{
+              backgroundColor: "white",
+              border: "1px solid var(--color-light-border)",
+              borderRadius: "12px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "20px 24px",
+                borderBottom: "1px solid var(--color-light-border)",
+              }}
+            >
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: "15px",
+                  fontWeight: 750,
+                  color: "#4A0E17",
+                  textTransform: "uppercase",
+                }}
+              >
+                Báo cáo hàng tồn kho & Bảo trì
+              </h3>
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: "13px",
+              }}
+            >
               <thead>
-                <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TÊN SẢN PHẨM</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TRẠNG THÁI</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>SỐ LƯỢNG</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>CHI TIẾT</th>
+                <tr
+                  style={{
+                    backgroundColor: "var(--color-light-bg)",
+                    borderBottom: "1px solid var(--color-light-border)",
+                  }}
+                >
+                  <th
+                    style={{
+                      padding: "14px 24px",
+                      textAlign: "left",
+                      fontWeight: 700,
+                      color: "var(--color-text-secondary)",
+                      fontSize: "11px",
+                    }}
+                  >
+                    TÊN SẢN PHẨM
+                  </th>
+                  <th
+                    style={{
+                      padding: "14px 24px",
+                      textAlign: "center",
+                      fontWeight: 700,
+                      color: "var(--color-text-secondary)",
+                      fontSize: "11px",
+                    }}
+                  >
+                    TRẠNG THÁI
+                  </th>
+                  <th
+                    style={{
+                      padding: "14px 24px",
+                      textAlign: "center",
+                      fontWeight: 700,
+                      color: "var(--color-text-secondary)",
+                      fontSize: "11px",
+                    }}
+                  >
+                    SỐ LƯỢNG
+                  </th>
+                  <th
+                    style={{
+                      padding: "14px 24px",
+                      textAlign: "left",
+                      fontWeight: 700,
+                      color: "var(--color-text-secondary)",
+                      fontSize: "11px",
+                    }}
+                  >
+                    CHI TIẾT
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {analyticsData.inventoryStatus.map((item: any, idx: number) => (
-                  <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
-                    <td style={{ padding: '16px 24px', fontWeight: 700, color: '#2A2A2A' }}>{item.name}</td>
-                    <td style={{ padding: '16px 24px', textAlign: 'center' }}>
-                      <span style={{ 
-                        padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
-                        backgroundColor: item.color === 'rental' ? '#EBF8FF' : '#FEF3C7',
-                        color: item.color === 'rental' ? '#2B6CB0' : '#D69E2E'
-                      }}>
+                  <tr
+                    key={idx}
+                    style={{
+                      borderBottom: "1px solid var(--color-light-border)",
+                    }}
+                  >
+                    <td
+                      style={{
+                        padding: "16px 24px",
+                        fontWeight: 700,
+                        color: "#2A2A2A",
+                      }}
+                    >
+                      {item.name}
+                    </td>
+                    <td style={{ padding: "16px 24px", textAlign: "center" }}>
+                      <span
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          backgroundColor:
+                            item.color === "rental" ? "#EBF8FF" : "#FEF3C7",
+                          color:
+                            item.color === "rental" ? "#2B6CB0" : "#D69E2E",
+                        }}
+                      >
                         {item.status}
                       </span>
                     </td>
-                    <td style={{ padding: '16px 24px', textAlign: 'center', fontWeight: 600 }}>{item.count}</td>
-                    <td style={{ padding: '16px 24px', color: 'var(--color-text-secondary)' }}>{item.detail}</td>
+                    <td
+                      style={{
+                        padding: "16px 24px",
+                        textAlign: "center",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {item.count}
+                    </td>
+                    <td
+                      style={{
+                        padding: "16px 24px",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      {item.detail}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1123,115 +1901,558 @@ export const ProviderDashboard: React.FC = () => {
     };
 
     const renderPhotoAnalytics = () => {
-      const maxVal = Math.max(...analyticsData.revenueGrowth.map((r: any) => r.value), 1000000);
+      const maxVal = Math.max(
+        ...analyticsData.revenueGrowth.map((r: any) => r.value),
+        1000000,
+      );
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
             <div>
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#4A0E17' }}>Tổng quan Hiệu suất</h2>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Thống kê doanh thu, lịch trình chụp và phản hồi đánh giá của bạn.</p>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: "20px",
+                  fontWeight: 800,
+                  color: "#4A0E17",
+                }}
+              >
+                Tổng quan Hiệu suất
+              </h2>
+              <p
+                style={{
+                  margin: "4px 0 0 0",
+                  fontSize: "13px",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                Thống kê doanh thu, lịch trình chụp và phản hồi đánh giá của
+                bạn.
+              </p>
             </div>
             {isShop && isPhoto && (
-              <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--color-light-bg)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
-                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "4px",
+                  backgroundColor: "var(--color-light-bg)",
+                  padding: "4px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--color-light-border)",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSubTab("shop")}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    border: "none",
+                    cursor: "pointer",
+                    backgroundColor:
+                      subTab === "shop" ? "white" : "transparent",
+                    color:
+                      subTab === "shop"
+                        ? "#4A0E17"
+                        : "var(--color-text-secondary)",
+                    boxShadow: subTab === "shop" ? "var(--shadow-sm)" : "none",
+                  }}
+                >
+                  Cửa hàng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubTab("photo")}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    border: "none",
+                    cursor: "pointer",
+                    backgroundColor:
+                      subTab === "photo" ? "white" : "transparent",
+                    color:
+                      subTab === "photo"
+                        ? "#4A0E17"
+                        : "var(--color-text-secondary)",
+                    boxShadow: subTab === "photo" ? "var(--shadow-sm)" : "none",
+                  }}
+                >
+                  Nhiếp ảnh
+                </button>
               </div>
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Doanh thu nhiếp ảnh</span>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: '#4A0E17', marginTop: '8px' }}>{(analyticsData.totalRevenue || 84250000).toLocaleString('vi-VN')} VND</div>
-              <span style={{ fontSize: '12px', color: '#166534', marginTop: '6px', display: 'block', fontWeight: 600 }}>↑ Tăng trưởng tốt trong mùa lễ</span>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: "16px",
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: "white",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "12px",
+                padding: "24px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
+                Doanh thu nhiếp ảnh
+              </span>
+              <div
+                style={{
+                  fontSize: "28px",
+                  fontWeight: 800,
+                  color: "#4A0E17",
+                  marginTop: "8px",
+                }}
+              >
+                {(analyticsData.totalRevenue || 84250000).toLocaleString(
+                  "vi-VN",
+                )}{" "}
+                VND
+              </div>
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "#166534",
+                  marginTop: "6px",
+                  display: "block",
+                  fontWeight: 600,
+                }}
+              >
+                ↑ Tăng trưởng tốt trong mùa lễ
+              </span>
             </div>
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Phí hoa hồng hệ thống (15%)</span>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: '#B89047', marginTop: '8px' }}>{(analyticsData.commissionFee || 12800000).toLocaleString('vi-VN')} VND</div>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '6px', display: 'block' }}>Thu phí tự động hàng tuần</span>
+            <div
+              style={{
+                backgroundColor: "white",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "12px",
+                padding: "24px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
+                Phí hoa hồng hệ thống (15%)
+              </span>
+              <div
+                style={{
+                  fontSize: "28px",
+                  fontWeight: 800,
+                  color: "#B89047",
+                  marginTop: "8px",
+                }}
+              >
+                {(analyticsData.commissionFee || 12800000).toLocaleString(
+                  "vi-VN",
+                )}{" "}
+                VND
+              </div>
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "var(--color-text-secondary)",
+                  marginTop: "6px",
+                  display: "block",
+                }}
+              >
+                Thu phí tự động hàng tuần
+              </span>
             </div>
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div
+              style={{
+                backgroundColor: "white",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "12px",
+                padding: "24px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <div>
-                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Hiệu suất đặt lịch</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600 }}><span style={{ color: '#166534' }}>● Thành công:</span> {analyticsData.successRate}%</div>
-                  <div style={{ fontSize: '12px', fontWeight: 600 }}><span style={{ color: '#991B1B' }}>● Hủy lịch:</span> {analyticsData.cancelRate}%</div>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--color-text-secondary)",
+                    fontWeight: 600,
+                  }}
+                >
+                  Hiệu suất đặt lịch
+                </span>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                    marginTop: "8px",
+                  }}
+                >
+                  <div style={{ fontSize: "12px", fontWeight: 600 }}>
+                    <span style={{ color: "#166534" }}>● Thành công:</span>{" "}
+                    {analyticsData.successRate}%
+                  </div>
+                  <div style={{ fontSize: "12px", fontWeight: 600 }}>
+                    <span style={{ color: "#991B1B" }}>● Hủy lịch:</span>{" "}
+                    {analyticsData.cancelRate}%
+                  </div>
                 </div>
               </div>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#166534', fontSize: '20px', fontWeight: 700 }}>✓</div>
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  backgroundColor: "#F0FDF4",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#166534",
+                  fontSize: "20px",
+                  fontWeight: 700,
+                }}
+              >
+                ✓
+              </div>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Doanh thu theo thời gian</h3>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '280px', paddingTop: '20px' }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.4fr 1fr",
+              gap: "20px",
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: "white",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "12px",
+                padding: "24px",
+              }}
+            >
+              <h3
+                style={{
+                  margin: "0 0 20px 0",
+                  fontSize: "15px",
+                  fontWeight: 750,
+                  color: "#4A0E17",
+                  textTransform: "uppercase",
+                }}
+              >
+                Doanh thu theo thời gian
+              </h3>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-end",
+                  height: "280px",
+                  paddingTop: "20px",
+                }}
+              >
                 {analyticsData.revenueGrowth.map((r: any, idx: number) => {
                   const barHeight = (r.value / maxVal) * 220;
                   return (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
-                      <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{(r.value/1000000).toFixed(1)}M</span>
-                      <div style={{ width: '32px', height: `${barHeight}px`, backgroundColor: '#4A0E17', borderRadius: '4px 4px 0 0', transition: 'height 0.3s ease' }} />
-                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)' }}>{r.label.replace('Tháng ', 'T')}</span>
+                    <div
+                      key={idx}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "8px",
+                        flex: 1,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "9px",
+                          fontWeight: 700,
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        {(r.value / 1000000).toFixed(1)}M
+                      </span>
+                      <div
+                        style={{
+                          width: "32px",
+                          height: `${barHeight}px`,
+                          backgroundColor: "#4A0E17",
+                          borderRadius: "4px 4px 0 0",
+                          transition: "height 0.3s ease",
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        {r.label.replace("Tháng ", "T")}
+                      </span>
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Lịch chụp sắp tới</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {analyticsData.upcomingSchedules && analyticsData.upcomingSchedules.length > 0 ? (
+            <div
+              style={{
+                backgroundColor: "white",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "12px",
+                padding: "24px",
+              }}
+            >
+              <h3
+                style={{
+                  margin: "0 0 20px 0",
+                  fontSize: "15px",
+                  fontWeight: 750,
+                  color: "#4A0E17",
+                  textTransform: "uppercase",
+                }}
+              >
+                Lịch chụp sắp tới
+              </h3>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
+                {analyticsData.upcomingSchedules &&
+                analyticsData.upcomingSchedules.length > 0 ? (
                   analyticsData.upcomingSchedules.map((s: any, idx: number) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+                    <div
+                      key={idx}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "12px",
+                        border: "1px solid var(--color-light-border)",
+                        borderRadius: "8px",
+                        backgroundColor: "var(--color-light-bg)",
+                      }}
+                    >
                       <div>
-                        <strong style={{ fontSize: '13px', color: '#2A2A2A', display: 'block' }}>{s.customerName}</strong>
-                        <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{s.date} • {s.time}</span>
+                        <strong
+                          style={{
+                            fontSize: "13px",
+                            color: "#2A2A2A",
+                            display: "block",
+                          }}
+                        >
+                          {s.customerName}
+                        </strong>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            color: "var(--color-text-secondary)",
+                          }}
+                        >
+                          {s.date} • {s.time}
+                        </span>
                       </div>
-                      <span style={{ 
-                        padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
-                        backgroundColor: s.color === 'deposit' ? '#F0FDF4' : '#FEF3C7',
-                        color: s.color === 'deposit' ? '#166534' : '#92400E'
-                      }}>{s.status}</span>
+                      <span
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          backgroundColor:
+                            s.color === "deposit" ? "#F0FDF4" : "#FEF3C7",
+                          color: s.color === "deposit" ? "#166534" : "#92400E",
+                        }}
+                      >
+                        {s.status}
+                      </span>
                     </div>
                   ))
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 600 }}>Chưa có lịch đặt chụp nào.</div>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "24px",
+                      color: "var(--color-text-secondary)",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Chưa có lịch đặt chụp nào.
+                  </div>
                 )}
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '20px' }}>
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase', alignSelf: 'flex-start' }}>Đánh giá trung bình</h3>
-              <div style={{ fontSize: '64px', fontWeight: 900, color: '#4A0E17', lineHeight: 1 }}>{analyticsData.averageRating}</div>
-              <div style={{ display: 'flex', gap: '4px', fontSize: '20px', color: '#B89047' }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1.4fr",
+              gap: "20px",
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: "white",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "12px",
+                padding: "24px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "12px",
+              }}
+            >
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: "15px",
+                  fontWeight: 750,
+                  color: "#4A0E17",
+                  textTransform: "uppercase",
+                  alignSelf: "flex-start",
+                }}
+              >
+                Đánh giá trung bình
+              </h3>
+              <div
+                style={{
+                  fontSize: "64px",
+                  fontWeight: 900,
+                  color: "#4A0E17",
+                  lineHeight: 1,
+                }}
+              >
+                {analyticsData.averageRating}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "4px",
+                  fontSize: "20px",
+                  color: "#B89047",
+                }}
+              >
                 {Array.from({ length: 5 }).map((_, i) => (
                   <span key={i}>★</span>
                 ))}
               </div>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Dựa trên tất cả feedback khách hàng</span>
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
+                Dựa trên tất cả feedback khách hàng
+              </span>
             </div>
 
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Phong cách phổ biến</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {analyticsData.popularConcepts && analyticsData.popularConcepts.length > 0 ? (
+            <div
+              style={{
+                backgroundColor: "white",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "12px",
+                padding: "24px",
+              }}
+            >
+              <h3
+                style={{
+                  margin: "0 0 20px 0",
+                  fontSize: "15px",
+                  fontWeight: 750,
+                  color: "#4A0E17",
+                  textTransform: "uppercase",
+                }}
+              >
+                Phong cách phổ biến
+              </h3>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px",
+                }}
+              >
+                {analyticsData.popularConcepts &&
+                analyticsData.popularConcepts.length > 0 ? (
                   analyticsData.popularConcepts.map((c: any, idx: number) => (
                     <div key={idx}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 700, marginBottom: '6px' }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          marginBottom: "6px",
+                        }}
+                      >
                         <span>{c.name}</span>
                         <span>{c.percentage}%</span>
                       </div>
-                      <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--color-light-bg)', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ width: `${c.percentage}%`, height: '100%', backgroundColor: c.color, borderRadius: '4px' }} />
+                      <div
+                        style={{
+                          width: "100%",
+                          height: "8px",
+                          backgroundColor: "var(--color-light-bg)",
+                          borderRadius: "4px",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${c.percentage}%`,
+                            height: "100%",
+                            backgroundColor: c.color,
+                            borderRadius: "4px",
+                          }}
+                        />
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 600 }}>Chưa có gói concept nào được đặt.</div>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "24px",
+                      color: "var(--color-text-secondary)",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Chưa có gói concept nào được đặt.
+                  </div>
                 )}
               </div>
             </div>
@@ -1240,97 +2461,320 @@ export const ProviderDashboard: React.FC = () => {
       );
     };
 
-    return subTab === 'shop' ? renderShopAnalytics() : renderPhotoAnalytics();
+    return subTab === "shop" ? renderShopAnalytics() : renderPhotoAnalytics();
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)' }}>
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        overflow: "hidden",
+        fontFamily: "var(--font-body)",
+        color: "var(--color-text-primary)",
+      }}
+    >
       {/* SIDEBAR */}
-      <aside style={{ width: '260px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '32px 24px', flexShrink: 0 }}>
-        <div>
-          <div style={{ marginBottom: '40px' }}>
-            <h1 style={{ fontFamily: 'var(--font-header)', fontSize: '22px', fontWeight: 800, color: 'white', margin: 0 }}>Silk & Stone</h1>
-            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 600 }}>Rental Marketplace</p>
+      <aside
+        style={{
+          width: "260px",
+          backgroundColor: "#4A0E17",
+          color: "white",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          padding: "24px 20px",
+          flexShrink: 0,
+          borderRight: "1px solid #3E0B12",
+        }}
+      >
+        <style>{`
+          .vh-sidebar-nav-no-scrollbar::-webkit-scrollbar {
+            display: none;
+          }
+        `}</style>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+            minHeight: 0,
+            overflow: "hidden",
+            marginBottom: "16px",
+          }}
+        >
+          <div style={{ marginBottom: "20px", flexShrink: 0 }}>
+            <h1
+              style={{
+                fontFamily: "var(--font-header)",
+                fontSize: "22px",
+                fontWeight: 800,
+                color: "white",
+                margin: 0,
+              }}
+            >
+              Silk & Stone
+            </h1>
+            <p
+              style={{
+                fontSize: "9px",
+                color: "#B89047",
+                marginTop: "4px",
+                textTransform: "uppercase",
+                letterSpacing: "0.15em",
+                fontWeight: 700,
+              }}
+            >
+              Rental Marketplace • Provider
+            </p>
           </div>
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <button onClick={() => setCurrentView('analytics')} style={navItemStyle(currentView === 'analytics')}><BarChart3 size={18} /> Thống kê & Hiệu suất</button>
-            <button onClick={() => setCurrentView('orders')} style={navItemStyle(currentView === 'orders')}><ShoppingBag size={18} /> Đơn hàng</button>
-            <button onClick={() => setCurrentView('collections')} style={navItemStyle(currentView === 'collections')}><Layers size={18} /> Bộ sưu tập</button>
-            <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ</button>
-            <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio</button>
-            <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn</button>
-            <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi</button>
-            <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi</button>
-            <button onClick={() => setCurrentView('trust')} style={navItemStyle(currentView === 'trust')}><Users size={18} /> Đánh giá khách hàng</button>
-            <button onClick={() => setCurrentView('payouts')} style={navItemStyle(currentView === 'payouts')}><DollarSign size={18} /> Lịch sử quyết toán</button>
+          <nav
+            className="vh-sidebar-nav-no-scrollbar"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "4px",
+              overflowY: "auto",
+              flex: 1,
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
+            }}
+          >
+            <button
+              onClick={() => setCurrentView("analytics")}
+              style={navItemStyle(currentView === "analytics")}
+            >
+              <BarChart3 size={18} /> Thống kê & Hiệu suất
+            </button>
+            <button
+              onClick={() => setCurrentView("orders")}
+              style={navItemStyle(currentView === "orders")}
+            >
+              <ShoppingBag size={18} /> Đơn hàng
+            </button>
+            <button
+              onClick={() => setCurrentView("collections")}
+              style={navItemStyle(currentView === "collections")}
+            >
+              <Layers size={18} /> Bộ sưu tập
+            </button>
+            <button
+              onClick={() => setCurrentView("profile")}
+              style={navItemStyle(currentView === "profile")}
+            >
+              <Award size={18} /> Thông tin dịch vụ
+            </button>
+            <button
+              onClick={() => setCurrentView("portfolio")}
+              style={navItemStyle(currentView === "portfolio")}
+            >
+              <Camera size={18} /> Quản lý Portfolio
+            </button>
+            <button
+              onClick={() => setCurrentView("calendar")}
+              style={navItemStyle(currentView === "calendar")}
+            >
+              <Calendar size={18} /> Lịch làm việc & Chặn
+            </button>
+            <button
+              onClick={() => setCurrentView("vouchers")}
+              style={navItemStyle(currentView === "vouchers")}
+            >
+              <Tag size={18} /> Mã khuyến mãi
+            </button>
+            <button
+              onClick={() => setCurrentView("reviews")}
+              style={navItemStyle(currentView === "reviews")}
+            >
+              <MessageSquare size={18} /> Đánh giá & Phản hồi
+            </button>
+            <button
+              onClick={() => setCurrentView("trust")}
+              style={navItemStyle(currentView === "trust")}
+            >
+              <Users size={18} /> Đánh giá khách hàng
+            </button>
+            <button
+              onClick={() => setCurrentView("payouts")}
+              style={navItemStyle(currentView === "payouts")}
+            >
+              <DollarSign size={18} /> Lịch sử quyết toán
+            </button>
           </nav>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
-          <button onClick={() => navigate('/')} style={navItemStyle(false)}><ArrowLeft size={18} /> Trang chủ</button>
-          <button onClick={handleLogoutClick} style={{ ...navItemStyle(false), color: '#FCA5A5' }}><LogOut size={18} /> Đăng xuất</button>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+            paddingTop: "20px",
+          }}
+        >
+          <button 
+            onClick={() => navigate("/")} 
+            style={navItemStyle(false)}
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "#B89047"; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#E8E2D5"; }}
+          >
+            <ArrowLeft size={18} /> Trang chủ
+          </button>
+          <button
+            onClick={handleLogoutClick}
+            style={{ ...navItemStyle(false), color: "#FCA5A5" }}
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = "rgba(248,113,113,0.08)"; e.currentTarget.style.color = "#F87171"; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#FCA5A5"; }}
+          >
+            <LogOut size={18} /> Đăng xuất
+          </button>
         </div>
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+        }}
+      >
         {/* TOP BAR */}
-        <header style={{
-          height: '60px', borderBottom: '1px solid var(--color-light-border)', backgroundColor: 'rgba(255,255,255,0.85)',
-          backdropFilter: 'blur(10px)', padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          position: 'sticky', top: 0, zIndex: 30,
-        }}>
-          <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Hệ thống Quản lý nhà cung cấp</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <div style={{ position: 'relative' }} ref={notiRef}>
-              <button 
-                onClick={() => { setIsNotiOpen(!isNotiOpen); if (!isNotiOpen) fetchNotifications(); }}
-                style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', position: 'relative' }}
+        <header
+          style={{
+            height: "60px",
+            borderBottom: "1px solid var(--color-light-border)",
+            backgroundColor: "rgba(255,255,255,0.85)",
+            backdropFilter: "blur(10px)",
+            padding: "0 32px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            position: "sticky",
+            top: 0,
+            zIndex: 30,
+          }}
+        >
+          <span
+            style={{
+              fontSize: "12px",
+              color: "var(--color-text-secondary)",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+            }}
+          >
+            Hệ thống Quản lý nhà cung cấp
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+            <div style={{ position: "relative" }} ref={notiRef}>
+              <button
+                onClick={() => {
+                  setIsNotiOpen(!isNotiOpen);
+                  if (!isNotiOpen) fetchNotifications();
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--color-text-secondary)",
+                  cursor: "pointer",
+                  position: "relative",
+                }}
               >
                 <Bell size={18} />
                 {providerUnreadCount > 0 && (
-                  <span style={{
-                    position: 'absolute', top: '-5px', right: '-5px',
-                    backgroundColor: 'var(--color-primary)', color: 'white',
-                    borderRadius: '50%', minWidth: '14px', height: '14px',
-                    fontSize: '8px', fontWeight: 'bold',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    padding: '0 2px', boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
-                  }}>
-                    {providerUnreadCount > 99 ? '99+' : providerUnreadCount}
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: "-5px",
+                      right: "-5px",
+                      backgroundColor: "var(--color-primary)",
+                      color: "white",
+                      borderRadius: "50%",
+                      minWidth: "14px",
+                      height: "14px",
+                      fontSize: "8px",
+                      fontWeight: "bold",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "0 2px",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                    }}
+                  >
+                    {providerUnreadCount > 99 ? "99+" : providerUnreadCount}
                   </span>
                 )}
               </button>
 
               {/* Notification Dropdown */}
               {isNotiOpen && (
-                <div style={{
-                  position: 'absolute', top: 'calc(100% + 10px)', right: '-20px',
-                  width: '380px', maxHeight: '480px',
-                  backgroundColor: 'white', borderRadius: '12px',
-                  boxShadow: '0 16px 48px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.04)',
-                  zIndex: 9999, overflow: 'hidden',
-                  animation: 'noti-slide-in 0.2s ease-out'
-                }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 10px)",
+                    right: "-20px",
+                    width: "380px",
+                    maxHeight: "480px",
+                    backgroundColor: "white",
+                    borderRadius: "12px",
+                    boxShadow:
+                      "0 16px 48px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.04)",
+                    zIndex: 9999,
+                    overflow: "hidden",
+                    animation: "noti-slide-in 0.2s ease-out",
+                  }}
+                >
                   {/* Header */}
-                  <div style={{
-                    padding: '14px 18px', borderBottom: '1px solid #F0EBE3',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    background: 'linear-gradient(135deg, #FAF6F0 0%, #FFF 100%)'
-                  }}>
+                  <div
+                    style={{
+                      padding: "14px 18px",
+                      borderBottom: "1px solid #F0EBE3",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      background:
+                        "linear-gradient(135deg, #FAF6F0 0%, #FFF 100%)",
+                    }}
+                  >
                     <div>
-                      <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--color-primary-dark)' }}>Thông báo</h3>
+                      <h3
+                        style={{
+                          margin: 0,
+                          fontSize: "15px",
+                          fontWeight: 800,
+                          color: "var(--color-primary-dark)",
+                        }}
+                      >
+                        Thông báo
+                      </h3>
                       {providerUnreadCount > 0 && (
-                        <span style={{ fontSize: '10px', color: 'var(--color-gold)', fontWeight: 600 }}>{providerUnreadCount} chưa đọc</span>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "var(--color-gold)",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {providerUnreadCount} chưa đọc
+                        </span>
                       )}
                     </div>
                     {providerUnreadCount > 0 && (
                       <button
                         onClick={handleNotiMarkAllAsRead}
                         style={{
-                          display: 'flex', alignItems: 'center', gap: '4px',
-                          padding: '4px 8px', border: '1px solid #E8E2D5', borderRadius: '5px',
-                          backgroundColor: 'white', color: '#706E3B', fontSize: '10px',
-                          fontWeight: 600, cursor: 'pointer'
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "4px 8px",
+                          border: "1px solid #E8E2D5",
+                          borderRadius: "5px",
+                          backgroundColor: "white",
+                          color: "#706E3B",
+                          fontSize: "10px",
+                          fontWeight: 600,
+                          cursor: "pointer",
                         }}
                       >
                         <CheckCheck size={11} />
@@ -1340,15 +2784,38 @@ export const ProviderDashboard: React.FC = () => {
                   </div>
 
                   {/* List */}
-                  <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
+                  <div style={{ maxHeight: "380px", overflowY: "auto" }}>
                     {loadingNoti ? (
-                      <div style={{ padding: '40px', textAlign: 'center', color: '#7A7A7A' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 600 }}>Đang tải...</span>
+                      <div
+                        style={{
+                          padding: "40px",
+                          textAlign: "center",
+                          color: "#7A7A7A",
+                        }}
+                      >
+                        <span style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Đang tải...
+                        </span>
                       </div>
                     ) : notifications.length === 0 ? (
-                      <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                        <Bell size={28} color="#D4C5A9" style={{ marginBottom: '8px' }} />
-                        <p style={{ margin: 0, fontSize: '12px', color: '#7A7A7A', fontWeight: 600 }}>Chưa có thông báo</p>
+                      <div
+                        style={{ padding: "40px 20px", textAlign: "center" }}
+                      >
+                        <Bell
+                          size={28}
+                          color="#D4C5A9"
+                          style={{ marginBottom: "8px" }}
+                        />
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: "12px",
+                            color: "#7A7A7A",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Chưa có thông báo
+                        </p>
                       </div>
                     ) : (
                       notifications.map((noti) => {
@@ -1356,64 +2823,140 @@ export const ProviderDashboard: React.FC = () => {
                         return (
                           <div
                             key={noti._id}
-                            onClick={() => !noti.isRead && handleNotiMarkAsRead(noti._id)}
+                            onClick={() =>
+                              !noti.isRead && handleNotiMarkAsRead(noti._id)
+                            }
                             style={{
-                              padding: '12px 18px', cursor: 'pointer',
-                              borderBottom: '1px solid #F5F0E8',
-                              backgroundColor: noti.isRead ? 'white' : '#FFFCF7',
-                              transition: 'background 0.15s',
-                              display: 'flex', gap: '10px', alignItems: 'flex-start',
-                              position: 'relative'
+                              padding: "12px 18px",
+                              cursor: "pointer",
+                              borderBottom: "1px solid #F5F0E8",
+                              backgroundColor: noti.isRead
+                                ? "white"
+                                : "#FFFCF7",
+                              transition: "background 0.15s",
+                              display: "flex",
+                              gap: "10px",
+                              alignItems: "flex-start",
+                              position: "relative",
                             }}
-                            onMouseOver={e => { e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
-                            onMouseOut={e => { e.currentTarget.style.backgroundColor = noti.isRead ? 'white' : '#FFFCF7'; }}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.backgroundColor = "#FAF6F0";
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.backgroundColor =
+                                noti.isRead ? "white" : "#FFFCF7";
+                            }}
                           >
                             {!noti.isRead && (
-                              <div style={{
-                                position: 'absolute', left: '6px', top: '50%', transform: 'translateY(-50%)',
-                                width: '5px', height: '5px', borderRadius: '50%',
-                                backgroundColor: 'var(--color-primary)'
-                              }} />
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  left: "6px",
+                                  top: "50%",
+                                  transform: "translateY(-50%)",
+                                  width: "5px",
+                                  height: "5px",
+                                  borderRadius: "50%",
+                                  backgroundColor: "var(--color-primary)",
+                                }}
+                              />
                             )}
-                            <div style={{
-                              width: '32px', height: '32px', borderRadius: '8px',
-                              backgroundColor: ts.bg, display: 'flex',
-                              alignItems: 'center', justifyContent: 'center',
-                              fontSize: '14px', flexShrink: 0
-                            }}>
+                            <div
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "8px",
+                                backgroundColor: ts.bg,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "14px",
+                                flexShrink: 0,
+                              }}
+                            >
                               {ts.icon}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
-                                <span style={{ fontSize: '12px', fontWeight: noti.isRead ? 600 : 750, color: '#2A2A2A' }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "5px",
+                                  marginBottom: "2px",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: "12px",
+                                    fontWeight: noti.isRead ? 600 : 750,
+                                    color: "#2A2A2A",
+                                  }}
+                                >
                                   {noti.title}
                                 </span>
-                                <span style={{
-                                  padding: '1px 4px', borderRadius: '3px', fontSize: '7px',
-                                  fontWeight: 700, backgroundColor: ts.bg, color: ts.color,
-                                  textTransform: 'uppercase', flexShrink: 0
-                                }}>
+                                <span
+                                  style={{
+                                    padding: "1px 4px",
+                                    borderRadius: "3px",
+                                    fontSize: "7px",
+                                    fontWeight: 700,
+                                    backgroundColor: ts.bg,
+                                    color: ts.color,
+                                    textTransform: "uppercase",
+                                    flexShrink: 0,
+                                  }}
+                                >
                                   {noti.type}
                                 </span>
                               </div>
-                              <p style={{
-                                margin: 0, fontSize: '11px', color: '#6B6B6B',
-                                lineHeight: '1.4', display: '-webkit-box', WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical' as any, overflow: 'hidden'
-                              }}>
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontSize: "11px",
+                                  color: "#6B6B6B",
+                                  lineHeight: "1.4",
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical" as any,
+                                  overflow: "hidden",
+                                }}
+                              >
                                 {noti.content}
                               </p>
-                              <span style={{ fontSize: '9px', color: '#B0A89A', fontWeight: 500, marginTop: '3px', display: 'block' }}>
+                              <span
+                                style={{
+                                  fontSize: "9px",
+                                  color: "#B0A89A",
+                                  fontWeight: 500,
+                                  marginTop: "3px",
+                                  display: "block",
+                                }}
+                              >
                                 {getNotiTimeAgo(noti.createdAt)}
                               </span>
                             </div>
                             {!noti.isRead && (
                               <button
-                                onClick={(e) => { e.stopPropagation(); handleNotiMarkAsRead(noti._id); }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleNotiMarkAsRead(noti._id);
+                                }}
                                 title="Đánh dấu đã đọc"
-                                style={{ background: 'none', border: 'none', padding: '3px', cursor: 'pointer', color: 'var(--color-gold)', flexShrink: 0, opacity: 0.6 }}
-                                onMouseOver={e => { e.currentTarget.style.opacity = '1'; }}
-                                onMouseOut={e => { e.currentTarget.style.opacity = '0.6'; }}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  padding: "3px",
+                                  cursor: "pointer",
+                                  color: "var(--color-gold)",
+                                  flexShrink: 0,
+                                  opacity: 0.6,
+                                }}
+                                onMouseOver={(e) => {
+                                  e.currentTarget.style.opacity = "1";
+                                }}
+                                onMouseOut={(e) => {
+                                  e.currentTarget.style.opacity = "0.6";
+                                }}
                               >
                                 <Check size={12} />
                               </button>
@@ -1433,18 +2976,76 @@ export const ProviderDashboard: React.FC = () => {
                 </div>
               )}
             </div>
-            <button style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer' }}><HelpCircle size={18} /></button>
-            <div style={{ height: '24px', width: '1px', backgroundColor: 'var(--color-light-border)' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--color-text-secondary)",
+                cursor: "pointer",
+              }}
+            >
+              <HelpCircle size={18} />
+            </button>
+            <div
+              style={{
+                height: "24px",
+                width: "1px",
+                backgroundColor: "var(--color-light-border)",
+              }}
+            />
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.2 }}>{provider?.businessName || 'Provider'}</div>
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>PROVIDER</div>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "var(--color-text-primary)",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {provider?.businessName || "Provider"}
+                </div>
+                <div
+                  style={{
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    color: "var(--color-primary)",
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  PROVIDER
+                </div>
               </div>
               {provider?.avatar || provider?.logoUrl ? (
-                <img src={getImageUrl(provider.avatar || provider.logoUrl)} alt="Avatar" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--color-light-border)' }} />
+                <img
+                  src={getImageUrl(provider.avatar || provider.logoUrl)}
+                  alt="Avatar"
+                  style={{
+                    width: "36px",
+                    height: "36px",
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    border: "1px solid var(--color-light-border)",
+                  }}
+                />
               ) : (
-                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--color-primary-trans)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', color: 'var(--color-primary-dark)', border: '1px solid var(--color-light-border)' }}>
-                  {(provider?.businessName || 'P').charAt(0).toUpperCase()}
+                <div
+                  style={{
+                    width: "36px",
+                    height: "36px",
+                    borderRadius: "50%",
+                    backgroundColor: "var(--color-primary-trans)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 700,
+                    fontSize: "14px",
+                    color: "var(--color-primary-dark)",
+                    border: "1px solid var(--color-light-border)",
+                  }}
+                >
+                  {(provider?.businessName || "P").charAt(0).toUpperCase()}
                 </div>
               )}
             </div>
@@ -1452,236 +3053,922 @@ export const ProviderDashboard: React.FC = () => {
         </header>
 
         {/* CONTENT SWITCH PANEL */}
-        {currentView === 'analytics' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+        {currentView === "analytics" && (
+          <main style={{ flex: 1, padding: "40px 32px", overflowY: "auto" }}>
             {renderAnalyticsView()}
           </main>
         )}
 
-        {currentView === 'orders' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        {currentView === "orders" && (
+          <main style={{ flex: 1, padding: "40px 32px", overflowY: "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: "32px",
+              }}
+            >
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Đơn hàng</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Theo dõi và cập nhật trạng thái đơn hàng từ các bộ sưu tập di sản Silk & Stone.</p>
+                <h2
+                  style={{
+                    fontFamily: "var(--font-header)",
+                    fontSize: "32px",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
+                  Quản lý Đơn hàng
+                </h2>
+                <p
+                  style={{
+                    fontSize: "14px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "8px",
+                    maxWidth: "520px",
+                  }}
+                >
+                  Theo dõi và cập nhật trạng thái đơn hàng từ các bộ sưu tập di
+                  sản Silk & Stone.
+                </p>
               </div>
-              <button onClick={() => alert('Export CSV')} style={{
-                display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', border: '1px solid var(--color-light-border)',
-                padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                color: 'var(--color-text-primary)', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
-              }}><Download size={14} /> Export CSV</button>
+              <button
+                onClick={() => alert("Export CSV")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  backgroundColor: "white",
+                  border: "1px solid var(--color-light-border)",
+                  padding: "10px 18px",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  color: "var(--color-text-primary)",
+                  boxShadow: "var(--shadow-sm)",
+                  transition: "var(--transition-smooth)",
+                }}
+              >
+                <Download size={14} /> Export CSV
+              </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginBottom: '32px' }}>
-              <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '12px' }}>Trạng thái:</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {tabs.map(t => (
-                    <button key={t.label} onClick={() => setOrderTab(t.label)} style={{
-                      padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer',
-                      backgroundColor: orderTab === t.label ? 'var(--color-dark-bg)' : 'var(--color-light-bg)',
-                      color: orderTab === t.label ? 'white' : 'var(--color-text-secondary)',
-                      transition: 'var(--transition-smooth)',
-                    }}>{t.label} ({t.count})</button>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 1fr",
+                gap: "24px",
+                marginBottom: "32px",
+              }}
+            >
+              <div
+                style={{
+                  backgroundColor: "white",
+                  borderRadius: "var(--radius-md)",
+                  border: "1px solid var(--color-light-border)",
+                  padding: "24px",
+                  boxShadow: "var(--shadow-sm)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    marginBottom: "12px",
+                  }}
+                >
+                  Trạng thái:
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {tabs.map((t) => (
+                    <button
+                      key={t.label}
+                      onClick={() => setOrderTab(t.label)}
+                      style={{
+                        padding: "8px 16px",
+                        borderRadius: "20px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        border: "none",
+                        cursor: "pointer",
+                        backgroundColor:
+                          orderTab === t.label
+                            ? "var(--color-dark-bg)"
+                            : "var(--color-light-bg)",
+                        color:
+                          orderTab === t.label
+                            ? "white"
+                            : "var(--color-text-secondary)",
+                        transition: "var(--transition-smooth)",
+                      }}
+                    >
+                      {t.label} ({t.count})
+                    </button>
                   ))}
                 </div>
               </div>
-              <div style={{
-                backgroundColor: '#FDF4F4', border: '1px solid rgba(161,30,34,0.12)', borderRadius: 'var(--radius-md)',
-                padding: '24px', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center',
-              }}>
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Doanh thu tháng này</div>
-                <div style={{ fontFamily: 'var(--font-header)', fontSize: '28px', fontWeight: 700, color: 'var(--color-primary)' }}>
-                  {monthlyRevenue > 0 ? `${monthlyRevenue.toLocaleString('vi-VN')}đ` : '—'}
+              <div
+                style={{
+                  backgroundColor: "#FDF4F4",
+                  border: "1px solid rgba(161,30,34,0.12)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "24px",
+                  position: "relative",
+                  overflow: "hidden",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    color: "var(--color-primary)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    marginBottom: "6px",
+                  }}
+                >
+                  Doanh thu tháng này
                 </div>
-                <div style={{ position: 'absolute', right: '16px', bottom: '8px', opacity: 0.06, pointerEvents: 'none', color: 'var(--color-primary)' }}><ShoppingBag size={80} /></div>
+                <div
+                  style={{
+                    fontFamily: "var(--font-header)",
+                    fontSize: "28px",
+                    fontWeight: 700,
+                    color: "var(--color-primary)",
+                  }}
+                >
+                  {monthlyRevenue > 0
+                    ? `${monthlyRevenue.toLocaleString("vi-VN")}đ`
+                    : "—"}
+                </div>
+                <div
+                  style={{
+                    position: "absolute",
+                    right: "16px",
+                    bottom: "8px",
+                    opacity: 0.06,
+                    pointerEvents: "none",
+                    color: "var(--color-primary)",
+                  }}
+                >
+                  <ShoppingBag size={80} />
+                </div>
               </div>
             </div>
 
-            <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <div
+              style={{
+                backgroundColor: "white",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--color-light-border)",
+                boxShadow: "var(--shadow-sm)",
+                overflow: "hidden",
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: "13px",
+                }}
+              >
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--color-light-border)', backgroundColor: 'var(--color-light-bg)' }}>
-                    {['MÃ ĐƠN HÀNG', 'KHÁCH HÀNG', 'SẢN PHẨM', 'NGÀY ĐẶT', 'TỔNG CỘNG', 'TRẠNG THÁI', 'THAO TÁC'].map(h => (
-                      <th key={h} style={{ padding: '14px 20px', fontWeight: 700, fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: h === 'TỔNG CỘNG' ? 'right' : h === 'TRẠNG THÁI' || h === 'THAO TÁC' ? 'center' : 'left' }}>{h}</th>
+                  <tr
+                    style={{
+                      borderBottom: "1px solid var(--color-light-border)",
+                      backgroundColor: "var(--color-light-bg)",
+                    }}
+                  >
+                    {[
+                      "MÃ ĐƠN HÀNG",
+                      "KHÁCH HÀNG",
+                      "SẢN PHẨM",
+                      "NGÀY ĐẶT",
+                      "TỔNG CỘNG",
+                      "TRẠNG THÁI",
+                      "THAO TÁC",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        style={{
+                          padding: "14px 20px",
+                          fontWeight: 700,
+                          fontSize: "10px",
+                          color: "var(--color-text-secondary)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                          textAlign:
+                            h === "TỔNG CỘNG"
+                              ? "right"
+                              : h === "TRẠNG THÁI" || h === "THAO TÁC"
+                                ? "center"
+                                : "left",
+                        }}
+                      >
+                        {h}
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {loadingOrders ? (
-                    <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải đơn hàng...</td></tr>
-                  ) : filteredOrders.length === 0 ? (
-                    <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Không có đơn hàng nào.</td></tr>
-                  ) : filteredOrders.map(o => (
-                    <tr key={o._id} style={{ borderBottom: '1px solid var(--color-light-border)', transition: 'var(--transition-smooth)' }}>
-                      <td style={{ padding: '16px 20px', fontWeight: 700 }}>{o.id}</td>
-                      <td style={{ padding: '16px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--color-light-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '11px', color: 'var(--color-text-secondary)', border: '1px solid var(--color-light-border)' }}>{o.customerInitials}</div>
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: '13px' }}>{o.customerName}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{o.customerEmail}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '16px 20px', fontWeight: 600 }}>{o.productName}</td>
-                      <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)' }}>{o.orderDate}</td>
-                      <td style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'right' }}>{o.total}</td>
-                      <td style={{ padding: '16px 20px', textAlign: 'center' }}><span style={statusBadgeStyle(o.status)}>{o.status}</span></td>
-                      <td style={{ padding: '16px 20px', textAlign: 'center', position: 'relative' }}>
-                        <button onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
-                        {actionMenuId === o._id && (
-                          <div style={{ position: 'absolute', right: '20px', top: '40px', width: '180px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
-                            {[
-                              { label: 'Hoàn thành', status: 'HOÀN THÀNH', icon: <CheckCircle size={14} />, color: '#2e7d32' },
-                              { label: 'Đang thực hiện', status: 'ĐANG XỬ LÝ', icon: <Play size={14} />, color: 'var(--color-gold)' },
-                              { label: 'Chờ xử lý', status: 'CHỜ XỬ LÝ', icon: <FileText size={14} />, color: 'var(--color-primary)' },
-                            ].map(a => (
-                              <button key={a.label} onClick={() => changeOrderStatus(o._id, a.status)} style={{
-                                width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: a.color,
-                                fontWeight: 500, textAlign: 'left',
-                              }}>{a.icon} {a.label}</button>
-                            ))}
-                            {(o.rawStatus === 'CONFIRMED' || o.rawStatus === 'COMPLETED' || o.rawStatus === 'PICKED_UP' || o.rawStatus === 'RETURNED' || o.rawStatus === 'RETURN_PENDING' || o.rawStatus === 'DISPUTED') && (
-                              <button onClick={() => {
-                                setReportingOrder(o);
-                                setSelectedItemId(o.items?.[0]?._id || '');
-                                setIncidentDesc('');
-                                setIncidentEvidence([]);
-                                setIncidentAmount(o.depositTotal || 0);
-                                setIncidentActionType('CLEANING');
-                                setActionMenuId(null);
-                              }} style={{
-                                width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
-                                fontWeight: 700, textAlign: 'left', borderTop: '1px solid var(--color-light-border)'
-                              }}><Flag size={14} /> Báo cáo hỏng đồ</button>
-                            )}
-                          </div>
-                        )}
+                    <tr>
+                      <td
+                        colSpan={7}
+                        style={{
+                          padding: "40px",
+                          textAlign: "center",
+                          color: "var(--color-text-secondary)",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Đang tải đơn hàng...
                       </td>
                     </tr>
-                  ))}
+                  ) : filteredOrders.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        style={{
+                          padding: "40px",
+                          textAlign: "center",
+                          color: "var(--color-text-secondary)",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Không có đơn hàng nào.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredOrders.map((o) => (
+                      <tr
+                        key={o._id}
+                        style={{
+                          borderBottom: "1px solid var(--color-light-border)",
+                          transition: "var(--transition-smooth)",
+                        }}
+                      >
+                        <td style={{ padding: "16px 20px", fontWeight: 700 }}>
+                          {o.id}
+                        </td>
+                        <td style={{ padding: "16px 20px" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "50%",
+                                backgroundColor: "var(--color-light-bg)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontWeight: 700,
+                                fontSize: "11px",
+                                color: "var(--color-text-secondary)",
+                                border: "1px solid var(--color-light-border)",
+                              }}
+                            >
+                              {o.customerInitials}
+                            </div>
+                            <div>
+                              <div
+                                style={{ fontWeight: 700, fontSize: "13px" }}
+                              >
+                                {o.customerName}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "11px",
+                                  color: "var(--color-text-secondary)",
+                                }}
+                              >
+                                {o.customerEmail}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: "16px 20px", fontWeight: 600 }}>
+                          {o.productName}
+                        </td>
+                        <td
+                          style={{
+                            padding: "16px 20px",
+                            color: "var(--color-text-secondary)",
+                          }}
+                        >
+                          {o.orderDate}
+                        </td>
+                        <td
+                          style={{
+                            padding: "16px 20px",
+                            fontWeight: 700,
+                            textAlign: "right",
+                          }}
+                        >
+                          {o.total}
+                        </td>
+                        <td
+                          style={{ padding: "16px 20px", textAlign: "center" }}
+                        >
+                          <span style={statusBadgeStyle(o.status)}>
+                            {o.status}
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            padding: "16px 20px",
+                            textAlign: "center",
+                            position: "relative",
+                          }}
+                        >
+                          <button
+                            onClick={() =>
+                              setActionMenuId(
+                                actionMenuId === o._id ? null : o._id,
+                              )
+                            }
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: "var(--color-text-secondary)",
+                              cursor: "pointer",
+                              padding: "4px",
+                              borderRadius: "50%",
+                            }}
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+                          {actionMenuId === o._id && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                right: "20px",
+                                top: "40px",
+                                width: "180px",
+                                backgroundColor: "white",
+                                border: "1px solid var(--color-light-border)",
+                                borderRadius: "var(--radius-sm)",
+                                boxShadow: "var(--shadow-md)",
+                                padding: "4px 0",
+                                zIndex: 40,
+                              }}
+                            >
+                              {[
+                                {
+                                  label: "Hoàn thành",
+                                  status: "HOÀN THÀNH",
+                                  icon: <CheckCircle size={14} />,
+                                  color: "#2e7d32",
+                                },
+                                {
+                                  label: "Đang thực hiện",
+                                  status: "ĐANG XỬ LÝ",
+                                  icon: <Play size={14} />,
+                                  color: "var(--color-gold)",
+                                },
+                                {
+                                  label: "Chờ xử lý",
+                                  status: "CHỜ XỬ LÝ",
+                                  icon: <FileText size={14} />,
+                                  color: "var(--color-primary)",
+                                },
+                              ].map((a) => (
+                                <button
+                                  key={a.label}
+                                  onClick={() =>
+                                    changeOrderStatus(o._id, a.status)
+                                  }
+                                  style={{
+                                    width: "100%",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                    padding: "8px 12px",
+                                    fontSize: "12px",
+                                    border: "none",
+                                    background: "none",
+                                    cursor: "pointer",
+                                    color: a.color,
+                                    fontWeight: 500,
+                                    textAlign: "left",
+                                  }}
+                                >
+                                  {a.icon} {a.label}
+                                </button>
+                              ))}
+                              {(o.rawStatus === "CONFIRMED" ||
+                                o.rawStatus === "COMPLETED" ||
+                                o.rawStatus === "PICKED_UP" ||
+                                o.rawStatus === "RETURNED" ||
+                                o.rawStatus === "RETURN_PENDING" ||
+                                o.rawStatus === "DISPUTED") && (
+                                <button
+                                  onClick={() => {
+                                    setReportingOrder(o);
+                                    setSelectedItemId(o.items?.[0]?._id || "");
+                                    setIncidentDesc("");
+                                    setIncidentEvidence([]);
+                                    setIncidentAmount(o.depositTotal || 0);
+                                    setIncidentActionType("CLEANING");
+                                    setActionMenuId(null);
+                                  }}
+                                  style={{
+                                    width: "100%",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                    padding: "8px 12px",
+                                    fontSize: "12px",
+                                    border: "none",
+                                    background: "none",
+                                    cursor: "pointer",
+                                    color: "var(--color-primary)",
+                                    fontWeight: 700,
+                                    textAlign: "left",
+                                    borderTop:
+                                      "1px solid var(--color-light-border)",
+                                  }}
+                                >
+                                  <Flag size={14} /> Báo cáo hỏng đồ
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
-              <div style={{ borderTop: '1px solid var(--color-light-border)', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', fontSize: '12px' }}>
-                <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Hiển thị {filteredOrders.length} đơn hàng</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <button disabled={activePage <= 1} onClick={() => setActivePage(p => Math.max(1, p - 1))} style={{ padding: '6px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: activePage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}><ChevronLeft size={14} /></button>
-                  <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>{activePage}</span>
-                  <button disabled={filteredOrders.length < 20} onClick={() => setActivePage(p => p + 1)} style={{ padding: '6px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: filteredOrders.length >= 20 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}><ChevronRight size={14} /></button>
+              <div
+                style={{
+                  borderTop: "1px solid var(--color-light-border)",
+                  padding: "14px 20px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  backgroundColor: "var(--color-light-bg)",
+                  fontSize: "12px",
+                }}
+              >
+                <span
+                  style={{
+                    color: "var(--color-text-secondary)",
+                    fontWeight: 600,
+                  }}
+                >
+                  Hiển thị {filteredOrders.length} đơn hàng
+                </span>
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: "4px" }}
+                >
+                  <button
+                    disabled={activePage <= 1}
+                    onClick={() => setActivePage((p) => Math.max(1, p - 1))}
+                    style={{
+                      padding: "6px",
+                      border: "1px solid var(--color-light-border)",
+                      borderRadius: "4px",
+                      background: "white",
+                      cursor: activePage > 1 ? "pointer" : "not-allowed",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span
+                    style={{
+                      padding: "4px 12px",
+                      borderRadius: "4px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      backgroundColor: "var(--color-primary)",
+                      color: "white",
+                    }}
+                  >
+                    {activePage}
+                  </span>
+                  <button
+                    disabled={filteredOrders.length < 20}
+                    onClick={() => setActivePage((p) => p + 1)}
+                    style={{
+                      padding: "6px",
+                      border: "1px solid var(--color-light-border)",
+                      borderRadius: "4px",
+                      background: "white",
+                      cursor:
+                        filteredOrders.length >= 20 ? "pointer" : "not-allowed",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    <ChevronRight size={14} />
+                  </button>
                 </div>
               </div>
             </div>
           </main>
         )}
 
-        {currentView === 'collections' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        {currentView === "collections" && (
+          <main style={{ flex: 1, padding: "40px 32px", overflowY: "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: "32px",
+              }}
+            >
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Bộ sưu tập</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>
-                  Thêm mới, cập nhật giá, hình ảnh và quản lý kho áo dài của bạn.
+                <h2
+                  style={{
+                    fontFamily: "var(--font-header)",
+                    fontSize: "32px",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
+                  Quản lý Bộ sưu tập
+                </h2>
+                <p
+                  style={{
+                    fontSize: "14px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "8px",
+                    maxWidth: "520px",
+                  }}
+                >
+                  Thêm mới, cập nhật giá, hình ảnh và quản lý kho áo dài của
+                  bạn.
                 </p>
               </div>
-              <button onClick={openAddModal} style={{
-                display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--color-primary)',
-                padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
-              }}><Plus size={14} /> Thêm Áo Dài mới</button>
+              <button
+                onClick={openAddModal}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  backgroundColor: "var(--color-primary)",
+                  padding: "10px 18px",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  color: "white",
+                  border: "none",
+                  boxShadow: "var(--shadow-sm)",
+                  transition: "var(--transition-smooth)",
+                }}
+              >
+                <Plus size={14} /> Thêm Áo Dài mới
+              </button>
             </div>
 
             {loadingProducts ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+              <div
+                style={{
+                  padding: "60px",
+                  textAlign: "center",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
                 Đang tải dữ liệu sản phẩm...
               </div>
             ) : products.length === 0 ? (
-              <div style={{ padding: '100px 40px', textAlign: 'center', backgroundColor: 'white', border: '1px dashed var(--color-light-border)', borderRadius: 'var(--radius-md)' }}>
-                <Layers size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5, marginBottom: '16px', margin: '0 auto' }} />
-                <h4 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Bộ sưu tập của bạn đang trống</h4>
-                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '6px', marginBottom: '20px' }}>Bắt đầu bằng việc thêm sản phẩm đầu tiên để tiếp cận hàng ngàn khách hàng.</p>
-                <button onClick={openAddModal} className="vh-btn vh-btn-primary" style={{ padding: '10px 20px', borderRadius: '6px' }}>Thêm Áo Dài đầu tiên</button>
+              <div
+                style={{
+                  padding: "100px 40px",
+                  textAlign: "center",
+                  backgroundColor: "white",
+                  border: "1px dashed var(--color-light-border)",
+                  borderRadius: "var(--radius-md)",
+                }}
+              >
+                <Layers
+                  size={48}
+                  style={{
+                    color: "var(--color-text-secondary)",
+                    opacity: 0.5,
+                    marginBottom: "16px",
+                    margin: "0 auto",
+                  }}
+                />
+                <h4
+                  style={{
+                    fontSize: "16px",
+                    fontWeight: 700,
+                    color: "var(--color-text-primary)",
+                  }}
+                >
+                  Bộ sưu tập của bạn đang trống
+                </h4>
+                <p
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "6px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  Bắt đầu bằng việc thêm sản phẩm đầu tiên để tiếp cận hàng ngàn
+                  khách hàng.
+                </p>
+                <button
+                  onClick={openAddModal}
+                  className="vh-btn vh-btn-primary"
+                  style={{ padding: "10px 20px", borderRadius: "6px" }}
+                >
+                  Thêm Áo Dài đầu tiên
+                </button>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                  gap: "24px",
+                }}
+              >
                 {products.map((p) => (
-                  <div key={p._id} style={{
-                    backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)',
-                    boxShadow: 'var(--shadow-sm)', overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'all 0.2s ease',
-                  }}>
+                  <div
+                    key={p._id}
+                    style={{
+                      backgroundColor: "white",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--color-light-border)",
+                      boxShadow: "var(--shadow-sm)",
+                      overflow: "hidden",
+                      display: "flex",
+                      flexDirection: "column",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
                     {/* Image */}
-                    <div style={{ height: '220px', overflow: 'hidden', position: 'relative', backgroundColor: 'var(--color-light-bg)' }}>
-                      <img 
-                        src={getImageUrl(p.images?.[0])} 
-                        alt={p.name} 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    <div
+                      style={{
+                        height: "220px",
+                        overflow: "hidden",
+                        position: "relative",
+                        backgroundColor: "var(--color-light-bg)",
+                      }}
+                    >
+                      <img
+                        src={getImageUrl(p.images?.[0])}
+                        alt={p.name}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                        }}
                       />
-                      <span style={{
-                        position: 'absolute', top: '12px', right: '12px',
-                        padding: '4px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: 700,
-                        backgroundColor: p.status === 'ACTIVE' ? 'var(--color-dark-bg)' : p.status === 'DRAFT' ? 'var(--color-gold)' : '#999',
-                        color: 'white',
-                      }}>
-                        {p.status === 'ACTIVE' ? 'ĐANG BÁN' : p.status === 'DRAFT' ? 'DỰ THẢO' : 'ẨN'}
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: "12px",
+                          right: "12px",
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          fontSize: "9px",
+                          fontWeight: 700,
+                          backgroundColor:
+                            p.status === "ACTIVE"
+                              ? "var(--color-dark-bg)"
+                              : p.status === "DRAFT"
+                                ? "var(--color-gold)"
+                                : "#999",
+                          color: "white",
+                        }}
+                      >
+                        {p.status === "ACTIVE"
+                          ? "ĐANG BÁN"
+                          : p.status === "DRAFT"
+                            ? "DỰ THẢO"
+                            : "ẨN"}
                       </span>
                     </div>
 
                     {/* Meta */}
-                    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
-                      {p.moderationStatus && p.moderationStatus !== 'APPROVED' && (
-                        <div style={{ fontSize: '11px', fontWeight: 700, color: p.moderationStatus === 'REJECTED' || p.moderationStatus === 'HIDDEN' ? '#991B1B' : '#92400E', background: p.moderationStatus === 'REJECTED' || p.moderationStatus === 'HIDDEN' ? '#FEF2F2' : '#FEF3C7', padding: '6px 8px', borderRadius: '4px' }}>
-                          {p.moderationStatus === 'PENDING_REVIEW' ? 'CHO KIEM DUYET' : p.moderationStatus === 'REJECTED' ? 'BI TU CHOI' : 'DA BI AN'}
-                          {p.moderationReason ? `: ${p.moderationReason}` : ''}
-                        </div>
-                      )}
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        {typeof p.categoryId === 'object' ? p.categoryId.name : 'Áo dài'}
+                    <div
+                      style={{
+                        padding: "20px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "10px",
+                        flex: 1,
+                      }}
+                    >
+                      {p.moderationStatus &&
+                        p.moderationStatus !== "APPROVED" && (
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              fontWeight: 700,
+                              color:
+                                p.moderationStatus === "REJECTED" ||
+                                p.moderationStatus === "HIDDEN"
+                                  ? "#991B1B"
+                                  : "#92400E",
+                              background:
+                                p.moderationStatus === "REJECTED" ||
+                                p.moderationStatus === "HIDDEN"
+                                  ? "#FEF2F2"
+                                  : "#FEF3C7",
+                              padding: "6px 8px",
+                              borderRadius: "4px",
+                            }}
+                          >
+                            {p.moderationStatus === "PENDING_REVIEW"
+                              ? "CHO KIEM DUYET"
+                              : p.moderationStatus === "REJECTED"
+                                ? "BI TU CHOI"
+                                : "DA BI AN"}
+                            {p.moderationReason
+                              ? `: ${p.moderationReason}`
+                              : ""}
+                          </div>
+                        )}
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: "var(--color-primary)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                        }}
+                      >
+                        {typeof p.categoryId === "object"
+                          ? p.categoryId.name
+                          : "Áo dài"}
                       </span>
-                      <h4 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0, lineHeight: 1.4 }}>
+                      <h4
+                        style={{
+                          fontSize: "15px",
+                          fontWeight: 700,
+                          color: "var(--color-text-primary)",
+                          margin: 0,
+                          lineHeight: 1.4,
+                        }}
+                      >
                         {p.name}
                       </h4>
-                      <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: 0, lineClamp: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '36px' }}>
-                        {p.description || 'Không có mô tả sản phẩm.'}
+                      <p
+                        style={{
+                          fontSize: "12px",
+                          color: "var(--color-text-secondary)",
+                          margin: 0,
+                          lineClamp: 2,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                          height: "36px",
+                        }}
+                      >
+                        {p.description || "Không có mô tả sản phẩm."}
                       </p>
 
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
-                        {p.sizes?.map(s => (
-                          <span key={s} style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', border: '1px solid var(--color-light-border)', borderRadius: '4px', backgroundColor: 'var(--color-light-bg)' }}>{s}</span>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "4px",
+                          flexWrap: "wrap",
+                          marginTop: "4px",
+                        }}
+                      >
+                        {p.sizes?.map((s) => (
+                          <span
+                            key={s}
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: 700,
+                              padding: "2px 6px",
+                              border: "1px solid var(--color-light-border)",
+                              borderRadius: "4px",
+                              backgroundColor: "var(--color-light-bg)",
+                            }}
+                          >
+                            {s}
+                          </span>
                         ))}
                       </div>
 
-                      <div style={{ borderTop: '1px solid var(--color-light-border)', paddingTop: '12px', marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div
+                        style={{
+                          borderTop: "1px solid var(--color-light-border)",
+                          paddingTop: "12px",
+                          marginTop: "auto",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
+                      >
                         <div>
-                          <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>GIÁ THUÊ / NGÀY</div>
-                          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>{(p.basePrice ?? (p as any).price ?? 0).toLocaleString('vi-VN')}đ</div>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--color-text-secondary)",
+                              fontWeight: 600,
+                            }}
+                          >
+                            GIÁ THUÊ / NGÀY
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "16px",
+                              fontWeight: 800,
+                              color: "var(--color-primary)",
+                            }}
+                          >
+                            {(
+                              p.basePrice ??
+                              (p as any).price ??
+                              0
+                            ).toLocaleString("vi-VN")}
+                            đ
+                          </div>
                         </div>
                         <div>
-                          <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600, textAlign: 'right' }}>TIỀN ĐẶT CỌC</div>
-                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'right' }}>{(p.depositAmount ?? 0).toLocaleString('vi-VN')}đ</div>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--color-text-secondary)",
+                              fontWeight: 600,
+                              textAlign: "right",
+                            }}
+                          >
+                            TIỀN ĐẶT CỌC
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "var(--color-text-primary)",
+                              textAlign: "right",
+                            }}
+                          >
+                            {(p.depositAmount ?? 0).toLocaleString("vi-VN")}đ
+                          </div>
                         </div>
                       </div>
 
                       {/* Actions */}
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '12px', borderTop: '1px solid var(--color-light-border)', paddingTop: '12px' }}>
-                        <button 
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "10px",
+                          marginTop: "12px",
+                          borderTop: "1px solid var(--color-light-border)",
+                          paddingTop: "12px",
+                        }}
+                      >
+                        <button
                           onClick={() => openEditModal(p)}
                           style={{
-                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                            backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '8px',
-                            borderRadius: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)',
-                            cursor: 'pointer', transition: 'all 0.2s',
+                            flex: 1,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "6px",
+                            backgroundColor: "white",
+                            border: "1px solid var(--color-light-border)",
+                            padding: "8px",
+                            borderRadius: "4px",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            color: "var(--color-text-primary)",
+                            cursor: "pointer",
+                            transition: "all 0.2s",
                           }}
                         >
                           <Pencil size={12} /> Chỉnh sửa
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleDeleteProduct(p._id, p.name)}
                           style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px',
-                            backgroundColor: 'white', border: '1px solid #FCA5A5', borderRadius: '4px',
-                            color: '#EF4444', cursor: 'pointer', transition: 'all 0.2s',
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "8px",
+                            backgroundColor: "white",
+                            border: "1px solid #FCA5A5",
+                            borderRadius: "4px",
+                            color: "#EF4444",
+                            cursor: "pointer",
+                            transition: "all 0.2s",
                           }}
                           title="Xóa sản phẩm"
                         >
@@ -1696,85 +3983,288 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
-        {currentView === 'profile' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        {currentView === "profile" && (
+          <main style={{ flex: 1, padding: "40px 32px", overflowY: "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: "32px",
+              }}
+            >
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Thông tin dịch vụ</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Thiết lập thông tin thương hiệu, showroom nhận đồ và chính sách hủy dịch vụ.</p>
+                <h2
+                  style={{
+                    fontFamily: "var(--font-header)",
+                    fontSize: "32px",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
+                  Thông tin dịch vụ
+                </h2>
+                <p
+                  style={{
+                    fontSize: "14px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "8px",
+                    maxWidth: "520px",
+                  }}
+                >
+                  Thiết lập thông tin thương hiệu, showroom nhận đồ và chính
+                  sách hủy dịch vụ.
+                </p>
               </div>
             </div>
 
             {isLoadingProvider ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải thông tin dịch vụ...</div>
+              <div
+                style={{
+                  padding: "60px",
+                  textAlign: "center",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
+                Đang tải thông tin dịch vụ...
+              </div>
             ) : (
-              <form onSubmit={handleUpdateProfile} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '32px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TÊN THƯƠNG HIỆU / CỬA HÀNG</label>
+              <form
+                onSubmit={handleUpdateProfile}
+                style={{
+                  backgroundColor: "white",
+                  borderRadius: "var(--radius-md)",
+                  border: "1px solid var(--color-light-border)",
+                  padding: "32px",
+                  boxShadow: "var(--shadow-sm)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "20px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "20px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: "var(--color-text-secondary)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      TÊN THƯƠNG HIỆU / CỬA HÀNG
+                    </label>
                     <input
                       type="text"
                       value={businessName}
                       onChange={(e) => setBusinessName(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      style={{
+                        padding: "10px 14px",
+                        border: "1px solid var(--color-light-border)",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        outline: "none",
+                      }}
                       required
                     />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>SỐ ĐIỆN THOẠI LIÊN HỆ</label>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: "var(--color-text-secondary)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      SỐ ĐIỆN THOẠI LIÊN HỆ
+                    </label>
                     <input
                       type="text"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      style={{
+                        padding: "10px 14px",
+                        border: "1px solid var(--color-light-border)",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        outline: "none",
+                      }}
                       required
                     />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>ĐỊA CHỈ SHOWROOM / ĐỊA ĐIỂM NHẬN ĐỒ</label>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: "var(--color-text-secondary)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      ĐỊA CHỈ SHOWROOM / ĐỊA ĐIỂM NHẬN ĐỒ
+                    </label>
                     <input
                       type="text"
                       value={addressLine}
                       onChange={(e) => setAddressLine(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      style={{
+                        padding: "10px 14px",
+                        border: "1px solid var(--color-light-border)",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        outline: "none",
+                      }}
                       required
                     />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>THÀNH PHỐ</label>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: "var(--color-text-secondary)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      THÀNH PHỐ
+                    </label>
                     <input
                       type="text"
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      style={{
+                        padding: "10px 14px",
+                        border: "1px solid var(--color-light-border)",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        outline: "none",
+                      }}
                       required
                     />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TỶ LỆ GIẢM GIÁ COMBO (%)</label>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: "var(--color-text-secondary)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      TỶ LỆ GIẢM GIÁ COMBO (%)
+                    </label>
                     <input
                       type="number"
                       min={0}
                       max={100}
                       value={comboDiscountPercent}
-                      onChange={(e) => setComboDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      onChange={(e) =>
+                        setComboDiscountPercent(
+                          Math.max(
+                            0,
+                            Math.min(100, Number(e.target.value) || 0),
+                          ),
+                        )
+                      }
+                      style={{
+                        padding: "10px 14px",
+                        border: "1px solid var(--color-light-border)",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        outline: "none",
+                      }}
                       required
                     />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>CHÍNH SÁCH HỦY DỊCH VỤ / HOÀN CỌC</label>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                      gridColumn: "span 2",
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: "var(--color-text-secondary)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      CHÍNH SÁCH HỦY DỊCH VỤ / HOÀN CỌC
+                    </label>
                     <textarea
                       value={cancellationPolicy}
                       onChange={(e) => setCancellationPolicy(e.target.value)}
                       rows={3}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'none', fontFamily: 'inherit' }}
+                      style={{
+                        padding: "10px 14px",
+                        border: "1px solid var(--color-light-border)",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        outline: "none",
+                        resize: "none",
+                        fontFamily: "inherit",
+                      }}
                     />
                   </div>
                 </div>
                 <button
                   type="submit"
-                  style={{ alignSelf: 'flex-start', padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-sm)' }}
+                  style={{
+                    alignSelf: "flex-start",
+                    padding: "10px 24px",
+                    border: "none",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    backgroundColor: "var(--color-primary)",
+                    color: "white",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    boxShadow: "var(--shadow-sm)",
+                  }}
                 >
                   <Save size={14} />
                   Lưu thay đổi
@@ -1784,16 +4274,55 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
-        {currentView === 'portfolio' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        {currentView === "portfolio" && (
+          <main style={{ flex: 1, padding: "40px 32px", overflowY: "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                justifySelf: "stretch",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: "32px",
+              }}
+            >
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Portfolio</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Đăng tải các tác phẩm thiết kế mẫu hoặc các dự án đã hoàn thành của bạn.</p>
+                <h2
+                  style={{
+                    fontFamily: "var(--font-header)",
+                    fontSize: "32px",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
+                  Quản lý Portfolio
+                </h2>
+                <p
+                  style={{
+                    fontSize: "14px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "8px",
+                    maxWidth: "520px",
+                  }}
+                >
+                  Đăng tải các tác phẩm thiết kế mẫu hoặc các dự án đã hoàn
+                  thành của bạn.
+                </p>
               </div>
               <button
                 onClick={handleAddPortfolio}
-                style={{ padding: '10px 20px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                style={{
+                  padding: "10px 20px",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  backgroundColor: "var(--color-primary)",
+                  color: "white",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
               >
                 <Plus size={14} />
                 Thêm tác phẩm mới
@@ -1801,27 +4330,139 @@ export const ProviderDashboard: React.FC = () => {
             </div>
 
             {isLoadingProvider ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải portfolio...</div>
+              <div
+                style={{
+                  padding: "60px",
+                  textAlign: "center",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
+                Đang tải portfolio...
+              </div>
             ) : portfolioItems.length === 0 ? (
-              <div style={{ padding: '80px 40px', textAlign: 'center', backgroundColor: 'white', border: '1px dashed var(--color-light-border)', borderRadius: 'var(--radius-md)' }}>
-                <Camera size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5, marginBottom: '16px', margin: '0 auto' }} />
-                <h4 style={{ fontSize: '16px', fontWeight: 700 }}>Chưa có tác phẩm nào trong Portfolio</h4>
-                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '6px' }}>Bắt đầu đăng tải hình ảnh chất lượng cao để thu hút khách hàng đặt lịch chụp.</p>
+              <div
+                style={{
+                  padding: "80px 40px",
+                  textAlign: "center",
+                  backgroundColor: "white",
+                  border: "1px dashed var(--color-light-border)",
+                  borderRadius: "var(--radius-md)",
+                }}
+              >
+                <Camera
+                  size={48}
+                  style={{
+                    color: "var(--color-text-secondary)",
+                    opacity: 0.5,
+                    marginBottom: "16px",
+                    margin: "0 auto",
+                  }}
+                />
+                <h4 style={{ fontSize: "16px", fontWeight: 700 }}>
+                  Chưa có tác phẩm nào trong Portfolio
+                </h4>
+                <p
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "6px",
+                  }}
+                >
+                  Bắt đầu đăng tải hình ảnh chất lượng cao để thu hút khách hàng
+                  đặt lịch chụp.
+                </p>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '20px' }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                  gap: "20px",
+                }}
+              >
                 {portfolioItems.map((item: any) => (
-                  <div key={item._id} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)' }}>
-                    <img src={item.images?.[0]?.startsWith('http') ? item.images[0] : getImageUrl(item.images?.[0])} alt={item.title || 'Portfolio item'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    {item.moderationStatus !== 'APPROVED' && <span style={{ position: 'absolute', top: '8px', left: '8px', padding: '4px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, background: '#FEF3C7', color: '#92400E' }}>{item.moderationStatus}</span>}
-                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', opacity: 0, transition: 'opacity 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '1'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}>
-                      <button
-                        onClick={() => handleRemovePortfolio(item._id)}
-                        style={{ padding: '8px 12px', backgroundColor: '#EF4444', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '12px' }}
+                  <div
+                    key={item._id}
+                    style={{
+                      position: "relative",
+                      borderRadius: "8px",
+                      overflow: "hidden",
+                      border: "1px solid var(--color-light-border)",
+                      boxShadow: "var(--shadow-sm)",
+                      background: "white",
+                    }}
+                  >
+                    <div style={{ position: "relative", aspectRatio: "1" }}>
+                      <img
+                        src={
+                          item.images?.[0]?.startsWith("http")
+                            ? item.images[0]
+                            : getImageUrl(item.images?.[0])
+                        }
+                        alt={item.title || "Portfolio item"}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                        }}
+                      />
+                      {item.moderationStatus !== "APPROVED" && (
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: "8px",
+                            left: "8px",
+                            padding: "4px 6px",
+                            borderRadius: "4px",
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            background: "#FEF3C7",
+                            color: "#92400E",
+                          }}
+                        >
+                          {item.moderationStatus}
+                        </span>
+                      )}
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          backgroundColor: "rgba(0,0,0,0.4)",
+                          opacity: 0,
+                          transition: "opacity 0.2s",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.opacity = "1")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.opacity = "0")
+                        }
                       >
-                        Gỡ ảnh
-                      </button>
+                        <button
+                          onClick={() => handleRemovePortfolio(item._id)}
+                          style={{
+                            padding: "8px 12px",
+                            backgroundColor: "#EF4444",
+                            border: "none",
+                            borderRadius: "4px",
+                            color: "white",
+                            cursor: "pointer",
+                            fontWeight: 700,
+                            fontSize: "12px",
+                          }}
+                        >
+                          Gỡ ảnh
+                        </button>
+                      </div>
                     </div>
+                    <PortfolioSmartTagPanel
+                      itemId={item._id}
+                      initialDecisionVersion={item.taggingDecisionVersion}
+                    />
                   </div>
                 ))}
               </div>
@@ -1829,108 +4470,354 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
-        {currentView === 'calendar' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        {currentView === "calendar" && (
+          <main style={{ flex: 1, padding: "40px 32px", overflowY: "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: "32px",
+              }}
+            >
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Lịch làm việc & Chặn</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Thiết lập khung giờ làm việc cố định hàng tuần và chặn các ngày bận đột xuất.</p>
+                <h2
+                  style={{
+                    fontFamily: "var(--font-header)",
+                    fontSize: "32px",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
+                  Lịch làm việc & Chặn
+                </h2>
+                <p
+                  style={{
+                    fontSize: "14px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "8px",
+                    maxWidth: "520px",
+                  }}
+                >
+                  Thiết lập khung giờ làm việc cố định hàng tuần và chặn các
+                  ngày bận đột xuất.
+                </p>
               </div>
             </div>
 
             {isLoadingProvider ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải lịch trình...</div>
+              <div
+                style={{
+                  padding: "60px",
+                  textAlign: "center",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
+                Đang tải lịch trình...
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "32px",
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--color-light-border)",
+                    padding: "24px",
+                    boxShadow: "var(--shadow-sm)",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 750,
+                      color: "var(--color-primary-dark)",
+                      margin: "0 0 16px 0",
+                      borderBottom: "1px solid var(--color-light-border)",
+                      paddingBottom: "8px",
+                    }}
+                  >
                     KHUNG GIỜ LÀM VIỆC CỐ ĐỊNH HẰNG TUẦN
                   </h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', alignItems: 'flex-end' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY TRONG TUẦN</span>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(4, 1fr)",
+                      gap: "16px",
+                      alignItems: "flex-end",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        NGÀY TRONG TUẦN
+                      </span>
                       <select
                         value={selectedDayOfWeek}
-                        onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))}
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                        onChange={(e) =>
+                          setSelectedDayOfWeek(Number(e.target.value))
+                        }
+                        style={{
+                          padding: "10px",
+                          border: "1px solid var(--color-light-border)",
+                          borderRadius: "6px",
+                          fontSize: "14px",
+                          outline: "none",
+                        }}
                       >
                         {daysOfWeekVn.map((day, idx) => (
-                          <option key={idx} value={idx}>{day}</option>
+                          <option key={idx} value={idx}>
+                            {day}
+                          </option>
                         ))}
                       </select>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIỜ MỞ CỬA</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        GIỜ MỞ CỬA
+                      </span>
                       <input
                         type="text"
                         value={startHour}
                         onChange={(e) => setStartHour(e.target.value)}
                         placeholder="Ví dụ: 08:00"
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                        style={{
+                          padding: "10px",
+                          border: "1px solid var(--color-light-border)",
+                          borderRadius: "6px",
+                          fontSize: "14px",
+                          outline: "none",
+                        }}
                       />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIỜ ĐÓNG CỬA</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        GIỜ ĐÓNG CỬA
+                      </span>
                       <input
                         type="text"
                         value={endHour}
                         onChange={(e) => setEndHour(e.target.value)}
                         placeholder="Ví dụ: 18:00"
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                        style={{
+                          padding: "10px",
+                          border: "1px solid var(--color-light-border)",
+                          borderRadius: "6px",
+                          fontSize: "14px",
+                          outline: "none",
+                        }}
                       />
                     </div>
                     <button
                       onClick={handleAddRecurringSchedule}
-                      style={{ padding: '11px 20px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                      style={{
+                        padding: "11px 20px",
+                        border: "none",
+                        borderRadius: "6px",
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        backgroundColor: "var(--color-primary)",
+                        color: "white",
+                        cursor: "pointer",
+                      }}
                     >
                       Lưu khung giờ
                     </button>
                   </div>
                 </div>
 
-                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
+                <div
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--color-light-border)",
+                    padding: "24px",
+                    boxShadow: "var(--shadow-sm)",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 750,
+                      color: "var(--color-primary-dark)",
+                      margin: "0 0 16px 0",
+                      borderBottom: "1px solid var(--color-light-border)",
+                      paddingBottom: "8px",
+                    }}
+                  >
                     CHẶN LỊCH NGHỈ / LỊCH BẬN ĐỘT XUẤT
                   </h3>
-                  <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '240px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHỌN NGÀY CHẶN</span>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "16px",
+                      alignItems: "flex-end",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                        width: "240px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        CHỌN NGÀY CHẶN
+                      </span>
                       <input
                         type="date"
                         value={blockedDate}
                         onChange={(e) => setBlockedDate(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]}
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                        min={new Date().toISOString().split("T")[0]}
+                        style={{
+                          padding: "10px",
+                          border: "1px solid var(--color-light-border)",
+                          borderRadius: "6px",
+                          fontSize: "14px",
+                          outline: "none",
+                        }}
                       />
                     </div>
                     <button
                       onClick={handleBlockDate}
-                      style={{ padding: '11px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: '#EF4444', color: 'white', cursor: 'pointer' }}
+                      style={{
+                        padding: "11px 24px",
+                        border: "none",
+                        borderRadius: "6px",
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        backgroundColor: "#EF4444",
+                        color: "white",
+                        cursor: "pointer",
+                      }}
                     >
                       Xác nhận chặn ngày bận
                     </button>
                   </div>
                 </div>
 
-                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
+                <div
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--color-light-border)",
+                    padding: "24px",
+                    boxShadow: "var(--shadow-sm)",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 750,
+                      color: "var(--color-primary-dark)",
+                      margin: "0 0 16px 0",
+                      borderBottom: "1px solid var(--color-light-border)",
+                      paddingBottom: "8px",
+                    }}
+                  >
                     LỊCH TRÌNH ĐÃ THIẾT LẬP
                   </h3>
                   {schedules.length === 0 ? (
-                    <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Chưa có thiết lập khung giờ nào.</p>
+                    <p
+                      style={{
+                        color: "var(--color-text-secondary)",
+                        textAlign: "center",
+                        padding: "20px 0",
+                      }}
+                    >
+                      Chưa có thiết lập khung giờ nào.
+                    </p>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "10px",
+                      }}
+                    >
                       {schedules.map((sch) => (
-                        <div key={sch._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '6px' }}>
-                          <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>
-                            {sch.scheduleType === 'RECURRING'
+                        <div
+                          key={sch._id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "12px 20px",
+                            backgroundColor: "var(--color-light-bg)",
+                            border: "1px solid var(--color-light-border)",
+                            borderRadius: "6px",
+                          }}
+                        >
+                          <strong
+                            style={{
+                              fontSize: "14px",
+                              color: "var(--color-text-primary)",
+                            }}
+                          >
+                            {sch.scheduleType === "RECURRING"
                               ? `Mỗi tuần vào ${daysOfWeekVn[sch.dayOfWeek]}`
-                              : `Nghỉ ngày bận đột xuất: ${new Date(sch.specificDate).toLocaleDateString('vi-VN')}`}
+                              : `Nghỉ ngày bận đột xuất: ${new Date(sch.specificDate).toLocaleDateString("vi-VN")}`}
                           </strong>
-                          <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                            {sch.scheduleType === 'RECURRING'
-                              ? sch.workingHours?.map((h: any) => `${h.start} - ${h.end}`).join(', ')
-                              : 'CHẶN NGHỈ CẢ NGÀY'}
+                          <span
+                            style={{
+                              fontSize: "13px",
+                              color: "var(--color-text-secondary)",
+                              fontWeight: 600,
+                            }}
+                          >
+                            {sch.scheduleType === "RECURRING"
+                              ? sch.workingHours
+                                  ?.map((h: any) => `${h.start} - ${h.end}`)
+                                  .join(", ")
+                              : "CHẶN NGHỈ CẢ NGÀY"}
                           </span>
                         </div>
                       ))}
@@ -1942,92 +4829,337 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
-        {currentView === 'vouchers' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        {currentView === "vouchers" && (
+          <main style={{ flex: 1, padding: "40px 32px", overflowY: "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: "32px",
+              }}
+            >
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Mã khuyến mãi</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Tạo các chương trình khuyến mãi, giảm giá trực tiếp theo % hoặc tiền mặt cho khách hàng.</p>
+                <h2
+                  style={{
+                    fontFamily: "var(--font-header)",
+                    fontSize: "32px",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
+                  Quản lý Mã khuyến mãi
+                </h2>
+                <p
+                  style={{
+                    fontSize: "14px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "8px",
+                    maxWidth: "520px",
+                  }}
+                >
+                  Tạo các chương trình khuyến mãi, giảm giá trực tiếp theo %
+                  hoặc tiền mặt cho khách hàng.
+                </p>
               </div>
             </div>
 
             {isLoadingProvider ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải danh sách voucher...</div>
+              <div
+                style={{
+                  padding: "60px",
+                  textAlign: "center",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
+                Đang tải danh sách voucher...
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                <form onSubmit={handleAddVoucher} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>TẠO MÃ KHUYẾN MÃI MỚI</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÃ CODE (IN HOA, VIẾT LIỀN)</span>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "32px",
+                }}
+              >
+                <form
+                  onSubmit={handleAddVoucher}
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--color-light-border)",
+                    padding: "24px",
+                    boxShadow: "var(--shadow-sm)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "20px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 750,
+                      color: "var(--color-primary-dark)",
+                      margin: 0,
+                      borderBottom: "1px solid var(--color-light-border)",
+                      paddingBottom: "8px",
+                    }}
+                  >
+                    TẠO MÃ KHUYẾN MÃI MỚI
+                  </h3>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "16px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        MÃ CODE (IN HOA, VIẾT LIỀN)
+                      </span>
                       <input
                         type="text"
                         placeholder="Ví dụ: SILKSTONE10"
                         value={vCode}
-                        onChange={(e) => setVCode(e.target.value.toUpperCase().replace(/\s/g, ''))}
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                        onChange={(e) =>
+                          setVCode(
+                            e.target.value.toUpperCase().replace(/\s/g, ""),
+                          )
+                        }
+                        style={{
+                          padding: "10px",
+                          border: "1px solid var(--color-light-border)",
+                          borderRadius: "6px",
+                          fontSize: "14px",
+                          outline: "none",
+                        }}
                         required
                       />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN CHƯƠNG TRÌNH KHUYẾN MÃI</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        TÊN CHƯƠNG TRÌNH KHUYẾN MÃI
+                      </span>
                       <input
                         type="text"
                         placeholder="Ví dụ: Giảm giá hè rực rỡ"
                         value={vName}
                         onChange={(e) => setVName(e.target.value)}
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                        style={{
+                          padding: "10px",
+                          border: "1px solid var(--color-light-border)",
+                          borderRadius: "6px",
+                          fontSize: "14px",
+                          outline: "none",
+                        }}
                         required
                       />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>LOẠI GIẢM GIÁ</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        LOẠI GIẢM GIÁ
+                      </span>
                       <select
                         value={vType}
                         onChange={(e) => setVType(e.target.value)}
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                        style={{
+                          padding: "10px",
+                          border: "1px solid var(--color-light-border)",
+                          borderRadius: "6px",
+                          fontSize: "14px",
+                          outline: "none",
+                        }}
                       >
-                        <option value="PERCENTAGE">Giảm theo Phần trăm (%)</option>
-                        <option value="FIXED_AMOUNT">Giảm số tiền mặt cố định (đ)</option>
+                        <option value="PERCENTAGE">
+                          Giảm theo Phần trăm (%)
+                        </option>
+                        <option value="FIXED_AMOUNT">
+                          Giảm số tiền mặt cố định (đ)
+                        </option>
                       </select>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIÁ TRỊ GIẢM</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        GIÁ TRỊ GIẢM
+                      </span>
                       <input
                         type="number"
                         value={vValue}
                         onChange={(e) => setVValue(Number(e.target.value))}
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                        style={{
+                          padding: "10px",
+                          border: "1px solid var(--color-light-border)",
+                          borderRadius: "6px",
+                          fontSize: "14px",
+                          outline: "none",
+                        }}
                         required
                       />
                     </div>
                   </div>
                   <button
                     type="submit"
-                    style={{ alignSelf: 'flex-start', padding: '11px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                    style={{
+                      alignSelf: "flex-start",
+                      padding: "11px 24px",
+                      border: "none",
+                      borderRadius: "6px",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      backgroundColor: "var(--color-primary)",
+                      color: "white",
+                      cursor: "pointer",
+                    }}
                   >
                     Tạo Voucher ngay
                   </button>
                 </form>
 
-                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>DANH SÁCH VOUCHERS HOẠT ĐỘNG</h3>
+                <div
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--color-light-border)",
+                    padding: "24px",
+                    boxShadow: "var(--shadow-sm)",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 750,
+                      color: "var(--color-primary-dark)",
+                      margin: "0 0 16px 0",
+                      borderBottom: "1px solid var(--color-light-border)",
+                      paddingBottom: "8px",
+                    }}
+                  >
+                    DANH SÁCH VOUCHERS HOẠT ĐỘNG
+                  </h3>
                   {vouchers.length === 0 ? (
-                    <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Chưa có mã khuyến mãi nào được tạo.</p>
+                    <p
+                      style={{
+                        color: "var(--color-text-secondary)",
+                        textAlign: "center",
+                        padding: "20px 0",
+                      }}
+                    >
+                      Chưa có mã khuyến mãi nào được tạo.
+                    </p>
                   ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "16px",
+                      }}
+                    >
                       {vouchers.map((v) => (
-                        <div key={v._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+                        <div
+                          key={v._id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "16px",
+                            border: "1px solid var(--color-light-border)",
+                            borderRadius: "8px",
+                            backgroundColor: "var(--color-light-bg)",
+                          }}
+                        >
                           <div>
-                            <span style={{ padding: '4px 10px', backgroundColor: 'var(--color-dark-bg)', color: 'white', borderRadius: '4px', fontWeight: 700, fontSize: '11px', letterSpacing: '0.05em' }}>{v.code}</span>
-                            <h5 style={{ fontSize: '14px', fontWeight: 700, margin: '10px 0 4px 0' }}>{v.name}</h5>
-                            <span style={{ fontSize: '13px', color: 'var(--color-primary)', fontWeight: 700 }}>
-                              Giảm {v.discountValue.toLocaleString()}{v.discountType === 'PERCENTAGE' ? '%' : 'đ'}
+                            <span
+                              style={{
+                                padding: "4px 10px",
+                                backgroundColor: "var(--color-dark-bg)",
+                                color: "white",
+                                borderRadius: "4px",
+                                fontWeight: 700,
+                                fontSize: "11px",
+                                letterSpacing: "0.05em",
+                              }}
+                            >
+                              {v.code}
+                            </span>
+                            <h5
+                              style={{
+                                fontSize: "14px",
+                                fontWeight: 700,
+                                margin: "10px 0 4px 0",
+                              }}
+                            >
+                              {v.name}
+                            </h5>
+                            <span
+                              style={{
+                                fontSize: "13px",
+                                color: "var(--color-primary)",
+                                fontWeight: 700,
+                              }}
+                            >
+                              Giảm {v.discountValue.toLocaleString()}
+                              {v.discountType === "PERCENTAGE" ? "%" : "đ"}
                             </span>
                           </div>
                           <button
                             onClick={() => handleDeleteVoucher(v._id)}
-                            style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '6px' }}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: "#EF4444",
+                              cursor: "pointer",
+                              padding: "6px",
+                            }}
                             title="Xóa Voucher"
                           >
                             <Trash2 size={16} />
@@ -2042,64 +5174,283 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
-        {currentView === 'reviews' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        {currentView === "reviews" && (
+          <main style={{ flex: 1, padding: "40px 32px", overflowY: "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: "32px",
+              }}
+            >
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá & Phản hồi</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Theo dõi mức độ đánh giá trung bình và trả lời các thắc mắc, phản hồi từ khách hàng.</p>
+                <h2
+                  style={{
+                    fontFamily: "var(--font-header)",
+                    fontSize: "32px",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
+                  Đánh giá & Phản hồi
+                </h2>
+                <p
+                  style={{
+                    fontSize: "14px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "8px",
+                    maxWidth: "520px",
+                  }}
+                >
+                  Theo dõi mức độ đánh giá trung bình và trả lời các thắc mắc,
+                  phản hồi từ khách hàng.
+                </p>
               </div>
             </div>
 
             {isLoadingProvider ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải thống kê đánh giá...</div>
+              <div
+                style={{
+                  padding: "60px",
+                  textAlign: "center",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
+                Đang tải thống kê đánh giá...
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                  <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-md)', padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>RATING TRUNG BÌNH</span>
-                    <strong style={{ fontSize: '36px', fontWeight: 800, color: 'var(--color-primary-dark)', margin: '8px 0' }}>{reviewsData?.averageRating || 0} / 5.0</strong>
-                    <div style={{ display: 'flex', gap: '2px', color: 'var(--color-gold)' }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "32px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "20px",
+                  }}
+                >
+                  <div
+                    style={{
+                      backgroundColor: "white",
+                      border: "1px solid var(--color-light-border)",
+                      borderRadius: "var(--radius-md)",
+                      padding: "24px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: "var(--color-text-secondary)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      RATING TRUNG BÌNH
+                    </span>
+                    <strong
+                      style={{
+                        fontSize: "36px",
+                        fontWeight: 800,
+                        color: "var(--color-primary-dark)",
+                        margin: "8px 0",
+                      }}
+                    >
+                      {reviewsData?.averageRating || 0} / 5.0
+                    </strong>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "2px",
+                        color: "var(--color-gold)",
+                      }}
+                    >
                       {[1, 2, 3, 4, 5].map((s) => (
-                        <Star key={s} size={14} fill={s <= Math.round(reviewsData?.averageRating || 0) ? 'currentColor' : 'none'} />
+                        <Star
+                          key={s}
+                          size={14}
+                          fill={
+                            s <= Math.round(reviewsData?.averageRating || 0)
+                              ? "currentColor"
+                              : "none"
+                          }
+                        />
                       ))}
                     </div>
                   </div>
-                  <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-md)', padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TỔNG LƯỢT ĐÁNH GIÁ</span>
-                    <strong style={{ fontSize: '36px', fontWeight: 800, color: 'var(--color-text-primary)', margin: '8px 0' }}>{reviewsData?.totalReviews || 0}</strong>
-                    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Lượt nhận xét thực tế từ khách</span>
+                  <div
+                    style={{
+                      backgroundColor: "white",
+                      border: "1px solid var(--color-light-border)",
+                      borderRadius: "var(--radius-md)",
+                      padding: "24px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: "var(--color-text-secondary)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      TỔNG LƯỢT ĐÁNH GIÁ
+                    </span>
+                    <strong
+                      style={{
+                        fontSize: "36px",
+                        fontWeight: 800,
+                        color: "var(--color-text-primary)",
+                        margin: "8px 0",
+                      }}
+                    >
+                      {reviewsData?.totalReviews || 0}
+                    </strong>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      Lượt nhận xét thực tế từ khách
+                    </span>
                   </div>
                 </div>
 
-                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 20px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>DANH SÁCH BÌNH LUẬN NỔI BẬT</h3>
+                <div
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--color-light-border)",
+                    padding: "24px",
+                    boxShadow: "var(--shadow-sm)",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 750,
+                      color: "var(--color-primary-dark)",
+                      margin: "0 0 20px 0",
+                      borderBottom: "1px solid var(--color-light-border)",
+                      paddingBottom: "8px",
+                    }}
+                  >
+                    DANH SÁCH BÌNH LUẬN NỔI BẬT
+                  </h3>
                   {!reviewsData?.reviews || reviewsData.reviews.length === 0 ? (
-                    <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Chưa có lượt đánh giá nào cho cửa hàng của bạn.</p>
+                    <p
+                      style={{
+                        color: "var(--color-text-secondary)",
+                        textAlign: "center",
+                        padding: "20px 0",
+                      }}
+                    >
+                      Chưa có lượt đánh giá nào cho cửa hàng của bạn.
+                    </p>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "20px",
+                      }}
+                    >
                       {reviewsData.reviews.map((r: any) => (
-                        <div key={r._id} style={{ padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div
+                          key={r._id}
+                          style={{
+                            padding: "16px",
+                            border: "1px solid var(--color-light-border)",
+                            borderRadius: "8px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "12px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "flex-start",
+                            }}
+                          >
                             <div>
-                              <div style={{ display: 'flex', gap: '2px', color: 'var(--color-gold)' }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: "2px",
+                                  color: "var(--color-gold)",
+                                }}
+                              >
                                 {[1, 2, 3, 4, 5].map((s) => (
-                                  <Star key={s} size={11} fill={s <= r.rating ? 'currentColor' : 'none'} />
+                                  <Star
+                                    key={s}
+                                    size={11}
+                                    fill={
+                                      s <= r.rating ? "currentColor" : "none"
+                                    }
+                                  />
                                 ))}
                               </div>
-                              <p style={{ fontSize: '14px', color: 'var(--color-text-primary)', margin: '8px 0 0 0' }}>{r.comment || 'Không có bình luận.'}</p>
+                              <p
+                                style={{
+                                  fontSize: "14px",
+                                  color: "var(--color-text-primary)",
+                                  margin: "8px 0 0 0",
+                                }}
+                              >
+                                {r.comment || "Không có bình luận."}
+                              </p>
                             </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
+                            <div style={{ display: "flex", gap: "8px" }}>
                               <button
                                 onClick={() => handleReportReview(r._id)}
-                                style={{ padding: '4px 10px', backgroundColor: '#FFF5F5', border: '1px solid #FEB2B2', borderRadius: '6px', color: '#C53030', fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                style={{
+                                  padding: "4px 10px",
+                                  backgroundColor: "#FFF5F5",
+                                  border: "1px solid #FEB2B2",
+                                  borderRadius: "6px",
+                                  color: "#C53030",
+                                  fontSize: "11px",
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
                               >
                                 <Flag size={11} />
                                 Báo cáo Spam
                               </button>
                               <button
-                                onClick={() => { setReplyingReviewId(r._id); setReplyText(r.reply || ''); }}
-                                style={{ padding: '4px 12px', backgroundColor: 'var(--color-dark-bg)', border: 'none', borderRadius: '6px', color: 'white', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                                onClick={() => {
+                                  setReplyingReviewId(r._id);
+                                  setReplyText(r.reply || "");
+                                }}
+                                style={{
+                                  padding: "4px 12px",
+                                  backgroundColor: "var(--color-dark-bg)",
+                                  border: "none",
+                                  borderRadius: "6px",
+                                  color: "white",
+                                  fontSize: "11px",
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                }}
                               >
                                 Phản hồi
                               </button>
@@ -2108,7 +5459,16 @@ export const ProviderDashboard: React.FC = () => {
 
                           {/* Reply display */}
                           {r.reply && (
-                            <div style={{ padding: '10px 14px', backgroundColor: 'var(--color-light-bg)', borderRadius: '6px', borderLeft: '3px solid var(--color-primary)', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}>
+                            <div
+                              style={{
+                                padding: "10px 14px",
+                                backgroundColor: "var(--color-light-bg)",
+                                borderRadius: "6px",
+                                borderLeft: "3px solid var(--color-primary)",
+                                fontSize: "12.5px",
+                                color: "var(--color-text-secondary)",
+                              }}
+                            >
                               <strong>Phản hồi của shop: </strong> {r.reply}
                             </div>
                           )}
@@ -2122,64 +5482,251 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
-        {currentView === 'trust' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        {currentView === "trust" && (
+          <main style={{ flex: 1, padding: "40px 32px", overflowY: "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: "32px",
+              }}
+            >
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá khách hàng & Tín nhiệm</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Đánh giá hai chiều sau khi hoàn thành dịch vụ và tra cứu độ uy tín của khách hàng.</p>
+                <h2
+                  style={{
+                    fontFamily: "var(--font-header)",
+                    fontSize: "32px",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
+                  Đánh giá khách hàng & Tín nhiệm
+                </h2>
+                <p
+                  style={{
+                    fontSize: "14px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "8px",
+                    maxWidth: "520px",
+                  }}
+                >
+                  Đánh giá hai chiều sau khi hoàn thành dịch vụ và tra cứu độ uy
+                  tín của khách hàng.
+                </p>
               </div>
             </div>
 
             {isLoadingProvider ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải dữ liệu...</div>
+              <div
+                style={{
+                  padding: "60px",
+                  textAlign: "center",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
+                Đang tải dữ liệu...
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>TRA CỨU ĐỘ TÍN NHIỆM KHÁCH HÀNG</h3>
-                  <div style={{ display: 'flex', gap: '12px' }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "32px",
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--color-light-border)",
+                    padding: "24px",
+                    boxShadow: "var(--shadow-sm)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 750,
+                      color: "var(--color-primary-dark)",
+                      margin: 0,
+                      borderBottom: "1px solid var(--color-light-border)",
+                      paddingBottom: "8px",
+                    }}
+                  >
+                    TRA CỨU ĐỘ TÍN NHIỆM KHÁCH HÀNG
+                  </h3>
+                  <div style={{ display: "flex", gap: "12px" }}>
                     <input
                       type="text"
                       placeholder="Nhập mã ID khách hàng để tra cứu..."
                       value={searchCustId}
                       onChange={(e) => setSearchCustId(e.target.value)}
-                      style={{ flex: 1, padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      style={{
+                        flex: 1,
+                        padding: "10px 14px",
+                        border: "1px solid var(--color-light-border)",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        outline: "none",
+                      }}
                     />
                     <button
                       onClick={handleSearchTrustScore}
-                      style={{ padding: '11px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                      style={{
+                        padding: "11px 24px",
+                        border: "none",
+                        borderRadius: "6px",
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        backgroundColor: "var(--color-primary)",
+                        color: "white",
+                        cursor: "pointer",
+                      }}
                     >
                       Tra cứu tín nhiệm
                     </button>
                   </div>
                   {trustScoreResult && (
-                    <div style={{ padding: '16px', backgroundColor: 'var(--color-light-bg)', borderRadius: '8px', border: '1px solid var(--color-light-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                    <div
+                      style={{
+                        padding: "16px",
+                        backgroundColor: "var(--color-light-bg)",
+                        borderRadius: "8px",
+                        border: "1px solid var(--color-light-border)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginTop: "8px",
+                      }}
+                    >
                       <div>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ĐIỂM TÍN NHIỆM TRUNG BÌNH</span>
-                        <strong style={{ display: 'block', fontSize: '24px', fontWeight: 800, color: 'var(--color-primary)', marginTop: '4px' }}>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            color: "var(--color-text-secondary)",
+                          }}
+                        >
+                          ĐIỂM TÍN NHIỆM TRUNG BÌNH
+                        </span>
+                        <strong
+                          style={{
+                            display: "block",
+                            fontSize: "24px",
+                            fontWeight: 800,
+                            color: "var(--color-primary)",
+                            marginTop: "4px",
+                          }}
+                        >
                           {trustScoreResult.averageRating} / 5.0
                         </strong>
                       </div>
-                      <span style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)' }}>Dựa trên {trustScoreResult.totalReviews} lượt đánh giá hành vi từ các đối tác.</span>
+                      <span
+                        style={{
+                          fontSize: "12.5px",
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        Dựa trên {trustScoreResult.totalReviews} lượt đánh giá
+                        hành vi từ các đối tác.
+                      </span>
                     </div>
                   )}
                 </div>
 
-                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 20px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>ĐƠN HÀNG CHỜ ĐÁNH GIÁ HÀNH VI</h3>
+                <div
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--color-light-border)",
+                    padding: "24px",
+                    boxShadow: "var(--shadow-sm)",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 750,
+                      color: "var(--color-primary-dark)",
+                      margin: "0 0 20px 0",
+                      borderBottom: "1px solid var(--color-light-border)",
+                      paddingBottom: "8px",
+                    }}
+                  >
+                    ĐƠN HÀNG CHỜ ĐÁNH GIÁ HÀNH VI
+                  </h3>
                   {bookingsState.length === 0 ? (
-                    <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Không có đơn đặt lịch nào khả dụng để đánh giá.</p>
+                    <p
+                      style={{
+                        color: "var(--color-text-secondary)",
+                        textAlign: "center",
+                        padding: "20px 0",
+                      }}
+                    >
+                      Không có đơn đặt lịch nào khả dụng để đánh giá.
+                    </p>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "12px",
+                      }}
+                    >
                       {bookingsState.map((booking) => (
-                        <div key={booking._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'white' }}>
+                        <div
+                          key={booking._id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "14px 20px",
+                            border: "1px solid var(--color-light-border)",
+                            borderRadius: "8px",
+                            backgroundColor: "white",
+                          }}
+                        >
                           <div>
-                            <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>{booking.bookingCode}</strong>
-                            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>Mã khách hàng: {booking.customerId}</p>
+                            <strong
+                              style={{
+                                fontSize: "14px",
+                                color: "var(--color-text-primary)",
+                              }}
+                            >
+                              {booking.bookingCode}
+                            </strong>
+                            <p
+                              style={{
+                                fontSize: "12px",
+                                color: "var(--color-text-secondary)",
+                                margin: "4px 0 0 0",
+                              }}
+                            >
+                              Mã khách hàng: {booking.customerId}
+                            </p>
                           </div>
                           <button
-                            onClick={() => setRatingBooking({ bookingId: booking._id, customerId: booking.customerId })}
-                            style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                            onClick={() =>
+                              setRatingBooking({
+                                bookingId: booking._id,
+                                customerId: booking.customerId,
+                              })
+                            }
+                            style={{
+                              padding: "8px 16px",
+                              border: "none",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: 700,
+                              backgroundColor: "var(--color-primary)",
+                              color: "white",
+                              cursor: "pointer",
+                            }}
                           >
                             Đánh giá khách hàng
                           </button>
@@ -2193,141 +5740,619 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
-        {currentView === 'payouts' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        {currentView === "payouts" && (
+          <main style={{ flex: 1, padding: "40px 32px", overflowY: "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: "24px",
+                gap: "20px",
+                flexWrap: "wrap",
+              }}
+            >
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Lịch sử quyết toán từ hệ thống</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Danh sách các khoản thanh toán đã được hệ thống chuyển khoản cho bạn sau khi đơn hàng hoàn thành.</p>
+                <h2
+                  style={{
+                    fontFamily: "var(--font-header)",
+                    fontSize: "30px",
+                    fontWeight: 700,
+                    margin: 0,
+                  }}
+                >
+                  Quyết toán từ hệ thống
+                </h2>
+                <p
+                  style={{
+                    fontSize: "14px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "8px",
+                    maxWidth: "620px",
+                  }}
+                >
+                  Theo dõi doanh thu, commission, phí nền tảng và số tiền thực
+                  nhận của từng booking.
+                </p>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  alignItems: "end",
+                  flexWrap: "wrap",
+                }}
+              >
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  TRẠNG THÁI
+                  <select
+                    value={payoutStatus}
+                    onChange={(event) => {
+                      setPayoutStatus(
+                        event.target.value as "ALL" | SettlementStatus,
+                      );
+                      setPayoutPage(1);
+                    }}
+                    style={{
+                      padding: "8px 10px",
+                      border: "1px solid var(--color-light-border)",
+                      borderRadius: "6px",
+                      background: "white",
+                    }}
+                  >
+                    <option value="ALL">Tất cả</option>
+                    <option value="READY_TO_SETTLE">Chờ quyết toán</option>
+                    <option value="ON_HOLD">Tạm giữ</option>
+                    <option value="SETTLED">Đã quyết toán</option>
+                    <option value="CANCELLED">Đã hủy</option>
+                  </select>
+                </label>
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  TỪ NGÀY
+                  <input
+                    type="date"
+                    value={payoutFromDate}
+                    onChange={(event) => {
+                      setPayoutFromDate(event.target.value);
+                      setPayoutPage(1);
+                    }}
+                    style={{
+                      padding: "7px 9px",
+                      border: "1px solid var(--color-light-border)",
+                      borderRadius: "6px",
+                    }}
+                  />
+                </label>
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  ĐẾN NGÀY
+                  <input
+                    type="date"
+                    value={payoutToDate}
+                    onChange={(event) => {
+                      setPayoutToDate(event.target.value);
+                      setPayoutPage(1);
+                    }}
+                    style={{
+                      padding: "7px 9px",
+                      border: "1px solid var(--color-light-border)",
+                      borderRadius: "6px",
+                    }}
+                  />
+                </label>
               </div>
             </div>
 
-            {isLoadingProvider ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải dữ liệu quyết toán...</div>
+            {payoutLoading ? (
+              <div
+                style={{
+                  padding: "60px",
+                  textAlign: "center",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 600,
+                }}
+              >
+                Đang tải dữ liệu quyết toán...
+              </div>
+            ) : payoutError ? (
+              <div
+                style={{
+                  padding: "48px",
+                  textAlign: "center",
+                  border: "1px solid #F3CACA",
+                  borderRadius: "8px",
+                  background: "#FFF8F8",
+                  color: "#991B1B",
+                }}
+              >
+                <p style={{ margin: "0 0 12px", fontWeight: 700 }}>
+                  {payoutError}
+                </p>
+                <button
+                  onClick={() => void fetchPayouts()}
+                  style={{
+                    padding: "8px 14px",
+                    border: "1px solid #991B1B",
+                    borderRadius: "6px",
+                    background: "white",
+                    color: "#991B1B",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Thử lại
+                </button>
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 20px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>DANH SÁCH CÁC KHOẢN QUYẾT TOÁN</h3>
-                  {payouts.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '40px 24px', color: 'var(--color-text-secondary)' }}>
-                      <DollarSign size={40} style={{ margin: '0 auto 12px auto', opacity: 0.3 }} />
-                      <p style={{ fontWeight: 700 }}>Chưa có khoản quyết toán nào</p>
-                      <p style={{ fontSize: '12.5px', marginTop: '4px' }}>Khi đơn hàng được hoàn thành, tiền quyết toán sẽ tự động gửi vào tài khoản ngân hàng của bạn.</p>
-                    </div>
-                  ) : (
-                    <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
-                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ QUYẾT TOÁN</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ BOOKING</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>SỐ TIỀN THỰC NHẬN</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TÀI KHOẢN NHẬN</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TRẠNG THÁI</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>NGÀY THỰC HIỆN</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {payouts.map((p: any) => (
-                            <tr 
-                              key={p.id} 
-                              onClick={() => {
-                                const bId = p.bookingId?._id || p.bookingId;
-                                if (bId) {
-                                  setSelectedBookingId(bId);
-                                  setIsDetailModalOpen(true);
-                                }
+              <div
+                style={{
+                  backgroundColor: "white",
+                  borderRadius: "8px",
+                  border: "1px solid var(--color-light-border)",
+                  overflow: "hidden",
+                }}
+              >
+                {payouts.length === 0 ? (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "40px 24px",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    <DollarSign
+                      size={40}
+                      style={{ margin: "0 auto 12px auto", opacity: 0.3 }}
+                    />
+                    <p style={{ fontWeight: 700 }}>
+                      Chưa có khoản quyết toán nào
+                    </p>
+                    <p style={{ fontSize: "12.5px", marginTop: "4px" }}>
+                      Settlement được tạo khi booking đã hoàn tất và thanh toán
+                      đầy đủ.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        fontSize: "13px",
+                      }}
+                    >
+                      <thead>
+                        <tr
+                          style={{
+                            backgroundColor: "var(--color-light-bg)",
+                            borderBottom: "1px solid var(--color-light-border)",
+                          }}
+                        >
+                          {[
+                            "MÃ QUYẾT TOÁN",
+                            "BOOKING",
+                            "DOANH THU",
+                            "COMMISSION",
+                            "PHÍ NỀN TẢNG",
+                            "THỰC NHẬN",
+                            "TRẠNG THÁI",
+                            "NGÀY TẠO",
+                            "",
+                          ].map((heading, index) => (
+                            <th
+                              key={`${heading}-${index}`}
+                              style={{
+                                padding: "13px 14px",
+                                textAlign:
+                                  index >= 2 && index <= 5
+                                    ? "right"
+                                    : index >= 6
+                                      ? "center"
+                                      : "left",
+                                fontWeight: 700,
+                                color: "var(--color-text-secondary)",
+                                fontSize: "10px",
+                                whiteSpace: "nowrap",
                               }}
-                              style={{ borderBottom: '1px solid var(--color-light-border)', cursor: 'pointer' }}
-                              className="hover:bg-stone-50 transition"
                             >
-                              <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.id}</td>
-                              <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingCode || '—'}</td>
-                              <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.amount || 0).toLocaleString('vi-VN')}đ</td>
-                              <td style={{ padding: '16px 20px' }}>
-                                <span style={{ fontWeight: 600, color: '#2A2A2A' }}>{p.bank}</span>
-                                <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{p.account} • {p.accountHolder}</span>
-                              </td>
-                              <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                                <span style={{ 
-                                  padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
-                                  backgroundColor: p.status === 'SETTLED' ? '#F0FDF4' : p.status === 'ON_HOLD' ? '#FEE2E2' : p.status === 'CANCELLED' ? '#F3F4F6' : '#FEF3C7',
-                                  color: p.status === 'SETTLED' ? '#166534' : p.status === 'ON_HOLD' ? '#991B1B' : p.status === 'CANCELLED' ? '#4B5563' : '#92400E'
-                                }}>
-                                  {p.status === 'SETTLED' ? 'Đã quyết toán' : p.status === 'ON_HOLD' ? 'Tạm giữ' : p.status === 'CANCELLED' ? 'Đã hủy' : 'Chờ quyết toán'}
-                                </span>
-                              </td>
-                              <td style={{ padding: '16px 20px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>{p.date}</td>
-                            </tr>
+                              {heading}
+                            </th>
                           ))}
-                        </tbody>
-                      </table>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payouts.map((payout) => (
+                          <tr
+                            key={payout._id}
+                            style={{
+                              borderBottom:
+                                "1px solid var(--color-light-border)",
+                            }}
+                          >
+                            <td
+                              style={{ padding: "15px 14px", fontWeight: 700 }}
+                            >
+                              {payout.settlementCode}
+                            </td>
+                            <td
+                              style={{
+                                padding: "15px 14px",
+                                fontWeight: 600,
+                                color: "var(--color-primary-dark)",
+                              }}
+                            >
+                              {settlementBookingCode(payout.bookingId)}
+                            </td>
+                            <td
+                              style={{
+                                padding: "15px 14px",
+                                textAlign: "right",
+                              }}
+                            >
+                              {settlementMoney(payout.grossAmount)}
+                            </td>
+                            <td
+                              style={{
+                                padding: "15px 14px",
+                                textAlign: "right",
+                                color: "#9A6B1E",
+                              }}
+                            >
+                              -{settlementMoney(payout.commissionAmount)}
+                              <small
+                                style={{
+                                  display: "block",
+                                  color: "var(--color-text-secondary)",
+                                }}
+                              >
+                                {(payout.commissionRate * 100).toLocaleString(
+                                  "vi-VN",
+                                )}
+                                %
+                              </small>
+                            </td>
+                            <td
+                              style={{
+                                padding: "15px 14px",
+                                textAlign: "right",
+                              }}
+                            >
+                              -{settlementMoney(payout.allocatedPlatformFee)}
+                            </td>
+                            <td
+                              style={{
+                                padding: "15px 14px",
+                                textAlign: "right",
+                                fontWeight: 800,
+                                color: "#166534",
+                              }}
+                            >
+                              {settlementMoney(payout.payableAmount)}
+                            </td>
+                            <td
+                              style={{
+                                padding: "15px 14px",
+                                textAlign: "center",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  padding: "4px 8px",
+                                  borderRadius: "4px",
+                                  fontSize: "11px",
+                                  fontWeight: 700,
+                                  backgroundColor:
+                                    payout.status === "SETTLED"
+                                      ? "#F0FDF4"
+                                      : payout.status === "ON_HOLD"
+                                        ? "#FEE2E2"
+                                        : payout.status === "CANCELLED"
+                                          ? "#F3F4F6"
+                                          : "#FEF3C7",
+                                  color:
+                                    payout.status === "SETTLED"
+                                      ? "#166534"
+                                      : payout.status === "ON_HOLD"
+                                        ? "#991B1B"
+                                        : payout.status === "CANCELLED"
+                                          ? "#4B5563"
+                                          : "#92400E",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {settlementStatusLabel(payout.status)}
+                              </span>
+                            </td>
+                            <td
+                              style={{
+                                padding: "15px 14px",
+                                textAlign: "center",
+                                color: "var(--color-text-secondary)",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {new Date(payout.createdAt).toLocaleDateString(
+                                "vi-VN",
+                              )}
+                            </td>
+                            <td
+                              style={{
+                                padding: "15px 14px",
+                                textAlign: "center",
+                              }}
+                            >
+                              <button
+                                onClick={() =>
+                                  void handleViewPayout(payout._id)
+                                }
+                                title="Xem chi tiết"
+                                style={{
+                                  width: "32px",
+                                  height: "32px",
+                                  display: "grid",
+                                  placeItems: "center",
+                                  border: "1px solid var(--color-light-border)",
+                                  borderRadius: "6px",
+                                  background: "white",
+                                  color: "var(--color-primary)",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <Eye size={15} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {payoutPagination.totalPages > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "14px 18px",
+                      borderTop: "1px solid var(--color-light-border)",
+                      fontSize: "12px",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    <span>
+                      {payoutPagination.total.toLocaleString("vi-VN")} kết quả ·
+                      Trang {payoutPagination.page}/
+                      {payoutPagination.totalPages}
+                    </span>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button
+                        disabled={payoutPage <= 1}
+                        onClick={() => setPayoutPage((page) => page - 1)}
+                        style={{
+                          padding: "7px 12px",
+                          border: "1px solid var(--color-light-border)",
+                          borderRadius: "6px",
+                          background: "white",
+                          cursor: payoutPage <= 1 ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        Trang trước
+                      </button>
+                      <button
+                        disabled={payoutPage >= payoutPagination.totalPages}
+                        onClick={() => setPayoutPage((page) => page + 1)}
+                        style={{
+                          padding: "7px 12px",
+                          border: "1px solid var(--color-light-border)",
+                          borderRadius: "6px",
+                          background: "white",
+                          cursor:
+                            payoutPage >= payoutPagination.totalPages
+                              ? "not-allowed"
+                              : "pointer",
+                        }}
+                      >
+                        Trang sau
+                      </button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             )}
           </main>
         )}
 
         {/* Footer */}
-        <footer style={{ borderTop: '1px solid var(--color-light-border)', padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-            <CheckCircle size={14} style={{ color: 'var(--color-primary)' }} />
+        <footer
+          style={{
+            borderTop: "1px solid var(--color-light-border)",
+            padding: "16px 32px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            fontSize: "12px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              color: "var(--color-text-secondary)",
+              fontWeight: 600,
+            }}
+          >
+            <CheckCircle size={14} style={{ color: "var(--color-primary)" }} />
             <span>HỆ THỐNG QUẢN LÝ DỮ LIỆU DI SẢN SILK & STONE</span>
           </div>
-          <div style={{ display: 'flex', gap: '24px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-            <a href="#" onClick={e => e.preventDefault()} style={{ color: 'inherit', textDecoration: 'none' }}>Báo cáo hệ thống</a>
-            <a href="#" onClick={e => e.preventDefault()} style={{ color: 'inherit', textDecoration: 'none' }}>Trung tâm hỗ trợ</a>
-            <a href="#" onClick={e => e.preventDefault()} style={{ color: 'inherit', textDecoration: 'none' }}>Chính sách bảo mật</a>
+          <div
+            style={{
+              display: "flex",
+              gap: "24px",
+              color: "var(--color-text-secondary)",
+              fontWeight: 600,
+            }}
+          >
+            <a
+              href="#"
+              onClick={(e) => e.preventDefault()}
+              style={{ color: "inherit", textDecoration: "none" }}
+            >
+              Báo cáo hệ thống
+            </a>
+            <a
+              href="#"
+              onClick={(e) => e.preventDefault()}
+              style={{ color: "inherit", textDecoration: "none" }}
+            >
+              Trung tâm hỗ trợ
+            </a>
+            <a
+              href="#"
+              onClick={(e) => e.preventDefault()}
+              style={{ color: "inherit", textDecoration: "none" }}
+            >
+              Chính sách bảo mật
+            </a>
           </div>
         </footer>
       </div>
 
       {/* -------------------- MODALS: CREATE & EDIT PRODUCT -------------------- */}
-      <Modal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        title={editingProduct ? 'Chỉnh sửa thông tin Áo Dài' : 'Đăng ký Áo Dài mới'} 
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={
+          editingProduct ? "Chỉnh sửa thông tin Áo Dài" : "Đăng ký Áo Dài mới"
+        }
         maxWidth="650px"
       >
-        <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
-          
+        <form
+          onSubmit={handleFormSubmit}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+            padding: "8px 0",
+          }}
+        >
           {/* Name */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TÊN ÁO DÀI *</label>
-            <input 
-              type="text" 
-              value={prodName} 
-              onChange={e => setProdName(e.target.value)} 
-              placeholder="Ví dụ: Áo Dài Gấm Hoa Đỏ Hỷ Sự" 
-              style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-              required 
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label
+              style={{
+                fontSize: "12px",
+                fontWeight: 700,
+                color: "var(--color-text-primary)",
+              }}
+            >
+              TÊN ÁO DÀI *
+            </label>
+            <input
+              type="text"
+              value={prodName}
+              onChange={(e) => setProdName(e.target.value)}
+              placeholder="Ví dụ: Áo Dài Gấm Hoa Đỏ Hỷ Sự"
+              style={{
+                padding: "10px 14px",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "6px",
+                fontSize: "14px",
+                outline: "none",
+              }}
+              required
             />
           </div>
 
           {/* Category & Status */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DANH MỤC *</label>
-              <select 
-                value={prodCategoryId} 
-                onChange={e => setProdCategoryId(e.target.value)} 
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "16px",
+            }}
+          >
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+            >
+              <label
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                }}
+              >
+                DANH MỤC *
+              </label>
+              <select
+                value={prodCategoryId}
+                onChange={(e) => setProdCategoryId(e.target.value)}
+                style={{
+                  padding: "10px 14px",
+                  border: "1px solid var(--color-light-border)",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  backgroundColor: "white",
+                  outline: "none",
+                }}
                 required
               >
-                {categories.map(c => (
-                  <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
                 ))}
               </select>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TRẠNG THÁI HIỂN THỊ</label>
-              <select 
-                value={prodStatus} 
-                onChange={e => setProdStatus(e.target.value as any)} 
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+            >
+              <label
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                }}
+              >
+                TRẠNG THÁI HIỂN THỊ
+              </label>
+              <select
+                value={prodStatus}
+                onChange={(e) => setProdStatus(e.target.value as any)}
+                style={{
+                  padding: "10px 14px",
+                  border: "1px solid var(--color-light-border)",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  backgroundColor: "white",
+                  outline: "none",
+                }}
               >
                 <option value="ACTIVE">Đang hoạt động (Bán)</option>
                 <option value="DRAFT">Bản nháp (Ẩn)</option>
@@ -2337,98 +6362,216 @@ export const ProviderDashboard: React.FC = () => {
           </div>
 
           {/* Prices */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>GIÁ THUÊ (VNĐ / NGÀY) *</label>
-              <input 
-                type="number" 
-                value={prodBasePrice} 
-                onChange={e => setProdBasePrice(e.target.value)} 
-                placeholder="Ví dụ: 350000" 
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                required 
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "16px",
+            }}
+          >
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+            >
+              <label
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                }}
+              >
+                GIÁ THUÊ (VNĐ / NGÀY) *
+              </label>
+              <input
+                type="number"
+                value={prodBasePrice}
+                onChange={(e) => setProdBasePrice(e.target.value)}
+                placeholder="Ví dụ: 350000"
+                style={{
+                  padding: "10px 14px",
+                  border: "1px solid var(--color-light-border)",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  outline: "none",
+                }}
+                required
               />
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TIỀN ĐẶT CỌC ĐỒ (VNĐ) *</label>
-              <input 
-                type="number" 
-                value={prodDepositAmount} 
-                onChange={e => setProdDepositAmount(e.target.value)} 
-                placeholder="Ví dụ: 500000" 
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                required 
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+            >
+              <label
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                }}
+              >
+                TIỀN ĐẶT CỌC ĐỒ (VNĐ) *
+              </label>
+              <input
+                type="number"
+                value={prodDepositAmount}
+                onChange={(e) => setProdDepositAmount(e.target.value)}
+                placeholder="Ví dụ: 500000"
+                style={{
+                  padding: "10px 14px",
+                  border: "1px solid var(--color-light-border)",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  outline: "none",
+                }}
+                required
               />
             </div>
           </div>
 
           {/* Description */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>MÔ TẢ SẢN PHẨM</label>
-            <textarea 
-              value={prodDescription} 
-              onChange={e => setProdDescription(e.target.value)} 
-              placeholder="Chất liệu lụa, độ co giãn, lưu ý giặt là..." 
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label
+              style={{
+                fontSize: "12px",
+                fontWeight: 700,
+                color: "var(--color-text-primary)",
+              }}
+            >
+              MÔ TẢ SẢN PHẨM
+            </label>
+            <textarea
+              value={prodDescription}
+              onChange={(e) => setProdDescription(e.target.value)}
+              placeholder="Chất liệu lụa, độ co giãn, lưu ý giặt là..."
               rows={3}
-              style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'vertical' }}
+              style={{
+                padding: "10px 14px",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "6px",
+                fontSize: "14px",
+                outline: "none",
+                resize: "vertical",
+              }}
             />
           </div>
 
           {/* Image Upload Component */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>HÌNH ẢNH SẢN PHẨM *</label>
-            
-            {/* Drag & Drop Area */}
-            <div 
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <label
               style={{
-                border: '2px dashed var(--color-light-border)',
-                borderRadius: '8px',
-                padding: '24px',
-                textAlign: 'center',
-                backgroundColor: 'var(--color-light-bg)',
-                cursor: 'pointer',
-                transition: 'var(--transition-smooth)',
-                position: 'relative'
+                fontSize: "12px",
+                fontWeight: 700,
+                color: "var(--color-text-primary)",
               }}
-              onClick={() => document.getElementById('product-image-upload')?.click()}
             >
-              <input 
+              HÌNH ẢNH SẢN PHẨM *
+            </label>
+
+            {/* Drag & Drop Area */}
+            <div
+              style={{
+                border: "2px dashed var(--color-light-border)",
+                borderRadius: "8px",
+                padding: "24px",
+                textAlign: "center",
+                backgroundColor: "var(--color-light-bg)",
+                cursor: "pointer",
+                transition: "var(--transition-smooth)",
+                position: "relative",
+              }}
+              onClick={() =>
+                document.getElementById("product-image-upload")?.click()
+              }
+            >
+              <input
                 id="product-image-upload"
-                type="file" 
-                multiple 
+                type="file"
+                multiple
                 accept="image/*"
                 onChange={handleImageChange}
-                style={{ display: 'none' }} 
+                style={{ display: "none" }}
               />
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                <Upload size={28} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                  {uploadingImages ? 'Đang tải ảnh lên máy chủ...' : 'Click hoặc Kéo thả nhiều ảnh từ máy của bạn'}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <Upload
+                  size={28}
+                  style={{ color: "var(--color-text-secondary)", opacity: 0.7 }}
+                />
+                <span
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "var(--color-text-primary)",
+                  }}
+                >
+                  {uploadingImages
+                    ? "Đang tải ảnh lên máy chủ..."
+                    : "Click hoặc Kéo thả nhiều ảnh từ máy của bạn"}
                 </span>
-                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Hỗ trợ JPG, PNG, WEBP (Tối đa 10MB)</span>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  Hỗ trợ JPG, PNG, WEBP (Tối đa 10MB)
+                </span>
               </div>
             </div>
 
             {/* Uploaded Images Preview */}
             {prodImages.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '12px', marginTop: '8px' }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
+                  gap: "12px",
+                  marginTop: "8px",
+                }}
+              >
                 {prodImages.map((imgUrl, index) => (
-                  <div key={index} style={{ width: '80px', height: '80px', borderRadius: '6px', overflow: 'hidden', position: 'relative', border: '1px solid var(--color-light-border)' }}>
-                    <img 
-                      src={getImageUrl(imgUrl)} 
-                      alt={`preview-${index}`} 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  <div
+                    key={index}
+                    style={{
+                      width: "80px",
+                      height: "80px",
+                      borderRadius: "6px",
+                      overflow: "hidden",
+                      position: "relative",
+                      border: "1px solid var(--color-light-border)",
+                    }}
+                  >
+                    <img
+                      src={getImageUrl(imgUrl)}
+                      alt={`preview-${index}`}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
                     />
                     <button
                       type="button"
                       onClick={() => removeImage(index)}
                       style={{
-                        position: 'absolute', top: '2px', right: '2px',
-                        width: '18px', height: '18px', borderRadius: '50%',
-                        backgroundColor: 'rgba(0,0,0,0.6)', color: 'white',
-                        border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', fontSize: '10px'
+                        position: "absolute",
+                        top: "2px",
+                        right: "2px",
+                        width: "18px",
+                        height: "18px",
+                        borderRadius: "50%",
+                        backgroundColor: "rgba(0,0,0,0.6)",
+                        color: "white",
+                        border: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        fontSize: "10px",
                       }}
                       title="Xóa hình này"
                     >
@@ -2441,34 +6584,63 @@ export const ProviderDashboard: React.FC = () => {
           </div>
 
           {/* Attributes Grid (Sizes, Colors, Materials, Styles, Occasions) */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1.2fr 0.8fr',
-            gap: '20px',
-            border: '1px solid var(--color-light-border)',
-            borderRadius: '8px',
-            padding: '20px',
-            backgroundColor: '#FAFAFA'
-          }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.2fr 0.8fr",
+              gap: "20px",
+              border: "1px solid var(--color-light-border)",
+              borderRadius: "8px",
+              padding: "20px",
+              backgroundColor: "#FAFAFA",
+            }}
+          >
             {/* Cột 1: Thuộc tính Vật lý */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+            >
               {/* Sizes */}
               <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kích thước có sẵn (Size)</label>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                  {sizesOptions.map(sz => {
+                <label
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  Kích thước có sẵn (Size)
+                </label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "6px",
+                    flexWrap: "wrap",
+                    marginTop: "6px",
+                  }}
+                >
+                  {sizesOptions.map((sz) => {
                     const isSelected = prodSizes.includes(sz);
                     return (
-                      <button 
-                        key={sz} 
+                      <button
+                        key={sz}
                         type="button"
                         onClick={() => handleSizeToggle(sz)}
                         style={{
-                          padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                          cursor: 'pointer', transition: 'all 0.15s',
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          border: isSelected
+                            ? "1px solid var(--color-primary)"
+                            : "1px solid var(--color-light-border)",
+                          backgroundColor: isSelected ? "#FDF4F4" : "white",
+                          color: isSelected
+                            ? "var(--color-primary)"
+                            : "var(--color-text-primary)",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
                         }}
                       >
                         {sz}
@@ -2480,25 +6652,57 @@ export const ProviderDashboard: React.FC = () => {
 
               {/* Colors */}
               <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Màu sắc chủ đạo</label>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                  {colorsOptions.map(c => {
+                <label
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  Màu sắc chủ đạo
+                </label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "6px",
+                    flexWrap: "wrap",
+                    marginTop: "6px",
+                  }}
+                >
+                  {colorsOptions.map((c) => {
                     const isSelected = prodColors.includes(c);
-                    const colorLabel = {
-                      RED: 'Đỏ', WHITE: 'Trắng', GOLD: 'Vàng', BLACK: 'Đen',
-                      PINK: 'Hồng', BLUE: 'Xanh dương', GREEN: 'Xanh lá', BROWN: 'Nâu'
-                    }[c] || c;
+                    const colorLabel =
+                      {
+                        RED: "Đỏ",
+                        WHITE: "Trắng",
+                        GOLD: "Vàng",
+                        BLACK: "Đen",
+                        PINK: "Hồng",
+                        BLUE: "Xanh dương",
+                        GREEN: "Xanh lá",
+                        BROWN: "Nâu",
+                      }[c] || c;
                     return (
-                      <button 
-                        key={c} 
+                      <button
+                        key={c}
                         type="button"
                         onClick={() => handleColorToggle(c)}
                         style={{
-                          padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                          cursor: 'pointer', transition: 'all 0.15s',
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          border: isSelected
+                            ? "1px solid var(--color-primary)"
+                            : "1px solid var(--color-light-border)",
+                          backgroundColor: isSelected ? "#FDF4F4" : "white",
+                          color: isSelected
+                            ? "var(--color-primary)"
+                            : "var(--color-text-primary)",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
                         }}
                       >
                         {colorLabel}
@@ -2510,24 +6714,54 @@ export const ProviderDashboard: React.FC = () => {
 
               {/* Materials */}
               <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Chất liệu</label>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                  {materialsOptions.map(m => {
+                <label
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  Chất liệu
+                </label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "6px",
+                    flexWrap: "wrap",
+                    marginTop: "6px",
+                  }}
+                >
+                  {materialsOptions.map((m) => {
                     const isSelected = prodMaterials.includes(m);
-                    const materialLabel = {
-                      SILK: 'Lụa', VELVET: 'Nhung', BROCADE: 'Gấm', ORGANZA: 'Organza', LINEN: 'Linen'
-                    }[m] || m;
+                    const materialLabel =
+                      {
+                        SILK: "Lụa",
+                        VELVET: "Nhung",
+                        BROCADE: "Gấm",
+                        ORGANZA: "Organza",
+                        LINEN: "Linen",
+                      }[m] || m;
                     return (
-                      <button 
-                        key={m} 
+                      <button
+                        key={m}
                         type="button"
                         onClick={() => handleMaterialToggle(m)}
                         style={{
-                          padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                          cursor: 'pointer', transition: 'all 0.15s',
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          border: isSelected
+                            ? "1px solid var(--color-primary)"
+                            : "1px solid var(--color-light-border)",
+                          backgroundColor: isSelected ? "#FDF4F4" : "white",
+                          color: isSelected
+                            ? "var(--color-primary)"
+                            : "var(--color-text-primary)",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
                         }}
                       >
                         {materialLabel}
@@ -2539,28 +6773,61 @@ export const ProviderDashboard: React.FC = () => {
             </div>
 
             {/* Cột 2: Phân loại Onboarding (Trường phái & Dịp lễ) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '1px solid var(--color-light-border)', paddingLeft: '20px' }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+                borderLeft: "1px solid var(--color-light-border)",
+                paddingLeft: "20px",
+              }}
+            >
               {/* Design Style */}
               <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Trường phái thiết kế *</label>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                <label
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  Trường phái thiết kế *
+                </label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "6px",
+                    flexWrap: "wrap",
+                    marginTop: "6px",
+                  }}
+                >
                   {[
-                    { key: 'traditional', label: 'Truyền thống' },
-                    { key: 'modern', label: 'Cách tân' },
-                    { key: 'edgy', label: 'Phá cách' }
-                  ].map(st => {
+                    { key: "traditional", label: "Truyền thống" },
+                    { key: "modern", label: "Cách tân" },
+                    { key: "edgy", label: "Phá cách" },
+                  ].map((st) => {
                     const isSelected = prodStyle === st.key;
                     return (
-                      <button 
-                        key={st.key} 
+                      <button
+                        key={st.key}
                         type="button"
                         onClick={() => setProdStyle(st.key)}
                         style={{
-                          padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                          cursor: 'pointer', transition: 'all 0.15s',
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          border: isSelected
+                            ? "1px solid var(--color-primary)"
+                            : "1px solid var(--color-light-border)",
+                          backgroundColor: isSelected ? "#FDF4F4" : "white",
+                          color: isSelected
+                            ? "var(--color-primary)"
+                            : "var(--color-text-primary)",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
                         }}
                       >
                         {st.label}
@@ -2572,35 +6839,58 @@ export const ProviderDashboard: React.FC = () => {
 
               {/* Occasions */}
               <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dịp lễ / Sự kiện phù hợp</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                <label
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  Dịp lễ / Sự kiện phù hợp
+                </label>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                    marginTop: "6px",
+                  }}
+                >
                   {[
-                    { key: 'graduation', label: 'Chụp ảnh kỷ yếu' },
-                    { key: 'wedding', label: 'Dự đám cưới' },
-                    { key: 'festival', label: 'Lễ hội truyền thống' },
-                    { key: 'event', label: 'Biểu diễn/Sự kiện' }
-                  ].map(oc => {
+                    { key: "graduation", label: "Chụp ảnh kỷ yếu" },
+                    { key: "wedding", label: "Dự đám cưới" },
+                    { key: "festival", label: "Lễ hội truyền thống" },
+                    { key: "event", label: "Biểu diễn/Sự kiện" },
+                  ].map((oc) => {
                     const isSelected = prodOccasions.includes(oc.key);
                     return (
-                      <button 
-                        key={oc.key} 
+                      <button
+                        key={oc.key}
                         type="button"
                         onClick={() => handleOccasionToggle(oc.key)}
                         style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '8px 12px',
-                          borderRadius: '6px',
-                          fontSize: '11px',
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "8px 12px",
+                          borderRadius: "6px",
+                          fontSize: "11px",
                           fontWeight: 700,
-                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s',
+                          border: isSelected
+                            ? "1px solid var(--color-primary)"
+                            : "1px solid var(--color-light-border)",
+                          backgroundColor: isSelected ? "#FDF4F4" : "white",
+                          color: isSelected
+                            ? "var(--color-primary)"
+                            : "var(--color-text-primary)",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
                         }}
                       >
-                        <span style={{ marginRight: '6px' }}>{isSelected ? '✓' : '+'}</span>
+                        <span style={{ marginRight: "6px" }}>
+                          {isSelected ? "✓" : "+"}
+                        </span>
                         {oc.label}
                       </button>
                     );
@@ -2610,36 +6900,136 @@ export const ProviderDashboard: React.FC = () => {
             </div>
           </div>
 
+          <SmartTagEditor
+            productId={editingProduct?._id}
+            initialDecisionVersion={editingProduct?.taggingDecisionVersion}
+          />
+
           {/* Form Actions */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', borderTop: '1px solid var(--color-light-border)', paddingTop: '16px' }}>
-            <button 
-              type="button" 
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: "12px",
+              marginTop: "16px",
+              borderTop: "1px solid var(--color-light-border)",
+              paddingTop: "16px",
+            }}
+          >
+            <button
+              type="button"
               onClick={() => setIsModalOpen(false)}
-              style={{ padding: '10px 20px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'white', cursor: 'pointer' }}
+              style={{
+                padding: "10px 20px",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "6px",
+                fontSize: "13px",
+                fontWeight: 700,
+                backgroundColor: "white",
+                cursor: "pointer",
+              }}
             >
               Hủy
             </button>
-            <button 
+            <button
               type="submit"
-              style={{ padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}
+              style={{
+                padding: "10px 24px",
+                border: "none",
+                borderRadius: "6px",
+                fontSize: "13px",
+                fontWeight: 700,
+                backgroundColor: "var(--color-primary)",
+                color: "white",
+                cursor: "pointer",
+                boxShadow: "var(--shadow-sm)",
+              }}
             >
-              {editingProduct ? 'Lưu thay đổi' : 'Đăng áo dài'}
+              {editingProduct ? "Lưu thay đổi" : "Đăng áo dài"}
             </button>
           </div>
-
         </form>
       </Modal>
       {/* Review reply modal popup */}
       {replyingReviewId && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-          <form onSubmit={handleReplyReview} style={{ width: '100%', maxWidth: '440px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
-            <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>PHẢN HỒI ĐÁNH GIÁ CỦA KHÁCH HÀNG</h4>
-              <button type="button" onClick={() => setReplyingReviewId(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+            backgroundColor: "rgba(0,0,0,0.6)",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <form
+            onSubmit={handleReplyReview}
+            style={{
+              width: "100%",
+              maxWidth: "440px",
+              backgroundColor: "white",
+              borderRadius: "16px",
+              boxShadow: "var(--shadow-xl)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "16px 24px",
+                backgroundColor: "var(--color-dark-bg)",
+                color: "white",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h4
+                style={{
+                  fontFamily: "var(--font-header)",
+                  fontSize: "15px",
+                  fontWeight: 700,
+                  margin: 0,
+                }}
+              >
+                PHẢN HỒI ĐÁNH GIÁ CỦA KHÁCH HÀNG
+              </h4>
+              <button
+                type="button"
+                onClick={() => setReplyingReviewId(null)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "rgba(255,255,255,0.7)",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                }}
+              >
+                ✕
+              </button>
             </div>
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div
+              style={{
+                padding: "24px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+              }}
+            >
               <textarea
-                style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none', resize: 'none', height: '100px', fontFamily: 'inherit' }}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--color-light-border)",
+                  fontSize: "14px",
+                  outline: "none",
+                  resize: "none",
+                  height: "100px",
+                  fontFamily: "inherit",
+                }}
                 placeholder="Nhập nội dung phản hồi nhận xét..."
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
@@ -2647,7 +7037,18 @@ export const ProviderDashboard: React.FC = () => {
               />
               <button
                 type="submit"
-                style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em' }}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  backgroundColor: "var(--color-primary)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  letterSpacing: "0.05em",
+                }}
               >
                 GỬI PHẢN HỒI
               </button>
@@ -2658,53 +7059,155 @@ export const ProviderDashboard: React.FC = () => {
 
       {/* Report incident modal popup */}
       {reportingOrder && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-          <form onSubmit={handleSendIncidentReport} style={{ width: '100%', maxWidth: '500px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
-            <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>BÁO CÁO SỰ CỐ / HỎNG ĐỒ</h4>
-              <button type="button" onClick={() => setReportingOrder(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+            backgroundColor: "rgba(0,0,0,0.6)",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <form
+            onSubmit={handleSendIncidentReport}
+            style={{
+              width: "100%",
+              maxWidth: "500px",
+              backgroundColor: "white",
+              borderRadius: "16px",
+              boxShadow: "var(--shadow-xl)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "16px 24px",
+                backgroundColor: "var(--color-dark-bg)",
+                color: "white",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h4
+                style={{
+                  fontFamily: "var(--font-header)",
+                  fontSize: "15px",
+                  fontWeight: 700,
+                  margin: 0,
+                }}
+              >
+                BÁO CÁO SỰ CỐ / HỎNG ĐỒ
+              </h4>
+              <button
+                type="button"
+                onClick={() => setReportingOrder(null)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "rgba(255,255,255,0.7)",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                }}
+              >
+                ✕
+              </button>
             </div>
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '80vh', overflowY: 'auto' }}>
-              
+            <div
+              style={{
+                padding: "24px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+                maxHeight: "80vh",
+                overflowY: "auto",
+              }}
+            >
               {/* Chọn sản phẩm bị hỏng */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SẢN PHẨM GẶP SỰ CỐ *</span>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+              >
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  SẢN PHẨM GẶP SỰ CỐ *
+                </span>
                 <select
                   value={selectedItemId}
                   onChange={(e) => setSelectedItemId(e.target.value)}
-                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none' }}
+                  style={{
+                    padding: "10px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--color-light-border)",
+                    outline: "none",
+                  }}
                   required
                 >
                   <option value="">-- Chọn sản phẩm trong đơn hàng --</option>
                   {(reportingOrder.items || []).map((item: any) => (
                     <option key={item._id} value={item._id}>
-                      {item.name || 'Sản phẩm'} ({item.quantity}x - {item.unitPrice?.toLocaleString()}đ)
+                      {item.name || "Sản phẩm"} ({item.quantity}x -{" "}
+                      {item.unitPrice?.toLocaleString()}đ)
                     </option>
                   ))}
                 </select>
               </div>
 
               {/* Loại xử lý */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>HÌNH THỨC XỬ LÝ *</span>
-                <div style={{ display: 'flex', gap: '16px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+              >
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  HÌNH THỨC XỬ LÝ *
+                </span>
+                <div style={{ display: "flex", gap: "16px" }}>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      cursor: "pointer",
+                      fontSize: "13px",
+                    }}
+                  >
                     <input
                       type="radio"
                       name="actionType"
                       value="CLEANING"
-                      checked={incidentActionType === 'CLEANING'}
-                      onChange={() => setIncidentActionType('CLEANING')}
+                      checked={incidentActionType === "CLEANING"}
+                      onChange={() => setIncidentActionType("CLEANING")}
                     />
                     Giặt là vết bẩn (CLEANING)
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      cursor: "pointer",
+                      fontSize: "13px",
+                    }}
+                  >
                     <input
                       type="radio"
                       name="actionType"
                       value="MAINTENANCE"
-                      checked={incidentActionType === 'MAINTENANCE'}
-                      onChange={() => setIncidentActionType('MAINTENANCE')}
+                      checked={incidentActionType === "MAINTENANCE"}
+                      onChange={() => setIncidentActionType("MAINTENANCE")}
                     />
                     Sửa chữa / Đền bù rách, hỏng (MAINTENANCE)
                   </label>
@@ -2712,10 +7215,30 @@ export const ProviderDashboard: React.FC = () => {
               </div>
 
               {/* Mô tả chi tiết */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÔ TẢ CHI TIẾT SỰ CỐ *</span>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+              >
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  MÔ TẢ CHI TIẾT SỰ CỐ *
+                </span>
                 <textarea
-                  style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none', resize: 'none', height: '80px', fontFamily: 'inherit' }}
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-light-border)",
+                    fontSize: "14px",
+                    outline: "none",
+                    resize: "none",
+                    height: "80px",
+                    fontFamily: "inherit",
+                  }}
                   placeholder="Nhập chi tiết vết bẩn hoặc vị trí rách hỏng của sản phẩm..."
                   value={incidentDesc}
                   onChange={(e) => setIncidentDesc(e.target.value)}
@@ -2724,37 +7247,173 @@ export const ProviderDashboard: React.FC = () => {
               </div>
 
               {/* Ảnh bằng chứng */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ẢNH CHỤP BẰNG CHỨNG (TỐI ĐA 5 ẢNH)</span>
-                <label style={{ minHeight: '86px', border: '1px dashed var(--color-primary)', borderRadius: '8px', backgroundColor: '#FDF8F8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--color-primary)', fontSize: '12px', fontWeight: 700, cursor: uploadingIncidentEvidence ? 'wait' : 'pointer', opacity: uploadingIncidentEvidence ? 0.65 : 1 }}>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+              >
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  ẢNH CHỤP BẰNG CHỨNG (TỐI ĐA 5 ẢNH)
+                </span>
+                <label
+                  style={{
+                    minHeight: "86px",
+                    border: "1px dashed var(--color-primary)",
+                    borderRadius: "8px",
+                    backgroundColor: "#FDF8F8",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    color: "var(--color-primary)",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: uploadingIncidentEvidence ? "wait" : "pointer",
+                    opacity: uploadingIncidentEvidence ? 0.65 : 1,
+                  }}
+                >
                   <Upload size={18} />
-                  {uploadingIncidentEvidence ? 'ĐANG TẢI ẢNH...' : 'CHỌN ẢNH JPG, PNG HOẶC WEBP'}
-                  <input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden disabled={uploadingIncidentEvidence || incidentEvidence.length >= 5} onChange={handleIncidentEvidenceUpload} />
+                  {uploadingIncidentEvidence
+                    ? "ĐANG TẢI ẢNH..."
+                    : "CHỌN ẢNH JPG, PNG HOẶC WEBP"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    hidden
+                    disabled={
+                      uploadingIncidentEvidence || incidentEvidence.length >= 5
+                    }
+                    onChange={handleIncidentEvidenceUpload}
+                  />
                 </label>
                 {incidentEvidence.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '8px' }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+                      gap: "8px",
+                    }}
+                  >
                     {incidentEvidence.map((url, index) => (
-                      <div key={url} style={{ position: 'relative', aspectRatio: '1', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-light-border)' }}>
-                        <img src={getImageUrl(url)} alt={`Bằng chứng ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        <button type="button" aria-label={`Xóa ảnh bằng chứng ${index + 1}`} onClick={() => setIncidentEvidence((current) => current.filter((_, itemIndex) => itemIndex !== index))} style={{ position: 'absolute', top: '3px', right: '3px', width: '22px', height: '22px', display: 'grid', placeItems: 'center', border: 'none', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.72)', color: 'white', cursor: 'pointer' }}>
+                      <div
+                        key={url}
+                        style={{
+                          position: "relative",
+                          aspectRatio: "1",
+                          borderRadius: "6px",
+                          overflow: "hidden",
+                          border: "1px solid var(--color-light-border)",
+                        }}
+                      >
+                        {url.startsWith("private://") ? (
+                          <div
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              display: "grid",
+                              placeItems: "center",
+                              padding: "8px",
+                              background: "var(--color-background-soft)",
+                              color: "var(--color-text-secondary)",
+                              fontSize: "11px",
+                              textAlign: "center",
+                            }}
+                          >
+                            Ảnh đã tải
+                          </div>
+                        ) : (
+                          <img
+                            src={getImageUrl(url)}
+                            alt={`Bằng chứng ${index + 1}`}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                          />
+                        )}
+                        <button
+                          type="button"
+                          aria-label={`Xóa ảnh bằng chứng ${index + 1}`}
+                          onClick={() =>
+                            setIncidentEvidence((current) =>
+                              current.filter(
+                                (_, itemIndex) => itemIndex !== index,
+                              ),
+                            )
+                          }
+                          style={{
+                            position: "absolute",
+                            top: "3px",
+                            right: "3px",
+                            width: "22px",
+                            height: "22px",
+                            display: "grid",
+                            placeItems: "center",
+                            border: "none",
+                            borderRadius: "50%",
+                            backgroundColor: "rgba(0,0,0,0.72)",
+                            color: "white",
+                            cursor: "pointer",
+                          }}
+                        >
                           <X size={13} />
                         </button>
                       </div>
                     ))}
                   </div>
                 )}
-                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Mỗi ảnh tối đa 5MB. Đã chọn {incidentEvidence.length}/5 ảnh.</span>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  Mỗi ảnh tối đa 5MB. Đã chọn {incidentEvidence.length}/5 ảnh.
+                </span>
               </div>
 
               {/* Số tiền yêu cầu đền bù */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TIỀN ĐỀN BÙ YÊU CẦU *</span>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)' }}>Tối đa cọc giữ đồ: {reportingOrder.depositTotal?.toLocaleString()}đ</span>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+              >
+                <div
+                  style={{ display: "flex", justifyContent: "space-between" }}
+                >
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    TIỀN ĐỀN BÙ YÊU CẦU *
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      color: "var(--color-primary)",
+                    }}
+                  >
+                    Tối đa cọc giữ đồ:{" "}
+                    {reportingOrder.depositTotal?.toLocaleString()}đ
+                  </span>
                 </div>
                 <input
                   type="number"
-                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none' }}
+                  style={{
+                    padding: "10px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--color-light-border)",
+                    fontSize: "14px",
+                    outline: "none",
+                  }}
                   placeholder="Nhập số tiền yêu cầu đền bù..."
                   value={incidentAmount}
                   onChange={(e) => setIncidentAmount(Number(e.target.value))}
@@ -2767,9 +7426,26 @@ export const ProviderDashboard: React.FC = () => {
               <button
                 type="submit"
                 disabled={submittingIncident || uploadingIncidentEvidence}
-                style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: submittingIncident || uploadingIncidentEvidence ? 'not-allowed' : 'pointer', opacity: submittingIncident || uploadingIncidentEvidence ? 0.65 : 1, letterSpacing: '0.05em', marginTop: '8px' }}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  backgroundColor: "var(--color-primary)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  cursor:
+                    submittingIncident || uploadingIncidentEvidence
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity:
+                    submittingIncident || uploadingIncidentEvidence ? 0.65 : 1,
+                  letterSpacing: "0.05em",
+                  marginTop: "8px",
+                }}
               >
-                {submittingIncident ? 'ĐANG GỬI...' : 'GỬI BÁO CÁO SỰ CỐ'}
+                {submittingIncident ? "ĐANG GỬI..." : "GỬI BÁO CÁO SỰ CỐ"}
               </button>
             </div>
           </form>
@@ -2778,37 +7454,142 @@ export const ProviderDashboard: React.FC = () => {
 
       {/* Rate customer modal popup */}
       {ratingBooking && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-          <form onSubmit={handleRateCustomer} style={{ width: '100%', maxWidth: '440px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
-            <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>ĐÁNH GIÁ KHÁCH HÀNG (TWO-WAY REVIEW)</h4>
-              <button type="button" onClick={() => setRatingBooking(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+            backgroundColor: "rgba(0,0,0,0.6)",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <form
+            onSubmit={handleRateCustomer}
+            style={{
+              width: "100%",
+              maxWidth: "440px",
+              backgroundColor: "white",
+              borderRadius: "16px",
+              boxShadow: "var(--shadow-xl)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "16px 24px",
+                backgroundColor: "var(--color-dark-bg)",
+                color: "white",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h4
+                style={{
+                  fontFamily: "var(--font-header)",
+                  fontSize: "15px",
+                  fontWeight: 700,
+                  margin: 0,
+                }}
+              >
+                ĐÁNH GIÁ KHÁCH HÀNG (TWO-WAY REVIEW)
+              </h4>
+              <button
+                type="button"
+                onClick={() => setRatingBooking(null)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "rgba(255,255,255,0.7)",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                }}
+              >
+                ✕
+              </button>
             </div>
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>MỨC ĐỘ UY TÍN / TÍN NHIỆM</span>
-                <div style={{ display: 'flex', gap: '8px' }}>
+            <div
+              style={{
+                padding: "24px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "20px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                  alignItems: "center",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  MỨC ĐỘ UY TÍN / TÍN NHIỆM
+                </span>
+                <div style={{ display: "flex", gap: "8px" }}>
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
                       key={star}
                       type="button"
                       onClick={() => setCRating(star)}
-                      style={{ background: 'none', border: 'none', color: 'var(--color-gold)', cursor: 'pointer', padding: '4px' }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--color-gold)",
+                        cursor: "pointer",
+                        padding: "4px",
+                      }}
                     >
-                      <Star size={24} fill={star <= cRating ? 'currentColor' : 'none'} />
+                      <Star
+                        size={24}
+                        fill={star <= cRating ? "currentColor" : "none"}
+                      />
                     </button>
                   ))}
                 </div>
               </div>
               <textarea
-                style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none', resize: 'none', height: '80px', fontFamily: 'inherit' }}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--color-light-border)",
+                  fontSize: "14px",
+                  outline: "none",
+                  resize: "none",
+                  height: "80px",
+                  fontFamily: "inherit",
+                }}
                 placeholder="Ghi nhận xét về khách hàng (ví dụ: trả trang phục đúng hạn, giữ gìn sạch sẽ)..."
                 value={cComment}
                 onChange={(e) => setCComment(e.target.value)}
               />
               <button
                 type="submit"
-                style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em' }}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  backgroundColor: "var(--color-primary)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  letterSpacing: "0.05em",
+                }}
               >
                 XÁC NHẬN ĐÁNH GIÁ KHÁCH
               </button>
@@ -2817,14 +7598,205 @@ export const ProviderDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Booking Details Modal */}
-      <BookingDetailModal 
-        bookingId={selectedBookingId}
-        isOpen={isDetailModalOpen}
-        onClose={() => setIsDetailModalOpen(false)}
-        onCustomerClick={viewCustomerTrust}
-        viewerRole="provider"
-      />
+      <Modal
+        isOpen={Boolean(selectedPayout)}
+        onClose={() => setSelectedPayout(null)}
+        title={
+          selectedPayout ? `Chi tiết ${selectedPayout.settlementCode}` : ""
+        }
+        maxWidth="820px"
+      >
+        {selectedPayout && (
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "18px" }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: "10px",
+              }}
+            >
+              {[
+                ["Booking", settlementBookingCode(selectedPayout.bookingId)],
+                ["Trạng thái", settlementStatusLabel(selectedPayout.status)],
+                [
+                  "Ngày tạo",
+                  new Date(selectedPayout.createdAt).toLocaleDateString(
+                    "vi-VN",
+                  ),
+                ],
+                [
+                  "Doanh thu dịch vụ",
+                  settlementMoney(selectedPayout.grossAmount),
+                ],
+                [
+                  `Commission (${(selectedPayout.commissionRate * 100).toLocaleString("vi-VN")}%)`,
+                  `-${settlementMoney(selectedPayout.commissionAmount)}`,
+                ],
+                [
+                  "Phí nền tảng",
+                  `-${settlementMoney(selectedPayout.allocatedPlatformFee)}`,
+                ],
+                [
+                  "Điều chỉnh hoàn tiền",
+                  `-${settlementMoney(selectedPayout.refundAmount)}`,
+                ],
+                [
+                  "Phạt vi phạm",
+                  `-${settlementMoney(selectedPayout.penaltyAmount)}`,
+                ],
+                [
+                  "Số tiền thực nhận",
+                  settlementMoney(selectedPayout.payableAmount),
+                ],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    padding: "12px",
+                    border: "1px solid var(--color-light-border)",
+                    borderRadius: "7px",
+                    background: "var(--color-light-bg)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      color: "var(--color-text-secondary)",
+                      marginBottom: "5px",
+                    }}
+                  >
+                    {label.toUpperCase()}
+                  </div>
+                  <div style={{ fontSize: "14px", fontWeight: 750 }}>
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div
+              style={{
+                padding: "13px",
+                border: "1px solid var(--color-light-border)",
+                borderRadius: "7px",
+                fontSize: "13px",
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              <strong style={{ color: "var(--color-text-primary)" }}>
+                Policy áp dụng:
+              </strong>{" "}
+              phiên bản {selectedPayout.policySnapshot.policyVersion}, loại rate{" "}
+              {selectedPayout.policySnapshot.appliedRateType}, phí cố định{" "}
+              {settlementMoney(selectedPayout.policySnapshot.fixedPlatformFee)}.
+            </div>
+            <div>
+              <h4 style={{ margin: "0 0 10px", fontSize: "14px" }}>
+                Các dịch vụ trong quyết toán
+              </h4>
+              <div
+                style={{
+                  overflowX: "auto",
+                  border: "1px solid var(--color-light-border)",
+                  borderRadius: "7px",
+                }}
+              >
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: "12px",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ background: "var(--color-light-bg)" }}>
+                      <th style={{ padding: "10px", textAlign: "left" }}>
+                        Dịch vụ
+                      </th>
+                      <th style={{ padding: "10px", textAlign: "right" }}>
+                        Giá
+                      </th>
+                      <th style={{ padding: "10px", textAlign: "right" }}>
+                        Giảm giá
+                      </th>
+                      <th style={{ padding: "10px", textAlign: "right" }}>
+                        Commission
+                      </th>
+                      <th style={{ padding: "10px", textAlign: "right" }}>
+                        Thực nhận
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(selectedPayout.itemSnapshots || []).map((item) => (
+                      <tr
+                        key={item.bookingItemId}
+                        style={{
+                          borderTop: "1px solid var(--color-light-border)",
+                        }}
+                      >
+                        <td style={{ padding: "10px" }}>
+                          {item.itemName || item.itemType}
+                        </td>
+                        <td style={{ padding: "10px", textAlign: "right" }}>
+                          {settlementMoney(item.serviceAmount)}
+                        </td>
+                        <td style={{ padding: "10px", textAlign: "right" }}>
+                          {settlementMoney(item.providerDiscountAmount)}
+                        </td>
+                        <td style={{ padding: "10px", textAlign: "right" }}>
+                          -{settlementMoney(item.commissionAmount)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px",
+                            textAlign: "right",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {settlementMoney(item.netAmount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {(selectedPayout.holdReason ||
+              selectedPayout.payoutReference ||
+              selectedPayout.note) && (
+              <div
+                style={{
+                  padding: "13px",
+                  borderRadius: "7px",
+                  background: "#F8F4EC",
+                  fontSize: "13px",
+                  lineHeight: 1.7,
+                }}
+              >
+                {selectedPayout.holdReason && (
+                  <div>
+                    <strong>Lý do tạm giữ:</strong> {selectedPayout.holdReason}
+                  </div>
+                )}
+                {selectedPayout.payoutReference && (
+                  <div>
+                    <strong>Mã chuyển khoản:</strong>{" "}
+                    {selectedPayout.payoutReference}
+                  </div>
+                )}
+                {selectedPayout.note && (
+                  <div>
+                    <strong>Ghi chú:</strong> {selectedPayout.note}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

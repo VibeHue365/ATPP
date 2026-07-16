@@ -5,7 +5,7 @@ import {
   NotFoundException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
-import { existsSync, readFileSync, unlinkSync } from 'fs';
+
 import { Types } from 'mongoose';
 import {
   AdminAuditAction,
@@ -28,6 +28,7 @@ import {
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { UserProfileMapper } from '../mappers/user-profile.mapper';
 import { UsersRepository } from '../repositories/users.repository';
+import { PublicMediaService } from '../../storage/services/public-media.service';
 
 const assignableRoles: string[] = Object.values(UserRole);
 
@@ -37,6 +38,7 @@ export class UsersService {
     private readonly usersRepository: UsersRepository,
     private readonly userProfileMapper: UserProfileMapper,
     private readonly securityLogService: SecurityLogService,
+    private readonly publicMedia: PublicMediaService,
   ) {}
 
   async getMe(
@@ -108,23 +110,33 @@ export class UsersService {
 
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
-      this.removeUploadedFile(file.path);
       throw new UnsupportedMediaTypeException(
         'Only jpg, png, and webp images are allowed',
       );
     }
 
     if (!this.hasValidImageSignature(file)) {
-      this.removeUploadedFile(file.path);
       throw new UnsupportedMediaTypeException(
         'Avatar file content is not a supported image',
       );
     }
 
     const userObjectId = this.toObjectId(userId);
-    const avatarUrl = `/uploads/avatars/${file.filename}`;
+    const existingUser = await this.usersRepository.findUserById(userObjectId);
+    if (!existingUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    const uploaded = await this.publicMedia.uploadImage('avatars', file);
+    const avatarUrl = uploaded.url;
 
     await this.usersRepository.updateProfile(userObjectId, { avatarUrl });
+
+    // Remove a previous MinIO avatar only after the replacement is saved.
+    // Legacy local URLs are retained so historical files remain accessible.
+    if (existingUser.profile?.avatarUrl && existingUser.profile?.avatarUrl !== avatarUrl) {
+      await this.publicMedia.deleteByUrl(existingUser.profile?.avatarUrl).catch(() => undefined);
+    }
 
     return this.getMe(userId, roles);
   }
@@ -144,10 +156,12 @@ export class UsersService {
 
     return {
       items: items.map((user) => this.toAdminUserResponse(user)),
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
     };
   }
 
@@ -159,7 +173,21 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return this.toAdminUserResponse(user, true);
+    const recentLoginHistory = await this.usersRepository.listRecentLoginHistory(
+      user._id,
+    );
+    return {
+      ...this.toAdminUserResponse(user, true),
+      recentLoginHistory: recentLoginHistory.map((entry) => ({
+        id: entry._id.toString(),
+        provider: entry.provider,
+        status: entry.status,
+        ipAddress: entry.ipAddress ?? null,
+        userAgent: entry.userAgent ?? null,
+        loggedInAt: entry.loggedInAt,
+        failureReason: entry.failureReason ?? null,
+      })),
+    };
   }
 
   async adminUpdateRoles(
@@ -171,6 +199,15 @@ export class UsersService {
     const actorObjectId = this.toObjectId(actorId);
     const targetUserId = this.toObjectId(userId);
     const normalizedRoles = this.normalizeRoles(dto.roles);
+    const activeRoleCodes = await this.usersRepository.findActiveRoleCodes(
+      normalizedRoles,
+    );
+    const inactiveRole = normalizedRoles.find(
+      (role) => !activeRoleCodes.includes(role),
+    );
+    if (inactiveRole) {
+      throw new BadRequestException(`Role is missing or inactive: ${inactiveRole}`);
+    }
     const targetUser = await this.usersRepository.findUserById(targetUserId);
 
     if (!targetUser) {
@@ -258,6 +295,13 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    if (dto.status !== UserStatus.Active) {
+      await this.usersRepository.revokeActiveSessions(
+        targetUserId,
+        'ADMIN_STATUS_CHANGED',
+      );
+    }
+
     await this.securityLogService.recordAdminAudit({
       actorId: actorObjectId,
       targetUserId,
@@ -322,6 +366,7 @@ export class UsersService {
     }
 
     await Promise.all([
+      this.usersRepository.revokeActiveSessions(targetUserId, 'ADMIN_LOCK'),
       this.securityLogService.recordAdminAudit({
         actorId: actorObjectId,
         targetUserId,
@@ -358,6 +403,10 @@ export class UsersService {
 
     if (!targetUser) {
       throw new NotFoundException('User not found');
+    }
+
+    if (targetUser.accountStatus === UserStatus.Active) {
+      throw new BadRequestException('User account is not locked');
     }
 
     const updated = await this.usersRepository.unlockUser(targetUserId);
@@ -502,38 +551,12 @@ export class UsersService {
   }
 
   private hasValidImageSignature(file: Express.Multer.File): boolean {
-    if (!file.path) {
-      return false;
-    }
-
-    const header = readFileSync(file.path).subarray(0, 12);
-
-    if (file.mimetype === 'image/jpeg') {
-      return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
-    }
-
-    if (file.mimetype === 'image/png') {
-      return (
-        header[0] === 0x89 &&
-        header[1] === 0x50 &&
-        header[2] === 0x4e &&
-        header[3] === 0x47
-      );
-    }
-
-    if (file.mimetype === 'image/webp') {
-      return (
-        header.toString('ascii', 0, 4) === 'RIFF' &&
-        header.toString('ascii', 8, 12) === 'WEBP'
-      );
-    }
-
-    return false;
+    const header = file.buffer?.subarray(0, 12);
+    if (!header?.length) return false;
+    if (file.mimetype === 'image/jpeg') return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+    if (file.mimetype === 'image/png') return header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47;
+    return file.mimetype === 'image/webp' && header.toString('ascii', 0, 4) === 'RIFF' && header.toString('ascii', 8, 12) === 'WEBP';
   }
 
-  private removeUploadedFile(path?: string): void {
-    if (path && existsSync(path)) {
-      unlinkSync(path);
-    }
-  }
+
 }

@@ -1,108 +1,159 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
 export const AuthLayout: React.FC = () => {
   const location = useLocation();
   const isRegister = location.pathname.includes('/register');
 
+  const images = [
+    '/hero_bg.png',
+    '/nang_thuy_tien.png',
+    '/phuong_hoang.png',
+    '/hong_lien_hoa.png',
+  ];
+
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % images.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [images.length]);
+
   return (
-    <div className="vh-auth-container">
-      {/* Visual Brand Side - Full bleed hero image */}
+    <div className="vh-auth-container" style={{ height: '100vh', overflow: 'hidden' }}>
+      <style>{`
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+      
+      {/* Visual Brand Side - Full bleed hero image with floating glass card */}
       <div
         className="vh-auth-brand-side"
         style={{
-          backgroundImage: "url('/hero_bg.png')",
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
           height: '100vh',
           position: 'relative',
+          overflow: 'hidden',
         }}
       >
-        {/* Dark gradient overlay from bottom */}
+        {/* Render all background images absolutely, overlaying each other, cross-fading */}
+        {images.map((img, idx) => (
+          <div
+            key={img}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage: `url('${img}')`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              opacity: idx === currentImageIndex ? 1 : 0,
+              transition: 'opacity 1.5s ease-in-out',
+              zIndex: 1,
+            }}
+          />
+        ))}
+
+        {/* Dark subtle overlay */}
         <div
           className="vh-auth-brand-overlay"
           style={{
-            background: isRegister
-              ? 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.1) 100%)'
-              : 'linear-gradient(to top, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.1) 50%, transparent 100%)',
+            background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.5) 100%)',
+            position: 'absolute',
+            inset: 0,
+            zIndex: 2,
           }}
         />
 
-        {/* Conditional Left side overlay style */}
-        {isRegister ? (
-          /* Register specific overlay: flat text directly over dark image background */
-          <div
+        {/* Premium Floating Glassmorphic Card */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '40px',
+            left: '40px',
+            right: '40px',
+            zIndex: 10,
+            background: 'rgba(30, 27, 25, 0.7)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            borderRadius: '16px',
+            padding: '36px',
+            boxShadow: '0 24px 48px rgba(0, 0, 0, 0.3)',
+            animation: 'fadeInUp 0.6s ease-out forwards',
+          }}
+        >
+          {/* Gold Header Tag */}
+          <span
             style={{
-              position: 'absolute',
-              bottom: '48px',
-              left: '48px',
-              right: '48px',
-              zIndex: 10,
+              color: 'var(--color-gold)',
+              fontSize: '10px',
+              fontWeight: 700,
+              letterSpacing: '0.15em',
+              textTransform: 'uppercase',
+              fontFamily: 'var(--font-body)',
+              display: 'block',
+              marginBottom: '12px',
             }}
           >
-            <h1
-              style={{
-                color: '#FFFFFF',
-                fontSize: '44px',
-                fontWeight: 700,
-                fontFamily: 'var(--font-header)',
-                lineHeight: 1.1,
-                marginBottom: '4px',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              Silk &amp; Stone
-            </h1>
-            <p
-              style={{
-                color: 'var(--color-gold)',
-                fontSize: '12px',
-                fontWeight: 700,
-                letterSpacing: '0.15em',
-                textTransform: 'uppercase',
-                fontFamily: 'var(--font-body)',
-              }}
-            >
-              Heritage &amp; Innovation
-            </p>
-          </div>
-        ) : (
-          /* Login specific overlay: glassmorphic cream panel */
-          <div
+            {isRegister ? 'KẾT NỐI ĐỐI TÁC • SILK & STONE' : 'GIAO THOA DI SẢN • SILK & STONE'}
+          </span>
+
+          <h1
             style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              zIndex: 10,
-              padding: '24px 32px',
-              background: 'rgba(252, 249, 242, 0.85)',
-              backdropFilter: 'blur(16px)',
-              borderTop: '1px solid rgba(45, 41, 38, 0.08)',
+              color: '#FFFFFF',
+              fontSize: '32px',
+              fontWeight: 800,
+              fontFamily: 'var(--font-header)',
+              lineHeight: 1.2,
+              marginBottom: '12px',
+              letterSpacing: '-0.02em',
             }}
           >
-            <h1
-              style={{
-                color: 'var(--color-primary)',
-                fontSize: '28px',
-                fontWeight: 700,
-                fontFamily: 'var(--font-header)',
-                lineHeight: 1.25,
-                marginBottom: '6px',
-              }}
-            >
-              Giao thoa giữa lụa và đá
-            </h1>
-            <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px', lineHeight: 1.6, fontWeight: 500 }}>
-              Cùng Silk &amp; Stone viết tiếp câu chuyện di sản trong thời đại mới.
-            </p>
-          </div>
-        )}
+            {isRegister
+              ? 'Kiến tạo tương lai thời trang truyền thống'
+              : 'Lưu giữ vẻ đẹp tinh hoa di sản'}
+          </h1>
+          <p
+            style={{
+              color: '#FAF6F0',
+              fontSize: '14px',
+              lineHeight: 1.6,
+              fontWeight: 500,
+              opacity: 0.85,
+              margin: 0,
+            }}
+          >
+            {isRegister
+              ? 'Tham gia cùng hơn 10.000+ đối tác và khách hàng để chia sẻ niềm đam mê, bảo tồn và phát huy giá trị văn hóa phục sức Việt.'
+              : 'Từ những chất liệu truyền thống tơ tằm, gấm, lụa... Silk & Stone đồng hành cùng bạn tôn vinh và lan tỏa bản sắc Việt.'}
+          </p>
+        </div>
       </div>
 
       {/* Form Content Side */}
-      <div className="vh-auth-form-side" style={{ position: 'relative', overflow: 'hidden' }}>
-        <div className="vh-auth-form-wrapper" style={{ maxWidth: '460px', zIndex: 2 }}>
+      <div 
+        className="vh-auth-form-side vh-hide-scrollbar" 
+        style={{ 
+          position: 'relative', 
+          height: '100vh', 
+          overflowY: 'auto', 
+          display: 'flex', 
+          flexDirection: 'column',
+          alignItems: 'center', 
+          justifyContent: 'center',
+          padding: '40px 16px',
+          width: '100%',
+        }}
+      >
+        <div className="vh-auth-form-wrapper" style={{ width: '100%', maxWidth: '460px', zIndex: 2 }}>
           <div className="vh-auth-card" style={{ padding: '12px 16px', border: 'none', boxShadow: 'none', backgroundColor: 'transparent' }}>
             <Outlet />
           </div>

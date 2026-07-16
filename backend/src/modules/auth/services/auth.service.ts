@@ -167,7 +167,7 @@ export class AuthService {
     const loginRateLimitKey = `auth:login:${email}:${this.rateLimitService.ipKey(
       context.ipAddress,
     )}`;
-    const user = await this.usersRepository.findUserByEmail(email);
+    let user = await this.usersRepository.findUserByEmail(email);
 
     if (!user || !user.auth.passwordHash) {
       await this.rateLimitService.assertRateLimit(
@@ -183,7 +183,17 @@ export class AuthService {
         'INVALID_CREDENTIALS',
         context,
       );
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Email hoặc mật khẩu không chính xác.');
+    }
+    const passwordHash = user.auth.passwordHash;
+
+    if (
+      user.accountStatus === UserStatus.Suspended &&
+      user.security?.lockedUntil &&
+      user.security.lockedUntil.getTime() <= Date.now()
+    ) {
+      user =
+        (await this.usersRepository.restoreExpiredSuspension(user._id)) ?? user;
     }
 
     if (user.accountStatus === UserStatus.Banned) {
@@ -219,7 +229,7 @@ export class AuthService {
 
     const validPassword = await bcrypt.compare(
       dto.password,
-      user.auth.passwordHash,
+      passwordHash,
     );
     if (!validPassword) {
       await this.rateLimitService.assertRateLimit(
@@ -235,7 +245,7 @@ export class AuthService {
         'INVALID_CREDENTIALS',
         context,
       );
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Email hoặc mật khẩu không chính xác.');
     }
 
     const tokens = await this.tokenService.issueTokens(user._id, email, context);

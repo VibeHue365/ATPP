@@ -128,9 +128,20 @@ export class OAuthService {
         },
       });
       await this.rolesService.assignDefaultCustomerRole(user._id);
-    } else if (user.accountStatus !== UserStatus.Active) {
+    } else if (
+      user.accountStatus === UserStatus.Suspended &&
+      user.security?.lockedUntil &&
+      user.security.lockedUntil.getTime() <= Date.now()
+    ) {
+      user =
+        (await this.usersRepository.restoreExpiredSuspension(user._id)) ?? user;
+    }
+
+    if (user.accountStatus !== UserStatus.Active) {
       throw new ForbiddenException('Account is not active');
-    } else if (!hasGoogleProvider) {
+    }
+
+    if (!hasGoogleProvider) {
       await this.usersRepository.addAuthProvider(user._id, {
         provider: AuthProviderType.Google,
         providerUserId,
@@ -179,7 +190,16 @@ export class OAuthService {
       throw new UnauthorizedException('OAuth code is expired or invalid');
     }
 
-    const user = await this.usersRepository.findUserById(token.userId);
+    let user = await this.usersRepository.findUserById(token.userId);
+    if (
+      user?.accountStatus === UserStatus.Suspended &&
+      user.security?.lockedUntil &&
+      user.security.lockedUntil.getTime() <= Date.now()
+    ) {
+      user =
+        (await this.usersRepository.restoreExpiredSuspension(user._id)) ?? user;
+    }
+
     if (!user || user.accountStatus !== UserStatus.Active) {
       throw new UnauthorizedException('User is not active');
     }

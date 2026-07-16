@@ -71,6 +71,12 @@ export class Product {
   @Prop({ type: [String], default: [] })
   occasions: string[];
 
+  @Prop({ type: Number, required: true, default: 1, min: 1 })
+  taggingRevision: number;
+
+  @Prop({ type: Number, required: true, default: 0, min: 0 })
+  taggingDecisionVersion: number;
+
   @Prop({ type: Map, of: String, default: {} })
   specifications: Map<string, string>;
 

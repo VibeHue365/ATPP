@@ -19,6 +19,18 @@ interface UserItem {
   emailVerified: boolean;
   phoneVerified: boolean;
   lockedUntil?: string;
+  lockedAt?: string;
+  lockedReason?: string;
+  lastLoginAt?: string;
+  recentLoginHistory?: Array<{
+    id: string;
+    provider: string;
+    status: 'SUCCESS' | 'FAILED';
+    ipAddress?: string | null;
+    userAgent?: string | null;
+    loggedInAt: string;
+    failureReason?: string | null;
+  }>;
   createdAt: string;
 }
 
@@ -41,9 +53,23 @@ interface ListResponse<T> {
   data?: T[];
 }
 
+interface UserListResponse {
+  items: UserItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 export const AccessControl: React.FC = () => {
   const toast = useToast();
-  const { user: currentAdmin } = useAuth();
+  const { user: currentAdmin, hasPermission, refreshPermissions } = useAuth();
+  const canReadUsers = hasPermission('user:read');
+  const canManageUsers = hasPermission('user:manage');
+  const canReadMatrix = hasPermission('role:read') && hasPermission('permission:read');
+  const canManageMatrix = hasPermission('role:manage') && hasPermission('permission:manage');
 
   // Sub-tabs: 'USERS' (Danh sách tài khoản) or 'MATRIX' (Ma trận phân quyền)
   const [subTab, setSubTab] = useState<'USERS' | 'MATRIX'>('USERS');
@@ -52,6 +78,7 @@ export const AccessControl: React.FC = () => {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
 
@@ -72,19 +99,27 @@ export const AccessControl: React.FC = () => {
   const [matrixError, setMatrixError] = useState<string | null>(null);
 
   const fetchUsers = async () => {
+    if (!canReadUsers) {
+      setUsers([]);
+      setUsersError('Bạn không có quyền xem danh sách người dùng.');
+      return;
+    }
     setLoadingUsers(true);
     setUsersError(null);
     try {
       const qParams = new URLSearchParams({
         page: page.toString(),
-        limit: '10',
-        keyword: searchQuery.trim(),
-        role: roleFilter || '',
-        status: statusFilter || ''
+        limit: '10'
       });
-      const res = await httpClient.get<any>(`/admin/users?${qParams.toString()}`);
+
+      const keyword = searchQuery.trim();
+      if (keyword) qParams.set('keyword', keyword);
+      if (roleFilter) qParams.set('role', roleFilter);
+      if (statusFilter) qParams.set('status', statusFilter);
+      const res = await httpClient.get<UserListResponse>(`/admin/users?${qParams.toString()}`);
       setUsers(res.items || []);
-      setTotalPages(res.totalPages || 1);
+      setTotalPages(res.pagination?.totalPages || 1);
+      setTotalUsers(res.pagination?.total || 0);
     } catch (err: any) {
       setUsersError(err?.message || 'Khong the tai danh sach tai khoan');
       toast.error(err.message || 'Không thể tải danh sách tài khoản');
@@ -94,6 +129,12 @@ export const AccessControl: React.FC = () => {
   };
 
   const fetchMatrixData = async () => {
+    if (!canReadMatrix) {
+      setRoles([]);
+      setPermissions([]);
+      setMatrixError('Bạn không có đủ quyền xem ma trận phân quyền.');
+      return;
+    }
     setLoadingMatrix(true);
     setMatrixError(null);
     try {
@@ -130,7 +171,7 @@ export const AccessControl: React.FC = () => {
     } else {
       fetchMatrixData();
     }
-  }, [subTab, page, roleFilter, statusFilter]);
+  }, [subTab, page, roleFilter, statusFilter, canReadUsers, canReadMatrix]);
 
   // Handle search submit
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -144,11 +185,12 @@ export const AccessControl: React.FC = () => {
 
   // Reload selected user details
   const fetchUserDetail = async (userId: string) => {
+    if (!canReadUsers) return;
     try {
       const res = await httpClient.get<any>(`/admin/users/${userId}`);
       setSelectedUser(res as UserItem);
     } catch (err) {
-      console.warn('Lỗi khi tải chi tiết user:', err);
+      toast.error(err instanceof Error ? err.message : 'Không thể tải chi tiết người dùng');
     }
   };
 
@@ -161,6 +203,7 @@ export const AccessControl: React.FC = () => {
 
   // Edit Roles (PATCH /admin/users/:id/roles)
   const handleEditRoles = async (user: UserItem) => {
+    if (!canManageUsers) return;
     // Safety guard check
     const isSelfAdmin = isSelf(user.id);
 
@@ -172,7 +215,7 @@ export const AccessControl: React.FC = () => {
     const { value: formResult } = await Swal.fire({
       title: `Thay đổi vai trò của ${user.fullName}`,
       html: `
-        <div style="text-align: left; font-size: 14px; font-family: sans-serif;">
+        <div style="text-align: left; font-size: 14px; font-family: inherit;">
           <p style="color: #7A7A7A; margin-bottom: 12px;">Chọn các vai trò áp dụng cho tài khoản này:</p>
 
           <div style="margin-bottom: 8px;">
@@ -244,6 +287,7 @@ export const AccessControl: React.FC = () => {
 
   // Lock / Unlock user accounts (PATCH /admin/users/:id/lock and /unlock)
   const handleLockUser = async (user: UserItem) => {
+    if (!canManageUsers) return;
     // Safety guard check
     if (isSelf(user.id)) {
       Swal.fire({
@@ -258,7 +302,7 @@ export const AccessControl: React.FC = () => {
     const { value: lockForm } = await Swal.fire({
       title: `Khóa tài khoản ${user.fullName}`,
       html: `
-        <div style="text-align: left; font-size: 14px; font-family: sans-serif;">
+        <div style="text-align: left; font-size: 14px; font-family: inherit;">
           <div style="margin-bottom: 12px;">
             <label style="font-weight: 700; color: #7A7A7A; font-size: 11px; display: block; margin-bottom: 4px;">PHƯƠNG THỨC KHÓA</label>
             <select id="lock-type" class="swal2-select" style="width: 100%; margin: 0; font-size: 13px; height: 38px;">
@@ -345,6 +389,7 @@ export const AccessControl: React.FC = () => {
   };
 
   const handleUnlockUser = async (user: UserItem) => {
+    if (!canManageUsers) return;
     const { value: reason } = await Swal.fire({
       title: `Mở khóa tài khoản ${user.fullName}`,
       input: 'textarea',
@@ -381,6 +426,7 @@ export const AccessControl: React.FC = () => {
 
   // Matrix permission checkbox change
   const handlePermissionToggle = (permCode: string) => {
+    if (!canManageMatrix) return;
     setRolePermissions(prev =>
       prev.includes(permCode) ? prev.filter(c => c !== permCode) : [...prev, permCode]
     );
@@ -388,6 +434,7 @@ export const AccessControl: React.FC = () => {
 
   // Save role permissions matrix update
   const handleSaveMatrix = async () => {
+    if (!canManageMatrix) return;
     const roleObj = roles.find(r => r.code === selectedRoleCode);
     if (!roleObj) return;
 
@@ -418,7 +465,8 @@ export const AccessControl: React.FC = () => {
           reason: reason.trim()
         });
         toast.success('Đã lưu cấu hình ma trận phân quyền mới!');
-        fetchMatrixData();
+        await refreshPermissions();
+        await fetchMatrixData();
       } catch (err: any) {
         toast.error(err.message || 'Cập nhật ma trận quyền thất bại');
       }
@@ -455,15 +503,16 @@ export const AccessControl: React.FC = () => {
           Danh sách người dùng & Phân quyền
         </button>
         <button
-          onClick={() => setSubTab('MATRIX')}
+          disabled={!canReadMatrix}
+          onClick={() => canReadMatrix && setSubTab('MATRIX')}
           style={{
             padding: '12px 20px',
             border: 'none',
             background: 'none',
             fontSize: '14px',
             fontWeight: 700,
-            cursor: 'pointer',
-            color: subTab === 'MATRIX' ? '#4A0E17' : '#7A7A7A',
+            cursor: canReadMatrix ? 'pointer' : 'not-allowed',
+            color: !canReadMatrix ? '#B8B3AA' : subTab === 'MATRIX' ? '#4A0E17' : '#7A7A7A',
             borderBottom: subTab === 'MATRIX' ? '3px solid #4A0E17' : '3px solid transparent',
             transition: 'all 0.15s'
           }}
@@ -512,7 +561,7 @@ export const AccessControl: React.FC = () => {
               <div style={{ display: 'flex', gap: '12px' }}>
                 <select
                   value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value)}
+                  onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
                   style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #E8E2D5', fontSize: '13px', backgroundColor: 'white', fontWeight: 600 }}
                 >
                   <option value="">Lọc theo vai trò (Roles)</option>
@@ -523,7 +572,7 @@ export const AccessControl: React.FC = () => {
 
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                   style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #E8E2D5', fontSize: '13px', backgroundColor: 'white', fontWeight: 600 }}
                 >
                   <option value="">Lọc trạng thái tài khoản</option>
@@ -628,9 +677,10 @@ export const AccessControl: React.FC = () => {
                           <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                             <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                               <button
+                                disabled={!canManageUsers}
                                 onClick={() => handleEditRoles(u)}
-                                style={{ padding: '6px', border: 'none', borderRadius: '4px', backgroundColor: '#FAF6F0', cursor: 'pointer', color: '#706E3B' }}
-                                title="Phân vai trò (Roles)"
+                                style={{ padding: '6px', border: 'none', borderRadius: '4px', backgroundColor: canManageUsers ? '#FAF6F0' : '#F3F4F6', cursor: canManageUsers ? 'pointer' : 'not-allowed', color: canManageUsers ? '#706E3B' : '#A0A0A0' }}
+                                title={canManageUsers ? 'Phân vai trò' : 'Bạn chỉ có quyền xem'}
                               >
                                 <Edit size={13} />
                               </button>
@@ -639,22 +689,23 @@ export const AccessControl: React.FC = () => {
                               {isBanned ? (
                                 <button
                                   onClick={() => handleUnlockUser(u)}
-                                  style={{ padding: '6px', border: 'none', borderRadius: '4px', backgroundColor: '#F0FDF4', cursor: 'pointer', color: '#166534' }}
-                                  title="Mở khóa tài khoản"
+                                  disabled={!canManageUsers}
+                                  style={{ padding: '6px', border: 'none', borderRadius: '4px', backgroundColor: canManageUsers ? '#F0FDF4' : '#F3F4F6', cursor: canManageUsers ? 'pointer' : 'not-allowed', color: canManageUsers ? '#166534' : '#A0A0A0' }}
+                                  title={canManageUsers ? 'Mở khóa tài khoản' : 'Bạn chỉ có quyền xem'}
                                 >
                                   <Unlock size={13} />
                                 </button>
                               ) : (
                                 <button
-                                  disabled={isSelfAccount}
+                                  disabled={isSelfAccount || !canManageUsers}
                                   onClick={() => handleLockUser(u)}
                                   style={{
                                     padding: '6px', border: 'none', borderRadius: '4px',
-                                    backgroundColor: isSelfAccount ? '#F3F4F6' : '#FFF5F5',
-                                    color: isSelfAccount ? '#A0A0A0' : '#E53E3E',
-                                    cursor: isSelfAccount ? 'not-allowed' : 'pointer'
+                                    backgroundColor: isSelfAccount || !canManageUsers ? '#F3F4F6' : '#FFF5F5',
+                                    color: isSelfAccount || !canManageUsers ? '#A0A0A0' : '#E53E3E',
+                                    cursor: isSelfAccount || !canManageUsers ? 'not-allowed' : 'pointer'
                                   }}
-                                  title={isSelfAccount ? 'Bạn không thể tự khóa chính mình' : 'Khóa tài khoản'}
+                                  title={isSelfAccount ? 'Bạn không thể tự khóa chính mình' : canManageUsers ? 'Khóa tài khoản' : 'Bạn chỉ có quyền xem'}
                                 >
                                   <Lock size={13} />
                                 </button>
@@ -669,11 +720,14 @@ export const AccessControl: React.FC = () => {
               </table>
 
               {/* Pagination controls */}
-              {totalPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', padding: '16px 20px', borderTop: '1px solid #E8E2D5', backgroundColor: '#FAF6F0' }}>
+              {totalUsers > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '16px 20px', borderTop: '1px solid #E8E2D5', backgroundColor: '#FAF6F0' }}>
+                  <span style={{ fontSize: '12px', color: '#7A7A7A' }}>{totalUsers.toLocaleString('vi-VN')} tài khoản</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button disabled={page === 1} onClick={() => setPage(page - 1)} style={{ padding: '6px 12px', border: '1px solid #E8E2D5', borderRadius: '4px', fontSize: '12px', cursor: 'pointer' }}>Trước</button>
                   <span style={{ fontSize: '13px', fontWeight: 600 }}>{page} / {totalPages}</span>
                   <button disabled={page === totalPages} onClick={() => setPage(page + 1)} style={{ padding: '6px 12px', border: '1px solid #E8E2D5', borderRadius: '4px', fontSize: '12px', cursor: 'pointer' }}>Sau</button>
+                  </div>
                 </div>
               )}
             </div>
@@ -736,13 +790,26 @@ export const AccessControl: React.FC = () => {
                     <strong style={{ color: '#C53030' }}>{new Date(selectedUser.lockedUntil).toLocaleString('vi-VN')}</strong>
                   </div>
                 )}
+                {selectedUser.lockedReason && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', backgroundColor: '#FFF8F8', padding: '10px', borderRadius: '6px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#991B1B' }}>LÝ DO KHÓA</span>
+                    <span style={{ color: '#5F1D25' }}>{selectedUser.lockedReason}</span>
+                  </div>
+                )}
               </div>
 
               <div style={{ borderTop: '1px solid #E8E2D5', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <h4 style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#4A0E17', fontWeight: 800 }}>NHẬT KÝ ĐĂNG NHẬP GẦN ĐÂY</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11px', color: '#7A7A7A' }}>
-                  <div style={{ padding: '6px', backgroundColor: '#FAF6F0', borderRadius: '4px' }}>• Đăng nhập từ Chrome Web / Windows (2026-07-09)</div>
-                  <div style={{ padding: '6px', backgroundColor: '#FAF6F0', borderRadius: '4px' }}>• Cấp lại Session refresh token (2026-07-06)</div>
+                  {(selectedUser.recentLoginHistory || []).length === 0 ? (
+                    <div style={{ padding: '8px', backgroundColor: '#FAF6F0', borderRadius: '4px' }}>Chưa có lịch sử đăng nhập.</div>
+                  ) : selectedUser.recentLoginHistory?.map((entry) => (
+                    <div key={entry.id} style={{ padding: '8px', backgroundColor: entry.status === 'SUCCESS' ? '#F0FDF4' : '#FFF5F5', borderRadius: '4px' }}>
+                      <strong style={{ color: entry.status === 'SUCCESS' ? '#166534' : '#991B1B' }}>{entry.status === 'SUCCESS' ? 'Đăng nhập thành công' : 'Đăng nhập thất bại'}</strong>
+                      <span style={{ display: 'block', marginTop: '2px' }}>{entry.provider} · {new Date(entry.loggedInAt).toLocaleString('vi-VN')}</span>
+                      <span style={{ display: 'block', marginTop: '2px' }}>{entry.ipAddress || 'Không rõ IP'}{entry.failureReason ? ` · ${entry.failureReason}` : ''}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -830,13 +897,15 @@ export const AccessControl: React.FC = () => {
                           display: 'flex',
                           alignItems: 'flex-start',
                           gap: '10px',
-                          cursor: 'pointer',
+                          cursor: canManageMatrix ? 'pointer' : 'not-allowed',
+                          opacity: canManageMatrix ? 1 : 0.7,
                           transition: 'all 0.15s'
                         }}
                       >
                         <input
                           type="checkbox"
                           checked={isChecked}
+                          disabled={!canManageMatrix}
                           onChange={() => {}} // Controlled click via parent div onClick
                           style={{ marginTop: '3px', accentColor: '#4A0E17', cursor: 'pointer' }}
                         />
@@ -853,23 +922,24 @@ export const AccessControl: React.FC = () => {
                 {/* Save action button */}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #E8E2D5', paddingTop: '16px' }}>
                   <button
+                    disabled={!canManageMatrix}
                     onClick={handleSaveMatrix}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
-                      backgroundColor: '#4A0E17',
+                      backgroundColor: canManageMatrix ? '#4A0E17' : '#A0A0A0',
                       color: 'white',
                       border: 'none',
                       padding: '10px 24px',
                       borderRadius: '6px',
                       fontSize: '13px',
                       fontWeight: 700,
-                      cursor: 'pointer',
+                      cursor: canManageMatrix ? 'pointer' : 'not-allowed',
                       boxShadow: '0 2px 4px rgba(74,14,23,0.15)'
                     }}
                   >
-                    <ShieldCheck size={16} /> Lưu Ma Trận Phân Quyền
+                    <ShieldCheck size={16} /> {canManageMatrix ? 'Lưu Ma Trận Phân Quyền' : 'Chỉ có quyền xem'}
                   </button>
                 </div>
               </div>

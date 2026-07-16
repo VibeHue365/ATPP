@@ -4,6 +4,7 @@ import {
   IsArray,
   IsEnum,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Max,
@@ -56,7 +57,9 @@ export class UpdateUserRolesDto {
   roles: UserRole[];
 
   @IsString()
+  @IsNotEmpty()
   @MaxLength(300)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   reason: string;
 }
 
@@ -65,7 +68,9 @@ export class UpdateUserStatusDto {
   status: UserStatus;
 
   @IsString()
+  @IsNotEmpty()
   @MaxLength(300)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   reason: string;
 }
 
@@ -83,12 +88,16 @@ export class LockUserDto {
   lockedUntil?: string;
 
   @IsString()
+  @IsNotEmpty()
   @MaxLength(300)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   reason: string;
 }
 
 export class UnlockUserDto {
   @IsString()
+  @IsNotEmpty()
   @MaxLength(300)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   reason: string;
 }

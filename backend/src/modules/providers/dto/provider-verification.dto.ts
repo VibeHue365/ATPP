@@ -11,7 +11,11 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ProviderCapability } from '../schemas/provider.schema';
-import { ProviderDocumentType } from '../schemas/provider-verification.schema';
+import {
+  ProviderChangeRequestAction,
+  ProviderChangeRequestTarget,
+  ProviderDocumentType,
+} from '../schemas/provider-verification.schema';
 
 export class CreateProviderVerificationDto {
   @IsArray()
@@ -128,6 +132,22 @@ export class UploadProviderVerificationDocumentDto {
   documentType: ProviderDocumentType;
 }
 
+export class ProviderChangeRequestDto {
+  @IsEnum(ProviderChangeRequestTarget)
+  target: ProviderChangeRequestTarget;
+
+  @IsEnum(ProviderChangeRequestAction)
+  action: ProviderChangeRequestAction;
+
+  @IsString()
+  @IsNotEmpty()
+  reasonCode: string;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
+}
+
 export class AdminReviewDecisionDto {
   @IsString()
   @IsOptional()
@@ -136,4 +156,11 @@ export class AdminReviewDecisionDto {
   @IsString()
   @IsOptional()
   note?: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => ProviderChangeRequestDto)
+  @IsOptional()
+  changeRequests?: ProviderChangeRequestDto[];
 }

@@ -71,7 +71,7 @@ export const AoDaiProductGrid: React.FC = () => {
     <section id="rentals" className="vh-features-section bg-stone-50/50 py-20 px-6 border-y border-stone-200">
       <div className="max-w-[1600px] w-full px-6 md:px-12 mx-auto">
         {/* Section Header */}
-        <div className="vh-section-header" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', textAlign: 'left', maxWidth: '100%', marginBottom: '40px' }}>
+        <div className="vh-section-header-row">
           <div>
             <span className="vh-section-badge">Thuê Áo Dài</span>
             <h2 className="text-3xl font-bold font-header text-stone-900 mt-2">Xu Hướng Áo Dài</h2>

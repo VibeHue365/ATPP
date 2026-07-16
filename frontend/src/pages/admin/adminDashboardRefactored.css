@@ -1,0 +1,471 @@
+.admin-refactor-shell {
+  display: flex;
+  min-height: 100vh;
+  background: #faf6f0;
+  color: #2a2a2a;
+  font-family: var(--font-body, Arial, sans-serif);
+}
+
+.admin-refactor-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  width: 280px;
+  height: 100vh;
+  box-sizing: border-box;
+  flex: 0 0 280px;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  border-right: 1px solid #3e0b12;
+  background: #4a0e17;
+  color: #fff;
+}
+
+.admin-refactor-sidebar__top {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-refactor-brand {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 32px;
+}
+
+.admin-refactor-brand strong {
+  color: #fff;
+  font-family: var(--font-header, Arial, sans-serif);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+
+.admin-refactor-brand span {
+  margin-top: 2px;
+  color: #f3c06b;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .18em;
+}
+
+.admin-refactor-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-refactor-profile img {
+  display: block;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.admin-refactor-profile--sidebar {
+  margin-bottom: 28px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, .06);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .04);
+}
+
+.admin-refactor-profile--sidebar img {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #f3c06b;
+}
+
+.admin-refactor-profile--sidebar strong,
+.admin-refactor-profile--sidebar span {
+  display: block;
+}
+
+.admin-refactor-profile--sidebar strong {
+  color: #fff;
+  font-size: 13px;
+}
+
+.admin-refactor-profile--sidebar span {
+  margin-top: 2px;
+  color: #f3c06b;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.admin-refactor-nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-color: #b89047 transparent;
+  scrollbar-width: thin;
+}
+
+.admin-refactor-nav button,
+.admin-refactor-sidebar__footer button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #e8e2d5;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition: all .15s ease;
+}
+
+.admin-refactor-nav button {
+  padding: 12px 16px;
+}
+
+.admin-refactor-nav button:hover,
+.admin-refactor-nav button.is-active {
+  background: #fff;
+  color: #4a0e17;
+}
+
+.admin-refactor-nav button.is-active {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+  font-weight: 700;
+}
+
+.admin-refactor-sidebar__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+
+.admin-refactor-sidebar__footer button {
+  padding: 10px 16px;
+}
+
+.admin-refactor-sidebar__footer button:hover {
+  background: rgba(255, 255, 255, .04);
+  color: #b89047;
+}
+
+.admin-refactor-sidebar__footer .admin-refactor-logout:hover {
+  background: rgba(248, 113, 113, .08);
+  color: #f87171;
+}
+
+.admin-refactor-main {
+  min-width: 0;
+  height: 100vh;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.admin-refactor-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  height: 70px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 32px;
+  border-bottom: 1px solid #e8e2d5;
+  background: #fff;
+}
+
+.admin-refactor-header h1 {
+  margin: 0;
+  color: #4a0e17;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.admin-refactor-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.admin-refactor-header__divider {
+  width: 1px;
+  height: 24px;
+  background: #e8e2d5;
+}
+
+.admin-refactor-profile--header {
+  gap: 8px;
+}
+
+.admin-refactor-profile--header img {
+  width: 32px;
+  height: 32px;
+}
+
+.admin-refactor-profile--header strong {
+  color: #2a2a2a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-refactor-notification {
+  position: relative;
+}
+
+.admin-refactor-notification__trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: #7a7a7a;
+  cursor: pointer;
+}
+
+.admin-refactor-notification__trigger > span {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  display: flex;
+  min-width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border-radius: 50%;
+  background: #4a0e17;
+  box-shadow: 0 1px 4px rgba(74, 14, 23, .4);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.admin-refactor-notification__menu {
+  position: absolute;
+  top: calc(100% + 16px);
+  right: -60px;
+  display: flex;
+  width: min(380px, calc(100vw - 32px));
+  max-height: 480px;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .12), 0 0 0 1px rgba(0, 0, 0, .06);
+}
+
+.admin-refactor-notification__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #faf6f0;
+  background: #faf6f0;
+}
+
+.admin-refactor-notification__header strong {
+  color: #4a0e17;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.admin-refactor-notification__header span {
+  color: #b89047;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.admin-refactor-notification__list {
+  overflow-y: auto;
+}
+
+.admin-refactor-notification__list > p {
+  margin: 0;
+  padding: 40px 20px;
+  color: #7a7a7a;
+  font-size: 13px;
+  text-align: center;
+}
+
+.admin-refactor-notification__list button {
+  display: grid;
+  width: 100%;
+  gap: 5px;
+  padding: 14px 20px;
+  border: 0;
+  border-bottom: 1px solid #faf6f0;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.admin-refactor-notification__list button:hover {
+  background: #faf6f0;
+}
+
+.admin-refactor-notification__list strong {
+  color: #4a0e17;
+  font-size: 12.5px;
+}
+
+.admin-refactor-notification__list small {
+  color: #555;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.admin-refactor-notification__type {
+  justify-self: start;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.admin-refactor-notification__type--verification {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.admin-refactor-notification__type--dispute {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.admin-refactor-notification__type--review {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.admin-refactor-content {
+  padding: 32px;
+}
+
+.admin-refactor-loading {
+  margin: 0;
+  padding: 24px;
+  border: 1px solid #e8e2d5;
+  border-radius: 10px;
+  background: #fff;
+  color: #706e3b;
+}
+
+.admin-refactor-error {
+  padding: 24px;
+  border: 1px solid #e5b9b9;
+  border-radius: 10px;
+  background: #fff7f7;
+  color: #7e1c1c;
+}
+
+.admin-refactor-error h2,
+.admin-refactor-error p {
+  margin-top: 0;
+}
+
+.admin-refactor-error button {
+  padding: 8px 12px;
+  border: 1px solid #7e1c1c;
+  border-radius: 6px;
+  background: #fff;
+  color: #7e1c1c;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .admin-refactor-sidebar {
+    width: 68px;
+    flex-basis: 68px;
+    padding: 16px 8px;
+  }
+
+  .admin-refactor-brand,
+  .admin-refactor-profile--sidebar,
+  .admin-refactor-nav button span,
+  .admin-refactor-sidebar__footer button span {
+    display: none;
+  }
+
+  .admin-refactor-nav button,
+  .admin-refactor-sidebar__footer button {
+    justify-content: center;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .admin-refactor-header,
+  .admin-refactor-content {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-refactor-shell {
+    display: block;
+  }
+
+  .admin-refactor-sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    min-height: auto;
+  }
+
+  .admin-refactor-sidebar__top {
+    overflow: visible;
+  }
+
+  .admin-refactor-nav {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .admin-refactor-nav button {
+    width: 44px;
+    flex: 0 0 44px;
+  }
+
+  .admin-refactor-sidebar__footer {
+    display: none;
+  }
+
+  .admin-refactor-main {
+    height: auto;
+    overflow: visible;
+  }
+
+  .admin-refactor-header {
+    padding: 0 16px;
+  }
+
+  .admin-refactor-header h1 {
+    max-width: 220px;
+    font-size: 13px;
+  }
+
+  .admin-refactor-profile--header strong,
+  .admin-refactor-header__divider {
+    display: none;
+  }
+
+  .admin-refactor-header__actions {
+    gap: 12px;
+  }
+
+  .admin-refactor-notification__menu {
+    right: -48px;
+  }
+}

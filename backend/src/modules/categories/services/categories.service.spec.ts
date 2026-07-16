@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { AdminAuditAction } from '../../auth/schemas/admin-audit-log.schema';
 import {
@@ -25,6 +25,7 @@ describe('CategoriesService', () => {
       assertSlugUniqueGlobally: jest.fn(),
       resolveParent: jest.fn().mockResolvedValue(undefined),
       assertNoActiveChildren: jest.fn(),
+      assertParentActiveForActivation: jest.fn(),
     };
     const usageService = {
       assertCategoryNotInUse: jest.fn(),
@@ -156,5 +157,100 @@ describe('CategoriesService', () => {
     await expect(
       service.assertActiveProductCategory(categoryId.toString()),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('maps a duplicate key race to a conflict', async () => {
+    const { service } = createService({
+      create: jest.fn().mockRejectedValue({ code: 11000 }),
+    });
+
+    await expect(
+      service.create(actorId, {
+        name: 'Ao dai cuoi',
+        type: ServiceCategoryType.AodaiCategory,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('rejects duplicate category ids when reordering', async () => {
+    const { service, categoryModel } = createService();
+    const id = new Types.ObjectId().toString();
+
+    await expect(
+      service.reorder(actorId, {
+        items: [
+          { id, displayOrder: 0 },
+          { id, displayOrder: 1 },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(categoryModel.find).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing category id when reordering', async () => {
+    const findChain = Promise.resolve([]);
+    const { service } = createService({
+      find: jest.fn().mockReturnValue(findChain),
+    });
+
+    await expect(
+      service.reorder(actorId, {
+        items: [{ id: new Types.ObjectId().toString(), displayOrder: 0 }],
+      }),
+    ).rejects.toThrow('CATEGORY_NOT_FOUND');
+  });
+
+  it('checks that the parent is active when reactivating a child', async () => {
+    const parentId = new Types.ObjectId();
+    const category = {
+      _id: categoryId,
+      parentId,
+      name: 'Ao dai con',
+      slug: 'ao-dai-con',
+      type: ServiceCategoryType.AodaiCategory,
+      status: CategoryStatus.Inactive,
+      displayOrder: 0,
+      metadata: {},
+      save: jest.fn(),
+    };
+    const { service, validationService } = createService({
+      findOne: jest.fn().mockResolvedValue(category),
+    });
+
+    await service.updateStatus(actorId, categoryId.toString(), {
+      status: CategoryStatus.Active,
+    });
+
+    expect(
+      validationService.assertParentActiveForActivation,
+    ).toHaveBeenCalledWith(parentId);
+  });
+
+  it('checks product and package usage before soft deleting', async () => {
+    const category = {
+      _id: categoryId,
+      parentId: null,
+      name: 'Ao dai rong',
+      slug: 'ao-dai-rong',
+      type: ServiceCategoryType.AodaiCategory,
+      status: CategoryStatus.Active,
+      displayOrder: 0,
+      metadata: {},
+      save: jest.fn(),
+    };
+    const { service, validationService, usageService } = createService({
+      findOne: jest.fn().mockResolvedValue(category),
+    });
+
+    await service.softDelete(actorId, categoryId.toString());
+
+    expect(validationService.assertNoActiveChildren).toHaveBeenCalledWith(
+      categoryId,
+    );
+    expect(usageService.assertCategoryNotInUse).toHaveBeenCalledWith(
+      categoryId,
+    );
+    expect(category.status).toBe(CategoryStatus.Inactive);
+    expect(category.save).toHaveBeenCalled();
   });
 });

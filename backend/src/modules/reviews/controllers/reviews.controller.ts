@@ -21,15 +21,14 @@ import {
   Min,
 } from 'class-validator';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { Permissions } from '../../../common/decorators/permissions.decorator';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { ReviewsService } from '../services/reviews.service';
+import { PublicMediaService } from '../../storage/services/public-media.service';
 
 export class CreateReviewDto {
   @IsString()
@@ -101,7 +100,10 @@ export class HandleReportDto {
 
 @Controller('reviews')
 export class ReviewsController {
-  constructor(private readonly reviewsService: ReviewsService) {}
+  constructor(
+    private readonly reviewsService: ReviewsService,
+    private readonly publicMedia: PublicMediaService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -187,32 +189,15 @@ export class ReviewsController {
         }
         callback(null, true);
       },
-      storage: diskStorage({
-        destination: (_request, _file, callback) => {
-          const dest = join(process.cwd(), 'uploads', 'reviews');
-          if (!existsSync(dest)) {
-            mkdirSync(dest, { recursive: true });
-          }
-          callback(null, dest);
-        },
-        filename: (_request, file, callback) => {
-          const safeExt = extname(file.originalname).toLowerCase() || '.jpg';
-          callback(
-            null,
-            `rev-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`,
-          );
-        },
-      }),
+      storage: memoryStorage(),
     }),
   )
   async uploadImage(
     @UploadedFile() file: Express.Multer.File | undefined,
   ): Promise<{ url: string }> {
-    if (!file) {
-      throw new BadRequestException('File is required');
-    }
-    const url = `/uploads/reviews/${file.filename}`;
-    return { url };
+    if (!file) throw new BadRequestException('File is required');
+    const upload = await this.publicMedia.uploadImage('reviews', file);
+    return { url: upload.url };
   }
 
   @Get('admin/reported')

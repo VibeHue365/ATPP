@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import {
   AuthProviderType,
   User,
@@ -22,6 +22,7 @@ export interface AdminUserListFilters {
 export class UsersRepository {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
+    @InjectConnection() private readonly connection: Connection,
   ) {}
 
   async existsByEmail(emailNormalized: string): Promise<boolean> {
@@ -92,7 +93,7 @@ export class UsersRepository {
     }
 
     if (filters.keyword) {
-      const keyword = filters.keyword.trim();
+      const keyword = filters.keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
         { 'profile.fullName': { $regex: keyword, $options: 'i' } },
         { 'auth.email': { $regex: keyword, $options: 'i' } },
@@ -192,6 +193,64 @@ export class UsersRepository {
       accountStatus: UserStatus.Active,
       deletedAt: null,
     });
+  }
+
+  async findActiveRoleCodes(roleCodes: string[]): Promise<string[]> {
+    const roles = await this.connection
+      .collection<{ code: string }>('roles')
+      .find({ code: { $in: roleCodes }, status: 'ACTIVE' }, { projection: { code: 1 } })
+      .toArray();
+    return roles.map((role) => role.code);
+  }
+
+  async revokeActiveSessions(userId: Types.ObjectId, reason: string): Promise<number> {
+    const result = await this.connection.collection('refresh_tokens').updateMany(
+      { userId, revokedAt: null },
+      { $set: { revokedAt: new Date(), revokedReason: reason } },
+    );
+    return result.modifiedCount;
+  }
+
+  async listRecentLoginHistory(userId: Types.ObjectId, limit = 10) {
+    return this.connection
+      .collection('login_histories')
+      .find(
+        { userId },
+        {
+          projection: {
+            provider: 1,
+            status: 1,
+            ipAddress: 1,
+            userAgent: 1,
+            loggedInAt: 1,
+            failureReason: 1,
+          },
+        },
+      )
+      .sort({ loggedInAt: -1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  async restoreExpiredSuspension(userId: Types.ObjectId): Promise<UserDocument | null> {
+    return this.userModel.findOneAndUpdate(
+      {
+        _id: userId,
+        accountStatus: UserStatus.Suspended,
+        'security.lockedUntil': { $ne: null, $lte: new Date() },
+        deletedAt: null,
+      },
+      {
+        $set: { accountStatus: UserStatus.Active },
+        $unset: {
+          'security.lockedUntil': '',
+          'security.lockedAt': '',
+          'security.lockedBy': '',
+          'security.lockedReason': '',
+        },
+      },
+      { new: true },
+    );
   }
 
   findUserByAuthProvider(

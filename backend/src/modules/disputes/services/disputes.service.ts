@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ConflictException, 
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { IncidentReport, IncidentStatus } from '../schemas/incident-report.schema';
+import { PrivateEvidenceUpload } from '../schemas/private-evidence-upload.schema';
 import { Dispute, DisputeStatus, DisputeDecision, FaultParty } from '../schemas/dispute.schema';
 import { Booking, BookingStatus } from '../../bookings/schemas/booking.schema';
 import { BookingItem } from '../../bookings/schemas/booking-item.schema';
@@ -13,6 +14,7 @@ import { MockBankingService } from '../../payments/services/mock-banking.service
 import { EscrowStatus } from '../../payments/schemas/booking-escrow.schema';
 import { SettlementsService } from '../../settlements/services/settlements.service';
 import { PolicyResolverService } from '../../system-policies/services/policy-resolver.service';
+import { PrivateStorageService } from '../../storage/services/private-storage.service';
 
 @Injectable()
 export class DisputesService {
@@ -21,6 +23,8 @@ export class DisputesService {
     private readonly incidentModel: Model<IncidentReport>,
     @InjectModel(Dispute.name)
     private readonly disputeModel: Model<Dispute>,
+    @InjectModel(PrivateEvidenceUpload.name)
+    private readonly privateEvidenceUploadModel: Model<PrivateEvidenceUpload>,
     @InjectModel(Booking.name)
     private readonly bookingModel: Model<Booking>,
     @InjectModel(BookingItem.name)
@@ -34,6 +38,7 @@ export class DisputesService {
     private readonly bankingService: MockBankingService,
     private readonly settlementsService: SettlementsService,
     private readonly policyResolverService: PolicyResolverService,
+    private readonly privateStorage: PrivateStorageService,
   ) {}
 
   async createIncidentReport(
@@ -89,12 +94,20 @@ export class DisputesService {
       throw new ForbiddenException('Bạn không có quyền báo cáo sản phẩm của provider khác');
     }
 
+    this.validateEvidenceReferences(dto.evidencePhotos);
+
+    await this.assertEvidenceReferencesOwnedBy(providerUserId, dto.evidencePhotos);
+
+    const policy = await this.policyResolverService.getDisputePolicy();
+    if (policy.requireEvidence && dto.evidencePhotos.length === 0) {
+      throw new BadRequestException('Vui lòng cung cấp ít nhất một bằng chứng');
+    }
+
     const allowedStatuses = [BookingStatus.PickedUp, BookingStatus.ReturnPending, BookingStatus.Returned, BookingStatus.Completed];
     if (!allowedStatuses.includes(booking.status)) {
       throw new BadRequestException('Trạng thái đơn hàng chưa cho phép báo cáo sự cố');
     }
     if (booking.status === BookingStatus.Completed) {
-      const policy = await this.policyResolverService.getDisputePolicy();
       const completedEntry = [...booking.statusTimeline].reverse().find((entry) => entry.status === BookingStatus.Completed);
       if (completedEntry && Date.now() - new Date(completedEntry.changedAt).getTime() > policy.allowDisputeAfterCompletedHours * 60 * 60 * 1000) {
         throw new BadRequestException('Đã quá thời hạn mở khiếu nại');
@@ -124,6 +137,8 @@ export class DisputesService {
     }
 
     // Cập nhật trạng thái áo dài (InventoryItem) tương ứng
+    await this.attachPrivateEvidenceUploads(providerUserId, dto.evidencePhotos, (incident as any)._id);
+
     if (bookingItem.inventoryItemId) {
       const inventoryStatus =
         dto.actionType === 'CLEANING'
@@ -193,6 +208,159 @@ export class DisputesService {
     throw new ForbiddenException('Bạn không có quyền xem báo cáo sự cố này');
   }
 
+  async registerEvidenceUploads(
+    uploaderId: string,
+    references: string[],
+  ): Promise<void> {
+    if (!Types.ObjectId.isValid(uploaderId)) {
+      throw new ForbiddenException('Tài khoản provider không hợp lệ');
+    }
+    const expiresAt = new Date(Date.now() + this.evidenceUploadTtlHours() * 60 * 60 * 1000);
+    await this.privateEvidenceUploadModel.insertMany(
+      references.map((reference) => ({
+        reference,
+        uploaderId: new Types.ObjectId(uploaderId),
+        expiresAt,
+      })),
+      { ordered: true },
+    );
+  }
+  async viewEvidence(
+    userId: string,
+    roles: string[],
+    reference: string,
+  ): Promise<{ file: import('stream').Readable; mimeType: string; fileName: string }> {
+    const { bucket, storageKey } = this.parsePrivateEvidenceReference(reference);
+    const incident = await this.incidentModel.findOne({ evidencePhotos: reference });
+
+    if (!incident) {
+      if (!Types.ObjectId.isValid(userId) || !roles.some((role) => role.toUpperCase() === 'PROVIDER')) {
+        throw new NotFoundException('Không tìm thấy ảnh bằng chứng');
+      }
+      const upload = await this.privateEvidenceUploadModel.findOne({
+        reference,
+        uploaderId: new Types.ObjectId(userId),
+        incidentId: null,
+        expiresAt: { $gt: new Date() },
+      });
+      if (!upload) {
+        throw new NotFoundException('Không tìm thấy ảnh bằng chứng');
+      }
+      return this.readEvidenceFile(bucket, storageKey);
+    }
+
+    if (!roles.some((role) => role.toUpperCase() === 'ADMIN')) {
+      const booking = await this.bookingModel.findById(incident.bookingId);
+      if (!booking) {
+        throw new NotFoundException('Không tìm thấy đơn đặt lịch');
+      }
+      const isCustomer = booking.customerId.toString() === userId;
+      let isReportingProvider = false;
+      if (!isCustomer && roles.some((role) => role.toUpperCase() === 'PROVIDER') && Types.ObjectId.isValid(userId)) {
+        const provider = await this.bookingModel.db
+          .model('Provider')
+          .findOne({ userId: new Types.ObjectId(userId) });
+        isReportingProvider = Boolean(
+          provider && incident.reportedBy.toString() === provider._id.toString(),
+        );
+      }
+      if (!isCustomer && !isReportingProvider) {
+        throw new ForbiddenException('Bạn không có quyền xem ảnh bằng chứng này');
+      }
+    }
+
+    return this.readEvidenceFile(bucket, storageKey);
+  }
+
+  private async assertEvidenceReferencesOwnedBy(
+    uploaderId: string,
+    references: string[],
+  ): Promise<void> {
+    const privateReferences = (references ?? []).filter((reference) =>
+      reference.startsWith('private://'),
+    );
+    if (privateReferences.length === 0) return;
+    if (!Types.ObjectId.isValid(uploaderId)) {
+      throw new ForbiddenException('Tài khoản provider không hợp lệ');
+    }
+    const count = await this.privateEvidenceUploadModel.countDocuments({
+      reference: { $in: privateReferences },
+      uploaderId: new Types.ObjectId(uploaderId),
+      incidentId: null,
+      expiresAt: { $gt: new Date() },
+    });
+    if (count !== privateReferences.length) {
+      throw new BadRequestException('Một hoặc nhiều ảnh bằng chứng đã hết hạn hoặc không thuộc tài khoản của bạn');
+    }
+  }
+
+  private async attachPrivateEvidenceUploads(
+    uploaderId: string,
+    references: string[],
+    incidentId: Types.ObjectId,
+  ): Promise<void> {
+    const privateReferences = (references ?? []).filter((reference) =>
+      reference.startsWith('private://'),
+    );
+    if (privateReferences.length === 0) return;
+    const result = await this.privateEvidenceUploadModel.updateMany(
+      {
+        reference: { $in: privateReferences },
+        uploaderId: new Types.ObjectId(uploaderId),
+        incidentId: null,
+        expiresAt: { $gt: new Date() },
+      },
+      { $set: { incidentId, expiresAt: null } },
+    );
+    if (result.modifiedCount !== privateReferences.length) {
+      throw new ConflictException('Ảnh bằng chứng vừa được sử dụng hoặc đã hết hạn, vui lòng tải lại');
+    }
+  }
+
+  private async readEvidenceFile(
+    bucket: string,
+    storageKey: string,
+  ): Promise<{ file: import('stream').Readable; mimeType: string; fileName: string }> {
+    return {
+      file: await this.privateStorage.readPrivateFile(bucket, storageKey),
+      mimeType: this.mimeTypeForEvidence(storageKey),
+      fileName: storageKey.split('/').pop() || 'evidence',
+    };
+  }
+  private evidenceUploadTtlHours(): number {
+    const value = Number(process.env.PRIVATE_EVIDENCE_UPLOAD_TTL_HOURS ?? 24);
+    return Number.isFinite(value) && value >= 1 ? value : 24;
+  }
+  private validateEvidenceReferences(references: string[]): void {
+    for (const reference of references ?? []) {
+      if (reference.startsWith('private://')) {
+        this.parsePrivateEvidenceReference(reference);
+        continue;
+      }
+      if (!reference.startsWith('/uploads/dispute-evidence/')) {
+        throw new BadRequestException('Tham chiếu ảnh bằng chứng không hợp lệ');
+      }
+    }
+  }
+
+  private parsePrivateEvidenceReference(reference: string): { bucket: string; storageKey: string } {
+    const prefix = 'private://dispute-evidence-private/';
+    if (!reference?.startsWith(prefix)) {
+      throw new BadRequestException('Tham chiếu ảnh bằng chứng private không hợp lệ');
+    }
+    const storageKey = reference.slice(prefix.length);
+    if (!storageKey.startsWith('dispute-evidence/') || storageKey.includes('..')) {
+      throw new BadRequestException('Khóa ảnh bằng chứng không hợp lệ');
+    }
+    return { bucket: 'dispute-evidence-private', storageKey };
+  }
+
+  private mimeTypeForEvidence(storageKey: string): string {
+    const extension = storageKey.split('.').pop()?.toLowerCase();
+    if (extension === 'png') return 'image/png';
+    if (extension === 'webp') return 'image/webp';
+    return 'image/jpeg';
+  }
   async customerAgreeIncident(incidentId: string, customerUserId: string): Promise<any> {
     const incident = await this.incidentModel.findById(incidentId);
     if (!incident) {
@@ -342,10 +510,13 @@ export class DisputesService {
     });
     await booking.save();
 
-    await this.settlementsService.holdSettlementsForBooking(
-      booking._id.toString(),
-      'Booking is under dispute',
-    );
+    const policy = await this.policyResolverService.getDisputePolicy();
+    if (policy.holdSettlementWhenDisputed) {
+      await this.settlementsService.holdSettlementsForBooking(
+        booking._id.toString(),
+        'Booking is under dispute',
+      );
+    }
 
     // Tạo Dispute record
     await this.disputeModel.findOneAndUpdate(

@@ -18,7 +18,15 @@ describe('RefundWorkflowService financial safety', () => {
     const bookingModel = { findOne: jest.fn(), updateOne: jest.fn(), ...overrides.bookingModel };
     const settlementModel = { find: jest.fn().mockReturnValue({ sort: jest.fn().mockResolvedValue([]) }), updateOne: jest.fn(), ...overrides.settlementModel };
     const adjustmentModel = { updateOne: jest.fn(), ...overrides.adjustmentModel };
-    return { service: new RefundWorkflowService(refundModel as any, attemptModel as any, paymentModel as any, bookingModel as any, settlementModel as any, adjustmentModel as any), refundModel, paymentModel };
+    const policyResolver = {
+      getRefundPolicy: jest.fn().mockResolvedValue({
+        autoApproveFreeCancelRefund: true,
+        manualReviewThresholdAmount: 1000000,
+        refundProcessingMode: 'SIMULATED',
+      }),
+      ...overrides.policyResolver,
+    };
+    return { service: new RefundWorkflowService(refundModel as any, attemptModel as any, paymentModel as any, bookingModel as any, settlementModel as any, adjustmentModel as any, policyResolver as any), refundModel, paymentModel, policyResolver };
   }
 
   it('allocates one refund across multiple successful payments', async () => {
@@ -39,9 +47,33 @@ describe('RefundWorkflowService financial safety', () => {
     const existing = { _id: new Types.ObjectId(), status: RefundStatus.Completed };
     const { service, refundModel } = createService();
     refundModel.findOne.mockResolvedValue(existing);
-    const result = await service.createFromCancellation({ bookingId, requestedBy: customerId, amount: 100000, reason: 'Cancelled', type: RefundType.Cancellation, sourceEventId: `refund:cancellation:${bookingId}` });
+    const result = await service.createFromCancellation({ bookingId, requestedBy: customerId, amount: 100000, reason: 'Cancelled', type: RefundType.Cancellation, sourceEventId: `refund:cancellation:${bookingId}`, isFreeCancel: true });
     expect(result).toBe(existing);
     expect(refundModel.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps a high-value cancellation refund pending for manual review', async () => {
+    const created = { _id: new Types.ObjectId(), status: RefundStatus.Pending };
+    const { service, refundModel, paymentModel } = createService({
+      policyResolver: {
+        getRefundPolicy: jest.fn().mockResolvedValue({
+          autoApproveFreeCancelRefund: true,
+          manualReviewThresholdAmount: 1000000,
+          refundProcessingMode: 'MANUAL',
+        }),
+      },
+    });
+    refundModel.findOne.mockResolvedValue(null);
+    refundModel.create.mockResolvedValue(created);
+    paymentModel.find.mockReturnValue(paymentChain([{ _id: new Types.ObjectId(), amount: 2000000, refundedAmount: 0, refundReservedAmount: 0 }]));
+
+    const result = await service.createFromCancellation({ bookingId, requestedBy: customerId, amount: 1500000, reason: 'Cancelled', type: RefundType.Cancellation, sourceEventId: `refund:cancellation:high:${bookingId}`, isFreeCancel: true });
+
+    expect(result).toBe(created);
+    expect(refundModel.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(refundModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'MANUAL' }),
+    );
   });
 
   it('returns a conflict when another admin already approved the request', async () => {

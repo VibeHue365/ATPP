@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -53,8 +53,8 @@
   --shadow-glass: 0 8px 32px 0 rgba(45, 41, 38, 0.06);
 
   /* Typography */
-  --font-header: 'Libre Caslon Text', serif;
-  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --font-header: 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
 
   /* Global Transitions */
   --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -74,6 +74,14 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   line-height: 1.6;
+}
+
+.font-header {
+  font-family: var(--font-header);
+}
+
+.font-body {
+  font-family: var(--font-body);
 }
 
 h1,
@@ -8671,5 +8679,119 @@ button {
 
 .vh-hide-scrollbar::-webkit-scrollbar {
   display: none; /* WebKit (Chrome, Safari, Edge) */
+}
+
+/* Premium Landing Page & Responsive Styles */
+
+/* Section header row layout for wrapping on mobile */
+.vh-section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 32px;
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .vh-section-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .vh-section-header-row button,
+  .vh-section-header-row a {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* Premium Card (with subtle lift hover, gold highlight, clean borders) */
+.vh-premium-card {
+  background-color: var(--color-bg-primary, #FFFFFF);
+  border: 1px solid rgba(45, 41, 38, 0.08);
+  border-radius: var(--radius-lg, 12px);
+  overflow: hidden;
+  transition: transform var(--transition-smooth, 0.3s ease), box-shadow var(--transition-smooth, 0.3s ease), border-color var(--transition-smooth, 0.3s ease);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.04));
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 32px;
+}
+
+.vh-premium-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-md, 0 10px 25px rgba(45, 41, 38, 0.08));
+  border-color: var(--color-gold, #C5A880);
+}
+
+/* AI Premium Banner Bento Grid */
+.vh-ai-banner-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 40px;
+  align-items: center;
+}
+
+.vh-ai-banner-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  color: white;
+}
+
+@media (max-width: 991px) {
+  .vh-ai-banner-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    text-align: center;
+  }
+  .vh-ai-banner-grid .vh-ai-banner-visual {
+    order: -1; /* visual on top for tablet/mobile */
+    max-width: 480px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .vh-ai-banner-content {
+    align-items: center;
+  }
+}
+
+/* Partners Row layout */
+.vh-partners-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 48px;
+  opacity: 0.6;
+}
+
+@media (max-width: 768px) {
+  .vh-partners-row {
+    gap: 24px 32px;
+  }
+}
+
+/* Responsive testimonials grid stack override */
+.vh-testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+
+@media (max-width: 991px) {
+  .vh-testimonials-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .vh-testimonials-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
 }
 

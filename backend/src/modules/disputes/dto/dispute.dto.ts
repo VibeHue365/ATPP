@@ -7,7 +7,7 @@ export class CreateIncidentDto {
   @IsString() @IsNotEmpty() @MaxLength(1000) description: string;
   @IsArray()
   @ArrayMaxSize(5)
-  @Matches(/^(https?:\/\/|\/uploads\/dispute-evidence\/)/i, {
+  @Matches(/^(private:\/\/dispute-evidence-private\/dispute-evidence\/|https?:\/\/|\/uploads\/dispute-evidence\/)/i, {
     each: true,
     message: 'Mỗi ảnh bằng chứng phải là URL hợp lệ',
   })

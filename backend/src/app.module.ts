@@ -21,6 +21,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AdminStatsModule } from './modules/admin-stats/admin-stats.module';
+import { SmartTaggingModule } from './modules/smart-tagging/smart-tagging.module';
 import { validateEnv } from './common/config/env.validation';
 import { ApiDocsController } from './common/controllers/api-docs.controller';
 
@@ -54,6 +55,7 @@ import { ApiDocsController } from './common/controllers/api-docs.controller';
     ChatModule,
     AdminStatsModule,
     AdminModule,
+    SmartTaggingModule,
   ],
   controllers: [AppController, ApiDocsController],
   providers: [AppService],

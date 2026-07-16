@@ -34,6 +34,7 @@ import { MockBankingService } from './services/mock-banking.service';
 import { BookingsModule } from '../bookings/bookings.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SettlementsModule } from '../settlements/settlements.module';
+import { SystemPoliciesModule } from '../system-policies/system-policies.module';
 
 export const paymentModels = MongooseModule.forFeature([
   { name: Payment.name, schema: PaymentSchema },
@@ -54,6 +55,7 @@ export const paymentModels = MongooseModule.forFeature([
     forwardRef(() => BookingsModule),
     NotificationsModule,
     SettlementsModule,
+    SystemPoliciesModule,
   ],
   controllers: [PaymentsController, RefundsController],
   providers: [PaymentsService, RefundWorkflowService, PayOSRefundService, MockBankingService],

@@ -92,6 +92,24 @@ export class CategoryValidationService {
     }
   }
 
+  async assertParentActiveForActivation(
+    parentId?: Types.ObjectId | null,
+  ): Promise<void> {
+    if (!parentId) {
+      return;
+    }
+
+    const activeParent = await this.categoryModel.exists({
+      _id: parentId,
+      status: CategoryStatus.Active,
+      deletedAt: { $exists: false },
+    });
+
+    if (!activeParent) {
+      throw new BadRequestException('CATEGORY_PARENT_NOT_ACTIVE');
+    }
+  }
+
   private async assertNoParentCycle(
     parent: CategoryDocument,
     currentId: Types.ObjectId,

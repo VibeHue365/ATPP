@@ -1,16 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Search, Lock, Unlock, Eye, RotateCcw
+  Search, Lock, Unlock, Eye
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
+import { Modal } from '../../../components/common/Modal';
 
 interface SettlementPolicySnapshot {
   policyCode: string;
   policyVersion: number;
   defaultCommissionRate: number;
+  sameProviderComboCommissionRate: number;
+  crossProviderComboCommissionRate: number;
   fixedPlatformFee: number;
+  minCommissionAmount: number;
+  appliedRateType: string;
 }
 
 interface SettlementItemSnapshot {
@@ -18,15 +23,39 @@ interface SettlementItemSnapshot {
   itemType: string;
   itemName?: string;
   serviceAmount: number;
+  providerDiscountAmount: number;
+  commissionBaseAmount: number;
+  commissionRate: number;
+  commissionAmount: number;
+  allocatedPlatformFee: number;
   netAmount: number;
+}
+
+interface SettlementBooking {
+  _id: string;
+  bookingCode?: string;
+  status?: string;
+}
+
+interface SettlementProvider {
+  _id: string;
+  businessName?: string;
+  paymentAccounts?: Array<{
+    bankName: string;
+    accountNumberMasked: string;
+    accountHolder: string;
+    isDefault: boolean;
+  }>;
 }
 
 interface Settlement {
   _id: string;
   settlementCode: string;
-  bookingId: any;
-  providerId: any;
+  bookingId: SettlementBooking | string;
+  providerId: SettlementProvider | string;
   grossAmount: number;
+  commissionBaseAmount: number;
+  commissionRate: number;
   commissionAmount: number;
   fixedPlatformFee: number;
   allocatedPlatformFee: number;
@@ -50,10 +79,17 @@ export const SettlementManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [selectedSettlement, setSelectedSettlement] = useState<Settlement | null>(null);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [bookingIdDraft, setBookingIdDraft] = useState('');
+  const [providerIdDraft, setProviderIdDraft] = useState('');
+  const [fromDateDraft, setFromDateDraft] = useState('');
+  const [toDateDraft, setToDateDraft] = useState('');
+  const [appliedFilters, setAppliedFilters] = useState({ bookingId: '', providerId: '', fromDate: '', toDate: '' });
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
 
   // Stats
   const [stats, setStats] = useState({
@@ -63,14 +99,22 @@ export const SettlementManagement: React.FC = () => {
     cancelled: 0
   });
 
-  const fetchSettlements = async () => {
+  const fetchSettlements = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await httpClient.get<any>('/admin/settlements');
-      // res.items is the array of settlements
+      const params = new URLSearchParams({
+        page: String(pagination.page),
+        limit: String(pagination.limit),
+      });
+      if (statusFilter !== 'ALL') params.set('status', statusFilter);
+      Object.entries(appliedFilters).forEach(([key, value]) => {
+        if (value) params.set(key, value);
+      });
+      const res = await httpClient.get<{ items: Settlement[]; pagination: typeof pagination }>(`/admin/settlements?${params.toString()}`);
       const items = res.items || [];
       setSettlements(items);
+      setPagination(res.pagination);
 
       // Calculate stats based on fetched items
       const pendingSum = items.filter((s: any) => s.status === 'READY_TO_SETTLE').reduce((sum: number, s: any) => sum + s.payableAmount, 0);
@@ -78,13 +122,12 @@ export const SettlementManagement: React.FC = () => {
       const heldSum = items.filter((s: any) => s.status === 'ON_HOLD').reduce((sum: number, s: any) => sum + s.payableAmount, 0);
       const cancelledSum = items.filter((s: any) => s.status === 'CANCELLED').reduce((sum: number, s: any) => sum + s.payableAmount, 0);
 
-      setStats(prev => ({
-        ...prev,
+      setStats({
         pending: pendingSum,
         settled: settledSum,
         held: heldSum,
         cancelled: cancelledSum,
-      }));
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Không thể tải danh sách quyết toán';
       setError(message);
@@ -92,11 +135,11 @@ export const SettlementManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [appliedFilters, pagination.limit, pagination.page, statusFilter, toast]);
 
   useEffect(() => {
     void fetchSettlements();
-  }, []);
+  }, [fetchSettlements]);
 
   const handleHoldSettlement = async (id: string) => {
     const { value: reason } = await Swal.fire({
@@ -158,7 +201,7 @@ export const SettlementManagement: React.FC = () => {
     const { value: formValues } = await Swal.fire({
       title: 'Xác nhận Đã quyết toán?',
       html: `
-        <div style="text-align: left; font-size: 13.5px; font-family: sans-serif;">
+        <div style="text-align: left; font-size: 13.5px; font-family: inherit;">
           <p style="margin-bottom: 12px;">Hệ thống sẽ ghi nhận khoản chuyển khoản <strong>${payableAmount.toLocaleString()}đ</strong> cho đối tác đã hoàn tất.</p>
           <div style="margin-bottom: 12px;">
             <label style="font-weight: 700; display: block; margin-bottom: 4px; color: #7A7A7A;">MÃ THAM CHIẾU NGÂN HÀNG (REF) *</label>
@@ -166,7 +209,7 @@ export const SettlementManagement: React.FC = () => {
           </div>
           <div>
             <label style="font-weight: 700; display: block; margin-bottom: 4px; color: #7A7A7A;">GHI CHÚ QUYẾT TOÁN</label>
-            <textarea id="swal-note" class="swal2-textarea" style="width: 100%; margin: 0; box-sizing: border-box; height: 60px; font-size: 13px; font-family: sans-serif;" placeholder="Nhập ghi chú chi tiết nếu có..."></textarea>
+            <textarea id="swal-note" class="swal2-textarea" style="width: 100%; margin: 0; box-sizing: border-box; height: 60px; font-size: 13px; font-family: inherit;" placeholder="Nhập ghi chú chi tiết nếu có..."></textarea>
           </div>
         </div>
       `,
@@ -204,71 +247,45 @@ export const SettlementManagement: React.FC = () => {
     setActionId(id);
     try {
       const settlement = await httpClient.get<Settlement>(`/admin/settlements/${id}`);
-      const items = settlement.itemSnapshots?.map((item) => (
-        `<li>${item.itemName || item.itemType}: ${item.netAmount.toLocaleString('vi-VN')}d</li>`
-      )).join('') || '<li>Khong co chi tiet dich vu</li>';
-
-      await Swal.fire({
-        title: settlement.settlementCode,
-        html: `
-          <div style="text-align:left; font-size:13px; line-height:1.6">
-            <p><strong>Tong tien:</strong> ${settlement.grossAmount.toLocaleString('vi-VN')}d</p>
-            <p><strong>Commission:</strong> ${settlement.commissionAmount.toLocaleString('vi-VN')}d</p>
-            <p><strong>Phi nen tang:</strong> ${(settlement.allocatedPlatformFee || 0).toLocaleString('vi-VN')}d</p>
-            <p><strong>So tien quyet toan:</strong> ${settlement.payableAmount.toLocaleString('vi-VN')}d</p>
-            ${settlement.holdReason ? `<p><strong>Ly do tam giu:</strong> ${settlement.holdReason}</p>` : ''}
-            ${settlement.payoutReference ? `<p><strong>Ma tham chieu:</strong> ${settlement.payoutReference}</p>` : ''}
-            <strong>Dich vu:</strong><ul style="margin:4px 0; padding-left:20px">${items}</ul>
-          </div>
-        `,
-        confirmButtonText: 'Dong',
-        confirmButtonColor: '#4A0E17',
-      });
+      setSelectedSettlement(settlement);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Khong the tai chi tiet quyet toan');
+      toast.error(err instanceof Error ? err.message : 'Không thể tải chi tiết quyết toán');
     } finally {
       setActionId(null);
     }
   };
 
-  const handleRegenerateSettlement = async (settlement: Settlement) => {
-    const bookingId = typeof settlement.bookingId === 'string'
-      ? settlement.bookingId
-      : settlement.bookingId?._id;
-
-    if (!bookingId) {
-      toast.error('Khong xac dinh duoc don hang cua quyet toan');
-      return;
-    }
-
-    const { value: reason } = await Swal.fire({
-      title: 'Tao lai quyet toan?',
-      input: 'textarea',
-      inputLabel: 'Ly do tao lai *',
-      inputPlaceholder: 'Vi du: doi soat lai du lieu don hang...',
-      inputAttributes: { required: 'true' },
+  const handleRegenerateByBooking = async () => {
+    const { value } = await Swal.fire({
+      title: 'Tạo lại quyết toán theo booking',
+      html: '<input id="regenerate-booking-id" class="swal2-input" placeholder="Booking ObjectId"><textarea id="regenerate-reason" class="swal2-textarea" placeholder="Lý do tạo lại"></textarea>',
       showCancelButton: true,
+      confirmButtonText: 'Tạo lại',
+      cancelButtonText: 'Hủy',
       confirmButtonColor: '#4A0E17',
-      confirmButtonText: 'Tao lai',
-      cancelButtonText: 'Quay lai',
-      preConfirm: (value) => {
-        if (!value?.trim()) {
-          Swal.showValidationMessage('Vui long nhap ly do');
+      preConfirm: () => {
+        const bookingId = (document.getElementById('regenerate-booking-id') as HTMLInputElement).value.trim();
+        const reason = (document.getElementById('regenerate-reason') as HTMLTextAreaElement).value.trim();
+        if (!/^[a-f\d]{24}$/i.test(bookingId)) {
+          Swal.showValidationMessage('Booking ID phải là MongoDB ObjectId hợp lệ');
           return false;
         }
-        return value.trim();
+        if (!reason) {
+          Swal.showValidationMessage('Vui lòng nhập lý do tạo lại');
+          return false;
+        }
+        return { bookingId, reason };
       },
     });
 
-    if (!reason) return;
-
-    setActionId(settlement._id);
+    if (!value) return;
+    setActionId('regenerate');
     try {
-      await httpClient.post(`/admin/settlements/booking/${bookingId}/regenerate`, { reason });
-      toast.success('Da tao lai quyet toan cho don hang');
+      await httpClient.post(`/admin/settlements/booking/${value.bookingId}/regenerate`, { reason: value.reason });
+      toast.success('Đã tạo lại quyết toán cho booking');
       await fetchSettlements();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Khong the tao lai quyet toan');
+      toast.error(err instanceof Error ? err.message : 'Không thể tạo lại quyết toán');
     } finally {
       setActionId(null);
     }
@@ -281,16 +298,28 @@ export const SettlementManagement: React.FC = () => {
       const q = searchQuery.toLowerCase();
       list = list.filter(s =>
         s.settlementCode.toLowerCase().includes(q) ||
-        (s.bookingId && (s.bookingId.bookingCode || s.bookingId._id || s.bookingId).toLowerCase().includes(q))
+        bookingLabel(s.bookingId).toLowerCase().includes(q)
       );
-    }
-
-    if (statusFilter !== 'ALL') {
-      list = list.filter(s => s.status === statusFilter);
     }
 
     return list;
   };
+
+  const applyFilters = () => {
+    setPagination((current) => ({ ...current, page: 1 }));
+    setAppliedFilters({
+      bookingId: bookingIdDraft.trim(),
+      providerId: providerIdDraft.trim(),
+      fromDate: fromDateDraft ? `${fromDateDraft}T00:00:00.000Z` : '',
+      toDate: toDateDraft ? `${toDateDraft}T23:59:59.999Z` : '',
+    });
+  };
+
+  const formatMoney = (value: number) => `${(value || 0).toLocaleString('vi-VN')}đ`;
+  const bookingLabel = (booking: Settlement['bookingId']) =>
+    typeof booking === 'string' ? `BK-${booking.slice(-6).toUpperCase()}` : booking.bookingCode || `BK-${booking._id.slice(-6).toUpperCase()}`;
+  const providerLabel = (provider: Settlement['providerId']) =>
+    typeof provider === 'string' ? provider : provider.businessName || provider._id;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -300,25 +329,25 @@ export const SettlementManagement: React.FC = () => {
         <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Chờ quyết toán</div>
           <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#B89047' }}>{stats.pending.toLocaleString()}đ</div>
-          <div style={{ fontSize: '11px', color: '#7A7A7A', marginTop: '4px' }}>Trạng thái READY_TO_SETTLE</div>
+          <div style={{ fontSize: '11px', color: '#7A7A7A', marginTop: '4px' }}>Tổng trên trang hiện tại</div>
         </div>
 
         <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Đã giải ngân</div>
           <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#166534' }}>{stats.settled.toLocaleString()}đ</div>
-          <div style={{ fontSize: '11px', color: '#706E3B', marginTop: '4px', fontWeight: 600 }}>Thanh toán cho nhà cung cấp</div>
+          <div style={{ fontSize: '11px', color: '#706E3B', marginTop: '4px', fontWeight: 600 }}>Tổng trên trang hiện tại</div>
         </div>
 
         <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Đang tạm giữ</div>
           <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#4A0E17' }}>{stats.held.toLocaleString()}đ</div>
-          <div style={{ fontSize: '11px', color: '#991B1B', marginTop: '4px', fontWeight: 600 }}>Tạm dừng do sự cố / tranh chấp</div>
+          <div style={{ fontSize: '11px', color: '#991B1B', marginTop: '4px', fontWeight: 600 }}>Tổng trên trang hiện tại</div>
         </div>
 
         <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Đã hủy quyết toán</div>
           <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#2B6CB0' }}>{stats.cancelled.toLocaleString()}đ</div>
-          <div style={{ fontSize: '11px', color: '#7A7A7A', marginTop: '4px' }}>Không còn payable do booking bị hủy</div>
+          <div style={{ fontSize: '11px', color: '#7A7A7A', marginTop: '4px' }}>Tổng trên trang hiện tại</div>
         </div>
       </div>
 
@@ -346,7 +375,7 @@ export const SettlementManagement: React.FC = () => {
           <Search size={16} color="#7A7A7A" />
           <input
             type="text"
-            placeholder="Tìm theo mã quyết toán, mã booking..."
+            placeholder="Tìm trong trang theo mã quyết toán, mã booking..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{ border: 'none', background: 'none', padding: '8px 12px', fontSize: '13px', width: '100%', outline: 'none' }}
@@ -357,7 +386,10 @@ export const SettlementManagement: React.FC = () => {
             {['ALL', 'READY_TO_SETTLE', 'ON_HOLD', 'SETTLED', 'CANCELLED'].map(status => (
               <button
                 key={status}
-                onClick={() => setStatusFilter(status)}
+                onClick={() => {
+                  setStatusFilter(status);
+                  setPagination((current) => ({ ...current, page: 1 }));
+                }}
                 style={{
                   padding: '6px 12px',
                   border: '1px solid #E8E2D5',
@@ -373,6 +405,29 @@ export const SettlementManagement: React.FC = () => {
                 {status === 'ALL' ? 'TẤT CẢ' : status === 'READY_TO_SETTLE' ? 'CHỜ PAYOUT' : status === 'ON_HOLD' ? 'TẠM GIỮ' : status === 'SETTLED' ? 'ĐÃ TRẢ TIỀN' : 'ĐÃ HỦY'}
               </button>
             ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(150px, 1fr)) auto', gap: '12px', padding: '16px 20px', backgroundColor: 'white', border: '1px solid #E8E2D5', borderRadius: '8px', alignItems: 'end' }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px', fontWeight: 700, color: '#5F5A52' }}>
+          BOOKING ID
+          <input value={bookingIdDraft} onChange={(event) => setBookingIdDraft(event.target.value)} placeholder="MongoDB ObjectId" style={{ padding: '9px 10px', border: '1px solid #D9D1C4', borderRadius: '6px' }} />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px', fontWeight: 700, color: '#5F5A52' }}>
+          PROVIDER ID
+          <input value={providerIdDraft} onChange={(event) => setProviderIdDraft(event.target.value)} placeholder="MongoDB ObjectId" style={{ padding: '9px 10px', border: '1px solid #D9D1C4', borderRadius: '6px' }} />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px', fontWeight: 700, color: '#5F5A52' }}>
+          TỪ NGÀY
+          <input type="date" value={fromDateDraft} onChange={(event) => setFromDateDraft(event.target.value)} style={{ padding: '8px 10px', border: '1px solid #D9D1C4', borderRadius: '6px' }} />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px', fontWeight: 700, color: '#5F5A52' }}>
+          ĐẾN NGÀY
+          <input type="date" value={toDateDraft} onChange={(event) => setToDateDraft(event.target.value)} style={{ padding: '8px 10px', border: '1px solid #D9D1C4', borderRadius: '6px' }} />
+        </label>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={applyFilters} style={{ padding: '9px 18px', border: 'none', borderRadius: '6px', backgroundColor: '#4A0E17', color: 'white', fontWeight: 700, cursor: 'pointer' }}>Lọc dữ liệu</button>
+          <button disabled={actionId === 'regenerate'} onClick={() => void handleRegenerateByBooking()} style={{ padding: '9px 14px', border: '1px solid #706E3B', borderRadius: '6px', backgroundColor: 'white', color: '#706E3B', fontWeight: 700, cursor: actionId === 'regenerate' ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>Tạo lại</button>
         </div>
       </div>
 
@@ -410,20 +465,22 @@ export const SettlementManagement: React.FC = () => {
                 </tr>
               ) : (
                 getFilteredSettlements().map((s) => {
-                  const bCode = s.bookingId?.bookingCode || `BK-${(s.bookingId?._id || s.bookingId)?.slice(-6).toUpperCase()}`;
+                  const bCode = bookingLabel(s.bookingId);
+                  const provider = typeof s.providerId === 'string' ? null : s.providerId;
+                  const defaultAccount = provider?.paymentAccounts?.find((account) => account.isDefault) || provider?.paymentAccounts?.[0];
 
                   return (
                     <tr key={s._id} style={{ borderBottom: '1px solid #FAF6F0' }}>
                       <td style={{ padding: '16px 20px', fontWeight: 700 }}>{s.settlementCode}</td>
                       <td style={{ padding: '16px 20px', color: '#4A0E17', fontWeight: 600 }}>{bCode}</td>
                       <td style={{ padding: '16px 20px' }}>
-                        <div style={{ fontWeight: 600 }}>{s.providerId?.businessName || 'Nhà cung cấp'}</div>
-                        <span style={{ fontSize: '11px', color: '#7A7A7A' }}>STK: {s.providerId?.bankInfo?.accountNumber || 'Chưa cập nhật'}</span>
+                        <div style={{ fontWeight: 600 }}>{providerLabel(s.providerId)}</div>
+                        <span style={{ fontSize: '11px', color: '#7A7A7A' }}>STK: {defaultAccount?.accountNumberMasked || 'Chưa cập nhật'}</span>
                       </td>
                       <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 600 }}>{s.grossAmount.toLocaleString()}đ</td>
                       <td style={{ padding: '16px 20px', textAlign: 'right', color: '#B89047', fontWeight: 600 }}>
                         -{s.commissionAmount.toLocaleString()}đ
-                        <span style={{ display: 'block', fontSize: '10px', color: '#7A7A7A' }}>{((s.policySnapshot?.defaultCommissionRate ?? 0) * 100).toLocaleString('vi-VN')}%</span>
+                        <span style={{ display: 'block', fontSize: '10px', color: '#7A7A7A' }}>{((s.commissionRate ?? 0) * 100).toLocaleString('vi-VN')}%</span>
                       </td>
                       <td style={{ padding: '16px 20px', textAlign: 'right', color: '#166534', fontWeight: 800 }}>{s.payableAmount.toLocaleString()}đ</td>
 
@@ -443,7 +500,7 @@ export const SettlementManagement: React.FC = () => {
                              onClick={() => void handleViewSettlement(s._id)}
                              disabled={actionId === s._id}
                              style={{ padding: '6px', border: 'none', borderRadius: '4px', backgroundColor: '#FAF6F0', color: '#4A0E17', cursor: 'pointer' }}
-                             title="Xem chi tiet quyet toan"
+                             title="Xem chi tiết quyết toán"
                            >
                              <Eye size={12} />
                            </button>
@@ -483,17 +540,7 @@ export const SettlementManagement: React.FC = () => {
                             </span>
                           )}
                            {s.status === 'CANCELLED' && (
-                             <button
-                               onClick={() => void handleRegenerateSettlement(s)}
-                               disabled={actionId === s._id}
-                               style={{ padding: '6px', border: 'none', borderRadius: '4px', backgroundColor: '#FAF6F0', color: '#706E3B', cursor: 'pointer' }}
-                               title="Tao lai quyet toan"
-                             >
-                               <RotateCcw size={12} />
-                             </button>
-                           )}
-                           {s.status === 'CANCELLED' && (
-                            <span style={{ fontSize: '11px', color: '#7A7A7A', fontStyle: 'italic' }}>Settlement đã bị hủy</span>
+                            <span style={{ fontSize: '11px', color: '#7A7A7A', fontStyle: 'italic' }}>Quyết toán đã bị hủy</span>
                           )}
                         </div>
                       </td>
@@ -503,7 +550,55 @@ export const SettlementManagement: React.FC = () => {
               )}
             </tbody>
           </table>
+          {!loading && !error && pagination.totalPages > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderTop: '1px solid #E8E2D5', fontSize: '12px', color: '#5F5A52' }}>
+              <span>{pagination.total.toLocaleString('vi-VN')} kết quả · Trang {pagination.page}/{pagination.totalPages}</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button disabled={pagination.page <= 1} onClick={() => setPagination((current) => ({ ...current, page: current.page - 1 }))} style={{ padding: '7px 12px', border: '1px solid #D9D1C4', borderRadius: '6px', background: 'white', cursor: pagination.page <= 1 ? 'not-allowed' : 'pointer' }}>Trang trước</button>
+                <button disabled={pagination.page >= pagination.totalPages} onClick={() => setPagination((current) => ({ ...current, page: current.page + 1 }))} style={{ padding: '7px 12px', border: '1px solid #D9D1C4', borderRadius: '6px', background: 'white', cursor: pagination.page >= pagination.totalPages ? 'not-allowed' : 'pointer' }}>Trang sau</button>
+              </div>
+            </div>
+          )}
         </div>
+
+      <Modal isOpen={Boolean(selectedSettlement)} onClose={() => setSelectedSettlement(null)} title={selectedSettlement ? `Chi tiết ${selectedSettlement.settlementCode}` : ''} maxWidth="860px">
+        {selectedSettlement && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+              {[
+                ['Đơn hàng', bookingLabel(selectedSettlement.bookingId)],
+                ['Nhà cung cấp', providerLabel(selectedSettlement.providerId)],
+                ['Trạng thái', selectedSettlement.status],
+                ['Tổng dịch vụ', formatMoney(selectedSettlement.grossAmount)],
+                [`Commission (${(selectedSettlement.commissionRate * 100).toLocaleString('vi-VN')}%)`, formatMoney(selectedSettlement.commissionAmount)],
+                ['Phí nền tảng', formatMoney(selectedSettlement.allocatedPlatformFee)],
+                ['Hoàn tiền điều chỉnh', formatMoney(selectedSettlement.refundAmount)],
+                ['Phạt vi phạm', formatMoney(selectedSettlement.penaltyAmount)],
+                ['Số tiền quyết toán', formatMoney(selectedSettlement.payableAmount)],
+              ].map(([label, value]) => (
+                <div key={label} style={{ border: '1px solid #E8E2D5', borderRadius: '7px', padding: '12px', background: '#FCFAF7' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#7A7A7A', marginBottom: '5px' }}>{label.toUpperCase()}</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#2A2A2A' }}>{value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: '14px', border: '1px solid #E8E2D5', borderRadius: '7px' }}>
+              <strong style={{ fontSize: '13px' }}>Policy áp dụng</strong>
+              <div style={{ marginTop: '8px', color: '#5F5A52', fontSize: '13px' }}>Phiên bản {selectedSettlement.policySnapshot.policyVersion} · Loại rate {selectedSettlement.policySnapshot.appliedRateType} · Phí cố định {formatMoney(selectedSettlement.policySnapshot.fixedPlatformFee)}</div>
+            </div>
+            <div>
+              <h4 style={{ margin: '0 0 10px', fontSize: '14px' }}>Chi tiết dịch vụ</h4>
+              <div style={{ overflowX: 'auto', border: '1px solid #E8E2D5', borderRadius: '7px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead><tr style={{ background: '#FAF6F0' }}><th style={{ padding: '10px', textAlign: 'left' }}>Dịch vụ</th><th style={{ padding: '10px', textAlign: 'right' }}>Giá</th><th style={{ padding: '10px', textAlign: 'right' }}>Giảm giá</th><th style={{ padding: '10px', textAlign: 'right' }}>Commission</th><th style={{ padding: '10px', textAlign: 'right' }}>Thực nhận</th></tr></thead>
+                  <tbody>{selectedSettlement.itemSnapshots.map((item) => <tr key={item.bookingItemId} style={{ borderTop: '1px solid #E8E2D5' }}><td style={{ padding: '10px' }}>{item.itemName || item.itemType}</td><td style={{ padding: '10px', textAlign: 'right' }}>{formatMoney(item.serviceAmount)}</td><td style={{ padding: '10px', textAlign: 'right' }}>{formatMoney(item.providerDiscountAmount)}</td><td style={{ padding: '10px', textAlign: 'right' }}>{formatMoney(item.commissionAmount)}</td><td style={{ padding: '10px', textAlign: 'right', fontWeight: 700 }}>{formatMoney(item.netAmount)}</td></tr>)}</tbody>
+                </table>
+              </div>
+            </div>
+            {(selectedSettlement.holdReason || selectedSettlement.payoutReference || selectedSettlement.note) && <div style={{ padding: '14px', borderRadius: '7px', background: '#F8F4EC', fontSize: '13px', lineHeight: 1.7 }}>{selectedSettlement.holdReason && <div><strong>Lý do tạm giữ:</strong> {selectedSettlement.holdReason}</div>}{selectedSettlement.payoutReference && <div><strong>Mã chuyển khoản:</strong> {selectedSettlement.payoutReference}</div>}{selectedSettlement.note && <div><strong>Ghi chú:</strong> {selectedSettlement.note}</div>}</div>}
+          </div>
+        )}
+      </Modal>
 
     </div>
   );

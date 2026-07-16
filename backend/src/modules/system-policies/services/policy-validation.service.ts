@@ -105,6 +105,11 @@ export class PolicyValidationService {
       0,
       1,
     );
+    if ((value.urgentBookingBeforeHours as number) > (value.freeCancelBeforeHours as number)) {
+      throw new BadRequestException(
+        `${PolicyErrorCode.ValueInvalid}: urgentBookingBeforeHours`,
+      );
+    }
   }
 
   private validateRefundPolicy(value: Record<string, unknown>): void {

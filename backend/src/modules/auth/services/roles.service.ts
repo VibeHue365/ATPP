@@ -26,12 +26,7 @@ const permissionSeeds = [
   ['role:read', 'Read Roles', 'AUTH', 'Read roles'],
   ['role:manage', 'Manage Roles', 'AUTH', 'Manage roles'],
   ['permission:read', 'Read Permissions', 'AUTH', 'Read permissions'],
-  [
-    'permission:manage',
-    'Manage Permissions',
-    'AUTH',
-    'Manage permissions',
-  ],
+  ['permission:manage', 'Manage Permissions', 'AUTH', 'Manage permissions'],
   ['category:read', 'Read Categories', 'CATEGORY', 'Read service categories'],
   [
     'category:manage',
@@ -69,6 +64,19 @@ const permissionSeeds = [
     'Manage Own Products',
     'PRODUCT',
     'Manage own products',
+  ],
+  ['dashboard:read', 'Read Admin Dashboard', 'ADMIN', 'Read admin statistics'],
+  [
+    'provider:read',
+    'Read Providers',
+    'PROVIDER',
+    'Read provider accounts and verifications',
+  ],
+  [
+    'provider:manage',
+    'Manage Providers',
+    'PROVIDER',
+    'Approve, suspend, and manage providers',
   ],
   ['refund:read', 'Read Refunds', 'REFUND', 'Read refund requests'],
   ['refund:manage', 'Manage Refunds', 'REFUND', 'Approve and process refunds'],
@@ -111,6 +119,37 @@ const permissionSeeds = [
     'View provider wallet',
   ],
   ['review:reply', 'Reply Review', 'REVIEW', 'Reply to reviews'],
+  [
+    'smart-tag:generate_own',
+    'Generate Own Smart Tags',
+    'SMART_TAG',
+    'Generate smart tag suggestions for own content',
+  ],
+  [
+    'smart-tag:read_own',
+    'Read Own Smart Tags',
+    'SMART_TAG',
+    'Read smart tag suggestions for own content',
+  ],
+  [
+    'smart-tag:decide_own',
+    'Decide Own Smart Tags',
+    'SMART_TAG',
+    'Activate, reject, or remove smart tags for own content',
+  ],
+  ['smart-tag:read', 'Read Smart Tags', 'SMART_TAG', 'Read all smart tags'],
+  [
+    'smart-tag:manage',
+    'Manage Smart Tags',
+    'SMART_TAG',
+    'Override smart tag decisions and regenerate content tags',
+  ],
+  [
+    'smart-tag:taxonomy_manage',
+    'Manage Smart Tag Taxonomy',
+    'SMART_TAG',
+    'Manage smart tag definitions and taxonomy revisions',
+  ],
 ] as const;
 
 const customerPermissions = [
@@ -134,6 +173,18 @@ const providerPermissions = [
   'booking:update_provider',
   'wallet:view_provider',
   'review:reply',
+  'smart-tag:generate_own',
+  'smart-tag:read_own',
+  'smart-tag:decide_own',
+];
+
+const protectedAdminPermissions = [
+  'user:read',
+  'user:manage',
+  'role:read',
+  'role:manage',
+  'permission:read',
+  'permission:manage',
 ];
 
 const roleSeeds = [
@@ -241,6 +292,17 @@ export class RolesService implements OnModuleInit {
       throw new NotFoundException('Role not found');
     }
 
+    if (normalizedCode === 'ADMIN') {
+      const missingProtectedPermission = protectedAdminPermissions.find(
+        (permission) => !uniquePermissions.includes(permission),
+      );
+      if (missingProtectedPermission) {
+        throw new BadRequestException(
+          `ADMIN role must keep permission: ${missingProtectedPermission}`,
+        );
+      }
+    }
+
     if (uniquePermissions.length > 0) {
       const activePermissions = await this.permissionModel
         .find({
@@ -335,7 +397,7 @@ export class RolesService implements OnModuleInit {
         { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
       );
 
-      if (code === 'ADMIN') {
+      if (code === 'ADMIN' || code === 'PROVIDER') {
         await this.roleModel.updateOne(
           { code },
           { $addToSet: { permissions: { $each: [...permissions] } } },

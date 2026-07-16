@@ -54,10 +54,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     const userId = new Types.ObjectId(payload.sub);
-    const user = await this.usersRepository.findUserById(userId);
+    let user = await this.usersRepository.findUserById(userId);
 
     if (!user) {
       throw new UnauthorizedException('Tài khoản không tồn tại');
+    }
+
+    if (
+      user.accountStatus === UserStatus.Suspended &&
+      user.security?.lockedUntil &&
+      user.security.lockedUntil.getTime() <= Date.now()
+    ) {
+      user =
+        (await this.usersRepository.restoreExpiredSuspension(userId)) ?? user;
     }
 
     if (user.accountStatus === UserStatus.Banned) {

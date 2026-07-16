@@ -31,7 +31,9 @@ async function bootstrap() {
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(securityHeaders);
   app.use(requestLogger(logger));
-  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
+  if (process.env.SERVE_LEGACY_UPLOADS !== 'false') {
+    app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
+  }
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

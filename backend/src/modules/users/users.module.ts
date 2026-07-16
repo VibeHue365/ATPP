@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SecurityLogModule } from '../auth/security-log.module';
+import { StorageModule } from '../storage/storage.module';
 import { User, UserSchema } from './schemas/user.schema';
 import { AdminUsersController } from './controllers/admin-users.controller';
 import { UsersController } from './controllers/users.controller';
@@ -14,7 +15,7 @@ export const userModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [userModels, SecurityLogModule],
+  imports: [userModels, SecurityLogModule, StorageModule],
   controllers: [UsersController, AdminUsersController],
   providers: [
     UsersService,

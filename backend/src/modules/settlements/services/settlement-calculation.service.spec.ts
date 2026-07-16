@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { BadRequestException } from '@nestjs/common';
 import { PolicyCode } from '../../system-policies/constants/policy-code.enum';
 import { BookingItemType } from '../../bookings/schemas/booking-item.schema';
 import { PaymentStatus } from '../../bookings/schemas/booking.schema';
@@ -102,5 +103,101 @@ describe('SettlementCalculationService', () => {
     expect(result[0].grossAmount).toBe(10000);
     expect(result[0].commissionAmount).toBe(1000);
     expect(result[0].itemSnapshots[0].depositAmount).toBe(5000);
+  });
+
+  it('subtracts provider-funded combo discount before calculating commission', async () => {
+    const service = new SettlementCalculationService(policyResolver as never);
+    const providerId = new Types.ObjectId();
+    const result = await service.calculateSettlementsForBooking(
+      {
+        _id: new Types.ObjectId(),
+        bookingCode: 'BK003',
+        status: 'COMPLETED',
+        paymentSummary: {
+          totalPaid: 9000,
+          paymentStatus: PaymentStatus.Paid,
+        },
+      },
+      [
+        {
+          _id: new Types.ObjectId(),
+          providerId,
+          itemType: BookingItemType.Product,
+          unitPrice: 10000,
+          quantity: 1,
+          comboDiscountAmount: 1000,
+        },
+      ],
+      null,
+    );
+
+    expect(result[0].grossAmount).toBe(9000);
+    expect(result[0].commissionBaseAmount).toBe(9000);
+    expect(result[0].commissionAmount).toBe(900);
+    expect(result[0].itemSnapshots[0]).toMatchObject({
+      serviceAmount: 10000,
+      providerDiscountAmount: 1000,
+      commissionBaseAmount: 9000,
+      commissionAmount: 900,
+    });
+  });
+
+  it('rejects a provider discount greater than the service amount', async () => {
+    const service = new SettlementCalculationService(policyResolver as never);
+
+    await expect(
+      service.calculateSettlementsForBooking(
+        {
+          _id: new Types.ObjectId(),
+          bookingCode: 'BK004',
+          status: 'COMPLETED',
+        },
+        [
+          {
+            _id: new Types.ObjectId(),
+            providerId: new Types.ObjectId(),
+            itemType: BookingItemType.Product,
+            unitPrice: 10000,
+            quantity: 1,
+            comboDiscountAmount: 10001,
+          },
+        ],
+        null,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('keeps the policy snapshot of an existing calculation when policy changes', async () => {
+    const service = new SettlementCalculationService(policyResolver as never);
+    const item = {
+      _id: new Types.ObjectId(),
+      providerId: new Types.ObjectId(),
+      itemType: BookingItemType.Product,
+      unitPrice: 10000,
+      quantity: 1,
+    };
+    const booking = {
+      _id: new Types.ObjectId(),
+      bookingCode: 'BK005',
+      status: 'COMPLETED',
+    };
+    const first = await service.calculateSettlementsForBooking(booking, [item], null);
+
+    policyResolver.getActivePolicyByCode.mockResolvedValueOnce({
+      version: 3,
+      value: {
+        defaultCommissionRate: 0.15,
+        sameProviderComboCommissionRate: 0.11,
+        crossProviderComboCommissionRate: 0.16,
+        fixedPlatformFee: 1000,
+        minCommissionAmount: 0,
+      },
+    });
+    const second = await service.calculateSettlementsForBooking(booking, [item], null);
+
+    expect(first[0].commissionRate).toBe(0.1);
+    expect(first[0].policySnapshot.policyVersion).toBe(2);
+    expect(second[0].commissionRate).toBe(0.15);
+    expect(second[0].policySnapshot.policyVersion).toBe(3);
   });
 });

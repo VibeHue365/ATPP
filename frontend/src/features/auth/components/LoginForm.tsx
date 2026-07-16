@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, Eye, EyeOff, Store, User } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { Button } from "../../../components/common/Button";
 import { Input } from "../../../components/common/Input";
 import { useToast } from "../../../components/feedback/Toast";
 import { API_BASE_URL } from "../../../config/env";
 import { ROUTES } from "../../../config/routes";
 import { useAuth } from "../hooks/useAuth";
+import { translateError } from "../../../utils/errorTranslator";
 
 export const LoginForm: React.FC = () => {
   const { login } = useAuth();
@@ -19,9 +20,7 @@ export const LoginForm: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [activeRole, setActiveRole] = useState<
-    "customer" | "store" | "photographer"
-  >("customer");
+
   const [errors, setErrors] = useState<{ email?: string; password?: string }>(
     {},
   );
@@ -72,7 +71,7 @@ export const LoginForm: React.FC = () => {
       }
     } catch (err: any) {
       toast.error(
-        err.message || "Đăng nhập thất bại. Vui lòng kiểm tra lại tài khoản.",
+        translateError(err.message) || "Đăng nhập thất bại. Vui lòng kiểm tra lại tài khoản.",
       );
     } finally {
       setIsLoading(false);
@@ -100,7 +99,7 @@ export const LoginForm: React.FC = () => {
           fontWeight: 600,
           color: "var(--color-text-secondary)",
           textDecoration: "none",
-          marginBottom: "16px",
+          marginBottom: "24px",
           alignSelf: "flex-start",
           transition: "var(--transition-smooth)",
         }}
@@ -115,76 +114,113 @@ export const LoginForm: React.FC = () => {
         Quay lại trang chủ
       </Link>
 
-      <h1 className="vh-brand-title">Silk &amp; Stone</h1>
+      <h1 
+        className="vh-brand-title"
+        style={{
+          fontFamily: "'Libre Caslon Text', serif",
+          fontSize: "36px",
+          fontWeight: 700,
+          background: "linear-gradient(135deg, #4A0E17 0%, #B89047 100%)",
+          WebkitBackgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          marginBottom: "8px",
+          lineHeight: 1.2,
+        }}
+      >
+        Silk &amp; Stone
+      </h1>
 
-      <h2 className="vh-greeting-title">Chào mừng bạn trở lại</h2>
-      <p className="vh-greeting-subtitle">
+      <h2 
+        className="vh-greeting-title"
+        style={{
+          fontSize: "20px",
+          fontWeight: 800,
+          color: "#2D2926",
+          marginBottom: "6px",
+        }}
+      >
+        Chào mừng bạn trở lại
+      </h2>
+      <p 
+        className="vh-greeting-subtitle"
+        style={{
+          fontSize: "13px",
+          color: "var(--color-text-secondary)",
+          marginBottom: "28px",
+          lineHeight: 1.5,
+        }}
+      >
         Vui lòng đăng nhập để tiếp tục hành trình văn hóa.
       </p>
 
-      <div className="vh-role-section-label">Bạn đăng nhập với tư cách</div>
-      <div className="vh-role-selector-grid">
-        <button
-          type="button"
-          onClick={() => setActiveRole("customer")}
-          className={`vh-role-card ${activeRole === "customer" ? "active" : ""}`}
-        >
-          <User size={20} className="vh-role-icon" />
-          <span className="vh-role-text">Khách hàng</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveRole("store")}
-          className={`vh-role-card ${activeRole === "store" ? "active" : ""}`}
-        >
-          <Store size={20} className="vh-role-icon" />
-          <span className="vh-role-text">Cửa hàng</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveRole("photographer")}
-          className={`vh-role-card ${
-            activeRole === "photographer" ? "active" : ""
-          }`}
-        >
-          <Camera size={20} className="vh-role-icon" />
-          <span className="vh-role-text">Nhiếp ảnh gia</span>
-        </button>
-      </div>
-
       <form
         onSubmit={handleSubmit}
+        noValidate
         className="vh-auth-form"
         style={{ display: "flex", flexDirection: "column", gap: "16px" }}
       >
         <Input
           label="Email đăng nhập"
           type="email"
-          placeholder="Email đăng nhập"
+          placeholder="Nhập email của bạn..."
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            setEmail(val);
+            if (errors.email) {
+              setErrors((prev) => ({
+                ...prev,
+                email: !val
+                  ? "Vui lòng nhập địa chỉ email"
+                  : !/\S+@\S+\.\S+/.test(val)
+                    ? "Email không hợp lệ"
+                    : undefined,
+              }));
+            }
+          }}
           error={errors.email}
-          className="vh-underline-input"
+          className="vh-premium-input"
           required
         />
 
         <Input
           label="Mật khẩu"
           type={showPassword ? "text" : "password"}
-          placeholder="Mật khẩu"
+          placeholder="Nhập mật khẩu..."
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            setPassword(val);
+            if (errors.password) {
+              setErrors((prev) => ({
+                ...prev,
+                password: !val
+                  ? "Vui lòng nhập mật khẩu"
+                  : val.length < 8
+                    ? "Mật khẩu phải chứa ít nhất 8 ký tự"
+                    : undefined,
+              }));
+            }
+          }}
           error={errors.password}
-          className="vh-underline-input"
+          className="vh-premium-input"
           rightIcon={
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="vh-password-toggle-btn"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "4px",
+                display: "flex",
+                alignItems: "center",
+                color: "var(--color-text-secondary)",
+                outline: "none",
+              }}
             >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           }
           required
@@ -199,12 +235,13 @@ export const LoginForm: React.FC = () => {
             margin: "2px 0 10px",
           }}
         >
-          <label className="vh-checkbox-container">
+          <label className="vh-checkbox-container" style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
             <input
               type="checkbox"
               className="vh-checkbox-input"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
+              style={{ cursor: "pointer" }}
             />
             <span
               style={{
@@ -223,6 +260,7 @@ export const LoginForm: React.FC = () => {
               margin: 0,
               fontWeight: 700,
               color: "var(--color-primary)",
+              fontSize: "13px",
             }}
           >
             Quên mật khẩu?
@@ -235,18 +273,34 @@ export const LoginForm: React.FC = () => {
           isLoading={isLoading}
           className="w-full"
           style={{
-            height: "42px",
-            borderRadius: "6px",
+            height: "44px",
+            borderRadius: "8px",
             fontWeight: 700,
-            fontSize: "13px",
-            letterSpacing: "0.05em",
+            fontSize: "14px",
+            letterSpacing: "0.02em",
+            backgroundColor: "var(--color-primary)",
+            border: "none",
+            boxShadow: "0 4px 12px rgba(161, 30, 34, 0.2)",
+            transition: "all 0.2s ease",
+            cursor: "pointer",
+            color: "white",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--color-primary-light)";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 6px 16px rgba(161, 30, 34, 0.3)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--color-primary)";
+            e.currentTarget.style.transform = "none";
+            e.currentTarget.style.boxShadow = "0 4px 12px rgba(161, 30, 34, 0.2)";
           }}
         >
           Đăng nhập
         </Button>
       </form>
 
-      <div className="vh-auth-divider" style={{ margin: "16px 0" }}>
+      <div className="vh-auth-divider" style={{ margin: "20px 0" }}>
         <span>Hoặc tiếp tục với</span>
       </div>
 
@@ -297,7 +351,7 @@ export const LoginForm: React.FC = () => {
         </button>
       </div>
 
-      <div className="vh-auth-switch" style={{ marginTop: "16px" }}>
+      <div className="vh-auth-switch" style={{ marginTop: "20px", fontSize: "14px" }}>
         <span>Chưa có tài khoản?</span>{" "}
         <Link
           to={ROUTES.REGISTER}

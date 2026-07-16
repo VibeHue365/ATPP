@@ -1,4 +1,4 @@
-import { httpClient } from '../../../services/httpClient';
+import { httpClient } from "../../../services/httpClient";
 import type {
   AodaiInfo,
   CreateProviderVerificationResponse,
@@ -7,19 +7,19 @@ import type {
   ProviderCapability,
   ProviderDocumentType,
   ProviderVerificationDetail,
-} from '../types';
+} from "../types";
 
 export const providerVerificationService = {
   create(requestedCapabilities: ProviderCapability[]) {
     return httpClient.post<CreateProviderVerificationResponse>(
-      '/provider-verifications',
+      "/provider-verifications",
       { requestedCapabilities },
     );
   },
 
   getCurrent() {
     return httpClient.get<ProviderVerificationDetail | null>(
-      '/provider-verifications/me/current',
+      "/provider-verifications/me/current",
     );
   },
 
@@ -44,32 +44,32 @@ export const providerVerificationService = {
     );
   },
 
-  acceptConsent(id: string, version = 'provider-verification-consent-v1') {
+  acceptConsent(id: string, version = "provider-verification-consent-v1") {
     return httpClient.post<{ accepted: boolean; acceptedAt: string }>(
       `/provider-verifications/${id}/consent`,
       { version },
     );
   },
 
-  uploadDocument(
-    id: string,
-    documentType: ProviderDocumentType,
-    file: File,
-  ) {
+  uploadDocument(id: string, documentType: ProviderDocumentType, file: File) {
     const formData = new FormData();
-    formData.append('documentType', documentType);
-    formData.append('file', file);
+    formData.append("documentType", documentType);
+    formData.append("file", file);
     return httpClient.post<{
       documentType: ProviderDocumentType;
       versionNo: number;
       uploadStatus: string;
       ocrStatus: string;
+      operationId?: string | null;
+      executionStatus?: string | null;
     }>(`/provider-verifications/${id}/documents`, formData);
   },
 
   runOcr(id: string, documentType: ProviderDocumentType) {
     return httpClient.post<{
       ocrStatus: string;
+      operationId?: string | null;
+      executionStatus?: string | null;
       ocrConfidence?: number | null;
       extractedFields?: Record<string, unknown>;
       mismatchFlags?: string[];

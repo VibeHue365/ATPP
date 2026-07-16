@@ -43,6 +43,7 @@ export interface SettlementItemInput {
   unitPrice: number;
   quantity: number;
   depositAmount?: number;
+  comboDiscountAmount?: number;
 }
 
 export interface CalculatedSettlementPayload {
@@ -203,10 +204,10 @@ export class SettlementCalculationService {
     for (const item of items) {
       const key = item.providerId.toString();
       const serviceAmount = this.getServiceAmount(item);
-      const providerDiscountAmount = 0;
+      const providerDiscountAmount = this.getProviderDiscountAmount(item);
       const grossAmount = serviceAmount - providerDiscountAmount;
 
-      if (providerDiscountAmount > serviceAmount) {
+      if (providerDiscountAmount < 0 || providerDiscountAmount > serviceAmount) {
         throw new BadRequestException(SETTLEMENT_ERROR_CODES.AmountInvalid);
       }
 
@@ -315,7 +316,8 @@ export class SettlementCalculationService {
   ): SettlementItemSnapshot[] {
     const itemGrossAmounts = group.items.map((item) => ({
       item,
-      grossAmount: this.getServiceAmount(item),
+      grossAmount:
+        this.getServiceAmount(item) - this.getProviderDiscountAmount(item),
     }));
 
     if (group.grossAmount <= 0) {
@@ -391,7 +393,7 @@ export class SettlementCalculationService {
     netAmount?: number,
   ): SettlementItemSnapshot {
     const serviceAmount = this.getServiceAmount(item);
-    const providerDiscountAmount = 0;
+    const providerDiscountAmount = this.getProviderDiscountAmount(item);
     const platformDiscountAmount = 0;
     const commissionBaseAmount = serviceAmount - providerDiscountAmount;
 
@@ -416,6 +418,10 @@ export class SettlementCalculationService {
 
   private getServiceAmount(item: SettlementItemInput): number {
     return this.moneyRound((item.unitPrice ?? 0) * (item.quantity ?? 1));
+  }
+
+  private getProviderDiscountAmount(item: SettlementItemInput): number {
+    return this.moneyRound(item.comboDiscountAmount ?? 0);
   }
 
   private resolveItemName(item: SettlementItemInput): string | null {

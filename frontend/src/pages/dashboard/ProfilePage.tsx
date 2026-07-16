@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { PrivateEvidenceImage } from '../../components/common/PrivateEvidenceImage';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { useAuth } from '../../features/auth/hooks/useAuth';
@@ -726,9 +727,13 @@ export const ProfilePage: React.FC = () => {
                       <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#4A5568', marginBottom: '4px' }}>Hình ảnh bằng chứng:</span>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         {bookingIncident.evidencePhotos.map((photo: string, idx: number) => (
-                          <a key={idx} href={photo} target="_blank" rel="noopener noreferrer">
-                            <img src={photo} alt={`Bằng chứng ${idx + 1}`} style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #FEB2B2' }} />
-                          </a>
+                          <PrivateEvidenceImage
+                            key={idx}
+                            reference={photo}
+                            legacyUrl={photo?.startsWith('http') ? photo : `${API_BASE_URL}${photo}`}
+                            alt={`Bằng chứng ${idx + 1}`}
+                            imageStyle={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #FEB2B2' }}
+                          />
                         ))}
                       </div>
                     </div>

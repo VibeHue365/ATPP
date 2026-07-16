@@ -4,39 +4,17 @@ import {
   X, FolderPlus, Grid
 } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
 import { API_BASE_URL } from '../../../config/env';
-
-// Enums matching NestJS
-type ServiceCategoryType = 'AODAI_CATEGORY' | 'PHOTOGRAPHY_CATEGORY' | 'CONCEPT' | 'STYLE' | 'EVENT';
-type CategoryStatus = 'ACTIVE' | 'INACTIVE';
-
-interface CategoryMetadata {
-  color?: string;
-  occasion?: string;
-  season?: string;
-}
-
-interface Category {
-  _id: string;
-  name: string;
-  slug: string;
-  type: ServiceCategoryType;
-  description?: string;
-  iconUrl?: string;
-  coverImageUrl?: string;
-  parentId?: string | null;
-  status: CategoryStatus;
-  displayOrder: number;
-  metadata?: CategoryMetadata;
-  createdAt: string;
-}
-
-interface AdminCategoriesResponse {
-  data?: Category[];
-  items?: Category[];
-}
+import {
+  categoryErrorMessage,
+  categoryService,
+} from '../../../features/categories/services/categoryService';
+import type {
+  Category,
+  CategoryStatus,
+  ServiceCategoryType,
+} from '../../../features/categories/types';
 
 export const CategoryManagement: React.FC = () => {
   const toast = useToast();
@@ -72,13 +50,16 @@ export const CategoryManagement: React.FC = () => {
     setError(null);
     try {
       // Query admin categories, include deleted false
-      const res = await httpClient.get<AdminCategoriesResponse | Category[]>(
-        '/admin/categories?includeDeleted=false&limit=100'
-      );
-      const items = Array.isArray(res) ? res : res.data || res.items || [];
-      setCategories(items);
+      const response = await categoryService.getAdmin({
+        includeDeleted: false,
+        limit: 100,
+      });
+      setCategories(response.data);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Không thể tải danh sách danh mục';
+      const message = categoryErrorMessage(
+        err,
+        'Không thể tải danh sách danh mục.',
+      );
       setError(message);
       toast.error(message);
     } finally {
@@ -127,10 +108,10 @@ export const CategoryManagement: React.FC = () => {
 
     // Optimistic UI update
     const updatedCategories = categories.map(c => {
-      if (c._id === currentItem._id) {
+      if (c.id === currentItem.id) {
         return { ...c, displayOrder: targetOrder };
       }
-      if (c._id === targetItem._id) {
+      if (c.id === targetItem.id) {
         return { ...c, displayOrder: currentOrder };
       }
       return c;
@@ -138,20 +119,20 @@ export const CategoryManagement: React.FC = () => {
 
     setCategories(updatedCategories);
 
-    setBusyCategoryId(currentItem._id);
+    setBusyCategoryId(currentItem.id);
     try {
-      await httpClient.patch('/admin/categories/reorder', {
-        items: [
-          { id: currentItem._id, displayOrder: targetOrder },
-          { id: targetItem._id, displayOrder: currentOrder }
+      await categoryService.reorder(
+        [
+          { id: currentItem.id, displayOrder: targetOrder },
+          { id: targetItem.id, displayOrder: currentOrder },
         ],
-        type: activeTypeTab,
-        reason: `Reorder category display index via Up/Down buttons`
-      });
+        activeTypeTab,
+        'Thay đổi thứ tự hiển thị từ trang quản trị.',
+      );
       toast.success('Cập nhật vị trí danh mục thành công');
       await fetchCategories();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Lỗi khi đồng bộ thứ tự danh mục');
+      toast.error(categoryErrorMessage(err, 'Lỗi khi đồng bộ thứ tự danh mục.'));
       await fetchCategories();
     } finally {
       setBusyCategoryId(null);
@@ -233,13 +214,13 @@ export const CategoryManagement: React.FC = () => {
     setSubmitting(true);
     try {
       if (editingCategory) {
-        await httpClient.patch(`/admin/categories/${editingCategory._id}`, {
+        await categoryService.update(editingCategory.id, {
           ...payload,
           parentId: parentId || null,
         });
         toast.success('Cập nhật danh mục thành công!');
       } else {
-        await httpClient.post('/admin/categories', {
+        await categoryService.create({
           ...payload,
           type: activeTypeTab,
           parentId: parentId || undefined,
@@ -249,7 +230,7 @@ export const CategoryManagement: React.FC = () => {
       setIsModalOpen(false);
       await fetchCategories();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Lưu danh mục thất bại');
+      toast.error(categoryErrorMessage(err, 'Lưu danh mục thất bại.'));
     } finally {
       setSubmitting(false);
     }
@@ -272,11 +253,11 @@ export const CategoryManagement: React.FC = () => {
     if (result.isConfirmed) {
       setBusyCategoryId(id);
       try {
-        await httpClient.delete(`/admin/categories/${id}`);
+        await categoryService.remove(id);
         toast.success(`Đã xóa danh mục "${name}"`);
         await fetchCategories();
       } catch (err: unknown) {
-        toast.error(err instanceof Error ? err.message : 'Xóa danh mục thất bại');
+        toast.error(categoryErrorMessage(err, 'Xóa danh mục thất bại.'));
       } finally {
         setBusyCategoryId(null);
       }
@@ -309,18 +290,21 @@ export const CategoryManagement: React.FC = () => {
 
     if (!result.isConfirmed) return;
 
-    setBusyCategoryId(cat._id);
+    setBusyCategoryId(cat.id);
     try {
-      await httpClient.patch(`/admin/categories/${cat._id}/status`, {
-        status: newStatus,
-        reason: newStatus === 'INACTIVE'
+      await categoryService.updateStatus(
+        cat.id,
+        newStatus,
+        newStatus === 'INACTIVE'
           ? String(result.value).trim()
           : 'Kích hoạt lại danh mục từ trang quản trị',
-      });
+      );
       toast.success(`Đã chuyển trạng thái danh mục sang ${newStatus === 'ACTIVE' ? 'Hoạt động' : 'Ẩn'}`);
       await fetchCategories();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Lỗi khi thay đổi trạng thái danh mục');
+      toast.error(
+        categoryErrorMessage(err, 'Lỗi khi thay đổi trạng thái danh mục.'),
+      );
     } finally {
       setBusyCategoryId(null);
     }
@@ -329,7 +313,7 @@ export const CategoryManagement: React.FC = () => {
   // Helper: Get name of parent category
   const getParentName = (pId?: string | null) => {
     if (!pId) return '—';
-    const parent = categories.find(c => c._id === pId);
+    const parent = categories.find(c => c.id === pId);
     return parent ? parent.name : 'Không xác định';
   };
 
@@ -478,7 +462,7 @@ export const CategoryManagement: React.FC = () => {
               </tr>
             ) : (
               filteredCategories.map((cat, index) => (
-                <tr key={cat._id} style={{ borderBottom: '1px solid #FAF6F0', transition: 'background 0.15s' }}>
+                <tr key={cat.id} style={{ borderBottom: '1px solid #FAF6F0', transition: 'background 0.15s' }}>
 
                   {/* Reorder controls */}
                   <td style={{ padding: '16px 20px' }}>
@@ -572,7 +556,7 @@ export const CategoryManagement: React.FC = () => {
                   <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                     <button
                       onClick={() => handleToggleStatus(cat)}
-                      disabled={busyCategoryId === cat._id}
+                      disabled={busyCategoryId === cat.id}
                       style={{
                         padding: '4px 8px',
                         borderRadius: '4px',
@@ -594,15 +578,15 @@ export const CategoryManagement: React.FC = () => {
                     <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                       <button
                         onClick={() => handleOpenEditModal(cat)}
-                        disabled={busyCategoryId === cat._id}
+                        disabled={busyCategoryId === cat.id}
                         style={{ padding: '6px', border: 'none', borderRadius: '4px', backgroundColor: '#FAF6F0', cursor: 'pointer', color: '#706E3B' }}
                         title="Chỉnh sửa"
                       >
                         <Edit2 size={13} />
                       </button>
                       <button
-                        onClick={() => handleDeleteCategory(cat._id, cat.name)}
-                        disabled={busyCategoryId === cat._id}
+                        onClick={() => handleDeleteCategory(cat.id, cat.name)}
+                        disabled={busyCategoryId === cat.id}
                         style={{ padding: '6px', border: 'none', borderRadius: '4px', backgroundColor: '#FFF5F5', cursor: 'pointer', color: '#E53E3E' }}
                         title="Xóa danh mục"
                       >
@@ -699,9 +683,9 @@ export const CategoryManagement: React.FC = () => {
                   >
                     <option value="">— Không có (Danh mục gốc) —</option>
                     {categories
-                      .filter(c => c.type === activeTypeTab && c._id !== editingCategory?._id)
+                      .filter(c => c.type === activeTypeTab && c.id !== editingCategory?.id)
                       .map(c => (
-                        <option key={c._id} value={c._id}>{c.name}</option>
+                        <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                   </select>
                 </div>

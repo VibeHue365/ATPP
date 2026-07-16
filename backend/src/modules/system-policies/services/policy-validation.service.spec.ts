@@ -35,4 +35,17 @@ describe('PolicyValidationService', () => {
       }),
     ).not.toThrow();
   });
+
+  it('rejects an urgent cancellation window larger than the free window', () => {
+    expect(() =>
+      service.validatePolicyValue(PolicyCode.CancellationPolicy, {
+        freeCancelBeforeHours: 24,
+        urgentBookingBeforeHours: 48,
+        gracePeriodMinutesNormal: 60,
+        gracePeriodMinutesUrgent: 5,
+        productLateCancelPenaltyRate: 1,
+        photographyLateCancelPenaltyRate: 0.3,
+      }),
+    ).toThrow(BadRequestException);
+  });
 });

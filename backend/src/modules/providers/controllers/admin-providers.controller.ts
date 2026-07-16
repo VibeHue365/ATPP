@@ -1,6 +1,8 @@
 import { Body, Controller, Param, Patch, Req, UseGuards } from '@nestjs/common';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { Permissions } from '../../../common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
@@ -13,8 +15,9 @@ interface RequestMeta {
 }
 
 @Controller('admin/providers')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles('ADMIN')
+@Permissions('provider:manage')
 export class AdminProvidersController {
   constructor(
     private readonly providerVerificationService: ProviderVerificationService,

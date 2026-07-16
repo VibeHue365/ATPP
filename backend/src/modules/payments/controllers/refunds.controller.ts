@@ -5,7 +5,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { Permissions } from '../../../common/decorators/permissions.decorator';
 import { ApproveRefundDto, CreateRefundDto, ProcessRefundDto, RefundActionDto } from '../dto/refund.dto';
-import { RefundMode, RefundStatus } from '../schemas/refund-request.schema';
+import { RefundStatus } from '../schemas/refund-request.schema';
 import { RefundWorkflowService } from '../services/refund-workflow.service';
 
 @Controller('refunds')
@@ -48,10 +48,10 @@ export class RefundsController {
   @Post('admin/:id/process')
   @UseGuards(PermissionsGuard)
   @Permissions('refund:manage')
-  process(@Param('id') id: string, @Body() dto: ProcessRefundDto, @CurrentUser() user: AuthUser) { return this.refunds.process(id, user.sub, dto.expectedVersion, dto.mode ?? RefundMode.Simulated, dto.reference); }
+  process(@Param('id') id: string, @Body() dto: ProcessRefundDto, @CurrentUser() user: AuthUser) { return this.refunds.process(id, user.sub, dto.expectedVersion, dto.mode, dto.reference); }
 
   @Post('admin/:id/retry')
   @UseGuards(PermissionsGuard)
   @Permissions('refund:manage')
-  retry(@Param('id') id: string, @Body() dto: ProcessRefundDto, @CurrentUser() user: AuthUser) { return this.refunds.retry(id, user.sub, dto.expectedVersion, dto.mode ?? RefundMode.Simulated, dto.reference); }
+  retry(@Param('id') id: string, @Body() dto: ProcessRefundDto, @CurrentUser() user: AuthUser) { return this.refunds.retry(id, user.sub, dto.expectedVersion, dto.mode, dto.reference); }
 }

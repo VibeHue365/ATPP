@@ -78,7 +78,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     if (normalized.includes('phone already exists')) {
       return ErrorCode.PhoneAlreadyExists;
     }
-    if (normalized.includes('invalid email or password')) {
+    if (
+      normalized.includes('invalid email or password') ||
+      normalized.includes('email hoặc mật khẩu không chính xác')
+    ) {
       return ErrorCode.InvalidCredentials;
     }
     if (normalized.includes('email is not verified')) {

@@ -10,11 +10,13 @@ import {
   BadRequestException,
   ForbiddenException,
   UnsupportedMediaTypeException,
+  Query,
+  Res,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { existsSync, mkdirSync } from 'fs';
-import { extname, join } from 'path';
+import { memoryStorage } from 'multer';
+import { randomUUID } from 'crypto';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -24,11 +26,15 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { DisputesService } from '../services/disputes.service';
 import { CreateIncidentDto, ResolveDisputeDto } from '../dto/dispute.dto';
+import { PrivateStorageService } from '../../storage/services/private-storage.service';
 
 @Controller(['disputes', 'api/disputes'])
 @UseGuards(JwtAuthGuard)
 export class DisputesController {
-  constructor(private readonly disputesService: DisputesService) {}
+  constructor(
+    private readonly disputesService: DisputesService,
+    private readonly privateStorage: PrivateStorageService,
+  ) {}
 
   /** POST /api/disputes/incidents/upload-evidence - Provider tải ảnh bằng chứng */
   @Post('incidents/upload-evidence')
@@ -48,26 +54,7 @@ export class DisputesController {
         }
         callback(null, true);
       },
-      storage: diskStorage({
-        destination: (_request, _file, callback) => {
-          const destination = join(
-            process.cwd(),
-            'uploads',
-            'dispute-evidence',
-          );
-          if (!existsSync(destination)) {
-            mkdirSync(destination, { recursive: true });
-          }
-          callback(null, destination);
-        },
-        filename: (_request, file, callback) => {
-          const safeExt = extname(file.originalname).toLowerCase() || '.jpg';
-          callback(
-            null,
-            `evidence-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`,
-          );
-        },
-      }),
+      storage: memoryStorage(),
     }),
   )
   async uploadEvidence(
@@ -82,13 +69,49 @@ export class DisputesController {
     if (!files?.length) {
       throw new BadRequestException('Vui lòng chọn ít nhất một ảnh bằng chứng');
     }
-    return {
-      urls: files.map(
-        (file) => `/uploads/dispute-evidence/${file.filename}`,
-      ),
-    };
+    const urls = await Promise.all(
+      files.map(async (file) => {
+        if (!this.hasValidImageSignature(file)) {
+          throw new UnsupportedMediaTypeException(
+            'Nội dung tệp không phải là ảnh JPG, PNG hoặc WEBP hợp lệ',
+          );
+        }
+        const extensionByMime: Record<string, string> = {
+          'image/jpeg': '.jpg',
+          'image/png': '.png',
+          'image/webp': '.webp',
+        };
+        const storageKey = `dispute-evidence/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${extensionByMime[file.mimetype]}`;
+        const bucket = 'dispute-evidence-private';
+        await this.privateStorage.uploadPrivateFile(bucket, storageKey, file.buffer, file.mimetype);
+        return `private://${bucket}/${storageKey}`;
+      }),
+    );
+    await this.disputesService.registerEvidenceUploads(user.sub, urls);
+    return { urls };
   }
 
+  @Get('incidents/evidence')
+  async viewEvidence(
+    @CurrentUser() user: AuthUser,
+    @Query('ref') reference: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.disputesService.viewEvidence(user.sub, user.roles, reference);
+    response.setHeader('Content-Type', result.mimeType);
+    response.setHeader('Content-Disposition', `inline; filename="${result.fileName}"`);
+    response.setHeader('Cache-Control', 'private, no-store, max-age=0');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    return result.file;
+  }
+
+  private hasValidImageSignature(file: Express.Multer.File): boolean {
+    const header = file.buffer?.subarray(0, 12);
+    if (!header?.length) return false;
+    if (file.mimetype === 'image/jpeg') return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+    if (file.mimetype === 'image/png') return header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47;
+    return file.mimetype === 'image/webp' && header.toString('ascii', 0, 4) === 'RIFF' && header.toString('ascii', 8, 12) === 'WEBP';
+  }
   /** POST /api/disputes/incidents - Shop báo cáo hỏng đồ */
   @Post('incidents')
   async createIncident(

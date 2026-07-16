@@ -34,11 +34,9 @@ export class ProviderSettlementsController {
   async findOne(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     const provider =
       await this.settlementAccessPolicy.resolveProviderForCurrentUser(user.sub);
-    const settlement = await this.settlementQueryService.findById(id);
-    this.settlementAccessPolicy.assertProviderCanView(
-      settlement.providerId,
+    return this.settlementQueryService.findProviderSettlementById(
+      id,
       provider._id,
     );
-    return settlement;
   }
 }

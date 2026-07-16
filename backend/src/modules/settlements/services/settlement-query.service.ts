@@ -25,6 +25,8 @@ export class SettlementQueryService {
     const [items, total] = await Promise.all([
       this.settlementModel
         .find(filter)
+        .populate('bookingId', 'bookingCode status completedAt createdAt')
+        .populate('providerId', 'businessName paymentAccounts')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -59,6 +61,7 @@ export class SettlementQueryService {
     const [items, total] = await Promise.all([
       this.settlementModel
         .find(filter)
+        .populate('bookingId', 'bookingCode status completedAt createdAt')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -79,7 +82,25 @@ export class SettlementQueryService {
 
   async findById(id: string) {
     const objectId = this.toObjectId(id);
-    const settlement = await this.settlementModel.findById(objectId).lean();
+    const settlement = await this.settlementModel
+      .findById(objectId)
+      .populate('bookingId', 'bookingCode status completedAt createdAt')
+      .populate('providerId', 'businessName paymentAccounts')
+      .lean();
+
+    if (!settlement) {
+      throw new NotFoundException(SETTLEMENT_ERROR_CODES.NotFound);
+    }
+
+    return settlement;
+  }
+
+  async findProviderSettlementById(id: string, providerId: Types.ObjectId) {
+    const objectId = this.toObjectId(id);
+    const settlement = await this.settlementModel
+      .findOne({ _id: objectId, providerId })
+      .populate('bookingId', 'bookingCode status completedAt createdAt')
+      .lean();
 
     if (!settlement) {
       throw new NotFoundException(SETTLEMENT_ERROR_CODES.NotFound);
@@ -92,6 +113,8 @@ export class SettlementQueryService {
     const objectId = this.toObjectId(bookingId);
     return this.settlementModel
       .find({ bookingId: objectId })
+      .populate('bookingId', 'bookingCode status completedAt createdAt')
+      .populate('providerId', 'businessName paymentAccounts')
       .sort({ providerId: 1 })
       .lean();
   }

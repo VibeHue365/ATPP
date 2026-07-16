@@ -1,8 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards, UseInterceptors, UploadedFile, BadRequestException, UnsupportedMediaTypeException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
@@ -14,6 +12,7 @@ import {
   CreatePhotographyBookingDto,
 } from '../services/bookings.service';
 import { IsString, IsNotEmpty } from 'class-validator';
+import { PublicMediaService } from '../../storage/services/public-media.service';
 
 export class CancelBookingDto {
   @IsString()
@@ -24,7 +23,10 @@ export class CancelBookingDto {
 @Controller(['bookings', 'api/bookings'])
 @UseGuards(JwtAuthGuard)
 export class BookingsController {
-  constructor(private readonly bookingsService: BookingsService) {}
+  constructor(
+    private readonly bookingsService: BookingsService,
+    private readonly publicMedia: PublicMediaService,
+  ) {}
 
   @Post('upload-reference')
   @UseInterceptors(
@@ -43,31 +45,15 @@ export class BookingsController {
         }
         callback(null, true);
       },
-      storage: diskStorage({
-        destination: (_request, _file, callback) => {
-          const dest = join(process.cwd(), 'uploads', 'bookings');
-          if (!existsSync(dest)) {
-            mkdirSync(dest, { recursive: true });
-          }
-          callback(null, dest);
-        },
-        filename: (_request, file, callback) => {
-          const safeExt = extname(file.originalname).toLowerCase() || '.jpg';
-          callback(
-            null,
-            `ref-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`,
-          );
-        },
-      }),
+      storage: memoryStorage(),
     }),
   )
-  uploadReferenceFile(
+  async uploadReferenceFile(
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
-    if (!file) {
-      throw new BadRequestException('No file uploaded');
-    }
-    return { url: `/uploads/bookings/${file.filename}` };
+    if (!file) throw new BadRequestException('No file uploaded');
+    const upload = await this.publicMedia.uploadImage('bookings', file);
+    return { url: upload.url };
   }
 
 

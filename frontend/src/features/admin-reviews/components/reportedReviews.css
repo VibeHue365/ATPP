@@ -1,0 +1,108 @@
+.admin-reviews {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-reviews__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-reviews h2,
+.admin-reviews p {
+  margin: 0;
+}
+
+.admin-reviews__header p {
+  color: #706e3b;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.admin-reviews__error {
+  color: #a32121;
+}
+
+.admin-reviews__table {
+  overflow: auto;
+  border: 1px solid #e8e2d5;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.admin-reviews table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.admin-reviews th,
+.admin-reviews td {
+  padding: 12px;
+  border-bottom: 1px solid #f0ece4;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-reviews th {
+  color: #7a7a7a;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.admin-reviews small {
+  display: block;
+  margin-top: 4px;
+  color: #666;
+}
+
+.admin-reviews__rating {
+  color: #b7791f;
+  letter-spacing: 1px;
+}
+
+.admin-reviews__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-reviews button {
+  padding: 7px 10px;
+  border: 1px solid #706e3b;
+  border-radius: 5px;
+  background: #fff;
+  color: #706e3b;
+  cursor: pointer;
+}
+
+.admin-reviews__remove {
+  border-color: #a32121 !important;
+  color: #a32121 !important;
+}
+
+.admin-reviews button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.admin-reviews__empty {
+  padding: 20px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .admin-reviews__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+.admin-reviews { gap: 20px; }
+.admin-reviews__toolbar { display: flex; justify-content: flex-end; min-height: 34px; }
+.admin-reviews__toolbar button { padding: 8px 12px; border: 1px solid #706e3b; border-radius: 6px; background: #fff; color: #706e3b; cursor: pointer; font-size: 12px; font-weight: 700; }
+.admin-reviews__table > header { padding: 20px 24px; border-bottom: 1px solid #e8e2d5; background: #faf6f0; }
+.admin-reviews__table > header h3 { margin: 0; color: #4a0e17; font-size: 15px; font-weight: 750; text-transform: uppercase; }
+.admin-reviews th { padding: 14px 20px; background: #faf6f0; }.admin-reviews td { padding: 16px 20px; }.admin-reviews__actions button { font-size: 11px; font-weight: 700; }

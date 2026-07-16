@@ -13,6 +13,7 @@ import { DisputesService } from './disputes.service';
 describe('DisputesService', () => {
   let incidentModel: any;
   let disputeModel: any;
+  let privateEvidenceUploadModel: any;
   let bookingModel: any;
   let bookingItemModel: any;
   let inventoryModel: any;
@@ -21,6 +22,7 @@ describe('DisputesService', () => {
   let bankingService: any;
   let settlementsService: any;
   let policyResolverService: any;
+  let privateStorage: any;
   let service: DisputesService;
 
   const bookingId = new Types.ObjectId();
@@ -35,6 +37,7 @@ describe('DisputesService', () => {
       findOneAndUpdate: jest.fn(),
     };
     disputeModel = { findOneAndUpdate: jest.fn() };
+    privateEvidenceUploadModel = { insertMany: jest.fn(), countDocuments: jest.fn(), updateMany: jest.fn(), findOne: jest.fn() };
     bookingItemModel = {};
     inventoryModel = {};
     paymentsService = { executeProfitSplit: jest.fn() };
@@ -45,15 +48,23 @@ describe('DisputesService', () => {
       releaseSettlementsForBooking: jest.fn(),
       cancelSettlementsForBooking: jest.fn(),
     };
-    policyResolverService = {};
+    policyResolverService = {
+      getDisputePolicy: jest.fn().mockResolvedValue({
+        allowDisputeAfterCompletedHours: 72,
+        requireEvidence: true,
+        holdSettlementWhenDisputed: true,
+      }),
+    };
     bookingModel = {
       findById: jest.fn(),
       db: { model: jest.fn() },
     };
+    privateStorage = { readPrivateFile: jest.fn(), deletePrivateFile: jest.fn() };
 
     service = new DisputesService(
       incidentModel,
       disputeModel,
+      privateEvidenceUploadModel,
       bookingModel,
       bookingItemModel,
       inventoryModel,
@@ -62,9 +73,34 @@ describe('DisputesService', () => {
       bankingService,
       settlementsService,
       policyResolverService,
+      privateStorage,
     );
   });
 
+  it('rejects private evidence that is not owned by the reporting provider', async () => {
+    privateEvidenceUploadModel.countDocuments.mockResolvedValue(0);
+
+    await expect(
+      (service as any).assertEvidenceReferencesOwnedBy(customerId.toString(), [
+        'private://dispute-evidence-private/dispute-evidence/2026-07-15/evidence.jpg',
+      ]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('lets the provider preview their unattached evidence before submitting', async () => {
+    const reference = 'private://dispute-evidence-private/dispute-evidence/2026-07-15/evidence.jpg';
+    incidentModel.findOne.mockResolvedValue(null);
+    privateEvidenceUploadModel.findOne.mockResolvedValue({ reference });
+    privateStorage.readPrivateFile.mockResolvedValue({ pipe: jest.fn() });
+
+    const result = await service.viewEvidence(customerId.toString(), ['PROVIDER'], reference);
+
+    expect(privateStorage.readPrivateFile).toHaveBeenCalledWith(
+      'dispute-evidence-private',
+      'dispute-evidence/2026-07-15/evidence.jpg',
+    );
+    expect(result.mimeType).toBe('image/jpeg');
+  });
   it('blocks a user who does not own the booking from viewing an incident', async () => {
     const incident = { bookingId, reportedBy: providerId };
     const query = {
@@ -135,6 +171,44 @@ describe('DisputesService', () => {
     );
     expect(disputeModel.findOneAndUpdate).toHaveBeenCalledTimes(1);
     expect(booking.status).toBe(BookingStatus.Disputed);
+  });
+
+  it('does not hold settlements when the active dispute policy disables it', async () => {
+    const incident = {
+      _id: incidentId,
+      bookingId,
+      bookingItemId: new Types.ObjectId(),
+      reportedBy: providerId,
+      description: 'Sự cố dịch vụ',
+      evidencePhotos: [],
+      status: IncidentStatus.PendingCustomer,
+    };
+    const booking = {
+      _id: bookingId,
+      customerId,
+      status: BookingStatus.ReturnPending,
+      statusTimeline: [],
+      save: jest.fn(),
+    };
+    incidentModel.findById.mockResolvedValue(incident);
+    incidentModel.findOneAndUpdate.mockResolvedValue({
+      ...incident,
+      status: IncidentStatus.Disputed,
+    });
+    bookingModel.findById.mockResolvedValue(booking);
+    disputeModel.findOneAndUpdate.mockResolvedValue({ status: DisputeStatus.Open });
+    policyResolverService.getDisputePolicy.mockResolvedValue({
+      allowDisputeAfterCompletedHours: 72,
+      requireEvidence: false,
+      holdSettlementWhenDisputed: false,
+    });
+
+    await service.customerDisagreeIncident(
+      incidentId.toString(),
+      customerId.toString(),
+    );
+
+    expect(settlementsService.holdSettlementsForBooking).not.toHaveBeenCalled();
   });
 
   it('rejects a split resolution that exceeds the held deposit', async () => {

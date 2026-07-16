@@ -8,6 +8,7 @@ import { RefundMode, RefundRequest, RefundStatus, RefundType } from '../schemas/
 import { Settlement } from '../../settlements/schemas/settlement.schema';
 import { SettlementStatus } from '../../settlements/constants/settlement-status.enum';
 import { SettlementAdjustment } from '../../settlements/schemas/settlement-adjustment.schema';
+import { PolicyResolverService } from '../../system-policies/services/policy-resolver.service';
 
 interface CreateSystemRefundInput {
   bookingId: string;
@@ -17,6 +18,7 @@ interface CreateSystemRefundInput {
   type: RefundType;
   sourceEventId: string;
   autoApprove?: boolean;
+  isFreeCancel?: boolean;
 }
 
 @Injectable()
@@ -28,6 +30,7 @@ export class RefundWorkflowService {
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
     @InjectModel(Settlement.name) private readonly settlementModel: Model<Settlement>,
     @InjectModel(SettlementAdjustment.name) private readonly adjustmentModel: Model<SettlementAdjustment>,
+    private readonly policyResolverService: PolicyResolverService,
   ) {}
 
   async createCustomerRequest(bookingId: string, customerId: string, amount: number, reason: string, idempotencyKey: string) {
@@ -48,11 +51,19 @@ export class RefundWorkflowService {
     const completedRefundAmount = payments.reduce((sum, payment) => sum + (payment.refundedAmount || 0), 0);
     const reservedRefundAmount = payments.reduce((sum, payment) => sum + (payment.refundReservedAmount || 0), 0);
     const maximumRefundableAmount = Math.max(capturedAmount - completedRefundAmount - reservedRefundAmount, 0);
-    return { eligible: maximumRefundableAmount > 0, reason: maximumRefundableAmount > 0 ? null : 'Không còn số tiền có thể hoàn.', capturedAmount, completedRefundAmount, reservedRefundAmount, maximumRefundableAmount, estimatedRefundAmount: maximumRefundableAmount };
+    const policy = await this.policyResolverService.getRefundPolicy();
+    return { eligible: maximumRefundableAmount > 0, reason: maximumRefundableAmount > 0 ? null : 'Không còn số tiền có thể hoàn.', capturedAmount, completedRefundAmount, reservedRefundAmount, maximumRefundableAmount, estimatedRefundAmount: maximumRefundableAmount, policy: { manualReviewThresholdAmount: policy.manualReviewThresholdAmount, refundProcessingMode: policy.refundProcessingMode } };
   }
 
   async createFromCancellation(input: CreateSystemRefundInput) {
-    return this.createRequest({ ...input, type: RefundType.Cancellation, autoApprove: input.autoApprove ?? true });
+    const policy = await this.policyResolverService.getRefundPolicy();
+    const belowManualReviewThreshold = input.amount <= policy.manualReviewThresholdAmount;
+    return this.createRequest({
+      ...input,
+      type: RefundType.Cancellation,
+      autoApprove: input.autoApprove
+        ?? Boolean(input.isFreeCancel && policy.autoApproveFreeCancelRefund && belowManualReviewThreshold),
+    });
   }
 
   async createFromDispute(input: CreateSystemRefundInput) {
@@ -96,7 +107,9 @@ export class RefundWorkflowService {
   }
 
   async process(refundId: string, adminId: string, expectedVersion: number, mode?: RefundMode, reference?: string) {
-    const refund = await this.transition(refundId, RefundStatus.Approved, RefundStatus.Processing, expectedVersion, { mode: mode ?? RefundMode.Simulated });
+    const policy = await this.policyResolverService.getRefundPolicy();
+    const processingMode = mode ?? policy.refundProcessingMode as RefundMode;
+    const refund = await this.transition(refundId, RefundStatus.Approved, RefundStatus.Processing, expectedVersion, { mode: processingMode });
     const attemptNo = await this.attemptModel.countDocuments({ refundRequestId: refund._id }) + 1;
     const attempt = await this.attemptModel.create({ refundRequestId: refund._id, attemptNo, idempotencyKey: `refund:process:${refund._id}:${attemptNo}`, mode: refund.mode, amount: refund.approvedAmount, status: RefundAttemptStatus.Initiated, reference: reference ?? null });
     if (refund.mode === RefundMode.Gateway) {
@@ -124,9 +137,11 @@ export class RefundWorkflowService {
     const existing = await this.refundModel.findOne({ sourceEventId: input.sourceEventId });
     if (existing) return existing;
     await this.buildAllocations(input.bookingId, input.amount);
-    const created = await this.refundModel.create({ code: `RF-${Date.now()}-${Math.floor(Math.random() * 1000)}`, bookingId: this.id(input.bookingId), requestedBy: this.id(input.requestedBy), type: input.type, sourceEventId: input.sourceEventId, mode: RefundMode.Simulated, amount: input.amount, reason: input.reason, approvedAmount: 0, processedAmount: 0, reservedAmount: 0, allocations: [] });
+    const policy = await this.policyResolverService.getRefundPolicy();
+    const created = await this.refundModel.create({ code: `RF-${Date.now()}-${Math.floor(Math.random() * 1000)}`, bookingId: this.id(input.bookingId), requestedBy: this.id(input.requestedBy), type: input.type, sourceEventId: input.sourceEventId, mode: policy.refundProcessingMode as RefundMode, amount: input.amount, reason: input.reason, approvedAmount: 0, processedAmount: 0, reservedAmount: 0, allocations: [] });
     if (!input.autoApprove) return created;
     const approved = await this.approve(created._id.toString(), input.requestedBy, input.amount, 0, 'Automatically approved by workflow');
+    if (policy.refundProcessingMode !== RefundMode.Simulated) return approved;
     return this.process(approved._id.toString(), input.requestedBy, approved.version, RefundMode.Simulated);
   }
 

@@ -6,6 +6,7 @@ import { Input } from "../../../components/common/Input";
 import { useToast } from "../../../components/feedback/Toast";
 import { ROUTES } from "../../../config/routes";
 import { useAuth } from "../hooks/useAuth";
+import { translateError } from "../../../utils/errorTranslator";
 
 interface ResetPasswordFormProps {
   initialToken?: string;
@@ -64,7 +65,7 @@ export const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
       navigate(ROUTES.LOGIN, { replace: true });
     } catch (err: any) {
       toast.error(
-        err.message ||
+        translateError(err.message) ||
           "Đặt lại mật khẩu thất bại. Mã khôi phục có thể đã quá hạn.",
       );
     } finally {

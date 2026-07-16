@@ -10,10 +10,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
-import { randomUUID } from 'crypto';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
@@ -24,8 +21,6 @@ interface RequestMeta {
   ip?: string;
   headers: Record<string, string | string[] | undefined>;
 }
-
-const avatarDestination = join(process.cwd(), 'uploads', 'avatars');
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -70,22 +65,7 @@ export class UsersController {
 
         callback(null, true);
       },
-      storage: diskStorage({
-        destination: (_request, _file, callback) => {
-          if (!existsSync(avatarDestination)) {
-            mkdirSync(avatarDestination, { recursive: true });
-          }
-          callback(null, avatarDestination);
-        },
-        filename: (_request, file, callback) => {
-          const extensionByMime: Record<string, string> = {
-            'image/jpeg': '.jpg',
-            'image/png': '.png',
-            'image/webp': '.webp',
-          };
-          callback(null, `${randomUUID()}${extensionByMime[file.mimetype]}`);
-        },
-      }),
+      storage: memoryStorage(),
     }),
   )
   updateAvatar(

@@ -35,10 +35,7 @@ export class ProductsRepository {
 
     if (options?.search) {
       const searchRegex = new RegExp(options.search, 'i');
-      query.$or = [
-        { name: searchRegex },
-        { description: searchRegex },
-      ];
+      query.$or = [{ name: searchRegex }, { description: searchRegex }];
     }
 
     if (options?.minPrice !== undefined || options?.maxPrice !== undefined) {
@@ -56,15 +53,21 @@ export class ProductsRepository {
     }
 
     if (options?.colors && options.colors.length > 0) {
-      query.colors = { $in: options.colors.map(c => new RegExp(`^${c}$`, 'i')) };
+      query.colors = {
+        $in: options.colors.map((c) => new RegExp(`^${c}$`, 'i')),
+      };
     }
 
     if (options?.sizes && options.sizes.length > 0) {
-      query.sizes = { $in: options.sizes.map(s => new RegExp(`^${s}$`, 'i')) };
+      query.sizes = {
+        $in: options.sizes.map((s) => new RegExp(`^${s}$`, 'i')),
+      };
     }
 
     if (options?.materials && options.materials.length > 0) {
-      query.materials = { $in: options.materials.map(m => new RegExp(`^${m}$`, 'i')) };
+      query.materials = {
+        $in: options.materials.map((m) => new RegExp(`^${m}$`, 'i')),
+      };
     }
 
     const products = await this.productModel
@@ -73,7 +76,7 @@ export class ProductsRepository {
       .populate('providerId')
       .exec();
 
-    return products.filter(p => {
+    return products.filter((p) => {
       const provider = p.providerId as any;
       return provider && provider.status === 'ACTIVE';
     });
@@ -84,7 +87,11 @@ export class ProductsRepository {
   }
 
   async findById(id: Types.ObjectId): Promise<ProductDocument | null> {
-    return this.productModel.findById(id).populate('categoryId').populate('providerId').exec();
+    return this.productModel
+      .findById(id)
+      .populate('categoryId')
+      .populate('providerId')
+      .exec();
   }
 
   async findPublicById(id: Types.ObjectId): Promise<ProductDocument | null> {
@@ -106,9 +113,18 @@ export class ProductsRepository {
       .exec();
   }
 
-  async update(id: Types.ObjectId, data: Partial<Product>): Promise<ProductDocument | null> {
+  async update(
+    id: Types.ObjectId,
+    data: Partial<Product>,
+    options?: { incrementTaggingRevision?: boolean },
+  ): Promise<ProductDocument | null> {
+    const update: Record<string, unknown> = { $set: data };
+    if (options?.incrementTaggingRevision) {
+      update.$inc = { taggingRevision: 1 };
+    }
+
     return this.productModel
-      .findByIdAndUpdate(id, { $set: data }, { new: true })
+      .findByIdAndUpdate(id, update, { new: true })
       .populate('categoryId')
       .exec();
   }

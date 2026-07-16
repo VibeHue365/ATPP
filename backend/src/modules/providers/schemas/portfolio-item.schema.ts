@@ -18,6 +18,12 @@ export class PortfolioItem {
   @Prop({ type: [String], required: true, default: [] })
   images: string[];
 
+  @Prop({ type: Number, required: true, default: 1, min: 1 })
+  taggingRevision: number;
+
+  @Prop({ type: Number, required: true, default: 0, min: 0 })
+  taggingDecisionVersion: number;
+
   @Prop({
     type: String,
     enum: Object.values(ProductModerationStatus),
@@ -37,4 +43,8 @@ export class PortfolioItem {
 }
 
 export const PortfolioItemSchema = SchemaFactory.createForClass(PortfolioItem);
-PortfolioItemSchema.index({ providerId: 1, moderationStatus: 1, updatedAt: -1 });
+PortfolioItemSchema.index({
+  providerId: 1,
+  moderationStatus: 1,
+  updatedAt: -1,
+});

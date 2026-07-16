@@ -5,6 +5,8 @@ from db.connection import users_col, services_col, bookings_col, db, products_co
 from recommendation.style_engine import StyleMatchingEngine
 from chatbot.chatbot_engine import ChatbotEngine
 from chatbot.normalization import extract_age_and_range, extract_gender
+from tagging.schemas import TaggingRequest, TaggingResponse
+from tagging.tagging_engine import suggest_tags
 
 app    = FastAPI(title="AI Style Matching", version="2.0")
 engine = StyleMatchingEngine()
@@ -22,6 +24,11 @@ class ImageChatRequest(BaseModel):
     message: str = ""
     image_base64: str
     mime_type: str = "image/jpeg"
+
+
+@app.post("/tagging/suggest", response_model=TaggingResponse)
+async def suggest_smart_tags(request: TaggingRequest):
+    return suggest_tags(request)
 
 
 async def _get_product_context(limit: int = 10) -> str:

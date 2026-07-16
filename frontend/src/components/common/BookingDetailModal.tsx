@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PrivateEvidenceImage } from './PrivateEvidenceImage';
 import { httpClient } from '../../services/httpClient';
 import { Modal } from './Modal';
 import { ShieldAlert, User, Clock, FileText, CheckCircle, XCircle } from 'lucide-react';
@@ -491,9 +492,14 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               {incident.evidencePhotos?.length > 0 && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: '8px' }}>
                   {incident.evidencePhotos.map((photo: string, index: number) => (
-                    <a key={photo} href={getEvidenceUrl(photo)} target="_blank" rel="noreferrer" style={{ display: 'block', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #FDE68A' }}>
-                      <img src={getEvidenceUrl(photo)} alt={`Bằng chứng sự cố ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </a>
+                    <PrivateEvidenceImage
+                      key={photo}
+                      reference={photo}
+                      legacyUrl={getEvidenceUrl(photo)}
+                      alt={`Bằng chứng sự cố ${index + 1}`}
+                      linkStyle={{ display: 'block', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #FDE68A' }}
+                      imageStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
                   ))}
                 </div>
               )}
