@@ -70,7 +70,7 @@ export const ProfilePage: React.FC = () => {
       setReviewingItem(null);
       setComment('');
       setRating(5);
-      fetchProfileData();
+      fetchBookings();
     } catch (err: any) {
       toast.error(err.message || 'Gửi đánh giá thất bại');
     }

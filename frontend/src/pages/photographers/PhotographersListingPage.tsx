@@ -17,7 +17,7 @@ import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../features/auth/hooks/useAuth';
-
+import Swal from 'sweetalert2';
 interface Photographer {
   id: string;
   providerId: string;

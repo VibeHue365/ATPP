@@ -19,8 +19,7 @@ interface AuthContextType {
   updateProfile: (payload: any) => Promise<void>;
   updateAvatar: (formData: FormData) => Promise<void>;
   updatePreferences: (payload: any) => Promise<void>;
-  toggleFavorite: (targetType: 'PRODUCT' | 'PHOTOGRAPHER', targetId: string) => Promise<void>;
-  setSession: (accessToken: string, refreshToken: string) => Promise<UserProfile>;
+  toggleFavorite: (targetType: 'PRODUCT' | 'PHOTOGRAPHER' | 'PROVIDER', targetId: string) => Promise<void>;  setSession: (accessToken: string, refreshToken: string) => Promise<UserProfile>;
   clearError: () => void;
 }
 
