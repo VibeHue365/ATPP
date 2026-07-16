@@ -40,15 +40,31 @@ export class ProviderDocumentOcrService {
       if (luminance > 0.9) qualityWarnings.push('IMAGE_TOO_BRIGHT');
       if (contrast < 18) qualityWarnings.push('IMAGE_LOW_CONTRAST');
       const result = await this.remoteOcr(await image.grayscale().normalise().sharpen().png().toBuffer());
-      const id = result.text.match(/\b\d{9,12}\b/)?.[0] ?? null; const owner = verification.businessProfile.ownerName?.trim() ?? null; const normalized = this.normalize(result.text); const warnings: string[] = [...qualityWarnings];
-      if (!result.text) warnings.push('OCR_TEXT_EMPTY'); if (!id) warnings.push('OCR_ID_NUMBER_NOT_FOUND'); if (owner && !normalized.includes(this.normalize(owner))) warnings.push('OWNER_NAME_MISMATCH'); if (result.confidence < 0.8) warnings.push('OCR_LOW_CONFIDENCE');
+      const isIdentityFront = job.documentType === 'IDENTITY_CARD_FRONT';
+      const detectedIdNumber = result.text.match(/\b\d{9,12}\b/)?.[0] ?? null;
+      const ownerName = isIdentityFront
+        ? verification.businessProfile.ownerName?.trim() ?? null
+        : null;
+      const normalizedText = this.normalize(result.text);
+      const warnings: string[] = [...qualityWarnings];
+
+      // A CCCD back image, shop photo, or portfolio does not necessarily contain
+      // the provider name or identity number. Requiring those fields made valid
+      // OCR attempts appear as OCR_FAILED and incorrectly requested a re-upload.
+      if (!result.text) warnings.push('OCR_TEXT_EMPTY');
+      if (isIdentityFront && !detectedIdNumber) warnings.push('OCR_ID_NUMBER_NOT_FOUND');
+      if (ownerName && !normalizedText.includes(this.normalize(ownerName))) {
+        warnings.push('OWNER_NAME_MISMATCH');
+      }
+      if (result.confidence < 0.8) warnings.push('OCR_LOW_CONFIDENCE');
       const peer = verification.documents.find((item) => item.documentType !== job.documentType && (item.documentType === 'IDENTITY_CARD_FRONT' || item.documentType === 'IDENTITY_CARD_BACK'))?.versions.find((candidate) => candidate.isCurrent);
-      const currentFingerprint = id ? this.fingerprint(id) : null;
+      const currentFingerprint = detectedIdNumber ? this.fingerprint(detectedIdNumber) : null;
       if (currentFingerprint && peer?.ocr?.identityFingerprint && peer.ocr.identityFingerprint.keyId === this.config.get<string>('IDENTITY_FINGERPRINT_KEY_ID', 'v1') && peer.ocr.identityFingerprint.value !== currentFingerprint) warnings.push('IDENTITY_NUMBER_MISMATCH_BETWEEN_SIDES');
-      const assessment = !id || qualityWarnings.length > 0 ? OcrAssessment.ReuploadRequired : result.confidence < 0.8 ? OcrAssessment.LowConfidence : warnings.includes('OWNER_NAME_MISMATCH') || warnings.includes('IDENTITY_NUMBER_MISMATCH_BETWEEN_SIDES') ? OcrAssessment.Mismatch : OcrAssessment.Passed;
+      const hasRequiredEvidence = Boolean(result.text) && (!isIdentityFront || Boolean(detectedIdNumber));
+      const assessment = !hasRequiredEvidence || qualityWarnings.length > 0 ? OcrAssessment.ReuploadRequired : result.confidence < 0.8 ? OcrAssessment.LowConfidence : warnings.includes('OWNER_NAME_MISMATCH') || warnings.includes('IDENTITY_NUMBER_MISMATCH_BETWEEN_SIDES') ? OcrAssessment.Mismatch : OcrAssessment.Passed;
       const legacy = assessment === OcrAssessment.Passed ? OcrStatus.Passed : assessment === OcrAssessment.LowConfidence ? OcrStatus.LowConfidence : assessment === OcrAssessment.Mismatch ? OcrStatus.MismatchDetected : OcrStatus.Failed;
-      const fields = { fullName: { value: owner && normalized.includes(this.normalize(owner)) ? owner : null, confidence: result.confidence }, idNumberMasked: { value: id ? `${'*'.repeat(Math.max(0, id.length - 4))}${id.slice(-4)}` : null, confidence: result.confidence } };
-      await this.finish(job, OcrExecutionStatus.Succeeded, assessment, legacy, result.confidence, fields, warnings, id ?? undefined);
+      const fields = { fullName: { value: ownerName && normalizedText.includes(this.normalize(ownerName)) ? ownerName : null, confidence: result.confidence }, idNumberMasked: { value: detectedIdNumber ? `${'*'.repeat(Math.max(0, detectedIdNumber.length - 4))}${detectedIdNumber.slice(-4)}` : null, confidence: result.confidence } };
+      await this.finish(job, OcrExecutionStatus.Succeeded, assessment, legacy, result.confidence, fields, warnings, detectedIdNumber ?? undefined);
     } catch (error) {
       if (retryRemaining) {
         await this.attempts.updateOne({ attemptId: job.attemptId }, { $set: { retryable: true, errorCode: 'OCR_ENGINE_UNAVAILABLE', heartbeatAt: new Date() } });
