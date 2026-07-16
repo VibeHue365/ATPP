@@ -58,6 +58,12 @@ interface VerificationDocumentVersion {
   ocrConfidence?: number | null;
   extractedFields: Record<string, any>;
   mismatchFlags: string[];
+  ocr?: {
+    executionStatus?: string;
+    assessment?: string | null;
+    warningCodes?: string[];
+    nextAction?: string | null;
+  };
 }
 
 interface VerificationDocument {
@@ -92,6 +98,39 @@ const ocrFieldValue = (value: unknown): string | null => {
   return null;
 };
 
+const OCR_WARNING_MESSAGES: Record<string, string> = {
+  OCR_ID_NUMBER_NOT_FOUND: 'Không tìm thấy số CCCD trên ảnh',
+  OWNER_NAME_MISMATCH: 'Tên chủ hồ sơ chưa khớp',
+  IDENTITY_NUMBER_MISMATCH_BETWEEN_SIDES: 'Số CCCD hai mặt không khớp',
+  OCR_LOW_CONFIDENCE: 'Độ tin cậy nhận dạng thấp',
+  OCR_TEXT_EMPTY: 'Không đọc được nội dung trên ảnh',
+  IMAGE_TOO_DARK: 'Ảnh quá tối',
+  IMAGE_TOO_BRIGHT: 'Ảnh bị chói sáng',
+  IMAGE_LOW_CONTRAST: 'Ảnh có độ tương phản thấp',
+  OCR_ENGINE_UNAVAILABLE: 'Dịch vụ OCR đang tạm thời không khả dụng',
+  OCR_QUEUE_DELIVERY_FAILED: 'Không thể gửi yêu cầu OCR',
+};
+
+function getOcrPresentation(version?: VerificationDocumentVersion) {
+  const status = version?.ocrStatus ?? 'NOT_STARTED';
+  const warningCodes = version?.ocr?.warningCodes?.length
+    ? version.ocr.warningCodes
+    : version?.mismatchFlags ?? [];
+  const messages = warningCodes.map((code) => OCR_WARNING_MESSAGES[code] ?? code);
+  const executionStatus = version?.ocr?.executionStatus;
+  const isProcessing = executionStatus === 'PROCESSING' || status === 'OCR_PROCESSING';
+
+  if (isProcessing) return { label: 'Đang quét OCR', message: 'Hệ thống đang xử lý tài liệu', allMessages: '', color: '#9A6700', background: '#FFFAEB', borderColor: '#FEC84B', isProcessing, retryLabel: 'Đang quét' };
+  if (status === 'OCR_PASSED') return { label: 'Đã xác minh', message: '', allMessages: '', color: '#067647', background: '#ECFDF3', borderColor: '#ABEFC6', isProcessing, retryLabel: 'Quét lại' };
+  if (status === 'OCR_LOW_CONFIDENCE') return { label: 'Độ tin cậy thấp', message: messages[0] ?? 'Hãy kiểm tra ảnh trước khi phê duyệt', allMessages: messages.join(' • '), color: '#9A6700', background: '#FFFAEB', borderColor: '#FEC84B', isProcessing, retryLabel: 'Quét lại' };
+  if (status === 'MISMATCH_DETECTED') return { label: 'Cần đối chiếu', message: messages[0] ?? 'Thông tin OCR chưa khớp hồ sơ', allMessages: messages.join(' • '), color: '#B42318', background: '#FEF3F2', borderColor: '#FECDCA', isProcessing, retryLabel: 'Quét lại' };
+  if (status === 'NEEDS_MANUAL_REVIEW') return { label: 'Cần kiểm tra thủ công', message: messages[0] ?? 'Admin cần đối chiếu tài liệu', allMessages: messages.join(' • '), color: '#6941C6', background: '#F9F5FF', borderColor: '#D9D6FE', isProcessing, retryLabel: 'Quét lại' };
+  if (status === 'OCR_FAILED') {
+    const completed = executionStatus === 'SUCCEEDED';
+    return { label: completed ? 'Cần kiểm tra lại ảnh' : 'OCR không xử lý được', message: messages[0] ?? (completed ? 'Ảnh chưa cung cấp đủ thông tin cần thiết' : 'Có thể thử quét lại tài liệu'), allMessages: messages.join(' • '), color: '#B42318', background: '#FEF3F2', borderColor: '#FECDCA', isProcessing, retryLabel: 'Quét lại' };
+  }
+  return { label: 'Chưa chạy OCR', message: 'Chưa có kết quả nhận dạng', allMessages: '', color: '#475467', background: '#F2F4F7', borderColor: '#D0D5DD', isProcessing, retryLabel: 'Chạy OCR' };
+}
 function VerificationDocumentPreview({ document }: { document: SelectedVerificationDocument }) {
   const [source, setSource] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -2381,9 +2420,8 @@ export const AdminDashboardPage: React.FC = () => {
                 const ver = doc.versions?.find((version: any) => version.isCurrent) ?? doc.versions?.[0];
                 const typeText = verificationDocumentLabels[doc.documentType] ?? doc.documentType;
 
-                const isPassed = ver?.ocrStatus === 'OCR_PASSED';
-                const isManual = ver?.ocrStatus === 'NEEDS_MANUAL_REVIEW';
-                const ocrColor = isPassed ? '#166534' : isManual ? '#D69E2E' : '#991B1B';
+                const ocrPresentation = getOcrPresentation(ver);
+                const canRetryOcr = Boolean(ver) && !ocrPresentation.isProcessing && ['NOT_STARTED', 'OCR_FAILED', 'OCR_LOW_CONFIDENCE'].includes(ver.ocrStatus);
 
                 return (
                   <div
@@ -2391,9 +2429,9 @@ export const AdminDashboardPage: React.FC = () => {
                     onClick={() => ver && setSelectedDocPreview({ verificationId: v.verificationId, documentType: doc.documentType, versionNo: ver.versionNo, mimeType: ver.mimeType })}
                     style={{
                       padding: '10px 12px', border: '1px solid #E8E2D5', borderRadius: '6px', cursor: 'pointer',
-                      backgroundColor: selectedDocPreview?.documentType === doc.documentType ? '#FFF9F9' : 'white',
-                      borderColor: selectedDocPreview?.documentType === doc.documentType ? '#4A0E17' : '#E8E2D5',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s'
+                      backgroundColor: selectedDocPreview?.documentType === doc.documentType ? '#FFF9F9' : ocrPresentation.background,
+                      borderColor: selectedDocPreview?.documentType === doc.documentType ? '#4A0E17' : ocrPresentation.borderColor,
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', transition: 'all 0.2s'
                     }}
                   >
                     <div>
@@ -2406,23 +2444,28 @@ export const AdminDashboardPage: React.FC = () => {
                           return <span style={{ fontSize: '10px', color: '#7A7A7A' }}>{idNumber ? `Số CCCD: ${idNumber}` : `Mã MST: ${taxCode}`}</span>;
                         })()}
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: ocrColor, display: 'block' }}>
-                        {ver?.ocrStatus}
+                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', maxWidth: '180px' }}>
+                      <span style={{ padding: '3px 6px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, color: ocrPresentation.color, backgroundColor: ocrPresentation.background, border: `1px solid ${ocrPresentation.borderColor}`, display: 'inline-flex' }}>
+                        {ocrPresentation.label}
                       </span>
-                      {ver?.mismatchFlags && ver.mismatchFlags.length > 0 && (
-                        <span style={{ fontSize: '9px', color: '#991B1B', fontWeight: 600 }}>⚠ Mismatch detected</span>
+                      {ocrPresentation.message && (
+                        <span title={ocrPresentation.allMessages || ocrPresentation.message} style={{ fontSize: '9px', color: ocrPresentation.color, fontWeight: 600, lineHeight: 1.35 }}>
+                          ⚠ {ocrPresentation.message}
+                        </span>
                       )}
-                      {(ver?.ocrStatus === 'NOT_STARTED' || ver?.ocrStatus === 'OCR_FAILED') && (
+                      {typeof ver?.ocrConfidence === 'number' && (
+                        <span style={{ fontSize: '9px', color: '#667085' }}>Độ tin cậy: {Math.round(ver.ocrConfidence * 100)}%</span>
+                      )}
+                      {canRetryOcr && (
                         <button
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
                             handleRunVerificationOcr(v.verificationId, doc.documentType);
                           }}
-                          style={{ marginTop: '6px', border: '1px solid #706E3B', borderRadius: '4px', backgroundColor: 'white', color: '#706E3B', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                          style={{ marginTop: '2px', border: '1px solid #706E3B', borderRadius: '4px', backgroundColor: 'white', color: '#706E3B', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
                         >
-                          Chạy OCR
+                          {ocrPresentation.retryLabel}
                         </button>
                       )}
                     </div>

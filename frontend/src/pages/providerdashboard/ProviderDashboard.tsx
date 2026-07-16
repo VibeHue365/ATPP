@@ -12,6 +12,7 @@ import { useToast } from '../../components/feedback/Toast';
 import { Modal } from '../../components/common/Modal';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { API_BASE_URL } from '../../config/env';
+import { SmartTagEditor } from '../../features/smart-tagging/components/SmartTagEditor';
 
 interface Order {
   _id: string;
@@ -48,6 +49,7 @@ interface Product {
   style?: string;
   occasions?: string[];
   status: 'ACTIVE' | 'DRAFT' | 'INACTIVE';
+  taggingDecisionVersion?: number;
 }
 
 export const ProviderDashboard: React.FC = () => {
@@ -300,7 +302,7 @@ export const ProviderDashboard: React.FC = () => {
           text: msg,
           icon: 'error',
           confirmButtonText: 'Đăng xuất',
-          confirmButtonColor: '#4A0E17',
+          confirmButtonColor: 'var(--color-primary)',
           allowOutsideClick: false,
         }).then(() => {
           logout();
@@ -391,7 +393,7 @@ export const ProviderDashboard: React.FC = () => {
       showCancelButton: true,
       confirmButtonText: 'Đồng ý thanh lý',
       cancelButtonText: 'Hủy bỏ',
-      confirmButtonColor: '#4A0E17',
+      confirmButtonColor: 'var(--color-primary)',
       cancelButtonColor: '#71717A'
     });
 
@@ -405,7 +407,7 @@ export const ProviderDashboard: React.FC = () => {
           title: 'Không thể thanh lý',
           text: err.message || 'Lỗi xảy ra khi thanh lý hiện vật.',
           icon: 'error',
-          confirmButtonColor: '#4A0E17'
+          confirmButtonColor: 'var(--color-primary)'
         });
       }
     }
@@ -1185,7 +1187,7 @@ export const ProviderDashboard: React.FC = () => {
       return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
           <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-            <div style={{ width: '40px', height: '40px', border: '3px solid #E8E2D5', borderTop: '3px solid #4A0E17', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px auto' }} />
+            <div style={{ width: '40px', height: '40px', border: '3px solid var(--color-light-border)', borderTop: '3px solid var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px auto' }} />
             <p style={{ fontWeight: 600 }}>Đang tải số liệu phân tích...</p>
           </div>
         </div>
@@ -1207,29 +1209,29 @@ export const ProviderDashboard: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#4A0E17' }}>Quản trị Cửa hàng</h2>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--color-primary)' }}>Quản trị Cửa hàng</h2>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Phân tích số liệu vận hành và doanh thu áo dài của bạn.</p>
             </div>
             {isShop && isPhoto && (
               <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--color-light-bg)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
-                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
+                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? 'var(--color-primary)' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
+                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? 'var(--color-primary)' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
               </div>
             )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
             {[
-              { label: 'Doanh thu cửa hàng', val: `${(analyticsData.totalRevenue || 0).toLocaleString('vi-VN')} đ`, desc: 'Tổng doanh thu thực', color: '#4A0E17', bg: '#FAF6F0' },
+              { label: 'Doanh thu cửa hàng', val: `${(analyticsData.totalRevenue || 0).toLocaleString('vi-VN')} đ`, desc: 'Tổng doanh thu thực', color: 'var(--color-primary)', bg: '#FAF6F0' },
               { label: 'Tỷ lệ thành công', val: `${analyticsData.successRate}%`, desc: 'Booking hoàn thành', color: '#166534', bg: '#F0FDF4' },
               { label: 'Tỷ lệ hủy lịch', val: `${analyticsData.cancelRate}%`, desc: 'Lịch khách hủy', color: '#991B1B', bg: '#FEE2E2' },
-              { label: 'Tổng sản phẩm', val: `${String(analyticsData.totalProducts).padStart(2, '0')} Item`, desc: 'Đồ đang hoạt động', color: '#706E3B', bg: '#FAF6F0' },
+              { label: 'Tổng sản phẩm', val: `${String(analyticsData.totalProducts).padStart(2, '0')} Item`, desc: 'Đồ đang hoạt động', color: 'var(--color-gold-dark)', bg: '#FAF6F0' },
               { label: 'Thời gian thuê tb', val: analyticsData.averageRentalDuration, desc: 'Thời gian mỗi đơn', color: '#15803D', bg: '#F0FDF4' }
             ].map((m, idx) => (
               <div key={idx} style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '120px' }}>
                 <div>
                   <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</span>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: idx === 0 ? '#4A0E17' : '#2A2A2A', marginTop: '6px', wordBreak: 'break-all' }}>{m.val}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 800, color: idx === 0 ? 'var(--color-primary)' : 'var(--color-text-primary)', marginTop: '6px', wordBreak: 'break-all' }}>{m.val}</div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #F0ECE4', paddingTop: '8px' }}>
                   <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{m.desc}</span>
@@ -1243,7 +1245,7 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Doanh thu Áo dài</h3>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Doanh thu Áo dài</h3>
               <div style={{ height: '300px', width: '100%' }}>
                 <svg viewBox="0 0 500 300" style={{ width: '100%', height: '100%' }}>
                   {[0, 0.25, 0.5, 0.75, 1].map((p, idx) => {
@@ -1252,15 +1254,15 @@ export const ProviderDashboard: React.FC = () => {
                       <line key={idx} x1="40" y1={y} x2="480" y2={y} stroke="#F0ECE4" strokeDasharray="3 3" />
                     );
                   })}
-                  <polyline fill="none" stroke="#4A0E17" strokeWidth="3" points={points} />
+                  <polyline fill="none" stroke="var(--color-primary)" strokeWidth="3" points={points} />
                   {analyticsData.revenueGrowth.map((r: any, idx: number) => {
                     const x = 50 + idx * 80;
                     const y = 260 - (r.value / maxRev) * 200;
                     return (
                       <g key={idx}>
-                        <circle cx={x} cy={y} r="5" fill="#4A0E17" />
+                        <circle cx={x} cy={y} r="5" fill="var(--color-primary)" />
                         <circle cx={x} cy={y} r="2" fill="white" />
-                        <text x={x} y={y - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="#2A2A2A">{(r.value/1000000).toFixed(1)}M</text>
+                        <text x={x} y={y - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--color-text-primary)">{(r.value/1000000).toFixed(1)}M</text>
                         <text x={x} y="285" textAnchor="middle" fontSize="10" fontWeight="600" fill="var(--color-text-secondary)">{r.label.replace('Tháng ', 'T')}</text>
                       </g>
                     );
@@ -1270,7 +1272,7 @@ export const ProviderDashboard: React.FC = () => {
             </div>
 
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Top Phổ biến</h3>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Top Phổ biến</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {analyticsData.popularProducts && analyticsData.popularProducts.length > 0 ? (
                   analyticsData.popularProducts.map((p: any, idx: number) => (
@@ -1278,12 +1280,12 @@ export const ProviderDashboard: React.FC = () => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <img src={getImageUrl(p.image)} alt={p.name} style={{ width: '44px', height: '44px', borderRadius: '6px', objectFit: 'cover' }} />
                         <div>
-                          <strong style={{ fontSize: '13px', color: '#2A2A2A', display: 'block' }}>{p.name}</strong>
+                          <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)', display: 'block' }}>{p.name}</strong>
                           <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Mẫu áo được thuê nhiều</span>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <strong style={{ fontSize: '14px', color: '#4A0E17' }}>{p.count}</strong>
+                        <strong style={{ fontSize: '14px', color: 'var(--color-primary)' }}>{p.count}</strong>
                         <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', display: 'block' }}>lượt thuê</span>
                       </div>
                     </div>
@@ -1297,7 +1299,7 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', overflow: 'hidden' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-light-border)' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Báo cáo hàng tồn kho & Bảo trì</h3>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Báo cáo hàng tồn kho & Bảo trì</h3>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
@@ -1311,7 +1313,7 @@ export const ProviderDashboard: React.FC = () => {
               <tbody>
                 {analyticsData.inventoryStatus.map((item: any, idx: number) => (
                   <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
-                    <td style={{ padding: '16px 24px', fontWeight: 700, color: '#2A2A2A' }}>{item.name}</td>
+                    <td style={{ padding: '16px 24px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.name}</td>
                     <td style={{ padding: '16px 24px', textAlign: 'center' }}>
                       <span style={{ 
                         padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
@@ -1338,13 +1340,13 @@ export const ProviderDashboard: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#4A0E17' }}>Tổng quan Hiệu suất</h2>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--color-primary)' }}>Tổng quan Hiệu suất</h2>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Thống kê doanh thu, lịch trình chụp và phản hồi đánh giá của bạn.</p>
             </div>
             {isShop && isPhoto && (
               <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--color-light-bg)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
-                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
+                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? 'var(--color-primary)' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
+                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? 'var(--color-primary)' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
               </div>
             )}
           </div>
@@ -1352,7 +1354,7 @@ export const ProviderDashboard: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
               <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Doanh thu nhiếp ảnh</span>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: '#4A0E17', marginTop: '8px' }}>{(analyticsData.totalRevenue || 84250000).toLocaleString('vi-VN')} VND</div>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-primary)', marginTop: '8px' }}>{(analyticsData.totalRevenue || 84250000).toLocaleString('vi-VN')} VND</div>
               <span style={{ fontSize: '12px', color: '#166534', marginTop: '6px', display: 'block', fontWeight: 600 }}>↑ Tăng trưởng tốt trong mùa lễ</span>
             </div>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
@@ -1374,14 +1376,14 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Doanh thu theo thời gian</h3>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Doanh thu theo thời gian</h3>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '280px', paddingTop: '20px' }}>
                 {analyticsData.revenueGrowth.map((r: any, idx: number) => {
                   const barHeight = (r.value / maxVal) * 220;
                   return (
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
                       <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{(r.value/1000000).toFixed(1)}M</span>
-                      <div style={{ width: '32px', height: `${barHeight}px`, backgroundColor: '#4A0E17', borderRadius: '4px 4px 0 0', transition: 'height 0.3s ease' }} />
+                      <div style={{ width: '32px', height: `${barHeight}px`, backgroundColor: 'var(--color-primary)', borderRadius: '4px 4px 0 0', transition: 'height 0.3s ease' }} />
                       <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)' }}>{r.label.replace('Tháng ', 'T')}</span>
                     </div>
                   );
@@ -1390,13 +1392,13 @@ export const ProviderDashboard: React.FC = () => {
             </div>
 
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Lịch chụp sắp tới</h3>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Lịch chụp sắp tới</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {analyticsData.upcomingSchedules && analyticsData.upcomingSchedules.length > 0 ? (
                   analyticsData.upcomingSchedules.map((s: any, idx: number) => (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
                       <div>
-                        <strong style={{ fontSize: '13px', color: '#2A2A2A', display: 'block' }}>{s.customerName}</strong>
+                        <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)', display: 'block' }}>{s.customerName}</strong>
                         <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{s.date} • {s.time}</span>
                       </div>
                       <span style={{ 
@@ -1415,8 +1417,8 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '20px' }}>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase', alignSelf: 'flex-start' }}>Đánh giá trung bình</h3>
-              <div style={{ fontSize: '64px', fontWeight: 900, color: '#4A0E17', lineHeight: 1 }}>{analyticsData.averageRating}</div>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase', alignSelf: 'flex-start' }}>Đánh giá trung bình</h3>
+              <div style={{ fontSize: '64px', fontWeight: 900, color: 'var(--color-primary)', lineHeight: 1 }}>{analyticsData.averageRating}</div>
               <div style={{ display: 'flex', gap: '4px', fontSize: '20px', color: '#B89047' }}>
                 {Array.from({ length: 5 }).map((_, i) => (
                   <span key={i}>★</span>
@@ -1426,7 +1428,7 @@ export const ProviderDashboard: React.FC = () => {
             </div>
 
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Phong cách phổ biến</h3>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Phong cách phổ biến</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {analyticsData.popularConcepts && analyticsData.popularConcepts.length > 0 ? (
                   analyticsData.popularConcepts.map((c: any, idx: number) => (
@@ -1574,7 +1576,7 @@ export const ProviderDashboard: React.FC = () => {
                     <tbody>
                       {inventorySummary.map((item, idx) => (
                         <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
-                          <td style={{ padding: '12px 16px', fontWeight: 700, color: '#2A2A2A' }}>{item.productName}</td>
+                          <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.productName}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{item.color}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>{item.total}</td>
@@ -1617,7 +1619,7 @@ export const ProviderDashboard: React.FC = () => {
                         const isRetired = item.conditionStatus === 'RETIRED';
                         return (
                           <tr key={item._id} style={{ borderBottom: '1px solid var(--color-light-border)', opacity: isRetired ? 0.6 : 1 }}>
-                            <td style={{ padding: '16px 20px', fontWeight: 700, color: '#4A0E17' }}>{item.sku}</td>
+                            <td style={{ padding: '16px 20px', fontWeight: 700, color: 'var(--color-primary)' }}>{item.sku}</td>
                             <td style={{ padding: '16px 20px', fontWeight: 700 }}>{item.productId?.name || 'Sản phẩm lỗi'}</td>
                             <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
                             <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.color}</td>
@@ -1653,7 +1655,7 @@ export const ProviderDashboard: React.FC = () => {
                                     }}
                                     style={{
                                       padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
-                                      backgroundColor: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '11px', color: '#4A0E17'
+                                      backgroundColor: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)'
                                     }}
                                   >
                                     Cập nhật
@@ -1713,7 +1715,7 @@ export const ProviderDashboard: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-light-bg)' }}>
       {/* SIDEBAR */}
       <aside style={{ width: '280px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '32px 20px', flexShrink: 0, position: 'sticky', top: 0, height: '100vh', overflowY: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         <div>
@@ -1742,10 +1744,10 @@ export const ProviderDashboard: React.FC = () => {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, backgroundColor: 'var(--color-light-bg)' }}>
         {/* TOP BAR */}
         <header style={{
-          height: '60px', borderBottom: '1px solid var(--color-light-border)', backgroundColor: 'rgba(255,255,255,0.85)',
+          height: '60px', borderBottom: '1px solid var(--color-light-border)', backgroundColor: 'var(--color-light-card)',
           backdropFilter: 'blur(10px)', padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           position: 'sticky', top: 0, zIndex: 30,
         }}>
@@ -1783,7 +1785,7 @@ export const ProviderDashboard: React.FC = () => {
                 }}>
                   {/* Header */}
                   <div style={{
-                    padding: '14px 18px', borderBottom: '1px solid #F0EBE3',
+                    padding: '14px 18px', borderBottom: '1px solid var(--color-light-border)',
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     background: 'linear-gradient(135deg, #FAF6F0 0%, #FFF 100%)'
                   }}>
@@ -1798,8 +1800,8 @@ export const ProviderDashboard: React.FC = () => {
                         onClick={handleNotiMarkAllAsRead}
                         style={{
                           display: 'flex', alignItems: 'center', gap: '4px',
-                          padding: '4px 8px', border: '1px solid #E8E2D5', borderRadius: '5px',
-                          backgroundColor: 'white', color: '#706E3B', fontSize: '10px',
+                          padding: '4px 8px', border: '1px solid var(--color-light-border)', borderRadius: '5px',
+                          backgroundColor: 'white', color: 'var(--color-gold-dark)', fontSize: '10px',
                           fontWeight: 600, cursor: 'pointer'
                         }}
                       >
@@ -1812,13 +1814,13 @@ export const ProviderDashboard: React.FC = () => {
                   {/* List */}
                   <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
                     {loadingNoti ? (
-                      <div style={{ padding: '40px', textAlign: 'center', color: '#7A7A7A' }}>
+                      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
                         <span style={{ fontSize: '12px', fontWeight: 600 }}>Đang tải...</span>
                       </div>
                     ) : notifications.length === 0 ? (
                       <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                        <Bell size={28} color="#D4C5A9" style={{ marginBottom: '8px' }} />
-                        <p style={{ margin: 0, fontSize: '12px', color: '#7A7A7A', fontWeight: 600 }}>Chưa có thông báo</p>
+                        <Bell size={28} color="var(--color-gold-light)" style={{ marginBottom: '8px' }} />
+                        <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Chưa có thông báo</p>
                       </div>
                     ) : (
                       notifications.map((noti) => {
@@ -1829,7 +1831,7 @@ export const ProviderDashboard: React.FC = () => {
                             onClick={() => !noti.isRead && handleNotiMarkAsRead(noti._id)}
                             style={{
                               padding: '12px 18px', cursor: 'pointer',
-                              borderBottom: '1px solid #F5F0E8',
+                              borderBottom: '1px solid var(--color-light-border)',
                               backgroundColor: noti.isRead ? 'white' : '#FFFCF7',
                               transition: 'background 0.15s',
                               display: 'flex', gap: '10px', alignItems: 'flex-start',
@@ -1855,7 +1857,7 @@ export const ProviderDashboard: React.FC = () => {
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
-                                <span style={{ fontSize: '12px', fontWeight: noti.isRead ? 600 : 750, color: '#2A2A2A' }}>
+                                <span style={{ fontSize: '12px', fontWeight: noti.isRead ? 600 : 750, color: 'var(--color-text-primary)' }}>
                                   {noti.title}
                                 </span>
                                 <span style={{
@@ -1867,13 +1869,13 @@ export const ProviderDashboard: React.FC = () => {
                                 </span>
                               </div>
                               <p style={{
-                                margin: 0, fontSize: '11px', color: '#6B6B6B',
+                                margin: 0, fontSize: '11px', color: 'var(--color-text-secondary)',
                                 lineHeight: '1.4', display: '-webkit-box', WebkitLineClamp: 2,
                                 WebkitBoxOrient: 'vertical' as any, overflow: 'hidden'
                               }}>
                                 {noti.content}
                               </p>
-                              <span style={{ fontSize: '9px', color: '#B0A89A', fontWeight: 500, marginTop: '3px', display: 'block' }}>
+                              <span style={{ fontSize: '9px', color: 'var(--color-text-secondary)', fontWeight: 500, marginTop: '3px', display: 'block' }}>
                                 {getNotiTimeAgo(noti.createdAt)}
                               </span>
                             </div>
@@ -1957,7 +1959,7 @@ export const ProviderDashboard: React.FC = () => {
                 </div>
               </div>
               <div style={{
-                backgroundColor: '#FDF4F4', border: '1px solid rgba(161,30,34,0.12)', borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--color-primary-trans)', border: '1px solid rgba(161,30,34,0.12)', borderRadius: 'var(--radius-md)',
                 padding: '24px', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center',
               }}>
                 <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Doanh thu tháng này</div>
@@ -2804,7 +2806,7 @@ export const ProviderDashboard: React.FC = () => {
                               <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingCode || '—'}</td>
                               <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.amount || 0).toLocaleString('vi-VN')}đ</td>
                               <td style={{ padding: '16px 20px' }}>
-                                <span style={{ fontWeight: 600, color: '#2A2A2A' }}>{p.bank}</span>
+                                <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{p.bank}</span>
                                 <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{p.account} • {p.accountHolder}</span>
                               </td>
                               <td style={{ padding: '16px 20px', textAlign: 'center' }}>
@@ -3109,7 +3111,7 @@ export const ProviderDashboard: React.FC = () => {
             border: '1px solid var(--color-light-border)',
             borderRadius: '8px',
             padding: '20px',
-            backgroundColor: '#FAFAFA'
+            backgroundColor: 'var(--color-light-bg)'
           }}>
             {/* Cột 1: Thuộc tính Vật lý */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -3127,7 +3129,7 @@ export const ProviderDashboard: React.FC = () => {
                         style={{
                           padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
                           border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
+                          backgroundColor: isSelected ? 'var(--color-primary-trans)' : 'white',
                           color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
                           cursor: 'pointer', transition: 'all 0.15s',
                         }}
@@ -3157,7 +3159,7 @@ export const ProviderDashboard: React.FC = () => {
                         style={{
                           padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
                           border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
+                          backgroundColor: isSelected ? 'var(--color-primary-trans)' : 'white',
                           color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
                           cursor: 'pointer', transition: 'all 0.15s',
                         }}
@@ -3186,7 +3188,7 @@ export const ProviderDashboard: React.FC = () => {
                         style={{
                           padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
                           border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
+                          backgroundColor: isSelected ? 'var(--color-primary-trans)' : 'white',
                           color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
                           cursor: 'pointer', transition: 'all 0.15s',
                         }}
@@ -3219,7 +3221,7 @@ export const ProviderDashboard: React.FC = () => {
                         style={{
                           padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
                           border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
+                          backgroundColor: isSelected ? 'var(--color-primary-trans)' : 'white',
                           color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
                           cursor: 'pointer', transition: 'all 0.15s',
                         }}
@@ -3255,7 +3257,7 @@ export const ProviderDashboard: React.FC = () => {
                           fontSize: '11px',
                           fontWeight: 700,
                           border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
+                          backgroundColor: isSelected ? 'var(--color-primary-trans)' : 'white',
                           color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
                           cursor: 'pointer',
                           transition: 'all 0.15s',
@@ -3271,6 +3273,10 @@ export const ProviderDashboard: React.FC = () => {
             </div>
           </div>
 
+          <SmartTagEditor
+            productId={editingProduct?._id}
+            initialDecisionVersion={editingProduct?.taggingDecisionVersion}
+          />
           {/* Form Actions */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', borderTop: '1px solid var(--color-light-border)', paddingTop: '16px' }}>
             <button 

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, ShoppingCart } from 'lucide-react';
 import { httpClient } from '../../../services/httpClient';
 import { ROUTES } from '../../../config/routes';
+import { SmartTagList } from '../../smart-tagging/components/SmartTagList';
+import type { PublicSmartTagBadge } from '../../smart-tagging/types/smartTag.types';
 
 interface AoDaiItem {
   id: string;
@@ -11,6 +13,7 @@ interface AoDaiItem {
   price: string;
   status: 'AVAILABLE' | 'RESERVED';
   image: string;
+  badges?: PublicSmartTagBadge[];
 }
 
 interface ProductFromDb {
@@ -23,6 +26,7 @@ interface ProductFromDb {
   colors: string[];
   materials: string[];
   status: string;
+  badges?: PublicSmartTagBadge[];
 }
 
 const translateMaterial = (mat: string): string => {
@@ -53,6 +57,7 @@ export const AoDaiProductGrid: React.FC = () => {
           price: p.basePrice.toLocaleString('vi-VN') + 'đ',
           status: p.status === 'ACTIVE' ? 'AVAILABLE' : 'RESERVED',
           image: p.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+          badges: p.badges,
         }));
 
         setItems(mappedItems);
@@ -144,6 +149,9 @@ export const AoDaiProductGrid: React.FC = () => {
                     <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '4px' }}>
                       {item.material}
                     </span>
+                    <div style={{ marginTop: '10px' }}>
+                      <SmartTagList badges={item.badges} limit={2} />
+                    </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--color-light-border)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
