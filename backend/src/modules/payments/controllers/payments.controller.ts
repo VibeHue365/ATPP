@@ -10,58 +10,18 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { IsEnum, IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { PaymentsService } from '../services/payments.service';
-import { Payment, PaymentPurpose } from '../schemas/payment.schema';
-import { PaymentWebhookEvent } from '../schemas/payment-webhook-event.schema';
-
-export class CreatePaymentLinkDto {
-  @IsString()
-  @IsNotEmpty()
-  bookingId: string;
-
-  @IsEnum(PaymentPurpose)
-  purpose: PaymentPurpose;
-}
-
-export class ResolveDisputeDto {
-  @IsNumber()
-  @Min(0)
-  refundToCustomer: number;
-
-  @IsNumber()
-  @Min(0)
-  payToProvider: number;
-}
-
-export class WebhookBodyDto {
-  @IsString()
-  @IsNotEmpty()
-  code: string;
-
-  @IsString()
-  @IsNotEmpty()
-  desc: string;
-
-  @IsNotEmpty()
-  data: Record<string, unknown>;
-
-  @IsString()
-  @IsNotEmpty()
-  signature: string;
-}
-
-interface WebhookData {
-  orderCode?: number;
-  status?: string;
-}
+import { PaymentsRepository } from '../repositories/payments.repository';
+import { WebhookEventRepository } from '../repositories/webhook-event.repository';
+import { CreatePaymentLinkDto } from '../dto/create-payment-link.dto';
+import { ResolveDisputeDto } from '../dto/resolve-dispute.dto';
+import { WebhookBodyDto } from '../dto/webhook-body.dto';
+import { WebhookData } from '../interfaces/webhook.interfaces';
 
 @Controller('payments')
 export class PaymentsController {
@@ -70,9 +30,8 @@ export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly configService: ConfigService,
-    @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
-    @InjectModel(PaymentWebhookEvent.name)
-    private readonly webhookEventModel: Model<PaymentWebhookEvent>,
+    private readonly paymentsRepository: PaymentsRepository,
+    private readonly webhookEventRepository: WebhookEventRepository,
   ) {}
 
   @Post('create-link')
@@ -121,17 +80,10 @@ export class PaymentsController {
     if (orderCode !== undefined && status) {
       const webhookId = `payos_${orderCode}_${status}`;
       try {
-        const event = await this.webhookEventModel.findOneAndUpdate(
-          { webhookId },
-          {
-            $setOnInsert: {
-              provider: 'PAYOS',
-              payload: body.data,
-              signature: body.signature,
-              processed: false,
-            },
-          },
-          { upsert: true, new: false },
+        const event = await this.webhookEventRepository.findOrCreateEvent(
+          webhookId,
+          body.data,
+          body.signature,
         );
 
         if (event && event.processed) {
@@ -163,10 +115,7 @@ export class PaymentsController {
         this.logger.warn(`Invalid signature detected in payOS webhook!`);
         if (orderCode !== undefined && status) {
           const webhookId = `payos_${orderCode}_${status}`;
-          await this.webhookEventModel.updateOne(
-            { webhookId },
-            { $set: { error: 'Signature verification failed' } },
-          );
+          await this.webhookEventRepository.markError(webhookId, 'Signature verification failed');
         }
         throw new BadRequestException('Signature verification failed');
       }
@@ -179,9 +128,7 @@ export class PaymentsController {
     this.logger.log(`Received payOS webhook for orderCode: ${orderCode}`);
 
     if (status === 'PAID' && orderCode !== undefined) {
-      const payment = await this.paymentModel.findOne({
-        'payos.orderCode': orderCode,
-      });
+      const payment = await this.paymentsRepository.findByOrderCode(orderCode);
       if (payment) {
         await this.paymentsService.confirmPayment(payment.paymentCode);
       }
@@ -189,10 +136,7 @@ export class PaymentsController {
 
     if (orderCode !== undefined && status) {
       const webhookId = `payos_${orderCode}_${status}`;
-      await this.webhookEventModel.updateOne(
-        { webhookId },
-        { $set: { processed: true, processedAt: new Date() } },
-      );
+      await this.webhookEventRepository.markProcessed(webhookId);
     }
 
     return { status: 'success' };
@@ -232,7 +176,7 @@ export class PaymentsController {
   @Get('checkout/:code')
   async renderCheckout(@Param('code') code: string, @Res() res: Response) {
     try {
-      const payment = await this.paymentModel.findOne({ paymentCode: code }).populate('bookingId');
+      const payment = await this.paymentsRepository.findPaymentWithBooking(code);
       if (!payment) {
         return res.status(404).send('Không tìm thấy thông tin thanh toán.');
       }
