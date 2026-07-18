@@ -42,7 +42,7 @@ import {
   InventoryReservation,
   ReservationStatus,
 } from '../../products/schemas/inventory-reservation.schema';
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsNumber, IsArray, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum, IsNumber, IsArray, IsInt, Min, Max } from 'class-validator';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/schemas/notification.schema';
 import { PolicyResolverService } from '../../system-policies/services/policy-resolver.service';
@@ -59,9 +59,10 @@ export class CreateBookingItemDto {
   @IsOptional()
   photographyPackageId?: string;
 
-  @IsNumber()
+  @IsInt()
   @IsOptional()
   @Min(1)
+  @Max(10)
   quantity?: number;
 
   @IsString()
@@ -157,8 +158,10 @@ export class CreateProductBookingDto {
   @IsNotEmpty()
   color: string;
 
-  @IsNumber()
+  @IsInt()
   @IsOptional()
+  @Min(1)
+  @Max(10)
   quantity?: number;
 }
 
@@ -342,6 +345,14 @@ export class BookingsService implements OnApplicationBootstrap {
     quantity: number,
     session?: any,
   ): Promise<Types.ObjectId[]> {
+    // Guard phòng thủ cho quantity: chặn 0/âm/số lẻ/quá lớn ở MỌI đường gọi
+    // (kể cả route POST /bookings dùng @Body() any nên bỏ qua DTO validator).
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      throw new BadRequestException('Số lượng thuê không hợp lệ.');
+    }
+    if (quantity > 10) {
+      throw new BadRequestException('Chỉ được thuê tối đa 10 chiếc cho mỗi lần đặt.');
+    }
     const sizeVal = size.trim().toUpperCase();
     const colorVal = this.normalizeColor(color);
 

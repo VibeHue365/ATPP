@@ -259,7 +259,7 @@ export const AdminDashboardPage: React.FC = () => {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate('/auth/login');
   };
 
   const [activeTab, setActiveTab] = useState<string>('overview');

@@ -38,6 +38,9 @@ export class InventoryItem {
   @Prop({ required: true, trim: true })
   color: string;
 
+  @Prop({ type: String, default: null, trim: true })
+  material?: string | null;
+
   @Prop({
     type: String,
     enum: Object.values(ConditionStatus),

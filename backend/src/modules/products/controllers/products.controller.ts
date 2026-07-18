@@ -23,12 +23,14 @@ import type { AuthUser } from '../../../common/decorators/current-user.decorator
 import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
 import { PublicMediaService } from '../../storage/services/public-media.service';
+import { InventoryService } from '../services/inventory.service';
 
 @Controller(['products', 'api/products'])
 export class ProductsController {
   constructor(
     private readonly productsService: ProductsService,
     private readonly publicMedia: PublicMediaService,
+    private readonly inventoryService: InventoryService,
   ) {}
 
   @Get()
@@ -132,6 +134,46 @@ export class ProductsController {
       (files || []).map((file) => this.publicMedia.uploadImage('products', file)),
     );
     return { urls: uploads.map((upload) => upload.url) };
+  }
+
+  @Post('upload-videos')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FilesInterceptor('videos', 2, {
+      limits: { fileSize: 50 * 1024 * 1024 },
+      fileFilter: (_request, file, callback) => {
+        const allowedMimeTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
+        if (!allowedMimeTypes.includes(file.mimetype)) {
+          callback(
+            new UnsupportedMediaTypeException(
+              'Only mp4, webm, and mov videos are allowed',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+      storage: memoryStorage(),
+    }),
+  )
+  async uploadVideos(
+    @UploadedFiles() files: Express.Multer.File[],
+  ): Promise<{ urls: string[] }> {
+    const uploads = await Promise.all(
+      (files || []).map((file) => this.publicMedia.uploadVideo('products', file)),
+    );
+    return { urls: uploads.map((upload) => upload.url) };
+  }
+
+  // Public: tồn kho khả dụng theo size/màu trong khoảng ngày — cho khách xem trước khi đặt
+  @Get(':id/availability')
+  async availability(
+    @Param('id') id: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.inventoryService.getPublicAvailability(id, from, to);
   }
 
   @Get(':id')

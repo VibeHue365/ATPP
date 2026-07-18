@@ -95,7 +95,7 @@ export const PhotographerDetailPage: React.FC = () => {
         }
       }).then((result) => {
         if (result.isConfirmed) {
-          navigate('/login');
+          navigate('/auth/login');
         }
       });
       return;

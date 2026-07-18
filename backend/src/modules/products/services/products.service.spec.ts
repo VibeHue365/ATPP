@@ -37,7 +37,12 @@ describe('ProductsService moderation', () => {
       projectProductBadges: jest.fn().mockResolvedValue(new Map()),
     };
     const smartTaggingService = { markAssignmentsStale: jest.fn() };
-    const connection = { db: { collection: jest.fn() } };
+    const connection = { db: { collection: jest.fn() }, model: jest.fn() };
+    const campaignService = {
+      getActiveCampaign: jest.fn(),
+      getActiveCampaignsForProviders: jest.fn(),
+    };
+    const publicMedia = { deleteByUrl: jest.fn() };
 
     return {
       service: new ProductsService(
@@ -47,6 +52,8 @@ describe('ProductsService moderation', () => {
         smartTagPublicProjectionService as any,
         smartTaggingService as any,
         connection as any,
+        campaignService as any,
+        publicMedia as any,
       ),
       productsRepository,
       categoriesService,

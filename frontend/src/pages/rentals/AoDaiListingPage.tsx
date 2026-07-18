@@ -411,7 +411,7 @@ export const AoDaiListingPage: React.FC = () => {
         cancelButtonText: "Hủy",
       }).then((result) => {
         if (result.isConfirmed) {
-          navigate("/login");
+          navigate("/auth/login");
         }
       });
       return;

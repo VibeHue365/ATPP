@@ -127,6 +127,7 @@ export class InventoryService {
       productName: string;
       size: string;
       color: string;
+      material: string | null;
       total: number;
       available: number;
       rented: number;
@@ -136,7 +137,8 @@ export class InventoryService {
     items.forEach((item) => {
       const prod = products.find((p) => p._id.toString() === item.productId.toString());
       const productName = prod ? prod.name : 'Sản phẩm không tên';
-      const key = `${item.productId.toString()}_${item.size.toUpperCase()}_${this.normalizeColor(item.color)}`;
+      const materialVal = item.material ? item.material.trim() : null;
+      const key = `${item.productId.toString()}_${item.size.toUpperCase()}_${this.normalizeColor(item.color)}_${materialVal || ''}`;
 
       if (!summaryMap.has(key)) {
         summaryMap.set(key, {
@@ -144,6 +146,7 @@ export class InventoryService {
           productName,
           size: item.size.toUpperCase(),
           color: this.normalizeColor(item.color),
+          material: materialVal,
           total: 0,
           available: 0,
           rented: 0,
@@ -169,6 +172,81 @@ export class InventoryService {
     return Array.from(summaryMap.values());
   }
 
+  /**
+   * Tồn kho khả dụng cho KHÁCH xem (public): đếm theo size+màu số chiếc còn trống
+   * trong khoảng ngày yêu cầu — loại LOCKED/RETIRED và các chiếc đã có reservation
+   * (TEMP_RESERVED / CONFIRMED) giao với khoảng ngày đó. Không lộ SKU/ghi chú nội bộ.
+   */
+  async getPublicAvailability(productId: string, from?: string, to?: string): Promise<{
+    productId: string;
+    from: string;
+    to: string;
+    totalAvailable: number;
+    variants: Array<{ size: string; color: string; material: string | null; total: number; available: number }>;
+  }> {
+    if (!Types.ObjectId.isValid(productId)) {
+      throw new BadRequestException('Mã sản phẩm không hợp lệ.');
+    }
+    const parseDay = (value: string | undefined, fallback: Date): Date => {
+      if (!value) return new Date(fallback);
+      const parsed = new Date(value);
+      if (isNaN(parsed.getTime())) {
+        throw new BadRequestException('Ngày không hợp lệ (định dạng YYYY-MM-DD).');
+      }
+      return parsed;
+    };
+    const now = new Date();
+    const fromDate = parseDay(from, now);
+    const toDate = parseDay(to, fromDate);
+    const rangeFrom = new Date(fromDate); rangeFrom.setHours(0, 0, 0, 0);
+    const rangeTo = new Date(toDate); rangeTo.setHours(23, 59, 59, 999);
+    if (rangeTo < rangeFrom) {
+      throw new BadRequestException('Khoảng ngày không hợp lệ (ngày kết thúc trước ngày bắt đầu).');
+    }
+
+    const prodId = new Types.ObjectId(productId);
+    const items = await this.inventoryItemModel.find({
+      productId: prodId,
+      conditionStatus: { $nin: [ConditionStatus.Locked, ConditionStatus.Retired] },
+    });
+
+    const emptyResult = {
+      productId,
+      from: rangeFrom.toISOString(),
+      to: rangeTo.toISOString(),
+      totalAvailable: 0,
+      variants: [] as Array<{ size: string; color: string; material: string | null; total: number; available: number }>,
+    };
+    if (items.length === 0) return emptyResult;
+
+    const conflicts = await this.inventoryReservationModel.find({
+      inventoryItemId: { $in: items.map((i) => i._id) },
+      status: { $in: ['TEMP_RESERVED', 'CONFIRMED'] },
+      reservedFrom: { $lte: rangeTo },
+      reservedTo: { $gte: rangeFrom },
+    } as any).select({ inventoryItemId: 1 });
+    const busyIds = new Set(conflicts.map((r) => r.inventoryItemId.toString()));
+
+    const grouped = new Map<string, { size: string; color: string; material: string | null; total: number; available: number }>();
+    for (const item of items) {
+      const size = item.size.toUpperCase();
+      const color = this.normalizeColor(item.color);
+      const key = `${size}|${color}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, { size, color, material: item.material || null, total: 0, available: 0 });
+      }
+      const group = grouped.get(key)!;
+      group.total++;
+      if (!busyIds.has(item._id.toString())) group.available++;
+    }
+    const variants = Array.from(grouped.values());
+    return {
+      ...emptyResult,
+      totalAvailable: variants.reduce((sum, v) => sum + v.available, 0),
+      variants,
+    };
+  }
+
   async createInventoryItems(userId: string, dto: CreateInventoryItemDto): Promise<InventoryItem[]> {
     const providerId = await this.getProviderId(userId);
 
@@ -179,6 +257,7 @@ export class InventoryService {
 
     const sizeVal = dto.size.trim().toUpperCase();
     const colorVal = this.normalizeColor(dto.color);
+    const materialVal = dto.material ? dto.material.trim() : null;
     const quantity = dto.quantity && dto.quantity > 0 ? dto.quantity : 1;
 
     const createdItems: InventoryItem[] = [];
@@ -213,6 +292,7 @@ export class InventoryService {
           sku,
           size: sizeVal,
           color: colorVal,
+          material: materialVal,
           conditionStatus: dto.conditionStatus || ConditionStatus.Good,
           status: dto.status || InventoryItemStatus.Available,
           notes: dto.notes || '',
@@ -221,15 +301,17 @@ export class InventoryService {
         createdItems.push(newItem);
       }
 
-      // Sync Product sizes/colors
+      // Sync Product sizes/colors (and materials when provided)
+      const addToSet: Record<string, string> = {
+        sizes: sizeVal,
+        colors: colorVal,
+      };
+      if (materialVal) {
+        addToSet.materials = materialVal;
+      }
       await this.productModel.updateOne(
         { _id: product._id },
-        {
-          $addToSet: {
-            sizes: sizeVal,
-            colors: colorVal,
-          },
-        },
+        { $addToSet: addToSet },
       ).session(session);
     });
 

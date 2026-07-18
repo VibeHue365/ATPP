@@ -138,7 +138,7 @@ export const PhotographersListingPage: React.FC = () => {
         }
       }).then((result) => {
         if (result.isConfirmed) {
-          navigate('/login');
+          navigate('/auth/login');
         }
       });
       return;

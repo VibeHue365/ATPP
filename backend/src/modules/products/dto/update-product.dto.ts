@@ -28,6 +28,11 @@ export class UpdateProductDto {
   images?: string[];
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  videos?: string[];
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   basePrice?: number;

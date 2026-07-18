@@ -47,6 +47,9 @@ export class Product {
   @Prop({ type: [String], default: [] })
   images: string[];
 
+  @Prop({ type: [String], default: [] })
+  videos: string[];
+
   @Prop({ required: true, min: 0 })
   basePrice: number;
 
