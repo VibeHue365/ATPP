@@ -1,19 +1,8 @@
 import React, { useState, useEffect } from "react";
+import { checkProductAvailability } from '../../features/rentals/services/productAvailabilityService';
+import { useProductAvailability } from '../../features/rentals/hooks/useProductAvailability';
 import { useParams, useNavigate } from "react-router-dom";
-import {
-  Heart,
-  Star,
-  Sparkles,
-  ArrowRight,
-  ChevronRight,
-  ChevronLeft,
-  Shield,
-  Camera,
-  User,
-  Check,
-  MapPin,
-  Flag,
-} from "lucide-react";
+import {Heart,Star,Sparkles,ArrowRight,ChevronRight,ChevronLeft,Shield,Camera,User,Check,MapPin,Flag,} from "lucide-react";
 import Swal from "sweetalert2";
 import { httpClient } from "../../services/httpClient";
 import { useToast } from "../../components/feedback/Toast";
@@ -158,8 +147,6 @@ export const ProductDetailPage: React.FC = () => {
   const [submittingReview, setSubmittingReview] = useState<boolean>(false);
   const [checkingReviewStatus, setCheckingReviewStatus] = useState<boolean>(false);
   const [bookingQty, setBookingQty] = useState<number>(1);
-  // Tồn kho khả dụng theo size/màu cho khoảng ngày đang chọn (public API)
-  const [availability, setAvailability] = useState<Array<{ size: string; color: string; material: string | null; total: number; available: number }>>([]);
 
   const fetchRealReviews = async () => {
     if (!id) return;
@@ -418,6 +405,15 @@ export const ProductDetailPage: React.FC = () => {
   const [startTime, setStartTime] = useState<string>("07:00");
   const [endTime, setEndTime] = useState<string>("09:00");
 
+  const availability = useProductAvailability({
+    productId: product?._id,
+    size: selectedSize, color: selectedColor,
+    rentalFrom: rentalMode === 'DAILY' ? startDate : singleDate,
+    rentalTo: rentalMode === 'DAILY' ? endDate : singleDate,
+    quantity: bookingQty, rentalType: rentalMode,
+    startTime: rentalMode === 'HOURLY' ? startTime : undefined,
+    endTime: rentalMode === 'HOURLY' ? endTime : undefined,
+  });
   const [busyDates, setBusyDates] = useState<string[]>([]);
   const [busySlots, setBusySlots] = useState<
     { date: string; timeSlot: string }[]
@@ -644,7 +640,7 @@ export const ProductDetailPage: React.FC = () => {
         cancelButtonText: "Hủy",
       }).then((result) => {
         if (result.isConfirmed) {
-          navigate("/auth/login");
+          navigate("/login");
         }
       });
       return;
@@ -1211,36 +1207,7 @@ export const ProductDetailPage: React.FC = () => {
     }
   };
 
-  // ── Tồn kho khả dụng cho khách ──────────────────────────────────────────
-  // Tải lại mỗi khi đổi khoảng ngày; không có ngày thì lấy tình trạng hôm nay.
-  useEffect(() => {
-    if (!id) return;
-    const params = startDate ? `?from=${startDate}&to=${endDate || startDate}` : "";
-    httpClient
-      .get<any>(`/products/${id}/availability${params}`)
-      .then((res) => setAvailability(res?.variants || []))
-      .catch(() => setAvailability([]));
-  }, [id, startDate, endDate]);
-
-  // null = chưa tải được dữ liệu kho (không chặn); số = còn đúng bấy nhiêu chiếc
-  const getAvailableFor = (size: string, color: string): number | null => {
-    if (availability.length === 0) return null;
-    const variant = availability.find(
-      (v) => v.size === (size || "").toUpperCase() && v.color === (color || "").toUpperCase(),
-    );
-    return variant ? variant.available : 0;
-  };
-  const selectedAvailable = getAvailableFor(selectedSize, selectedColor);
-  const isOutOfStock = selectedAvailable !== null && selectedAvailable <= 0;
-  const maxQty = Math.max(1, Math.min(10, selectedAvailable ?? 10));
-  const purchaseBlocked = isCurrentTimeSlotBusy || isOutOfStock;
-
-  // Đổi size/màu/ngày -> kẹp lại số lượng cho khớp tồn kho
-  useEffect(() => {
-    setBookingQty((q) => Math.min(q, maxQty));
-  }, [maxQty]);
-
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!isAuthenticated) {
       toast.error("Vui lòng đăng nhập để thực hiện chức năng này.");
       navigate(ROUTES.LOGIN);
@@ -1251,15 +1218,13 @@ export const ProductDetailPage: React.FC = () => {
       toast.error("Vui lòng chọn đầy đủ màu sắc và kích cỡ.");
       return;
     }
+    const rentalFrom = rentalMode === 'DAILY' ? startDate : singleDate;
+    const rentalTo = rentalMode === 'DAILY' ? endDate : singleDate;
+    try {
+      const availability = await checkProductAvailability(product?._id || '', selectedSize, selectedColor, rentalFrom, rentalTo, bookingQty, rentalMode, rentalMode === 'HOURLY' ? startTime : undefined, rentalMode === 'HOURLY' ? endTime : undefined);
+      if (!availability.available) { toast.error(`Ch? c?n ${availability.availableQuantity} s?n ph?m ph? h?p trong l?ch ?? ch?n.`); return; }
+    } catch (error: any) { toast.error(error.message || 'Kh?ng th? ki?m tra l?ch thu?.'); return; }
 
-    if (isOutOfStock) {
-      toast.error("Lựa chọn này đã hết hàng trong khoảng ngày đã chọn. Vui lòng đổi size/màu hoặc ngày khác.");
-      return;
-    }
-    if (selectedAvailable !== null && bookingQty > selectedAvailable) {
-      toast.error(`Chỉ còn ${selectedAvailable} chiếc cho lựa chọn này.`);
-      return;
-    }
 
     const days = getDayDuration();
     const hours = getHourDuration();
@@ -1302,15 +1267,6 @@ export const ProductDetailPage: React.FC = () => {
 
     if (!selectedSize || !selectedColor) {
       toast.error("Vui lòng chọn đầy đủ màu sắc và kích cỡ.");
-      return;
-    }
-
-    if (isOutOfStock) {
-      toast.error("Lựa chọn này đã hết hàng trong khoảng ngày đã chọn. Vui lòng đổi size/màu hoặc ngày khác.");
-      return;
-    }
-    if (selectedAvailable !== null && bookingQty > selectedAvailable) {
-      toast.error(`Chỉ còn ${selectedAvailable} chiếc cho lựa chọn này.`);
       return;
     }
 
@@ -1423,8 +1379,7 @@ export const ProductDetailPage: React.FC = () => {
             </span>
           </div>
         </div>
-      )}
-      <div style={{ maxWidth: '1280px', width: '100%', margin: '0 auto', padding: '0 40px' }}>
+      )}      <div style={{ maxWidth: '1280px', width: '100%', margin: '0 auto', padding: '0 40px' }}>
         
         {/* BREADCRUMB */}
         <nav
@@ -1876,13 +1831,11 @@ export const ProductDetailPage: React.FC = () => {
                 <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
                   {product.colors.map((c) => {
                     const isSelected = selectedColor === c;
-                    const colorAvail = getAvailableFor(selectedSize, c);
-                    const colorOut = colorAvail !== null && colorAvail <= 0;
                     return (
                       <button
                         key={c}
                         onClick={() => setSelectedColor(c)}
-                        title={colorOut ? `${c} — Hết hàng` : c}
+                        title={c}
                         style={{
                           width: "32px",
                           height: "32px",
@@ -1896,7 +1849,6 @@ export const ProductDetailPage: React.FC = () => {
                             : "none",
                           cursor: "pointer",
                           transition: "all 0.2s ease",
-                          opacity: colorOut ? 0.3 : 1,
                         }}
                       />
                     );
@@ -1920,13 +1872,10 @@ export const ProductDetailPage: React.FC = () => {
                 <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
                   {product.sizes.map((s) => {
                     const isSelected = selectedSize === s;
-                    const sizeAvail = getAvailableFor(s, selectedColor);
-                    const sizeOut = sizeAvail !== null && sizeAvail <= 0;
                     return (
                       <button
                         key={s}
                         onClick={() => setSelectedSize(s)}
-                        title={sizeOut ? `Size ${s} — Hết hàng` : `Size ${s}`}
                         style={{
                           padding: "12px 28px",
                           borderRadius: "8px",
@@ -1944,8 +1893,6 @@ export const ProductDetailPage: React.FC = () => {
                           cursor: "pointer",
                           transition: "all 0.2s ease",
                           minWidth: "56px",
-                          opacity: sizeOut ? 0.4 : 1,
-                          textDecoration: sizeOut ? "line-through" : "none",
                         }}
                       >
                         {s}
@@ -2425,48 +2372,51 @@ export const ProductDetailPage: React.FC = () => {
                 </div>
               )}
 
-            {/* Canh bao het hang cho lua chon hien tai */}
-            {isOutOfStock && (
-              <div style={{ padding: '12px 16px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '10px', marginBottom: '8px', fontSize: '13px', fontWeight: 700, color: '#B91C1C' }}>
-                Hết hàng: size {selectedSize} · màu {selectedColor} không còn chiếc nào
-                {startDate ? ' trong khoảng ngày đã chọn' : ''}. Vui lòng đổi size/màu hoặc chọn ngày khác.
-              </div>
-            )}
-
+              {availability.state === 'checking' && (
+                <div style={{ color: '#6B5B4D', fontSize: '14px' }}>
+                  Đang kiểm tra lịch trống...
+                </div>
+              )}
+              {availability.state === 'available' && availability.result && (
+                <div style={{ color: '#1E7A46', fontSize: '14px' }}>
+                  Còn {availability.result.availableQuantity} sản phẩm phù hợp với lịch thuê đã chọn.
+                </div>
+              )}
+              {availability.state === 'unavailable' && (
+                <div style={{ color: '#C0392B', fontSize: '14px' }}>
+                  Không đủ số lượng cho lịch thuê đã chọn. Vui lòng đổi ngày, giờ hoặc số lượng.
+                </div>
+              )}
+              {availability.state === 'error' && (
+                <div style={{ color: '#8C6D1F', fontSize: '14px' }}>
+                  Chưa thể kiểm tra lịch ngay lúc này. Hệ thống sẽ kiểm tra lại trước khi xác nhận thuê.
+                </div>
+              )}
             {/* Quantity Selector */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '12px 18px', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Số lượng thuê</span>
-                {selectedAvailable !== null && !isOutOfStock && (
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: selectedAvailable <= 2 ? '#B45309' : '#166534' }}>
-                    Còn {selectedAvailable} chiếc{startDate ? ' cho khoảng ngày này' : ''}
-                  </span>
-                )}
-              </div>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Số lượng thuê</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <button
-                  type="button"
+                <button 
+                  type="button" 
                   onClick={() => setBookingQty(q => Math.max(1, q - 1))}
                   style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1.5px solid var(--color-primary-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '18px', cursor: 'pointer', backgroundColor: 'transparent', color: 'var(--color-primary-dark)', outline: 'none' }}
                 >
                   -
                 </button>
                 <span style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)', minWidth: '20px', textAlign: 'center' }}>{bookingQty}</span>
-                <button
-                  type="button"
-                  disabled={bookingQty >= maxQty}
-                  onClick={() => setBookingQty(q => Math.min(maxQty, q + 1))}
-                  title={bookingQty >= maxQty ? `Tối đa ${maxQty} chiếc (theo tồn kho)` : undefined}
-                  style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1.5px solid var(--color-primary-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '18px', cursor: bookingQty >= maxQty ? 'not-allowed' : 'pointer', backgroundColor: 'transparent', color: 'var(--color-primary-dark)', opacity: bookingQty >= maxQty ? 0.4 : 1, outline: 'none' }}
+                <button 
+                  type="button" 
+                  onClick={() => setBookingQty(q => q + 1)}
+                  style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1.5px solid var(--color-primary-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '18px', cursor: 'pointer', backgroundColor: 'transparent', color: 'var(--color-primary-dark)', outline: 'none' }}
                 >
                   +
                 </button>
               </div>
             </div>
 
-              <button
+              <button 
                 onClick={handleAddToCart}
-                disabled={purchaseBlocked}
+                disabled={isCurrentTimeSlotBusy || availability.state === 'checking' || availability.state === 'unavailable'}
                 className="vh-btn vh-btn-outline vh-btn-lg"
                 style={{
                   width: "100%",
@@ -2474,22 +2424,22 @@ export const ProductDetailPage: React.FC = () => {
                   fontSize: "16px",
                   height: "54px",
                   fontWeight: 700,
-                  border: purchaseBlocked
+                  border: isCurrentTimeSlotBusy
                     ? "1.5px solid #8C827A"
                     : "1.5px solid var(--color-primary-dark)",
                   backgroundColor: "transparent",
-                  color: purchaseBlocked
+                  color: isCurrentTimeSlotBusy
                     ? "#8C827A"
                     : "var(--color-primary-dark)",
-                  cursor: purchaseBlocked ? "not-allowed" : "pointer",
+                  cursor: isCurrentTimeSlotBusy ? "not-allowed" : "pointer",
                 }}
               >
-                {isOutOfStock ? "HẾT HÀNG" : "THÊM VÀO GIỎ HÀNG"}
+                THÊM VÀO GIỎ HÀNG
               </button>
 
               <button
                 onClick={handleBookingSubmit}
-                disabled={purchaseBlocked}
+                disabled={isCurrentTimeSlotBusy || availability.state === 'checking' || availability.state === 'unavailable'}
                 className="vh-btn vh-btn-primary vh-btn-lg"
                 style={{
                   width: "100%",
@@ -2497,16 +2447,16 @@ export const ProductDetailPage: React.FC = () => {
                   fontSize: "16px",
                   height: "54px",
                   fontWeight: 700,
-                  backgroundColor: purchaseBlocked
+                  backgroundColor: isCurrentTimeSlotBusy
                     ? "#8C827A"
                     : "var(--color-primary-dark)",
                   color: "#FFFFFF",
                   border: "none",
-                  cursor: purchaseBlocked ? "not-allowed" : "pointer",
+                  cursor: isCurrentTimeSlotBusy ? "not-allowed" : "pointer",
                 }}
               >
-                <span>{isOutOfStock ? "HẾT HÀNG" : "THUÊ NGAY"}</span>
-                {!isOutOfStock && <ArrowRight size={18} />}
+                <span>THUÊ NGAY</span>
+                <ArrowRight size={18} />
               </button>
 
               {/* COMBO BANNER */}
@@ -4314,3 +4264,6 @@ export const ProductDetailPage: React.FC = () => {
 };
 
 export default ProductDetailPage;
+
+
+

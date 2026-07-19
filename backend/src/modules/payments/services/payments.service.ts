@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   Injectable,
+  Inject,
+  forwardRef,
   NotFoundException,
   Logger,
 } from '@nestjs/common';
@@ -33,6 +35,7 @@ import { SettlementRepository } from '../repositories/settlement.repository';
 import { TransferRepository } from '../repositories/transfer.repository';
 import { SettlementTransferMapper } from '../mappers/settlement-transfer.mapper';
 import { SettlementsService } from '../../settlements/services/settlements.service';
+import { PhotographyHoldService } from '../../bookings/services/photography-hold.service';
 
 interface PaymentAccountDoc {
   bankName?: string;
@@ -78,6 +81,8 @@ export class PaymentsService {
     @InjectModel(SettlementTransfer.name)
     private readonly transferModel: Model<SettlementTransfer>,
     private readonly settlementsService: SettlementsService,
+    @Inject(forwardRef(() => PhotographyHoldService))
+    private readonly photographyHoldService: PhotographyHoldService,
   ) {}
 
   async createPaymentLink(
@@ -194,6 +199,7 @@ export class PaymentsService {
         throw new NotFoundException('Payment not found');
       }
       if (existing.status === PaymentStatus.Success) {
+        await this.photographyHoldService.confirmForBooking(existing.bookingId);
         return existing;
       }
       throw new BadRequestException(
@@ -216,6 +222,9 @@ export class PaymentsService {
     );
 
     if (updatedBooking) {
+      const holdConfirmation = await this.photographyHoldService.confirmForBooking(
+        payment.bookingId,
+      );
       const isPaid =
         updatedBooking.paymentSummary.totalPaid >=
         updatedBooking.pricingSummary.grandTotal;
@@ -237,9 +246,10 @@ export class PaymentsService {
         isConfirmedEligible = isPaid;
       }
 
-      const newStatus = isConfirmedEligible
-        ? BookingStatus.Confirmed
-        : updatedBooking.status;
+      const newStatus =
+        isConfirmedEligible && holdConfirmation.confirmed
+          ? BookingStatus.Confirmed
+          : updatedBooking.status;
 
       const newPaymentStatus = isPaid
         ? BookingPaymentStatus.Paid
@@ -276,24 +286,42 @@ export class PaymentsService {
       }
 
       try {
-        // Bắn thông báo cho khách hàng
-        await this.notificationsService.createNotification(
-          updatedBooking.customerId.toString(),
-          `Thanh toán thành công`,
-          `Bạn đã thanh toán thành công số tiền ${payment.amount.toLocaleString('vi-VN')}đ cho đơn hàng ${updatedBooking.bookingCode}.`,
-          NotificationType.Payment,
-          { bookingId: updatedBooking._id },
-        );
-
-        // Bắn thông báo cho các nhà cung cấp liên quan
-        for (const providerId of updatedBooking.providerIds) {
+        if (holdConfirmation.paymentReviewRequired) {
           await this.notificationsService.createNotification(
-            providerId.toString(),
-            `Lịch đặt mới được thanh toán`,
-            `Đơn đặt lịch ${updatedBooking.bookingCode} đã được khách hàng thanh toán cọc thành công.`,
-            NotificationType.Booking,
+            updatedBooking.customerId.toString(),
+            'Thanh toán đang chờ kiểm tra',
+            'Hệ thống đã ghi nhận ' +
+              payment.amount.toLocaleString('vi-VN') +
+              'đ cho đơn ' +
+              updatedBooking.bookingCode +
+              ', nhưng lịch chụp giữ chỗ đã hết hạn. Chúng tôi sẽ liên hệ để xác nhận lại lịch hoặc hỗ trợ hoàn tiền.',
+            NotificationType.Payment,
+            { bookingId: updatedBooking._id, paymentReviewRequired: true },
+          );
+        } else {
+          await this.notificationsService.createNotification(
+            updatedBooking.customerId.toString(),
+            'Thanh toán thành công',
+            'Bạn đã thanh toán thành công số tiền ' +
+              payment.amount.toLocaleString('vi-VN') +
+              'đ cho đơn hàng ' +
+              updatedBooking.bookingCode +
+              '.',
+            NotificationType.Payment,
             { bookingId: updatedBooking._id },
           );
+
+          for (const providerId of updatedBooking.providerIds) {
+            await this.notificationsService.createNotification(
+              providerId.toString(),
+              'Lịch đặt mới được thanh toán',
+              'Đơn đặt lịch ' +
+                updatedBooking.bookingCode +
+                ' đã được khách hàng thanh toán cọc thành công.',
+              NotificationType.Booking,
+              { bookingId: updatedBooking._id },
+            );
+          }
         }
       } catch (e) {
         console.error('Failed to create payment/booking notifications:', e);
@@ -306,17 +334,6 @@ export class PaymentsService {
         updatedBooking.pricingSummary.depositTotal,
       );
 
-      // Cập nhật trạng thái các Reservation tương ứng sang CONFIRMED
-      try {
-        await this.bookingModel.db
-          .model('InventoryReservation')
-          .updateMany(
-            { bookingId: payment.bookingId },
-            { $set: { status: 'CONFIRMED' } }
-          );
-      } catch (err) {
-        console.error('Failed to update InventoryReservation status to CONFIRMED:', err);
-      }
     }
 
     return payment;

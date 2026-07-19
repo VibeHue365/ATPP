@@ -5,6 +5,11 @@ export interface Dispute {
   bookingId?: {
     _id?: string;
     bookingCode?: string;
+    customerId?: {
+      profile?: {
+        fullName?: string;
+      };
+    };
     pricingSummary?: {
       depositTotal?: number;
     };
@@ -23,6 +28,7 @@ export interface Dispute {
   };
   requestedAmount: number;
   description: string;
+  evidencePhotos?: string[];
 }
 
 export interface ResolvePayload {

@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import {
   IsArray,
+  ArrayNotEmpty,
+  ArrayUnique,
   IsBoolean,
   IsEnum,
   IsNotEmpty,
@@ -81,6 +83,19 @@ export class RecurringScheduleDto {
   workingHours: Array<{ start: string; end: string }>;
 }
 
+export class BulkRecurringScheduleDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsNumber({}, { each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  dayOfWeeks: number[];
+
+  @IsArray()
+  @ArrayNotEmpty()
+  workingHours: Array<{ start: string; end: string }>;
+}
 export class SpecificDateScheduleDto {
   @IsString()
   @IsNotEmpty()
@@ -175,6 +190,17 @@ export class ProvidersController {
     );
   }
 
+  @Post('me/schedules/recurring/bulk')
+  async updateRecurringBulk(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: BulkRecurringScheduleDto,
+  ) {
+    return this.providersService.updateRecurringSchedules(
+      user.sub,
+      dto.dayOfWeeks,
+      dto.workingHours,
+    );
+  }
   @Post('me/schedules/specific-date')
   async updateSpecificDate(
     @CurrentUser() user: AuthUser,

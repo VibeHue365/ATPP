@@ -671,8 +671,8 @@ export const AdminDashboardPage: React.FC = () => {
     }
 
     let payload: {
-      reason: string;
-      note: string;
+      reason?: string;
+      note?: string;
       changeRequests?: Array<{ target: string; action: string; reasonCode: string; note?: string }>;
     } | null = null;
 
@@ -717,16 +717,28 @@ export const AdminDashboardPage: React.FC = () => {
         note: result.value.message,
         changeRequests: result.value.selectedValues.map((value: string) => toProviderChangeRequest(value, result.value.extraNote)),
       };
+    } else if (decision === 'approve') {
+      const result = await Swal.fire({
+        title: 'Phê duyệt hồ sơ đối tác?',
+        text: 'Hệ thống sẽ cấp quyền đối tác và tự gửi thông báo phê duyệt.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#706E3B',
+        confirmButtonText: 'Phê duyệt hồ sơ',
+        cancelButtonText: 'Quay lại',
+      });
+      if (!result.isConfirmed) return;
+      payload = {};
     } else {
       const result = await Swal.fire({
-        title: decision === 'approve' ? 'Phê duyệt hồ sơ đối tác?' : 'Từ chối hồ sơ đối tác?',
+        title: 'Từ chối hồ sơ đối tác?',
         input: 'textarea',
-        inputLabel: 'Lý do / nội dung phản hồi cho đối tác *',
-        inputPlaceholder: 'Nhập nội dung chi tiết gửi cho đối tác...',
-        inputAttributes: { required: 'true' },
+        inputLabel: 'Lý do từ chối gửi cho đối tác *',
+        inputPlaceholder: 'Nêu rõ lý do để đối tác có thể hiểu kết quả xét duyệt...',
+        inputValidator: (value) => value.trim() ? undefined : 'Vui lòng nhập lý do từ chối.',
         showCancelButton: true,
-        confirmButtonColor: decision === 'approve' ? '#706E3B' : '#4A0E17',
-        confirmButtonText: 'Xác nhận gửi',
+        confirmButtonColor: '#4A0E17',
+        confirmButtonText: 'Từ chối hồ sơ',
         cancelButtonText: 'Quay lại',
       });
       const note = typeof result.value === 'string' ? result.value.trim() : '';

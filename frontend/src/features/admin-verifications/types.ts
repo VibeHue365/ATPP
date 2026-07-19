@@ -1,4 +1,9 @@
-import type { ProviderCapability, ProviderDocumentType, OcrStatus } from '../provider-verifications/types';
+import type {
+  OcrStatus,
+  OcrV2Summary,
+  ProviderCapability,
+  ProviderDocumentType,
+} from '../provider-verifications/types';
 
 export type AdminVerificationStatus =
   | 'DRAFT'
@@ -22,6 +27,7 @@ export interface AdminVerificationDocumentVersion {
   uploadStatus: string;
   ocrStatus: OcrStatus;
   ocrConfidence?: number | null;
+  ocr?: OcrV2Summary | null;
   extractedFields?: Record<string, unknown>;
   mismatchFlags?: string[];
 }
@@ -63,8 +69,8 @@ export interface AdminVerificationDetail extends AdminVerificationSummary {
 }
 
 export interface AdminReviewDecisionPayload {
-  reason: string;
-  note: string;
+  reason?: string;
+  note?: string;
   changeRequests?: Array<{
     target: 'IDENTITY_CARD_FRONT' | 'IDENTITY_CARD_BACK' | 'BUSINESS_PROFILE' | 'PORTFOLIO' | 'OTHER';
     action: 'REUPLOAD' | 'UPDATE_PROFILE' | 'PROVIDE_MORE_INFO';

@@ -17,6 +17,7 @@ import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
 import { DiscountCampaignService } from './discount-campaign.service';
 import { CategoriesService } from '../../categories/services/categories.service';
+import { ServiceCategoryType } from '../../categories/schemas/category.schema';
 import { ModerateProductDto } from '../dto/product-moderation.dto';
 import { SmartTagPublicProjectionService } from '../../smart-tagging/services/smart-tag-public-projection.service';
 import { SmartTaggingService } from '../../smart-tagging/services/smart-tagging.service';
@@ -44,6 +45,10 @@ export class ProductsService {
     colors?: string[];
     sizes?: string[];
     materials?: string[];
+    categoryId?: string;
+    styleCategoryIds?: string[];
+    eventCategoryIds?: string[];
+    limit?: number;
   }): Promise<any[]> {
     const products = await this.productsRepository.findAllActive(options);
     const productsWithBadges = await this.attachPublicBadges(products);
@@ -72,12 +77,19 @@ export class ProductsService {
     });
   }
 
+  async getFeaturedProducts(limit = 8): Promise<any[]> {
+    // Engagement metrics are not persisted yet, so newest public listings are
+    // the deterministic fallback for the landing featured section.
+    return this.getAllActiveProducts({ limit });
+  }
+
   async getCategories(): Promise<any[]> {
     return this.categoriesService.listActiveCategoriesForProducts();
   }
 
   async getProductById(productId: string): Promise<any | null> {
-    const product = await this.productsRepository.findById(new Types.ObjectId(productId));
+    if (!Types.ObjectId.isValid(productId)) return null;
+    const product = await this.productsRepository.findPublicById(new Types.ObjectId(productId));
     if (!product) return null;
     const plain = product.toObject() as any;
     const pId = typeof plain.providerId === 'object' && plain.providerId ? plain.providerId._id : plain.providerId;
@@ -164,6 +176,14 @@ export class ProductsService {
     }
 
     await this.categoriesService.assertActiveProductCategory(dto.categoryId);
+    await this.categoriesService.assertActiveCategories(
+      dto.styleCategoryIds ?? [],
+      ServiceCategoryType.Style,
+    );
+    await this.categoriesService.assertActiveCategories(
+      dto.eventCategoryIds ?? [],
+      ServiceCategoryType.Event,
+    );
 
     const slug =
       dto.name
@@ -201,6 +221,8 @@ export class ProductsService {
     const product = await this.productsRepository.create({
       providerId: user.provider.providerId,
       categoryId: new Types.ObjectId(dto.categoryId),
+      styleCategoryIds: (dto.styleCategoryIds ?? []).map((id) => new Types.ObjectId(id)),
+      eventCategoryIds: (dto.eventCategoryIds ?? []).map((id) => new Types.ObjectId(id)),
       name: dto.name,
       slug,
       description: dto.description || '',
@@ -309,7 +331,9 @@ export class ProductsService {
       (dto.colors !== undefined && !sameStringArray(dto.colors, product.colors)) ||
       (dto.materials !== undefined && !sameStringArray(dto.materials, product.materials)) ||
       (dto.style !== undefined && dto.style !== product.style) ||
-      (dto.occasions !== undefined && !sameStringArray(dto.occasions, product.occasions));
+      (dto.occasions !== undefined && !sameStringArray(dto.occasions, product.occasions)) ||
+      (dto.styleCategoryIds !== undefined && !sameStringArray(dto.styleCategoryIds, (product.styleCategoryIds ?? []).map((id) => id.toString()))) ||
+      (dto.eventCategoryIds !== undefined && !sameStringArray(dto.eventCategoryIds, (product.eventCategoryIds ?? []).map((id) => id.toString())));
     const productChanged =
       taggingInputChanged ||
       (dto.basePrice !== undefined && dto.basePrice !== product.basePrice) ||
@@ -337,6 +361,24 @@ export class ProductsService {
     if (dto.categoryId !== undefined) {
       await this.categoriesService.assertActiveProductCategory(dto.categoryId);
       updateData.categoryId = new Types.ObjectId(dto.categoryId);
+    }
+    if (dto.styleCategoryIds !== undefined) {
+      await this.categoriesService.assertActiveCategories(
+        dto.styleCategoryIds,
+        ServiceCategoryType.Style,
+      );
+      updateData.styleCategoryIds = dto.styleCategoryIds.map(
+        (id) => new Types.ObjectId(id),
+      );
+    }
+    if (dto.eventCategoryIds !== undefined) {
+      await this.categoriesService.assertActiveCategories(
+        dto.eventCategoryIds,
+        ServiceCategoryType.Event,
+      );
+      updateData.eventCategoryIds = dto.eventCategoryIds.map(
+        (id) => new Types.ObjectId(id),
+      );
     }
     if (dto.description !== undefined) updateData.description = dto.description;
     if (dto.images !== undefined) updateData.images = dto.images;

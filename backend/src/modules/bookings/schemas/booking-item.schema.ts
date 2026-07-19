@@ -3,6 +3,24 @@ import { HydratedDocument, Types } from 'mongoose';
 
 export type BookingItemDocument = HydratedDocument<BookingItem>;
 
+export interface PhotographyPackageSnapshot {
+  name: string;
+  basePrice: number;
+  pricingUnit: 'PER_SESSION' | 'PER_DAY' | 'PER_BOOKING';
+  includedDurationMinutes: number;
+  includedSessionCount?: number | null;
+  includedDayCount?: number | null;
+  overtimeFeePerHour: number;
+  overtimeIncrementMinutes: number;
+  maxOvertimeMinutes: number;
+}
+
+export interface BookingPriceBreakdownItem {
+  type: 'BASE_PACKAGE' | 'OVERTIME' | 'TRAVEL' | 'SURCHARGE' | 'MULTI_DAY_DISCOUNT';
+  label: string;
+  amount: number;
+  scheduleId?: Types.ObjectId | null;
+}
 export enum BookingItemType {
   Product = 'PRODUCT',
   PhotographyPackage = 'PHOTOGRAPHY_PACKAGE',
@@ -100,6 +118,15 @@ export class BookingItem {
 
   @Prop({ type: Boolean, default: false })
   isReviewed?: boolean;
+
+  @Prop({ type: Object, default: null })
+  packageSnapshot?: PhotographyPackageSnapshot | null;
+
+  @Prop({ type: [Object], default: [] })
+  priceBreakdown: BookingPriceBreakdownItem[];
+
+  @Prop({ type: Number, default: 1, min: 1 })
+  scheduleSchemaVersion: number;
 
   @Prop({ type: Number, default: 0 })
   comboDiscountPercent: number;

@@ -744,8 +744,8 @@ export class ProviderVerificationService {
     );
     await this.notifyUser(
       verification.userId,
-      'Provider verification submitted',
-      'Your Provider verification has been submitted for review.',
+      'Hồ sơ đăng ký đối tác đã được gửi',
+      'Hồ sơ đăng ký đối tác của bạn đã được gửi và đang chờ xét duyệt.',
       { verificationId: verification._id.toString() },
     );
 
@@ -905,8 +905,8 @@ export class ProviderVerificationService {
     );
     await this.notifyUser(
       verification.userId,
-      'Provider verification approved',
-      'Your Provider verification has been approved.',
+      'Hồ sơ đăng ký đối tác đã được phê duyệt',
+      'Hồ sơ đăng ký đối tác của bạn đã được phê duyệt. Bạn có thể bắt đầu quản lý dịch vụ.',
       { verificationId: verification._id.toString(), providerId: provider._id.toString() },
     );
 
@@ -934,7 +934,7 @@ export class ProviderVerificationService {
       'REJECT_PROVIDER_VERIFICATION',
       dto,
       meta,
-      'Your Provider verification has been rejected.',
+      'Hồ sơ đăng ký đối tác của bạn đã bị từ chối. Vui lòng xem lý do và gửi lại hồ sơ khi đã hoàn thiện.',
     );
   }
 
@@ -958,7 +958,7 @@ export class ProviderVerificationService {
       'REQUEST_PROVIDER_VERIFICATION_CHANGES',
       dto,
       meta,
-      'Your Provider verification requires changes.',
+      'Hồ sơ đăng ký đối tác của bạn cần được bổ sung hoặc điều chỉnh. Vui lòng xem yêu cầu từ quản trị viên.',
     );
   }
 
@@ -975,8 +975,8 @@ export class ProviderVerificationService {
       'SUSPEND_PROVIDER',
       dto,
       meta,
-      'Provider suspended',
-      'Your Provider account has been suspended.',
+      'Tài khoản đối tác đã bị tạm ngưng',
+      'Tài khoản đối tác của bạn đã bị tạm ngưng. Vui lòng liên hệ quản trị viên để được hỗ trợ.',
     );
   }
 
@@ -993,8 +993,8 @@ export class ProviderVerificationService {
       'UNSUSPEND_PROVIDER',
       dto,
       meta,
-      'Provider unsuspended',
-      'Your Provider account has been unsuspended.',
+      'Tài khoản đối tác đã được kích hoạt lại',
+      'Tài khoản đối tác của bạn đã được kích hoạt lại. Bạn có thể tiếp tục sử dụng các chức năng dành cho đối tác.',
     );
   }
 
@@ -1045,7 +1045,9 @@ export class ProviderVerificationService {
     );
     await this.notifyUser(
       verification.userId,
-      `Provider verification ${nextStatus.toLowerCase()}`,
+      nextStatus === VerificationStatus.Rejected
+        ? 'Hồ sơ đăng ký đối tác bị từ chối'
+        : 'Hồ sơ đăng ký đối tác cần bổ sung',
       notificationContent,
       { verificationId: verification._id.toString() },
     );

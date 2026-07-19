@@ -1,5 +1,6 @@
 import {
   IsArray,
+  ArrayUnique,
   IsEnum,
   IsMongoId,
   IsNumber,
@@ -14,6 +15,17 @@ export class UpdateProductDto {
   @IsMongoId()
   categoryId?: string;
 
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsMongoId({ each: true })
+  styleCategoryIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsMongoId({ each: true })
+  eventCategoryIds?: string[];
   @IsOptional()
   @IsString()
   name?: string;

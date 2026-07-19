@@ -16,6 +16,8 @@ export function RevenuePanel() {
       </div>
       {(stats.error || transactions.error) && <p className="admin-dashboard-panel__error" role="alert">{stats.error || transactions.error}</p>}
 
+      {stats.isLoading && !stats.data ? <p className='admin-dashboard-panel__loading'>Đang tải báo cáo doanh thu…</p> : <>
+
       <div className="admin-analytics-metrics admin-analytics-metrics--three">
         <MetricCard label="Tổng doanh số giao dịch" value={formatCurrency(total)} detail="Cập nhật tự động từ PayOS" tone="burgundy" />
         <MetricCard label="Doanh thu hệ thống (10%)" value={formatCurrency(commission)} detail="Khấu trừ trực tiếp trên mỗi đơn thành công" tone="gold" />
@@ -34,6 +36,7 @@ export function RevenuePanel() {
           </footer>
         }
       />
+      </>}
     </section>
   );
 }

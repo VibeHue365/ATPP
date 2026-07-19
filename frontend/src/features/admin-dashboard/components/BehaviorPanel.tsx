@@ -1,12 +1,6 @@
 import { useAdminStats } from '../hooks/useAdminStats';
 import './adminDashboardPanels.css';
 
-const fallbackSearches = [
-  { keyword: 'áo dài nhật bình', count: 0 },
-  { keyword: 'chụp ảnh ngoại cảnh huế', count: 0 },
-  { keyword: 'áo dài cô ba sài gòn', count: 0 },
-];
-
 const pages = [
   { key: 'homepage', label: 'Trang chủ (Discovery)', color: '#4A0E17' },
   { key: 'rentals', label: 'Danh sách cho thuê áo dài', color: '#706E3B' },
@@ -16,7 +10,7 @@ const pages = [
 
 export function BehaviorPanel() {
   const { data, error, isLoading, refresh } = useAdminStats();
-  const searches = data?.userBehavior?.topSearches?.length ? data.userBehavior.topSearches : fallbackSearches;
+  const searches = data?.userBehavior?.topSearches ?? [];
   const views = data?.userBehavior?.pageViews ?? {};
   const maxViews = Math.max(1, ...Object.values(views));
   const products = data?.userBehavior?.popularProducts ?? [];
@@ -32,6 +26,7 @@ export function BehaviorPanel() {
               <h3>Từ khóa tìm kiếm phổ biến</h3>
               <table className="admin-behavior-searches"><thead><tr><th>Từ khóa</th><th>Lượt tìm kiếm</th></tr></thead><tbody>
                 {searches.map((search, index) => <tr key={search.keyword}><td><span>{index + 1}</span>{search.keyword}</td><td>{search.count.toLocaleString('vi-VN')}</td></tr>)}
+                {!searches.length && <tr><td colSpan={2} className='admin-behavior-searches__empty'>Chưa có dữ liệu tìm kiếm.</td></tr>}
               </tbody></table>
             </article>
             <article className="admin-analytics-card">

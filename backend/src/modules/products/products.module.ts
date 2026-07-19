@@ -32,6 +32,7 @@ import { ProductsService } from './services/products.service';
 import { ProductsRepository } from './repositories/products.repository';
 import { InventoryController } from './controllers/inventory.controller';
 import { InventoryService } from './services/inventory.service';
+import { ProductAvailabilityService } from './services/product-availability.service';
 import { DiscountCampaign, DiscountCampaignSchema } from './schemas/discount-campaign.schema';
 import { DiscountCampaignService } from './services/discount-campaign.service';
 import { DiscountCampaignController } from './controllers/discount-campaign.controller';
@@ -65,6 +66,7 @@ export const productModels = MongooseModule.forFeature([
     ProductsService,
     ProductsRepository,
     InventoryService,
+    ProductAvailabilityService,
     DiscountCampaignService,
   ],
   exports: [

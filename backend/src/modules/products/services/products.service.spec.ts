@@ -1,4 +1,4 @@
-﻿import { ConflictException } from '@nestjs/common';
+import { ConflictException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import {
   ProductModerationStatus,
@@ -31,16 +31,21 @@ describe('ProductsService moderation', () => {
     };
     const categoriesService = {
       assertActiveProductCategory: jest.fn(),
+      assertActiveCategories: jest.fn(),
       listActiveCategoriesForProducts: jest.fn(),
     };
     const smartTagPublicProjectionService = {
       projectProductBadges: jest.fn().mockResolvedValue(new Map()),
     };
     const smartTaggingService = { markAssignmentsStale: jest.fn() };
-    const connection = { db: { collection: jest.fn() }, model: jest.fn() };
+    const inventoryItemModel = { create: jest.fn().mockResolvedValue({}) };
+    const connection = {
+      db: { collection: jest.fn() },
+      model: jest.fn().mockReturnValue(inventoryItemModel),
+    };
     const campaignService = {
       getActiveCampaign: jest.fn(),
-      getActiveCampaignsForProviders: jest.fn(),
+      getActiveCampaignsForProviders: jest.fn().mockResolvedValue({}),
     };
     const publicMedia = { deleteByUrl: jest.fn() };
 

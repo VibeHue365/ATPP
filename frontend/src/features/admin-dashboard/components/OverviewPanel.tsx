@@ -1,6 +1,6 @@
 import { useAdminTransactions } from '../hooks/useAdminTransactions';
 import { useAdminStats } from '../hooks/useAdminStats';
-import { MetricCard, TransactionTable, TrendChart } from './AdminAnalyticsShared';
+import { BookingDistribution, MetricCard, TransactionTable, TrendChart } from './AdminAnalyticsShared';
 import { formatCurrency } from '../utils/adminAnalyticsUtils';
 
 export function OverviewPanel() {
@@ -15,6 +15,8 @@ export function OverviewPanel() {
       </div>
       {(stats.error || transactions.error) && <p className="admin-dashboard-panel__error" role="alert">{stats.error || transactions.error}</p>}
 
+      {stats.isLoading && !data ? <p className='admin-dashboard-panel__loading'>Đang tải số liệu tổng quan…</p> : <>
+
       <div className="admin-analytics-metrics admin-analytics-metrics--four">
         <MetricCard label="Tổng doanh thu" value={formatCurrency(data?.revenue?.total ?? 0)} detail="Cập nhật tự động từ PayOS" tone="burgundy" />
         <MetricCard label="Khách hàng đăng ký" value={data?.customers?.total ?? 0} detail={`Hoạt động: ${data?.customers?.active ?? 0} khách`} tone="charcoal" />
@@ -24,10 +26,11 @@ export function OverviewPanel() {
 
       <div className="admin-analytics-split">
         <TrendChart title="Thống kê đơn đặt lịch" legend="Đơn đặt lịch theo kỳ" points={data?.bookings?.growth ?? []} />
-        <TrendChart title="Tăng trưởng doanh thu" legend="Doanh thu theo kỳ" points={data?.revenue?.growth ?? []} />
+        <BookingDistribution items={data?.userBehavior?.popularBookings ?? []} />
       </div>
 
       <TransactionTable title="Lịch sử giao dịch thanh toán gần đây" items={(transactions.data?.items ?? []).slice(0, 3)} />
+      </>}
     </section>
   );
 }

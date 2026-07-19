@@ -29,6 +29,11 @@ export class Product {
   @Prop({ type: Types.ObjectId, ref: 'Category', required: true, index: true })
   categoryId: Types.ObjectId;
 
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Category' }], default: [] })
+  styleCategoryIds: Types.ObjectId[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Category' }], default: [] })
+  eventCategoryIds: Types.ObjectId[];
   @Prop({ required: true, trim: true })
   name: string;
 

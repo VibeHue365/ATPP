@@ -33,6 +33,7 @@ export interface Provider {
 
 export interface Booking {
   id: string;
+  bookingId?: string;
   customerName: string;
   providerName: string;
   items: string;

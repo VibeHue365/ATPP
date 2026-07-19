@@ -43,6 +43,41 @@ export function TrendChart({ title, points, legend }: {
   );
 }
 
+const bookingTypes = [
+  { id: 'AODAI_RENTAL', label: 'Cho thuê áo dài', color: '#4a0e17' },
+  { id: 'PHOTOGRAPHY', label: 'Dịch vụ chụp ảnh', color: '#706e3b' },
+  { id: 'COMBO', label: 'Combo trọn gói', color: '#b89047' },
+] as const;
+
+export function BookingDistribution({ items }: { items: Array<{ _id: string; count: number }> }) {
+  const segments = bookingTypes.map((type) => ({
+    ...type,
+    count: Math.max(0, items.find((item) => item._id === type.id)?.count ?? 0),
+  }));
+  const total = segments.reduce((sum, item) => sum + item.count, 0);
+  let offset = 0;
+
+  return (
+    <article className='admin-analytics-card admin-booking-distribution'>
+      <div><h3>Cơ cấu đặt dịch vụ hệ thống</h3><p>Tỷ lệ booking theo các loại hình dịch vụ chính.</p></div>
+      <div className='admin-booking-distribution__content'>
+        <svg viewBox='0 0 120 120' role='img' aria-label={`Tổng cộng ${total.toLocaleString('vi-VN')} booking`}>
+          <circle className='admin-booking-distribution__track' cx='60' cy='60' r='45' pathLength='100' />
+          {total > 0 && segments.map((segment) => {
+            const percentage = (segment.count / total) * 100;
+            const dashOffset = -offset;
+            offset += percentage;
+            return percentage > 0 ? <circle key={segment.id} className='admin-booking-distribution__segment' cx='60' cy='60' r='45' pathLength='100' stroke={segment.color} strokeDasharray={`${percentage} ${100 - percentage}`} strokeDashoffset={dashOffset} /> : null;
+          })}
+          <text x='60' y='56' textAnchor='middle'>Tổng booking</text>
+          <text className='admin-booking-distribution__total' x='60' y='73' textAnchor='middle'>{total.toLocaleString('vi-VN')}</text>
+        </svg>
+        <ul>{segments.map((segment) => <li key={segment.id}><i style={{ backgroundColor: segment.color }} /><span>{segment.label}</span><strong>{total ? Math.round((segment.count / total) * 100) : 0}%</strong></li>)}</ul>
+      </div>
+    </article>
+  );
+}
+
 const statusLabel: Record<AdminTransaction['status'], string> = {
   PAID: 'ThÃ nh cÃ´ng',
   PENDING: 'Äang xá»­ lÃ½',

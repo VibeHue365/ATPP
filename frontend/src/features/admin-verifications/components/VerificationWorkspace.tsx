@@ -16,10 +16,35 @@ import {
 import { VerificationDocumentPreview } from './VerificationDocumentPreview';
 import './verificationWorkspace.css';
 
+import type { AdminVerificationStatus } from '../types';
+
 const reviewPayload = (reason: string): AdminReviewDecisionPayload => ({ reason, note: reason });
 
 const statusClass = (status: string) =>
   `admin-verification-status admin-verification-status--${status.toLowerCase()}`;
+
+const verificationStatusLabels: Record<AdminVerificationStatus, string> = {
+  DRAFT: 'Bản nháp',
+  SUBMITTED: 'Mới gửi',
+  UNDER_REVIEW: 'Đang đánh giá',
+  NEEDS_CHANGES: 'Cần bổ sung',
+  APPROVED: 'Đã phê duyệt',
+  REJECTED: 'Đã từ chối',
+  CANCELLED: 'Đã hủy',
+};
+
+const ocrStatusLabels: Record<string, string> = {
+  NOT_STARTED: 'Chưa chạy OCR',
+  OCR_PROCESSING: 'Đang xử lý',
+  OCR_PASSED: 'OCR đạt',
+  OCR_FAILED: 'OCR thất bại',
+  OCR_LOW_CONFIDENCE: 'Độ tin cậy thấp',
+  MISMATCH_DETECTED: 'Cần đối chiếu',
+  NEEDS_MANUAL_REVIEW: 'Cần kiểm tra thủ công',
+};
+
+const ocrStatusLabel = (status?: string) =>
+  ocrStatusLabels[status ?? 'NOT_STARTED'] ?? status ?? 'Chưa chạy OCR';
 
 const ocrSupportedTypes = new Set<ProviderDocumentType>([
   'IDENTITY_CARD_FRONT',
@@ -28,6 +53,25 @@ const ocrSupportedTypes = new Set<ProviderDocumentType>([
   'TAX_REGISTRATION',
   'PROFESSIONAL_CERTIFICATE',
 ]);
+
+const ocrNextActionLabel = (action?: string | null) => {
+  const labels: Record<string, string> = {
+    WAIT_FOR_OCR: 'Đang chờ kết quả OCR',
+    UPLOAD_AGAIN: 'Cần tải lại tài liệu',
+    READY_TO_SUBMIT: 'Sẵn sàng để duyệt',
+    SUBMIT_WITH_MANUAL_REVIEW: 'Cần đối chiếu thủ công',
+  };
+  return action ? labels[action] ?? action : null;
+};
+
+const verificationFilters: Array<{ value: 'ALL' | AdminVerificationStatus; label: string }> = [
+  { value: 'ALL', label: 'Tất cả trạng thái' },
+  { value: 'SUBMITTED', label: 'Mới gửi' },
+  { value: 'UNDER_REVIEW', label: 'Đang đánh giá' },
+  { value: 'NEEDS_CHANGES', label: 'Cần bổ sung' },
+  { value: 'APPROVED', label: 'Đã phê duyệt' },
+  { value: 'REJECTED', label: 'Đã từ chối' },
+];
 
 type VerificationAction = (id: string) => Promise<AdminVerificationActionResult>;
 type VerificationReviewAction = (
@@ -59,6 +103,10 @@ function VerificationDocuments({ detail, disabled, onRunOcr }: {
           const idNumber = ocrValue(version?.extractedFields?.idNumberMasked);
           const canRunOcr = ocrSupportedTypes.has(document.documentType);
           const canRetryOcr = version?.ocrStatus === 'NOT_STARTED' || version?.ocrStatus === 'OCR_FAILED';
+          const confidence = typeof version?.ocrConfidence === 'number'
+            ? `${Math.round(version.ocrConfidence * 100)}%`
+            : null;
+          const nextAction = ocrNextActionLabel(version?.ocr?.nextAction);
 
           return (
             <article className="admin-verification-document" key={document.documentType}>
@@ -84,8 +132,15 @@ function VerificationDocuments({ detail, disabled, onRunOcr }: {
               </button>
               <div className="admin-verification-document__meta">
                 <span className={statusClass(version?.ocrStatus ?? 'NOT_STARTED')}>
-                  {version?.ocrStatus ?? 'NOT_STARTED'}
+                  {ocrStatusLabel(version?.ocrStatus)}
                 </span>
+                {confidence && <small className='admin-verification-document__confidence'>Tin cậy: {confidence}</small>}
+                {version?.mismatchFlags?.length ? (
+                  <small className='admin-verification-document__warning'>
+                    {version.mismatchFlags.length} cảnh báo cần đối chiếu
+                  </small>
+                ) : null}
+                {nextAction && <small className='admin-verification-document__next-action'>{nextAction}</small>}
                 {canRunOcr && version && canRetryOcr && (
                   <button
                     type="button"
@@ -166,17 +221,57 @@ function VerificationDetail({
     if (reason) await execute(() => action(detail.verificationId, reviewPayload(reason)));
   };
 
-  const isFinal = detail.status === 'APPROVED' || detail.status === 'REJECTED';
+  const handleApprove = async () => {
+    const result = await Swal.fire({
+      title: 'Phê duyệt hồ sơ đối tác?',
+      text: 'Hệ thống sẽ cấp quyền đối tác và tự gửi thông báo phê duyệt.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Phê duyệt hồ sơ',
+      cancelButtonText: 'Quay lại',
+    });
+
+    if (result.isConfirmed) {
+      await execute(() => onApprove(detail.verificationId, {}));
+    }
+  };
+  const isReviewable = detail.status === 'SUBMITTED' || detail.status === 'UNDER_REVIEW';
+  const attentionDocumentCount = (detail.documents ?? []).filter((document) => {
+    const version = currentDocumentVersion(document);
+    return version && ['OCR_FAILED', 'OCR_LOW_CONFIDENCE', 'MISMATCH_DETECTED', 'NEEDS_MANUAL_REVIEW'].includes(version.ocrStatus);
+  }).length;
+  const missingDocumentLabels = (detail.missingDocuments ?? [])
+    .map((documentType) => documentLabels[documentType])
+    .join(', ');
 
   return (
     <aside className="admin-verification-detail" aria-label="Chi tiết hồ sơ đối tác">
       <div className="admin-verification-detail__header">
         <div>
-          <h2>{detail.businessProfile.businessName || 'Hồ sơ đối tác'}</h2>
+          <div className='admin-verification-detail__title'>
+            <h2>{detail.businessProfile.businessName || 'Hồ sơ đối tác'}</h2>
+            <span className={statusClass(detail.status)}>{verificationStatusLabels[detail.status]}</span>
+          </div>
           <p>{detail.businessProfile.ownerName || 'Chưa có chủ sở hữu'}</p>
         </div>
         <button type="button" onClick={onClose} aria-label="Đóng chi tiết hồ sơ">×</button>
       </div>
+
+      <section className='admin-verification-review-summary' aria-label='Tóm tắt hồ sơ'>
+        <div>
+          <span>Tài liệu cần đối chiếu</span>
+          <strong>{attentionDocumentCount}</strong>
+        </div>
+        <div>
+          <span>Tài liệu còn thiếu</span>
+          <strong>{detail.missingDocuments?.length ?? 0}</strong>
+          {missingDocumentLabels && <small>{missingDocumentLabels}</small>}
+        </div>
+        <div>
+          <span>Lần bổ sung</span>
+          <strong>#{detail.verificationRevision ?? 1}</strong>
+        </div>
+      </section>
 
       <dl className="admin-verification-detail__info">
         <div><dt>Email</dt><dd>{detail.businessProfile.email || '—'}</dd></div>
@@ -194,17 +289,17 @@ function VerificationDetail({
             Bắt đầu đánh giá
           </button>
         )}
-        {!isFinal && (
-          <button type="button" disabled={isSaving} onClick={() => void handleReviewAction('Phê duyệt hồ sơ', 'Hồ sơ hợp lệ.', onApprove)}>
+        {isReviewable && (
+          <button type="button" disabled={isSaving} onClick={() => void handleApprove()}>
             Phê duyệt
           </button>
         )}
-        {!isFinal && (
+        {isReviewable && (
           <button type="button" disabled={isSaving} onClick={() => void handleReviewAction('Yêu cầu chỉnh sửa', 'Vui lòng bổ sung thông tin.', onRequestChanges)}>
             Yêu cầu sửa
           </button>
         )}
-        {!isFinal && (
+        {isReviewable && (
           <button className="admin-verification-actions__danger" type="button" disabled={isSaving} onClick={() => void handleReviewAction('Từ chối hồ sơ', 'Hồ sơ không đạt yêu cầu.', onReject)}>
             Từ chối
           </button>
@@ -232,6 +327,8 @@ export function VerificationWorkspace() {
   } = useAdminVerifications();
   const [query, setQuery] = useState('');
 
+  const [statusFilter, setStatusFilter] = useState<'ALL' | AdminVerificationStatus>('ALL');
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -246,6 +343,13 @@ export function VerificationWorkspace() {
     );
   }, [items, query]);
 
+  const visibleItems = useMemo(
+    () => statusFilter === 'ALL'
+      ? filteredItems
+      : filteredItems.filter((item) => item.status === statusFilter),
+    [filteredItems, statusFilter],
+  );
+
   return (
     <section className="admin-verification-workspace">
       <div className="admin-verification-workspace__controls">
@@ -257,6 +361,12 @@ export function VerificationWorkspace() {
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Tìm theo tên thương hiệu, chủ sở hữu hoặc trạng thái…"
           />
+        </label>
+        <label className='admin-verification-workspace__filter'>
+          <span className='sr-only'>Lọc theo trạng thái</span>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'ALL' | AdminVerificationStatus)}>
+            {verificationFilters.map((filter) => <option key={filter.value} value={filter.value}>{filter.label}</option>)}
+          </select>
         </label>
         <button type="button" onClick={() => void refresh()} disabled={isLoading}>Tải lại</button>
       </div>
@@ -271,7 +381,7 @@ export function VerificationWorkspace() {
           <div className="admin-verification-list__labels" aria-hidden="true">
             <span>Tên đối tác</span><span>Dịch vụ đăng ký</span><span>Ngày gửi</span><span>Trạng thái</span>
           </div>
-          {filteredItems.map((item) => {
+          {visibleItems.map((item) => {
             const isSelected = selected?.verificationId === item.verificationId;
             return (
               <button
@@ -288,11 +398,12 @@ export function VerificationWorkspace() {
                   {(item.requestedCapabilities ?? []).map((capability) => <i key={capability}>{capability === 'PHOTOGRAPHY' ? 'CHỤP ẢNH' : capability === 'AODAI_RENTAL' ? 'CHO THUÊ' : capability}</i>)}
                 </span>
                 <span className="admin-verification-list__date">{item.createdAt ? new Date(item.createdAt).toLocaleDateString('vi-VN') : '—'}</span>
-                <span className={statusClass(item.status)}>{item.status}</span>
+                <span className={statusClass(item.status)}>{verificationStatusLabels[item.status]}</span>
               </button>
             );
           })}
-          {!isLoading && filteredItems.length === 0 && <p className="admin-verification-list__empty">Chưa có hồ sơ phù hợp.</p>}
+          {isLoading && visibleItems.length === 0 && <p className='admin-verification-list__empty'>Đang tải hồ sơ...</p>}
+          {!isLoading && visibleItems.length === 0 && <p className="admin-verification-list__empty">Chưa có hồ sơ phù hợp.</p>}
         </section>
 
         {selected && (
