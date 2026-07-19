@@ -13,7 +13,7 @@ import {
   Mail, 
   Phone, 
   CalendarRange, 
-  Star, 
+  Star,
   Pencil,
   AlertTriangle
 } from 'lucide-react';

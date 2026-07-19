@@ -1392,13 +1392,36 @@ export const ProductDetailPage: React.FC = () => {
   return (
     <div style={{ backgroundColor: '#FCF9F2', minHeight: '100vh', padding: '40px 0' }}>
       {product.activeCampaign && (
-        <div style={{ 
-          maxWidth: '1200px', margin: '0 auto 24px auto', padding: '16px 24px', 
-          backgroundColor: '#EF4444', color: 'white', borderRadius: '12px', 
-          fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', 
-          justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(239, 68, 68, 0.1)' 
-        }}>
-          <span>🎉 {product.activeCampaign.occasion} - Giảm giá siêu khủng {product.activeCampaign.discountPercent}% áp dụng đến hết ngày {new Date(product.activeCampaign.endDate).toLocaleDateString('vi-VN')}!</span>
+        <div style={{ maxWidth: '1200px', margin: '0 auto 24px auto', padding: '0 40px' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '16px',
+            padding: '14px 20px', borderRadius: '14px',
+            background: 'linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%)',
+            color: 'white', boxShadow: '0 10px 24px -8px rgba(139,20,20,0.45)',
+          }}>
+            <div style={{
+              flexShrink: 0, width: '48px', height: '48px', borderRadius: '50%',
+              backgroundColor: 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontSize: '15px', fontWeight: 800, letterSpacing: '-0.02em',
+            }}>
+              -{product.activeCampaign.discountPercent}%
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '15px', fontWeight: 800 }}>
+                Ưu đãi {product.activeCampaign.occasion} · Giảm {product.activeCampaign.discountPercent}%
+              </div>
+              <div style={{ fontSize: '12.5px', fontWeight: 500, opacity: 0.92, marginTop: '2px' }}>
+                Áp dụng đến hết ngày {new Date(product.activeCampaign.endDate).toLocaleDateString('vi-VN')} — đặt ngay kẻo lỡ!
+              </div>
+            </div>
+            <span style={{
+              flexShrink: 0, padding: '6px 14px', borderRadius: '999px', backgroundColor: 'white',
+              color: 'var(--color-primary-dark)', fontSize: '11.5px', fontWeight: 800, whiteSpace: 'nowrap',
+              letterSpacing: '0.03em',
+            }}>
+              ĐANG DIỄN RA
+            </span>
+          </div>
         </div>
       )}
       <div style={{ maxWidth: '1280px', width: '100%', margin: '0 auto', padding: '0 40px' }}>

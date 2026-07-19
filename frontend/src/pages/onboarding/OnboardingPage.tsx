@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { httpClient } from '../../services/httpClient';
 import { 
   GraduationCap, 
   Heart, 
@@ -48,8 +49,34 @@ export const OnboardingPage: React.FC = () => {
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
-  const canProceed = 
+  // Nếu người dùng đã có sở thích -> nạp lại để CHỈNH SỬA (không bắt làm lại từ đầu)
+  useEffect(() => {
+    let active = true;
+    httpClient.get<any>('/users/me').then((me) => {
+      if (!active) return;
+      const p = me?.preferences;
+      const hasData = p && (p.preferredAoDaiStyles?.length || p.favoriteColors?.length || p.sizeInfo?.preferredSize || p.preferredOccasions?.length);
+      if (!hasData) return;
+      setIsEditing(true);
+      if (p.preferredAoDaiStyles?.[0]) {
+        setStep1({ style: String(p.preferredAoDaiStyles[0]).toLowerCase() as Step1Data['style'] });
+      }
+      setStep2({
+        colorTone: (p.favoriteColors?.[0] ? String(p.favoriteColors[0]).toLowerCase() : null) as Step2Data['colorTone'],
+        size: (p.sizeInfo?.preferredSize ?? null) as Step2Data['size'],
+        height: p.sizeInfo?.height != null ? String(p.sizeInfo.height) : '',
+        weight: p.sizeInfo?.weight != null ? String(p.sizeInfo.weight) : '',
+      });
+      if (p.preferredOccasions?.[0]) {
+        setStep3({ purpose: String(p.preferredOccasions[0]).toLowerCase() as Step3Data['purpose'] });
+      }
+    }).catch(() => { /* khách mới / lỗi mạng -> để trống như cũ */ });
+    return () => { active = false; };
+  }, []);
+
+  const canProceed =
     (step === 1 && step1.style !== null) ||
     (step === 2 && step2.size !== null) ||
     (step === 3 && step3.purpose !== null);
@@ -78,7 +105,8 @@ export const OnboardingPage: React.FC = () => {
 
       await updatePreferences(payload);
       setSubmitting(false);
-      navigate(ROUTES.RENTALS);
+      // Sửa xong -> về trang cá nhân; onboarding lần đầu -> ra trang thuê
+      navigate(isEditing ? ROUTES.PROFILE : ROUTES.RENTALS);
     } catch (err) {
       console.error('Failed to save onboarding preferences:', err);
       setErrorMsg('Không thể lưu thông tin. Vui lòng kiểm tra kết nối mạng và thử lại.');

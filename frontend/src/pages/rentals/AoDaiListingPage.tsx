@@ -8,6 +8,9 @@ import {
   ShoppingCart,
   Settings,
   Search,
+  Ruler,
+  Palette,
+  Fingerprint,
 } from "lucide-react";
 import { httpClient } from "../../services/httpClient";
 import { API_BASE_URL } from "../../config/env";
@@ -544,10 +547,11 @@ export const AoDaiListingPage: React.FC = () => {
               <div
                 className="vh-filter-section"
                 style={{
-                  backgroundColor: "var(--color-light-bg)",
+                  background:
+                    "linear-gradient(180deg, var(--color-primary-trans) 0%, var(--color-light-bg) 70%)",
                   padding: "16px",
-                  borderRadius: "8px",
-                  border: "1px solid var(--color-light-border)",
+                  borderRadius: "12px",
+                  border: "1px solid var(--color-primary-trans)",
                 }}
               >
                 <h4
@@ -564,10 +568,26 @@ export const AoDaiListingPage: React.FC = () => {
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: "6px",
+                      gap: "8px",
+                      fontWeight: 800,
                     }}
                   >
-                    <Sparkles size={14} /> GỢI Ý CÁ NHÂN HÓA
+                    <span
+                      style={{
+                        width: "26px",
+                        height: "26px",
+                        borderRadius: "50%",
+                        backgroundColor: "var(--color-primary)",
+                        color: "white",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Fingerprint size={15} />
+                    </span>
+                    Gợi ý cá nhân hóa
                   </span>
                   <button
                     onClick={() => navigate("/onboarding")}
@@ -600,25 +620,44 @@ export const AoDaiListingPage: React.FC = () => {
                       style={{
                         display: "flex",
                         alignItems: "center",
+                        justifyContent: "space-between",
                         gap: "8px",
                         cursor: "pointer",
-                        fontSize: "13px",
-                        fontWeight: 600,
+                        padding: "10px 12px",
+                        borderRadius: "10px",
+                        backgroundColor: "white",
+                        border: matchMySize
+                          ? "1.5px solid var(--color-primary)"
+                          : "1px solid var(--color-light-border)",
+                        boxShadow: matchMySize
+                          ? "0 0 0 3px var(--color-primary-trans)"
+                          : "none",
+                        transition: "all 0.15s",
                       }}
                     >
+                      <span style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                        <Ruler size={17} style={{ color: "var(--color-primary)", flexShrink: 0 }} />
+                        <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--color-text-primary)" }}>
+                            Khớp số đo của tôi
+                          </span>
+                          {isFallbackApplied ? (
+                            <span style={{ fontSize: "11px", fontWeight: 600, color: "#B45309" }}>
+                              Size {displaySize} · kho chưa có XXL, tạm dùng XL
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+                              Ưu tiên size {displaySize}
+                            </span>
+                          )}
+                        </span>
+                      </span>
                       <input
                         type="checkbox"
                         checked={matchMySize}
                         onChange={(e) => setMatchMySize(e.target.checked)}
-                        style={{ accentColor: "var(--color-primary)" }}
+                        style={{ accentColor: "var(--color-primary)", width: "16px", height: "16px", flexShrink: 0 }}
                       />
-                      {isFallbackApplied ? (
-                        <span title="Hệ thống tự động lùi về size lớn nhất hiện có (XL) do kho chưa có sản phẩm size XXL của bạn.">
-                          📏 Khớp số đo (Size XL - khuyên dùng XXL ⚠️)
-                        </span>
-                      ) : (
-                        `📏 Khớp số đo (Size ${displaySize})`
-                      )}
                     </label>
                   )}
                   {hasGuPreference && (
@@ -626,19 +665,33 @@ export const AoDaiListingPage: React.FC = () => {
                       style={{
                         display: "flex",
                         alignItems: "center",
+                        justifyContent: "space-between",
                         gap: "8px",
                         cursor: "pointer",
-                        fontSize: "13px",
-                        fontWeight: 600,
+                        padding: "10px 12px",
+                        borderRadius: "10px",
+                        backgroundColor: "white",
+                        border: recommendMyGu
+                          ? "1.5px solid var(--color-primary)"
+                          : "1px solid var(--color-light-border)",
+                        boxShadow: recommendMyGu
+                          ? "0 0 0 3px var(--color-primary-trans)"
+                          : "none",
+                        transition: "all 0.15s",
                       }}
                     >
+                      <span style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <Palette size={17} style={{ color: "var(--color-primary)", flexShrink: 0 }} />
+                        <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--color-text-primary)" }}>
+                          Đề xuất theo gu của tôi
+                        </span>
+                      </span>
                       <input
                         type="checkbox"
                         checked={recommendMyGu}
                         onChange={(e) => setRecommendMyGu(e.target.checked)}
-                        style={{ accentColor: "var(--color-primary)" }}
+                        style={{ accentColor: "var(--color-primary)", width: "16px", height: "16px", flexShrink: 0 }}
                       />
-                      ✨ Đề xuất theo gu của tôi
                     </label>
                   )}
                 </div>
