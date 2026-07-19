@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
-  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,Copy,
+  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,Copy,Package, Eye,
   Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck
 } from 'lucide-react';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
@@ -13,6 +13,10 @@ import { Modal } from '../../components/common/Modal';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { API_BASE_URL } from '../../config/env';
 import { SmartTagEditor } from '../../features/smart-tagging/components/SmartTagEditor';
+import { PortfolioItemFormModal, type PortfolioItemFormValues } from '../../features/photographers/components/PortfolioItemFormModal';
+import { PhotographyPackageManager } from '../../features/photography-packages/components/PhotographyPackageManager';
+import { categoryService } from '../../features/categories/services/categoryService';
+import type { Category } from '../../features/categories/types';
 
 interface Order {
   _id: string;
@@ -49,10 +53,20 @@ interface Product {
   materials: string[];
   style?: string;
   occasions?: string[];
+  styleCategoryIds?: Array<string | { _id?: string; id?: string }>;
+  eventCategoryIds?: Array<string | { _id?: string; id?: string }>;
   status: 'ACTIVE' | 'DRAFT' | 'INACTIVE';
   taggingDecisionVersion?: number;
 }
 
+interface PortfolioItem {
+  _id: string;
+  title: string;
+  description?: string | null;
+  images: string[];
+  moderationStatus: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'HIDDEN';
+  moderationReason?: string | null;
+}
 export const ProviderDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { logout, user, isAuthenticated } = useAuth();
@@ -73,16 +87,23 @@ export const ProviderDashboard: React.FC = () => {
       }
     }
   }, [user, isAuthenticated, navigate, toast]);
-  
+
   // Views navigation state
-  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'calendar' | 'vouchers' | 'inventory' | 'reviews' | 'trust' | 'analytics' | 'payouts'>('analytics');
+  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'photography-packages' | 'calendar' | 'vouchers' | 'inventory' | 'reviews' | 'trust' | 'analytics' | 'payouts'>('analytics');
   const [collectionTab, setCollectionTab] = useState<'products' | 'inventory'>('products');
 
   // Provider Specific States
   const [provider, setProvider] = useState<any>(null);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
+  const [isPortfolioFormOpen, setIsPortfolioFormOpen] = useState(false);
+  const [isPortfolioSaving, setIsPortfolioSaving] = useState(false);
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+  const [editingPortfolioItem, setEditingPortfolioItem] = useState<PortfolioItem | null>(null);
+  const [previewPortfolioItem, setPreviewPortfolioItem] = useState<PortfolioItem | null>(null);
+  const [previewImageIndex, setPreviewImageIndex] = useState<number>(0);
+  const hasPhotographyCapability = Array.isArray(provider?.capabilities) && provider.capabilities.includes('PHOTOGRAPHY');
   const [subTab, setSubTab] = useState<'shop' | 'photo'>('shop');
-
   // Product Search / Sort / Filter States
   const [prodSearch, setProdSearch] = useState('');
   const [prodSortBy, setProdSortBy] = useState('newest');
@@ -167,9 +188,11 @@ export const ProviderDashboard: React.FC = () => {
   const vMinOrder = 0;
 
   // Form states - Calendar
-  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(0);
-  const [startHour, setStartHour] = useState('08:00');
-  const [endHour, setEndHour] = useState('17:00');
+  const [selectedScheduleDays, setSelectedScheduleDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [workingHourRanges, setWorkingHourRanges] = useState<Array<{ start: string; end: string }>>([
+    { start: '08:00', end: '17:00' },
+  ]);
+  const [editingScheduleDay, setEditingScheduleDay] = useState<number | null>(null);
   const [blockedDate, setBlockedDate] = useState('');
 
   // Reply states
@@ -271,6 +294,13 @@ export const ProviderDashboard: React.FC = () => {
       setCity(pRes.address?.city || '');
       setCancellationPolicy(pRes.policies?.cancellationPolicy || '');
       setComboDiscountPercent(pRes.comboDiscountPercent ?? 0);
+
+      if (Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY')) {
+        const portfolioRes: any = await httpClient.get('/providers/me/portfolio-items');
+        setPortfolioItems(Array.isArray(portfolioRes) ? portfolioRes : []);
+      } else {
+        setPortfolioItems([]);
+      }
 
       const sRes: any = await httpClient.get('/providers/me/schedules');
       setSchedules(sRes);
@@ -495,19 +525,65 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
-  const handleAddRecurringSchedule = async () => {
+  const toggleScheduleDay = (day: number) => {
+    setSelectedScheduleDays((current) => current.includes(day)
+      ? current.filter((item) => item !== day)
+      : [...current, day].sort((a, b) => a - b));
+  };
+
+  const updateWorkingHourRange = (
+    index: number,
+    field: 'start' | 'end',
+    value: string,
+  ) => {
+    setWorkingHourRanges((current) => current.map((range, rangeIndex) =>
+      rangeIndex === index ? { ...range, [field]: value } : range,
+    ));
+  };
+
+  const handleSaveRecurringSchedules = async () => {
+    if (selectedScheduleDays.length === 0) {
+      toast.error('Hãy chọn ít nhất một ngày làm việc.');
+      return;
+    }
+
+    const sortedRanges = [...workingHourRanges].sort((a, b) => a.start.localeCompare(b.start));
+    const hasInvalidRange = sortedRanges.some((range) => !range.start || !range.end || range.start >= range.end);
+    const hasOverlap = sortedRanges.some((range, index) =>
+      index > 0 && range.start < sortedRanges[index - 1].end,
+    );
+    if (hasInvalidRange) {
+      toast.error('Giờ bắt đầu của mỗi ca phải sớm hơn giờ kết thúc.');
+      return;
+    }
+    if (hasOverlap) {
+      toast.error('Các ca làm việc không được chồng lên nhau.');
+      return;
+    }
+
     try {
-      await httpClient.post('/providers/me/schedules/recurring', {
-        dayOfWeek: Number(selectedDayOfWeek),
-        workingHours: [{ start: startHour, end: endHour }],
+      await httpClient.post('/providers/me/schedules/recurring/bulk', {
+        dayOfWeeks: selectedScheduleDays,
+        workingHours: sortedRanges,
       });
-      toast.success('Thiết lập khung giờ làm việc recurring thành công!');
+      toast.success(`Đã lưu lịch cho ${selectedScheduleDays.length} ngày làm việc.`);
+      setEditingScheduleDay(null);
       fetchProviderData();
     } catch (err: any) {
-      toast.error('Lưu lịch làm việc thất bại');
+      toast.error(err.message || 'Lưu lịch làm việc thất bại.');
     }
   };
 
+  const handleEditRecurringSchedule = (schedule: any) => {
+    const dayOfWeek = Number(schedule.dayOfWeek);
+    setSelectedScheduleDays(Number.isInteger(dayOfWeek) ? [dayOfWeek] : []);
+    setWorkingHourRanges(
+      Array.isArray(schedule.workingHours) && schedule.workingHours.length > 0
+        ? schedule.workingHours.map((range: any) => ({ start: range.start, end: range.end }))
+        : [{ start: '08:00', end: '17:00' }],
+    );
+    setEditingScheduleDay(dayOfWeek);
+  };
   const handleBlockDate = async () => {
     if (!blockedDate) return;
     try {
@@ -559,6 +635,55 @@ export const ProviderDashboard: React.FC = () => {
     } catch (err: any) {
       toast.error('Gỡ ảnh thất bại');
     }
+  };
+  // Kept temporarily for legacy data cleanup; the UI uses portfolio-items.
+  void handleAddPortfolio;
+  void handleRemovePortfolio;
+
+  const handlePortfolioFormSubmit = async (values: PortfolioItemFormValues) => {
+    setIsPortfolioSaving(true);
+    try {
+      if (editingPortfolioItem) {
+        await httpClient.patch(`/providers/me/portfolio-items/${editingPortfolioItem._id}`, values);
+        toast.success('Cập nhật tác phẩm thành công.');
+      } else {
+        await httpClient.post('/providers/me/portfolio-items', values);
+        toast.success('Tác phẩm đã được gửi duyệt.');
+      }
+      setIsPortfolioFormOpen(false);
+      setEditingPortfolioItem(null);
+      await fetchProviderData();
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể lưu tác phẩm portfolio.');
+    } finally {
+      setIsPortfolioSaving(false);
+    }
+  };
+  const handleDeletePortfolioItem = async (itemId: string) => {
+    if (!window.confirm('G\u1EE1 t\u00E1c ph\u1EA9m n\u00E0y kh\u1ECFi portfolio?')) return;
+    try {
+      await httpClient.delete(`/providers/me/portfolio-items/${itemId}`);
+      toast.success('\u0110\u00E3 g\u1EE1 t\u00E1c ph\u1EA9m kh\u1ECFi portfolio.');
+      fetchProviderData();
+      return;
+    } catch (err: any) {
+      toast.error(err.message || 'Kh\u00F4ng th\u1EC3 g\u1EE1 t\u00E1c ph\u1EA9m.');
+      return;
+    }
+    /* Legacy reply handler body kept out of this handler.
+
+    e.preventDefault();
+    if (!replyingReviewId) return;
+    try {
+      await httpClient.post(`/reviews/${replyingReviewId}/reply`, { reply: replyText });
+      toast.success('Gửi phản hồi đánh giá thành công!');
+      setReplyingReviewId(null);
+      setReplyText('');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error('Không thể gửi phản hồi');
+    }
+    */
   };
 
   const handleReplyReview = async (e: React.FormEvent) => {
@@ -678,7 +803,7 @@ export const ProviderDashboard: React.FC = () => {
         const firstItem = b.items?.[0];
         const productName = firstItem?.name || firstItem?.productId?.name || firstItem?.photographyPackageId?.name || 'Sản phẩm thuê';
         const dateStr = b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : '';
-        
+
         let totalAmt = 0;
         if (b.items && b.items.length > 0) {
           totalAmt = b.items.reduce((sum: number, item: any) => {
@@ -736,7 +861,7 @@ export const ProviderDashboard: React.FC = () => {
   // Add/Edit Product Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  
+
   // Product Form Fields
   const [prodName, setProdName] = useState('');
   const [prodCategoryId, setProdCategoryId] = useState('');
@@ -753,6 +878,10 @@ export const ProviderDashboard: React.FC = () => {
   const [uploadingVideos, setUploadingVideos] = useState(false);
   const [prodStyle, setProdStyle] = useState('traditional');
   const [prodOccasions, setProdOccasions] = useState<string[]>([]);
+  const [styleCategories, setStyleCategories] = useState<Category[]>([]);
+  const [eventCategories, setEventCategories] = useState<Category[]>([]);
+  const [prodStyleCategoryIds, setProdStyleCategoryIds] = useState<string[]>([]);
+  const [prodEventCategoryIds, setProdEventCategoryIds] = useState<string[]>([]);
 
   // Onboarding wizard (3 steps) + variant table + hidden-draft lifecycle
   type VariantRow = { size: string; color: string; material: string; quantity: number; condition: string };
@@ -804,6 +933,18 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
+  const fetchServiceCategories = async () => {
+    try {
+      const [styles, events] = await Promise.all([
+        categoryService.getPublic({ type: 'STYLE', status: 'ACTIVE', limit: 100 }),
+        categoryService.getPublic({ type: 'EVENT', status: 'ACTIVE', limit: 100 }),
+      ]);
+      setStyleCategories(styles);
+      setEventCategories(events);
+    } catch (err) {
+      console.error('Lỗi tải danh mục phong cách và dịp phù hợp:', err);
+    }
+  };
   const fetchActiveCampaign = async () => {
     try {
       const res = await httpClient.get('/campaigns/mine') as any;
@@ -833,6 +974,7 @@ export const ProviderDashboard: React.FC = () => {
     } else if (currentView === 'collections') {
       fetchProducts();
       fetchCategories();
+      fetchServiceCategories();
       fetchActiveCampaign();
     } else if (currentView === 'payouts') {
       fetchPayouts();
@@ -885,6 +1027,8 @@ export const ProviderDashboard: React.FC = () => {
     setProdVideos([]);
     setProdStyle('traditional');
     setProdOccasions([]);
+    setProdStyleCategoryIds([]);
+    setProdEventCategoryIds([]);
     setVariants([emptyVariant()]);
     setWizardStep(1);
     setCreatedDraftId(null);
@@ -905,6 +1049,19 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
+  const normalizeCategoryIds = (items?: Array<string | { _id?: string; id?: string }>) =>
+    (items || [])
+      .map(item => typeof item === 'string' ? item : item._id || item.id || '')
+      .filter(Boolean);
+
+  const toggleProductCategoryId = (
+    categoryId: string,
+    setCategoryIds: React.Dispatch<React.SetStateAction<string[]>>,
+  ) => {
+    setCategoryIds(current => current.includes(categoryId)
+      ? current.filter(id => id !== categoryId)
+      : [...current, categoryId]);
+  };
   const openEditModal = (p: Product) => {
     setEditingProduct(p);
     setProdName(p.name);
@@ -920,6 +1077,8 @@ export const ProviderDashboard: React.FC = () => {
     setProdVideos(p.videos || []);
     setProdStyle(p.style || 'traditional');
     setProdOccasions(p.occasions || []);
+    setProdStyleCategoryIds(normalizeCategoryIds(p.styleCategoryIds));
+    setProdEventCategoryIds(normalizeCategoryIds(p.eventCategoryIds));
     setVariants([]);
     setWizardStep(1);
     setCreatedDraftId(null);
@@ -943,6 +1102,8 @@ export const ProviderDashboard: React.FC = () => {
     setProdVideos([]);
     setProdStyle(p.style ? p.style.toLowerCase() : 'traditional');
     setProdOccasions(p.occasions || []);
+    setProdStyleCategoryIds(normalizeCategoryIds(p.styleCategoryIds));
+    setProdEventCategoryIds(normalizeCategoryIds(p.eventCategoryIds));
     // Sao chép biến thể từ áo gốc (số lượng đặt lại = 1 để provider tự nhập).
     const dupSizes = p.sizes && p.sizes.length ? p.sizes : ['M'];
     const dupColors = p.colors && p.colors.length ? p.colors : ['RED'];
@@ -1024,7 +1185,7 @@ export const ProviderDashboard: React.FC = () => {
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    
+
     setUploadingImages(true);
     try {
       const formData = new FormData();
@@ -1151,6 +1312,8 @@ export const ProviderDashboard: React.FC = () => {
     videos: prodVideos,
     style: prodStyle,
     occasions: prodOccasions,
+    styleCategoryIds: prodStyleCategoryIds,
+    eventCategoryIds: prodEventCategoryIds,
   });
 
   const validateWizardStep1 = () => {
@@ -1256,7 +1419,7 @@ export const ProviderDashboard: React.FC = () => {
       return 'Chờ xử lý';
     }
     if ([
-      'ĐÃ ĐẶT CỌC', 'ĐANG THỰC HIỆN', 'CHỜ NHẬN ĐỒ', 'ĐANG THUÊ', 
+      'ĐÃ ĐẶT CỌC', 'ĐANG THỰC HIỆN', 'CHỜ NHẬN ĐỒ', 'ĐANG THUÊ',
       'CHỜ KHÁCH DUYỆT SỰ CỐ', 'ĐÃ TRẢ ĐỒ', 'TRANH CHẤP', 'ĐANG XỬ LÝ',
       'DEPOSIT_PAID', 'CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP',
       'RETURN_PENDING', 'RETURNED', 'DISPUTED'
@@ -1280,8 +1443,8 @@ export const ProviderDashboard: React.FC = () => {
     { label: 'Đã hủy', count: orders.filter(o => getOrderGroup(o.status) === 'Đã hủy').length },
   ], [orders]);
 
-  const filteredOrders = orderTab === 'Tất cả' 
-    ? orders 
+  const filteredOrders = orderTab === 'Tất cả'
+    ? orders
     : orders.filter(o => getOrderGroup(o.status) === orderTab);
 
   // Monthly revenue from completed orders
@@ -1492,7 +1655,7 @@ export const ProviderDashboard: React.FC = () => {
                   <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
                     <td style={{ padding: '16px 24px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.name}</td>
                     <td style={{ padding: '16px 24px', textAlign: 'center' }}>
-                      <span style={{ 
+                      <span style={{
                         padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
                         backgroundColor: item.color === 'rental' ? '#EBF8FF' : '#FEF3C7',
                         color: item.color === 'rental' ? '#2B6CB0' : '#D69E2E'
@@ -1578,7 +1741,7 @@ export const ProviderDashboard: React.FC = () => {
                         <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)', display: 'block' }}>{s.customerName}</strong>
                         <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{s.date} • {s.time}</span>
                       </div>
-                      <span style={{ 
+                      <span style={{
                         padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
                         backgroundColor: s.color === 'deposit' ? '#F0FDF4' : '#FEF3C7',
                         color: s.color === 'deposit' ? '#166534' : '#92400E'
@@ -1810,7 +1973,7 @@ export const ProviderDashboard: React.FC = () => {
                             <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
                             <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.color}</td>
                             <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                              <span style={{ 
+                              <span style={{
                                 padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
                                 backgroundColor: item.conditionStatus === 'NEW' ? '#EEF2F6' : item.conditionStatus === 'GOOD' ? '#F0FDF4' : item.conditionStatus === 'MINOR_DAMAGE' ? '#FFFBEB' : item.conditionStatus === 'LOCKED' ? '#FEF2F2' : '#F4F4F5',
                                 color: item.conditionStatus === 'NEW' ? '#475569' : item.conditionStatus === 'GOOD' ? '#166534' : item.conditionStatus === 'MINOR_DAMAGE' ? '#B45309' : item.conditionStatus === 'LOCKED' ? '#991B1B' : '#71717A'
@@ -1819,7 +1982,7 @@ export const ProviderDashboard: React.FC = () => {
                               </span>
                             </td>
                             <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                              <span style={{ 
+                              <span style={{
                                 padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
                                 backgroundColor: item.status === 'AVAILABLE' ? '#ECFDF5' : item.status === 'RENTED' ? '#EFF6FF' : '#FFF7ED',
                                 color: item.status === 'AVAILABLE' ? '#047857' : item.status === 'RENTED' ? '#1D4ED8' : '#C2410C'
@@ -1831,7 +1994,7 @@ export const ProviderDashboard: React.FC = () => {
                             <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                               {!isRetired && (
                                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                                  <button 
+                                  <button
                                     onClick={() => {
                                       setEditInvItem(item);
                                       setEditInvStatus(item.status);
@@ -1846,7 +2009,7 @@ export const ProviderDashboard: React.FC = () => {
                                   >
                                     Cập nhật
                                   </button>
-                                  <button 
+                                  <button
                                     onClick={() => handleDeleteInventoryItem(item._id)}
                                     style={{
                                       padding: '6px 12px', border: 'none', borderRadius: '4px',
@@ -1872,9 +2035,9 @@ export const ProviderDashboard: React.FC = () => {
                       Hiển thị {inventoryItems.length} trên tổng số {invTotal} hiện vật
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button 
-                        disabled={invPage <= 1} 
-                        onClick={() => setInvPage(p => Math.max(1, p - 1))} 
+                      <button
+                        disabled={invPage <= 1}
+                        onClick={() => setInvPage(p => Math.max(1, p - 1))}
                         style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
                       >
                         Trang trước
@@ -1882,9 +2045,9 @@ export const ProviderDashboard: React.FC = () => {
                       <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
                         {invPage} / {Math.ceil(invTotal / invLimit)}
                       </span>
-                      <button 
-                        disabled={invPage >= Math.ceil(invTotal / invLimit)} 
-                        onClick={() => setInvPage(p => p + 1)} 
+                      <button
+                        disabled={invPage >= Math.ceil(invTotal / invLimit)}
+                        onClick={() => setInvPage(p => p + 1)}
                         style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage < Math.ceil(invTotal / invLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
                       >
                         Trang sau
@@ -1914,7 +2077,12 @@ export const ProviderDashboard: React.FC = () => {
             <button onClick={() => setCurrentView('orders')} style={navItemStyle(currentView === 'orders')}><ShoppingBag size={18} /> Đơn hàng</button>
             <button onClick={() => { setCurrentView('collections'); setCollectionTab('products'); }} style={navItemStyle(currentView === 'collections' && collectionTab === 'products')}><Layers size={18} /> Bộ sưu tập</button>
             <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ</button>
+            {hasPhotographyCapability && (
             <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio</button>
+            )}
+            {hasPhotographyCapability && (
+              <button onClick={() => setCurrentView('photography-packages')} style={navItemStyle(currentView === 'photography-packages')}><Package size={18} /> Gói chụp ảnh</button>
+            )}
             <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn</button>
             <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi</button>
             <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi</button>
@@ -1939,7 +2107,7 @@ export const ProviderDashboard: React.FC = () => {
           <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Hệ thống Quản lý nhà cung cấp</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <div style={{ position: 'relative' }} ref={notiRef}>
-              <button 
+              <button
                 onClick={() => { setIsNotiOpen(!isNotiOpen); if (!isNotiOpen) fetchNotifications(); }}
                 style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', position: 'relative' }}
               >
@@ -2353,10 +2521,10 @@ export const ProviderDashboard: React.FC = () => {
                   }}>
                     {/* Image */}
                     <div style={{ height: '220px', overflow: 'hidden', position: 'relative', backgroundColor: 'var(--color-light-bg)' }}>
-                      <img 
-                        src={getImageUrl(p.images?.[0])} 
-                        alt={p.name} 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      <img
+                        src={getImageUrl(p.images?.[0])}
+                        alt={p.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                       <span style={{
                         position: 'absolute', top: '12px', right: '12px',
@@ -2399,7 +2567,7 @@ export const ProviderDashboard: React.FC = () => {
 
                       {/* Actions */}
                       <div style={{ display: 'flex', gap: '10px', marginTop: '12px', borderTop: '1px solid var(--color-light-border)', paddingTop: '12px' }}>
-                        <button 
+                        <button
                           onClick={() => openEditModal(p)}
                           style={{
                             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
@@ -2410,7 +2578,7 @@ export const ProviderDashboard: React.FC = () => {
                         >
                           <Pencil size={12} /> Chỉnh sửa
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleDuplicateProduct(p)}
                           style={{
                             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
@@ -2421,7 +2589,7 @@ export const ProviderDashboard: React.FC = () => {
                         >
                           <Copy size={12} /> Nhân bản
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleDeleteProduct(p._id, p.name)}
                           style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px',
@@ -2445,9 +2613,9 @@ export const ProviderDashboard: React.FC = () => {
                     Hiển thị {products.length} trên tổng số {prodTotal} thiết kế
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button 
-                      disabled={prodPage <= 1} 
-                      onClick={() => setProdPage(p => Math.max(1, p - 1))} 
+                    <button
+                      disabled={prodPage <= 1}
+                      onClick={() => setProdPage(p => Math.max(1, p - 1))}
                       style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
                     >
                       Trang trước
@@ -2455,9 +2623,9 @@ export const ProviderDashboard: React.FC = () => {
                     <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
                       {prodPage} / {Math.ceil(prodTotal / prodLimit)}
                     </span>
-                    <button 
-                      disabled={prodPage >= Math.ceil(prodTotal / prodLimit)} 
-                      onClick={() => setProdPage(p => p + 1)} 
+                    <button
+                      disabled={prodPage >= Math.ceil(prodTotal / prodLimit)}
+                      onClick={() => setProdPage(p => p + 1)}
                       style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage < Math.ceil(prodTotal / prodLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
                     >
                       Trang sau
@@ -2562,7 +2730,11 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
-        {currentView === 'portfolio' && (
+        {hasPhotographyCapability && currentView === 'photography-packages' && (
+          <PhotographyPackageManager enabled={hasPhotographyCapability} />
+        )}
+
+        {hasPhotographyCapability && currentView === 'portfolio' && (
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
@@ -2570,7 +2742,7 @@ export const ProviderDashboard: React.FC = () => {
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Đăng tải các tác phẩm thiết kế mẫu hoặc các dự án đã hoàn thành của bạn.</p>
               </div>
               <button
-                onClick={handleAddPortfolio}
+                onClick={() => setIsPortfolioFormOpen(true)}
                 style={{ padding: '10px 20px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
                 <Plus size={14} />
@@ -2580,27 +2752,229 @@ export const ProviderDashboard: React.FC = () => {
 
             {isLoadingProvider ? (
               <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải portfolio...</div>
-            ) : !provider?.media?.images || provider.media.images.length === 0 ? (
+            ) : portfolioItems.length === 0 ? (
               <div style={{ padding: '80px 40px', textAlign: 'center', backgroundColor: 'white', border: '1px dashed var(--color-light-border)', borderRadius: 'var(--radius-md)' }}>
                 <Camera size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5, marginBottom: '16px', margin: '0 auto' }} />
                 <h4 style={{ fontSize: '16px', fontWeight: 700 }}>Chưa có tác phẩm nào trong Portfolio</h4>
                 <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '6px' }}>Bắt đầu đăng tải hình ảnh chất lượng cao để thu hút khách hàng đặt lịch chụp.</p>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '20px' }}>
-                {provider.media.images.map((img: string, idx: number) => (
-                  <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)' }}>
-                    <img src={img.startsWith('http') ? img : getImageUrl(img)} alt="Portfolio item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', opacity: 0, transition: 'opacity 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '1'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}>
-                      <button
-                        onClick={() => handleRemovePortfolio(img)}
-                        style={{ padding: '8px 12px', backgroundColor: '#EF4444', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '12px' }}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '24px' }}>
+                {portfolioItems.map((item) => {
+                  const isHovered = hoveredItemId === item._id;
+
+                  let statusLabel = 'Chờ duyệt';
+                  let statusBgColor = '#F59E0B';
+                  if (item.moderationStatus === 'APPROVED') {
+                    statusLabel = 'Đã duyệt';
+                    statusBgColor = '#10B981';
+                  } else if (item.moderationStatus === 'REJECTED') {
+                    statusLabel = 'Từ chối';
+                    statusBgColor = '#EF4444';
+                  } else if (item.moderationStatus === 'HIDDEN') {
+                    statusLabel = 'Tạm ẩn';
+                    statusBgColor = '#6B7280';
+                  }
+
+                  return (
+                    <div
+                      key={item._id}
+                      onMouseEnter={() => setHoveredItemId(item._id)}
+                      onMouseLeave={() => setHoveredItemId(null)}
+                      style={{
+                        position: 'relative',
+                        aspectRatio: '1',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        border: '1px solid var(--color-light-border)',
+                        boxShadow: 'var(--shadow-sm)',
+                        transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                        transform: isHovered ? 'translateY(-4px)' : 'none',
+                      }}
+                    >
+                      {/* Artwork Image */}
+                      <img
+                        src={item.images[0].startsWith('http') ? item.images[0] : getImageUrl(item.images[0])}
+                        alt={item.title}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          transition: 'transform 0.3s ease',
+                          transform: isHovered ? 'scale(1.05)' : 'none',
+                        }}
+                      />
+
+                      {/* Always visible status badge at top-right */}
+                      <span
+                        style={{
+                          position: 'absolute',
+                          right: '12px',
+                          top: '12px',
+                          padding: '4px 10px',
+                          borderRadius: '20px',
+                          backgroundColor: statusBgColor,
+                          color: '#FFFFFF',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                          zIndex: 2,
+                          pointerEvents: 'none',
+                        }}
                       >
-                        Gỡ ảnh
-                      </button>
+                        {statusLabel}
+                      </span>
+
+                      {/* Always visible dark gradient title overlay at bottom */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          padding: '24px 12px 12px 12px',
+                          background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0) 100%)',
+                          color: '#FFFFFF',
+                          zIndex: 1,
+                          pointerEvents: 'none',
+                          display: 'flex',
+                          flexDirection: 'column',
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            fontSize: '13.5px',
+                            textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {item.title}
+                        </span>
+                      </div>
+
+                      {/* Hover blur overlay containing actions */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          backgroundColor: 'rgba(0,0,0,0.4)',
+                          backdropFilter: 'blur(3px)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '10px',
+                          opacity: isHovered ? 1 : 0,
+                          transition: 'opacity 0.25s ease',
+                          zIndex: 3,
+                          pointerEvents: isHovered ? 'auto' : 'none',
+                        }}
+                      >
+                        {/* Xem ảnh lớn */}
+                        <button
+                          onClick={() => {
+                            setPreviewPortfolioItem(item);
+                            setPreviewImageIndex(0);
+                          }}
+                          style={{
+                            width: '130px',
+                            padding: '8px 12px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: 'var(--color-text-primary)',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#FFFFFF';
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                        >
+                          <Eye size={12} />
+                          Xem ảnh lớn
+                        </button>
+
+                        {/* Sửa thông tin */}
+                        <button
+                          onClick={() => {
+                            setEditingPortfolioItem(item);
+                            setIsPortfolioFormOpen(true);
+                          }}
+                          style={{
+                            width: '130px',
+                            padding: '8px 12px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: 'var(--color-text-primary)',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#FFFFFF';
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                        >
+                          <Pencil size={11} />
+                          Sửa thông tin
+                        </button>
+
+                        {/* Gỡ ảnh */}
+                        <button
+                          onClick={() => handleDeletePortfolioItem(item._id)}
+                          style={{
+                            width: '130px',
+                            padding: '8px 12px',
+                            backgroundColor: '#EF4444',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 6px rgba(239, 68, 68, 0.2)',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        >
+                          <Trash2 size={11} />
+                          Gỡ tác phẩm
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </main>
@@ -2620,51 +2994,53 @@ export const ProviderDashboard: React.FC = () => {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
                 <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
-                    KHUNG GIỜ LÀM VIỆC CỐ ĐỊNH HẰNG TUẦN
-                  </h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', alignItems: 'flex-end' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY TRONG TUẦN</span>
-                      <select
-                        value={selectedDayOfWeek}
-                        onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))}
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      >
-                        {daysOfWeekVn.map((day, idx) => (
-                          <option key={idx} value={idx}>{day}</option>
-                        ))}
-                      </select>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '20px', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '14px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0 }}>KHUNG GIỜ LÀM VIỆC HẰNG TUẦN</h3>
+                      <p style={{ margin: '6px 0 0', color: 'var(--color-text-secondary)', fontSize: '13px' }}>Chọn nhiều ngày và thêm các ca phù hợp. Lịch cũ của các ngày được chọn sẽ được cập nhật.</p>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIỜ MỞ CỬA</span>
-                      <input
-                        type="text"
-                        value={startHour}
-                        onChange={(e) => setStartHour(e.target.value)}
-                        placeholder="Ví dụ: 08:00"
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      />
+                    {editingScheduleDay !== null && <span style={{ padding: '6px 10px', backgroundColor: '#FFF7ED', color: '#9A3412', borderRadius: '999px', fontWeight: 700, fontSize: '12px' }}>Đang sửa {daysOfWeekVn[editingScheduleDay]}</span>}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 750, color: 'var(--color-text-secondary)' }}>CHỌN NGÀY LÀM VIỆC</span>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button type="button" onClick={() => setSelectedScheduleDays([1, 2, 3, 4, 5])} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', fontSize: '12px' }}>Thứ 2 - Thứ 6</button>
+                      <button type="button" onClick={() => setSelectedScheduleDays([0, 1, 2, 3, 4, 5, 6])} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', fontSize: '12px' }}>Cả tuần</button>
+                      <button type="button" onClick={() => setSelectedScheduleDays([])} style={{ border: 'none', background: 'transparent', color: 'var(--color-text-secondary)', fontWeight: 700, cursor: 'pointer', fontSize: '12px' }}>Bỏ chọn</button>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIỜ ĐÓNG CỬA</span>
-                      <input
-                        type="text"
-                        value={endHour}
-                        onChange={(e) => setEndHour(e.target.value)}
-                        placeholder="Ví dụ: 18:00"
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      />
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '24px' }}>
+                    {daysOfWeekVn.map((day, index) => {
+                      const isSelected = selectedScheduleDays.includes(index);
+                      return <button key={day} type="button" onClick={() => toggleScheduleDay(index)} style={{ padding: '10px 14px', minWidth: '104px', borderRadius: '8px', border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)', backgroundColor: isSelected ? 'var(--color-primary)' : 'white', color: isSelected ? 'white' : 'var(--color-text-primary)', fontWeight: 700, cursor: 'pointer' }}>{day}</button>;
+                    })}
+                  </div>
+
+                  <div style={{ borderTop: '1px solid var(--color-light-border)', paddingTop: '18px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+                      <div>
+                        <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>Các ca làm việc</strong>
+                        <p style={{ margin: '3px 0 0', color: 'var(--color-text-secondary)', fontSize: '12px' }}>Ví dụ: 08:00 - 12:00 và 13:30 - 17:30.</p>
+                      </div>
+                      <button type="button" onClick={() => setWorkingHourRanges((current) => [...current, { start: '08:00', end: '17:00' }])} style={{ padding: '8px 12px', border: '1px solid var(--color-primary)', borderRadius: '6px', backgroundColor: 'white', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Plus size={15} /> Thêm ca</button>
                     </div>
-                    <button
-                      onClick={handleAddRecurringSchedule}
-                      style={{ padding: '11px 20px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
-                    >
-                      Lưu khung giờ
-                    </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {workingHourRanges.map((range, index) => (
+                        <div key={index} style={{ display: 'grid', gridTemplateColumns: 'minmax(130px, 1fr) minmax(130px, 1fr) auto', gap: '12px', alignItems: 'end', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+                          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>BẮT ĐẦU<input type="time" value={range.start} onChange={(event) => updateWorkingHourRange(index, 'start', event.target.value)} style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white' }} /></label>
+                          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>KẾT THÚC<input type="time" value={range.end} onChange={(event) => updateWorkingHourRange(index, 'end', event.target.value)} style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white' }} /></label>
+                          <button type="button" disabled={workingHourRanges.length === 1} onClick={() => setWorkingHourRanges((current) => current.filter((_, rangeIndex) => rangeIndex !== index))} title="Xóa ca" style={{ width: '40px', height: '40px', border: '1px solid #FECACA', borderRadius: '6px', backgroundColor: workingHourRanges.length === 1 ? '#F9FAFB' : '#FFF1F2', color: workingHourRanges.length === 1 ? '#9CA3AF' : '#DC2626', cursor: workingHourRanges.length === 1 ? 'not-allowed' : 'pointer' }}><Trash2 size={16} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '22px', flexWrap: 'wrap' }}>
+                    {editingScheduleDay !== null && <button type="button" onClick={() => { setEditingScheduleDay(null); setSelectedScheduleDays([1, 2, 3, 4, 5]); setWorkingHourRanges([{ start: '08:00', end: '17:00' }]); }} style={{ padding: '11px 16px', border: '1px solid var(--color-light-border)', borderRadius: '6px', backgroundColor: 'white', color: 'var(--color-text-primary)', fontWeight: 700, cursor: 'pointer' }}>Hủy sửa</button>}
+                    <button type="button" onClick={handleSaveRecurringSchedules} style={{ padding: '11px 20px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}>{editingScheduleDay !== null ? 'Cập nhật khung giờ' : 'Lưu lịch đã chọn'}</button>
                   </div>
                 </div>
-
                 <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
                     CHẶN LỊCH NGHỈ / LỊCH BẬN ĐỘT XUẤT
@@ -2690,25 +3066,26 @@ export const ProviderDashboard: React.FC = () => {
                 </div>
 
                 <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
-                    LỊCH TRÌNH ĐÃ THIẾT LẬP
-                  </h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '10px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0 }}>LỊCH TRÌNH ĐÃ THIẾT LẬP</h3>
+                    <span style={{ color: 'var(--color-text-secondary)', fontSize: '12px', fontWeight: 700 }}>{schedules.length} thiết lập</span>
+                  </div>
                   {schedules.length === 0 ? (
                     <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Chưa có thiết lập khung giờ nào.</p>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {schedules.map((sch) => (
-                        <div key={sch._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '6px' }}>
-                          <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>
-                            {sch.scheduleType === 'RECURRING'
-                              ? `Mỗi tuần vào ${daysOfWeekVn[sch.dayOfWeek]}`
-                              : `Nghỉ ngày bận đột xuất: ${new Date(sch.specificDate).toLocaleDateString('vi-VN')}`}
-                          </strong>
-                          <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                            {sch.scheduleType === 'RECURRING'
-                              ? sch.workingHours?.map((h: any) => `${h.start} - ${h.end}`).join(', ')
-                              : 'CHẶN NGHỈ CẢ NGÀY'}
-                          </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {schedules.filter((schedule) => schedule.scheduleType === 'RECURRING').sort((a, b) => Number(a.dayOfWeek) - Number(b.dayOfWeek)).map((schedule) => (
+                        <div key={schedule._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', flexWrap: 'wrap', padding: '14px 16px', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px' }}>
+                          <div>
+                            <strong style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-primary)' }}>{daysOfWeekVn[Number(schedule.dayOfWeek)]}</strong>
+                            <span style={{ display: 'block', marginTop: '4px', fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>{schedule.workingHours?.map((range: any) => `${range.start} - ${range.end}`).join(' · ') || 'Chưa có ca làm việc'}</span>
+                          </div>
+                          <button type="button" onClick={() => handleEditRecurringSchedule(schedule)} style={{ padding: '8px 12px', border: '1px solid var(--color-primary)', borderRadius: '6px', backgroundColor: 'white', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Pencil size={14} /> Sửa</button>
+                        </div>
+                      ))}
+                      {schedules.filter((schedule) => schedule.scheduleType !== 'RECURRING').map((schedule) => (
+                        <div key={schedule._id} style={{ padding: '14px 16px', backgroundColor: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '8px' }}>
+                          <strong style={{ fontSize: '14px', color: '#9A3412' }}>Đã chặn ngày {schedule.specificDate ? new Date(schedule.specificDate).toLocaleDateString('vi-VN') : 'không xác định'}</strong>
                         </div>
                       ))}
                     </div>
@@ -3006,8 +3383,8 @@ export const ProviderDashboard: React.FC = () => {
                         </thead>
                         <tbody>
                           {payouts.map((p: any) => (
-                            <tr 
-                              key={p.id} 
+                            <tr
+                              key={p.id}
                               onClick={() => {
                                 const bId = p.bookingId?._id || p.bookingId;
                                 if (bId) {
@@ -3026,7 +3403,7 @@ export const ProviderDashboard: React.FC = () => {
                                 <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{p.account} • {p.accountHolder}</span>
                               </td>
                               <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                                <span style={{ 
+                                <span style={{
                                   padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
                                   backgroundColor: p.status === 'SUCCESS' ? '#F0FDF4' : p.status === 'PENDING' ? '#FEF3C7' : '#FEE2E2',
                                   color: p.status === 'SUCCESS' ? '#166534' : p.status === 'PENDING' ? '#92400E' : '#991B1B'
@@ -3073,12 +3450,12 @@ export const ProviderDashboard: React.FC = () => {
             <div style={{ padding: '12px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '6px', fontSize: '13px', color: '#B91C1C', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <span style={{ fontWeight: 700 }}>Đang chạy chiến dịch: {activeCampaign.occasion} (-{activeCampaign.discountPercent}%)</span>
               <span>Thời gian: {new Date(activeCampaign.startDate).toLocaleDateString('vi-VN')} - {new Date(activeCampaign.endDate).toLocaleDateString('vi-VN')}</span>
-              <button 
-                type="button" 
-                onClick={handleDeactivateCampaign} 
-                style={{ 
-                  marginTop: '8px', padding: '8px 12px', backgroundColor: '#EF4444', color: 'white', border: 'none', 
-                  borderRadius: '4px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', alignSelf: 'flex-start' 
+              <button
+                type="button"
+                onClick={handleDeactivateCampaign}
+                style={{
+                  marginTop: '8px', padding: '8px 12px', backgroundColor: '#EF4444', color: 'white', border: 'none',
+                  borderRadius: '4px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', alignSelf: 'flex-start'
                 }}
               >
                 Về giá gốc (Hủy khuyến mãi)
@@ -3088,9 +3465,9 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DỊP KHUYẾN MÃI *</label>
-            <input 
-              type="text" 
-              placeholder="Ví dụ: Sale Tết 2027, Khai xuân..." 
+            <input
+              type="text"
+              placeholder="Ví dụ: Sale Tết 2027, Khai xuân..."
               value={campaignOccasion}
               onChange={(e) => setCampaignOccasion(e.target.value)}
               required
@@ -3100,11 +3477,11 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>PHẦN TRĂM GIẢM GIÁ (%) *</label>
-            <input 
-              type="number" 
-              min="1" 
-              max="90" 
-              placeholder="10" 
+            <input
+              type="number"
+              min="1"
+              max="90"
+              placeholder="10"
               value={campaignPercent}
               onChange={(e) => setCampaignPercent(e.target.value)}
               required
@@ -3115,8 +3492,8 @@ export const ProviderDashboard: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TỪ NGÀY *</label>
-              <input 
-                type="date" 
+              <input
+                type="date"
                 value={campaignStart}
                 onChange={(e) => setCampaignStart(e.target.value)}
                 required
@@ -3125,8 +3502,8 @@ export const ProviderDashboard: React.FC = () => {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>ĐẾN NGÀY *</label>
-              <input 
-                type="date" 
+              <input
+                type="date"
                 value={campaignEnd}
                 onChange={(e) => setCampaignEnd(e.target.value)}
                 required
@@ -3136,19 +3513,19 @@ export const ProviderDashboard: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', gap: '12px', marginTop: '12px', borderTop: '1px solid var(--color-light-border)', paddingTop: '16px' }}>
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => setIsCampaignModalOpen(false)}
               style={{ flex: 1, padding: '10px', backgroundColor: '#F3F4F6', color: '#4B5563', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
             >
               Hủy
             </button>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={submittingCampaign}
-              style={{ 
-                flex: 2, padding: '10px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', 
-                borderRadius: '6px', fontWeight: 700, fontSize: '13px', cursor: submittingCampaign ? 'not-allowed' : 'pointer' 
+              style={{
+                flex: 2, padding: '10px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none',
+                borderRadius: '6px', fontWeight: 700, fontSize: '13px', cursor: submittingCampaign ? 'not-allowed' : 'pointer'
               }}
             >
               {submittingCampaign ? 'Đang xử lý...' : activeCampaign ? 'Cập nhật khuyến mãi mới' : 'Kích hoạt khuyến mãi'}
@@ -3158,10 +3535,10 @@ export const ProviderDashboard: React.FC = () => {
       </Modal>
 
       {/* -------------------- MODALS: CREATE & EDIT PRODUCT -------------------- */}
-      <Modal 
-        isOpen={isModalOpen} 
-        onClose={handleWizardCancel} 
-        title={editingProduct ? 'Chỉnh sửa thông tin Áo Dài' : 'Đăng ký Áo Dài mới'} 
+      <Modal
+        isOpen={isModalOpen}
+        onClose={handleWizardCancel}
+        title={editingProduct ? 'Chỉnh sửa thông tin Áo Dài' : 'Đăng ký Áo Dài mới'}
         maxWidth="720px"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
@@ -3185,17 +3562,17 @@ export const ProviderDashboard: React.FC = () => {
 
           {wizardStep === 1 && (
           <>
-          
+
           {/* Name */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TÊN ÁO DÀI *</label>
-            <input 
-              type="text" 
-              value={prodName} 
-              onChange={e => setProdName(e.target.value)} 
-              placeholder="Ví dụ: Áo Dài Gấm Hoa Đỏ Hỷ Sự" 
+            <input
+              type="text"
+              value={prodName}
+              onChange={e => setProdName(e.target.value)}
+              placeholder="Ví dụ: Áo Dài Gấm Hoa Đỏ Hỷ Sự"
               style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-              required 
+              required
             />
           </div>
 
@@ -3203,9 +3580,9 @@ export const ProviderDashboard: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DANH MỤC *</label>
-              <select 
-                value={prodCategoryId} 
-                onChange={e => setProdCategoryId(e.target.value)} 
+              <select
+                value={prodCategoryId}
+                onChange={e => setProdCategoryId(e.target.value)}
                 style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
                 required
               >
@@ -3217,9 +3594,9 @@ export const ProviderDashboard: React.FC = () => {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TRẠNG THÁI HIỂN THỊ</label>
-              <select 
-                value={prodStatus} 
-                onChange={e => setProdStatus(e.target.value as any)} 
+              <select
+                value={prodStatus}
+                onChange={e => setProdStatus(e.target.value as any)}
                 style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
               >
                 <option value="ACTIVE">Đang hoạt động (Bán)</option>
@@ -3233,25 +3610,25 @@ export const ProviderDashboard: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>GIÁ THUÊ (VNĐ / NGÀY) *</label>
-              <input 
-                type="number" 
-                value={prodBasePrice} 
-                onChange={e => setProdBasePrice(e.target.value)} 
-                placeholder="Ví dụ: 350000" 
+              <input
+                type="number"
+                value={prodBasePrice}
+                onChange={e => setProdBasePrice(e.target.value)}
+                placeholder="Ví dụ: 350000"
                 style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                required 
+                required
               />
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TIỀN ĐẶT CỌC ĐỒ (VNĐ) *</label>
-              <input 
-                type="number" 
-                value={prodDepositAmount} 
-                onChange={e => setProdDepositAmount(e.target.value)} 
-                placeholder="Ví dụ: 500000" 
+              <input
+                type="number"
+                value={prodDepositAmount}
+                onChange={e => setProdDepositAmount(e.target.value)}
+                placeholder="Ví dụ: 500000"
                 style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                required 
+                required
               />
             </div>
           </div>
@@ -3259,10 +3636,10 @@ export const ProviderDashboard: React.FC = () => {
           {/* Description */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>MÔ TẢ SẢN PHẨM</label>
-            <textarea 
-              value={prodDescription} 
-              onChange={e => setProdDescription(e.target.value)} 
-              placeholder="Chất liệu lụa, độ co giãn, lưu ý giặt là..." 
+            <textarea
+              value={prodDescription}
+              onChange={e => setProdDescription(e.target.value)}
+              placeholder="Chất liệu lụa, độ co giãn, lưu ý giặt là..."
               rows={3}
               style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'vertical' }}
             />
@@ -3271,9 +3648,9 @@ export const ProviderDashboard: React.FC = () => {
           {/* Image Upload Component */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>HÌNH ẢNH SẢN PHẨM *</label>
-            
+
             {/* Drag & Drop Area */}
-            <div 
+            <div
               style={{
                 border: '2px dashed var(--color-light-border)',
                 borderRadius: '8px',
@@ -3286,13 +3663,13 @@ export const ProviderDashboard: React.FC = () => {
               }}
               onClick={() => document.getElementById('product-image-upload')?.click()}
             >
-              <input 
+              <input
                 id="product-image-upload"
-                type="file" 
-                multiple 
+                type="file"
+                multiple
                 accept="image/*"
                 onChange={handleImageChange}
-                style={{ display: 'none' }} 
+                style={{ display: 'none' }}
               />
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                 <Upload size={28} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
@@ -3308,10 +3685,10 @@ export const ProviderDashboard: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '12px', marginTop: '8px' }}>
                 {prodImages.map((imgUrl, index) => (
                   <div key={index} style={{ width: '80px', height: '80px', borderRadius: '6px', overflow: 'hidden', position: 'relative', border: '1px solid var(--color-light-border)' }}>
-                    <img 
-                      src={getImageUrl(imgUrl)} 
-                      alt={`preview-${index}`} 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    <img
+                      src={getImageUrl(imgUrl)}
+                      alt={`preview-${index}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                     <button
                       type="button"
@@ -3395,7 +3772,60 @@ export const ProviderDashboard: React.FC = () => {
             )}
           </div>
 
-          {/* Trường phái & dịp lễ KHÔNG nhập tay nữa — suy tự động từ thẻ thông minh ở bước 3 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>PHÂN LOẠI BỔ SUNG</p>
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Chọn để áo dài xuất hiện đúng trong các bộ lọc trên sàn. Thẻ thông minh ở bước 3 vẫn bổ sung gợi ý cá nhân hoá.</p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>PHONG CÁCH</span>
+              {styleCategories.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {styleCategories.map(category => {
+                    const selected = prodStyleCategoryIds.includes(category.id);
+                    return (
+                      <button
+                        key={category.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => toggleProductCategoryId(category.id, setProdStyleCategoryIds)}
+                        style={{ padding: '7px 12px', borderRadius: '999px', border: `1px solid ${selected ? 'var(--color-primary)' : 'var(--color-light-border)'}`, backgroundColor: selected ? 'rgba(154, 27, 27, 0.10)' : 'white', color: selected ? 'var(--color-primary)' : 'var(--color-text-primary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {selected ? '✓ ' : ''}{category.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Chưa có danh mục phong cách đang hoạt động.</span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DỊP PHÙ HỢP</span>
+              {eventCategories.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {eventCategories.map(category => {
+                    const selected = prodEventCategoryIds.includes(category.id);
+                    return (
+                      <button
+                        key={category.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => toggleProductCategoryId(category.id, setProdEventCategoryIds)}
+                        style={{ padding: '7px 12px', borderRadius: '999px', border: `1px solid ${selected ? 'var(--color-primary)' : 'var(--color-light-border)'}`, backgroundColor: selected ? 'rgba(154, 27, 27, 0.10)' : 'white', color: selected ? 'var(--color-primary)' : 'var(--color-text-primary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {selected ? '✓ ' : ''}{category.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Chưa có danh mục dịp phù hợp đang hoạt động.</span>
+              )}
+            </div>
+          </div>
           </>
           )}
 
@@ -3566,7 +3996,7 @@ export const ProviderDashboard: React.FC = () => {
               <button type="button" onClick={() => setReportingOrder(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
             </div>
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '80vh', overflowY: 'auto' }}>
-              
+
               {/* Chọn sản phẩm bị hỏng */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SẢN PHẨM GẶP SỰ CỐ *</span>
@@ -3706,8 +4136,164 @@ export const ProviderDashboard: React.FC = () => {
         </div>
       )}
 
+      <PortfolioItemFormModal
+        isOpen={isPortfolioFormOpen}
+        isSaving={isPortfolioSaving}
+        onClose={() => {
+          setIsPortfolioFormOpen(false);
+          setEditingPortfolioItem(null);
+        }}
+        onSubmit={handlePortfolioFormSubmit}
+        initialValues={editingPortfolioItem ? { title: editingPortfolioItem.title, description: editingPortfolioItem.description || undefined, images: editingPortfolioItem.images } : null}
+      />
+
+      {previewPortfolioItem && (
+        <div
+          onClick={() => setPreviewPortfolioItem(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            cursor: 'zoom-out',
+          }}
+        >
+          <button
+            onClick={() => setPreviewPortfolioItem(null)}
+            style={{
+              position: 'absolute',
+              right: '24px',
+              top: '24px',
+              background: 'rgba(255,255,255,0.15)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '20px',
+              zIndex: 10002,
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
+          >
+            ✕
+          </button>
+
+          {/* Navigation Buttons for multiple images */}
+          {previewPortfolioItem.images.length > 1 && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewImageIndex(prev => (prev === 0 ? previewPortfolioItem.images.length - 1 : prev - 1));
+                }}
+                style={{
+                  position: 'absolute',
+                  left: '24px',
+                  background: 'rgba(255,255,255,0.15)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '44px',
+                  height: '44px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '24px',
+                  zIndex: 10002,
+                  transition: 'background 0.2s',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
+              >
+                ‹
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewImageIndex(prev => (prev === previewPortfolioItem.images.length - 1 ? 0 : prev + 1));
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '24px',
+                  background: 'rgba(255,255,255,0.15)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '44px',
+                  height: '44px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '24px',
+                  zIndex: 10002,
+                  transition: 'background 0.2s',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
+              >
+                ›
+              </button>
+            </>
+          )}
+
+          {/* Image & Description Box */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '16px',
+              maxWidth: '90%',
+              maxHeight: '90%',
+              cursor: 'default',
+            }}
+          >
+            <img
+              src={previewPortfolioItem.images[previewImageIndex].startsWith('http')
+                ? previewPortfolioItem.images[previewImageIndex]
+                : getImageUrl(previewPortfolioItem.images[previewImageIndex])}
+              alt={previewPortfolioItem.title}
+              style={{
+                maxWidth: '100%',
+                maxHeight: '75vh',
+                objectFit: 'contain',
+                borderRadius: '8px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              }}
+            />
+
+            {/* Caption */}
+            <div style={{ textAlign: 'center', color: 'white' }}>
+              <h4 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 700 }}>
+                {previewPortfolioItem.title}
+                {previewPortfolioItem.images.length > 1 && ` (${previewImageIndex + 1}/${previewPortfolioItem.images.length})`}
+              </h4>
+              {previewPortfolioItem.description && (
+                <p style={{ margin: 0, fontSize: '13.5px', color: 'rgba(255,255,255,0.8)', maxWidth: '600px', lineHeight: 1.5 }}>
+                  {previewPortfolioItem.description}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Booking Details Modal */}
-      <BookingDetailModal 
+      <BookingDetailModal
         bookingId={selectedBookingId}
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
@@ -3724,7 +4310,7 @@ export const ProviderDashboard: React.FC = () => {
               <button type="button" onClick={() => setIsAddInventoryOpen(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
             </div>
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              
+
               {/* Chọn sản phẩm */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SẢN PHẨM *</label>
@@ -3856,7 +4442,7 @@ export const ProviderDashboard: React.FC = () => {
               <button type="button" onClick={() => setIsEditInventoryOpen(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
             </div>
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              
+
               {/* Thông tin cố định */}
               <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-light-bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
                 <strong>Sản phẩm:</strong> {editInvItem.productId?.name} <br />
