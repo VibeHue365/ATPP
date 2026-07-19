@@ -36,8 +36,6 @@ import { ProvidersController } from './controllers/providers.controller';
 import { AdminPortfolioModerationController } from './controllers/admin-portfolio-moderation.controller';
 import { ProvidersService } from './services/providers.service';
 import { ProvidersRepository } from './repositories/providers.repository';
-import { PhotographersController } from './controllers/photographers.controller';
-import { PhotographersService } from './services/photographers.service';
 import { ProviderVerificationService } from './services/provider-verification.service';
 import { ProviderOcrQueueService } from './services/provider-ocr-queue.service';
 import { ProviderOcrOutboxService } from './services/provider-ocr-outbox.service';
@@ -77,7 +75,6 @@ const providerSupportModels = MongooseModule.forFeature([
   ],
   controllers: [
     ProvidersController,
-    PhotographersController,
     ProviderVerificationsController,
     AdminProviderVerificationsController,
     AdminProvidersController,
@@ -86,8 +83,8 @@ const providerSupportModels = MongooseModule.forFeature([
   providers: [
     ProvidersService,
     ProvidersRepository,
-    PhotographersService,
     ProviderVerificationService,
+
     ProviderOcrQueueService,
     ProviderOcrOutboxService,
     ProviderDocumentOcrService,
@@ -97,7 +94,6 @@ const providerSupportModels = MongooseModule.forFeature([
     providerModels,
     ProvidersService,
     ProvidersRepository,
-    PhotographersService,
     ProviderVerificationService,
     ProviderOcrQueueService,
     ProviderOcrOutboxService,

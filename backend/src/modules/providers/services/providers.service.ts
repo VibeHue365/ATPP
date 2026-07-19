@@ -291,19 +291,79 @@ export class ProvidersService {
     dayOfWeek: number,
     workingHours: Array<{ start: string; end: string }>,
   ): Promise<ProviderScheduleDocument> {
+    const schedules = await this.updateRecurringSchedules(
+      userIdStr,
+      [dayOfWeek],
+      workingHours,
+    );
+    return schedules[0];
+  }
+
+  async updateRecurringSchedules(
+    userIdStr: string,
+    dayOfWeeks: number[],
+    workingHours: Array<{ start: string; end: string }>,
+  ): Promise<ProviderScheduleDocument[]> {
+    const normalizedDays = [...new Set(dayOfWeeks)]
+      .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+      .sort((a, b) => a - b);
+    if (normalizedDays.length === 0) {
+      throw new BadRequestException('Hãy chọn ít nhất một ngày làm việc.');
+    }
+
+    const normalizedHours = this.validateWorkingHours(workingHours);
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
     if (!provider) {
       throw new NotFoundException('Provider profile not found');
     }
 
-    return this.providersRepository.upsertRecurringSchedule(
-      provider._id,
-      dayOfWeek,
-      workingHours,
+    return Promise.all(
+      normalizedDays.map((dayOfWeek) =>
+        this.providersRepository.upsertRecurringSchedule(
+          provider._id,
+          dayOfWeek,
+          normalizedHours,
+        ),
+      ),
     );
   }
 
+  private validateWorkingHours(
+    workingHours: Array<{ start: string; end: string }>,
+  ): Array<{ start: string; end: string }> {
+    if (!Array.isArray(workingHours) || workingHours.length === 0) {
+      throw new BadRequestException('Hãy thêm ít nhất một ca làm việc.');
+    }
+
+    const toMinutes = (time: string): number | null => {
+      if (!/^\d{2}:\d{2}$/.test(time)) return null;
+      const [hour, minute] = time.split(':').map(Number);
+      if (hour > 23 || minute > 59) return null;
+      return hour * 60 + minute;
+    };
+
+    const normalized = workingHours.map((slot) => {
+      const start = String(slot?.start || '').trim();
+      const end = String(slot?.end || '').trim();
+      const startMinutes = toMinutes(start);
+      const endMinutes = toMinutes(end);
+      if (startMinutes === null || endMinutes === null || startMinutes >= endMinutes) {
+        throw new BadRequestException(
+          'Mỗi ca phải có giờ bắt đầu trước giờ kết thúc (định dạng HH:mm).',
+        );
+      }
+      return { start, end, startMinutes, endMinutes };
+    }).sort((a, b) => a.startMinutes - b.startMinutes);
+
+    for (let index = 1; index < normalized.length; index += 1) {
+      if (normalized[index].startMinutes < normalized[index - 1].endMinutes) {
+        throw new BadRequestException('Các ca làm việc không được chồng lên nhau.');
+      }
+    }
+
+    return normalized.map(({ start, end }) => ({ start, end }));
+  }
   async updateSpecificDateSchedule(
     userIdStr: string,
     dateStr: string,

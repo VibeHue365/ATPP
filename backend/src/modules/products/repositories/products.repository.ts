@@ -23,6 +23,9 @@ export class ProductsRepository {
     sizes?: string[];
     materials?: string[];
     categoryId?: string;
+    styleCategoryIds?: string[];
+    eventCategoryIds?: string[];
+    limit?: number;
   }): Promise<ProductDocument[]> {
     const query: any = {
       status: ProductStatus.Active,
@@ -33,8 +36,27 @@ export class ProductsRepository {
       query.categoryId = new Types.ObjectId(options.categoryId);
     }
 
+    const addCategoryArrayFilter = (
+      field: 'styleCategoryIds' | 'eventCategoryIds',
+      categoryIds?: string[],
+    ) => {
+      const validIds = (categoryIds ?? []).filter((id) =>
+        Types.ObjectId.isValid(id),
+      );
+      if (validIds.length > 0) {
+        query[field] = {
+          $in: validIds.map((id) => new Types.ObjectId(id)),
+        };
+      }
+    };
+
+    addCategoryArrayFilter('styleCategoryIds', options?.styleCategoryIds);
+    addCategoryArrayFilter('eventCategoryIds', options?.eventCategoryIds);
+
     if (options?.search) {
-      const searchRegex = new RegExp(options.search, 'i');
+      // Treat the search text literally to prevent malformed user regexes.
+      const escapedSearch = options.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escapedSearch, 'i');
       query.$or = [{ name: searchRegex }, { description: searchRegex }];
     }
 
@@ -70,11 +92,16 @@ export class ProductsRepository {
       };
     }
 
-    const products = await this.productModel
+    let queryBuilder = this.productModel
       .find(query)
       .populate('categoryId')
-      .populate('providerId')
-      .exec();
+      .populate('providerId');
+
+    if (options?.limit) {
+      queryBuilder = queryBuilder.limit(Math.min(Math.max(options.limit, 1), 24));
+    }
+
+    const products = await queryBuilder.exec();
 
     return products.filter((p) => {
       const provider = p.providerId as any;

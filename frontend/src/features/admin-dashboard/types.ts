@@ -14,6 +14,7 @@ export interface AdminPopularProduct {
 export interface AdminUserBehavior {
   topSearches?: Array<{ keyword: string; count: number }>;
   pageViews?: Partial<Record<'homepage' | 'rentals' | 'photographers' | 'productDetails', number>>;
+  popularBookings?: Array<{ _id: string; count: number }>;
   popularProducts?: AdminPopularProduct[];
 }
 

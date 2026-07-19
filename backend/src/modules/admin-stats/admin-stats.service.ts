@@ -219,6 +219,7 @@ export class AdminStatsService {
       const provObj = (b.providerIds && b.providerIds.length > 0) ? (b.providerIds[0] as any) : null;
       return {
         id: b.bookingCode || b._id.toString(),
+        bookingId: b._id.toString(),
         customerName: custObj?.profile?.fullName || 'Khách hàng',
         providerName: provObj?.businessName || 'Nhà cung cấp',
         items: b.bookingType || 'Sản phẩm',

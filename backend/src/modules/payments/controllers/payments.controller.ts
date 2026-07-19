@@ -74,74 +74,54 @@ export class PaymentsController {
   @Post('webhook')
   async handlePayOSWebhook(@Body() body: WebhookBodyDto) {
     const webhookData = body.data as WebhookData;
-    const orderCode = webhookData.orderCode;
-    const status = webhookData.status;
-
-    if (orderCode !== undefined && status) {
-      const webhookId = `payos_${orderCode}_${status}`;
-      try {
-        const event = await this.webhookEventRepository.findOrCreateEvent(
-          webhookId,
-          body.data,
-          body.signature,
-        );
-
-        if (event && event.processed) {
-          this.logger.log(
-            `Webhook ${webhookId} was already processed. Bypassing.`,
-          );
-          return { status: 'success', note: 'already_processed' };
-        }
-      } catch (err) {
-        this.logger.log(
-          `Conflict/Duplicate writing WebhookEvent ${webhookId}. Bypassing.`,
-        );
-        return { status: 'success', note: 'duplicate_ignored' };
-      }
+    const orderCode = webhookData?.orderCode;
+    const status = webhookData?.status;
+    if (orderCode === undefined || !status) {
+      throw new BadRequestException('Webhook PayOS thiếu orderCode hoặc trạng thái.');
     }
 
-    const checksumKey = this.configService.get<string>(
-      'PAYOS_CHECKSUM_KEY',
-      '',
-    );
-
+    const checksumKey = this.configService.get<string>('PAYOS_CHECKSUM_KEY', '');
     if (checksumKey && !checksumKey.includes('your_')) {
-      const isVerified = this.verifyPayOSSignature(
-        body.data,
-        body.signature,
-        checksumKey,
-      );
-      if (!isVerified) {
-        this.logger.warn(`Invalid signature detected in payOS webhook!`);
-        if (orderCode !== undefined && status) {
-          const webhookId = `payos_${orderCode}_${status}`;
-          await this.webhookEventRepository.markError(webhookId, 'Signature verification failed');
-        }
+      if (!this.verifyPayOSSignature(body.data, body.signature, checksumKey)) {
+        this.logger.warn(`Invalid signature detected in PayOS webhook for order ${orderCode}.`);
         throw new BadRequestException('Signature verification failed');
       }
     } else {
-      this.logger.warn(
-        `PAYOS_CHECKSUM_KEY not configured or is placeholder. Bypassing signature check for simulation.`,
-      );
+      this.logger.warn('PAYOS_CHECKSUM_KEY is not configured; signature check is bypassed for the local simulator.');
     }
 
-    this.logger.log(`Received payOS webhook for orderCode: ${orderCode}`);
+    const webhookId = `payos_${orderCode}_${status}`;
+    const claim = await this.webhookEventRepository.claimVerifiedEvent(
+      webhookId,
+      body.data,
+      body.signature,
+    );
+    if (claim.state === 'processed') {
+      return { status: 'success', note: 'already_processed' };
+    }
+    if (claim.state === 'processing') {
+      return { status: 'success', note: 'already_processing' };
+    }
 
-    if (status === 'PAID' && orderCode !== undefined) {
-      const payment = await this.paymentsRepository.findByOrderCode(orderCode);
-      if (payment) {
+    try {
+      this.logger.log(`Processing PayOS webhook ${webhookId}.`);
+      if (status === 'PAID') {
+        const payment = await this.paymentsRepository.findByOrderCode(orderCode);
+        if (!payment) {
+          throw new BadRequestException(`Không tìm thấy giao dịch PayOS có orderCode ${orderCode}.`);
+        }
         await this.paymentsService.confirmPayment(payment.paymentCode);
       }
-    }
-
-    if (orderCode !== undefined && status) {
-      const webhookId = `payos_${orderCode}_${status}`;
       await this.webhookEventRepository.markProcessed(webhookId);
+      return { status: 'success' };
+    } catch (error: any) {
+      await this.webhookEventRepository.markError(
+        webhookId,
+        error?.message || 'Webhook processing failed',
+      );
+      throw error;
     }
-
-    return { status: 'success' };
   }
-
   private verifyPayOSSignature(
     data: Record<string, unknown>,
     signature: string,

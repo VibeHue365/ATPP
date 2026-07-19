@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Swal from 'sweetalert2';
+import { API_BASE_URL } from '../../../config/env';
 import { adminReportedReviewsApi } from '../api/adminReportedReviewsApi';
 import { useReportedReviews } from '../hooks/useReportedReviews';
 import type { ReportAction, ReportedReview } from '../types';
@@ -28,6 +29,11 @@ const formatReportedAt = (value?: string) => {
   return Number.isNaN(date.getTime()) ? 'Không rõ thời điểm' : date.toLocaleString('vi-VN');
 };
 
+const imageUrl = (value: string) =>
+  value.startsWith('http://') || value.startsWith('https://')
+    ? value
+    : `${API_BASE_URL}${value}`;
+
 export function ReportedReviewsPanel() {
   const { error, items, loading, refresh } = useReportedReviews();
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -54,6 +60,13 @@ export function ReportedReviewsPanel() {
     try {
       await adminReportedReviewsApi.handle(review._id, action, result.value.trim());
       await refresh();
+      await Swal.fire({
+        title: 'Đã cập nhật',
+        text: action === 'DELETE' ? 'Đánh giá đã được gỡ và các bên liên quan đã được thông báo.' : 'Báo cáo đã được đóng, đánh giá vẫn được giữ lại.',
+        icon: 'success',
+        timer: 1800,
+        showConfirmButton: false,
+      });
     } catch (requestError) {
       await Swal.fire({
         title: 'Không thể xử lý báo cáo',
@@ -79,6 +92,7 @@ export function ReportedReviewsPanel() {
               <th>Đối tác</th>
               <th>Khách hàng & đánh giá</th>
               <th>Lý do báo cáo</th>
+              <th>Ngày báo cáo</th>
               <th>Thao tác</th>
             </tr>
           </thead>
@@ -87,16 +101,24 @@ export function ReportedReviewsPanel() {
               <tr key={review._id}>
                 <td>
                   <strong>#{getBookingLabel(review)}</strong>
-                  <small>{formatReportedAt(review.reportedAt)}</small>
                 </td>
                 <td>{review.providerId?.businessName ?? 'Nhà cung cấp'}</td>
                 <td>
                   <strong>{review.customerId?.profile?.fullName ?? 'Khách hàng'}</strong>
                   <small className="admin-reviews__rating">{'★'.repeat(review.rating ?? 0)}</small>
                   <small>{review.comment || 'Không có bình luận.'}</small>
-                  {!!review.images?.length && <small>{review.images.length} ảnh đính kèm</small>}
+                  {!!review.images?.length && (
+                    <div className='admin-reviews__images' aria-label='Ảnh đính kèm đánh giá'>
+                      {review.images.map((image, index) => (
+                        <a key={image} href={imageUrl(image)} target='_blank' rel='noreferrer'>
+                          <img src={imageUrl(image)} alt={`Ảnh đính kèm ${index + 1}`} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </td>
                 <td>{review.reportReason || 'Spam / vi phạm tiêu chuẩn'}</td>
+                <td><small>{formatReportedAt(review.reportedAt)}</small></td>
                 <td className="admin-reviews__actions">
                   <button
                     className="admin-reviews__remove"

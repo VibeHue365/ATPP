@@ -11,6 +11,7 @@ import {
 import { Booking, BookingDocument } from '../schemas/booking.schema';
 import { Notification, NotificationDocument, NotificationType } from '../../notifications/schemas/notification.schema';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { PhotographyHoldService } from './photography-hold.service';
 
 @Injectable()
 export class BookingsSchedulerService {
@@ -24,8 +25,20 @@ export class BookingsSchedulerService {
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
     private readonly notificationsService: NotificationsService,
+    private readonly photographyHoldService: PhotographyHoldService,
   ) {}
 
+  @Cron(CronExpression.EVERY_MINUTE)
+  async expirePhotographyHolds() {
+    try {
+      const expiredCount = await this.photographyHoldService.expireExpiredHolds();
+      if (expiredCount > 0) {
+        this.logger.log(`Expired ${expiredCount} photography schedule hold(s).`);
+      }
+    } catch (error) {
+      this.logger.error('Unable to expire photography schedule holds.', error);
+    }
+  }
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleScheduleReminders() {
     this.logger.log('Running automatic schedule reminders cron-job...');
@@ -36,8 +49,11 @@ export class BookingsSchedulerService {
     const end24h = new Date(now.getTime() + 24.5 * 60 * 60 * 1000);
 
     const upcomingSchedules24h = await this.bookingScheduleModel.find({
-      status: BookingScheduleStatus.Scheduled,
-      scheduledDate: { $gte: start24h, $lte: end24h },
+      status: { $in: [BookingScheduleStatus.Scheduled, BookingScheduleStatus.Confirmed] },
+      $or: [
+        { startsAt: { $gte: start24h, $lte: end24h } },
+        { startsAt: null, scheduledDate: { $gte: start24h, $lte: end24h } },
+      ],
     });
 
     for (const schedule of upcomingSchedules24h) {
@@ -49,8 +65,11 @@ export class BookingsSchedulerService {
     const end2h = new Date(now.getTime() + 2.5 * 60 * 60 * 1000);
 
     const upcomingSchedules2h = await this.bookingScheduleModel.find({
-      status: BookingScheduleStatus.Scheduled,
-      scheduledDate: { $gte: start2h, $lte: end2h },
+      status: { $in: [BookingScheduleStatus.Scheduled, BookingScheduleStatus.Confirmed] },
+      $or: [
+        { startsAt: { $gte: start2h, $lte: end2h } },
+        { startsAt: null, scheduledDate: { $gte: start2h, $lte: end2h } },
+      ],
     });
 
     for (const schedule of upcomingSchedules2h) {
@@ -97,8 +116,14 @@ export class BookingsSchedulerService {
           eventTypeLabel = 'lịch trình';
       }
 
+      const scheduledAt = schedule.startsAt ?? schedule.scheduledDate;
+      if (!scheduledAt) {
+        this.logger.warn(`Skipping reminder for schedule ${schedule._id}: missing start time.`);
+        return;
+      }
+
       const title = `Nhắc nhở lịch trình - Còn ${timeLabel}`;
-      const content = `Bạn có lịch trình ${eventTypeLabel} cho đơn hàng ${booking.bookingCode} vào lúc ${schedule.scheduledDate.toLocaleTimeString('vi-VN')} ngày ${schedule.scheduledDate.toLocaleDateString('vi-VN')}. Vui lòng chuẩn bị đúng giờ!`;
+      const content = `Bạn có lịch trình ${eventTypeLabel} cho đơn hàng ${booking.bookingCode} vào lúc ${scheduledAt.toLocaleTimeString('vi-VN')} ngày ${scheduledAt.toLocaleDateString('vi-VN')}. Vui lòng chuẩn bị đúng giờ!`;
 
       await this.notificationsService.createNotification(
         customerId,

@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProvidersModule } from './modules/providers/providers.module';
+import { PhotographersModule } from './modules/photographers/photographers.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { SystemPoliciesModule } from './modules/system-policies/system-policies.module';
 import { SettlementsModule } from './modules/settlements/settlements.module';
@@ -41,6 +42,7 @@ import { ApiDocsController } from './common/controllers/api-docs.controller';
     AuthModule,
     UsersModule,
     ProvidersModule,
+    PhotographersModule,
     CategoriesModule,
     SystemPoliciesModule,
     SettlementsModule,

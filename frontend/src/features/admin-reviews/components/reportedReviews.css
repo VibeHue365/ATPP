@@ -64,6 +64,10 @@
   letter-spacing: 1px;
 }
 
+.admin-reviews__images { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.admin-reviews__images a { display: block; width: 44px; height: 44px; overflow: hidden; padding: 0; border: 1px solid #e8e2d5; border-radius: 5px; }
+.admin-reviews__images img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
 .admin-reviews__actions {
   display: flex;
   flex-wrap: wrap;

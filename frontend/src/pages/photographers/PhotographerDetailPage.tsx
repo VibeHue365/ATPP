@@ -4,51 +4,31 @@ import { useCart } from '../../context/CartContext';
 import { useToast } from '../../components/feedback/Toast';
 import { httpClient } from '../../services/httpClient';
 import { ROUTES } from '../../config/routes';
-import { 
-  MapPin, Star, ArrowRight, Upload, ChevronLeft, ChevronRight, CheckCircle, AlertCircle, Heart
-} from 'lucide-react';
+import { CheckCircle, AlertCircle, Camera } from 'lucide-react';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import './PhotographerDetailPage.css';
 import Swal from 'sweetalert2';
+import { usePhotographerDetail } from '../../features/photographers/hooks/usePhotographerDetail';
+import type { PhotographerPackage as Package, PhotographyQuote } from '../../features/photographers/types/photographer.types';
+import { photographersApi } from '../../features/photographers/api/photographers.api';
+import { PhotographerPortfolioGrid } from '../../features/photographers/components/PhotographerPortfolioGrid';
+import { PhotographerPortfolioLightbox, type PhotographerPortfolioImage } from '../../features/photographers/components/PhotographerPortfolioLightbox';
+import { PhotographerReviews } from '../../features/photographers/components/PhotographerReviews';
+import { PhotographerPackageSelector } from '../../features/photographers/components/PhotographerPackageSelector';
+import { PhotographerHero } from '../../features/photographers/components/PhotographerHero';
+import { PhotographyBookingSidebar } from '../../features/photographers/components/PhotographyBookingSidebar';
+import { PhotographyScheduleSelector } from '../../features/photographers/components/PhotographyScheduleSelector';
+import { PhotographySessionDetailsForm } from '../../features/photographers/components/PhotographySessionDetailsForm';
+import { PhotographyDurationControl } from '../../features/photographers/components/PhotographyDurationControl';
+import { PhotographyMultiSessionEditor, type PhotographySessionDraft } from '../../features/photographers/components/PhotographyMultiSessionEditor';
+import type { PhotographyCalendarDay } from '../../features/photographers/components/PhotographyScheduleSelector';
+import type { PhotographerReview } from '../../features/photographers/components/PhotographerReviews';
+type PhotographerAvailabilityStatus = 'AVAILABLE' | 'FULL' | 'NO_SCHEDULE' | 'OFF_DAY' | 'PAST';
 
-interface Package {
-  _id: string;
-  name: string;
-  price: number;
-  durationHours: number;
-  editedPhotosCount: number;
-  rawPhotosCount: number;
-  deliveryDays: number;
-  description: string;
-}
-
-interface PhotographerDetails {
-  _id: string;
-  businessName: string;
-  rating: {
-    averageRating: number;
-    totalReviews: number;
-  };
-  contact: {
-    email: string;
-    phone: string;
-  };
-  media: {
-    images: string[];
-  };
-  policies: {
-    cancellationPolicy?: string;
-  };
-  equipment: string[];
-  portfolio: string[];
-  packages: Package[];
-  quote?: string;
-  address?: {
-    addressLine?: string | null;
-    ward?: string | null;
-    district?: string | null;
-    city?: string | null;
-  };
-}
+type MonthlyAvailabilityResponse = {
+  month: string;
+  days: Array<{ date: string; status: PhotographerAvailabilityStatus }>;
+};
 
 const toMinutes = (time: string): number => {
   const [hours, minutes] = time.split(":").map(Number);
@@ -95,7 +75,7 @@ export const PhotographerDetailPage: React.FC = () => {
         }
       }).then((result) => {
         if (result.isConfirmed) {
-          navigate('/login');
+          navigate('/auth/login');
         }
       });
       return;
@@ -114,23 +94,81 @@ export const PhotographerDetailPage: React.FC = () => {
   };
   const location = useLocation();
 
-  const [photographer, setPhotographer] = useState<PhotographerDetails | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reviews, setReviews] = useState<any[]>([]);
+  const { photographer, isLoading: loading, error } = usePhotographerDetail(id);
+  const hasBookablePackage = Boolean(photographer?.packages.length);
+  const [reviews, setReviews] = useState<PhotographerReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState<boolean>(true);
+
+  // Lightbox States
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  const allPortfolioImages = useMemo<PhotographerPortfolioImage[]>(() => {
+    if (photographer?.portfolioItems?.length) {
+      return photographer.portfolioItems.flatMap((item) => {
+        const images = item.images.filter(Boolean);
+        return images.map((src, index) => ({
+          src,
+          title: item.title,
+          description: item.description || undefined,
+          imageNumber: index + 1,
+          imageCount: images.length,
+        }));
+      });
+    }
+    if (photographer?.portfolio?.length) {
+      return photographer.portfolio.filter(Boolean).map((src, index, images) => ({
+        src,
+        title: `Tác phẩm #${index + 1}`,
+        imageNumber: index + 1,
+        imageCount: images.length,
+      }));
+    }
+    return [];
+  }, [photographer]);
+
+  const handleImageClick = (imageSrc: string) => {
+    const index = allPortfolioImages.findIndex((image) => image.src === imageSrc);
+    if (index >= 0) {
+      setLightboxIndex(index);
+      setLightboxOpen(true);
+    }
+  };
+
+  const handlePreviousImage = () => {
+    setLightboxIndex((current) =>
+      current === 0 ? allPortfolioImages.length - 1 : current - 1,
+    );
+  };
+
+  const handleNextImage = () => {
+    setLightboxIndex((current) =>
+      current === allPortfolioImages.length - 1 ? 0 : current + 1,
+    );
+  };
 
   // Booking Form States
   const [selectedPkg, setSelectedPkg] = useState<Package | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(''); // YYYY-MM-DD
   const [startTime, setStartTime] = useState<string>('');
-  const [endTime, setEndTime] = useState<string>('');
-  const selectedTimeSlot = `${startTime} - ${endTime}`;
+  const [durationMinutes, setDurationMinutes] = useState<number>(0);
+  const includedDurationMinutes = Math.max(selectedPkg?.includedDurationMinutes ?? Math.round((selectedPkg?.durationHours ?? 2) * 60), 30);
+  const overtimeIncrementMinutes = Math.max(selectedPkg?.overtimeIncrementMinutes ?? 30, 30);
+  const maxOvertimeMinutes = Math.max(selectedPkg?.maxOvertimeMinutes ?? 240, 0);
+  const effectiveDurationMinutes = Math.max(durationMinutes || includedDurationMinutes, includedDurationMinutes);
+  const endTime = startTime ? toTime(toMinutes(startTime) + effectiveDurationMinutes) : '';
+  const selectedTimeSlot = startTime && endTime ? `${startTime} - ${endTime}` : '';
+  const [quote, setQuote] = useState<PhotographyQuote | null>(null);
+  const [nextDurationQuote, setNextDurationQuote] = useState<PhotographyQuote | null>(null);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [isQuoteLoading, setIsQuoteLoading] = useState(false);
+  const [isNextDurationQuoteLoading, setIsNextDurationQuoteLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<string>('');
-  const [customLocation, setCustomLocation] = useState<string>('');
   const [selectedConcept, setSelectedConcept] = useState<string>('');
   const [customRequest, setCustomRequest] = useState<string>('');
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [bookingMode, setBookingMode] = useState<'SINGLE' | 'MULTI'>('SINGLE');
+  const [multiSessions, setMultiSessions] = useState<PhotographySessionDraft[]>([]);
   const [agreeTerms, setAgreeTerms] = useState<boolean>(false);
 
   // Calendar navigation & booking state
@@ -140,6 +178,8 @@ export const PhotographerDetailPage: React.FC = () => {
   const [busyDates, setBusyDates] = useState<string[]>([]);
   const [busySlots, setBusySlots] = useState<{ date: string, timeSlot: string }[]>([]);
   const [availableTimeRanges, setAvailableTimeRanges] = useState<Array<{ start: string; end: string }>>([]);
+  const [monthlyAvailability, setMonthlyAvailability] = useState<Record<string, PhotographerAvailabilityStatus>>({});
+  const [isMonthlyAvailabilityLoading, setIsMonthlyAvailabilityLoading] = useState(false);
 
   // Check if cart has an Ao Dai to auto-fill details
   const aoDaiInCart = cart.find((item) => item.itemType === 'PRODUCT');
@@ -173,7 +213,6 @@ export const PhotographerDetailPage: React.FC = () => {
     if (aoDaiInCart && rentalFrom) {
       setSelectedDate(rentalFrom);
       if (aoDaiInCart.startTime) setStartTime(aoDaiInCart.startTime);
-      if (aoDaiInCart.endTime) setEndTime(aoDaiInCart.endTime);
       toast.success('Đã đồng bộ lịch trình theo Áo dài thành công!');
     }
   };
@@ -188,7 +227,7 @@ export const PhotographerDetailPage: React.FC = () => {
 
   const renderBanner = () => {
     if (!aoDaiInCart) return null;
-    
+
     if (!isCitySynced) {
       return (
         <div style={{
@@ -210,7 +249,7 @@ export const PhotographerDetailPage: React.FC = () => {
         </div>
       );
     }
-    
+
     if (isFullySynced) {
       return (
         <div style={{
@@ -231,7 +270,7 @@ export const PhotographerDetailPage: React.FC = () => {
         </div>
       );
     }
-    
+
     return (
       <div style={{
         display: 'flex',
@@ -274,65 +313,52 @@ export const PhotographerDetailPage: React.FC = () => {
     );
   };
 
-  // Load Photographer details
+  // Load booking availability separately from the public photographer profile.
   useEffect(() => {
-    const fetchDetails = async () => {
+    const fetchBookingAvailability = async () => {
+      if (!id) return;
       try {
-        setLoading(true);
-        const data = await httpClient.get<any>(`/api/photographers/${id}`);
-        
-        const details: PhotographerDetails = {
-          ...data,
-          quote: data.quote,
-          equipment: Array.isArray(data.equipment) ? data.equipment : [],
-          portfolio: Array.isArray(data.portfolio)
-            ? data.portfolio
-            : Array.isArray(data.media?.images)
-              ? data.media.images
-              : [],
-        };
-
-        setPhotographer(details);
-        
-        // Load busy dates/slots
-        try {
-          const busyData = await httpClient.get<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }>(`/api/bookings/busy-dates/provider/${id}`);
-          setBusyDates(busyData.bookedDates || []);
-          setBusySlots(busyData.bookedSlots || []);
-        } catch (e) {
-          console.error('Lỗi tải lịch bận của thợ chụp:', e);
-        }
-        
-        // Default select package based on state or fallback to first package
-        if (details.packages && details.packages.length > 0) {
-          const statePkgId = location.state?.selectedPackageId;
-          if (statePkgId) {
-            const found = details.packages.find((p: any) => p._id === statePkgId);
-            if (found) {
-              setSelectedPkg(found);
-            } else {
-              setSelectedPkg(details.packages[0]);
-            }
-          } else {
-            setSelectedPkg(details.packages[0]);
-          }
-        }
-      } catch (err: any) {
-        console.error('Lỗi tải chi tiết thợ chụp:', err);
-        setError(err.message || 'Không thể tải chi tiết nhiếp ảnh gia.');
-      } finally {
-        setLoading(false);
+        const busyData = await httpClient.get<{ bookedDates: string[]; bookedSlots: { date: string; timeSlot: string }[] }>(`/api/bookings/busy-dates/provider/${id}`);
+        setBusyDates(busyData.bookedDates || []);
+        setBusySlots(busyData.bookedSlots || []);
+      } catch (bookingError) {
+        console.error('Không thể tải lịch bận của nhiếp ảnh gia:', bookingError);
+        setBusyDates([]);
+        setBusySlots([]);
       }
     };
-    fetchDetails();
+
+    void fetchBookingAvailability();
   }, [id]);
 
+  useEffect(() => {
+    if (!photographer?.packages.length) {
+      setSelectedPkg(null);
+      return;
+    }
+
+    const selectedPackageId = location.state?.selectedPackageId;
+    const selectedPackage = selectedPackageId
+      ? photographer.packages.find((item) => item._id === selectedPackageId)
+      : undefined;
+    setSelectedPkg(selectedPackage ?? photographer.packages[0]);
+  }, [location.state, photographer]);
+
+  useEffect(() => {
+    if (!selectedPkg) {
+      setDurationMinutes(0);
+      return;
+    }
+    const packageDuration = Math.max(selectedPkg.includedDurationMinutes ?? Math.round(selectedPkg.durationHours * 60), 30);
+    setDurationMinutes(packageDuration);
+    setMultiSessions((current) => current.map((session) => ({ ...session, durationMinutes: packageDuration })));
+  }, [selectedPkg?._id]);
   // Load Photographer reviews
   useEffect(() => {
     const fetchReviews = async () => {
       try {
         setReviewsLoading(true);
-        const data = await httpClient.get<any[]>(`/reviews/provider/${id}`);
+        const data = await httpClient.get<PhotographerReview[]>(`/reviews/provider/${id}`);
         setReviews(data || []);
       } catch (err) {
         console.error('Failed to fetch reviews for photographer', err);
@@ -356,10 +382,9 @@ export const PhotographerDetailPage: React.FC = () => {
         setSelectedDate(rentalDate);
       }
     }
-    
+
     if (aoDaiInCart) {
       if (aoDaiInCart.startTime) setStartTime(aoDaiInCart.startTime);
-      if (aoDaiInCart.endTime) setEndTime(aoDaiInCart.endTime);
     }
   }, [aoDaiInCart, busyDates]);
 
@@ -384,34 +409,71 @@ export const PhotographerDetailPage: React.FC = () => {
   };
 
 
-  // Dynamic calendar — must be BEFORE any early returns to follow Rules of Hooks
+  // Calendar availability is supplied by the backend from provider working hours,
+  // off days, active bookings, and the duration of the selected package.
   const calendarDays = useMemo(() => {
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const year = calendarDate.getFullYear();
     const month = calendarDate.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     let firstDayOfWeek = new Date(year, month, 1).getDay();
     firstDayOfWeek = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
-    const days: any[] = [];
-    for (let i = 0; i < firstDayOfWeek; i++) {
+    const days: PhotographyCalendarDay[] = [];
+    for (let i = 0; i < firstDayOfWeek; i += 1) {
       days.push({ day: 0, dateStr: '', isWeekend: false, isAvailable: false, isEmpty: true });
     }
-    for (let i = 1; i <= daysInMonth; i++) {
+    for (let i = 1; i <= daysInMonth; i += 1) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-      const dayOfWeek = new Date(dateStr).getDay();
-      
-      const isAvailable = !busyDates.includes(dateStr) && dateStr >= todayStr;
-
+      const status = monthlyAvailability[dateStr] ?? 'NO_SCHEDULE';
+      const dayOfWeek = new Date(`${dateStr}T00:00:00`).getDay();
       days.push({
-        day: i, dateStr,
+        day: i,
+        dateStr,
         isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
-        isAvailable,
+        isAvailable: status === 'AVAILABLE',
         isEmpty: false,
+        availabilityStatus: status,
       });
     }
     return days;
-  }, [calendarDate, busyDates]);
+  }, [calendarDate, monthlyAvailability]);
+
+  useEffect(() => {
+    if (!id || !selectedPkg) {
+      setMonthlyAvailability({});
+      setIsMonthlyAvailabilityLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const month = `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, '0')}`;
+    setIsMonthlyAvailabilityLoading(true);
+    httpClient
+      .get<MonthlyAvailabilityResponse>(
+        `/api/photographers/${id}/availability/month?month=${month}&packageId=${selectedPkg._id}`,
+      )
+      .then((availability) => {
+        if (cancelled) return;
+        setMonthlyAvailability(Object.fromEntries(availability.days.map((day) => [day.date, day.status])));
+      })
+      .catch((availabilityError) => {
+        console.error('Unable to load monthly photographer availability:', availabilityError);
+        if (!cancelled) setMonthlyAvailability({});
+      })
+      .finally(() => {
+        if (!cancelled) setIsMonthlyAvailabilityLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [calendarDate, id, selectedPkg]);
+
+  useEffect(() => {
+    if (!selectedDate) return;
+    const displayedMonth = `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, '0')}`;
+    if (selectedDate.startsWith(displayedMonth) && monthlyAvailability[selectedDate] && monthlyAvailability[selectedDate] !== 'AVAILABLE') {
+      setSelectedDate('');
+      setStartTime('');
+    }
+  }, [calendarDate, monthlyAvailability, selectedDate]);
 
   useEffect(() => {
     if (!id || !selectedDate) {
@@ -431,35 +493,34 @@ export const PhotographerDetailPage: React.FC = () => {
   }, [id, selectedDate]);
 
   const photographerSlots = useMemo(() => {
-    const durationMinutes = Math.max(Math.round((selectedPkg?.durationHours || 2) * 60), 30);
     return availableTimeRanges.flatMap((range) => {
       const start = toMinutes(range.start);
       const end = toMinutes(range.end);
       const slots: Array<{ start: string; end: string; label: string }> = [];
-      for (let current = start; current + durationMinutes <= end; current += 30) {
-        const slotEnd = current + durationMinutes;
+      for (let current = start; current + effectiveDurationMinutes <= end; current += 30) {
+        const slotEnd = current + effectiveDurationMinutes;
         slots.push({ start: toTime(current), end: toTime(slotEnd), label: `${toTime(current)} - ${toTime(slotEnd)}` });
       }
       return slots;
     });
-  }, [availableTimeRanges, selectedPkg?.durationHours]);
+  }, [availableTimeRanges, effectiveDurationMinutes]);
 
   useEffect(() => {
-    const firstAvailableSlot = photographerSlots.find((slot) => {
-      const busy = bookedSlotsOnSelectedDate.some((bookedSlot) =>
-        isTimeSlotOverlap(`${slot.start}-${slot.end}`, bookedSlot),
-      );
-      return !busy;
-    });
-    setStartTime(firstAvailableSlot?.start || "");
-    setEndTime(firstAvailableSlot?.end || "");
-  }, [photographerSlots, bookedSlotsOnSelectedDate]);
+    const currentSlot = photographerSlots.find((slot) => slot.start === startTime);
+    const currentSlotIsAvailable = currentSlot && !bookedSlotsOnSelectedDate.some((bookedSlot) =>
+      isTimeSlotOverlap(`${currentSlot.start}-${currentSlot.end}`, bookedSlot),
+    );
+    if (currentSlotIsAvailable) return;
+
+    const firstAvailableSlot = photographerSlots.find((slot) => !bookedSlotsOnSelectedDate.some((bookedSlot) =>
+      isTimeSlotOverlap(`${slot.start}-${slot.end}`, bookedSlot),
+    ));
+    setStartTime(firstAvailableSlot?.start || '');
+  }, [photographerSlots, bookedSlotsOnSelectedDate, startTime]);
 
   const handleSlotClick = (slot: { start: string; end: string }) => {
     setStartTime(slot.start);
-    setEndTime(slot.end);
-  };
-  const isCurrentTimeSlotBusy = useMemo(() => {
+  };  const isCurrentTimeSlotBusy = useMemo(() => {
     return bookedSlotsOnSelectedDate.some(bookedSlot => {
       if (!bookedSlot) return false;
       return isTimeSlotOverlap(selectedTimeSlot, bookedSlot);
@@ -477,6 +538,90 @@ export const PhotographerDetailPage: React.FC = () => {
     return address ? [address] : [];
   }, [photographer]);
 
+  useEffect(() => {
+    if (!selectedLocation && locations[0]) {
+      setSelectedLocation(locations[0]);
+    }
+  }, [locations, selectedLocation]);
+
+  const quoteSessions = useMemo<PhotographySessionDraft[]>(() => (
+    bookingMode === 'SINGLE'
+      ? [{ clientId: 'main-session', date: selectedDate, startTime, durationMinutes: effectiveDurationMinutes }]
+      : multiSessions
+  ), [bookingMode, selectedDate, startTime, effectiveDurationMinutes, multiSessions]);
+  const isQuoteable = quoteSessions.length > 0 && quoteSessions.every((session) => Boolean(session.date && session.startTime));
+  const nextDurationMinutes = effectiveDurationMinutes + overtimeIncrementMinutes;
+  const canRequestNextDurationQuote = Boolean(
+    bookingMode === 'SINGLE' && id && selectedPkg && selectedDate && startTime && nextDurationMinutes <= includedDurationMinutes + maxOvertimeMinutes,
+  );
+
+  useEffect(() => {
+    if (!id || !selectedPkg || !isQuoteable) {
+      setQuote(null);
+      setNextDurationQuote(null);
+      setQuoteError(null);
+      setIsQuoteLoading(false);
+      setIsNextDurationQuoteLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const createPayload = (sessions: PhotographySessionDraft[]) => ({
+      packageId: selectedPkg._id,
+      sessions: sessions.map((session) => ({
+        clientId: session.clientId,
+        startsAt: `${session.date}T${session.startTime}:00+07:00`,
+        endsAt: `${session.date}T${toTime(toMinutes(session.startTime) + session.durationMinutes)}:00+07:00`,
+        ...(selectedLocation ? { locationAddress: selectedLocation } : {}),
+      })),
+    });
+
+    setIsQuoteLoading(true);
+    setQuoteError(null);
+    setIsNextDurationQuoteLoading(canRequestNextDurationQuote);
+    if (!canRequestNextDurationQuote) setNextDurationQuote(null);
+
+    const timer = window.setTimeout(() => {
+      const currentQuote = photographersApi.quote(id, createPayload(quoteSessions));
+      const nextQuote = canRequestNextDurationQuote
+        ? photographersApi.quote(id, createPayload([{ clientId: 'main-session', date: selectedDate, startTime, durationMinutes: nextDurationMinutes }]))
+        : Promise.resolve(null);
+
+      Promise.all([currentQuote, nextQuote])
+        .then(([current, next]) => {
+          if (cancelled) return;
+          setQuote(current);
+          setNextDurationQuote(next);
+        })
+        .catch((quoteRequestError: any) => {
+          if (cancelled) return;
+          console.error('Không thể lấy báo giá chụp ảnh:', quoteRequestError);
+          setQuote(null);
+          setNextDurationQuote(null);
+          setQuoteError(quoteRequestError?.message || 'Không thể kiểm tra lịch và báo giá lúc này. Vui lòng thử lại.');
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setIsQuoteLoading(false);
+            setIsNextDurationQuoteLoading(false);
+          }
+        });
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [id, selectedPkg, selectedLocation, quoteSessions, isQuoteable, selectedDate, startTime, effectiveDurationMinutes, nextDurationMinutes, canRequestNextDurationQuote]);
+
+  const canIncreaseDuration = bookingMode === 'SINGLE' && Boolean(nextDurationQuote?.valid) && !isNextDurationQuoteLoading;
+  const increaseUnavailableReason = !selectedDate || !startTime
+    ? 'Hãy chọn ngày và giờ bắt đầu trước.'
+    : nextDurationMinutes > includedDurationMinutes + maxOvertimeMinutes
+      ? 'Đã đạt thời lượng tăng giờ tối đa của gói.'
+      : isNextDurationQuoteLoading
+        ? 'Đang kiểm tra lịch còn trống…'
+        : nextDurationQuote?.errors[0]?.message || 'Khoảng thời gian tăng thêm không còn trống.';
   if (loading) {
     return (
       <div style={{ backgroundColor: '#FCF9F2', minHeight: '80vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
@@ -512,6 +657,51 @@ export const PhotographerDetailPage: React.FC = () => {
     }
   };
 
+  const localToday = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  };
+
+  const createSessionDraft = (date = selectedDate || rentalFrom || localToday()): PhotographySessionDraft => ({
+    clientId: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    date,
+    startTime: startTime || '09:00',
+    durationMinutes: effectiveDurationMinutes,
+  });
+
+  const generateSessionsForRange = (from: string, to: string) => {
+    if (!from || !to || to < from) {
+      toast.error('Khoảng ngày chụp không hợp lệ.');
+      return;
+    }
+    const sessions: PhotographySessionDraft[] = [];
+    const cursor = new Date(`${from}T12:00:00+07:00`);
+    const last = new Date(`${to}T12:00:00+07:00`);
+    while (cursor <= last && sessions.length < 31) {
+      const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+      sessions.push(createSessionDraft(date));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    if (cursor <= last) {
+      toast.error('Mỗi lần chỉ có thể tạo tối đa 31 buổi. Hãy chia nhỏ khoảng ngày.');
+      return;
+    }
+    setMultiSessions(sessions);
+  };
+
+  const changeBookingMode = (mode: 'SINGLE' | 'MULTI') => {
+    if (mode === bookingMode) return;
+    if (mode === 'MULTI' && multiSessions.length === 0) {
+      const from = rentalFrom || selectedDate || localToday();
+      const to = rentalTo || from;
+      generateSessionsForRange(from, to);
+    }
+    setBookingMode(mode);
+  };
+
+  const updateMultiSession = (clientId: string, patch: Partial<Omit<PhotographySessionDraft, 'clientId'>>) => {
+    setMultiSessions((current) => current.map((session) => session.clientId === clientId ? { ...session, ...patch } : session));
+  };
   const handleAddBookingToCart = async () => {
     if (!isAuthenticated) {
       toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
@@ -519,10 +709,16 @@ export const PhotographerDetailPage: React.FC = () => {
       return;
     }
 
+    if (bookingMode === 'MULTI') {
+      toast.info('Lịch nhiều buổi cần được giữ chỗ và thanh toán trực tiếp để bảo toàn toàn bộ các buổi chụp.');
+      return;
+    }
+
     if (!selectedPkg) { toast.error('Vui lòng chọn gói dịch vụ!'); return; }
     if (!selectedDate) { toast.error('Vui lòng chọn ngày dự kiến chụp!'); return; }
-    if (busyDates.includes(selectedDate)) {
-      toast.error('Nhiếp ảnh gia đã có lịch chụp vào ngày này. Vui lòng chọn ngày chụp khác!');
+    if (!startTime || !endTime) { toast.error('Vui lòng chọn khung giờ chụp còn trống!'); return; }
+    if (!quote?.valid || !quote.totals) {
+      toast.error('Lịch chụp chưa hợp lệ hoặc báo giá đang được cập nhật.');
       return;
     }
     if (!agreeTerms) { toast.error('Vui lòng đồng ý với điều khoản đặt lịch!'); return; }
@@ -531,34 +727,10 @@ export const PhotographerDetailPage: React.FC = () => {
       return;
     }
 
-    let finalLocation = selectedLocation;
-    if (selectedLocation === 'KHAC') {
-      const trimmedCustom = customLocation.trim();
-      if (!trimmedCustom) {
-        toast.error('Vui lòng nhập địa điểm chụp ảnh mong muốn!');
-        return;
-      }
-
-      const lowerCustom = trimmedCustom.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const normCity = photographerCity.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-      // List of other cities that are mismatching
-      const otherCities = ['ha noi', 'ho chi minh', 'sai gon', 'da nang', 'hue', 'thua thien hue', 'quang nam', 'hoi an', 'nha trang', 'da lat'].filter(c => {
-        const normCityPart = photographerCity.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        return !normCityPart.includes(c) && !c.includes(normCityPart);
-      });
-
-      const hasWrongCity = otherCities.some(city => lowerCustom.includes(city));
-      if (hasWrongCity) {
-        toast.error(`Địa điểm chụp ảnh phải thuộc khu vực hoạt động của thợ ảnh (${photographerCity}). Vui lòng nhập địa điểm hợp lệ!`);
-        return;
-      }
-
-      if (!lowerCustom.includes(normCity)) {
-        finalLocation = `${trimmedCustom}, ${photographerCity}`;
-      } else {
-        finalLocation = trimmedCustom;
-      }
+    const finalLocation = selectedLocation;
+    if (!finalLocation) {
+      toast.error('Vui lòng chọn địa điểm chụp ảnh.');
+      return;
     }
 
     setIsBookingNow(true);
@@ -583,7 +755,8 @@ export const PhotographerDetailPage: React.FC = () => {
       photographerName: photographer.businessName,
       photographerAvatar: photographer.portfolio[0] || '',
       packageName: selectedPkg.name,
-      basePrice: selectedPkg.price,
+      basePrice: quote.totals.totalAmount,
+      depositAmount: Math.round(quote.totals.totalAmount * 0.3),
       shootDate: selectedDate,
       shootTimeSlot: selectedTimeSlot,
       shootLocation: finalLocation,
@@ -605,9 +778,9 @@ export const PhotographerDetailPage: React.FC = () => {
     }
 
     if (!selectedPkg) { toast.error('Vui lòng chọn gói dịch vụ!'); return; }
-    if (!selectedDate) { toast.error('Vui lòng chọn ngày dự kiến chụp!'); return; }
-    if (busyDates.includes(selectedDate)) {
-      toast.error('Nhiếp ảnh gia đã có lịch chụp vào ngày này. Vui lòng chọn ngày chụp khác!');
+    if (!isQuoteable) { toast.error('Vui lòng hoàn tất thông tin của tất cả buổi chụp.'); return; }
+    if (!quote?.valid || !quote.totals) {
+      toast.error('Lịch chụp chưa hợp lệ hoặc báo giá đang được cập nhật.');
       return;
     }
     if (!agreeTerms) { toast.error('Vui lòng đồng ý với điều khoản đặt lịch!'); return; }
@@ -616,34 +789,10 @@ export const PhotographerDetailPage: React.FC = () => {
       return;
     }
 
-    let finalLocation = selectedLocation;
-    if (selectedLocation === 'KHAC') {
-      const trimmedCustom = customLocation.trim();
-      if (!trimmedCustom) {
-        toast.error('Vui lòng nhập địa điểm chụp ảnh mong muốn!');
-        return;
-      }
-
-      const lowerCustom = trimmedCustom.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const normCity = photographerCity.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-      // List of other cities that are mismatching
-      const otherCities = ['ha noi', 'ho chi minh', 'sai gon', 'da nang', 'hue', 'thua thien hue', 'quang nam', 'hoi an', 'nha trang', 'da lat'].filter(c => {
-        const normCityPart = photographerCity.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        return !normCityPart.includes(c) && !c.includes(normCityPart);
-      });
-
-      const hasWrongCity = otherCities.some(city => lowerCustom.includes(city));
-      if (hasWrongCity) {
-        toast.error(`Địa điểm chụp ảnh phải thuộc khu vực hoạt động của thợ ảnh (${photographerCity}). Vui lòng nhập địa điểm hợp lệ!`);
-        return;
-      }
-
-      if (!lowerCustom.includes(normCity)) {
-        finalLocation = `${trimmedCustom}, ${photographerCity}`;
-      } else {
-        finalLocation = trimmedCustom;
-      }
+    const finalLocation = selectedLocation;
+    if (!finalLocation) {
+      toast.error('Vui lòng chọn địa điểm chụp ảnh.');
+      return;
     }
 
     try {
@@ -664,21 +813,34 @@ export const PhotographerDetailPage: React.FC = () => {
         }
       }
 
-      const bookingRes: any = await httpClient.post('/api/bookings/photography', {
-        packageId: selectedPkg._id,
-        shootDate: selectedDate,
-        shootTimeSlot: selectedTimeSlot,
-        shootLocation: finalLocation,
-        concept: selectedConcept,
-        customRequests: customRequest || null,
-        referenceImage: referenceImageUrl,
-      });
+      const idempotencyKey =
+        'photography-hold-' +
+        Date.now().toString() +
+        '-' +
+        Math.random().toString(36).slice(2);
+      const holdRes: any = await httpClient.post(
+        '/api/bookings/photography/hold',
+        {
+          packageId: selectedPkg._id,
+          sessions: quoteSessions.map((session) => ({
+            clientId: session.clientId,
+            startsAt: `${session.date}T${session.startTime}:00+07:00`,
+            endsAt: `${session.date}T${toTime(toMinutes(session.startTime) + session.durationMinutes)}:00+07:00`,
+            locationAddress: finalLocation,
+          })),
+          concept: selectedConcept,
+          customRequests: customRequest || undefined,
+          referenceImage: referenceImageUrl || undefined,
+        },
+        {
+          headers: { 'Idempotency-Key': idempotencyKey },
+        },
+      );
 
-      // Show toast and proceed to PayOS simulator
-      toast.success('Khởi tạo đơn đặt thợ chụp ảnh thành công!');
-      
+      toast.success('Đã giữ lịch trong 10 phút. Đang chuyển đến thanh toán...');
+
       const paymentRes: any = await httpClient.post('/payments/create-link', {
-        bookingId: bookingRes._id,
+        bookingId: holdRes.bookingId,
         purpose: 'DEPOSIT_PAYMENT',
       });
 
@@ -692,14 +854,14 @@ export const PhotographerDetailPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Lỗi đặt lịch:', err);
-      toast.error(err.message || 'Could not create the booking. Please try again.');
+      toast.error(err.message || 'Không thể tạo lịch đặt. Vui lòng thử lại.');
     } finally {
       setIsBookingNow(false);
     }
   };
 
   return (
-    <div style={{ backgroundColor: '#FCF9F2', minHeight: '100vh', padding: '60px 0' }}>
+    <div className="pd-page-wrapper">
 
       {/* BOOKING SUCCESS MODAL */}
       {bookingSuccess && (
@@ -788,12 +950,12 @@ export const PhotographerDetailPage: React.FC = () => {
       )}
 
       <div style={{ maxWidth: '1400px', width: '100%', margin: '0 auto', padding: '0 40px' }}>
-        
+
         {/* Breadcrumb */}
-        <div style={{ display: 'flex', gap: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '32px', fontWeight: 600 }}>
-          <Link to="/" style={{ color: 'var(--color-text-secondary)' }}>Trang chủ</Link>
+        <div className="pd-breadcrumb">
+          <Link to="/">Trang chủ</Link>
           <span>/</span>
-          <Link to={ROUTES.PHOTOGRAPHERS} style={{ color: 'var(--color-text-secondary)' }}>Nhiếp ảnh gia</Link>
+          <Link to={ROUTES.PHOTOGRAPHERS}>Nhiếp ảnh gia</Link>
           <span>/</span>
           <span style={{ color: 'var(--color-primary)' }}>{photographer.businessName}</span>
         </div>
@@ -801,707 +963,190 @@ export const PhotographerDetailPage: React.FC = () => {
         {/* Dynamic Cart Info Banner */}
         {renderBanner()}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 440px', gap: '50px', alignItems: 'start' }}>
-          
+        <div className={`pd-layout-grid${hasBookablePackage ? '' : ' pd-layout-grid--portfolio-only'}`}>
+
           {/* LEFT COLUMN: Configuration Forms */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
-            
-            {/* Header info */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px' }}>
-                <h1 className="font-header" style={{ fontSize: '38px', color: 'var(--color-primary-dark)', fontWeight: 700, margin: 0 }}>
-                  {photographer.businessName}
-                </h1>
-                <button
-                  onClick={(e) => handleToggleFavorite(photographer._id, e)}
-                  style={{
-                    backgroundColor: 'white',
-                    border: '1px solid rgba(182, 145, 91, 0.3)',
-                    borderRadius: '50%',
-                    width: '44px',
-                    height: '44px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    boxShadow: 'var(--shadow-sm)',
-                    transition: 'all 0.2s ease',
-                    color: favorites.includes(photographer._id) ? '#A11E22' : '#8C827A'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'scale(1.05)';
-                    e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'scale(1)';
-                    e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-                  }}
-                  title={favorites.includes(photographer._id) ? 'Xóa khỏi danh sách yêu thích' : 'Lưu vào danh sách yêu thích'}
-                >
-                  <Heart size={20} fill={favorites.includes(photographer._id) ? '#A11E22' : 'none'} color={favorites.includes(photographer._id) ? '#A11E22' : '#8C827A'} />
-                </button>
-              </div>
-              <p className="font-body" style={{ fontSize: '15px', fontStyle: 'italic', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-                {photographer.quote}
-              </p>
-            </div>
+          <div className="pd-details-column">
 
-            {/* Step 1: Chọn gói dịch vụ */}
-            <section style={{ backgroundColor: 'white', padding: '32px', borderRadius: '16px', border: '1px solid var(--color-light-border)' }}>
-              <h2 className="font-header" style={{ fontSize: '22px', fontWeight: 750, color: 'var(--color-text-primary)', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--color-primary-dark)', color: 'white', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</span>
-                <span>Chọn gói dịch vụ</span>
-              </h2>
+            <PhotographerHero
+              name={photographer.businessName}
+              quote={photographer.quote}
+              isFavorite={favorites.includes(photographer._id)}
+              onToggleFavorite={(event) => handleToggleFavorite(photographer._id, event)}
+              avatarUrl={photographer.coverImage || photographer.portfolio[0]}
+              coverUrl={photographer.media?.coverUrl || photographer.coverImage || photographer.portfolio[0]}
+              rating={photographer.rating.averageRating}
+              reviewsCount={photographer.rating.totalReviews}
+              city={photographerCity}
+            />
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {photographer.packages.map((pkg) => {
-                  const isSelected = selectedPkg?._id === pkg._id;
-                  return (
-                    <div
-                      key={pkg._id}
-                      onClick={() => setSelectedPkg(pkg)}
-                      style={{
-                        border: isSelected ? '2px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                        borderRadius: '12px',
-                        padding: '20px',
-                        backgroundColor: isSelected ? 'rgba(161, 30, 34, 0.02)' : 'white',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start'
-                      }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left', maxWidth: '80%' }}>
-                        <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{pkg.name}</span>
-                        <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>{pkg.description}</p>
-                        <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600, marginTop: '8px' }}>
-                          <span>Thời gian: <strong>{pkg.durationHours} giờ</strong></span>
-                          <span>Ảnh chỉnh sửa: <strong>{pkg.editedPhotosCount} ảnh</strong></span>
-                          <span>Trả ảnh: <strong>{pkg.deliveryDays} ngày</strong></span>
-                        </div>
-                        <div style={{ fontSize: '12.5px', color: '#8B1E22', fontWeight: 600, marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <MapPin size={13} style={{ flexShrink: 0 }} />
-                          <span>Khu vực hoạt động: <strong>{photographerCity}</strong> (Chụp tại các địa điểm trong tỉnh/thành phố)</span>
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '18px', fontWeight: 850, color: 'var(--color-primary-dark)' }}>
-                          {pkg.price.toLocaleString('vi-VN')}đ
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* Step 2: Lịch & Khung giờ - 2-column layout */}
-            <section style={{ backgroundColor: 'white', padding: '32px', borderRadius: '16px', border: '1px solid var(--color-light-border)' }}>
-              <h2 className="font-header" style={{ fontSize: '22px', fontWeight: 750, color: 'var(--color-text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--color-primary-dark)', color: 'white', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>2</span>
-                <span>Lịch & Khung giờ</span>
-              </h2>
-              <p style={{ fontSize: '13px', color: '#8C827A', marginBottom: '24px', marginLeft: '32px' }}>
-                Chọn thời gian phù hợp để ghi lại những khoảnh khắc đẹp nhất.
-              </p>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: '32px', alignItems: 'start' }}>
-                {/* LEFT: Calendar */}
-                <div>
-                  {/* Month navigation header */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                    <button
-                      onClick={() => { const d = new Date(calendarDate); d.setMonth(d.getMonth() - 1); setCalendarDate(d); }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center' }}
-                    >
-                      <ChevronLeft size={16} />
-                    </button>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                      Tháng {calendarDate.getMonth() + 1}, {calendarDate.getFullYear()}
-                    </span>
-                    <button
-                      onClick={() => { const d = new Date(calendarDate); d.setMonth(d.getMonth() + 1); setCalendarDate(d); }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center' }}
-                    >
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-
-                  {/* Calendar grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
-                    {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((w) => (
-                      <span key={w} style={{ fontSize: '10px', fontWeight: 800, color: '#8C827A', padding: '4px 0' }}>{w}</span>
-                    ))}
-                    {calendarDays.map((d, idx) => {
-                      if (d.isEmpty) return <div key={`e-${idx}`} />;
-                      const isSelected = selectedDate === d.dateStr;
-                      return (
-                        <button
-                          key={d.day}
-                          disabled={!d.isAvailable}
-                          onClick={() => setSelectedDate(d.dateStr)}
-                          style={{
-                            aspectRatio: '1',
-                            border: isSelected ? '2px solid var(--color-primary)' : '1px solid transparent',
-                            borderRadius: '8px',
-                            backgroundColor: isSelected
-                              ? 'var(--color-primary)'
-                              : !d.isAvailable
-                                ? '#F5F5F5'
-                                : d.isWeekend
-                                  ? '#FCF9F2'
-                                  : '#FFFFFF',
-                            color: !d.isAvailable
-                              ? '#CCCCCC'
-                              : isSelected
-                                ? '#FFFFFF'
-                                : 'var(--color-text-primary)',
-                            fontWeight: isSelected || d.isWeekend ? 'bold' : 'normal',
-                            fontSize: '12px',
-                            cursor: d.isAvailable ? 'pointer' : 'not-allowed',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.15s ease',
-                          }}
-                        >
-                          {d.day}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* RIGHT: Time slots grid */}
-                <div>
-                  <h3 style={{ fontSize: '11.5px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>CHỌN GIỜ CHỤP</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
-                    {photographerSlots.map((block) => {
-                      const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
-                        isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
-                      );
-                      const today = new Date();
-                      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                      const isPast = selectedDate === todayStr && (() => {
-                        const [sh, sm] = block.start.split(':').map(Number);
-                        return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
-                      })();
-
-                      const isSelected = startTime === block.start && endTime === block.end;
-
-                      return (
-                        <button
-                          key={block.label}
-                          type="button"
-                          disabled={isBusy || isPast}
-                          onClick={() => handleSlotClick(block)}
-                          style={{
-                            padding: '12px 8px',
-                            borderRadius: '8px',
-                            fontSize: '12.5px',
-                            fontWeight: 700,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '4px',
-                            cursor: (isBusy || isPast) ? 'not-allowed' : 'pointer',
-                            backgroundColor: isSelected
-                              ? 'var(--color-primary-dark)'
-                              : (isBusy || isPast)
-                                ? '#EAEAE8'
-                                : '#FFFFFF',
-                            color: isSelected
-                              ? '#FFFFFF'
-                              : (isBusy || isPast)
-                                ? '#A0A09E'
-                                : 'var(--color-text-primary)',
-                            border: isSelected
-                              ? '1.5px solid var(--color-primary-dark)'
-                              : '1.5px solid rgba(45, 41, 38, 0.15)',
-                            transition: 'all 0.15s ease',
-                          }}
-                        >
-                          <span>{block.label}</span>
-                          <span style={{ fontSize: '10px', fontWeight: 600, opacity: 0.85 }}>
-                            {isBusy ? 'Đã bận' : isPast ? 'Đã qua' : isSelected ? 'Đã chọn' : 'Trống'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <span style={{ fontSize: '11.5px', fontStyle: 'italic', color: 'var(--color-text-secondary)', display: 'block', marginTop: '14px' }}>
-                    * Bạn có thể chọn liên tiếp nhiều ô để đặt lịch chụp dài hơn (Ví dụ: click ô 7h-9h rồi click ô 9h-11h).
-                  </span>
-                </div>
-              </div>
-            </section>
-
-            {/* Step 3: Địa điểm chụp */}
-            <section style={{ backgroundColor: 'white', padding: '32px', borderRadius: '16px', border: '1px solid var(--color-light-border)' }}>
-              <h2 className="font-header" style={{ fontSize: '22px', fontWeight: 750, color: 'var(--color-text-primary)', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--color-primary-dark)', color: 'white', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>3</span>
-                <span>Địa điểm chụp ảnh</span>
-              </h2>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {/* Location chips */}
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  {locations.map((loc) => {
-                    const isSelected = selectedLocation === loc;
-                    return (
-                      <button
-                        key={loc}
-                        type="button"
-                        onClick={() => {
-                          setSelectedLocation(loc);
-                          setCustomLocation('');
-                        }}
-                        style={{
-                          padding: '8px 16px',
-                          borderRadius: '6px',
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          backgroundColor: isSelected ? 'var(--color-primary-dark)' : '#FFFFFF',
-                          color: isSelected ? '#FFFFFF' : '#8C827A',
-                          border: isSelected ? '1px solid var(--color-primary-dark)' : '1px solid rgba(45, 41, 38, 0.15)',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        {loc}
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedLocation('KHAC');
-                    }}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      backgroundColor: selectedLocation === 'KHAC' ? 'var(--color-primary-dark)' : '#FFFFFF',
-                      color: selectedLocation === 'KHAC' ? '#FFFFFF' : '#8C827A',
-                      border: selectedLocation === 'KHAC' ? '1px solid var(--color-primary-dark)' : '1px solid rgba(45, 41, 38, 0.15)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    Khác (Tự nhập)
-                  </button>
-                </div>
-
-                {/* Custom location input (conditionally rendered) */}
-                {selectedLocation === 'KHAC' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', animation: 'fadeIn 0.2s ease-out' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid rgba(182, 145, 91, 0.35)', padding: '12px 16px', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
-                      <MapPin size={18} color="var(--color-gold)" />
-                      <input
-                        type="text"
-                        placeholder={`Nhập địa điểm chụp tự chọn tại khu vực ${photographerCity}...`}
-                        value={customLocation}
-                        onChange={(e) => setCustomLocation(e.target.value)}
-                        style={{
-                          border: 'none',
-                          backgroundColor: 'transparent',
-                          width: '100%',
-                          fontSize: '14px',
-                          color: 'var(--color-text-primary)',
-                          fontWeight: 600,
-                          outline: 'none'
-                        }}
-                      />
-                    </div>
-                    <span style={{ fontSize: '12px', color: '#D35400', fontWeight: 550, display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '4px' }}>
-                      ⚠️ Lưu ý: Địa điểm tự chọn phải nằm trong tỉnh/thành phố {photographerCity} hoạt động của thợ ảnh.
-                    </span>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* Step 4: Concept & Ý tưởng */}
-            <section style={{ backgroundColor: 'white', padding: '32px', borderRadius: '16px', border: '1px solid var(--color-light-border)' }}>
-              <h2 className="font-header" style={{ fontSize: '22px', fontWeight: 750, color: 'var(--color-text-primary)', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--color-primary-dark)', color: 'white', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>4</span>
-                <span>Concept & Ý tưởng mong muốn</span>
-              </h2>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                <div>
-                  <label style={{ fontSize: '13px', color: '#8C827A', fontWeight: 650, display: 'block', marginBottom: '8px' }}>
-                    Concept mong muon:
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Nhap concept ban muon chup"
-                    value={selectedConcept}
-                    onChange={(event) => setSelectedConcept(event.target.value)}
-                    style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(182, 145, 91, 0.25)', backgroundColor: 'var(--color-light-bg)' }}
-                  />
-                </div>
-                {/* Ideas Textarea */}
-                <div>
-                  <label style={{ fontSize: '13px', color: '#8C827A', fontWeight: 650, display: 'block', marginBottom: '8px' }}>Ý tưởng chụp hoặc yêu cầu chi tiết:</label>
-                  <textarea
-                    rows={4}
-                    placeholder="Mô tả bối cảnh, concept bạn mong muốn hoặc các lưu ý đặc biệt dành cho thợ chụp..."
-                    value={customRequest}
-                    onChange={(e) => setCustomRequest(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '14px',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(182, 145, 91, 0.25)',
-                      backgroundColor: 'var(--color-light-bg)',
-                      color: 'var(--color-text-primary)',
-                      fontSize: '14px',
-                      resize: 'vertical',
-                      outline: 'none'
-                    }}
-                  />
-                </div>
-
-                {/* Reference Upload */}
-                <div>
-                  <label style={{ fontSize: '13px', color: '#8C827A', fontWeight: 650, display: 'block', marginBottom: '8px' }}>Tải ảnh bối cảnh/concept mẫu (Nếu có):</label>
-                  <div style={{
-                    border: '1.5px dashed rgba(182, 145, 91, 0.35)',
-                    borderRadius: '8px',
-                    padding: '24px',
-                    textAlign: 'center',
-                    backgroundColor: 'var(--color-light-bg)',
-                    cursor: 'pointer',
-                    position: 'relative'
-                  }}>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        opacity: 0,
-                        cursor: 'pointer'
-                      }}
-                    />
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: '#8C827A' }}>
-                      <Upload size={24} style={{ color: 'var(--color-gold)' }} />
-                      <span style={{ fontSize: '13px', fontWeight: 600 }}>
-                        {referenceFile ? `Đã chọn: ${referenceFile.name}` : 'Kéo thả ảnh hoặc Click để tải tệp lên'}
-                      </span>
-                      <span style={{ fontSize: '11px', color: '#B6915B' }}>Chấp nhận định dạng JPG, PNG dưới 5MB</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Portfolio Grid */}
-            <section>
-              <h3 className="font-header" style={{ fontSize: '20px', color: 'var(--color-text-primary)', marginBottom: '20px' }}>Tác phẩm tiêu biểu</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-                {photographer.portfolio.map((img, idx) => (
-                  <div key={idx} style={{ aspectRatio: '1', borderRadius: '10px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', boxShadow: 'var(--shadow-sm)' }}>
-                    <img src={img} alt={`Work ${idx}`} style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s' }} />
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Reviews Section */}
-            <section style={{ backgroundColor: 'white', padding: '32px', borderRadius: '16px', border: '1px solid var(--color-light-border)', marginTop: '40px' }}>
-              <h3 className="font-header" style={{ fontSize: '22px', fontWeight: 750, color: 'var(--color-text-primary)', marginBottom: '24px', textAlign: 'left' }}>
-                Đánh giá từ khách hàng ({reviews.length})
+            <section className="pd-about-card">
+              <h3 className="pd-section-title" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+                Giới thiệu & Thiết bị
               </h3>
+              <div className="pd-about-content">
+                <div className="pd-about-left">
+                  <span className="pd-info-label">Về nhiếp ảnh gia</span>
+                  <p className="pd-about-bio">
+                    {photographer.quote || 'Nhiếp ảnh gia chuyên nghiệp đồng hành cùng VibeHue mang lại cho bạn những bộ ảnh ấn tượng và đáng nhớ nhất.'}
+                  </p>
 
-              {reviewsLoading ? (
-                <div style={{ textAlign: 'center', padding: '20px', color: '#8C827A' }}>Đang tải đánh giá...</div>
-              ) : reviews.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px', backgroundColor: 'var(--color-light-bg)', borderRadius: '12px', border: '1px solid #EAEAE8' }}>
-                  <Star size={32} style={{ color: '#CCCCCC', margin: '0 auto 12px' }} />
-                  <p style={{ fontSize: '14px', color: '#8C827A', margin: 0 }}>Chưa có đánh giá nào cho nhiếp ảnh gia này.</p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                  {/* Summary row */}
-                  <div style={{ display: 'flex', gap: '40px', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', padding: '20px', borderRadius: '12px', flexWrap: 'wrap' }}>
-                    <div style={{ textAlign: 'center' }}>
-                      <h4 style={{ fontSize: '48px', fontWeight: 850, color: 'var(--color-primary-dark)', margin: 0 }}>
-                        {(reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1)}
-                      </h4>
-                      <div style={{ display: 'flex', gap: '2px', justifyContent: 'center', margin: '6px 0' }}>
-                        {[1, 2, 3, 4, 5].map((s) => {
-                          const avg = reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length;
-                          return (
-                            <Star key={s} size={16} fill={s <= Math.round(avg) ? 'var(--color-gold)' : 'none'} color="var(--color-gold)" />
-                          );
-                        })}
+                  {photographer.policies?.cancellationPolicy && (
+                    <div className="pd-policy-box" style={{ marginTop: '16px' }}>
+                      <div className="pd-policy-header">
+                        <AlertCircle size={15} />
+                        <span>Chính sách hủy lịch</span>
                       </div>
-                      <span style={{ fontSize: '13px', color: '#8C827A', fontWeight: 600 }}>Đánh giá trung bình</span>
+                      <div>{photographer.policies.cancellationPolicy}</div>
                     </div>
+                  )}
+                </div>
 
-                    {/* Breakdown bars */}
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '200px' }}>
-                      {[5, 4, 3, 2, 1].map((stars) => {
-                        const count = reviews.filter(r => Math.floor(r.rating) === stars).length;
-                        const pct = (count / reviews.length) * 100;
-                        return (
-                          <div key={stars} style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12.5px', fontWeight: 600, color: '#2D2926' }}>
-                            <span style={{ width: '40px', textAlign: 'right' }}>{stars} sao</span>
-                            <div style={{ flex: 1, height: '8px', backgroundColor: '#EAEAE8', borderRadius: '9999px', overflow: 'hidden' }}>
-                              <div style={{ width: `${pct}%`, height: '100%', backgroundColor: 'var(--color-gold)', borderRadius: '9999px' }} />
-                            </div>
-                            <span style={{ width: '30px', color: '#8C827A' }}>{count}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Reviews List */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', borderTop: '1px solid #EAEAE8', paddingTop: '24px' }}>
-                    {reviews.map((rev) => {
-                      const custName = rev.customerId?.profile?.fullName || rev.customerId?.fullName || rev.customerId?.email || 'Khách hàng';
-                      const custAvatar = rev.customerId?.profile?.avatarUrl || rev.customerId?.avatarUrl || '/avatar_hanna.png';
-                      return (
-                        <div key={rev._id} style={{ display: 'flex', gap: '16px', borderBottom: '1px solid #F6F6F4', paddingBottom: '20px', textAlign: 'left' }}>
-                          <img
-                            src={custAvatar}
-                            alt={custName}
-                            style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover', border: '1px solid rgba(0,0,0,0.05)' }}
-                          />
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <strong style={{ fontSize: '14px', color: '#2D2926' }}>{custName}</strong>
-                              <span style={{ fontSize: '12px', color: '#8C827A' }}>{new Date(rev.createdAt).toLocaleDateString('vi-VN')}</span>
-                            </div>
-                            <div style={{ display: 'flex', gap: '2px' }}>
-                              {[1, 2, 3, 4, 5].map((s) => (
-                                <Star key={s} size={12} fill={s <= rev.rating ? 'var(--color-gold)' : 'none'} color="var(--color-gold)" />
-                              ))}
-                            </div>
-                            <p style={{ fontSize: '13.5px', color: '#5C544F', margin: '4px 0 0 0', lineHeight: 1.5 }}>
-                              {rev.comment}
-                            </p>
-                            {rev.reply && (
-                              <div style={{ backgroundColor: 'var(--color-light-bg)', padding: '12px 16px', borderRadius: '8px', marginTop: '10px', borderLeft: '3px solid var(--color-primary-dark)' }}>
-                                <strong style={{ fontSize: '12.5px', color: 'var(--color-primary-dark)', display: 'block', marginBottom: '4px' }}>Phản hồi từ Nhiếp ảnh gia:</strong>
-                                <p style={{ fontSize: '13px', color: '#5C544F', margin: 0, lineHeight: 1.5 }}>{rev.reply}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                <div className="pd-about-right">
+                  <span className="pd-info-label">Thiết bị sử dụng</span>
+                  <div className="pd-equipment-list">
+                    {photographer.equipment?.length ? (
+                      photographer.equipment.map((eq, i) => (
+                        <span key={i} className="pd-equipment-tag">
+                          <Camera size={13} style={{ flexShrink: 0 }} />
+                          {eq}
+                        </span>
+                      ))
+                    ) : (
+                      <span style={{ fontSize: '13.5px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+                        Chưa cập nhật danh sách thiết bị.
+                      </span>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
             </section>
+
+            {hasBookablePackage ? <>
+            <PhotographerPackageSelector
+              packages={photographer.packages}
+              selectedPackageId={selectedPkg?._id}
+              city={photographerCity}
+              onSelect={setSelectedPkg}
+            />
+
+            <section className="pd-booking-mode" aria-label="Chế độ đặt lịch">
+                <span>Hình thức đặt lịch</span>
+                <div>
+                  <button type="button" className={bookingMode === 'SINGLE' ? 'active' : ''} onClick={() => changeBookingMode('SINGLE')}>Một buổi</button>
+                  <button type="button" className={bookingMode === 'MULTI' ? 'active' : ''} onClick={() => changeBookingMode('MULTI')}>Nhiều buổi / nhiều ngày</button>
+                </div>
+              </section>
+
+              {bookingMode === 'SINGLE' ? <>
+                <PhotographyScheduleSelector
+                  calendarDate={calendarDate}
+                  calendarDays={calendarDays}
+                  isCalendarLoading={isMonthlyAvailabilityLoading}
+                  selectedDate={selectedDate}
+                  slots={photographerSlots}
+                  selectedStartTime={startTime}
+                  selectedEndTime={endTime}
+                  onPreviousMonth={() => { const nextDate = new Date(calendarDate); nextDate.setMonth(nextDate.getMonth() - 1); setCalendarDate(nextDate); }}
+                  onNextMonth={() => { const nextDate = new Date(calendarDate); nextDate.setMonth(nextDate.getMonth() + 1); setCalendarDate(nextDate); }}
+                  onSelectDate={setSelectedDate}
+                  onSelectSlot={handleSlotClick}
+                  isSlotBusy={(slot) => bookedSlotsOnSelectedDate.some((bookedSlot) => isTimeSlotOverlap(`${slot.start}-${slot.end}`, bookedSlot))}
+                />
+                <PhotographyDurationControl
+                  includedDurationMinutes={includedDurationMinutes}
+                  durationMinutes={effectiveDurationMinutes}
+                  overtimeIncrementMinutes={overtimeIncrementMinutes}
+                  maxOvertimeMinutes={maxOvertimeMinutes}
+                  endTime={endTime}
+                  canIncrease={canIncreaseDuration}
+                  isCheckingIncrease={isNextDurationQuoteLoading}
+                  unavailableReason={increaseUnavailableReason}
+                  onDecrease={() => setDurationMinutes((current) => Math.max(includedDurationMinutes, current - overtimeIncrementMinutes))}
+                  onIncrease={() => {
+                    if (canIncreaseDuration) setDurationMinutes(nextDurationMinutes);
+                  }}
+                />
+              </> : (
+                <PhotographyMultiSessionEditor
+                  sessions={multiSessions}
+                  minDate={localToday()}
+                  includedDurationMinutes={includedDurationMinutes}
+                  overtimeIncrementMinutes={overtimeIncrementMinutes}
+                  maxOvertimeMinutes={maxOvertimeMinutes}
+                  errors={quote?.valid === false ? quote.errors : []}
+                  onAdd={() => setMultiSessions((current) => [...current, createSessionDraft()])}
+                  onGenerateRange={generateSessionsForRange}
+                  onUpdate={updateMultiSession}
+                  onRemove={(clientId) => setMultiSessions((current) => current.filter((session) => session.clientId !== clientId))}
+                />
+              )}
+
+              <PhotographySessionDetailsForm
+              locations={locations}
+              photographerCity={photographerCity}
+              selectedLocation={selectedLocation}
+              concept={selectedConcept}
+              request={customRequest}
+              referenceFile={referenceFile}
+              onLocationChange={setSelectedLocation}
+              onConceptChange={setSelectedConcept}
+              onRequestChange={setCustomRequest}
+              onReferenceFileChange={handleFileChange}
+            />
+            </> : (
+              <section className="pd-no-package">
+                <Camera size={22} />
+                <div>
+                  <strong>Nhiếp ảnh gia chưa mở lịch đặt</strong>
+                  <p>Bạn vẫn có thể xem Portfolio bên dưới. Gói chụp sẽ xuất hiện khi provider hoàn tất và đăng bán dịch vụ.</p>
+                </div>
+              </section>
+            )}
+
+            <PhotographerPortfolioGrid
+              portfolioItems={photographer.portfolioItems}
+              legacyPortfolio={photographer.portfolio}
+              onImageClick={handleImageClick}
+            />
+
+            <PhotographerReviews reviews={reviews} isLoading={reviewsLoading} />
 
           </div>
 
-          {/* RIGHT COLUMN: Sticky summary panel */}
-          <aside style={{ position: 'sticky', top: '100px' }}>
-            <div className="vh-premium-card vh-hide-scrollbar" style={{ 
-              backgroundColor: 'white', 
-              padding: '28px', 
-              borderRadius: '16px', 
-              border: '1px solid var(--color-light-border)', 
-              boxShadow: 'var(--shadow-sm)', 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: '24px',
-              maxHeight: 'calc(100vh - 140px)',
-              overflowY: 'auto'
-            }}>
-              
-              {/* Profile card summary */}
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '20px' }}>
-                <img
-                  src={photographer.portfolio[0]}
-                  alt={photographer.businessName}
-                  style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover' }}
-                />
-                <div style={{ textAlign: 'left' }}>
-                  <h3 className="font-header" style={{ fontSize: '20px', color: 'var(--color-text-primary)', margin: 0 }}>
-                    {photographer.businessName}
-                  </h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                    <Star size={12} fill="#F59E0B" stroke="#F59E0B" />
-                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{photographer.rating?.averageRating?.toFixed(1) || '4.9'}</span>
-                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>({photographer.rating?.totalReviews || '45'} đánh giá)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Booking specifications summary */}
-              <div>
-                <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '14px', textAlign: 'left' }}>
-                  Tóm tắt lịch đặt
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Gói chụp:</span>
-                    <strong style={{ color: 'var(--color-text-primary)' }}>{selectedPkg ? selectedPkg.name : 'Chưa chọn'}</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Ngày chụp:</span>
-                    <strong style={{ color: 'var(--color-text-primary)' }}>{selectedDate || 'Chưa chọn'}</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Khung giờ:</span>
-                    <strong style={{ color: 'var(--color-text-primary)' }}>{selectedTimeSlot}</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Địa điểm:</span>
-                    <strong style={{ color: 'var(--color-text-primary)' }}>
-                      {selectedLocation === 'KHAC' ? (customLocation.trim() || 'Khác (Chưa nhập)') : selectedLocation}
-                    </strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Concept:</span>
-                    <strong style={{ color: 'var(--color-text-primary)' }}>{selectedConcept}</strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* Photographer details */}
-              <div>
-                <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px', textAlign: 'left' }}>
-                  Thông tin thợ ảnh
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--color-text-secondary)', textAlign: 'left' }}>
-                  <span>Thiết bị: {photographer.equipment?.length ? photographer.equipment.join(' • ') : 'Chưa cập nhật'}</span>
-                  <span>Thời gian hủy: Lịch được hoàn cọc 100% khi báo trước 48 giờ.</span>
-                </div>
-              </div>
-
-              {/* Price calculations */}
-              {selectedPkg && (
-                <div style={{ backgroundColor: 'var(--color-light-bg)', padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                    <span>Giá trị gói:</span>
-                    <span>{selectedPkg.price.toLocaleString('vi-VN')}đ</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                    <span>Đặt cọc giữ chỗ (30%):</span>
-                    <span>{Math.round(selectedPkg.price * 0.3).toLocaleString('vi-VN')}đ</span>
-                  </div>
-                  <div style={{ height: '1px', backgroundColor: 'rgba(0,0,0,0.05)', margin: '4px 0' }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: 'var(--color-primary-dark)', fontWeight: 'bold' }}>
-                    <span>CẦN CỌC TRƯỚC:</span>
-                    <span>{Math.round(selectedPkg.price * 0.3).toLocaleString('vi-VN')}đ</span>
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textAlign: 'right' }}>
-                    *Còn lại <strong>{Math.round(selectedPkg.price * 0.7).toLocaleString('vi-VN')}đ</strong> thanh toán sau buổi chụp.
-                  </div>
-                </div>
-              )}
-
-              {/* Conditions checkbox */}
-              <div style={{ textAlign: 'left' }}>
-                <label className="vh-checkbox-container" style={{ fontSize: '12px', lineHeight: 1.5, alignItems: 'flex-start' }}>
-                  <input
-                    type="checkbox"
-                    className="vh-checkbox-input"
-                    checked={agreeTerms}
-                    onChange={(e) => setAgreeTerms(e.target.checked)}
-                    style={{ marginTop: '2px' }}
-                  />
-                  <span>Tôi đồng ý với chính sách thanh toán cọc và cam kết chụp ảnh đúng giờ đã chọn.</span>
-                </label>
-              </div>
-
-              {/* Conflict Warning Message */}
-              {isCurrentTimeSlotBusy && (
-                <div style={{
-                  color: '#C0392B',
-                  backgroundColor: '#FADBD8',
-                  border: '1px solid #F1948A',
-                  padding: '12px',
-                  borderRadius: '8px',
-                  fontSize: '12.5px',
-                  fontWeight: 650,
-                  textAlign: 'center',
-                  marginBottom: '10px'
-                }}>
-                  ⚠️ Thợ chụp đã bận trong khung giờ này. Vui lòng chọn giờ hoặc ngày khác!
-                </div>
-              )}
-
-              {/* CTA Buttons */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {/* ĐẶT LỊCH NGAY */}
-                <button
-                  onClick={handleDirectBooking}
-                  disabled={isBookingNow || isCurrentTimeSlotBusy}
-                  className="vh-btn vh-btn-primary"
-                  style={{
-                    width: '100%',
-                    borderRadius: '12px',
-                    padding: '14px 20px',
-                    fontWeight: 700,
-                    fontSize: '15px',
-                    backgroundColor: (isBookingNow || isCurrentTimeSlotBusy) ? '#8C827A' : 'var(--color-primary-dark)',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    cursor: (isBookingNow || isCurrentTimeSlotBusy) ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    letterSpacing: '0.04em',
-                  }}
-                >
-                  {isBookingNow ? (
-                    <><span>ĐANG XỬ LÝ...</span></>
-                  ) : (
-                    <><span>ĐẶT LỊCH NGAY</span><ArrowRight size={16} /></>
-                  )}
-                </button>
-
-                {/* THÊM VÀO GIỎ HÀNG */}
-                 <button
-                  onClick={handleAddBookingToCart}
-                  disabled={isCurrentTimeSlotBusy || isBookingNow}
-                  className="vh-btn"
-                  style={{
-                    width: '100%',
-                    borderRadius: '12px',
-                    padding: '13px 20px',
-                    fontWeight: 700,
-                    fontSize: '14px',
-                    backgroundColor: 'transparent',
-                    color: (isCurrentTimeSlotBusy || isBookingNow) ? '#8C827A' : 'var(--color-primary-dark)',
-                    border: (isCurrentTimeSlotBusy || isBookingNow) ? '1.5px solid #8C827A' : '1.5px solid var(--color-primary-dark)',
-                    cursor: (isCurrentTimeSlotBusy || isBookingNow) ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    letterSpacing: '0.04em',
-                  }}
-                >
-                  {isBookingNow ? (
-                    <span>ĐANG XỬ LÝ...</span>
-                  ) : (
-                    <>
-                      <span>THÊM VÀO GIỎ HÀNG</span>
-                      <ArrowRight size={16} />
-                    </>
-                  )}
-                </button>
-              </div>
-
-            </div>
-          </aside>
+          {hasBookablePackage && (
+          <PhotographyBookingSidebar
+            photographer={photographer}
+            selectedPackage={selectedPkg}
+            selectedDate={bookingMode === 'SINGLE' ? selectedDate : (multiSessions[0]?.date || '')}
+            selectedTimeSlot={bookingMode === 'SINGLE' ? selectedTimeSlot : `${multiSessions.length} buổi chụp`}
+            selectedLocation={selectedLocation}
+            selectedConcept={selectedConcept}
+             quote={quote}
+             quoteError={quoteError}
+             isQuoteLoading={isQuoteLoading}
+            agreeTerms={agreeTerms}
+            isBusy={bookingMode === 'SINGLE' && isCurrentTimeSlotBusy}
+            isBooking={isBookingNow}
+             canAddToCart={bookingMode === 'SINGLE'}
+            onAgreeTermsChange={setAgreeTerms}
+            onBookNow={handleDirectBooking}
+            onAddToCart={handleAddBookingToCart}
+          />
+          )}
 
         </div>
       </div>
+
+      {lightboxOpen && (
+        <PhotographerPortfolioLightbox
+          images={allPortfolioImages}
+          activeIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+          onPrevious={handlePreviousImage}
+          onNext={handleNextImage}
+        />
+      )}
     </div>
   );
 };
