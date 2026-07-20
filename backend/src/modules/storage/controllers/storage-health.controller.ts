@@ -9,9 +9,9 @@ export class StorageHealthController {
   async check() {
     try {
       const result = await this.publicMedia.health();
-      return { status: 'UP', provider: 'MINIO', ...result };
+      return { status: 'UP', provider: 'CLOUDINARY', ...result };
     } catch {
-      throw new ServiceUnavailableException({ status: 'DOWN', provider: 'MINIO' });
+      throw new ServiceUnavailableException({ status: 'DOWN', provider: 'CLOUDINARY' });
     }
   }
 }

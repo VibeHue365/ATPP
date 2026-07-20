@@ -1,84 +1,74 @@
 import { Injectable, ServiceUnavailableException, UnsupportedMediaTypeException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { randomUUID } from 'crypto';
-import { extname } from 'path';
-import { Client } from 'minio';
+import { v2 as cloudinary } from 'cloudinary';
 
 @Injectable()
 export class PublicMediaService {
-  private readonly client: Client;
-  private readonly bucket: string;
-  private ensured = false;
-
   constructor(private readonly config: ConfigService) {
-    this.client = new Client({
-      endPoint: this.config.get<string>('MINIO_ENDPOINT', '127.0.0.1'),
-      port: this.number('MINIO_PORT', 9000),
-      useSSL: this.boolean('MINIO_USE_SSL', false),
-      accessKey: this.config.get<string>('MINIO_ACCESS_KEY', ''),
-      secretKey: this.config.get<string>('MINIO_SECRET_KEY', ''),
+    cloudinary.config({
+      cloud_name: this.config.get<string>('CLOUDINARY_CLOUD_NAME'),
+      api_key: this.config.get<string>('CLOUDINARY_API_KEY'),
+      api_secret: this.config.get<string>('CLOUDINARY_API_SECRET'),
     });
-    this.bucket = this.config.get<string>('MINIO_PUBLIC_BUCKET', 'public-media');
   }
 
   async uploadImage(scope: string, file: Express.Multer.File): Promise<{ key: string; url: string }> {
     if (!file?.buffer?.length) throw new ServiceUnavailableException('Image buffer is required');
     this.assertValidImage(file);
-    await this.ensureBucket();
-    const extension = this.extension(file);
-    const key = `${this.safeSegment(scope)}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${extension}`;
-    await this.client.putObject(this.bucket, key, file.buffer, file.buffer.length, {
-      'Content-Type': file.mimetype,
-      'Cache-Control': 'public, max-age=31536000, immutable',
+
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: `vibehue/${this.safeSegment(scope)}`,
+          resource_type: 'image',
+        },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve({ key: result.public_id, url: result.secure_url });
+        },
+      );
+      uploadStream.end(file.buffer);
     });
-    return { key, url: this.publicUrl(key) };
   }
 
   async uploadVideo(scope: string, file: Express.Multer.File): Promise<{ key: string; url: string }> {
     if (!file?.buffer?.length) throw new ServiceUnavailableException('Video buffer is required');
     this.assertValidVideo(file);
-    await this.ensureBucket();
-    const extension = this.videoExtension(file);
-    const key = `${this.safeSegment(scope)}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${extension}`;
-    await this.client.putObject(this.bucket, key, file.buffer, file.buffer.length, {
-      'Content-Type': file.mimetype,
-      'Cache-Control': 'public, max-age=31536000, immutable',
+
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: `vibehue/${this.safeSegment(scope)}`,
+          resource_type: 'video',
+        },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve({ key: result.public_id, url: result.secure_url });
+        },
+      );
+      uploadStream.end(file.buffer);
     });
-    return { key, url: this.publicUrl(key) };
   }
 
-  async health(): Promise<{ bucket: string }> {
-    await this.ensureBucket();
-    return { bucket: this.bucket };
+  async health(): Promise<{ status: string }> {
+    return { status: 'UP' };
   }
+
   async deleteByUrl(url: string | null | undefined): Promise<void> {
     const key = this.keyFromUrl(url);
     if (!key) return;
-    await this.ensureBucket();
-    await this.client.removeObject(this.bucket, key);
+    const isVideo = url.includes('/video/');
+    await cloudinary.uploader.destroy(key, { resource_type: isVideo ? 'video' : 'image' });
   }
 
   async removeUnreferenced(
     referencedUrls: Iterable<string>,
     olderThan: Date,
   ): Promise<number> {
-    await this.ensureBucket();
-    const referencedKeys = new Set<string>();
-    for (const url of referencedUrls) {
-      const key = this.keyFromUrl(url);
-      if (key) referencedKeys.add(key);
-    }
-
-    let removed = 0;
-    const stream = this.client.listObjects(this.bucket, '', true);
-    for await (const item of stream as AsyncIterable<{ name?: string; lastModified?: Date }>) {
-      if (!item.name || referencedKeys.has(item.name)) continue;
-      if (item.lastModified && item.lastModified > olderThan) continue;
-      await this.client.removeObject(this.bucket, item.name);
-      removed += 1;
-    }
-    return removed;
+    // Cloudinary does not require local orphan cleanup
+    return 0;
   }
+
   private assertValidImage(file: Express.Multer.File): void {
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
@@ -96,13 +86,13 @@ export class PublicMediaService {
       throw new UnsupportedMediaTypeException('Image content does not match its declared format');
     }
   }
+
   private assertValidVideo(file: Express.Multer.File): void {
     const allowedMimeTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
       throw new UnsupportedMediaTypeException('Only mp4, webm, and mov videos are allowed');
     }
     const header = file.buffer.subarray(0, 12);
-    // mp4 / mov: chuỗi "ftyp" ở byte 4-8; webm: EBML header 0x1A45DFA3
     const validMp4Like =
       (file.mimetype === 'video/mp4' || file.mimetype === 'video/quicktime') &&
       header.toString('ascii', 4, 8) === 'ftyp';
@@ -113,46 +103,14 @@ export class PublicMediaService {
       throw new UnsupportedMediaTypeException('Video content does not match its declared format');
     }
   }
-  private async ensureBucket(): Promise<void> {
-    if (this.ensured) return;
-    const exists = await this.client.bucketExists(this.bucket);
-    if (!exists) await this.client.makeBucket(this.bucket);
-    await this.client.setBucketPolicy(this.bucket, JSON.stringify({
-      Version: '2012-10-17',
-      Statement: [{
-        Effect: 'Allow',
-        Principal: { AWS: ['*'] },
-        Action: ['s3:GetObject'],
-        Resource: [`arn:aws:s3:::${this.bucket}/*`],
-      }],
-    }));
-    this.ensured = true;
-  }
-
-  private publicUrl(key: string): string {
-    const configured = this.config.get<string>('MINIO_PUBLIC_BASE_URL');
-    const base = configured?.replace(/\/$/, '') || `http${this.boolean('MINIO_USE_SSL', false) ? 's' : ''}://${this.config.get<string>('MINIO_ENDPOINT', '127.0.0.1')}:${this.number('MINIO_PORT', 9000)}`;
-    return `${base}/${this.bucket}/${key}`;
-  }
 
   private keyFromUrl(url: string | null | undefined): string | null {
     if (!url) return null;
-    const marker = `/${this.bucket}/`;
-    const index = url.indexOf(marker);
-    return index >= 0 ? decodeURIComponent(url.slice(index + marker.length)) : null;
+    const match = url.match(/\/upload\/(?:v\d+\/)?([^.]+)/);
+    return match ? match[1] : null;
   }
 
-  private extension(file: Express.Multer.File): string {
-    const byMime: Record<string, string> = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
-    return byMime[file.mimetype] ?? (extname(file.originalname).toLowerCase() || '.bin');
+  private safeSegment(value: string): string {
+    return value.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
   }
-
-  private videoExtension(file: Express.Multer.File): string {
-    const byMime: Record<string, string> = { 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov' };
-    return byMime[file.mimetype] ?? (extname(file.originalname).toLowerCase() || '.bin');
-  }
-
-  private safeSegment(value: string): string { return value.replace(/[^a-z0-9-]/gi, '-').toLowerCase(); }
-  private number(key: string, fallback: number): number { const value = Number(this.config.get<string>(key, String(fallback))); return Number.isFinite(value) ? value : fallback; }
-  private boolean(key: string, fallback: boolean): boolean { const value = this.config.get<string>(key); return value ? ['1', 'true', 'yes', 'on'].includes(value.toLowerCase()) : fallback; }
 }
