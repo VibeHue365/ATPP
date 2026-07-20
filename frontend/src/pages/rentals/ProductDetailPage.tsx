@@ -418,11 +418,31 @@ export const ProductDetailPage: React.FC = () => {
   const [busySlots, setBusySlots] = useState<
     { date: string; timeSlot: string }[]
   >([]);
+  const [variantBookedDates, setVariantBookedDates] = useState<Record<string, string[]>>({});
   const [providerScheduleInfo, setProviderScheduleInfo] = useState<{
     hasSchedule: boolean;
     workingDays: number[];
     offDays: string[];
   } | null>(null);
+
+  const activeBusyDates = React.useMemo(() => {
+    let combined = [...busyDates];
+    if (selectedSize && selectedColor) {
+      const normalizeCol = (col: string) => {
+        const u = col.trim().toUpperCase();
+        if (u === 'ĐỎ' || u === 'RED') return 'RED';
+        if (u === 'TRẮNG' || u === 'WHITE') return 'WHITE';
+        if (u === 'VÀNG' || u === 'GOLD') return 'GOLD';
+        if (u === 'ĐEN' || u === 'BLACK') return 'BLACK';
+        return u;
+      };
+      const key = `${selectedSize.trim().toUpperCase()}_${normalizeCol(selectedColor)}`;
+      if (variantBookedDates[key]) {
+        combined = Array.from(new Set([...combined, ...variantBookedDates[key]]));
+      }
+    }
+    return combined;
+  }, [selectedSize, selectedColor, variantBookedDates, busyDates]);
 
   const bookedSlotsOnSelectedDate = React.useMemo(() => {
     if (!singleDate) return [];
@@ -694,7 +714,7 @@ export const ProductDetailPage: React.FC = () => {
       const dateObj = new Date(yNum, mNum - 1, dNum);
       const dayOfWeek = dateObj.getDay();
 
-      let isAvailable = !busyDates.includes(dateStr) && dateStr >= todayStr;
+      let isAvailable = !activeBusyDates.includes(dateStr) && dateStr >= todayStr;
 
       if (providerScheduleInfo) {
         if (!providerScheduleInfo.hasSchedule) {
@@ -900,6 +920,7 @@ export const ProductDetailPage: React.FC = () => {
           const busyData = await httpClient.get<{
             bookedDates: string[];
             bookedSlots: { date: string; timeSlot: string }[];
+            variantBookedDates?: Record<string, string[]>;
             workingDays?: number[];
             offDays?: string[];
             hasSchedule?: boolean;
@@ -907,6 +928,9 @@ export const ProductDetailPage: React.FC = () => {
           loadedBookedDates = busyData.bookedDates || [];
           setBusyDates(loadedBookedDates);
           setBusySlots(busyData.bookedSlots || []);
+          if (busyData.variantBookedDates) {
+            setVariantBookedDates(busyData.variantBookedDates);
+          }
           if (busyData.hasSchedule !== undefined) {
             setProviderScheduleInfo({
               hasSchedule: busyData.hasSchedule,
@@ -2366,14 +2390,28 @@ export const ProductDetailPage: React.FC = () => {
 
                         <span
                           style={{
-                            fontSize: "10px",
+                            fontSize: "11px",
                             fontStyle: "italic",
                             color: "var(--color-text-secondary)",
                             marginTop: "8px",
                             lineHeight: 1.4,
+                            display: "block",
                           }}
                         >
                           * Chọn Ngày nhận và Ngày trả trực tiếp trên lịch.
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontStyle: "italic",
+                            color: "#8C6D1F",
+                            marginTop: "4px",
+                            lineHeight: 1.4,
+                            display: "block",
+                            fontWeight: 600,
+                          }}
+                        >
+                          ⏰ Giờ lấy đồ: từ 1h sáng | Giờ trả đồ: trước 11h đêm.
                         </span>
                       </div>
                     )}

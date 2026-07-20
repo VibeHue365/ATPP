@@ -93,6 +93,102 @@ export class BookingsSchedulerService {
     }
   }
 
+  /**
+   * Auto-confirm bookings in PICKUP_PENDING status if they have been initiated for more than 30 minutes.
+   * Runs every 5 minutes.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async autoCompleteHandoverTimeout() {
+    this.logger.log('Running auto-confirm for PICKUP_PENDING bookings...');
+    const deadline = new Date(Date.now() - 30 * 60 * 1000);
+
+    try {
+      const candidates = await this.bookingModel
+        .find({
+          status: BookingStatus.PickupPending,
+          handoverInitiatedAt: { $lte: deadline },
+        })
+        .select('_id bookingCode')
+        .lean();
+
+      if (candidates.length === 0) return;
+      this.logger.log(`Found ${candidates.length} PICKUP_PENDING booking(s) past 30m window.`);
+
+      for (const candidate of candidates) {
+        try {
+          const locked = await this.bookingModel.findOneAndUpdate(
+            { _id: candidate._id, status: BookingStatus.PickupPending },
+            { 
+              $set: { status: BookingStatus.PickedUp },
+              $push: {
+                statusTimeline: {
+                  status: BookingStatus.PickedUp,
+                  changedAt: new Date(),
+                  note: 'Hệ thống tự động xác nhận đã nhận đồ sau 30 phút bàn giao tại quầy.'
+                }
+              }
+            },
+            { new: false },
+          );
+
+          if (!locked) continue;
+
+          // Notify customer
+          try {
+            await this.notificationsService.createNotification(
+              locked.customerId.toString(),
+              'Đơn hàng tự động nhận đồ',
+              `Đơn hàng ${locked.bookingCode} đã tự động kích hoạt trạng thái Đang thuê do hết thời gian 30 phút xác nhận tại quầy.`,
+              NotificationType.Booking,
+              { bookingId: locked._id },
+            );
+          } catch (e) {
+            this.logger.error('Failed to notify auto-confirm pickup:', e);
+          }
+
+          this.logger.log(`Auto-confirmed pickup for booking ${candidate.bookingCode} after 30m.`);
+        } catch (err) {
+          this.logger.error(`Failed to auto-confirm pickup for booking ${candidate.bookingCode}:`, err);
+        }
+      }
+    } catch (err) {
+      this.logger.error('Auto-confirm handover timeout cron failed:', err);
+    }
+  }
+
+  /**
+   * Auto-unlock maintenance items (LOCKED status) after 48 hours.
+   * Runs every hour.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async autoUnlockMaintenanceItems() {
+    this.logger.log('Running auto-unlock for maintenance items...');
+    try {
+      const inventoryItemModel = this.bookingModel.db.model('InventoryItem');
+      const lockedItems = await inventoryItemModel.find({
+        conditionStatus: 'LOCKED',
+        notes: { $regex: /^LOCKED_UNTIL_/ },
+      });
+
+      const now = new Date();
+      for (const item of lockedItems) {
+        const notesStr = item.notes || '';
+        const match = notesStr.match(/^LOCKED_UNTIL_([^:]+):/);
+        if (match && match[1]) {
+          const lockedUntil = new Date(match[1]);
+          if (now >= lockedUntil) {
+            item.conditionStatus = 'GOOD';
+            item.notes = 'Tự động mở khóa sau 48 giờ bảo trì.';
+            await item.save();
+            this.logger.log(`Auto-unlocked inventory item SKU ${item.sku} after maintenance.`);
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.error('Failed to auto-unlock maintenance items:', err);
+    }
+  }
+
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleScheduleReminders() {
     this.logger.log('Running automatic schedule reminders cron-job...');

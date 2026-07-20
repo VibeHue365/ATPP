@@ -123,6 +123,7 @@ export class DisputesService {
         productId: bookingItem.productId as any,
         reportedBy: provider._id,
         description: dto.description,
+        actionType: dto.actionType,
         evidencePhotos: dto.evidencePhotos,
         requestedAmount: dto.requestedAmount,
         status: IncidentStatus.PendingCustomer,
@@ -230,11 +231,14 @@ export class DisputesService {
     roles: string[],
     reference: string,
   ): Promise<{ file: import('stream').Readable; mimeType: string; fileName: string }> {
+    console.log('[DEBUG] viewEvidence request:', { userId, roles, reference });
     const { bucket, storageKey } = this.parsePrivateEvidenceReference(reference);
     const incident = await this.incidentModel.findOne({ evidencePhotos: reference });
+    console.log('[DEBUG] viewEvidence incident query:', { incidentExists: !!incident, incidentId: incident?._id });
 
     if (!incident) {
-      if (!Types.ObjectId.isValid(userId) || !roles.some((role) => role.toUpperCase() === 'PROVIDER')) {
+      if (!Types.ObjectId.isValid(userId) || !roles?.some((role) => role.toUpperCase() === 'PROVIDER')) {
+        console.log('[DEBUG] viewEvidence failed because no incident and user is not provider:', { userId, isValidId: Types.ObjectId.isValid(userId) });
         throw new NotFoundException('Không tìm thấy ảnh bằng chứng');
       }
       const upload = await this.privateEvidenceUploadModel.findOne({
@@ -244,19 +248,21 @@ export class DisputesService {
         expiresAt: { $gt: new Date() },
       });
       if (!upload) {
+        console.log('[DEBUG] viewEvidence failed because private upload not found or expired:', { reference, userId });
         throw new NotFoundException('Không tìm thấy ảnh bằng chứng');
       }
       return this.readEvidenceFile(bucket, storageKey);
     }
 
-    if (!roles.some((role) => role.toUpperCase() === 'ADMIN')) {
+    if (!roles?.some((role) => role.toUpperCase() === 'ADMIN')) {
       const booking = await this.bookingModel.findById(incident.bookingId);
       if (!booking) {
+        console.log('[DEBUG] viewEvidence failed because booking not found:', incident.bookingId);
         throw new NotFoundException('Không tìm thấy đơn đặt lịch');
       }
       const isCustomer = booking.customerId.toString() === userId;
       let isReportingProvider = false;
-      if (!isCustomer && roles.some((role) => role.toUpperCase() === 'PROVIDER') && Types.ObjectId.isValid(userId)) {
+      if (!isCustomer && roles?.some((role) => role.toUpperCase() === 'PROVIDER') && Types.ObjectId.isValid(userId)) {
         const provider = await this.bookingModel.db
           .model('Provider')
           .findOne({ userId: new Types.ObjectId(userId) });
@@ -264,6 +270,12 @@ export class DisputesService {
           provider && incident.reportedBy.toString() === provider._id.toString(),
         );
       }
+      console.log('[DEBUG] viewEvidence permission evaluation:', {
+        customerId: booking.customerId.toString(),
+        userId,
+        isCustomer,
+        isReportingProvider,
+      });
       if (!isCustomer && !isReportingProvider) {
         throw new ForbiddenException('Bạn không có quyền xem ảnh bằng chứng này');
       }

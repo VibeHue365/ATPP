@@ -1761,6 +1761,7 @@ export class BookingsService implements OnApplicationBootstrap {
     note?: string,
     userId?: string,
     roles?: string[],
+    handoverPhotos?: string[],
   ): Promise<BookingDocument> {
     const booking = await this.bookingModel.findById(bookingIdStr);
     if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
@@ -1825,6 +1826,12 @@ export class BookingsService implements OnApplicationBootstrap {
     booking.status = nextStatus;
     if (nextStatus === BookingStatus.AwaitingReview) {
       booking.awaitingReviewSince = new Date();
+    }
+    if (nextStatus === BookingStatus.PickupPending) {
+      booking.handoverInitiatedAt = new Date();
+      if (handoverPhotos && handoverPhotos.length > 0) {
+        booking.handoverPhotos = handoverPhotos;
+      }
     }
     booking.statusTimeline.push({
       status: newStatus as BookingStatus,
@@ -2212,7 +2219,7 @@ export class BookingsService implements OnApplicationBootstrap {
     return populatedBookings;
   }
 
-  async getBusySchedulesForProduct(productId: string): Promise<{ bookedDates: string[]; bookedSlots: { date: string; timeSlot: string }[]; workingDays?: number[]; offDays?: string[]; hasSchedule?: boolean }> {
+  async getBusySchedulesForProduct(productId: string): Promise<{ bookedDates: string[]; bookedSlots: { date: string; timeSlot: string }[]; variantBookedDates?: Record<string, string[]>; workingDays?: number[]; offDays?: string[]; hasSchedule?: boolean }> {
     const inventoryItems = await this.inventoryItemModel.find({
       productId: new Types.ObjectId(productId),
       conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
@@ -2234,7 +2241,7 @@ export class BookingsService implements OnApplicationBootstrap {
     const itemIds = inventoryItems.map((i) => i._id);
     const reservations = await this.inventoryReservationModel.find({
       inventoryItemId: { $in: itemIds },
-      status: { $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed] },
+      status: { $nin: [ReservationStatus.Cancelled, ReservationStatus.Expired] },
     });
 
     const dailyBookings = new Map<string, Map<string, number>>();
@@ -2277,14 +2284,18 @@ export class BookingsService implements OnApplicationBootstrap {
     });
 
     const bookedDates: string[] = [];
+    const variantBookedDates: Record<string, string[]> = {};
+
     dailyBookings.forEach((m, dateStr) => {
       let allKeysBooked = true;
       for (const key of sizeColors) {
         const bookedCount = m.get(key) || 0;
         const totalStock = stockMap.get(key) || 0;
-        if (bookedCount < totalStock) {
+        if (bookedCount >= totalStock) {
+          if (!variantBookedDates[key]) variantBookedDates[key] = [];
+          variantBookedDates[key].push(dateStr);
+        } else {
           allKeysBooked = false;
-          break;
         }
       }
       if (allKeysBooked) {
@@ -2340,6 +2351,7 @@ export class BookingsService implements OnApplicationBootstrap {
     return {
       bookedDates,
       bookedSlots,
+      variantBookedDates,
       workingDays,
       offDays,
       hasSchedule,
@@ -2441,5 +2453,171 @@ export class BookingsService implements OnApplicationBootstrap {
       const [size, color] = key.split('_');
       return { size, color, stock: count };
     });
+  }
+
+  async customerConfirmPickup(bookingId: string, customerId: string): Promise<any> {
+    const booking = await this.bookingModel.findById(bookingId);
+    if (!booking) {
+      throw new NotFoundException('Không tìm thấy đơn đặt lịch');
+    }
+    if (booking.customerId.toString() !== customerId) {
+      throw new ForbiddenException('Bạn không có quyền xác nhận đơn này');
+    }
+    if (booking.status !== BookingStatus.PickupPending) {
+      throw new BadRequestException('Đơn hàng không ở trạng thái chờ nhận đồ');
+    }
+
+    if (booking.handoverInitiatedAt) {
+      const diffMs = Date.now() - new Date(booking.handoverInitiatedAt).getTime();
+      if (diffMs > 30 * 60 * 1000) {
+        throw new BadRequestException('Đã quá thời gian 30 phút xác nhận tại quầy');
+      }
+    }
+
+    booking.status = BookingStatus.PickedUp;
+    booking.statusTimeline.push({
+      status: BookingStatus.PickedUp,
+      changedAt: new Date(),
+      note: 'Khách hàng xác nhận nhận đồ hoàn hảo tại quầy.',
+    });
+
+    await booking.save();
+    return { success: true, booking };
+  }
+
+  async customerReportDamage(
+    bookingId: string,
+    customerId: string,
+    description: string,
+    evidencePhotos: string[],
+  ): Promise<any> {
+    if (!evidencePhotos || evidencePhotos.length === 0) {
+      throw new BadRequestException('Báo cáo lỗi bắt buộc phải có ít nhất 1 hình ảnh làm bằng chứng.');
+    }
+
+    const booking = await this.bookingModel.findById(bookingId);
+    if (!booking) {
+      throw new NotFoundException('Không tìm thấy đơn đặt lịch');
+    }
+    if (booking.customerId.toString() !== customerId) {
+      throw new ForbiddenException('Bạn không có quyền báo cáo lỗi cho đơn này');
+    }
+    if (booking.status !== BookingStatus.PickupPending) {
+      throw new BadRequestException('Đơn hàng không ở trạng thái chờ nhận đồ');
+    }
+
+    if (booking.handoverInitiatedAt) {
+      const diffMs = Date.now() - new Date(booking.handoverInitiatedAt).getTime();
+      if (diffMs > 30 * 60 * 1000) {
+        throw new BadRequestException('Đã quá thời gian 30 phút báo cáo lỗi tại quầy');
+      }
+    }
+
+    booking.status = BookingStatus.PickedUp;
+    booking.pickupDamageReport = {
+      reportedAt: new Date(),
+      description,
+      evidencePhotos,
+    };
+
+    booking.statusTimeline.push({
+      status: BookingStatus.PickedUp,
+      changedAt: new Date(),
+      note: `Khách hàng nhận đồ và báo cáo lỗi: ${description}`,
+    });
+
+    await booking.save();
+
+    // Notify provider of damage report
+    try {
+      for (const pId of booking.providerIds) {
+        const provider = await this.providerModel.findById(pId);
+        if (provider && provider.userId) {
+          await this.notificationsService.createNotification(
+            provider.userId.toString(),
+            'Khách hàng báo lỗi trang phục',
+            `Khách hàng đã báo cáo lỗi nhẹ khi nhận trang phục cho đơn hàng ${booking.bookingCode}. Vui lòng đối soát.`,
+            NotificationType.Booking,
+            { bookingId: booking._id },
+          );
+        }
+      }
+    } catch (e) {
+      console.error('Failed to notify provider of damage report:', e);
+    }
+
+    return { success: true, booking };
+  }
+
+  async customerRejectHandover(
+    bookingId: string,
+    customerId: string,
+    reason: string,
+    evidencePhotos: string[],
+  ): Promise<any> {
+    if (!evidencePhotos || evidencePhotos.length === 0) {
+      throw new BadRequestException('Từ chối nhận đồ bắt buộc phải có ít nhất 1 hình ảnh làm bằng chứng.');
+    }
+
+    const booking = await this.bookingModel.findById(bookingId);
+    if (!booking) {
+      throw new NotFoundException('Không tìm thấy đơn đặt lịch');
+    }
+    if (booking.customerId.toString() !== customerId) {
+      throw new ForbiddenException('Bạn không có quyền từ chối đơn này');
+    }
+    if (booking.status !== BookingStatus.PickupPending) {
+      throw new BadRequestException('Đơn hàng không ở trạng thái chờ nhận đồ');
+    }
+
+    if (booking.handoverInitiatedAt) {
+      const diffMs = Date.now() - new Date(booking.handoverInitiatedAt).getTime();
+      if (diffMs > 30 * 60 * 1000) {
+        throw new BadRequestException('Đã quá thời gian 30 phút từ chối nhận đồ');
+      }
+    }
+
+    try {
+      const items = await this.bookingItemModel.find({ bookingId: booking._id });
+      const maintenanceUntil = new Date(Date.now() + 48 * 60 * 60 * 1000);
+      const notes = `LOCKED_UNTIL_${maintenanceUntil.toISOString()}: Khách từ chối nhận do lỗi nặng: ${reason}`;
+
+      for (const item of items) {
+        if (item.inventoryItemId) {
+          await this.inventoryItemModel.findByIdAndUpdate(item.inventoryItemId, {
+            conditionStatus: 'LOCKED',
+            notes,
+          } as any);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to lock inventory items on rejection:', err);
+    }
+
+    const result = await this.cancelBooking(
+      bookingId,
+      customerId,
+      `Khách từ chối nhận do lỗi nặng tại quầy: ${reason}`,
+    );
+
+    // Notify provider of rejection
+    try {
+      for (const pId of booking.providerIds) {
+        const provider = await this.providerModel.findById(pId);
+        if (provider && provider.userId) {
+          await this.notificationsService.createNotification(
+            provider.userId.toString(),
+            'Khách từ chối nhận đồ',
+            `Khách hàng đã từ chối nhận trang phục cho đơn hàng ${booking.bookingCode} do lỗi nặng tại quầy: ${reason}.`,
+            NotificationType.Booking,
+            { bookingId: booking._id },
+          );
+        }
+      }
+    } catch (e) {
+      console.error('Failed to notify provider of rejection:', e);
+    }
+
+    return { success: true, result };
   }
 }

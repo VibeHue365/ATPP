@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
   HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, Trash2, Play, Pencil, Copy, Package, Eye,
-  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck, Clock, ShieldCheck
+  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck, Clock, ShieldCheck, AlertTriangle
 } from 'lucide-react';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 import Swal from 'sweetalert2';
@@ -13,6 +13,7 @@ import { Modal } from '../../components/common/Modal';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { API_BASE_URL } from '../../config/env';
 import { SmartTagEditor } from '../../features/smart-tagging/components/SmartTagEditor';
+import { PrivateEvidenceImage } from '../../components/common/PrivateEvidenceImage';
 import { PortfolioItemFormModal, type PortfolioItemFormValues } from '../../features/photographers/components/PortfolioItemFormModal';
 import { PhotographyPackageManager } from '../../features/photography-packages/components/PhotographyPackageManager';
 import { categoryService } from '../../features/categories/services/categoryService';
@@ -34,6 +35,11 @@ interface Order {
   items?: any[];
   depositTotal?: number;
   rawStatus?: string;
+  pickupDamageReport?: {
+    reportedAt: string;
+    description: string;
+    evidencePhotos: string[];
+  } | null;
 }
 
 interface Product {
@@ -767,9 +773,30 @@ export const ProviderDashboard: React.FC = () => {
   const [reportingOrder, setReportingOrder] = useState<Order | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [incidentDesc, setIncidentDesc] = useState<string>('');
-  const [incidentEvidence, setIncidentEvidence] = useState<string>('');
+  const [incidentPhotos, setIncidentPhotos] = useState<string[]>([]);
   const [incidentAmount, setIncidentAmount] = useState<number>(0);
   const [incidentActionType, setIncidentActionType] = useState<'CLEANING' | 'MAINTENANCE'>('CLEANING');
+
+  const handleIncidentPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    toast.info('Đang tải ảnh lên...');
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append('images', files[i]);
+      }
+      const res: any = await httpClient.post('/api/disputes/incidents/upload-evidence', formData);
+      if (res.urls && Array.isArray(res.urls)) {
+        setIncidentPhotos(prev => [...prev, ...res.urls]);
+        toast.success('Tải ảnh thành công!');
+      } else {
+        toast.error('Tải ảnh thất bại: Phản hồi không hợp lệ từ máy chủ.');
+      }
+    } catch (err: any) {
+      toast.error('Tải ảnh thất bại: ' + (err.message || ''));
+    }
+  };
 
   const handleSendIncidentReport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -777,17 +804,20 @@ export const ProviderDashboard: React.FC = () => {
       toast.error('Vui lòng chọn sản phẩm gặp sự cố!');
       return;
     }
+    if (incidentPhotos.length === 0) {
+      toast.error('Báo cáo sự cố bắt buộc phải có ít nhất 1 hình ảnh làm bằng chứng!');
+      return;
+    }
     if (incidentAmount > (reportingOrder.depositTotal || 0)) {
       toast.error(`Tiền đền bù không được vượt quá số tiền cọc (${(reportingOrder.depositTotal || 0).toLocaleString()}đ)`);
       return;
     }
     try {
-      const photos = incidentEvidence ? incidentEvidence.split(',').map(s => s.trim()).filter(Boolean) : [];
       await httpClient.post('/api/disputes/incidents', {
         bookingId: reportingOrder._id,
         bookingItemId: selectedItemId,
         description: incidentDesc,
-        evidencePhotos: photos,
+        evidencePhotos: incidentPhotos,
         requestedAmount: incidentAmount,
         actionType: incidentActionType,
       });
@@ -795,7 +825,7 @@ export const ProviderDashboard: React.FC = () => {
       setReportingOrder(null);
       setSelectedItemId('');
       setIncidentDesc('');
-      setIncidentEvidence('');
+      setIncidentPhotos([]);
       setIncidentAmount(0);
       setIncidentActionType('CLEANING');
       fetchOrders();
@@ -1518,6 +1548,152 @@ export const ProviderDashboard: React.FC = () => {
   };
 
   const changeOrderStatus = async (_id: string, apiStatus: string) => {
+    const order = orders.find(o => o._id === _id || o.id === _id);
+    if (order && (apiStatus === 'PICKUP_PENDING' || apiStatus === 'PICKED_UP')) {
+      const firstItem = order.items?.[0];
+      const startDateStr = firstItem?.startDate || firstItem?.rentalFrom;
+      if (startDateStr) {
+        const today = new Date();
+        const start = new Date(startDateStr);
+        const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const startZero = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const diffDays = (startZero.getTime() - todayZero.getTime()) / (1000 * 60 * 60 * 24);
+
+        if (diffDays > 1) {
+          toast.error('Chưa đến thời gian bàn giao đồ! Chỉ được thực hiện tối đa trước ngày nhận 24 giờ.');
+          return;
+        }
+      }
+    }
+
+    if (apiStatus === 'PICKUP_PENDING') {
+      const result = await Swal.fire({
+        title: 'Bàn giao trang phục',
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0;">
+            <p style="font-size: 13px; color: #6B7280; margin-bottom: 18px; text-align: center; line-height: 1.5; max-width: 360px;">
+              Ảnh chụp rõ nét tình trạng tổng thể, cổ áo, tà áo và các chi tiết quan trọng lúc giao hàng làm bằng chứng đối soát.
+            </p>
+            <label for="handover-file-input" style="
+              width: 100%;
+              max-width: 320px;
+              height: 130px;
+              border: 2px dashed #D1D5DB;
+              border-radius: 12px;
+              background-color: #F9FAFB;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              cursor: pointer;
+              transition: all 0.2s ease-in-out;
+              gap: 8px;
+              padding: 16px;
+              box-sizing: border-box;
+            "
+            onmouseover="this.style.borderColor='var(--color-primary-dark)'; this.style.backgroundColor='#FFFDF9';"
+            onmouseout="this.style.borderColor='#D1D5DB'; this.style.backgroundColor='#F9FAFB';"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8C827A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span style="font-size: 13px; font-weight: 700; color: #4B5563; margin-top: 4px;">Tải lên ảnh bàn giao</span>
+              <span style="font-size: 11px; color: #9CA3AF;">Hỗ trợ nhiều hình ảnh JPG, PNG, WEBP</span>
+              <input type="file" id="handover-file-input" multiple accept="image/*" style="display: none;" />
+            </label>
+            <div id="handover-preview-container" style="
+              display: flex;
+              gap: 10px;
+              flex-wrap: wrap;
+              justify-content: center;
+              margin-top: 20px;
+              width: 100%;
+              max-width: 360px;
+            "></div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: 'var(--color-primary-dark)',
+        cancelButtonColor: '#9CA3AF',
+        confirmButtonText: 'Xác nhận Bàn giao',
+        cancelButtonText: 'Hủy',
+        background: 'white',
+        didOpen: () => {
+          const fileInput = document.getElementById('handover-file-input') as HTMLInputElement;
+          const previewContainer = document.getElementById('handover-preview-container') as HTMLDivElement;
+          if (fileInput && previewContainer) {
+            fileInput.addEventListener('change', async (e: any) => {
+              const files = e.target.files;
+              if (!files || files.length === 0) return;
+              previewContainer.innerHTML = '<span style="font-size: 12px; color: #8C827A; font-weight: 600;">⏳ Đang tải ảnh...</span>';
+              
+              const uploadedUrls: string[] = [];
+              try {
+                for (let i = 0; i < files.length; i++) {
+                  const formData = new FormData();
+                  formData.append('file', files[i]);
+                  const res: any = await httpClient.post('/api/bookings/upload-reference', formData);
+                  if (res.url) uploadedUrls.push(res.url);
+                }
+                
+                previewContainer.innerHTML = '';
+                uploadedUrls.forEach(url => {
+                  const wrapper = document.createElement('div');
+                  wrapper.style.position = 'relative';
+                  wrapper.style.width = '64px';
+                  wrapper.style.height = '64px';
+                  wrapper.style.borderRadius = '8px';
+                  wrapper.style.overflow = 'hidden';
+                  wrapper.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)';
+                  wrapper.style.border = '1px solid #E5E7EB';
+
+                  const img = document.createElement('img');
+                  img.src = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+                  img.style.width = '100%';
+                  img.style.height = '100%';
+                  img.style.objectFit = 'cover';
+                  img.className = 'handover-uploaded-img';
+                  img.dataset.url = url;
+
+                  wrapper.appendChild(img);
+                  previewContainer.appendChild(wrapper);
+                });
+              } catch (err) {
+                previewContainer.innerHTML = '<span style="font-size: 12px; color: #C0392B; font-weight: 600;">❌ Tải ảnh thất bại!</span>';
+              }
+            });
+          }
+        },
+        preConfirm: () => {
+          const imgs = document.querySelectorAll('.handover-uploaded-img');
+          const urls: string[] = [];
+          imgs.forEach((img: any) => {
+            if (img.dataset.url) urls.push(img.dataset.url);
+          });
+          if (urls.length === 0) {
+            Swal.showValidationMessage('Vui lòng tải lên ít nhất 1 hình ảnh bàn giao!');
+            return false;
+          }
+          return urls;
+        }
+      });
+
+      if (!result.isConfirmed || !result.value) {
+        setActionMenuId(null);
+        return;
+      }
+      
+      const handoverPhotos = result.value;
+      try {
+        await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus, handoverPhotos });
+        const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
+        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus, handoverPhotos } : o));
+        toast.success(`Đã bàn giao và cập nhật trạng thái đơn hàng thành "${displayStatus}"!`);
+      } catch (err: any) {
+        toast.error(err.message || 'Cập nhật trạng thái thất bại');
+      }
+      setActionMenuId(null);
+      return;
+    }
+
     try {
       await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus });
       const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
@@ -2353,7 +2529,7 @@ export const ProviderDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
+            <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--color-light-border)', backgroundColor: 'var(--color-light-bg)' }}>
@@ -2382,7 +2558,26 @@ export const ProviderDashboard: React.FC = () => {
                       <td style={{ padding: '16px 20px', fontWeight: 600 }}>{o.productName}</td>
                       <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)' }}>{o.orderDate}</td>
                       <td style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'right' }}>{o.total}</td>
-                      <td style={{ padding: '16px 20px', textAlign: 'center' }}><span style={statusBadgeStyle(o.status)}>{o.status}</span></td>
+                      <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                          <span style={statusBadgeStyle(o.status)}>{o.status}</span>
+                          {o.pickupDamageReport && (
+                            <span style={{
+                              fontSize: '9px',
+                              fontWeight: 700,
+                              backgroundColor: '#FEF9E7',
+                              color: '#D35400',
+                              border: '1px solid #F5CBA7',
+                              borderRadius: '4px',
+                              padding: '2px 6px',
+                              display: 'inline-block',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              ⚠️ KHÁCH BÁO LỖI
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td style={{ padding: '16px 20px', textAlign: 'center', position: 'relative' }}>
                         <button onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
                         {actionMenuId === o._id && (() => {
@@ -2427,19 +2622,48 @@ export const ProviderDashboard: React.FC = () => {
                                   Cập nhật trạng thái
                                 </div>
                               )}
-                              {steps.map((a: { label: string; apiStatus: string; icon: React.ReactNode; color: string }) => (
-                                <button key={a.apiStatus} onClick={() => changeOrderStatus(o._id, a.apiStatus)} style={{
-                                  width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                  fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: a.color,
-                                  fontWeight: 600, textAlign: 'left',
-                                }}>{a.icon} {a.label}</button>
-                              ))}
+                              {steps.map((a: { label: string; apiStatus: string; icon: React.ReactNode; color: string }) => {
+                                const isHandoverAction = a.apiStatus === 'PICKUP_PENDING' || a.apiStatus === 'PICKED_UP';
+                                let isDisabled = false;
+                                if (isHandoverAction) {
+                                  const firstItem = o.items?.[0];
+                                  const startDateStr = firstItem?.startDate || firstItem?.rentalFrom;
+                                  if (startDateStr) {
+                                    const today = new Date();
+                                    const start = new Date(startDateStr);
+                                    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                                    const startZero = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                                    const diffDays = (startZero.getTime() - todayZero.getTime()) / (1000 * 60 * 60 * 24);
+                                    if (diffDays > 1) {
+                                      isDisabled = true;
+                                    }
+                                  }
+                                }
+                                return (
+                                  <button
+                                    key={a.apiStatus}
+                                    disabled={isDisabled}
+                                    onClick={() => changeOrderStatus(o._id, a.apiStatus)}
+                                    style={{
+                                      width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                      fontSize: '12px', border: 'none', background: 'none', 
+                                      cursor: isDisabled ? 'not-allowed' : 'pointer', 
+                                      color: isDisabled ? '#CCCCCC' : a.color,
+                                      opacity: isDisabled ? 0.6 : 1,
+                                      fontWeight: 600, textAlign: 'left',
+                                    }}
+                                    title={isDisabled ? "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)" : ""}
+                                  >
+                                    {a.icon} {a.label}
+                                  </button>
+                                );
+                              })}
                               {canReport && (
                                 <button onClick={() => {
                                   setReportingOrder(o);
                                   setSelectedItemId(o.items?.[0]?._id || '');
                                   setIncidentDesc('');
-                                  setIncidentEvidence('');
+                                  setIncidentPhotos([]);
                                   setIncidentAmount(o.depositTotal || 0);
                                   setIncidentActionType('CLEANING');
                                   setActionMenuId(null);
@@ -4106,6 +4330,41 @@ export const ProviderDashboard: React.FC = () => {
             </div>
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '80vh', overflowY: 'auto' }}>
 
+              {/* Pickup Damage Report Warning */}
+              {reportingOrder.pickupDamageReport && (
+                <div style={{
+                  backgroundColor: '#FEF9E7',
+                  border: '1px solid #F5CBA7',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  fontSize: '13px',
+                  color: '#7E5109',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                    <AlertTriangle size={15} style={{ color: '#D35400' }} />
+                    <span>Chú ý: Khách hàng đã báo lỗi khi nhận đồ!</span>
+                  </div>
+                  <div style={{ fontSize: '12px' }}>
+                    <strong>Mô tả của khách:</strong> {reportingOrder.pickupDamageReport.description}
+                  </div>
+                  {reportingOrder.pickupDamageReport.evidencePhotos && reportingOrder.pickupDamageReport.evidencePhotos.length > 0 && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                      {reportingOrder.pickupDamageReport.evidencePhotos.map((photo: string, index: number) => (
+                        <a key={index} href={photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`} target="_blank" rel="noreferrer" style={{ width: '45px', height: '45px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #F5CBA7' }}>
+                          <img src={photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`} alt="Evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  <strong style={{ fontSize: '11px', color: '#C0392B', marginTop: '4px' }}>
+                    * Vui lòng đối soát kỹ và không phạt tiền đối với các vết bẩn/hỏng hóc khách hàng đã khai báo ở trên.
+                  </strong>
+                </div>
+              )}
+
               {/* Chọn sản phẩm bị hỏng */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SẢN PHẨM GẶP SỰ CỐ *</span>
@@ -4164,15 +4423,85 @@ export const ProviderDashboard: React.FC = () => {
               </div>
 
               {/* Ảnh bằng chứng */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ẢNH CHỤP BẰNG CHỨNG (CÁCH NHAU BẰNG DẤU PHẨY)</span>
-                <input
-                  type="text"
-                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none' }}
-                  placeholder="Link ảnh bằng chứng 1, Link ảnh bằng chứng 2..."
-                  value={incidentEvidence}
-                  onChange={(e) => setIncidentEvidence(e.target.value)}
-                />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ẢNH CHỤP BẰNG CHỨNG HỎNG HÓC *</span>
+                
+                <label htmlFor="incident-photo-file" style={{
+                  border: '2px dashed #D1D5DB',
+                  borderRadius: '12px',
+                  backgroundColor: '#F9FAFB',
+                  padding: '20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  gap: '8px',
+                  transition: 'all 0.2s ease-in-out'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--color-primary-dark)';
+                  e.currentTarget.style.backgroundColor = '#FFFDF9';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.borderColor = '#D1D5DB';
+                  e.currentTarget.style.backgroundColor = '#F9FAFB';
+                }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8C827A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#4B5563' }}>Tải ảnh bằng chứng lên</span>
+                  <span style={{ fontSize: '11px', color: '#9CA3AF' }}>Chọn một hoặc nhiều hình ảnh vết bẩn, rách</span>
+                  <input
+                    id="incident-photo-file"
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleIncidentPhotoUpload}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+
+                {incidentPhotos.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px', padding: '8px', backgroundColor: '#F3F4F6', borderRadius: '8px' }}>
+                    {incidentPhotos.map((photo, index) => {
+                      const url = photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`;
+                      return (
+                        <div key={index} style={{ position: 'relative', width: '56px', height: '56px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #D1D5DB' }}>
+                          <PrivateEvidenceImage
+                            reference={photo}
+                            legacyUrl={url}
+                            alt="Incident preview"
+                            linkStyle={{ display: 'block', width: '100%', height: '100%' }}
+                            imageStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setIncidentPhotos(prev => prev.filter((_, i) => i !== index))}
+                            style={{
+                              position: 'absolute',
+                              top: '2px',
+                              right: '2px',
+                              width: '16px',
+                              height: '16px',
+                              borderRadius: '50%',
+                              backgroundColor: 'rgba(0,0,0,0.6)',
+                              color: 'white',
+                              border: 'none',
+                              fontSize: '10px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Số tiền yêu cầu đền bù */}

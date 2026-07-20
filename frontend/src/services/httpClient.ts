@@ -57,16 +57,25 @@ class HttpClient {
 
   private async parseResponse<T>(response: Response): Promise<T> {
     const contentType = response.headers.get('content-type');
-    let data: any = {};
+    let data: any = null;
 
     if (contentType && contentType.includes('application/json')) {
-      data = await response.json().catch(() => ({}));
+      // Preserve null — backend may return literal null for "not found" cases
+      const raw = await response.text().catch(() => '');
+      try {
+        data = raw.length > 0 ? JSON.parse(raw) : null;
+      } catch {
+        data = {};
+      }
     } else {
-      data = { message: await response.text().catch(() => 'Response parsing failed') };
+      const text = await response.text().catch(() => 'Response parsing failed');
+      data = { message: text };
     }
 
     if (!response.ok) {
-      const errorMessage = data.message || `Request failed with status ${response.status}`;
+      const errorMessage =
+        (data && typeof data === 'object' ? data.message : null) ||
+        `Request failed with status ${response.status}`;
       throw new Error(errorMessage);
     }
 

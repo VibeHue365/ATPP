@@ -323,6 +323,64 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             <div>{getStatusBadge(booking.status)}</div>
           </div>
 
+          {/* Pickup Damage Report */}
+          {booking.pickupDamageReport && (
+            <div style={{
+              backgroundColor: '#FEF9E7',
+              border: '1px solid #F5CBA7',
+              borderRadius: '10px',
+              padding: '14px 18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#B9770E', fontWeight: 700, fontSize: '13px' }}>
+                <ShieldAlert size={16} />
+                <span>BÁO CÁO LỖI LÚC NHẬN ĐỒ CỦA KHÁCH HÀNG</span>
+              </div>
+              <p style={{ fontSize: '13px', margin: 0, color: '#4E340E' }}>
+                <strong>Mô tả:</strong> {booking.pickupDamageReport.description || 'Không có mô tả'}
+              </p>
+              {booking.pickupDamageReport.evidencePhotos && booking.pickupDamageReport.evidencePhotos.length > 0 && (
+                <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                  {booking.pickupDamageReport.evidencePhotos.map((photo: string, index: number) => (
+                    <a key={index} href={getEvidenceUrl(photo)} target="_blank" rel="noreferrer" style={{ width: '60px', height: '60px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #F5D3A7' }}>
+                      <img src={getEvidenceUrl(photo)} alt="Damage report evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </a>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: '11px', color: '#9A6B24', fontStyle: 'italic', marginTop: '2px' }}>
+                Ghi nhận lúc: {new Date(booking.pickupDamageReport.reportedAt).toLocaleString('vi-VN')}
+              </div>
+            </div>
+          )}
+
+          {/* Shop Handover Photos */}
+          {booking.handoverPhotos && booking.handoverPhotos.length > 0 && (
+            <div style={{
+              backgroundColor: '#EDF9F2',
+              border: '1px solid #C2F0D7',
+              borderRadius: '10px',
+              padding: '14px 18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#27AE60', fontWeight: 700, fontSize: '13px' }}>
+                <CheckCircle size={16} />
+                <span>ẢNH BÀN GIAO SẢN PHẨM CỦA CỬA HÀNG</span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {booking.handoverPhotos.map((photo: string, index: number) => (
+                  <a key={index} href={getEvidenceUrl(photo)} target="_blank" rel="noreferrer" style={{ width: '60px', height: '60px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #C2F0D7' }}>
+                    <img src={getEvidenceUrl(photo)} alt="Shop handover evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Customer / Service Provider info */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div style={{ padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px' }}>

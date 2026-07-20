@@ -409,6 +409,10 @@ export class BookingStatusService {
         );
       }
 
+      if (booking.status === BookingStatus.PickupPending) {
+        isFreeCancel = true;
+      }
+
       let penaltyAmount = 0;
       if (isFreeCancel) {
         refundAmount = booking.pricingSummary?.grandTotal || 0;
@@ -766,6 +770,22 @@ export class BookingStatusService {
           );
         } catch (e) {
           console.error('Failed to send AWAITING_REVIEW notification:', e);
+        }
+      }
+
+      // Side effect: set handoverInitiatedAt for 30m auto-confirm window
+      if (nextStatus === BookingStatus.PickupPending) {
+        booking.handoverInitiatedAt = new Date();
+        try {
+          await this.notificationsService.createNotification(
+            booking.customerId.toString(),
+            'Đơn hàng bắt đầu bàn giao',
+            `Đơn hàng ${booking.bookingCode} của bạn đang được bàn giao tại quầy. Vui lòng kiểm tra và xác nhận nhận đồ trong vòng 30 phút.`,
+            NotificationType.Booking,
+            { bookingId: booking._id },
+          );
+        } catch (e) {
+          console.error('Failed to send PICKUP_PENDING notification:', e);
         }
       }
 

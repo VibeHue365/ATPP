@@ -81,17 +81,19 @@ export const ProfilePage: React.FC = () => {
   const [bookingIncident, setBookingIncident] = useState<any | null>(null);
 
   useEffect(() => {
+    // Immediately clear stale incident data when switching bookings
+    setBookingIncident(null);
+
     const fetchIncident = async () => {
       if (activeDetailBooking) {
         try {
-          const inc = await httpClient.get(`/api/disputes/incidents/booking/${activeDetailBooking._id}`);
-          setBookingIncident(inc);
+          const inc = await httpClient.get<any | null>(`/api/disputes/incidents/booking/${activeDetailBooking._id}`);
+          // Only set if it's a real incident object (not null/undefined/empty)
+          setBookingIncident(inc && inc._id ? inc : null);
         } catch (err) {
           console.error('Không thể tải thông tin sự cố:', err);
           setBookingIncident(null);
         }
-      } else {
-        setBookingIncident(null);
       }
     };
     fetchIncident();
@@ -777,10 +779,10 @@ export const ProfilePage: React.FC = () => {
                   </span>
                 </div>
                 <div style={{ fontSize: '13px', color: '#2D3748', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <span>Sản phẩm gặp sự cố: <strong>{bookingIncident.bookingItemId?.name || bookingIncident.productId?.name || 'Sản phẩm'}</strong></span>
-                  <span>Hình thức xử lý: <strong>{bookingIncident.bookingItemId?.actionType === 'MAINTENANCE' || bookingIncident.actionType === 'MAINTENANCE' ? 'Sửa chữa / Bảo dưỡng (MAINTENANCE)' : 'Giặt là / Tẩy rửa (CLEANING)'}</strong></span>
-                  <span>Mô tả sự cố: <em style={{ color: '#4A5568' }}>"{bookingIncident.description}"</em></span>
-                  <span>Số tiền đền bù yêu cầu: <strong style={{ color: '#C53030', fontSize: '15px' }}>{bookingIncident.requestedAmount?.toLocaleString('vi-VN')}đ</strong></span>
+                  <span>Sản phẩm gặp sự cố: <strong>{bookingIncident.productId?.name || bookingIncident.bookingItemId?.productName || 'Sản phẩm'}</strong></span>
+                  <span>Hình thức xử lý: <strong>{bookingIncident.actionType === 'MAINTENANCE' ? 'Sửa chữa / Bảo dưỡng (MAINTENANCE)' : 'Giặt là / Tẩy rửa (CLEANING)'}</strong></span>
+                  <span>Mô tả sự cố: <em style={{ color: '#4A5568' }}>{bookingIncident.description ? `"${bookingIncident.description}"` : <span style={{ color: '#A0AEC0' }}>Không có mô tả</span>}</em></span>
+                  <span>Số tiền đền bù yêu cầu: <strong style={{ color: '#C53030', fontSize: '15px' }}>{(bookingIncident.requestedAmount ?? 0).toLocaleString('vi-VN')}đ</strong></span>
                   
                   {bookingIncident.evidencePhotos && bookingIncident.evidencePhotos.length > 0 && (
                     <div style={{ marginTop: '8px' }}>

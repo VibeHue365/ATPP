@@ -2,8 +2,55 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
-import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle } from 'lucide-react';
+import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle, Check, XCircle } from 'lucide-react';
 import { BookingDetailModal } from '../../../components/common/BookingDetailModal';
+import { API_BASE_URL } from '../../../config/env';
+
+const HandoverCountdown = ({ initiatedAt, onTimeout }: { initiatedAt: string; onTimeout: () => void }) => {
+  const [timeLeft, setTimeLeft] = React.useState<string>('');
+
+  React.useEffect(() => {
+    const calculateTime = () => {
+      const start = new Date(initiatedAt).getTime();
+      const deadline = start + 30 * 60 * 1000;
+      const now = Date.now();
+      const diff = deadline - now;
+
+      if (diff <= 0) {
+        setTimeLeft('00:00');
+        onTimeout();
+        return;
+      }
+
+      const minutes = Math.floor(diff / (60 * 1000));
+      const seconds = Math.floor((diff % (60 * 1000)) / 1000);
+      setTimeLeft(`${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+    };
+
+    calculateTime();
+    const interval = setInterval(calculateTime, 1000);
+    return () => clearInterval(interval);
+  }, [initiatedAt, onTimeout]);
+
+  return (
+    <div style={{
+      backgroundColor: '#FEF9E7',
+      border: '1px solid #F5CBA7',
+      borderRadius: '8px',
+      padding: '8px 12px',
+      fontSize: '12px',
+      color: '#B9770E',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      marginBottom: '10px',
+      fontWeight: 600,
+      width: '100%'
+    }}>
+      <span>⏰ Xác nhận tại quầy còn: <strong style={{ color: '#C0392B', fontSize: '13px' }}>{timeLeft}</strong></span>
+    </div>
+  );
+};
 
 interface CustomerDashboardProps {
   user: any;
@@ -31,6 +78,74 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [reviewingItem, setReviewingItem] = useState<any>(null);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
+
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportModalType, setReportModalType] = useState<'DAMAGE' | 'REJECT'>('DAMAGE');
+  const [reportDesc, setReportDesc] = useState('');
+  const [reportPhotos, setReportPhotos] = useState<string[]>([]);
+
+  const handleConfirmPickup = async (bookingId: string) => {
+    try {
+      toast.info('Đang xác nhận nhận đồ...');
+      await httpClient.post(`/api/bookings/${bookingId}/customer-confirm-pickup`, {});
+      toast.success('Xác nhận nhận đồ thành công!');
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Xác nhận thất bại');
+    }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    toast.info('Đang tải ảnh lên...');
+    
+    try {
+      const urls: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append('file', files[i]);
+        const res: any = await httpClient.post('/api/bookings/upload-reference', formData);
+        if (res.url) urls.push(res.url);
+      }
+      setReportPhotos(prev => [...prev, ...urls]);
+      toast.success('Tải ảnh thành công!');
+    } catch (err: any) {
+      toast.error('Tải ảnh thất bại: ' + (err.message || ''));
+    }
+  };
+
+  const handleSubmitReport = async () => {
+    if (!reportDesc.trim()) {
+      toast.error('Vui lòng nhập mô tả lỗi.');
+      return;
+    }
+    if (reportPhotos.length === 0) {
+      toast.error('Vui lòng tải lên ít nhất 1 hình ảnh làm bằng chứng.');
+      return;
+    }
+
+    try {
+      toast.info('Đang gửi báo cáo...');
+      if (reportModalType === 'DAMAGE') {
+        await httpClient.post(`/api/bookings/${selectedBookingId}/customer-report-damage`, {
+          description: reportDesc,
+          evidencePhotos: reportPhotos
+        });
+        toast.success('Đã gửi báo cáo lỗi và nhận đồ thành công!');
+      } else {
+        await httpClient.post(`/api/bookings/${selectedBookingId}/customer-reject-handover`, {
+          reason: reportDesc,
+          evidencePhotos: reportPhotos
+        });
+        toast.success('Đã từ chối nhận đồ và hoàn tiền thành công!');
+      }
+      setIsReportModalOpen(false);
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Gửi báo cáo thất bại');
+    }
+  };
 
   const handleContinuePayment = async (bookingId: string) => {
     try {
@@ -644,7 +759,27 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     };
                   }
                   
-                  // For CONFIRMED, DEPOSIT_PAID, PICKED_UP
+                  if (item.status === 'PICKUP_PENDING') {
+                    return { 
+                      label: 'XÁC NHẬN TẠI QUẦY (30 PHÚT)', 
+                      color: '#D35400', 
+                      bgColor: '#FDF2E9', 
+                      borderColor: '#F5CBA7',
+                      icon: Clock
+                    };
+                  }
+                  
+                  if (item.status === 'PICKED_UP') {
+                    return { 
+                      label: 'ĐANG THUÊ', 
+                      color: '#27AE60', 
+                      bgColor: '#EDF9F2', 
+                      borderColor: '#C2F0D7',
+                      icon: Calendar
+                    };
+                  }
+                  
+                  // For CONFIRMED, DEPOSIT_PAID
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
                   
@@ -730,6 +865,118 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         </span>
                       </div>
                     </div>
+
+                    {item.status === 'PICKUP_PENDING' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px', width: '100%' }}>
+                        
+                        {/* Shop Handover Photos Section */}
+                        {item.booking?.handoverPhotos && item.booking.handoverPhotos.length > 0 && (
+                          <div style={{
+                            backgroundColor: '#EDF9F2',
+                            border: '1px solid #C2F0D7',
+                            borderRadius: '8px',
+                            padding: '8px 10px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px'
+                          }}>
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#27AE60', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Check size={12} /> Ảnh bàn giao từ Shop:
+                            </span>
+                            <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+                              {item.booking.handoverPhotos.map((photo: string, index: number) => {
+                                const url = photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`;
+                                return (
+                                  <a key={index} href={url} target="_blank" rel="noreferrer" style={{ width: '48px', height: '48px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #C2F0D7', flexShrink: 0 }}>
+                                    <img src={url} alt="Handover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  </a>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {item.booking?.handoverInitiatedAt && (
+                          <HandoverCountdown 
+                            initiatedAt={item.booking.handoverInitiatedAt} 
+                            onTimeout={() => {
+                              onRefresh();
+                            }} 
+                          />
+                        )}
+                        <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap' }}>
+                          <button 
+                            onClick={() => handleConfirmPickup(item.booking?._id || item.booking?.id)}
+                            style={{
+                              flex: 1, backgroundColor: '#27AE60', color: 'white', border: 'none',
+                              padding: '8px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
+                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                              minWidth: '90px'
+                            }}
+                          >
+                            <Check size={13} /> Nhận đồ
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setSelectedBookingId(item.booking?._id || item.booking?.id);
+                              setReportModalType('DAMAGE');
+                              setReportDesc('');
+                              setReportPhotos([]);
+                              setIsReportModalOpen(true);
+                            }}
+                            style={{
+                              flex: 1, backgroundColor: '#F39C12', color: 'white', border: 'none',
+                              padding: '8px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
+                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                              minWidth: '90px'
+                            }}
+                          >
+                            <AlertTriangle size={13} /> Báo lỗi nhẹ
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setSelectedBookingId(item.booking?._id || item.booking?.id);
+                              setReportModalType('REJECT');
+                              setReportDesc('');
+                              setReportPhotos([]);
+                              setIsReportModalOpen(true);
+                            }}
+                            style={{
+                              flex: 1, backgroundColor: '#C0392B', color: 'white', border: 'none',
+                              padding: '8px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
+                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                              minWidth: '90px'
+                            }}
+                          >
+                            <XCircle size={13} /> Từ chối nhận
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {isIncidentPending && (
+                      <div style={{
+                        backgroundColor: '#FFF7ED',
+                        border: '1px solid #FDE68A',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        marginTop: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        fontSize: '12px',
+                        textAlign: 'left',
+                        width: '100%',
+                        boxSizing: 'border-box'
+                      }}>
+                        <div style={{ fontWeight: 700, color: '#92400E', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <AlertTriangle size={14} style={{ flexShrink: 0 }} /> Shop yêu cầu đền bù sự cố hỏng đồ!
+                        </div>
+                        <div style={{ color: '#78350F', lineHeight: 1.4 }}>
+                          Vui lòng bấm nút <strong style={{ color: '#C0392B' }}>"Phản hồi đền bù"</strong> bên dưới để xem ảnh bằng chứng và chọn phương án Chấp nhận hoặc Khiếu nại.
+                        </div>
+                      </div>
+                    )}
                     
                     <div className="vh-appointment-card-footer">
                       <span className={isReturned ? 'vh-appointment-status-success' : 'vh-appointment-time-badge'}>
@@ -1002,6 +1249,111 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Report Damage or Reject Handover Modal */}
+      {isReportModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center',
+          alignItems: 'center', zIndex: 9999, padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '460px',
+            padding: '24px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px', fontFamily: 'var(--font-header)', color: '#2D2926' }}>
+              {reportModalType === 'DAMAGE' ? '⚠️ Báo cáo lỗi nhẹ khi nhận' : '🔴 Từ chối nhận đồ do lỗi nặng'}
+            </h3>
+            <p style={{ fontSize: '12px', color: '#8C827A', marginBottom: '16px' }}>
+              {reportModalType === 'DAMAGE' 
+                ? 'Nếu trang phục có vết bẩn nhỏ, vết xước cũ, hãy chụp ảnh lại làm bằng chứng để không bị phạt cọc lúc trả.'
+                : 'Nếu trang phục bị rách nặng, sai mẫu mã không mặc được, hãy chụp ảnh lại để hủy đơn & hoàn tiền 100%.'}
+            </p>
+
+            {/* Description text area */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#2D2926' }}>Mô tả chi tiết lỗi:</label>
+              <textarea
+                value={reportDesc}
+                onChange={(e) => setReportDesc(e.target.value)}
+                placeholder="Mô tả cụ thể vị trí và tình trạng lỗi..."
+                style={{
+                  width: '100%', height: '80px', borderRadius: '8px', border: '1px solid #EAEAE8',
+                  padding: '10px', fontSize: '13px', outline: 'none', resize: 'none', color: '#2D2926'
+                }}
+              />
+            </div>
+
+            {/* Upload image area */}
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#2D2926' }}>
+                Hình ảnh bằng chứng (Bắt buộc có ít nhất 1 ảnh):
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                {reportPhotos.map((url, idx) => (
+                  <div key={idx} style={{ position: 'relative', width: '70px', height: '70px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #EAEAE8' }}>
+                    <img src={url} alt="Evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button 
+                      type="button"
+                      onClick={() => setReportPhotos(prev => prev.filter((_, i) => i !== idx))}
+                      style={{
+                        position: 'absolute', top: '2px', right: '2px', backgroundColor: 'rgba(0,0,0,0.6)',
+                        color: 'white', border: 'none', borderRadius: '50%', width: '16px', height: '16px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '10px'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {reportPhotos.length < 5 && (
+                  <label style={{
+                    width: '70px', height: '70px', borderRadius: '6px', border: '2px dashed #CCCCCC',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', color: '#8C827A'
+                  }}>
+                    <Plus size={18} />
+                    <span style={{ fontSize: '10px' }}>Tải lên</span>
+                    <input 
+                      type="file" 
+                      multiple
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                type="button"
+                onClick={() => setIsReportModalOpen(false)}
+                style={{
+                  flex: 1, backgroundColor: 'white', color: '#2D2926', border: '1px solid #EAEAE8',
+                  padding: '10px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button 
+                type="button"
+                onClick={handleSubmitReport}
+                style={{
+                  flex: 1, 
+                  backgroundColor: reportModalType === 'DAMAGE' ? '#F39C12' : '#C0392B', 
+                  color: 'white', border: 'none',
+                  padding: '10px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Gửi báo cáo
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

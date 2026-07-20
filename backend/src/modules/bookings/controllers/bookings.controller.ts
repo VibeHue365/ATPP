@@ -138,10 +138,10 @@ export class BookingsController {
   async updateStatus(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() body: { status: string; note?: string },
+    @Body() body: { status: string; note?: string; handoverPhotos?: string[] },
   ) {
     if (!body?.status) throw new BadRequestException('Thiếu trường status');
-    return this.bookingsService.updateBookingStatus(id, body.status, body.note, user.sub, user.roles);
+    return this.bookingsService.updateBookingStatus(id, body.status, body.note, user.sub, user.roles, body.handoverPhotos);
   }
 
   /** POST /bookings/:id/cancel hoặc POST /api/bookings/:id/cancel */
@@ -209,5 +209,41 @@ export class BookingsController {
       throw new BadRequestException('size and color queries are required');
     }
     return this.bookingsService.getProductStockCount(productId, size, color);
+  }
+
+  @Post(':id/customer-confirm-pickup')
+  async customerConfirmPickup(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.bookingsService.customerConfirmPickup(id, user.sub);
+  }
+
+  @Post(':id/customer-report-damage')
+  async customerReportDamage(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() body: { description: string; evidencePhotos: string[] },
+  ) {
+    return this.bookingsService.customerReportDamage(
+      id,
+      user.sub,
+      body.description,
+      body.evidencePhotos,
+    );
+  }
+
+  @Post(':id/customer-reject-handover')
+  async customerRejectHandover(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() body: { reason: string; evidencePhotos: string[] },
+  ) {
+    return this.bookingsService.customerRejectHandover(
+      id,
+      user.sub,
+      body.reason,
+      body.evidencePhotos,
+    );
   }
 }

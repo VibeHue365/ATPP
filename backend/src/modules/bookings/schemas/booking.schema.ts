@@ -208,6 +208,29 @@ export class Booking {
    */
   @Prop({ type: Number, default: null })
   estimatedNetAmount?: number | null;
+
+  /** Store pickup only: timestamp when shop clicks "Bàn giao đồ" (moves to PICKUP_PENDING) */
+  @Prop({ type: Date, default: null, index: true })
+  handoverInitiatedAt?: Date | null;
+
+  /** Store pickup only: photos uploaded by shop at handover time (when moving to PICKUP_PENDING) */
+  @Prop({ type: [String], default: [] })
+  handoverPhotos?: string[];
+
+  /** Pre-existing damage report submitted by customer during pickup (within 30 minutes) */
+  @Prop({
+    type: {
+      reportedAt: { type: Date, default: null },
+      description: { type: String, default: null },
+      evidencePhotos: { type: [String], default: [] },
+    },
+    default: null,
+  })
+  pickupDamageReport?: {
+    reportedAt: Date | null;
+    description: string | null;
+    evidencePhotos: string[];
+  } | null;
 }
 
 export const BookingSchema = SchemaFactory.createForClass(Booking);
