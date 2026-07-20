@@ -111,6 +111,7 @@ export const ProviderDashboard: React.FC = () => {
   const [previewPortfolioItem, setPreviewPortfolioItem] = useState<PortfolioItem | null>(null);
   const [previewImageIndex, setPreviewImageIndex] = useState<number>(0);
   const hasPhotographyCapability = Array.isArray(provider?.capabilities) && provider.capabilities.includes('PHOTOGRAPHY');
+  const hasAodaiCapability = Array.isArray(provider?.capabilities) && (provider.capabilities.includes('AODAI_RENTAL') || provider.capabilities.includes('RENTAL'));
   const [subTab, setSubTab] = useState<'shop' | 'photo'>('shop');
   // Product Search / Sort / Filter States
   const [prodSearch, setProdSearch] = useState('');
@@ -178,6 +179,38 @@ export const ProviderDashboard: React.FC = () => {
   }, [analyticsData]);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
+  const [combos, setCombos] = useState<any[]>([]);
+  const [photoPackages, setPhotoPackages] = useState<any[]>([]);
+  const [cName, setCName] = useState('');
+  const [cDesc, setCDesc] = useState('');
+  const [cProductId, setCProductId] = useState('');
+  const [cPackageId, setCPackageId] = useState('');
+  const [cDiscount, setCDiscount] = useState<number | ''>(10);
+  const [cPrice, setCPrice] = useState('');
+
+  // Tự động tính toán giá combo hợp lý
+  useEffect(() => {
+    if (cProductId && cPackageId) {
+      const prod = myProductsList.find(p => p._id === cProductId);
+      const pkg = photoPackages.find(p => p._id === cPackageId);
+      if (prod && pkg) {
+        const discountPercent = Number(cDiscount) || 0;
+        const originalPrice = (prod.basePrice || 0) + (pkg.price || 0);
+        const calculatedPrice = Math.round(originalPrice * (1 - discountPercent / 100));
+        setCPrice(String(calculatedPrice));
+      }
+    }
+  }, [cProductId, cPackageId, cDiscount, myProductsList, photoPackages]);
+  const [cValidFrom, setCValidFrom] = useState('');
+  const [cValidTo, setCValidTo] = useState('');
+  const [cMaxUsage, setCMaxUsage] = useState<number | ''>(10);
+  const [cAoDaiQuantity, setCAoDaiQuantity] = useState<number | ''>(1);
+  const [cShootPeopleCount, setCShootPeopleCount] = useState<number | ''>(1);
+  const [isAoDaiModalOpen, setIsAoDaiModalOpen] = useState(false);
+  const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
+  const [aoDaiSearch, setAoDaiSearch] = useState('');
+  const [packageSearch, setPackageSearch] = useState('');
+  const [editingComboId, setEditingComboId] = useState<string | null>(null);
   const [reviewsData, setReviewsData] = useState<any>(null);
   const [bookingsState, setBookingsState] = useState<any[]>([]);
   const [payouts, setPayouts] = useState<any[]>([]);
@@ -326,8 +359,29 @@ export const ProviderDashboard: React.FC = () => {
       if (Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY')) {
         const portfolioRes: any = await httpClient.get('/providers/me/portfolio-items');
         setPortfolioItems(Array.isArray(portfolioRes) ? portfolioRes : []);
+
+        const packagesRes: any = await httpClient.get('/providers/me/photography-packages');
+        setPhotoPackages(Array.isArray(packagesRes) ? packagesRes : []);
       } else {
         setPortfolioItems([]);
+        setPhotoPackages([]);
+      }
+
+      const hasAodai = Array.isArray(pRes.capabilities) && (pRes.capabilities.includes('AODAI_RENTAL') || pRes.capabilities.includes('RENTAL'));
+      if (hasAodai) {
+        const productsRes: any = await httpClient.get('/products/my-listings?limit=999');
+        setMyProductsList(productsRes?.items || []);
+
+        // Load inventory summary so combo form can show Ao Dai stock
+        const summary: any = await httpClient.get('/inventory/summary');
+        setInventorySummary(summary || []);
+      }
+
+      if (hasAodai && Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY')) {
+        const combosRes: any = await httpClient.get('/combo-promotions/my');
+        setCombos(Array.isArray(combosRes) ? combosRes : []);
+      } else {
+        setCombos([]);
       }
 
       const sRes: any = await httpClient.get('/providers/me/schedules');
@@ -718,6 +772,130 @@ export const ProviderDashboard: React.FC = () => {
     } catch (err: any) {
       toast.error('Xóa voucher thất bại');
     }
+  };
+
+  const handleCreateOrUpdateCombo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cProductId || !cPackageId) {
+      toast.error('Vui lòng chọn cả áo dài và gói chụp ảnh');
+      return;
+    }
+
+    const selectedPkg = photoPackages.find(p => p._id === cPackageId);
+    if (selectedPkg) {
+      const maxPeopleAllowed = selectedPkg.maxPeople || 1;
+      if (Number(cShootPeopleCount || 1) > maxPeopleAllowed) {
+        toast.error(`Số người chụp trong combo (${cShootPeopleCount}) không được lớn hơn số người chụp tối đa của gói chụp ảnh (${maxPeopleAllowed} người)`);
+        return;
+      }
+    }
+
+    const selectedAoDaiStock = cProductId && inventorySummary
+      ? inventorySummary
+        .filter((item: any) => item.productId === cProductId)
+        .reduce((sum: number, item: any) => sum + (item.available || 0), 0)
+      : 0;
+    if (selectedAoDaiStock > 0 && Number(cAoDaiQuantity || 1) > selectedAoDaiStock) {
+      toast.error(`Số lượng áo dài trong combo (${cAoDaiQuantity}) không được vượt quá số lượng tồn kho khả dụng (${selectedAoDaiStock})`);
+      return;
+    }
+    if (!cName.trim()) {
+      toast.error('Vui lòng nhập tên combo');
+      return;
+    }
+    if (cDiscount === '' || cDiscount < 1 || cDiscount > 80) {
+      toast.error('Phần trăm giảm giá phải nằm trong khoảng 1 - 80%');
+      return;
+    }
+    if (!cValidFrom || !cValidTo) {
+      toast.error('Vui lòng chọn khoảng thời gian hiệu lực của combo');
+      return;
+    }
+    if (cValidFrom > cValidTo) {
+      toast.error('Ngày bắt đầu không được lớn hơn ngày kết thúc');
+      return;
+    }
+    if (cMaxUsage === '' || Number(cMaxUsage) < 1) {
+      toast.error('Số lượng giới hạn combo phải lớn hơn hoặc bằng 1');
+      return;
+    }
+
+    const payload: any = {
+      name: cName,
+      description: cDesc,
+      discountPercent: Number(cDiscount),
+      comboPrice: cPrice ? Number(cPrice) : undefined,
+      validFrom: new Date(cValidFrom).toISOString(),
+      validTo: new Date(cValidTo).toISOString(),
+      maxUsage: Number(cMaxUsage),
+      aoDaiQuantity: Number(cAoDaiQuantity || 1),
+      shootPeopleCount: Number(cShootPeopleCount || 1),
+    };
+
+    if (!editingComboId) {
+      payload.productId = cProductId;
+      payload.photographyPackageId = cPackageId;
+    }
+
+    try {
+      if (editingComboId) {
+        await httpClient.put(`/combo-promotions/${editingComboId}`, payload);
+        toast.success(`Cập nhật combo "${cName}" thành công!`);
+      } else {
+        await httpClient.post('/combo-promotions', payload);
+        toast.success(`Tạo combo "${cName}" thành công!`);
+      }
+      clearComboForm();
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error(err.message || 'Thao tác combo thất bại');
+    }
+  };
+
+  const handleEditCombo = (combo: any) => {
+    setEditingComboId(combo._id);
+    setCName(combo.name);
+    setCDesc(combo.description || '');
+    setCProductId(combo.productId?._id || combo.productId || '');
+    setCPackageId(combo.photographyPackageId?._id || combo.photographyPackageId || '');
+    setCDiscount(combo.discountPercent);
+    setCPrice(combo.comboPrice ? String(combo.comboPrice) : '');
+    setCMaxUsage(combo.maxUsage || 10);
+    setCAoDaiQuantity(combo.aoDaiQuantity || 1);
+    setCShootPeopleCount(combo.shootPeopleCount || 1);
+
+    if (combo.validFrom) {
+      setCValidFrom(new Date(combo.validFrom).toISOString().split('T')[0]);
+    }
+    if (combo.validTo) {
+      setCValidTo(new Date(combo.validTo).toISOString().split('T')[0]);
+    }
+  };
+
+  const handleDeleteCombo = async (id: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa combo khuyến mãi này?')) return;
+    try {
+      await httpClient.delete(`/combo-promotions/${id}`);
+      toast.success('Xóa combo thành công!');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error(err.message || 'Xóa combo thất bại');
+    }
+  };
+
+  const clearComboForm = () => {
+    setEditingComboId(null);
+    setCName('');
+    setCDesc('');
+    setCProductId('');
+    setCPackageId('');
+    setCDiscount(10);
+    setCPrice('');
+    setCValidFrom('');
+    setCValidTo('');
+    setCMaxUsage(10);
+    setCAoDaiQuantity(1);
+    setCShootPeopleCount(1);
   };
 
   const toggleScheduleDay = (day: number) => {
@@ -1919,7 +2097,7 @@ export const ProviderDashboard: React.FC = () => {
               const files = e.target.files;
               if (!files || files.length === 0) return;
               previewContainer.innerHTML = '<span style="font-size: 12px; color: #8C827A; font-weight: 600;">⏳ Đang tải ảnh...</span>';
-              
+
               const uploadedUrls: string[] = [];
               try {
                 for (let i = 0; i < files.length; i++) {
@@ -1928,7 +2106,7 @@ export const ProviderDashboard: React.FC = () => {
                   const res: any = await httpClient.post('/api/bookings/upload-reference', formData);
                   if (res.url) uploadedUrls.push(res.url);
                 }
-                
+
                 previewContainer.innerHTML = '';
                 uploadedUrls.forEach(url => {
                   const wrapper = document.createElement('div');
@@ -1975,7 +2153,7 @@ export const ProviderDashboard: React.FC = () => {
         setActionMenuId(null);
         return;
       }
-      
+
       const handoverPhotos = result.value;
       try {
         await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus, handoverPhotos });
@@ -2103,7 +2281,7 @@ export const ProviderDashboard: React.FC = () => {
                       <g key={idx}>
                         <circle cx={x} cy={y} r="5" fill="var(--color-primary)" />
                         <circle cx={x} cy={y} r="2" fill="white" />
-                        <text x={x} y={y - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--color-text-primary)">{(r.value/1000000).toFixed(1)}M</text>
+                        <text x={x} y={y - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--color-text-primary)">{(r.value / 1000000).toFixed(1)}M</text>
                         <text x={x} y="285" textAnchor="middle" fontSize="10" fontWeight="600" fill="var(--color-text-secondary)">{r.label.replace('Tháng ', 'T')}</text>
                       </g>
                     );
@@ -2223,7 +2401,7 @@ export const ProviderDashboard: React.FC = () => {
                   const barHeight = (r.value / maxVal) * 220;
                   return (
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
-                      <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{(r.value/1000000).toFixed(1)}M</span>
+                      <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{(r.value / 1000000).toFixed(1)}M</span>
                       <div style={{ width: '32px', height: `${barHeight}px`, backgroundColor: 'var(--color-primary)', borderRadius: '4px 4px 0 0', transition: 'height 0.3s ease' }} />
                       <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)' }}>{r.label.replace('Tháng ', 'T')}</span>
                     </div>
@@ -2381,95 +2559,95 @@ export const ProviderDashboard: React.FC = () => {
                 <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>Chưa có biến thể áo dài nào trong kho.</div>
               ) : (
                 <>
-                <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SIZE</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU SẮC</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LIỆU</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TỔNG KHO</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>KHẢ DỤNG</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>ĐANG THUÊ</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>GIẶT / BẢO TRÌ</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>THAO TÁC</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pagedSummary.map((item, idx) => (
-                        <tr key={`${item.productId}-${item.size}-${item.color}-${item.material || ''}-${idx}`} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
-                          <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.productName}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{colorLabels[item.color] || item.color}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{materialLabels[item.material] || item.material || '—'}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>
-                            {item.total > 0 ? item.total : (
-                              <span style={{ padding: '3px 8px', borderRadius: '999px', fontSize: '10.5px', fontWeight: 800, backgroundColor: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' }}>
-                                HẾT HÀNG
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{item.available}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>{item.rented}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>{item.maintenance}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                              <button
-                                disabled={variantBusy}
-                                onClick={() => { setVariantEditRow(item); setVariantEditQty(String(item.total)); }}
-                                style={{
-                                  padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
-                                  backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer',
-                                  fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1
-                                }}
-                              >
-                                Sửa số lượng
-                              </button>
-                              <button
-                                disabled={variantBusy}
-                                onClick={() => handleRemoveVariant(item)}
-                                style={{
-                                  padding: '6px 12px', border: '1px solid #FECACA', borderRadius: '4px',
-                                  backgroundColor: '#FEF2F2', cursor: variantBusy ? 'not-allowed' : 'pointer',
-                                  fontWeight: 700, fontSize: '11px', color: '#DC2626', opacity: variantBusy ? 0.5 : 1
-                                }}
-                              >
-                                Xoá biến thể
-                              </button>
-                            </div>
-                          </td>
+                  <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SIZE</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU SẮC</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LIỆU</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TỔNG KHO</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>KHẢ DỤNG</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>ĐANG THUÊ</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>GIẶT / BẢO TRÌ</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>THAO TÁC</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {inventorySummary.length > invSummaryLimit && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '16px', fontSize: '13px' }}>
-                    <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                      Hiển thị {pagedSummary.length} trên tổng số {inventorySummary.length} biến thể
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        disabled={invSummaryCurrent <= 1}
-                        onClick={() => setInvSummaryPage(p => Math.max(1, p - 1))}
-                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invSummaryCurrent > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                      >
-                        Trang trước
-                      </button>
-                      <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
-                        {invSummaryCurrent} / {invSummaryTotalPages}
-                      </span>
-                      <button
-                        disabled={invSummaryCurrent >= invSummaryTotalPages}
-                        onClick={() => setInvSummaryPage(p => Math.min(invSummaryTotalPages, p + 1))}
-                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invSummaryCurrent < invSummaryTotalPages ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                      >
-                        Trang sau
-                      </button>
-                    </div>
+                      </thead>
+                      <tbody>
+                        {pagedSummary.map((item, idx) => (
+                          <tr key={`${item.productId}-${item.size}-${item.color}-${item.material || ''}-${idx}`} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
+                            <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.productName}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{colorLabels[item.color] || item.color}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{materialLabels[item.material] || item.material || '—'}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>
+                              {item.total > 0 ? item.total : (
+                                <span style={{ padding: '3px 8px', borderRadius: '999px', fontSize: '10.5px', fontWeight: 800, backgroundColor: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' }}>
+                                  HẾT HÀNG
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{item.available}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>{item.rented}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>{item.maintenance}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                <button
+                                  disabled={variantBusy}
+                                  onClick={() => { setVariantEditRow(item); setVariantEditQty(String(item.total)); }}
+                                  style={{
+                                    padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
+                                    backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer',
+                                    fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1
+                                  }}
+                                >
+                                  Sửa số lượng
+                                </button>
+                                <button
+                                  disabled={variantBusy}
+                                  onClick={() => handleRemoveVariant(item)}
+                                  style={{
+                                    padding: '6px 12px', border: '1px solid #FECACA', borderRadius: '4px',
+                                    backgroundColor: '#FEF2F2', cursor: variantBusy ? 'not-allowed' : 'pointer',
+                                    fontWeight: 700, fontSize: '11px', color: '#DC2626', opacity: variantBusy ? 0.5 : 1
+                                  }}
+                                >
+                                  Xoá biến thể
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                )}
+                  {inventorySummary.length > invSummaryLimit && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '16px', fontSize: '13px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                        Hiển thị {pagedSummary.length} trên tổng số {inventorySummary.length} biến thể
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          disabled={invSummaryCurrent <= 1}
+                          onClick={() => setInvSummaryPage(p => Math.max(1, p - 1))}
+                          style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invSummaryCurrent > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                        >
+                          Trang trước
+                        </button>
+                        <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
+                          {invSummaryCurrent} / {invSummaryTotalPages}
+                        </span>
+                        <button
+                          disabled={invSummaryCurrent >= invSummaryTotalPages}
+                          onClick={() => setInvSummaryPage(p => Math.min(invSummaryTotalPages, p + 1))}
+                          style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invSummaryCurrent < invSummaryTotalPages ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                        >
+                          Trang sau
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -2484,116 +2662,116 @@ export const ProviderDashboard: React.FC = () => {
               ) : (
                 <>
                   <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
-                        <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SKU</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SIZE</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LƯỢNG</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TRẠNG THÁI</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GHI CHÚ</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>THAO TÁC</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inventoryItems.map((item: any) => {
-                        const isRetired = item.conditionStatus === 'RETIRED';
-                        return (
-                          <tr key={item._id} style={{ borderBottom: '1px solid var(--color-light-border)', opacity: isRetired ? 0.6 : 1 }}>
-                            <td style={{ padding: '16px 20px', fontWeight: 700, color: 'var(--color-primary)' }}>{item.sku}</td>
-                            <td style={{ padding: '16px 20px', fontWeight: 700 }}>{item.productId?.name || 'Sản phẩm lỗi'}</td>
-                            <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
-                            <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.color}</td>
-                            <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                              <span style={{
-                                padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
-                                backgroundColor: item.conditionStatus === 'NEW' ? '#EEF2F6' : item.conditionStatus === 'GOOD' ? '#F0FDF4' : item.conditionStatus === 'MINOR_DAMAGE' ? '#FFFBEB' : item.conditionStatus === 'LOCKED' ? '#FEF2F2' : '#F4F4F5',
-                                color: item.conditionStatus === 'NEW' ? '#475569' : item.conditionStatus === 'GOOD' ? '#166534' : item.conditionStatus === 'MINOR_DAMAGE' ? '#B45309' : item.conditionStatus === 'LOCKED' ? '#991B1B' : '#71717A'
-                              }}>
-                                {item.conditionStatus === 'NEW' ? 'Mới (New)' : item.conditionStatus === 'GOOD' ? 'Tốt (Good)' : item.conditionStatus === 'MINOR_DAMAGE' ? 'Hỏng nhẹ' : item.conditionStatus === 'LOCKED' ? 'Khóa (Locked)' : 'Thanh lý (Retired)'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                              <span style={{
-                                padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
-                                backgroundColor: item.status === 'AVAILABLE' ? '#ECFDF5' : item.status === 'RENTED' ? '#EFF6FF' : '#FFF7ED',
-                                color: item.status === 'AVAILABLE' ? '#047857' : item.status === 'RENTED' ? '#1D4ED8' : '#C2410C'
-                              }}>
-                                {item.status === 'AVAILABLE' ? 'Sẵn sàng' : item.status === 'RENTED' ? 'Đang thuê' : item.status === 'CLEANING' ? 'Đang giặt' : 'Bảo trì'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>{item.notes || '—'}</td>
-                            <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                              {!isRetired && (
-                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                                  <button
-                                    disabled={variantBusy}
-                                    onClick={() => {
-                                      setEditInvItem(item);
-                                      setEditInvStatus(item.status);
-                                      setEditInvCondition(item.conditionStatus);
-                                      setEditInvNotes(item.notes || '');
-                                      setIsEditInventoryOpen(true);
-                                    }}
-                                    style={{
-                                      padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
-                                      backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px',
-                                      color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1
-                                    }}
-                                  >
-                                    Cập nhật
-                                  </button>
-                                  <button
-                                    disabled={variantBusy}
-                                    onClick={() => handleDeleteInventoryItem(item._id)}
-                                    style={{
-                                      padding: '6px 12px', border: 'none', borderRadius: '4px',
-                                      backgroundColor: '#FEE2E2', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px',
-                                      color: '#991B1B', opacity: variantBusy ? 0.5 : 1
-                                    }}
-                                  >
-                                    Thanh lý
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Inventory pagination controls */}
-                {invTotal > invLimit && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '16px', fontSize: '13px' }}>
-                    <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                      Hiển thị {inventoryItems.length} trên tổng số {invTotal} hiện vật
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        disabled={invPage <= 1}
-                        onClick={() => setInvPage(p => Math.max(1, p - 1))}
-                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                      >
-                        Trang trước
-                      </button>
-                      <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
-                        {invPage} / {Math.ceil(invTotal / invLimit)}
-                      </span>
-                      <button
-                        disabled={invPage >= Math.ceil(invTotal / invLimit)}
-                        onClick={() => setInvPage(p => p + 1)}
-                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage < Math.ceil(invTotal / invLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                      >
-                        Trang sau
-                      </button>
-                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
+                          <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SKU</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SIZE</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LƯỢNG</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TRẠNG THÁI</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GHI CHÚ</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>THAO TÁC</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventoryItems.map((item: any) => {
+                          const isRetired = item.conditionStatus === 'RETIRED';
+                          return (
+                            <tr key={item._id} style={{ borderBottom: '1px solid var(--color-light-border)', opacity: isRetired ? 0.6 : 1 }}>
+                              <td style={{ padding: '16px 20px', fontWeight: 700, color: 'var(--color-primary)' }}>{item.sku}</td>
+                              <td style={{ padding: '16px 20px', fontWeight: 700 }}>{item.productId?.name || 'Sản phẩm lỗi'}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.color}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                                  backgroundColor: item.conditionStatus === 'NEW' ? '#EEF2F6' : item.conditionStatus === 'GOOD' ? '#F0FDF4' : item.conditionStatus === 'MINOR_DAMAGE' ? '#FFFBEB' : item.conditionStatus === 'LOCKED' ? '#FEF2F2' : '#F4F4F5',
+                                  color: item.conditionStatus === 'NEW' ? '#475569' : item.conditionStatus === 'GOOD' ? '#166534' : item.conditionStatus === 'MINOR_DAMAGE' ? '#B45309' : item.conditionStatus === 'LOCKED' ? '#991B1B' : '#71717A'
+                                }}>
+                                  {item.conditionStatus === 'NEW' ? 'Mới (New)' : item.conditionStatus === 'GOOD' ? 'Tốt (Good)' : item.conditionStatus === 'MINOR_DAMAGE' ? 'Hỏng nhẹ' : item.conditionStatus === 'LOCKED' ? 'Khóa (Locked)' : 'Thanh lý (Retired)'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                                  backgroundColor: item.status === 'AVAILABLE' ? '#ECFDF5' : item.status === 'RENTED' ? '#EFF6FF' : '#FFF7ED',
+                                  color: item.status === 'AVAILABLE' ? '#047857' : item.status === 'RENTED' ? '#1D4ED8' : '#C2410C'
+                                }}>
+                                  {item.status === 'AVAILABLE' ? 'Sẵn sàng' : item.status === 'RENTED' ? 'Đang thuê' : item.status === 'CLEANING' ? 'Đang giặt' : 'Bảo trì'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>{item.notes || '—'}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                                {!isRetired && (
+                                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                    <button
+                                      disabled={variantBusy}
+                                      onClick={() => {
+                                        setEditInvItem(item);
+                                        setEditInvStatus(item.status);
+                                        setEditInvCondition(item.conditionStatus);
+                                        setEditInvNotes(item.notes || '');
+                                        setIsEditInventoryOpen(true);
+                                      }}
+                                      style={{
+                                        padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
+                                        backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px',
+                                        color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1
+                                      }}
+                                    >
+                                      Cập nhật
+                                    </button>
+                                    <button
+                                      disabled={variantBusy}
+                                      onClick={() => handleDeleteInventoryItem(item._id)}
+                                      style={{
+                                        padding: '6px 12px', border: 'none', borderRadius: '4px',
+                                        backgroundColor: '#FEE2E2', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px',
+                                        color: '#991B1B', opacity: variantBusy ? 0.5 : 1
+                                      }}
+                                    >
+                                      Thanh lý
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-              </>)}
+
+                  {/* Inventory pagination controls */}
+                  {invTotal > invLimit && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '16px', fontSize: '13px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                        Hiển thị {inventoryItems.length} trên tổng số {invTotal} hiện vật
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          disabled={invPage <= 1}
+                          onClick={() => setInvPage(p => Math.max(1, p - 1))}
+                          style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                        >
+                          Trang trước
+                        </button>
+                        <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
+                          {invPage} / {Math.ceil(invTotal / invLimit)}
+                        </span>
+                        <button
+                          disabled={invPage >= Math.ceil(invTotal / invLimit)}
+                          onClick={() => setInvPage(p => p + 1)}
+                          style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage < Math.ceil(invTotal / invLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                        >
+                          Trang sau
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>)}
             </div>
           </>
         )}
@@ -2617,13 +2795,13 @@ export const ProviderDashboard: React.FC = () => {
             <button onClick={() => { setCurrentView('collections'); setCollectionTab('products'); }} style={navItemStyle(currentView === 'collections' && collectionTab === 'products')}><Layers size={18} /> Bộ sưu tập</button>
             <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ</button>
             {hasPhotographyCapability && (
-            <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio</button>
+              <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio</button>
             )}
             {hasPhotographyCapability && (
               <button onClick={() => setCurrentView('photography-packages')} style={navItemStyle(currentView === 'photography-packages')}><Package size={18} /> Gói chụp ảnh</button>
             )}
             <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn</button>
-            <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi</button>
+            <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi & Combo</button>
             <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi</button>
             <button onClick={() => setCurrentView('trust')} style={navItemStyle(currentView === 'trust')}><Users size={18} /> Đánh giá khách hàng</button>
             <button onClick={() => setCurrentView('payouts')} style={navItemStyle(currentView === 'payouts')}><DollarSign size={18} /> Lịch sử quyết toán</button>
@@ -2881,142 +3059,142 @@ export const ProviderDashboard: React.FC = () => {
                       const hasRentalLifecycle = Array.isArray(o.items) && o.items.some((item: any) => Boolean(item.rentalFulfillment));
                       void hasRentalLifecycle;
                       return (
-                    <tr key={o._id} style={{ borderBottom: '1px solid var(--color-light-border)', transition: 'var(--transition-smooth)' }}>
-                      <td style={{ padding: '16px 20px', fontWeight: 700 }}>{o.id}</td>
-                      <td style={{ padding: '16px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--color-light-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '11px', color: 'var(--color-text-secondary)', border: '1px solid var(--color-light-border)' }}>{o.customerInitials}</div>
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: '13px' }}>{o.customerName}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{o.customerEmail}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '16px 20px', fontWeight: 600 }}>{o.productName}</td>
-                      <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)' }}>{o.orderDate}</td>
-                      <td style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'right' }}>{o.total}</td>
-                      <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                          <span style={statusBadgeStyle(o.status)}>{o.status}</span>
-                          {o.pickupDamageReport && (
-                            <span style={{
-                              fontSize: '9px',
-                              fontWeight: 700,
-                              backgroundColor: '#FEF9E7',
-                              color: '#D35400',
-                              border: '1px solid #F5CBA7',
-                              borderRadius: '4px',
-                              padding: '2px 6px',
-                              display: 'inline-block',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              ⚠️ KHÁCH BÁO LỖI
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td style={{ padding: '16px 20px', textAlign: 'center', position: 'relative' }}>
-                        <button onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
-                        {actionMenuId === o._id && (() => {
-                          // Các bước tiếp theo hợp lệ cho từng trạng thái (khớp với backend allowedTransitions)
-                          const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string }[]> = {
-                            PENDING_PAYMENT: [
-                              { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
-                              { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                            ],
-                            DEPOSIT_PAID: [
-                              { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
-                              { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
-                              { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                            ],
-                            CONFIRMED: [
-                              { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
-                              { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                            ],
-                            PICKUP_PENDING: [
-                              { label: 'Xác nhận đã lấy đồ', apiStatus: 'PICKED_UP', icon: <CheckCheck size={14} />, color: '#2e7d32' },
-                              { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                            ],
-                            PICKED_UP: [
-                              { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-                              { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
-                            ],
-                            RETURN_PENDING: [
-                              { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-                            ],
-                            RETURNED: [
-                              { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
-                            ],
-                          };
-                          const rawStatus = (o.rawStatus || '') as string;
-                          const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string }[] = nextStepsMap[rawStatus] || [];
-                          const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
-                          if (steps.length === 0 && !canReport) return null;
-                          return (
-                            <div style={{ position: 'absolute', right: '20px', top: '40px', width: '210px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
-                              {steps.length > 0 && (
-                                <div style={{ padding: '6px 12px 2px', fontSize: '10px', fontWeight: 700, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                  Cập nhật trạng thái
-                                </div>
-                              )}
-                              {steps.map((a: { label: string; apiStatus: string; icon: React.ReactNode; color: string }) => {
-                                const isHandoverAction = a.apiStatus === 'PICKUP_PENDING' || a.apiStatus === 'PICKED_UP';
-                                let isDisabled = false;
-                                if (isHandoverAction) {
-                                  const firstItem = o.items?.[0];
-                                  const startDateStr = firstItem?.startDate || firstItem?.rentalFrom;
-                                  if (startDateStr) {
-                                    const today = new Date();
-                                    const start = new Date(startDateStr);
-                                    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                                    const startZero = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                                    const diffDays = (startZero.getTime() - todayZero.getTime()) / (1000 * 60 * 60 * 24);
-                                    if (diffDays > 1) {
-                                      isDisabled = true;
-                                    }
-                                  }
-                                }
-                                return (
-                                  <button
-                                    key={a.apiStatus}
-                                    disabled={isDisabled}
-                                    onClick={() => changeOrderStatus(o._id, a.apiStatus)}
-                                    style={{
-                                      width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                      fontSize: '12px', border: 'none', background: 'none', 
-                                      cursor: isDisabled ? 'not-allowed' : 'pointer', 
-                                      color: isDisabled ? '#CCCCCC' : a.color,
-                                      opacity: isDisabled ? 0.6 : 1,
-                                      fontWeight: 600, textAlign: 'left',
-                                    }}
-                                    title={isDisabled ? "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)" : ""}
-                                  >
-                                    {a.icon} {a.label}
-                                  </button>
-                                );
-                              })}
-                              {canReport && (
-                                <button onClick={() => {
-                                  setReportingOrder(o);
-                                  setSelectedItemId(o.items?.[0]?._id || '');
-                                  setIncidentDesc('');
-                                  setIncidentPhotos([]);
-                                  setIncidentAmount(o.depositTotal || 0);
-                                  setIncidentActionType('CLEANING');
-                                  setActionMenuId(null);
-                                }} style={{
-                                  width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                  fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
-                                  fontWeight: 700, textAlign: 'left', borderTop: steps.length > 0 ? '1px solid var(--color-light-border)' : 'none'
-                                }}><Flag size={14} /> Báo cáo hỏng đồ</button>
+                        <tr key={o._id} style={{ borderBottom: '1px solid var(--color-light-border)', transition: 'var(--transition-smooth)' }}>
+                          <td style={{ padding: '16px 20px', fontWeight: 700 }}>{o.id}</td>
+                          <td style={{ padding: '16px 20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--color-light-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '11px', color: 'var(--color-text-secondary)', border: '1px solid var(--color-light-border)' }}>{o.customerInitials}</div>
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: '13px' }}>{o.customerName}</div>
+                                <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{o.customerEmail}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px 20px', fontWeight: 600 }}>{o.productName}</td>
+                          <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)' }}>{o.orderDate}</td>
+                          <td style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'right' }}>{o.total}</td>
+                          <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                              <span style={statusBadgeStyle(o.status)}>{o.status}</span>
+                              {o.pickupDamageReport && (
+                                <span style={{
+                                  fontSize: '9px',
+                                  fontWeight: 700,
+                                  backgroundColor: '#FEF9E7',
+                                  color: '#D35400',
+                                  border: '1px solid #F5CBA7',
+                                  borderRadius: '4px',
+                                  padding: '2px 6px',
+                                  display: 'inline-block',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  ⚠️ KHÁCH BÁO LỖI
+                                </span>
                               )}
                             </div>
-                          );
-                        })()}
-                      </td>
-                    </tr>
-                  );
-                }))}
+                          </td>
+                          <td style={{ padding: '16px 20px', textAlign: 'center', position: 'relative' }}>
+                            <button onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
+                            {actionMenuId === o._id && (() => {
+                              // Các bước tiếp theo hợp lệ cho từng trạng thái (khớp với backend allowedTransitions)
+                              const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string }[]> = {
+                                PENDING_PAYMENT: [
+                                  { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                  { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                ],
+                                DEPOSIT_PAID: [
+                                  { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                  { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                  { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                ],
+                                CONFIRMED: [
+                                  { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                  { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                ],
+                                PICKUP_PENDING: [
+                                  { label: 'Xác nhận đã lấy đồ', apiStatus: 'PICKED_UP', icon: <CheckCheck size={14} />, color: '#2e7d32' },
+                                  { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                ],
+                                PICKED_UP: [
+                                  { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                  { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                ],
+                                RETURN_PENDING: [
+                                  { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                ],
+                                RETURNED: [
+                                  { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                ],
+                              };
+                              const rawStatus = (o.rawStatus || '') as string;
+                              const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string }[] = nextStepsMap[rawStatus] || [];
+                              const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
+                              if (steps.length === 0 && !canReport) return null;
+                              return (
+                                <div style={{ position: 'absolute', right: '20px', top: '40px', width: '210px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
+                                  {steps.length > 0 && (
+                                    <div style={{ padding: '6px 12px 2px', fontSize: '10px', fontWeight: 700, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                      Cập nhật trạng thái
+                                    </div>
+                                  )}
+                                  {steps.map((a: { label: string; apiStatus: string; icon: React.ReactNode; color: string }) => {
+                                    const isHandoverAction = a.apiStatus === 'PICKUP_PENDING' || a.apiStatus === 'PICKED_UP';
+                                    let isDisabled = false;
+                                    if (isHandoverAction) {
+                                      const firstItem = o.items?.[0];
+                                      const startDateStr = firstItem?.startDate || firstItem?.rentalFrom;
+                                      if (startDateStr) {
+                                        const today = new Date();
+                                        const start = new Date(startDateStr);
+                                        const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                                        const startZero = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                                        const diffDays = (startZero.getTime() - todayZero.getTime()) / (1000 * 60 * 60 * 24);
+                                        if (diffDays > 1) {
+                                          isDisabled = true;
+                                        }
+                                      }
+                                    }
+                                    return (
+                                      <button
+                                        key={a.apiStatus}
+                                        disabled={isDisabled}
+                                        onClick={() => changeOrderStatus(o._id, a.apiStatus)}
+                                        style={{
+                                          width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                          fontSize: '12px', border: 'none', background: 'none',
+                                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                          color: isDisabled ? '#CCCCCC' : a.color,
+                                          opacity: isDisabled ? 0.6 : 1,
+                                          fontWeight: 600, textAlign: 'left',
+                                        }}
+                                        title={isDisabled ? "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)" : ""}
+                                      >
+                                        {a.icon} {a.label}
+                                      </button>
+                                    );
+                                  })}
+                                  {canReport && (
+                                    <button onClick={() => {
+                                      setReportingOrder(o);
+                                      setSelectedItemId(o.items?.[0]?._id || '');
+                                      setIncidentDesc('');
+                                      setIncidentPhotos([]);
+                                      setIncidentAmount(o.depositTotal || 0);
+                                      setIncidentActionType('CLEANING');
+                                      setActionMenuId(null);
+                                    }} style={{
+                                      width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                      fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
+                                      fontWeight: 700, textAlign: 'left', borderTop: steps.length > 0 ? '1px solid var(--color-light-border)' : 'none'
+                                    }}><Flag size={14} /> Báo cáo hỏng đồ</button>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      );
+                    }))}
                 </tbody>
               </table>
               <div style={{ borderTop: '1px solid var(--color-light-border)', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', fontSize: '12px' }}>
@@ -3123,189 +3301,189 @@ export const ProviderDashboard: React.FC = () => {
             </div>
 
             {collectionTab === 'products' && (
-            <>
-            {/* Search and Sort controls */}
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '24px', backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-              <input
-                type="text"
-                placeholder="Tìm kiếm áo dài theo tên..."
-                value={prodSearch}
-                onChange={(e) => { setProdSearch(e.target.value); setProdPage(1); }}
-                style={{ flex: 1, minWidth: '200px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none' }}
-              />
-              <select
-                value={prodSizeFilter}
-                onChange={(e) => { setProdSizeFilter(e.target.value); setProdPage(1); }}
-                style={{ width: '130px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
-              >
-                <option value="">Tất cả Size</option>
-                <option value="S">Size S</option>
-                <option value="M">Size M</option>
-                <option value="L">Size L</option>
-                <option value="XL">Size XL</option>
-                <option value="XXL">Size XXL</option>
-              </select>
-              <select
-                value={prodColorFilter}
-                onChange={(e) => { setProdColorFilter(e.target.value); setProdPage(1); }}
-                style={{ width: '140px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
-              >
-                <option value="">Tất cả Màu</option>
-                <option value="RED">Đỏ (Red)</option>
-                <option value="WHITE">Trắng (White)</option>
-                <option value="GOLD">Vàng (Gold)</option>
-                <option value="BLACK">Đen (Black)</option>
-                <option value="PINK">Hồng (Pink)</option>
-                <option value="BLUE">Xanh dương</option>
-                <option value="GREEN">Xanh lá</option>
-                <option value="BROWN">Nâu</option>
-              </select>
-              <select
-                value={prodSortBy}
-                onChange={(e) => { setProdSortBy(e.target.value); setProdPage(1); }}
-                style={{ width: '180px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
-              >
-                <option value="newest">Mới nhất (Newest)</option>
-                <option value="price_asc">Giá thuê: Thấp - Cao</option>
-                <option value="price_desc">Giá thuê: Cao - Thấp</option>
-              </select>
-            </div>
-
-            {loadingProducts ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                Đang tải dữ liệu sản phẩm...
-              </div>
-            ) : products.length === 0 ? (
-              <div style={{ padding: '100px 40px', textAlign: 'center', backgroundColor: 'white', border: '1px dashed var(--color-light-border)', borderRadius: 'var(--radius-md)' }}>
-                <Layers size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5, marginBottom: '16px', margin: '0 auto' }} />
-                <h4 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Bộ sưu tập của bạn đang trống</h4>
-                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '6px', marginBottom: '20px' }}>Bắt đầu bằng việc thêm sản phẩm đầu tiên để tiếp cận hàng ngàn khách hàng.</p>
-                <button onClick={openAddModal} className="vh-btn vh-btn-primary" style={{ padding: '10px 20px', borderRadius: '6px' }}>Thêm Áo Dài đầu tiên</button>
-              </div>
-            ) : (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
-                {products.map((p) => (
-                  <div key={p._id} style={{
-                    backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)',
-                    boxShadow: 'var(--shadow-sm)', overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'all 0.2s ease',
-                  }}>
-                    {/* Image */}
-                    <div style={{ height: '220px', overflow: 'hidden', position: 'relative', backgroundColor: 'var(--color-light-bg)' }}>
-                      <img
-                        src={getImageUrl(p.images?.[0])}
-                        alt={p.name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                      <span style={{
-                        position: 'absolute', top: '12px', right: '12px',
-                        padding: '4px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: 700,
-                        backgroundColor: p.status === 'ACTIVE' ? 'var(--color-dark-bg)' : p.status === 'DRAFT' ? 'var(--color-gold)' : '#999',
-                        color: 'white',
-                      }}>
-                        {p.status === 'ACTIVE' ? 'ĐANG BÁN' : p.status === 'DRAFT' ? 'DỰ THẢO' : 'ẨN'}
-                      </span>
-                    </div>
-
-                    {/* Meta */}
-                    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        {typeof p.categoryId === 'object' ? p.categoryId.name : 'Áo dài'}
-                      </span>
-                      <h4 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0, lineHeight: 1.4 }}>
-                        {p.name}
-                      </h4>
-                      <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: 0, lineClamp: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '36px' }}>
-                        {p.description || 'Không có mô tả sản phẩm.'}
-                      </p>
-
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
-                        {p.sizes?.map(s => (
-                          <span key={s} style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', border: '1px solid var(--color-light-border)', borderRadius: '4px', backgroundColor: 'var(--color-light-bg)' }}>{s}</span>
-                        ))}
-                      </div>
-
-                      <div style={{ borderTop: '1px solid var(--color-light-border)', paddingTop: '12px', marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>GIÁ THUÊ / NGÀY</div>
-                          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>{(p.basePrice ?? (p as any).price ?? 0).toLocaleString('vi-VN')}đ</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600, textAlign: 'right' }}>TIỀN ĐẶT CỌC</div>
-                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'right' }}>{(p.depositAmount ?? 0).toLocaleString('vi-VN')}đ</div>
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '12px', borderTop: '1px solid var(--color-light-border)', paddingTop: '12px' }}>
-                        <button
-                          onClick={() => openEditModal(p)}
-                          style={{
-                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                            backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '8px',
-                            borderRadius: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)',
-                            cursor: 'pointer', transition: 'all 0.2s',
-                          }}
-                        >
-                          <Pencil size={12} /> Chỉnh sửa
-                        </button>
-                        <button
-                          onClick={() => handleDuplicateProduct(p)}
-                          style={{
-                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                            backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '8px',
-                            borderRadius: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)',
-                            cursor: 'pointer', transition: 'all 0.2s',
-                          }}
-                        >
-                          <Copy size={12} /> Nhân bản
-                        </button>
-                        <button
-                          onClick={() => handleDeleteProduct(p._id, p.name)}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px',
-                            backgroundColor: 'white', border: '1px solid #FCA5A5', borderRadius: '4px',
-                            color: '#EF4444', cursor: 'pointer', transition: 'all 0.2s',
-                          }}
-                          title="Xóa sản phẩm"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Product list pagination bar */}
-              {prodTotal > prodLimit && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '24px', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                    Hiển thị {products.length} trên tổng số {prodTotal} thiết kế
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button
-                      disabled={prodPage <= 1}
-                      onClick={() => setProdPage(p => Math.max(1, p - 1))}
-                      style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                    >
-                      Trang trước
-                    </button>
-                    <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
-                      {prodPage} / {Math.ceil(prodTotal / prodLimit)}
-                    </span>
-                    <button
-                      disabled={prodPage >= Math.ceil(prodTotal / prodLimit)}
-                      onClick={() => setProdPage(p => p + 1)}
-                      style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage < Math.ceil(prodTotal / prodLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                    >
-                      Trang sau
-                    </button>
-                  </div>
+                {/* Search and Sort controls */}
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '24px', backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm áo dài theo tên..."
+                    value={prodSearch}
+                    onChange={(e) => { setProdSearch(e.target.value); setProdPage(1); }}
+                    style={{ flex: 1, minWidth: '200px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none' }}
+                  />
+                  <select
+                    value={prodSizeFilter}
+                    onChange={(e) => { setProdSizeFilter(e.target.value); setProdPage(1); }}
+                    style={{ width: '130px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+                  >
+                    <option value="">Tất cả Size</option>
+                    <option value="S">Size S</option>
+                    <option value="M">Size M</option>
+                    <option value="L">Size L</option>
+                    <option value="XL">Size XL</option>
+                    <option value="XXL">Size XXL</option>
+                  </select>
+                  <select
+                    value={prodColorFilter}
+                    onChange={(e) => { setProdColorFilter(e.target.value); setProdPage(1); }}
+                    style={{ width: '140px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+                  >
+                    <option value="">Tất cả Màu</option>
+                    <option value="RED">Đỏ (Red)</option>
+                    <option value="WHITE">Trắng (White)</option>
+                    <option value="GOLD">Vàng (Gold)</option>
+                    <option value="BLACK">Đen (Black)</option>
+                    <option value="PINK">Hồng (Pink)</option>
+                    <option value="BLUE">Xanh dương</option>
+                    <option value="GREEN">Xanh lá</option>
+                    <option value="BROWN">Nâu</option>
+                  </select>
+                  <select
+                    value={prodSortBy}
+                    onChange={(e) => { setProdSortBy(e.target.value); setProdPage(1); }}
+                    style={{ width: '180px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+                  >
+                    <option value="newest">Mới nhất (Newest)</option>
+                    <option value="price_asc">Giá thuê: Thấp - Cao</option>
+                    <option value="price_desc">Giá thuê: Cao - Thấp</option>
+                  </select>
                 </div>
-              )}
-            </>)}
-            </>
+
+                {loadingProducts ? (
+                  <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                    Đang tải dữ liệu sản phẩm...
+                  </div>
+                ) : products.length === 0 ? (
+                  <div style={{ padding: '100px 40px', textAlign: 'center', backgroundColor: 'white', border: '1px dashed var(--color-light-border)', borderRadius: 'var(--radius-md)' }}>
+                    <Layers size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5, marginBottom: '16px', margin: '0 auto' }} />
+                    <h4 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Bộ sưu tập của bạn đang trống</h4>
+                    <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '6px', marginBottom: '20px' }}>Bắt đầu bằng việc thêm sản phẩm đầu tiên để tiếp cận hàng ngàn khách hàng.</p>
+                    <button onClick={openAddModal} className="vh-btn vh-btn-primary" style={{ padding: '10px 20px', borderRadius: '6px' }}>Thêm Áo Dài đầu tiên</button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
+                      {products.map((p) => (
+                        <div key={p._id} style={{
+                          backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)',
+                          boxShadow: 'var(--shadow-sm)', overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'all 0.2s ease',
+                        }}>
+                          {/* Image */}
+                          <div style={{ height: '220px', overflow: 'hidden', position: 'relative', backgroundColor: 'var(--color-light-bg)' }}>
+                            <img
+                              src={getImageUrl(p.images?.[0])}
+                              alt={p.name}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <span style={{
+                              position: 'absolute', top: '12px', right: '12px',
+                              padding: '4px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: 700,
+                              backgroundColor: p.status === 'ACTIVE' ? 'var(--color-dark-bg)' : p.status === 'DRAFT' ? 'var(--color-gold)' : '#999',
+                              color: 'white',
+                            }}>
+                              {p.status === 'ACTIVE' ? 'ĐANG BÁN' : p.status === 'DRAFT' ? 'DỰ THẢO' : 'ẨN'}
+                            </span>
+                          </div>
+
+                          {/* Meta */}
+                          <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              {typeof p.categoryId === 'object' ? p.categoryId.name : 'Áo dài'}
+                            </span>
+                            <h4 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0, lineHeight: 1.4 }}>
+                              {p.name}
+                            </h4>
+                            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: 0, lineClamp: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '36px' }}>
+                              {p.description || 'Không có mô tả sản phẩm.'}
+                            </p>
+
+                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                              {p.sizes?.map(s => (
+                                <span key={s} style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', border: '1px solid var(--color-light-border)', borderRadius: '4px', backgroundColor: 'var(--color-light-bg)' }}>{s}</span>
+                              ))}
+                            </div>
+
+                            <div style={{ borderTop: '1px solid var(--color-light-border)', paddingTop: '12px', marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div>
+                                <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>GIÁ THUÊ / NGÀY</div>
+                                <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>{(p.basePrice ?? (p as any).price ?? 0).toLocaleString('vi-VN')}đ</div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600, textAlign: 'right' }}>TIỀN ĐẶT CỌC</div>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'right' }}>{(p.depositAmount ?? 0).toLocaleString('vi-VN')}đ</div>
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '12px', borderTop: '1px solid var(--color-light-border)', paddingTop: '12px' }}>
+                              <button
+                                onClick={() => openEditModal(p)}
+                                style={{
+                                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                  backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '8px',
+                                  borderRadius: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)',
+                                  cursor: 'pointer', transition: 'all 0.2s',
+                                }}
+                              >
+                                <Pencil size={12} /> Chỉnh sửa
+                              </button>
+                              <button
+                                onClick={() => handleDuplicateProduct(p)}
+                                style={{
+                                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                  backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '8px',
+                                  borderRadius: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)',
+                                  cursor: 'pointer', transition: 'all 0.2s',
+                                }}
+                              >
+                                <Copy size={12} /> Nhân bản
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProduct(p._id, p.name)}
+                                style={{
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px',
+                                  backgroundColor: 'white', border: '1px solid #FCA5A5', borderRadius: '4px',
+                                  color: '#EF4444', cursor: 'pointer', transition: 'all 0.2s',
+                                }}
+                                title="Xóa sản phẩm"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Product list pagination bar */}
+                    {prodTotal > prodLimit && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '24px', fontSize: '13px' }}>
+                        <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                          Hiển thị {products.length} trên tổng số {prodTotal} thiết kế
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            disabled={prodPage <= 1}
+                            onClick={() => setProdPage(p => Math.max(1, p - 1))}
+                            style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                          >
+                            Trang trước
+                          </button>
+                          <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
+                            {prodPage} / {Math.ceil(prodTotal / prodLimit)}
+                          </span>
+                          <button
+                            disabled={prodPage >= Math.ceil(prodTotal / prodLimit)}
+                            onClick={() => setProdPage(p => p + 1)}
+                            style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage < Math.ceil(prodTotal / prodLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                          >
+                            Trang sau
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>)}
+              </>
             )}
             {collectionTab === 'inventory' && (
               <div>{renderInventoryView()}</div>
@@ -3894,6 +4072,408 @@ export const ProviderDashboard: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {/* COMBO PROMOTION SECTION */}
+                {hasPhotographyCapability && hasAodaiCapability && (
+                  <div style={{ borderTop: '2px dashed var(--color-light-border)', paddingTop: '40px', marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--color-primary-dark)', margin: 0 }}>Quản lý Combo Khuyến Mãi (Áo Dài + Photographer)</h3>
+                      <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '6px' }}>
+                        Tạo gói combo kết hợp thuê áo dài và thuê thợ chụp ảnh để được hưởng mức chiết khấu hấp dẫn hơn.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', alignItems: 'start' }}>
+                      {/* Form Create/Edit Combo */}
+                      <form onSubmit={handleCreateOrUpdateCombo} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <h4 style={{ fontSize: '15px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px', textTransform: 'uppercase' }}>
+                          {editingComboId ? 'CẬP NHẬT COMBO' : 'TẠO COMBO MỚI'}
+                        </h4>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN COMBO KHUYẾN MÃI</span>
+                          <input
+                            type="text"
+                            placeholder="Ví dụ: Combo Tràng An - Lưu giữ khoảnh khắc"
+                            value={cName}
+                            onChange={(e) => setCName(e.target.value)}
+                            style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                            required
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÔ TẢ COMBO (MÔ TẢ NGẮN)</span>
+                          <textarea
+                            placeholder="Mô tả quyền lợi combo, ví dụ: Bao gồm 1 bộ áo dài và 2 tiếng chụp hình ngoại cảnh..."
+                            value={cDesc}
+                            onChange={(e) => setCDesc(e.target.value)}
+                            rows={2}
+                            style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'none', fontFamily: 'inherit' }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHỌN ÁO DÀI</span>
+                            {cProductId ? (
+                              (() => {
+                                const prod = myProductsList.find(p => p._id === cProductId);
+                                return (
+                                  <div style={{ display: 'flex', gap: '10px', padding: '8px', border: '1px solid var(--color-primary)', borderRadius: '8px', backgroundColor: 'var(--color-primary-trans)', alignItems: 'center' }}>
+                                    <img src={prod?.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'} alt={prod?.name} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prod?.name}</div>
+                                      <div style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600 }}>{prod?.basePrice?.toLocaleString('vi-VN')}đ</div>
+                                    </div>
+                                    <button type="button" onClick={() => setIsAoDaiModalOpen(true)} style={{ border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Đổi</button>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setIsAoDaiModalOpen(true)}
+                                style={{ padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '6px', fontSize: '13px', fontWeight: 600, color: '#64748B', backgroundColor: '#F8FAFC', cursor: 'pointer', textAlign: 'center' }}
+                              >
+                                + Chọn Áo Dài
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHỌN GÓI CHỤP ẢNH</span>
+                            {cPackageId ? (
+                              (() => {
+                                const pkg = photoPackages.find(p => p._id === cPackageId);
+                                return (
+                                  <div style={{ display: 'flex', gap: '10px', padding: '8px', border: '1px solid var(--color-primary)', borderRadius: '8px', backgroundColor: 'var(--color-primary-trans)', alignItems: 'center' }}>
+                                    <img src={pkg?.images?.[0] || 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb'} alt={pkg?.name} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pkg?.name}</div>
+                                      <div style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600 }}>{pkg?.price?.toLocaleString('vi-VN')}đ ({pkg?.durationHours}h)</div>
+                                    </div>
+                                    <button type="button" onClick={() => setIsPackageModalOpen(true)} style={{ border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Đổi</button>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setIsPackageModalOpen(true)}
+                                style={{ padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '6px', fontSize: '13px', fontWeight: 600, color: '#64748B', backgroundColor: '#F8FAFC', cursor: 'pointer', textAlign: 'center' }}
+                              >
+                                + Chọn Gói Chụp
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>PHẦN TRĂM GIẢM GIÁ (%)</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={80}
+                              value={cDiscount}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '') {
+                                  setCDiscount('');
+                                } else {
+                                  const num = Number(val);
+                                  if (!isNaN(num)) {
+                                    setCDiscount(num);
+                                  }
+                                }
+                              }}
+                              onBlur={() => {
+                                if (cDiscount === '' || cDiscount < 1) {
+                                  setCDiscount(1);
+                                } else if (cDiscount > 80) {
+                                  setCDiscount(80);
+                                }
+                              }}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIÁ COMBO TỰ ĐỊNH NGHĨA (Đ - TÙY CHỌN)</span>
+                            <input
+                              type="number"
+                              placeholder="Để trống nếu tính theo %"
+                              value={cPrice}
+                              onChange={(e) => setCPrice(e.target.value)}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY BẮT ĐẦU COMBO</span>
+                            <input
+                              type="date"
+                              value={cValidFrom}
+                              onChange={(e) => setCValidFrom(e.target.value)}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY KẾT THÚC COMBO</span>
+                            <input
+                              type="date"
+                              value={cValidTo}
+                              onChange={(e) => setCValidTo(e.target.value)}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SỐ LƯỢNG COMBO GIỚI HẠN (STOCK)</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={cMaxUsage}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setCMaxUsage(val === '' ? '' : Number(val));
+                              }}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SỐ LƯỢNG NGƯỜI CHỤP TRONG COMBO</span>
+                            {(() => {
+                              const selectedPkg = photoPackages.find(p => p._id === cPackageId);
+                              const maxPeopleAllowed = selectedPkg ? (selectedPkg.maxPeople || 1) : 1;
+                              return (
+                                <>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={maxPeopleAllowed}
+                                    value={cShootPeopleCount}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const num = val === '' ? '' : Number(val);
+                                      if (num !== '' && num > maxPeopleAllowed) {
+                                        setCShootPeopleCount(maxPeopleAllowed);
+                                      } else {
+                                        setCShootPeopleCount(num);
+                                      }
+                                    }}
+                                    style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                                    required
+                                  />
+                                  {selectedPkg && (
+                                    <small style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                                      Số người chụp tối đa của gói: <strong style={{ color: 'var(--color-primary)' }}>{maxPeopleAllowed}</strong> người
+                                    </small>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SỐ LƯỢNG ÁO DÀI THUÊ TRONG COMBO</span>
+                            {(() => {
+                              const selectedAoDaiStock = cProductId && inventorySummary
+                                ? inventorySummary
+                                  .filter((item: any) => item.productId === cProductId)
+                                  .reduce((sum: number, item: any) => sum + (item.available || 0), 0)
+                                : 0;
+                              return (
+                                <>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={selectedAoDaiStock || 1}
+                                    value={cAoDaiQuantity}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const num = val === '' ? '' : Number(val);
+                                      if (num !== '' && num > selectedAoDaiStock && selectedAoDaiStock > 0) {
+                                        setCAoDaiQuantity(selectedAoDaiStock);
+                                      } else {
+                                        setCAoDaiQuantity(num);
+                                      }
+                                    }}
+                                    style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                                    required
+                                  />
+                                  <small style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                                    Tồn kho áo dài khả dụng: <strong style={{ color: 'var(--color-primary)' }}>{selectedAoDaiStock}</strong> sản phẩm
+                                  </small>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                          <button
+                            type="submit"
+                            style={{ padding: '11px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                          >
+                            {editingComboId ? 'Cập nhật Combo' : 'Tạo Combo ngay'}
+                          </button>
+                          {editingComboId && (
+                            <button
+                              type="button"
+                              onClick={clearComboForm}
+                              style={{ padding: '11px 24px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'white', color: 'var(--color-text-primary)', cursor: 'pointer' }}
+                            >
+                              Hủy bỏ
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Modal chọn Áo Dài */}
+                        {isAoDaiModalOpen && (
+                          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                            <div style={{ backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} onClick={(e) => e.stopPropagation()}>
+                              <div style={{ padding: '20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>Chọn Áo Dài Cho Combo</h3>
+                                <button type="button" onClick={() => setIsAoDaiModalOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}><X size={20} /></button>
+                              </div>
+                              <div style={{ padding: '16px', borderBottom: '1px solid #E2E8F0' }}>
+                                <input
+                                  type="text"
+                                  placeholder="Tìm kiếm áo dài theo tên..."
+                                  value={aoDaiSearch}
+                                  onChange={(e) => setAoDaiSearch(e.target.value)}
+                                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
+                                />
+                              </div>
+                              <div style={{ padding: '20px', overflowY: 'auto', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {myProductsList.filter(p => p.name.toLowerCase().includes(aoDaiSearch.toLowerCase())).map((prod) => (
+                                  <div
+                                    key={prod._id}
+                                    onClick={() => { setCProductId(prod._id); setIsAoDaiModalOpen(false); }}
+                                    style={{ display: 'flex', gap: '12px', padding: '12px', border: cProductId === prod._id ? '2px solid var(--color-primary)' : '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', backgroundColor: cProductId === prod._id ? 'var(--color-primary-trans)' : 'white', transition: 'all 0.2s', alignItems: 'center' }}
+                                  >
+                                    <img src={prod.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'} alt={prod.name} style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1 }}>
+                                      <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{prod.name}</strong>
+                                      <div style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 700, marginTop: '2px' }}>{prod.basePrice?.toLocaleString('vi-VN')}đ</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Modal chọn Gói chụp ảnh */}
+                        {isPackageModalOpen && (
+                          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                            <div style={{ backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} onClick={(e) => e.stopPropagation()}>
+                              <div style={{ padding: '20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>Chọn Gói Chụp Cho Combo</h3>
+                                <button type="button" onClick={() => setIsPackageModalOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}><X size={20} /></button>
+                              </div>
+                              <div style={{ padding: '16px', borderBottom: '1px solid #E2E8F0' }}>
+                                <input
+                                  type="text"
+                                  placeholder="Tìm kiếm gói chụp theo tên..."
+                                  value={packageSearch}
+                                  onChange={(e) => setPackageSearch(e.target.value)}
+                                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
+                                />
+                              </div>
+                              <div style={{ padding: '20px', overflowY: 'auto', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {photoPackages.filter(p => p.name.toLowerCase().includes(packageSearch.toLowerCase())).map((pkg) => (
+                                  <div
+                                    key={pkg._id}
+                                    onClick={() => { setCPackageId(pkg._id); setIsPackageModalOpen(false); }}
+                                    style={{ display: 'flex', gap: '12px', padding: '12px', border: cPackageId === pkg._id ? '2px solid var(--color-primary)' : '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', backgroundColor: cPackageId === pkg._id ? 'var(--color-primary-trans)' : 'white', transition: 'all 0.2s', alignItems: 'center' }}
+                                  >
+                                    <img src={pkg.images?.[0] || 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb'} alt={pkg.name} style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1 }}>
+                                      <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{pkg.name}</strong>
+                                      <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>Thời lượng: {pkg.durationHours}h</div>
+                                      <div style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 700, marginTop: '2px' }}>{pkg.price?.toLocaleString('vi-VN')}đ</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </form>
+
+                      {/* Danh sách Combo */}
+                      <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+                        <h4 style={{ fontSize: '15px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px', textTransform: 'uppercase' }}>
+                          DANH SÁCH COMBO ĐANG CHẠY
+                        </h4>
+                        {combos.length === 0 ? (
+                          <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', margin: 'auto' }}>Chưa có combo khuyến mãi nào được tạo.</p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', maxHeight: '480px' }}>
+                            {combos.map((cb) => (
+                              <div key={cb._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+                                <div style={{ flex: 1, marginRight: '16px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ padding: '2px 8px', backgroundColor: 'var(--color-primary)', color: 'white', borderRadius: '4px', fontWeight: 700, fontSize: '11px' }}>
+                                      -{cb.discountPercent}%
+                                    </span>
+                                    <h5 style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{cb.name}</h5>
+                                  </div>
+                                  {cb.description && (
+                                    <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 8px 0' }}>{cb.description}</p>
+                                  )}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--color-text-primary)', marginTop: '8px' }}>
+                                    <div><strong>Áo dài:</strong> {cb.productId?.name || 'Sản phẩm đã bị xóa'}</div>
+                                    <div><strong>Gói chụp:</strong> {cb.photographyPackageId?.name || 'Gói chụp đã bị xóa'}</div>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                                  <div style={{ textAlign: 'right' }}>
+                                    <div style={{ textDecoration: 'line-through', color: '#94A3B8', fontSize: '11px' }}>
+                                      {((cb.productId?.basePrice || 0) + (cb.photographyPackageId?.price || 0)).toLocaleString('vi-VN')}đ
+                                    </div>
+                                    <div style={{ color: '#EF4444', fontWeight: 700, fontSize: '15px' }}>
+                                      {cb.comboPrice ? cb.comboPrice.toLocaleString('vi-VN') : Math.round(((cb.productId?.basePrice || 0) + (cb.photographyPackageId?.price || 0)) * (1 - cb.discountPercent / 100)).toLocaleString('vi-VN')}đ
+                                    </div>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                                    <button
+                                      onClick={() => handleEditCombo(cb)}
+                                      style={{ padding: '6px 10px', border: '1px solid var(--color-primary)', borderRadius: '4px', backgroundColor: 'white', color: 'var(--color-primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      Sửa
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteCombo(cb._id)}
+                                      style={{ padding: '6px 10px', border: '1px solid #EF4444', borderRadius: '4px', backgroundColor: 'white', color: '#EF4444', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      Xóa
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </main>
@@ -4306,389 +4886,389 @@ export const ProviderDashboard: React.FC = () => {
           </div>
 
           {wizardStep === 1 && (
-          <>
+            <>
 
-          {/* Name */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TÊN ÁO DÀI *</label>
-            <input
-              type="text"
-              value={prodName}
-              onChange={e => setProdName(e.target.value)}
-              placeholder="Ví dụ: Áo Dài Gấm Hoa Đỏ Hỷ Sự"
-              style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-              required
-            />
-          </div>
-
-          {/* Category & Status */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DANH MỤC *</label>
-              <select
-                value={prodCategoryId}
-                onChange={e => setProdCategoryId(e.target.value)}
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
-                required
-              >
-                {categories.map(c => (
-                  <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TRẠNG THÁI HIỂN THỊ</label>
-              <select
-                value={prodStatus}
-                onChange={e => setProdStatus(e.target.value as any)}
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
-              >
-                <option value="ACTIVE">Đang hoạt động (Bán)</option>
-                <option value="DRAFT">Bản nháp (Ẩn)</option>
-                <option value="INACTIVE">Ngừng kinh doanh</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Prices */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>GIÁ THUÊ (VNĐ / NGÀY) *</label>
-              <input
-                type="number"
-                value={prodBasePrice}
-                onChange={e => setProdBasePrice(e.target.value)}
-                placeholder="Ví dụ: 350000"
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                required
-              />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TIỀN ĐẶT CỌC ĐỒ (VNĐ) *</label>
-              <input
-                type="number"
-                value={prodDepositAmount}
-                onChange={e => setProdDepositAmount(e.target.value)}
-                placeholder="Ví dụ: 500000"
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                required
-              />
-            </div>
-          </div>
-
-          {/* Description */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>MÔ TẢ SẢN PHẨM</label>
-            <textarea
-              value={prodDescription}
-              onChange={e => setProdDescription(e.target.value)}
-              placeholder="Chất liệu lụa, độ co giãn, lưu ý giặt là..."
-              rows={3}
-              style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'vertical' }}
-            />
-          </div>
-
-          {/* Image Upload Component */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>HÌNH ẢNH SẢN PHẨM *</label>
-
-            {/* Drag & Drop Area */}
-            <div
-              style={{
-                border: '2px dashed var(--color-light-border)',
-                borderRadius: '8px',
-                padding: '24px',
-                textAlign: 'center',
-                backgroundColor: 'var(--color-light-bg)',
-                cursor: 'pointer',
-                transition: 'var(--transition-smooth)',
-                position: 'relative'
-              }}
-              onClick={() => document.getElementById('product-image-upload')?.click()}
-            >
-              <input
-                id="product-image-upload"
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handleImageChange}
-                style={{ display: 'none' }}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                <Upload size={28} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                  {uploadingImages ? 'Đang tải ảnh lên máy chủ...' : 'Click hoặc Kéo thả nhiều ảnh từ máy của bạn'}
-                </span>
-                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Hỗ trợ JPG, PNG, WEBP (Tối đa 10MB)</span>
+              {/* Name */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TÊN ÁO DÀI *</label>
+                <input
+                  type="text"
+                  value={prodName}
+                  onChange={e => setProdName(e.target.value)}
+                  placeholder="Ví dụ: Áo Dài Gấm Hoa Đỏ Hỷ Sự"
+                  style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                  required
+                />
               </div>
-            </div>
 
-            {/* Uploaded Images Preview */}
-            {prodImages.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '12px', marginTop: '8px' }}>
-                {prodImages.map((imgUrl, index) => (
-                  <div key={index} style={{ width: '80px', height: '80px', borderRadius: '6px', overflow: 'hidden', position: 'relative', border: '1px solid var(--color-light-border)' }}>
-                    <img
-                      src={getImageUrl(imgUrl)}
-                      alt={`preview-${index}`}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeImage(index)}
-                      style={{
-                        position: 'absolute', top: '2px', right: '2px',
-                        width: '18px', height: '18px', borderRadius: '50%',
-                        backgroundColor: 'rgba(0,0,0,0.6)', color: 'white',
-                        border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', fontSize: '10px'
-                      }}
-                      title="Xóa hình này"
-                    >
-                      <X size={10} />
-                    </button>
+              {/* Category & Status */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DANH MỤC *</label>
+                  <select
+                    value={prodCategoryId}
+                    onChange={e => setProdCategoryId(e.target.value)}
+                    style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
+                    required
+                  >
+                    {categories.map(c => (
+                      <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TRẠNG THÁI HIỂN THỊ</label>
+                  <select
+                    value={prodStatus}
+                    onChange={e => setProdStatus(e.target.value as any)}
+                    style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
+                  >
+                    <option value="ACTIVE">Đang hoạt động (Bán)</option>
+                    <option value="DRAFT">Bản nháp (Ẩn)</option>
+                    <option value="INACTIVE">Ngừng kinh doanh</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Prices */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>GIÁ THUÊ (VNĐ / NGÀY) *</label>
+                  <input
+                    type="number"
+                    value={prodBasePrice}
+                    onChange={e => setProdBasePrice(e.target.value)}
+                    placeholder="Ví dụ: 350000"
+                    style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TIỀN ĐẶT CỌC ĐỒ (VNĐ) *</label>
+                  <input
+                    type="number"
+                    value={prodDepositAmount}
+                    onChange={e => setProdDepositAmount(e.target.value)}
+                    placeholder="Ví dụ: 500000"
+                    style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>MÔ TẢ SẢN PHẨM</label>
+                <textarea
+                  value={prodDescription}
+                  onChange={e => setProdDescription(e.target.value)}
+                  placeholder="Chất liệu lụa, độ co giãn, lưu ý giặt là..."
+                  rows={3}
+                  style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'vertical' }}
+                />
+              </div>
+
+              {/* Image Upload Component */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>HÌNH ẢNH SẢN PHẨM *</label>
+
+                {/* Drag & Drop Area */}
+                <div
+                  style={{
+                    border: '2px dashed var(--color-light-border)',
+                    borderRadius: '8px',
+                    padding: '24px',
+                    textAlign: 'center',
+                    backgroundColor: 'var(--color-light-bg)',
+                    cursor: 'pointer',
+                    transition: 'var(--transition-smooth)',
+                    position: 'relative'
+                  }}
+                  onClick={() => document.getElementById('product-image-upload')?.click()}
+                >
+                  <input
+                    id="product-image-upload"
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <Upload size={28} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                      {uploadingImages ? 'Đang tải ảnh lên máy chủ...' : 'Click hoặc Kéo thả nhiều ảnh từ máy của bạn'}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Hỗ trợ JPG, PNG, WEBP (Tối đa 10MB)</span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
 
-          {/* Video Upload (tuỳ chọn) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>VIDEO GIỚI THIỆU (TÙY CHỌN)</label>
-            <div
-              style={{
-                border: '2px dashed var(--color-light-border)',
-                borderRadius: '8px',
-                padding: '16px',
-                textAlign: 'center',
-                backgroundColor: 'var(--color-light-bg)',
-                cursor: 'pointer',
-                transition: 'var(--transition-smooth)',
-              }}
-              onClick={() => document.getElementById('product-video-upload')?.click()}
-            >
-              <input
-                id="product-video-upload"
-                type="file"
-                multiple
-                accept="video/mp4,video/webm,video/quicktime"
-                onChange={handleVideoChange}
-                style={{ display: 'none' }}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                <Play size={22} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                  {uploadingVideos ? 'Đang tải video lên máy chủ...' : 'Click để chọn video từ máy của bạn'}
-                </span>
-                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Hỗ trợ MP4, WEBM, MOV (Tối đa 50MB / video · tối đa 2 video)</span>
-              </div>
-            </div>
-
-            {prodVideos.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', marginTop: '8px' }}>
-                {prodVideos.map((videoUrl, index) => (
-                  <div key={index} style={{ position: 'relative', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-light-border)', backgroundColor: '#000' }}>
-                    <video
-                      src={getImageUrl(videoUrl)}
-                      controls
-                      preload="metadata"
-                      style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block' }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeVideo(index)}
-                      style={{
-                        position: 'absolute', top: '4px', right: '4px',
-                        width: '20px', height: '20px', borderRadius: '50%',
-                        backgroundColor: 'rgba(0,0,0,0.65)', color: 'white',
-                        border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', zIndex: 2,
-                      }}
-                      title="Xóa video này"
-                    >
-                      <X size={11} />
-                    </button>
+                {/* Uploaded Images Preview */}
+                {prodImages.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '12px', marginTop: '8px' }}>
+                    {prodImages.map((imgUrl, index) => (
+                      <div key={index} style={{ width: '80px', height: '80px', borderRadius: '6px', overflow: 'hidden', position: 'relative', border: '1px solid var(--color-light-border)' }}>
+                        <img
+                          src={getImageUrl(imgUrl)}
+                          alt={`preview-${index}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          style={{
+                            position: 'absolute', top: '2px', right: '2px',
+                            width: '18px', height: '18px', borderRadius: '50%',
+                            backgroundColor: 'rgba(0,0,0,0.6)', color: 'white',
+                            border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer', fontSize: '10px'
+                          }}
+                          title="Xóa hình này"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>
 
-          </>
+              {/* Video Upload (tuỳ chọn) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>VIDEO GIỚI THIỆU (TÙY CHỌN)</label>
+                <div
+                  style={{
+                    border: '2px dashed var(--color-light-border)',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    textAlign: 'center',
+                    backgroundColor: 'var(--color-light-bg)',
+                    cursor: 'pointer',
+                    transition: 'var(--transition-smooth)',
+                  }}
+                  onClick={() => document.getElementById('product-video-upload')?.click()}
+                >
+                  <input
+                    id="product-video-upload"
+                    type="file"
+                    multiple
+                    accept="video/mp4,video/webm,video/quicktime"
+                    onChange={handleVideoChange}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                    <Play size={22} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                      {uploadingVideos ? 'Đang tải video lên máy chủ...' : 'Click để chọn video từ máy của bạn'}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Hỗ trợ MP4, WEBM, MOV (Tối đa 50MB / video · tối đa 2 video)</span>
+                  </div>
+                </div>
+
+                {prodVideos.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', marginTop: '8px' }}>
+                    {prodVideos.map((videoUrl, index) => (
+                      <div key={index} style={{ position: 'relative', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-light-border)', backgroundColor: '#000' }}>
+                        <video
+                          src={getImageUrl(videoUrl)}
+                          controls
+                          preload="metadata"
+                          style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeVideo(index)}
+                          style={{
+                            position: 'absolute', top: '4px', right: '4px',
+                            width: '20px', height: '20px', borderRadius: '50%',
+                            backgroundColor: 'rgba(0,0,0,0.65)', color: 'white',
+                            border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer', zIndex: 2,
+                          }}
+                          title="Xóa video này"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </>
           )}
 
           {wizardStep === 2 && (
-          <>
-          {editingProduct ? (
-            <div style={{ padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Biến thể & tồn kho hiện có</p>
-                <button type="button" onClick={() => { setAddInvProductId(editingProduct._id); setIsAddInventoryOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}>
-                  <Plus size={13} /> Nhập thêm hàng
-                </button>
-              </div>
-              {editInvSummary.length === 0 ? (
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {(prodSizes || []).map(sz => (<span key={'s' + sz} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{sz}</span>))}
-                  {(prodColors || []).map(c => (<span key={'c' + c} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{colorLabels[c] || c}</span>))}
-                  {(prodMaterials || []).map(m => (<span key={'m' + m} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{materialLabels[m] || m}</span>))}
+            <>
+              {editingProduct ? (
+                <div style={{ padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Biến thể & tồn kho hiện có</p>
+                    <button type="button" onClick={() => { setAddInvProductId(editingProduct._id); setIsAddInventoryOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}>
+                      <Plus size={13} /> Nhập thêm hàng
+                    </button>
+                  </div>
+                  {editInvSummary.length === 0 ? (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {(prodSizes || []).map(sz => (<span key={'s' + sz} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{sz}</span>))}
+                      {(prodColors || []).map(c => (<span key={'c' + c} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{colorLabels[c] || c}</span>))}
+                      {(prodMaterials || []).map(m => (<span key={'m' + m} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{materialLabels[m] || m}</span>))}
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid var(--color-light-border)', color: 'var(--color-text-secondary)' }}>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>SIZE</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>MÀU</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>CHẤT LIỆU</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>TỔNG</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>KHẢ DỤNG</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>THAO TÁC</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {editInvSummary.map((row: any, idx: number) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
+                              <td style={{ padding: '8px 12px', fontWeight: 600 }}>{row.size}</td>
+                              <td style={{ padding: '8px 12px', fontWeight: 600 }}>{colorLabels[row.color] || row.color}</td>
+                              <td style={{ padding: '8px 12px' }}>{materialLabels[row.material] || row.material || '—'}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>{row.total}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{row.available}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                  <button
+                                    type="button"
+                                    disabled={variantBusy}
+                                    onClick={() => { setVariantEditRow(row); setVariantEditQty(String(row.total)); }}
+                                    style={{ padding: '5px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1 }}
+                                  >
+                                    Sửa số lượng
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={variantBusy}
+                                    onClick={() => handleRemoveVariant(row)}
+                                    style={{ padding: '5px 10px', border: '1px solid #FECACA', borderRadius: '4px', backgroundColor: '#FEF2F2', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px', color: '#DC2626', opacity: variantBusy ? 0.5 : 1 }}
+                                  >
+                                    Xoá
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                    Nhập thêm hàng và sửa/xoá biến thể là thao tác trên KHO — có hiệu lực ngay, không chờ bấm "Lưu thay đổi". Nhập nhầm thì bấm Xoá ngay tại dòng đó.
+                    Trạng thái giặt / bảo trì / thanh lý của từng chiếc quản lý ở tab Tồn kho.
+                  </p>
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--color-light-border)', color: 'var(--color-text-secondary)' }}>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>SIZE</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>MÀU</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>CHẤT LIỆU</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>TỔNG</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>KHẢ DỤNG</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>THAO TÁC</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {editInvSummary.map((row: any, idx: number) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
-                          <td style={{ padding: '8px 12px', fontWeight: 600 }}>{row.size}</td>
-                          <td style={{ padding: '8px 12px', fontWeight: 600 }}>{colorLabels[row.color] || row.color}</td>
-                          <td style={{ padding: '8px 12px' }}>{materialLabels[row.material] || row.material || '—'}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>{row.total}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{row.available}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                              <button
-                                type="button"
-                                disabled={variantBusy}
-                                onClick={() => { setVariantEditRow(row); setVariantEditQty(String(row.total)); }}
-                                style={{ padding: '5px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1 }}
-                              >
-                                Sửa số lượng
-                              </button>
-                              <button
-                                type="button"
-                                disabled={variantBusy}
-                                onClick={() => handleRemoveVariant(row)}
-                                style={{ padding: '5px 10px', border: '1px solid #FECACA', borderRadius: '4px', backgroundColor: '#FEF2F2', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px', color: '#DC2626', opacity: variantBusy ? 0.5 : 1 }}
-                              >
-                                Xoá
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div>
+                  <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '0 0 10px' }}>Mỗi dòng là một biến thể (khác màu / chất liệu / số lượng). Kho sẽ tự sinh theo số lượng.</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', fontSize: '10.5px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', padding: '0 2px 6px' }}>
+                    <span>Size</span><span>Màu</span><span>Chất liệu</span><span>SL</span><span>Tình trạng</span><span></span>
+                  </div>
+                  {variants.map((v, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                      <select value={v.size} onChange={e => updateVariantRow(idx, 'size', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                        {sizesOptions.map(sz => (<option key={sz} value={sz}>{sz}</option>))}
+                      </select>
+                      <select value={v.color} onChange={e => updateVariantRow(idx, 'color', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                        {colorsOptions.map(c => (<option key={c} value={c}>{colorLabels[c] || c}</option>))}
+                      </select>
+                      <select value={v.material} onChange={e => updateVariantRow(idx, 'material', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                        {materialsOptions.map(m => (<option key={m} value={m}>{materialLabels[m] || m}</option>))}
+                      </select>
+                      <input type="number" min={1} value={v.quantity} onChange={e => updateVariantRow(idx, 'quantity', Math.max(1, Number(e.target.value) || 1))} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }} />
+                      <select value={v.condition} onChange={e => updateVariantRow(idx, 'condition', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                        {conditionOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                      </select>
+                      <button type="button" onClick={() => removeVariantRow(idx)} title="Xóa dòng" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                    <button type="button" onClick={addVariantRow} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px dashed var(--color-primary)', background: 'white', color: 'var(--color-primary)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
+                      <Plus size={14} /> Thêm dòng biến thể
+                    </button>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Tổng kho: {variants.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)} chiếc · {variants.length} biến thể</span>
+                  </div>
                 </div>
               )}
-              <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                Nhập thêm hàng và sửa/xoá biến thể là thao tác trên KHO — có hiệu lực ngay, không chờ bấm "Lưu thay đổi". Nhập nhầm thì bấm Xoá ngay tại dòng đó.
-                Trạng thái giặt / bảo trì / thanh lý của từng chiếc quản lý ở tab Tồn kho.
-              </p>
-            </div>
-          ) : (
-            <div>
-              <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '0 0 10px' }}>Mỗi dòng là một biến thể (khác màu / chất liệu / số lượng). Kho sẽ tự sinh theo số lượng.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', fontSize: '10.5px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', padding: '0 2px 6px' }}>
-                <span>Size</span><span>Màu</span><span>Chất liệu</span><span>SL</span><span>Tình trạng</span><span></span>
-              </div>
-              {variants.map((v, idx) => (
-                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
-                  <select value={v.size} onChange={e => updateVariantRow(idx, 'size', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
-                    {sizesOptions.map(sz => (<option key={sz} value={sz}>{sz}</option>))}
-                  </select>
-                  <select value={v.color} onChange={e => updateVariantRow(idx, 'color', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
-                    {colorsOptions.map(c => (<option key={c} value={c}>{colorLabels[c] || c}</option>))}
-                  </select>
-                  <select value={v.material} onChange={e => updateVariantRow(idx, 'material', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
-                    {materialsOptions.map(m => (<option key={m} value={m}>{materialLabels[m] || m}</option>))}
-                  </select>
-                  <input type="number" min={1} value={v.quantity} onChange={e => updateVariantRow(idx, 'quantity', Math.max(1, Number(e.target.value) || 1))} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }} />
-                  <select value={v.condition} onChange={e => updateVariantRow(idx, 'condition', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
-                    {conditionOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
-                  </select>
-                  <button type="button" onClick={() => removeVariantRow(idx)} title="Xóa dòng" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <X size={16} />
-                  </button>
-                </div>
-              ))}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-                <button type="button" onClick={addVariantRow} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px dashed var(--color-primary)', background: 'white', color: 'var(--color-primary)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
-                  <Plus size={14} /> Thêm dòng biến thể
-                </button>
-                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Tổng kho: {variants.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)} chiếc · {variants.length} biến thể</span>
-              </div>
-            </div>
-          )}
 
-          {/* Ảnh theo màu — mỗi màu khác nhau một ô, không phụ thuộc size nên không phải tải lặp */}
-          {colorsNeedingImages().length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
-              <div>
-                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>ẢNH THEO MÀU</p>
-                <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                  Khách đổi màu ở trang sản phẩm thì ảnh đổi theo. Màu nào bỏ trống sẽ dùng ảnh chung ở bước 1.
-                </p>
-              </div>
-
-              {colorsNeedingImages().map(color => {
-                const shots = prodColorImages[color] || [];
-                const busy = uploadingColor === color;
-                return (
-                  <div key={`ci-${color}`} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', borderRadius: '8px', border: '1px solid var(--color-light-border)', backgroundColor: 'white' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', fontWeight: 700 }}>
-                        <span style={{ width: '14px', height: '14px', borderRadius: '50%', border: '1px solid var(--color-light-border)', backgroundColor: colorSwatches[color] || '#D4D4D8' }} />
-                        {colorLabels[color] || color}
-                        {shots.length === 0 && (
-                          <span style={{ fontSize: '11px', fontWeight: 600, color: '#B45309' }}>— chưa có ảnh riêng</span>
-                        )}
-                      </span>
-                      <label style={{ padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700, color: 'var(--color-primary)', backgroundColor: 'white', cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
-                        {busy ? 'Đang tải...' : '+ Thêm ảnh'}
-                        <input type="file" accept="image/*" multiple hidden disabled={busy} onChange={e => handleColorImageChange(color, e)} />
-                      </label>
-                    </div>
-
-                    {shots.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {shots.map((url, idx) => (
-                          <div key={`${color}-${url}-${idx}`} style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-light-border)' }}>
-                            <img src={getImageUrl(url)} alt={`${color} ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            <button
-                              type="button"
-                              onClick={() => removeColorImage(color, idx)}
-                              style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', border: 'none', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '11px', lineHeight: 1, cursor: 'pointer' }}
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+              {/* Ảnh theo màu — mỗi màu khác nhau một ô, không phụ thuộc size nên không phải tải lặp */}
+              {colorsNeedingImages().length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>ẢNH THEO MÀU</p>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                      Khách đổi màu ở trang sản phẩm thì ảnh đổi theo. Màu nào bỏ trống sẽ dùng ảnh chung ở bước 1.
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          )}
-          </>
+
+                  {colorsNeedingImages().map(color => {
+                    const shots = prodColorImages[color] || [];
+                    const busy = uploadingColor === color;
+                    return (
+                      <div key={`ci-${color}`} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', borderRadius: '8px', border: '1px solid var(--color-light-border)', backgroundColor: 'white' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', fontWeight: 700 }}>
+                            <span style={{ width: '14px', height: '14px', borderRadius: '50%', border: '1px solid var(--color-light-border)', backgroundColor: colorSwatches[color] || '#D4D4D8' }} />
+                            {colorLabels[color] || color}
+                            {shots.length === 0 && (
+                              <span style={{ fontSize: '11px', fontWeight: 600, color: '#B45309' }}>— chưa có ảnh riêng</span>
+                            )}
+                          </span>
+                          <label style={{ padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700, color: 'var(--color-primary)', backgroundColor: 'white', cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+                            {busy ? 'Đang tải...' : '+ Thêm ảnh'}
+                            <input type="file" accept="image/*" multiple hidden disabled={busy} onChange={e => handleColorImageChange(color, e)} />
+                          </label>
+                        </div>
+
+                        {shots.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {shots.map((url, idx) => (
+                              <div key={`${color}-${url}-${idx}`} style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-light-border)' }}>
+                                <img src={getImageUrl(url)} alt={`${color} ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <button
+                                  type="button"
+                                  onClick={() => removeColorImage(color, idx)}
+                                  style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', border: 'none', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '11px', lineHeight: 1, cursor: 'pointer' }}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
 
           {wizardStep === 3 && (
-          <>
-          <SmartTagEditor
-            productId={editingProduct?._id ?? createdDraftId ?? undefined}
-            initialDecisionVersion={editingProduct?.taggingDecisionVersion}
-            onActiveTagsChange={setActiveTagCodes}
-          />
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
-            {editingProduct
-              ? 'Trường phái & dịp lễ của sản phẩm được suy tự động từ các thẻ đã chọn.'
-              : 'Bấm "Tạo gợi ý", chọn thẻ phù hợp (cần ít nhất 1 thẻ). Trường phái & dịp lễ sẽ được suy tự động từ thẻ.'}
-          </p>
-          </>
+            <>
+              <SmartTagEditor
+                productId={editingProduct?._id ?? createdDraftId ?? undefined}
+                initialDecisionVersion={editingProduct?.taggingDecisionVersion}
+                onActiveTagsChange={setActiveTagCodes}
+              />
+              <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
+                {editingProduct
+                  ? 'Trường phái & dịp lễ của sản phẩm được suy tự động từ các thẻ đã chọn.'
+                  : 'Bấm "Tạo gợi ý", chọn thẻ phù hợp (cần ít nhất 1 thẻ). Trường phái & dịp lễ sẽ được suy tự động từ thẻ.'}
+              </p>
+            </>
           )}
 
           {/* Dieu huong wizard */}
@@ -4858,7 +5438,7 @@ export const ProviderDashboard: React.FC = () => {
               {/* Ảnh bằng chứng */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ẢNH CHỤP BẰNG CHỨNG HỎNG HÓC *</span>
-                
+
                 <label htmlFor="incident-photo-file" style={{
                   border: '2px dashed #D1D5DB',
                   borderRadius: '12px',
@@ -4872,16 +5452,16 @@ export const ProviderDashboard: React.FC = () => {
                   gap: '8px',
                   transition: 'all 0.2s ease-in-out'
                 }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--color-primary-dark)';
-                  e.currentTarget.style.backgroundColor = '#FFFDF9';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.borderColor = '#D1D5DB';
-                  e.currentTarget.style.backgroundColor = '#F9FAFB';
-                }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--color-primary-dark)';
+                    e.currentTarget.style.backgroundColor = '#FFFDF9';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.borderColor = '#D1D5DB';
+                    e.currentTarget.style.backgroundColor = '#F9FAFB';
+                  }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8C827A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8C827A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
                   <span style={{ fontSize: '13px', fontWeight: 700, color: '#4B5563' }}>Tải ảnh bằng chứng lên</span>
                   <span style={{ fontSize: '11px', color: '#9CA3AF' }}>Chọn một hoặc nhiều hình ảnh vết bẩn, rách</span>
                   <input

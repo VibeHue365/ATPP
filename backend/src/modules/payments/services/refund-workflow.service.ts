@@ -62,7 +62,9 @@ export class RefundWorkflowService {
       ...input,
       type: RefundType.Cancellation,
       autoApprove: input.autoApprove
-        ?? Boolean(input.isFreeCancel && policy.autoApproveFreeCancelRefund && belowManualReviewThreshold),
+        ?? (policy.refundProcessingMode === RefundMode.Simulated
+          ? true
+          : Boolean(input.isFreeCancel && policy.autoApproveFreeCancelRefund && belowManualReviewThreshold)),
     });
   }
 

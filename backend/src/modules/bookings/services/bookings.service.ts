@@ -259,7 +259,7 @@ export class BookingsService implements OnApplicationBootstrap {
     private readonly providerModel: Model<Provider>,
     private readonly campaignService: DiscountCampaignService,
     private readonly policyResolverService: PolicyResolverService,
-  ) {}
+  ) { }
 
   async onApplicationBootstrap() {
     try {
@@ -1095,12 +1095,12 @@ export class BookingsService implements OnApplicationBootstrap {
           rentalFulfillment:
             itemType === BookingItemType.Product
               ? this.createRentalFulfillmentForDates(
-                  item.rentalType,
-                  item.rentalFrom,
-                  item.rentalTo,
-                  item.shootDate,
-                  item.shootTimeSlot,
-                )
+                item.rentalType,
+                item.rentalFrom,
+                item.rentalTo,
+                item.shootDate,
+                item.shootTimeSlot,
+              )
               : null,
           rentalType: item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY',
           comboDiscountPercent,
@@ -2666,22 +2666,22 @@ export class BookingsService implements OnApplicationBootstrap {
               },
               status: violationPolicy.autoSuspendEnabled
                 ? {
-                    $cond: [
-                      {
-                        $gte: [
-                          {
-                            $add: [
-                              { $ifNull: ['$violationCount', 0] },
-                              violationPoint,
-                            ],
-                          },
-                          violationPolicy.maxWarningsBeforeSuspend,
-                        ],
-                      },
-                      ProviderStatus.Suspended,
-                      '$status',
-                    ],
-                  }
+                  $cond: [
+                    {
+                      $gte: [
+                        {
+                          $add: [
+                            { $ifNull: ['$violationCount', 0] },
+                            violationPoint,
+                          ],
+                        },
+                        violationPolicy.maxWarningsBeforeSuspend,
+                      ],
+                    },
+                    ProviderStatus.Suspended,
+                    '$status',
+                  ],
+                }
                 : '$status',
             },
           },
@@ -2706,7 +2706,7 @@ export class BookingsService implements OnApplicationBootstrap {
           penaltyAmount +=
             Math.round(
               item.unitPrice *
-                cancellationPolicy.photographyLateCancelPenaltyRate,
+              cancellationPolicy.photographyLateCancelPenaltyRate,
             ) * item.quantity;
         }
       }
@@ -2729,13 +2729,13 @@ export class BookingsService implements OnApplicationBootstrap {
             providerPenalty +=
               Math.round(
                 item.unitPrice *
-                  cancellationPolicy.productLateCancelPenaltyRate,
+                cancellationPolicy.productLateCancelPenaltyRate,
               ) * item.quantity;
           } else {
             providerPenalty +=
               Math.round(
                 item.unitPrice *
-                  cancellationPolicy.photographyLateCancelPenaltyRate,
+                cancellationPolicy.photographyLateCancelPenaltyRate,
               ) * item.quantity;
           }
         }
@@ -2859,12 +2859,12 @@ export class BookingsService implements OnApplicationBootstrap {
     // Trả về định dạng phù hợp cho cả 2 luồng gọi
     return Array.isArray(rolesOrCancelledByUserId)
       ? {
-          success: true,
-          booking: savedBooking,
-          isFreeCancel,
-          refundAmount,
-          penaltyReason,
-        }
+        success: true,
+        booking: savedBooking,
+        isFreeCancel,
+        refundAmount,
+        penaltyReason,
+      }
       : savedBooking;
   }
 
@@ -3058,7 +3058,7 @@ export class BookingsService implements OnApplicationBootstrap {
           });
         }
       }
-    } catch (_) {}
+    } catch (_) { }
 
     return {
       bookedDates,

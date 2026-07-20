@@ -81,7 +81,7 @@ export const DEFAULT_POLICY_VALUES: Record<PolicyCode, PolicyValue> = {
   },
   [PolicyCode.RefundPolicy]: {
     autoApproveFreeCancelRefund: true,
-    manualReviewThresholdAmount: 1000000,
+    manualReviewThresholdAmount: 10000000,
     refundProcessingMode: 'SIMULATED',
   },
   [PolicyCode.ProviderViolationPolicy]: {

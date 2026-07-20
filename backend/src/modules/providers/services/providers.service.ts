@@ -63,7 +63,7 @@ export class ProvidersService {
     @InjectModel(PortfolioItem.name)
     private readonly portfolioItemModel: Model<PortfolioItem>,
     private readonly smartTaggingService: SmartTaggingService,
-  ) {}
+  ) { }
 
   async getOrCreateProvider(
     userIdStr: string,
@@ -739,10 +739,10 @@ export class ProvidersService {
     const provider = await this.requireProvider(userIdStr);
 
     const wallet = provider.wallet ?? {
-      pendingBalance:   0,
+      pendingBalance: 0,
       availableBalance: 0,
-      totalEarned:      0,
-      lastUpdatedAt:    null,
+      totalEarned: 0,
+      lastUpdatedAt: null,
     };
 
     // Fetch 10 most recent completed settlements for this provider
@@ -757,19 +757,19 @@ export class ProvidersService {
 
     return {
       wallet: {
-        pendingBalance:   wallet.pendingBalance,
+        pendingBalance: wallet.pendingBalance,
         availableBalance: wallet.availableBalance,
-        totalEarned:      wallet.totalEarned,
-        lastUpdatedAt:    wallet.lastUpdatedAt,
+        totalEarned: wallet.totalEarned,
+        lastUpdatedAt: wallet.lastUpdatedAt,
       },
       recentSettlements: recentSettlements.map((s: any) => ({
         settlementCode: s.settlementCode,
-        bookingCode:    s.bookingId?.bookingCode ?? '—',
-        bookingType:    s.bookingId?.bookingType ?? '—',
-        netAmount:      s.netAmount,
-        payableAmount:  s.payableAmount,
-        status:         s.status,
-        createdAt:      s.createdAt,
+        bookingCode: s.bookingId?.bookingCode ?? '—',
+        bookingType: s.bookingId?.bookingType ?? '—',
+        netAmount: s.netAmount,
+        payableAmount: s.payableAmount,
+        status: s.status,
+        createdAt: s.createdAt,
       })),
     };
   }
