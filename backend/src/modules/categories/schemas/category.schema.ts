@@ -29,7 +29,6 @@ export class Category {
 
   @Prop({
     required: true,
-    index: true,
     trim: true,
     lowercase: true,
   })
@@ -53,7 +52,7 @@ export class Category {
   @Prop({ type: String, default: null, trim: true })
   coverImageUrl?: string | null;
 
-  @Prop({ type: Types.ObjectId, ref: 'Category', default: null, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Category', default: null })
   parentId?: Types.ObjectId | null;
 
   @Prop({
