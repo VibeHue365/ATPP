@@ -13,7 +13,7 @@ backend/uploads/
 # IDE files
 .vscode/
 .idea/
-mobile/
+
 
 # Environment variables / Secrets
 **/.env
@@ -25,3 +25,4 @@ mobile/
 .DS_Store
 Thumbs.db
 *.log
+/docs/

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { httpClient } from '../../services/httpClient';
 import { 
   GraduationCap, 
   Heart, 
@@ -24,17 +25,13 @@ interface Step1Data {
 
 interface Step2Data {
   colorTone: 'pastel' | 'red_gold' | 'dark' | 'colorful' | null;
-  size: 'S' | 'M' | 'L' | 'XL' | null;
+  size: 'S' | 'M' | 'L' | 'XL' | 'XXL' | null;
   height: string;
   weight: string;
-  chest: string;
-  waist: string;
-  hips: string;
 }
 
 interface Step3Data {
   purpose: 'graduation' | 'wedding' | 'festival' | 'event' | null;
-  aiAssistant: boolean;
 }
 
 export const OnboardingPage: React.FC = () => {
@@ -42,42 +39,78 @@ export const OnboardingPage: React.FC = () => {
   const { updatePreferences } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
-  const [step1, setStep1] = useState<Step1Data>({ style: 'traditional' });
+  const [step1, setStep1] = useState<Step1Data>({ style: null });
   const [step2, setStep2] = useState<Step2Data>({
-    colorTone: 'red_gold', size: 'M', height: '160', weight: '50', chest: '', waist: '', hips: '',
+    colorTone: null, size: null, height: '', weight: '',
   });
-  const [step3, setStep3] = useState<Step3Data>({ purpose: 'wedding', aiAssistant: false });
+  const [step3, setStep3] = useState<Step3Data>({ purpose: null });
 
   const [submitting, setSubmitting] = useState(false);
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Nếu người dùng đã có sở thích -> nạp lại để CHỈNH SỬA (không bắt làm lại từ đầu)
+  useEffect(() => {
+    let active = true;
+    httpClient.get<any>('/users/me').then((me) => {
+      if (!active) return;
+      const p = me?.preferences;
+      const hasData = p && (p.preferredAoDaiStyles?.length || p.favoriteColors?.length || p.sizeInfo?.preferredSize || p.preferredOccasions?.length);
+      if (!hasData) return;
+      setIsEditing(true);
+      if (p.preferredAoDaiStyles?.[0]) {
+        setStep1({ style: String(p.preferredAoDaiStyles[0]).toLowerCase() as Step1Data['style'] });
+      }
+      setStep2({
+        colorTone: (p.favoriteColors?.[0] ? String(p.favoriteColors[0]).toLowerCase() : null) as Step2Data['colorTone'],
+        size: (p.sizeInfo?.preferredSize ?? null) as Step2Data['size'],
+        height: p.sizeInfo?.height != null ? String(p.sizeInfo.height) : '',
+        weight: p.sizeInfo?.weight != null ? String(p.sizeInfo.weight) : '',
+      });
+      if (p.preferredOccasions?.[0]) {
+        setStep3({ purpose: String(p.preferredOccasions[0]).toLowerCase() as Step3Data['purpose'] });
+      }
+    }).catch(() => { /* khách mới / lỗi mạng -> để trống như cũ */ });
+    return () => { active = false; };
+  }, []);
+
+  const canProceed =
+    (step === 1 && step1.style !== null) ||
+    (step === 2 && step2.size !== null) ||
+    (step === 3 && step3.purpose !== null);
+
   const savePreferences = async (isSkipped = false) => {
     setSubmitting(true);
+    setErrorMsg(null);
     try {
-      const payload = {
+      const payload: any = {
         hasCompletedOnboarding: true,
-        preferences: isSkipped ? {} : {
-          stylePreferences: step3.purpose ? [step3.purpose.toUpperCase()] : [],
+      };
+      
+      if (!isSkipped) {
+        payload.preferences = {
+          preferredOccasions: step3.purpose ? [step3.purpose.toUpperCase()] : [],
           favoriteColors: step2.colorTone ? [step2.colorTone.toUpperCase()] : [],
           preferredAoDaiStyles: step1.style ? [step1.style.toUpperCase()] : [],
           sizeInfo: {
             preferredSize: step2.size || null,
             height: step2.height ? Number(step2.height) : null,
             weight: step2.weight ? Number(step2.weight) : null,
-            chest: step2.chest ? Number(step2.chest) : null,
-            waist: step2.waist ? Number(step2.waist) : null,
-            hips: step2.hips ? Number(step2.hips) : null,
           },
           preferredLocations: []
-        }
-      };
+        };
+      }
 
       await updatePreferences(payload);
+      setSubmitting(false);
+      // Sửa xong -> về trang cá nhân; onboarding lần đầu -> ra trang thuê
+      navigate(isEditing ? ROUTES.PROFILE : ROUTES.RENTALS);
     } catch (err) {
       console.error('Failed to save onboarding preferences:', err);
-    } finally {
+      setErrorMsg('Không thể lưu thông tin. Vui lòng kiểm tra kết nối mạng và thử lại.');
       setSubmitting(false);
-      navigate(ROUTES.RENTALS);
     }
   };
 
@@ -266,7 +299,7 @@ export const OnboardingPage: React.FC = () => {
               <h3 style={{ fontFamily: 'var(--font-header)', fontSize: '24px', fontWeight: 700, margin: '32px 0 16px 0' }}>Kích thước & Số đo</h3>
               <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '12px' }}>Size tiêu chuẩn</span>
               <div style={{ display: 'flex', gap: '12px', marginBottom: '32px' }}>
-                {(['S', 'M', 'L', 'XL'] as const).map((sz) => (
+                {(['S', 'M', 'L', 'XL', 'XXL'] as const).map((sz) => (
                   <button key={sz} onClick={() => setStep2(p => ({ ...p, size: sz }))} style={{
                     width: '48px', height: '40px', borderRadius: '8px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', transition: 'var(--transition-smooth)',
                     border: step2.size === sz ? '2px solid var(--color-primary)' : '1px solid var(--color-light-border)',
@@ -276,18 +309,14 @@ export const OnboardingPage: React.FC = () => {
                 ))}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '20px', borderTop: '1px solid var(--color-light-border)', paddingTop: '24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px', borderTop: '1px solid var(--color-light-border)', paddingTop: '24px' }}>
                 {[
                   { label: 'Chiều cao (cm)', key: 'height' as const },
                   { label: 'Cân nặng (kg)', key: 'weight' as const },
-                  { label: 'Ngực (tự chọn)', key: 'chest' as const },
-                  { label: 'Eo (tự chọn)', key: 'waist' as const },
-                  { label: 'Mông (tự chọn)', key: 'hips' as const },
                 ].map((m) => (
                   <div key={m.key} style={{ display: 'flex', flexDirection: 'column' }}>
                     <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{m.label}</label>
                     <input type="number" value={step2[m.key]} onChange={(e) => setStep2(p => ({ ...p, [m.key]: e.target.value }))}
-                      placeholder={m.key === 'chest' || m.key === 'waist' || m.key === 'hips' ? '--' : ''}
                       style={{ width: '100%', textAlign: 'center', border: 'none', borderBottom: '1px solid var(--color-light-border)', padding: '6px 0', fontSize: '15px', fontWeight: 600, color: 'var(--color-text-primary)', background: 'transparent', outline: 'none' }} />
                   </div>
                 ))}
@@ -343,25 +372,15 @@ export const OnboardingPage: React.FC = () => {
                 ))}
               </div>
 
-              {/* AI Toggle */}
-              <div style={{ backgroundColor: 'var(--color-light-bg)', borderLeft: '4px solid var(--color-primary)', borderRadius: '0 var(--radius-md) var(--radius-md) 0', padding: '24px', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <div onClick={() => setStep3(p => ({ ...p, aiAssistant: !p.aiAssistant }))} style={{
-                  width: '44px', height: '24px', borderRadius: '24px', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background-color 0.3s ease',
-                  backgroundColor: step3.aiAssistant ? 'var(--color-primary)' : 'var(--color-light-border)',
-                }}>
-                  <div style={{
-                    position: 'absolute', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: 'white', top: '3px', transition: 'left 0.3s ease', boxShadow: 'var(--shadow-sm)',
-                    left: step3.aiAssistant ? '23px' : '3px',
-                  }} />
-                </div>
-                <div>
-                  <h4 style={{ fontWeight: 700, color: 'var(--color-text-primary)', fontSize: '14px', margin: '0 0 4px 0' }}>Trợ lý AI gợi ý phong cách riêng</h4>
-                  <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.6 }}>Sử dụng trí tuệ nhân tạo để phân tích sở thích và vóc dáng, giúp bạn tìm ra bộ Áo Dài hoàn hảo nhất trong 5 giây.</p>
-                </div>
-              </div>
             </div>
           )}
         </div>
+
+        {errorMsg && (
+          <div style={{ color: '#E53E3E', fontSize: '13px', fontWeight: 600, marginBottom: '16px', backgroundColor: '#FFF5F5', padding: '10px 14px', borderRadius: '6px', border: '1px solid #FED7D7' }}>
+            {errorMsg}
+          </div>
+        )}
 
         {/* Footer Actions */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--color-light-border)', paddingTop: '32px', marginTop: 'auto' }}>
@@ -382,10 +401,10 @@ export const OnboardingPage: React.FC = () => {
               textTransform: 'uppercase', letterSpacing: '0.08em', cursor: 'pointer',
               opacity: submitting ? 0.5 : 1,
             }}>Bỏ qua</button>
-            <button onClick={handleNext} disabled={submitting} style={{
-              padding: '12px 28px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', fontWeight: 700, fontSize: '12px',
-              textTransform: 'uppercase', letterSpacing: '0.1em', borderRadius: '4px', cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(161,30,34,0.15)', display: 'flex', alignItems: 'center', gap: '8px', transition: 'var(--transition-smooth)',
+            <button onClick={handleNext} disabled={submitting || !canProceed} style={{
+              padding: '12px 28px', backgroundColor: canProceed ? 'var(--color-primary)' : '#CBD5E1', color: canProceed ? 'white' : '#94A3B8', border: 'none', fontWeight: 700, fontSize: '12px',
+              textTransform: 'uppercase', letterSpacing: '0.1em', borderRadius: '4px', cursor: canProceed ? 'pointer' : 'not-allowed',
+              boxShadow: canProceed ? '0 4px 12px rgba(161,30,34,0.15)' : 'none', display: 'flex', alignItems: 'center', gap: '8px', transition: 'var(--transition-smooth)',
               opacity: submitting ? 0.8 : 1,
             }}>
               {step === 3 ? (submitting ? 'Đang lưu...' : 'Hoàn tất') : 'Tiếp tục'} <ArrowRight size={16} />

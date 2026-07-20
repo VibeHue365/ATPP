@@ -23,6 +23,11 @@ export class PaymentWebhookEvent {
   @Prop({ type: Boolean, default: false, index: true })
   processed: boolean;
 
+  @Prop({ type: Date, default: null, index: true })
+  processingStartedAt?: Date | null;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  processingAttempts: number;
   @Prop({ type: String, default: null })
   error?: string | null;
 

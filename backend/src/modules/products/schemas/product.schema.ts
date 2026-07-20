@@ -9,6 +9,13 @@ export enum ProductStatus {
   Draft = 'DRAFT',
 }
 
+export enum ProductModerationStatus {
+  PendingReview = 'PENDING_REVIEW',
+  Approved = 'APPROVED',
+  Rejected = 'REJECTED',
+  Hidden = 'HIDDEN',
+}
+
 export interface ProductRating {
   averageRating: number;
   totalReviews: number;
@@ -22,6 +29,11 @@ export class Product {
   @Prop({ type: Types.ObjectId, ref: 'Category', required: true, index: true })
   categoryId: Types.ObjectId;
 
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Category' }], default: [] })
+  styleCategoryIds: Types.ObjectId[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Category' }], default: [] })
+  eventCategoryIds: Types.ObjectId[];
   @Prop({ required: true, trim: true })
   name: string;
 
@@ -39,6 +51,9 @@ export class Product {
 
   @Prop({ type: [String], default: [] })
   images: string[];
+
+  @Prop({ type: [String], default: [] })
+  videos: string[];
 
   @Prop({ required: true, min: 0 })
   basePrice: number;
@@ -64,6 +79,12 @@ export class Product {
   @Prop({ type: [String], default: [] })
   occasions: string[];
 
+  @Prop({ type: Number, required: true, default: 1, min: 1 })
+  taggingRevision: number;
+
+  @Prop({ type: Number, required: true, default: 0, min: 0 })
+  taggingDecisionVersion: number;
+
   @Prop({ type: Map, of: String, default: {} })
   specifications: Map<string, string>;
 
@@ -74,6 +95,23 @@ export class Product {
     index: true,
   })
   status: ProductStatus;
+
+  @Prop({
+    type: String,
+    enum: Object.values(ProductModerationStatus),
+    default: ProductModerationStatus.PendingReview,
+    index: true,
+  })
+  moderationStatus: ProductModerationStatus;
+
+  @Prop({ type: String, default: null, trim: true, maxlength: 300 })
+  moderationReason?: string | null;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  moderatedBy?: Types.ObjectId | null;
+
+  @Prop({ type: Date, default: null })
+  moderatedAt?: Date | null;
 
   @Prop({
     type: {

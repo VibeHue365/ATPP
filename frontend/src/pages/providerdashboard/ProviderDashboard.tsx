@@ -1,16 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
-  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,
-  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3
+  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,Copy,Package, Eye,
+  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck
 } from 'lucide-react';
+import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
 import { Modal } from '../../components/common/Modal';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { API_BASE_URL } from '../../config/env';
+import { SmartTagEditor } from '../../features/smart-tagging/components/SmartTagEditor';
+import { PortfolioItemFormModal, type PortfolioItemFormValues } from '../../features/photographers/components/PortfolioItemFormModal';
+import { PhotographyPackageManager } from '../../features/photography-packages/components/PhotographyPackageManager';
+import { categoryService } from '../../features/categories/services/categoryService';
+import type { Category } from '../../features/categories/types';
 
 interface Order {
   _id: string;
@@ -26,6 +32,8 @@ interface Order {
   createdAt?: string;
   customerId?: any;
   items?: any[];
+  depositTotal?: number;
+  rawStatus?: string;
 }
 
 interface Product {
@@ -37,6 +45,7 @@ interface Product {
   } | string;
   description?: string;
   images: string[];
+  videos?: string[];
   basePrice: number;
   depositAmount: number;
   sizes: string[];
@@ -44,9 +53,20 @@ interface Product {
   materials: string[];
   style?: string;
   occasions?: string[];
+  styleCategoryIds?: Array<string | { _id?: string; id?: string }>;
+  eventCategoryIds?: Array<string | { _id?: string; id?: string }>;
   status: 'ACTIVE' | 'DRAFT' | 'INACTIVE';
+  taggingDecisionVersion?: number;
 }
 
+interface PortfolioItem {
+  _id: string;
+  title: string;
+  description?: string | null;
+  images: string[];
+  moderationStatus: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'HIDDEN';
+  moderationReason?: string | null;
+}
 export const ProviderDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { logout, user, isAuthenticated } = useAuth();
@@ -56,7 +76,7 @@ export const ProviderDashboard: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated !== undefined) {
       if (!isAuthenticated) {
-        navigate('/login', { replace: true });
+        navigate('/auth/login', { replace: true });
         return;
       }
       const roles = user?.roles || [];
@@ -67,14 +87,73 @@ export const ProviderDashboard: React.FC = () => {
       }
     }
   }, [user, isAuthenticated, navigate, toast]);
-  
+
   // Views navigation state
-  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'calendar' | 'vouchers' | 'reviews' | 'trust' | 'analytics'>('analytics');
+  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'photography-packages' | 'calendar' | 'vouchers' | 'inventory' | 'reviews' | 'trust' | 'analytics' | 'payouts'>('analytics');
+  const [collectionTab, setCollectionTab] = useState<'products' | 'inventory'>('products');
 
   // Provider Specific States
   const [provider, setProvider] = useState<any>(null);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
+  const [isPortfolioFormOpen, setIsPortfolioFormOpen] = useState(false);
+  const [isPortfolioSaving, setIsPortfolioSaving] = useState(false);
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+  const [editingPortfolioItem, setEditingPortfolioItem] = useState<PortfolioItem | null>(null);
+  const [previewPortfolioItem, setPreviewPortfolioItem] = useState<PortfolioItem | null>(null);
+  const [previewImageIndex, setPreviewImageIndex] = useState<number>(0);
+  const hasPhotographyCapability = Array.isArray(provider?.capabilities) && provider.capabilities.includes('PHOTOGRAPHY');
   const [subTab, setSubTab] = useState<'shop' | 'photo'>('shop');
+  // Product Search / Sort / Filter States
+  const [prodSearch, setProdSearch] = useState('');
+  const [prodSortBy, setProdSortBy] = useState('newest');
+  const [prodPage, setProdPage] = useState(1);
+  const [prodLimit] = useState(6); // 6 items per page for a nice grid
+  const [prodTotal, setProdTotal] = useState(0);
+  const [prodSizeFilter, setProdSizeFilter] = useState('');
+  const [prodColorFilter, setProdColorFilter] = useState('');
+
+  // Inventory Search / Sort / Filter / Pagination States
+  const [invSearch, setInvSearch] = useState('');
+  const [invSortBy, setInvSortBy] = useState('newest');
+  const [invStatusFilter, setInvStatusFilter] = useState('');
+  const [invConditionFilter, setInvConditionFilter] = useState('');
+  const [invPage, setInvPage] = useState(1);
+  const [invSummaryPage, setInvSummaryPage] = useState(1);
+  const [invLimit] = useState(10); // 10 items per page
+  const [invTotal, setInvTotal] = useState(0);
+
+  // Inventory States
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [inventorySummary, setInventorySummary] = useState<any[]>([]);
+  const [myProductsList, setMyProductsList] = useState<any[]>([]);
+  const [isLoadingInventory, setIsLoadingInventory] = useState(false);
+
+  // Discount Campaign State
+  const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
+  const [campaignOccasion, setCampaignOccasion] = useState('');
+  const [campaignPercent, setCampaignPercent] = useState('10');
+  const [campaignStart, setCampaignStart] = useState('');
+  const [campaignEnd, setCampaignEnd] = useState('');
+  const [activeCampaign, setActiveCampaign] = useState<any>(null);
+  const [submittingCampaign, setSubmittingCampaign] = useState(false);
+
+  // Add Item Modal State
+  const [isAddInventoryOpen, setIsAddInventoryOpen] = useState(false);
+  const [addInvProductId, setAddInvProductId] = useState('');
+  const [addInvSize, setAddInvSize] = useState('M');
+  const [addInvColor, setAddInvColor] = useState('WHITE');
+  const [addInvMaterial, setAddInvMaterial] = useState('');
+  const [addInvQuantity, setAddInvQuantity] = useState(1);
+  const [addInvCondition, setAddInvCondition] = useState('GOOD');
+  const [addInvNotes, setAddInvNotes] = useState('');
+
+  // Update Item Modal State
+  const [isEditInventoryOpen, setIsEditInventoryOpen] = useState(false);
+  const [editInvItem, setEditInvItem] = useState<any>(null);
+  const [editInvStatus, setEditInvStatus] = useState('AVAILABLE');
+  const [editInvCondition, setEditInvCondition] = useState('GOOD');
+  const [editInvNotes, setEditInvNotes] = useState('');
 
   useEffect(() => {
     if (analyticsData) {
@@ -88,6 +167,9 @@ export const ProviderDashboard: React.FC = () => {
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [reviewsData, setReviewsData] = useState<any>(null);
   const [bookingsState, setBookingsState] = useState<any[]>([]);
+  const [payouts, setPayouts] = useState<any[]>([]);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isLoadingProvider, setIsLoadingProvider] = useState(false);
 
   // Form states - Profile
@@ -96,6 +178,7 @@ export const ProviderDashboard: React.FC = () => {
   const [addressLine, setAddressLine] = useState('');
   const [city, setCity] = useState('');
   const [cancellationPolicy, setCancellationPolicy] = useState('');
+  const [comboDiscountPercent, setComboDiscountPercent] = useState(0);
 
   // Form states - Voucher
   const [vCode, setVCode] = useState('');
@@ -105,9 +188,11 @@ export const ProviderDashboard: React.FC = () => {
   const vMinOrder = 0;
 
   // Form states - Calendar
-  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(0);
-  const [startHour, setStartHour] = useState('08:00');
-  const [endHour, setEndHour] = useState('17:00');
+  const [selectedScheduleDays, setSelectedScheduleDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [workingHourRanges, setWorkingHourRanges] = useState<Array<{ start: string; end: string }>>([
+    { start: '08:00', end: '17:00' },
+  ]);
+  const [editingScheduleDay, setEditingScheduleDay] = useState<number | null>(null);
   const [blockedDate, setBlockedDate] = useState('');
 
   // Reply states
@@ -123,6 +208,81 @@ export const ProviderDashboard: React.FC = () => {
   const [searchCustId, setSearchCustId] = useState('');
   const [trustScoreResult, setTrustScoreResult] = useState<any>(null);
 
+  // Notification states
+  const [isNotiOpen, setIsNotiOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingNoti, setLoadingNoti] = useState(false);
+  const notiRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to close notification panel
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notiRef.current && !notiRef.current.contains(event.target as Node)) {
+        setIsNotiOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setLoadingNoti(true);
+      const data = await httpClient.request<any[]>('/notifications');
+      setNotifications(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to fetch notifications', e);
+    } finally {
+      setLoadingNoti(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  const providerUnreadCount = notifications.filter(n => !n.isRead).length;
+
+  const handleNotiMarkAsRead = async (id: string) => {
+    try {
+      await httpClient.request(`/notifications/${id}/read`, { method: 'PATCH' });
+      setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
+    } catch (e) { console.error(e); }
+  };
+
+  const handleNotiMarkAllAsRead = async () => {
+    try {
+      await httpClient.request('/notifications/read-all', { method: 'POST' });
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    } catch (e) { console.error(e); }
+  };
+
+  const getNotiTimeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Vừa xong';
+    if (mins < 60) return `${mins} phút trước`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} giờ trước`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} ngày trước`;
+    return new Date(dateStr).toLocaleDateString('vi-VN');
+  };
+
+  const getNotiTypeStyle = (type: string) => {
+    switch (type) {
+      case 'BOOKING': return { bg: '#EEF2FF', color: '#4338CA', icon: '📋' };
+      case 'PAYMENT': return { bg: '#F0FDF4', color: '#166534', icon: '💳' };
+      case 'HANDOVER': return { bg: '#FFF7ED', color: '#C2410C', icon: '🤝' };
+      case 'REFUND': return { bg: '#FEF3C7', color: '#92400E', icon: '💰' };
+      case 'DISPUTE': return { bg: '#FEE2E2', color: '#991B1B', icon: '⚠️' };
+      case 'SYSTEM': return { bg: '#F5F3FF', color: '#7C3AED', icon: '🔔' };
+      default: return { bg: '#F9FAFB', color: '#6B7280', icon: '📌' };
+    }
+  };
+
   const fetchProviderData = async () => {
     setIsLoadingProvider(true);
     try {
@@ -133,6 +293,14 @@ export const ProviderDashboard: React.FC = () => {
       setAddressLine(pRes.address?.addressLine || '');
       setCity(pRes.address?.city || '');
       setCancellationPolicy(pRes.policies?.cancellationPolicy || '');
+      setComboDiscountPercent(pRes.comboDiscountPercent ?? 0);
+
+      if (Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY')) {
+        const portfolioRes: any = await httpClient.get('/providers/me/portfolio-items');
+        setPortfolioItems(Array.isArray(portfolioRes) ? portfolioRes : []);
+      } else {
+        setPortfolioItems([]);
+      }
 
       const sRes: any = await httpClient.get('/providers/me/schedules');
       setSchedules(sRes);
@@ -168,15 +336,144 @@ export const ProviderDashboard: React.FC = () => {
           text: msg,
           icon: 'error',
           confirmButtonText: 'Đăng xuất',
-          confirmButtonColor: '#4A0E17',
+          confirmButtonColor: 'var(--color-primary)',
           allowOutsideClick: false,
         }).then(() => {
           logout();
-          navigate('/login');
+          navigate('/auth/login');
         });
       }
     } finally {
       setIsLoadingProvider(false);
+    }
+  };
+
+  // silent: giữ nguyên bảng đang hiện (không chớp màn "Đang tải...") khi đổi trang/bộ lọc
+  // itemsOnly: chỉ tải lại danh sách hiện vật, khỏi kéo lại summary + danh sách sản phẩm
+  const fetchInventoryData = async (options?: { silent?: boolean; itemsOnly?: boolean }) => {
+    if (!options?.silent) setIsLoadingInventory(true);
+    try {
+      const res: any = await httpClient.get(
+        `/inventory?search=${encodeURIComponent(invSearch)}&status=${invStatusFilter}&conditionStatus=${invConditionFilter}&sortBy=${invSortBy}&page=${invPage}&limit=${invLimit}`
+      );
+      setInventoryItems(res?.items || []);
+      setInvTotal(res?.total || 0);
+
+      if (!options?.itemsOnly) {
+        const summary: any = await httpClient.get('/inventory/summary');
+        setInventorySummary(summary || []);
+
+        const productsRes: any = await httpClient.get('/products/my-listings?limit=999');
+        setMyProductsList(productsRes?.items || []);
+      }
+    } catch (e) {
+      console.error('Failed to load inventory:', e);
+      toast.error('Không thể đồng bộ dữ liệu tồn kho');
+    } finally {
+      if (!options?.silent) setIsLoadingInventory(false);
+    }
+  };
+
+  const handleCreateInventoryItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addInvProductId) {
+      toast.error('Vui lòng chọn sản phẩm');
+      return;
+    }
+    try {
+      await httpClient.post('/inventory', {
+        productId: addInvProductId,
+        size: addInvSize,
+        color: addInvColor,
+        material: addInvMaterial || undefined,
+        quantity: Number(addInvQuantity),
+        conditionStatus: addInvCondition,
+        notes: addInvNotes
+      });
+      toast.success('Nhập kho hiện vật thành công!');
+      setIsAddInventoryOpen(false);
+      // Reset form
+      setAddInvProductId('');
+      setAddInvSize('M');
+      setAddInvColor('WHITE');
+      setAddInvMaterial('');
+      setAddInvQuantity(1);
+      setAddInvCondition('GOOD');
+      setAddInvNotes('');
+      // Refetch
+      fetchInventoryData({ silent: true });
+      if (editingProduct) {
+        void loadEditInvSummary(editingProduct._id);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi nhập kho hiện vật');
+    }
+  };
+
+  const handleUpdateInventoryItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editInvItem) return;
+    try {
+      await httpClient.patch(`/inventory/${editInvItem._id}`, {
+        status: editInvStatus,
+        conditionStatus: editInvCondition,
+        notes: editInvNotes
+      });
+      toast.success('Cập nhật trạng thái hiện vật thành công!');
+      setIsEditInventoryOpen(false);
+      setEditInvItem(null);
+      fetchInventoryData({ silent: true });
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi cập nhật trạng thái');
+    }
+  };
+
+  const handleDeleteInventoryItem = async (itemId: string) => {
+    const result = await Swal.fire({
+      title: 'Xác nhận thanh lý?',
+      text: 'Hiện vật này sẽ được chuyển sang trạng thái RETIRED và không thể cho thuê tiếp.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Đồng ý thanh lý',
+      cancelButtonText: 'Hủy bỏ',
+      confirmButtonColor: 'var(--color-primary)',
+      cancelButtonColor: '#71717A'
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await httpClient.delete(`/inventory/${itemId}`);
+        toast.success('Thanh lý hiện vật thành công!');
+        fetchInventoryData({ silent: true });
+      } catch (err: any) {
+        Swal.fire({
+          title: 'Không thể thanh lý',
+          text: err.message || 'Lỗi xảy ra khi thanh lý hiện vật.',
+          icon: 'error',
+          confirmButtonColor: 'var(--color-primary)'
+        });
+      }
+    }
+  };
+
+  const fetchPayouts = async () => {
+    try {
+      const res: any = await httpClient.get('/payments/settlement-transfers/provider');
+      setPayouts(res || []);
+    } catch (err: any) {
+      console.error('Không thể tải lịch sử quyết toán:', err);
+    }
+  };
+
+  const viewCustomerTrust = async (custId: string) => {
+    setIsDetailModalOpen(false);
+    setCurrentView('trust');
+    setSearchCustId(custId);
+    try {
+      const res = await httpClient.get(`/users/${custId}/trust-score`);
+      setTrustScoreResult(res);
+    } catch (err) {
+      console.error('Không thể tải điểm tín nhiệm:', err);
     }
   };
 
@@ -188,6 +485,7 @@ export const ProviderDashboard: React.FC = () => {
         contact: { ...provider?.contact, phone },
         address: { ...provider?.address, addressLine, city },
         policies: { ...provider?.policies, cancellationPolicy },
+        comboDiscountPercent: Number(comboDiscountPercent),
       });
       toast.success('Cập nhật thông tin dịch vụ thành công!');
       fetchProviderData();
@@ -227,19 +525,65 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
-  const handleAddRecurringSchedule = async () => {
+  const toggleScheduleDay = (day: number) => {
+    setSelectedScheduleDays((current) => current.includes(day)
+      ? current.filter((item) => item !== day)
+      : [...current, day].sort((a, b) => a - b));
+  };
+
+  const updateWorkingHourRange = (
+    index: number,
+    field: 'start' | 'end',
+    value: string,
+  ) => {
+    setWorkingHourRanges((current) => current.map((range, rangeIndex) =>
+      rangeIndex === index ? { ...range, [field]: value } : range,
+    ));
+  };
+
+  const handleSaveRecurringSchedules = async () => {
+    if (selectedScheduleDays.length === 0) {
+      toast.error('Hãy chọn ít nhất một ngày làm việc.');
+      return;
+    }
+
+    const sortedRanges = [...workingHourRanges].sort((a, b) => a.start.localeCompare(b.start));
+    const hasInvalidRange = sortedRanges.some((range) => !range.start || !range.end || range.start >= range.end);
+    const hasOverlap = sortedRanges.some((range, index) =>
+      index > 0 && range.start < sortedRanges[index - 1].end,
+    );
+    if (hasInvalidRange) {
+      toast.error('Giờ bắt đầu của mỗi ca phải sớm hơn giờ kết thúc.');
+      return;
+    }
+    if (hasOverlap) {
+      toast.error('Các ca làm việc không được chồng lên nhau.');
+      return;
+    }
+
     try {
-      await httpClient.post('/providers/me/schedules/recurring', {
-        dayOfWeek: Number(selectedDayOfWeek),
-        workingHours: [{ start: startHour, end: endHour }],
+      await httpClient.post('/providers/me/schedules/recurring/bulk', {
+        dayOfWeeks: selectedScheduleDays,
+        workingHours: sortedRanges,
       });
-      toast.success('Thiết lập khung giờ làm việc recurring thành công!');
+      toast.success(`Đã lưu lịch cho ${selectedScheduleDays.length} ngày làm việc.`);
+      setEditingScheduleDay(null);
       fetchProviderData();
     } catch (err: any) {
-      toast.error('Lưu lịch làm việc thất bại');
+      toast.error(err.message || 'Lưu lịch làm việc thất bại.');
     }
   };
 
+  const handleEditRecurringSchedule = (schedule: any) => {
+    const dayOfWeek = Number(schedule.dayOfWeek);
+    setSelectedScheduleDays(Number.isInteger(dayOfWeek) ? [dayOfWeek] : []);
+    setWorkingHourRanges(
+      Array.isArray(schedule.workingHours) && schedule.workingHours.length > 0
+        ? schedule.workingHours.map((range: any) => ({ start: range.start, end: range.end }))
+        : [{ start: '08:00', end: '17:00' }],
+    );
+    setEditingScheduleDay(dayOfWeek);
+  };
   const handleBlockDate = async () => {
     if (!blockedDate) return;
     try {
@@ -291,6 +635,55 @@ export const ProviderDashboard: React.FC = () => {
     } catch (err: any) {
       toast.error('Gỡ ảnh thất bại');
     }
+  };
+  // Kept temporarily for legacy data cleanup; the UI uses portfolio-items.
+  void handleAddPortfolio;
+  void handleRemovePortfolio;
+
+  const handlePortfolioFormSubmit = async (values: PortfolioItemFormValues) => {
+    setIsPortfolioSaving(true);
+    try {
+      if (editingPortfolioItem) {
+        await httpClient.patch(`/providers/me/portfolio-items/${editingPortfolioItem._id}`, values);
+        toast.success('Cập nhật tác phẩm thành công.');
+      } else {
+        await httpClient.post('/providers/me/portfolio-items', values);
+        toast.success('Tác phẩm đã được gửi duyệt.');
+      }
+      setIsPortfolioFormOpen(false);
+      setEditingPortfolioItem(null);
+      await fetchProviderData();
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể lưu tác phẩm portfolio.');
+    } finally {
+      setIsPortfolioSaving(false);
+    }
+  };
+  const handleDeletePortfolioItem = async (itemId: string) => {
+    if (!window.confirm('G\u1EE1 t\u00E1c ph\u1EA9m n\u00E0y kh\u1ECFi portfolio?')) return;
+    try {
+      await httpClient.delete(`/providers/me/portfolio-items/${itemId}`);
+      toast.success('\u0110\u00E3 g\u1EE1 t\u00E1c ph\u1EA9m kh\u1ECFi portfolio.');
+      fetchProviderData();
+      return;
+    } catch (err: any) {
+      toast.error(err.message || 'Kh\u00F4ng th\u1EC3 g\u1EE1 t\u00E1c ph\u1EA9m.');
+      return;
+    }
+    /* Legacy reply handler body kept out of this handler.
+
+    e.preventDefault();
+    if (!replyingReviewId) return;
+    try {
+      await httpClient.post(`/reviews/${replyingReviewId}/reply`, { reply: replyText });
+      toast.success('Gửi phản hồi đánh giá thành công!');
+      setReplyingReviewId(null);
+      setReplyText('');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error('Không thể gửi phản hồi');
+    }
+    */
   };
 
   const handleReplyReview = async (e: React.FormEvent) => {
@@ -410,7 +803,7 @@ export const ProviderDashboard: React.FC = () => {
         const firstItem = b.items?.[0];
         const productName = firstItem?.name || firstItem?.productId?.name || firstItem?.photographyPackageId?.name || 'Sản phẩm thuê';
         const dateStr = b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : '';
-        
+
         let totalAmt = 0;
         if (b.items && b.items.length > 0) {
           totalAmt = b.items.reduce((sum: number, item: any) => {
@@ -468,7 +861,7 @@ export const ProviderDashboard: React.FC = () => {
   // Add/Edit Product Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  
+
   // Product Form Fields
   const [prodName, setProdName] = useState('');
   const [prodCategoryId, setProdCategoryId] = useState('');
@@ -481,19 +874,45 @@ export const ProviderDashboard: React.FC = () => {
   const [prodStatus, setProdStatus] = useState<'ACTIVE' | 'DRAFT' | 'INACTIVE'>('ACTIVE');
   const [prodImages, setProdImages] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [prodVideos, setProdVideos] = useState<string[]>([]);
+  const [uploadingVideos, setUploadingVideos] = useState(false);
   const [prodStyle, setProdStyle] = useState('traditional');
   const [prodOccasions, setProdOccasions] = useState<string[]>([]);
+  const [styleCategories, setStyleCategories] = useState<Category[]>([]);
+  const [eventCategories, setEventCategories] = useState<Category[]>([]);
+  const [prodStyleCategoryIds, setProdStyleCategoryIds] = useState<string[]>([]);
+  const [prodEventCategoryIds, setProdEventCategoryIds] = useState<string[]>([]);
+
+  // Onboarding wizard (3 steps) + variant table + hidden-draft lifecycle
+  type VariantRow = { size: string; color: string; material: string; quantity: number; condition: string };
+  const [variants, setVariants] = useState<VariantRow[]>([]);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [createdDraftId, setCreatedDraftId] = useState<string | null>(null);
+  const [activeTagCodes, setActiveTagCodes] = useState<string[]>([]);
+  const [editInvSummary, setEditInvSummary] = useState<any[]>([]);
+  const [savingDraft, setSavingDraft] = useState(false);
 
   const sizesOptions = ['S', 'M', 'L', 'XL', 'XXL'];
   const colorsOptions = ['RED', 'WHITE', 'GOLD', 'BLACK', 'PINK', 'BLUE', 'GREEN', 'BROWN'];
   const materialsOptions = ['SILK', 'VELVET', 'BROCADE', 'ORGANZA', 'LINEN'];
+  const colorLabels: Record<string, string> = { RED: 'Đỏ', WHITE: 'Trắng', GOLD: 'Vàng', BLACK: 'Đen', PINK: 'Hồng', BLUE: 'Xanh dương', GREEN: 'Xanh lá', BROWN: 'Nâu' };
+  const materialLabels: Record<string, string> = { SILK: 'Lụa', VELVET: 'Nhung', BROCADE: 'Gấm', ORGANZA: 'Organza', LINEN: 'Linen' };
+  const conditionOptions = [{ value: 'NEW', label: 'Mới (New)' }, { value: 'GOOD', label: 'Tốt (Good)' }, { value: 'MINOR_DAMAGE', label: 'Hỏng nhẹ' }];
+  const DEFAULT_PRODUCT_IMAGE = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
+  const colorSwatches: Record<string, string> = { RED: '#C0392B', WHITE: '#FFFFFF', GOLD: '#D4AC0D', BLACK: '#1B1B1B', PINK: '#E5739C', BLUE: '#2E86C1', GREEN: '#27AE60', BROWN: '#8B5A2B' };
+  // Suy ngược trường phái / dịp lễ từ thẻ thông minh đã chọn (nuôi hệ gợi ý cá nhân hóa)
+  const TAG_TO_STYLE: Record<string, string> = { TRUYEN_THONG: 'traditional', CACH_TAN: 'modern', PHA_CACH: 'edgy' };
+  const TAG_TO_OCCASION: Record<string, string> = { PHU_HOP_LE_CUOI: 'wedding', CHUP_ANH_KY_YEU: 'graduation', LE_HOI_TRUYEN_THONG: 'festival', BIEU_DIEN_SU_KIEN: 'event' };
 
   // Fetch products and categories
   const fetchProducts = async () => {
     setLoadingProducts(true);
     try {
-      const data = await httpClient.get<Product[]>('/products/my-listings');
-      setProducts(data);
+      const res: any = await httpClient.get(
+        `/products/my-listings?search=${encodeURIComponent(prodSearch)}&sortBy=${prodSortBy}&page=${prodPage}&limit=${prodLimit}&sizes=${prodSizeFilter}&colors=${prodColorFilter}`
+      );
+      setProducts(res?.items || []);
+      setProdTotal(res?.total || 0);
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Lỗi tải danh sách sản phẩm');
@@ -507,10 +926,45 @@ export const ProviderDashboard: React.FC = () => {
       const data = await httpClient.get<any[]>('/products/categories');
       setCategories(data);
       if (data.length > 0 && !prodCategoryId) {
-        setProdCategoryId(data[0]._id);
+        setProdCategoryId(data[0]._id || data[0].id);
       }
     } catch (err) {
       console.error('Lỗi tải danh mục:', err);
+    }
+  };
+
+  const fetchServiceCategories = async () => {
+    try {
+      const [styles, events] = await Promise.all([
+        categoryService.getPublic({ type: 'STYLE', status: 'ACTIVE', limit: 100 }),
+        categoryService.getPublic({ type: 'EVENT', status: 'ACTIVE', limit: 100 }),
+      ]);
+      setStyleCategories(styles);
+      setEventCategories(events);
+    } catch (err) {
+      console.error('Lỗi tải danh mục phong cách và dịp phù hợp:', err);
+    }
+  };
+  const fetchActiveCampaign = async () => {
+    try {
+      const res = await httpClient.get('/campaigns/mine') as any;
+      if (res && res._id) {
+        setActiveCampaign(res);
+        setCampaignOccasion(res.occasion);
+        setCampaignPercent(res.discountPercent.toString());
+        setCampaignStart(new Date(res.startDate).toISOString().split('T')[0]);
+        setCampaignEnd(new Date(res.endDate).toISOString().split('T')[0]);
+      } else {
+        setActiveCampaign(null);
+        // Default dates
+        const today = new Date();
+        const nextWeek = new Date();
+        nextWeek.setDate(today.getDate() + 7);
+        setCampaignStart(today.toISOString().split('T')[0]);
+        setCampaignEnd(nextWeek.toISOString().split('T')[0]);
+      }
+    } catch (err) {
+      console.error('Error fetching campaign:', err);
     }
   };
 
@@ -520,10 +974,36 @@ export const ProviderDashboard: React.FC = () => {
     } else if (currentView === 'collections') {
       fetchProducts();
       fetchCategories();
+      fetchServiceCategories();
+      fetchActiveCampaign();
+    } else if (currentView === 'payouts') {
+      fetchPayouts();
+    } else if (currentView === 'inventory') {
+      fetchInventoryData();
     } else if (['profile', 'portfolio', 'calendar', 'vouchers', 'reviews', 'trust', 'analytics'].includes(currentView)) {
       fetchProviderData();
     }
   }, [currentView]);
+
+  useEffect(() => {
+    if (currentView === 'collections') {
+      fetchProducts();
+    }
+  }, [prodSearch, prodSortBy, prodPage, prodSizeFilter, prodColorFilter]);
+
+  // Vào tab Tồn kho -> tải đầy đủ (có màn loading lần đầu)
+  useEffect(() => {
+    if (currentView === 'collections' && collectionTab === 'inventory') {
+      fetchInventoryData();
+    }
+  }, [currentView, collectionTab]);
+
+  // Đổi trang / bộ lọc -> chỉ tải lại danh sách hiện vật, giữ nguyên màn hình
+  useEffect(() => {
+    if (currentView === 'collections' && collectionTab === 'inventory') {
+      fetchInventoryData({ silent: true, itemsOnly: true });
+    }
+  }, [invSearch, invSortBy, invStatusFilter, invConditionFilter, invPage]);
 
   const getImageUrl = (url: string) => {
     if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
@@ -544,14 +1024,44 @@ export const ProviderDashboard: React.FC = () => {
     setProdMaterials(['SILK']);
     setProdStatus('ACTIVE');
     setProdImages([]);
+    setProdVideos([]);
     setProdStyle('traditional');
-    setProdOccasions(['wedding']);
+    setProdOccasions([]);
+    setProdStyleCategoryIds([]);
+    setProdEventCategoryIds([]);
+    setVariants([emptyVariant()]);
+    setWizardStep(1);
+    setCreatedDraftId(null);
+    setActiveTagCodes([]);
     if (categories.length > 0) {
-      setProdCategoryId(categories[0]._id);
+      setProdCategoryId(categories[0]._id || categories[0].id);
     }
     setIsModalOpen(true);
   };
 
+  // Tải bảng tồn kho của riêng 1 sản phẩm để nhúng vào bước 2 khi chỉnh sửa
+  const loadEditInvSummary = async (productId: string) => {
+    try {
+      const summary: any = await httpClient.get('/inventory/summary');
+      setEditInvSummary((Array.isArray(summary) ? summary : []).filter((row: any) => row.productId === productId));
+    } catch {
+      setEditInvSummary([]);
+    }
+  };
+
+  const normalizeCategoryIds = (items?: Array<string | { _id?: string; id?: string }>) =>
+    (items || [])
+      .map(item => typeof item === 'string' ? item : item._id || item.id || '')
+      .filter(Boolean);
+
+  const toggleProductCategoryId = (
+    categoryId: string,
+    setCategoryIds: React.Dispatch<React.SetStateAction<string[]>>,
+  ) => {
+    setCategoryIds(current => current.includes(categoryId)
+      ? current.filter(id => id !== categoryId)
+      : [...current, categoryId]);
+  };
   const openEditModal = (p: Product) => {
     setEditingProduct(p);
     setProdName(p.name);
@@ -564,14 +1074,118 @@ export const ProviderDashboard: React.FC = () => {
     setProdMaterials(p.materials || []);
     setProdStatus(p.status);
     setProdImages(p.images || []);
+    setProdVideos(p.videos || []);
     setProdStyle(p.style || 'traditional');
     setProdOccasions(p.occasions || []);
+    setProdStyleCategoryIds(normalizeCategoryIds(p.styleCategoryIds));
+    setProdEventCategoryIds(normalizeCategoryIds(p.eventCategoryIds));
+    setVariants([]);
+    setWizardStep(1);
+    setCreatedDraftId(null);
+    setActiveTagCodes([]);
+    void loadEditInvSummary(p._id);
     setIsModalOpen(true);
+  };
+
+  const handleDuplicateProduct = (p: Product) => {
+    setEditingProduct(null);
+    setProdName('');
+    setProdCategoryId(typeof p.categoryId === 'object' ? p.categoryId._id : p.categoryId);
+    setProdDescription(p.description || '');
+    setProdBasePrice(p.basePrice.toString());
+    setProdDepositAmount(p.depositAmount.toString());
+    setProdSizes(p.sizes || []);
+    setProdColors(p.colors || []);
+    setProdMaterials(p.materials || []);
+    setProdStatus(p.status);
+    setProdImages([]);
+    setProdVideos([]);
+    setProdStyle(p.style ? p.style.toLowerCase() : 'traditional');
+    setProdOccasions(p.occasions || []);
+    setProdStyleCategoryIds(normalizeCategoryIds(p.styleCategoryIds));
+    setProdEventCategoryIds(normalizeCategoryIds(p.eventCategoryIds));
+    // Sao chép biến thể từ áo gốc (số lượng đặt lại = 1 để provider tự nhập).
+    const dupSizes = p.sizes && p.sizes.length ? p.sizes : ['M'];
+    const dupColors = p.colors && p.colors.length ? p.colors : ['RED'];
+    const dupMaterial = p.materials && p.materials.length ? p.materials[0] : 'SILK';
+    const dupVariants: VariantRow[] = [];
+    for (const s of dupSizes) for (const c of dupColors) dupVariants.push({ size: s, color: c, material: dupMaterial, quantity: 1, condition: 'GOOD' });
+    setVariants(dupVariants.length ? dupVariants : [emptyVariant()]);
+    setWizardStep(1);
+    setCreatedDraftId(null);
+    setActiveTagCodes([]);
+    setIsModalOpen(true);
+  };
+
+  const openCampaignModal = () => {
+    setIsCampaignModalOpen(true);
+  };
+
+  const handleCreateCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!campaignOccasion.trim()) {
+      toast.error('Vui lòng nhập dịp khuyến mãi');
+      return;
+    }
+    const percent = parseInt(campaignPercent, 10);
+    if (isNaN(percent) || percent < 1 || percent > 90) {
+      toast.error('Phần trăm giảm giá phải từ 1% đến 90%');
+      return;
+    }
+    if (!campaignStart || !campaignEnd) {
+      toast.error('Vui lòng chọn đầy đủ ngày bắt đầu và kết thúc');
+      return;
+    }
+
+    setSubmittingCampaign(true);
+    try {
+      await httpClient.post('/campaigns', {
+        occasion: campaignOccasion.trim(),
+        discountPercent: percent,
+        startDate: new Date(campaignStart).toISOString(),
+        endDate: new Date(campaignEnd).toISOString(),
+      });
+      toast.success('Tạo chiến dịch khuyến mãi thành công');
+      setIsCampaignModalOpen(false);
+      fetchActiveCampaign();
+      fetchProducts();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.message || err.message || 'Lỗi khi tạo khuyến mãi');
+    } finally {
+      setSubmittingCampaign(false);
+    }
+  };
+
+  const handleDeactivateCampaign = async () => {
+    const confirm = window.confirm('Bạn có chắc chắn muốn tắt chương trình khuyến mãi và quay về giá gốc?');
+    if (!confirm) return;
+
+    setSubmittingCampaign(true);
+    try {
+      await httpClient.delete('/campaigns/active');
+      toast.success('Đã tắt khuyến mãi thành công, các sản phẩm quay về giá gốc');
+      setActiveCampaign(null);
+      setCampaignOccasion('');
+      setCampaignPercent('10');
+      const today = new Date();
+      const nextWeek = new Date();
+      nextWeek.setDate(today.getDate() + 7);
+      setCampaignStart(today.toISOString().split('T')[0]);
+      setCampaignEnd(nextWeek.toISOString().split('T')[0]);
+      setIsCampaignModalOpen(false);
+      fetchProducts();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.message || err.message || 'Lỗi khi tắt khuyến mãi');
+    } finally {
+      setSubmittingCampaign(false);
+    }
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    
+
     setUploadingImages(true);
     try {
       const formData = new FormData();
@@ -593,51 +1207,33 @@ export const ProviderDashboard: React.FC = () => {
     setProdImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleOccasionToggle = (key: string) => {
-    setProdOccasions(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  const handleVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    if (prodVideos.length + e.target.files.length > 2) {
+      toast.error('Tối đa 2 video cho mỗi sản phẩm');
+      e.target.value = '';
+      return;
+    }
+    setUploadingVideos(true);
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < e.target.files.length; i++) {
+        formData.append('videos', e.target.files[i]);
+      }
+      const res = await httpClient.post<{ urls: string[] }>('/products/upload-videos', formData);
+      setProdVideos(prev => [...prev, ...res.urls]);
+      toast.success('Đã tải video lên thành công!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Tải video lên thất bại');
+    } finally {
+      setUploadingVideos(false);
+      e.target.value = '';
+    }
   };
 
-  const handleFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!prodName || !prodCategoryId || !prodBasePrice || !prodDepositAmount) {
-      toast.error('Vui lòng điền đầy đủ các thông tin bắt buộc');
-      return;
-    }
-
-    if (Number(prodDepositAmount) > Number(prodBasePrice)) {
-      toast.error('Giá cọc không được lớn hơn giá thuê');
-      return;
-    }
-
-
-    const payload = {
-      name: prodName,
-      categoryId: prodCategoryId,
-      description: prodDescription,
-      basePrice: Number(prodBasePrice),
-      depositAmount: Number(prodDepositAmount),
-      sizes: prodSizes,
-      colors: prodColors,
-      materials: prodMaterials,
-      status: prodStatus,
-      images: prodImages.length > 0 ? prodImages : ['https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'],
-      style: prodStyle,
-      occasions: prodOccasions,
-    };
-
-    try {
-      if (editingProduct) {
-        await httpClient.patch(`/products/${editingProduct._id}`, payload);
-        toast.success(`Cập nhật áo dài "${prodName}" thành công!`);
-      } else {
-        await httpClient.post('/products', payload);
-        toast.success(`Thêm mới áo dài "${prodName}" thành công!`);
-      }
-      setIsModalOpen(false);
-      fetchProducts();
-    } catch (err: any) {
-      toast.error(err.message || 'Thao tác lưu sản phẩm thất bại.');
-    }
+  const removeVideo = (index: number) => {
+    setProdVideos(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleDeleteProduct = async (id: string, name: string) => {
@@ -679,16 +1275,141 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
-  const handleSizeToggle = (size: string) => {
-    setProdSizes(prev => prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size]);
+  // ──────────────────────────────────────────────────────────────────────────
+  // Onboarding wizard (3 bước) + bảng biến thể + vòng đời "nháp ẩn"
+  // ──────────────────────────────────────────────────────────────────────────
+  const emptyVariant = (): VariantRow => ({ size: 'M', color: 'RED', material: 'SILK', quantity: 1, condition: 'GOOD' });
+  const addVariantRow = () => setVariants(prev => [...prev, emptyVariant()]);
+  const removeVariantRow = (idx: number) => setVariants(prev => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+  const updateVariantRow = (idx: number, field: keyof VariantRow, value: string | number) =>
+    setVariants(prev => prev.map((v, i) => (i === idx ? { ...v, [field]: value } : v)));
+
+  // Gộp các dòng trùng size+màu+chất liệu (cộng dồn số lượng), bỏ dòng thiếu size/màu.
+  const normalizeVariants = (rows: VariantRow[]) => {
+    const map = new Map<string, { size: string; color: string; material: string; quantity: number; conditionStatus: string }>();
+    for (const v of rows) {
+      const size = (v.size || '').trim().toUpperCase();
+      const color = (v.color || '').trim().toUpperCase();
+      const material = (v.material || '').trim();
+      const quantity = Math.max(1, Number(v.quantity) || 1);
+      if (!size || !color) continue;
+      const key = `${size}|${color}|${material.toUpperCase()}`;
+      const existing = map.get(key);
+      if (existing) existing.quantity += quantity;
+      else map.set(key, { size, color, material, quantity, conditionStatus: v.condition || 'GOOD' });
+    }
+    return Array.from(map.values());
   };
 
-  const handleColorToggle = (color: string) => {
-    setProdColors(prev => prev.includes(color) ? prev.filter(c => c !== color) : [...prev, color]);
+  const buildBasePayload = () => ({
+    name: prodName,
+    categoryId: prodCategoryId,
+    description: prodDescription,
+    basePrice: Number(prodBasePrice),
+    depositAmount: Number(prodDepositAmount),
+    status: prodStatus,
+    images: prodImages.length > 0 ? prodImages : [DEFAULT_PRODUCT_IMAGE],
+    videos: prodVideos,
+    style: prodStyle,
+    occasions: prodOccasions,
+    styleCategoryIds: prodStyleCategoryIds,
+    eventCategoryIds: prodEventCategoryIds,
+  });
+
+  const validateWizardStep1 = () => {
+    if (!prodName || !prodCategoryId || !prodBasePrice || !prodDepositAmount) {
+      toast.error('Vui lòng điền đầy đủ thông tin bắt buộc ở bước 1');
+      return false;
+    }
+    if (Number(prodDepositAmount) > Number(prodBasePrice)) {
+      toast.error('Giá cọc không được lớn hơn giá thuê');
+      return false;
+    }
+    if (prodImages.length === 0) {
+      toast.error('Cần tải lên ít nhất 1 hình ảnh sản phẩm');
+      return false;
+    }
+    return true;
   };
 
-  const handleMaterialToggle = (material: string) => {
-    setProdMaterials(prev => prev.includes(material) ? prev.filter(m => m !== material) : [...prev, material]);
+  const handleWizardNext = async () => {
+    if (wizardStep === 1) {
+      if (!validateWizardStep1()) return;
+      setWizardStep(2);
+      return;
+    }
+    if (wizardStep === 2) {
+      // Edit mode: biến thể được quản lý ở tab Tồn kho, chỉ cần sang bước gắn thẻ.
+      if (editingProduct) { setWizardStep(3); return; }
+      const normalized = normalizeVariants(variants);
+      if (normalized.length === 0) {
+        toast.error('Cần ít nhất 1 dòng biến thể hợp lệ (size + màu)');
+        return;
+      }
+      // Tạo bản NHÁP ẨN để AI có productId mà gắn thẻ (khách chưa nhìn thấy).
+      setSavingDraft(true);
+      try {
+        if (createdDraftId) {
+          // Nháp đã tồn tại (quay lại rồi tiến tới): chỉ cập nhật thông tin cơ bản.
+          await httpClient.patch(`/products/${createdDraftId}`, buildBasePayload());
+        } else {
+          const created: any = await httpClient.post('/products', {
+            ...buildBasePayload(),
+            status: 'DRAFT',
+            variants: normalized,
+          });
+          setCreatedDraftId(created._id);
+          if (normalized.length !== variants.length) {
+            toast.success('Đã gộp các biến thể trùng size/màu/chất liệu.');
+          }
+        }
+        setWizardStep(3);
+      } catch (err: any) {
+        toast.error(err.message || 'Lưu bản nháp thất bại. Vui lòng thử lại.');
+      } finally {
+        setSavingDraft(false);
+      }
+    }
+  };
+
+  const handleWizardBack = () => setWizardStep(step => Math.max(1, step - 1));
+
+  const handleWizardFinish = async () => {
+    if (!editingProduct && activeTagCodes.length < 1) {
+      toast.error('Hãy tạo và chọn ít nhất 1 thẻ thông minh trước khi đăng.');
+      return;
+    }
+    if (!validateWizardStep1()) return;
+    try {
+      const targetId = editingProduct?._id ?? createdDraftId;
+      if (!targetId) return;
+      // Trường phái & dịp lễ suy ngược từ thẻ đã chọn (thẻ là nguồn sự thật);
+      // nếu chưa mở bước thẻ (edit nhanh giá/mô tả) thì giữ nguyên giá trị cũ.
+      const styleFromTags = activeTagCodes.map(code => TAG_TO_STYLE[code]).find(Boolean);
+      const occasionsFromTags = activeTagCodes.map(code => TAG_TO_OCCASION[code]).filter(Boolean);
+      await httpClient.patch(`/products/${targetId}`, {
+        ...buildBasePayload(),
+        style: activeTagCodes.length ? (styleFromTags || prodStyle) : prodStyle,
+        occasions: activeTagCodes.length ? occasionsFromTags : prodOccasions,
+      });
+      toast.success(editingProduct ? `Cập nhật áo dài "${prodName}" thành công!` : `Đăng áo dài "${prodName}" thành công!`);
+      setIsModalOpen(false);
+      setCreatedDraftId(null);
+      fetchProducts();
+    } catch (err: any) {
+      toast.error(err.message || 'Thao tác thất bại.');
+    }
+  };
+
+  const handleWizardCancel = async () => {
+    // Bỏ dở một bản nháp vừa tạo -> xóa nó (kèm tồn kho) cho sạch.
+    if (createdDraftId && !editingProduct) {
+      const ok = window.confirm('Hủy sẽ xóa áo dài nháp vừa tạo. Bạn có chắc không?');
+      if (!ok) return;
+      try { await httpClient.delete(`/products/${createdDraftId}`); } catch { /* ignore */ }
+    }
+    setCreatedDraftId(null);
+    setIsModalOpen(false);
   };
 
   // Orders Tab filter & helpers — counts computed dynamically
@@ -698,7 +1419,7 @@ export const ProviderDashboard: React.FC = () => {
       return 'Chờ xử lý';
     }
     if ([
-      'ĐÃ ĐẶT CỌC', 'ĐANG THỰC HIỆN', 'CHỜ NHẬN ĐỒ', 'ĐANG THUÊ', 
+      'ĐÃ ĐẶT CỌC', 'ĐANG THỰC HIỆN', 'CHỜ NHẬN ĐỒ', 'ĐANG THUÊ',
       'CHỜ KHÁCH DUYỆT SỰ CỐ', 'ĐÃ TRẢ ĐỒ', 'TRANH CHẤP', 'ĐANG XỬ LÝ',
       'DEPOSIT_PAID', 'CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP',
       'RETURN_PENDING', 'RETURNED', 'DISPUTED'
@@ -722,8 +1443,8 @@ export const ProviderDashboard: React.FC = () => {
     { label: 'Đã hủy', count: orders.filter(o => getOrderGroup(o.status) === 'Đã hủy').length },
   ], [orders]);
 
-  const filteredOrders = orderTab === 'Tất cả' 
-    ? orders 
+  const filteredOrders = orderTab === 'Tất cả'
+    ? orders
     : orders.filter(o => getOrderGroup(o.status) === orderTab);
 
   // Monthly revenue from completed orders
@@ -753,6 +1474,9 @@ export const ProviderDashboard: React.FC = () => {
     color: active ? 'var(--color-primary)' : 'rgba(255,255,255,0.5)', textDecoration: 'none', borderRadius: '8px',
     backgroundColor: active ? 'rgba(255,255,255,0.06)' : 'transparent', transition: 'var(--transition-smooth)', cursor: 'pointer',
     borderRight: active ? '2px solid var(--color-primary)' : 'none',
+    textAlign: 'left',
+    width: '100%',
+    border: 'none',
   });
 
   // Map từ trạng thái tiếng Việt → BookingStatus enum value
@@ -803,7 +1527,7 @@ export const ProviderDashboard: React.FC = () => {
       return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
           <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-            <div style={{ width: '40px', height: '40px', border: '3px solid #E8E2D5', borderTop: '3px solid #4A0E17', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px auto' }} />
+            <div style={{ width: '40px', height: '40px', border: '3px solid var(--color-light-border)', borderTop: '3px solid var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px auto' }} />
             <p style={{ fontWeight: 600 }}>Đang tải số liệu phân tích...</p>
           </div>
         </div>
@@ -825,29 +1549,29 @@ export const ProviderDashboard: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#4A0E17' }}>Quản trị Cửa hàng</h2>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--color-primary)' }}>Quản trị Cửa hàng</h2>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Phân tích số liệu vận hành và doanh thu áo dài của bạn.</p>
             </div>
             {isShop && isPhoto && (
               <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--color-light-bg)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
-                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
+                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? 'var(--color-primary)' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
+                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? 'var(--color-primary)' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
               </div>
             )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
             {[
-              { label: 'Doanh thu cửa hàng', val: `${(analyticsData.totalRevenue || 0).toLocaleString('vi-VN')} đ`, desc: 'Tổng doanh thu thực', color: '#4A0E17', bg: '#FAF6F0' },
+              { label: 'Doanh thu cửa hàng', val: `${(analyticsData.totalRevenue || 0).toLocaleString('vi-VN')} đ`, desc: 'Tổng doanh thu thực', color: 'var(--color-primary)', bg: '#FAF6F0' },
               { label: 'Tỷ lệ thành công', val: `${analyticsData.successRate}%`, desc: 'Booking hoàn thành', color: '#166534', bg: '#F0FDF4' },
               { label: 'Tỷ lệ hủy lịch', val: `${analyticsData.cancelRate}%`, desc: 'Lịch khách hủy', color: '#991B1B', bg: '#FEE2E2' },
-              { label: 'Tổng sản phẩm', val: `${String(analyticsData.totalProducts).padStart(2, '0')} Item`, desc: 'Đồ đang hoạt động', color: '#706E3B', bg: '#FAF6F0' },
+              { label: 'Tổng sản phẩm', val: `${String(analyticsData.totalProducts).padStart(2, '0')} Item`, desc: 'Đồ đang hoạt động', color: 'var(--color-gold-dark)', bg: '#FAF6F0' },
               { label: 'Thời gian thuê tb', val: analyticsData.averageRentalDuration, desc: 'Thời gian mỗi đơn', color: '#15803D', bg: '#F0FDF4' }
             ].map((m, idx) => (
               <div key={idx} style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '120px' }}>
                 <div>
                   <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</span>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: idx === 0 ? '#4A0E17' : '#2A2A2A', marginTop: '6px', wordBreak: 'break-all' }}>{m.val}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 800, color: idx === 0 ? 'var(--color-primary)' : 'var(--color-text-primary)', marginTop: '6px', wordBreak: 'break-all' }}>{m.val}</div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #F0ECE4', paddingTop: '8px' }}>
                   <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{m.desc}</span>
@@ -861,7 +1585,7 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Doanh thu Áo dài</h3>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Doanh thu Áo dài</h3>
               <div style={{ height: '300px', width: '100%' }}>
                 <svg viewBox="0 0 500 300" style={{ width: '100%', height: '100%' }}>
                   {[0, 0.25, 0.5, 0.75, 1].map((p, idx) => {
@@ -870,15 +1594,15 @@ export const ProviderDashboard: React.FC = () => {
                       <line key={idx} x1="40" y1={y} x2="480" y2={y} stroke="#F0ECE4" strokeDasharray="3 3" />
                     );
                   })}
-                  <polyline fill="none" stroke="#4A0E17" strokeWidth="3" points={points} />
+                  <polyline fill="none" stroke="var(--color-primary)" strokeWidth="3" points={points} />
                   {analyticsData.revenueGrowth.map((r: any, idx: number) => {
                     const x = 50 + idx * 80;
                     const y = 260 - (r.value / maxRev) * 200;
                     return (
                       <g key={idx}>
-                        <circle cx={x} cy={y} r="5" fill="#4A0E17" />
+                        <circle cx={x} cy={y} r="5" fill="var(--color-primary)" />
                         <circle cx={x} cy={y} r="2" fill="white" />
-                        <text x={x} y={y - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="#2A2A2A">{(r.value/1000000).toFixed(1)}M</text>
+                        <text x={x} y={y - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--color-text-primary)">{(r.value/1000000).toFixed(1)}M</text>
                         <text x={x} y="285" textAnchor="middle" fontSize="10" fontWeight="600" fill="var(--color-text-secondary)">{r.label.replace('Tháng ', 'T')}</text>
                       </g>
                     );
@@ -888,7 +1612,7 @@ export const ProviderDashboard: React.FC = () => {
             </div>
 
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Top Phổ biến</h3>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Top Phổ biến</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {analyticsData.popularProducts && analyticsData.popularProducts.length > 0 ? (
                   analyticsData.popularProducts.map((p: any, idx: number) => (
@@ -896,12 +1620,12 @@ export const ProviderDashboard: React.FC = () => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <img src={getImageUrl(p.image)} alt={p.name} style={{ width: '44px', height: '44px', borderRadius: '6px', objectFit: 'cover' }} />
                         <div>
-                          <strong style={{ fontSize: '13px', color: '#2A2A2A', display: 'block' }}>{p.name}</strong>
+                          <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)', display: 'block' }}>{p.name}</strong>
                           <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Mẫu áo được thuê nhiều</span>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <strong style={{ fontSize: '14px', color: '#4A0E17' }}>{p.count}</strong>
+                        <strong style={{ fontSize: '14px', color: 'var(--color-primary)' }}>{p.count}</strong>
                         <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', display: 'block' }}>lượt thuê</span>
                       </div>
                     </div>
@@ -915,7 +1639,7 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', overflow: 'hidden' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-light-border)' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Báo cáo hàng tồn kho & Bảo trì</h3>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Báo cáo hàng tồn kho & Bảo trì</h3>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
@@ -929,9 +1653,9 @@ export const ProviderDashboard: React.FC = () => {
               <tbody>
                 {analyticsData.inventoryStatus.map((item: any, idx: number) => (
                   <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
-                    <td style={{ padding: '16px 24px', fontWeight: 700, color: '#2A2A2A' }}>{item.name}</td>
+                    <td style={{ padding: '16px 24px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.name}</td>
                     <td style={{ padding: '16px 24px', textAlign: 'center' }}>
-                      <span style={{ 
+                      <span style={{
                         padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
                         backgroundColor: item.color === 'rental' ? '#EBF8FF' : '#FEF3C7',
                         color: item.color === 'rental' ? '#2B6CB0' : '#D69E2E'
@@ -956,13 +1680,13 @@ export const ProviderDashboard: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#4A0E17' }}>Tổng quan Hiệu suất</h2>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--color-primary)' }}>Tổng quan Hiệu suất</h2>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Thống kê doanh thu, lịch trình chụp và phản hồi đánh giá của bạn.</p>
             </div>
             {isShop && isPhoto && (
               <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--color-light-bg)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
-                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? '#4A0E17' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
+                <button type="button" onClick={() => setSubTab('shop')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'shop' ? 'white' : 'transparent', color: subTab === 'shop' ? 'var(--color-primary)' : 'var(--color-text-secondary)', boxShadow: subTab === 'shop' ? 'var(--shadow-sm)' : 'none' }}>Cửa hàng</button>
+                <button type="button" onClick={() => setSubTab('photo')} style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: subTab === 'photo' ? 'white' : 'transparent', color: subTab === 'photo' ? 'var(--color-primary)' : 'var(--color-text-secondary)', boxShadow: subTab === 'photo' ? 'var(--shadow-sm)' : 'none' }}>Nhiếp ảnh</button>
               </div>
             )}
           </div>
@@ -970,7 +1694,7 @@ export const ProviderDashboard: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
               <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Doanh thu nhiếp ảnh</span>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: '#4A0E17', marginTop: '8px' }}>{(analyticsData.totalRevenue || 84250000).toLocaleString('vi-VN')} VND</div>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-primary)', marginTop: '8px' }}>{(analyticsData.totalRevenue || 84250000).toLocaleString('vi-VN')} VND</div>
               <span style={{ fontSize: '12px', color: '#166534', marginTop: '6px', display: 'block', fontWeight: 600 }}>↑ Tăng trưởng tốt trong mùa lễ</span>
             </div>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
@@ -992,14 +1716,14 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Doanh thu theo thời gian</h3>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Doanh thu theo thời gian</h3>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '280px', paddingTop: '20px' }}>
                 {analyticsData.revenueGrowth.map((r: any, idx: number) => {
                   const barHeight = (r.value / maxVal) * 220;
                   return (
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
                       <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{(r.value/1000000).toFixed(1)}M</span>
-                      <div style={{ width: '32px', height: `${barHeight}px`, backgroundColor: '#4A0E17', borderRadius: '4px 4px 0 0', transition: 'height 0.3s ease' }} />
+                      <div style={{ width: '32px', height: `${barHeight}px`, backgroundColor: 'var(--color-primary)', borderRadius: '4px 4px 0 0', transition: 'height 0.3s ease' }} />
                       <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)' }}>{r.label.replace('Tháng ', 'T')}</span>
                     </div>
                   );
@@ -1008,16 +1732,16 @@ export const ProviderDashboard: React.FC = () => {
             </div>
 
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Lịch chụp sắp tới</h3>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Lịch chụp sắp tới</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {analyticsData.upcomingSchedules && analyticsData.upcomingSchedules.length > 0 ? (
                   analyticsData.upcomingSchedules.map((s: any, idx: number) => (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
                       <div>
-                        <strong style={{ fontSize: '13px', color: '#2A2A2A', display: 'block' }}>{s.customerName}</strong>
+                        <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)', display: 'block' }}>{s.customerName}</strong>
                         <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{s.date} • {s.time}</span>
                       </div>
-                      <span style={{ 
+                      <span style={{
                         padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
                         backgroundColor: s.color === 'deposit' ? '#F0FDF4' : '#FEF3C7',
                         color: s.color === 'deposit' ? '#166534' : '#92400E'
@@ -1033,8 +1757,8 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '20px' }}>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase', alignSelf: 'flex-start' }}>Đánh giá trung bình</h3>
-              <div style={{ fontSize: '64px', fontWeight: 900, color: '#4A0E17', lineHeight: 1 }}>{analyticsData.averageRating}</div>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase', alignSelf: 'flex-start' }}>Đánh giá trung bình</h3>
+              <div style={{ fontSize: '64px', fontWeight: 900, color: 'var(--color-primary)', lineHeight: 1 }}>{analyticsData.averageRating}</div>
               <div style={{ display: 'flex', gap: '4px', fontSize: '20px', color: '#B89047' }}>
                 {Array.from({ length: 5 }).map((_, i) => (
                   <span key={i}>★</span>
@@ -1044,7 +1768,7 @@ export const ProviderDashboard: React.FC = () => {
             </div>
 
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase' }}>Phong cách phổ biến</h3>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Phong cách phổ biến</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {analyticsData.popularConcepts && analyticsData.popularConcepts.length > 0 ? (
                   analyticsData.popularConcepts.map((c: any, idx: number) => (
@@ -1071,10 +1795,278 @@ export const ProviderDashboard: React.FC = () => {
     return subTab === 'shop' ? renderShopAnalytics() : renderPhotoAnalytics();
   };
 
+  const renderInventoryView = () => {
+    const invSummaryLimit = 8;
+    const invSummaryTotalPages = Math.max(1, Math.ceil(inventorySummary.length / invSummaryLimit));
+    const invSummaryCurrent = Math.min(invSummaryPage, invSummaryTotalPages);
+    const pagedSummary = inventorySummary.slice((invSummaryCurrent - 1) * invSummaryLimit, invSummaryCurrent * invSummaryLimit);
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {/* Search, Filter, Sort Controls */}
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', backgroundColor: 'white', padding: '20px', borderRadius: '12px', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)' }}>
+          {/* Search bar */}
+          <div style={{ flex: 1, minWidth: '240px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Tìm kiếm hiện vật</label>
+            <input
+              type="text"
+              placeholder="Tìm theo SKU hoặc tên áo dài..."
+              value={invSearch}
+              onChange={(e) => setInvSearch(e.target.value)}
+              style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none' }}
+            />
+          </div>
+
+          {/* Status Filter */}
+          <div style={{ width: '180px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Trạng thái hoạt động</label>
+            <select
+              value={invStatusFilter}
+              onChange={(e) => setInvStatusFilter(e.target.value)}
+              style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+            >
+              <option value="">Tất cả trạng thái</option>
+              <option value="AVAILABLE">Sẵn sàng (Available)</option>
+              <option value="RENTED">Đang thuê (Rented)</option>
+              <option value="CLEANING">Đang giặt (Cleaning)</option>
+              <option value="MAINTENANCE">Bảo trì (Maintenance)</option>
+            </select>
+          </div>
+
+          {/* Condition Filter */}
+          <div style={{ width: '180px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Tình trạng chất lượng</label>
+            <select
+              value={invConditionFilter}
+              onChange={(e) => setInvConditionFilter(e.target.value)}
+              style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+            >
+              <option value="">Tất cả chất lượng</option>
+              <option value="NEW">Mới (New)</option>
+              <option value="GOOD">Tốt (Good)</option>
+              <option value="MINOR_DAMAGE">Hỏng nhẹ</option>
+              <option value="LOCKED">Đang khóa (Locked)</option>
+              <option value="RETIRED">Đã thanh lý (Retired)</option>
+            </select>
+          </div>
+
+          {/* Sort */}
+          <div style={{ width: '180px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Sắp xếp theo</label>
+            <select
+              value={invSortBy}
+              onChange={(e) => setInvSortBy(e.target.value)}
+              style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+            >
+              <option value="newest">Mới nhất (Nhập sau)</option>
+              <option value="oldest">Cũ nhất (Nhập trước)</option>
+              <option value="sku_asc">Mã SKU: A - Z</option>
+              <option value="sku_desc">Mã SKU: Z - A</option>
+            </select>
+          </div>
+        </div>
+
+        {isLoadingInventory ? (
+          <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+            Đang tải dữ liệu kho áo dài...
+          </div>
+        ) : (
+          <>
+            {/* 1. SUMMARY VIEW */}
+            <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px', textTransform: 'uppercase' }}>
+                BẢNG TỔNG HỢP TỒN KHO BIẾN THỂ
+              </h3>
+              {inventorySummary.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>Chưa có biến thể áo dài nào trong kho.</div>
+              ) : (
+                <>
+                <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SIZE</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU SẮC</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LIỆU</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TỔNG KHO</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>KHẢ DỤNG</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>ĐANG THUÊ</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>GIẶT / BẢO TRÌ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedSummary.map((item, idx) => (
+                        <tr key={`${item.productId}-${item.size}-${item.color}-${item.material || ''}-${idx}`} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
+                          <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.productName}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{item.color}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{materialLabels[item.material] || item.material || '—'}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>{item.total}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{item.available}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>{item.rented}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>{item.maintenance}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {inventorySummary.length > invSummaryLimit && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '16px', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                      Hiển thị {pagedSummary.length} trên tổng số {inventorySummary.length} biến thể
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        disabled={invSummaryCurrent <= 1}
+                        onClick={() => setInvSummaryPage(p => Math.max(1, p - 1))}
+                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invSummaryCurrent > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                      >
+                        Trang trước
+                      </button>
+                      <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
+                        {invSummaryCurrent} / {invSummaryTotalPages}
+                      </span>
+                      <button
+                        disabled={invSummaryCurrent >= invSummaryTotalPages}
+                        onClick={() => setInvSummaryPage(p => Math.min(invSummaryTotalPages, p + 1))}
+                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invSummaryCurrent < invSummaryTotalPages ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                      >
+                        Trang sau
+                      </button>
+                    </div>
+                  </div>
+                )}
+                </>
+              )}
+            </div>
+
+            {/* 2. DETAIL VIEW */}
+            <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px', textTransform: 'uppercase' }}>
+                DANH SÁCH CHI TIẾT HIỆN VẬT ÁO DÀI
+              </h3>
+              {inventoryItems.length === 0 ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>Chưa có chiếc áo dài nào trong kho. Tạo áo dài mới ở tab "Sản phẩm", hoặc bấm "Nhập thêm hàng" để bổ sung tồn kho.</div>
+              ) : (
+                <>
+                  <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
+                        <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SKU</th>
+                        <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
+                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SIZE</th>
+                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU</th>
+                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LƯỢNG</th>
+                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TRẠNG THÁI</th>
+                        <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GHI CHÚ</th>
+                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>THAO TÁC</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inventoryItems.map((item: any) => {
+                        const isRetired = item.conditionStatus === 'RETIRED';
+                        return (
+                          <tr key={item._id} style={{ borderBottom: '1px solid var(--color-light-border)', opacity: isRetired ? 0.6 : 1 }}>
+                            <td style={{ padding: '16px 20px', fontWeight: 700, color: 'var(--color-primary)' }}>{item.sku}</td>
+                            <td style={{ padding: '16px 20px', fontWeight: 700 }}>{item.productId?.name || 'Sản phẩm lỗi'}</td>
+                            <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
+                            <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.color}</td>
+                            <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                              <span style={{
+                                padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                                backgroundColor: item.conditionStatus === 'NEW' ? '#EEF2F6' : item.conditionStatus === 'GOOD' ? '#F0FDF4' : item.conditionStatus === 'MINOR_DAMAGE' ? '#FFFBEB' : item.conditionStatus === 'LOCKED' ? '#FEF2F2' : '#F4F4F5',
+                                color: item.conditionStatus === 'NEW' ? '#475569' : item.conditionStatus === 'GOOD' ? '#166534' : item.conditionStatus === 'MINOR_DAMAGE' ? '#B45309' : item.conditionStatus === 'LOCKED' ? '#991B1B' : '#71717A'
+                              }}>
+                                {item.conditionStatus === 'NEW' ? 'Mới (New)' : item.conditionStatus === 'GOOD' ? 'Tốt (Good)' : item.conditionStatus === 'MINOR_DAMAGE' ? 'Hỏng nhẹ' : item.conditionStatus === 'LOCKED' ? 'Khóa (Locked)' : 'Thanh lý (Retired)'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                              <span style={{
+                                padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                                backgroundColor: item.status === 'AVAILABLE' ? '#ECFDF5' : item.status === 'RENTED' ? '#EFF6FF' : '#FFF7ED',
+                                color: item.status === 'AVAILABLE' ? '#047857' : item.status === 'RENTED' ? '#1D4ED8' : '#C2410C'
+                              }}>
+                                {item.status === 'AVAILABLE' ? 'Sẵn sàng' : item.status === 'RENTED' ? 'Đang thuê' : item.status === 'CLEANING' ? 'Đang giặt' : 'Bảo trì'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>{item.notes || '—'}</td>
+                            <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                              {!isRetired && (
+                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                  <button
+                                    onClick={() => {
+                                      setEditInvItem(item);
+                                      setEditInvStatus(item.status);
+                                      setEditInvCondition(item.conditionStatus);
+                                      setEditInvNotes(item.notes || '');
+                                      setIsEditInventoryOpen(true);
+                                    }}
+                                    style={{
+                                      padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
+                                      backgroundColor: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)'
+                                    }}
+                                  >
+                                    Cập nhật
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteInventoryItem(item._id)}
+                                    style={{
+                                      padding: '6px 12px', border: 'none', borderRadius: '4px',
+                                      backgroundColor: '#FEE2E2', cursor: 'pointer', fontWeight: 700, fontSize: '11px', color: '#991B1B'
+                                    }}
+                                  >
+                                    Thanh lý
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Inventory pagination controls */}
+                {invTotal > invLimit && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '16px', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                      Hiển thị {inventoryItems.length} trên tổng số {invTotal} hiện vật
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        disabled={invPage <= 1}
+                        onClick={() => setInvPage(p => Math.max(1, p - 1))}
+                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                      >
+                        Trang trước
+                      </button>
+                      <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
+                        {invPage} / {Math.ceil(invTotal / invLimit)}
+                      </span>
+                      <button
+                        disabled={invPage >= Math.ceil(invTotal / invLimit)}
+                        onClick={() => setInvPage(p => p + 1)}
+                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage < Math.ceil(invTotal / invLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                      >
+                        Trang sau
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>)}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-light-bg)' }}>
       {/* SIDEBAR */}
-      <aside style={{ width: '260px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '32px 24px', flexShrink: 0 }}>
+      <aside style={{ width: '280px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '32px 20px', flexShrink: 0, position: 'sticky', top: 0, height: '100vh', overflowY: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         <div>
           <div style={{ marginBottom: '40px' }}>
             <h1 style={{ fontFamily: 'var(--font-header)', fontSize: '22px', fontWeight: 800, color: 'white', margin: 0 }}>Silk & Stone</h1>
@@ -1083,13 +2075,19 @@ export const ProviderDashboard: React.FC = () => {
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <button onClick={() => setCurrentView('analytics')} style={navItemStyle(currentView === 'analytics')}><BarChart3 size={18} /> Thống kê & Hiệu suất</button>
             <button onClick={() => setCurrentView('orders')} style={navItemStyle(currentView === 'orders')}><ShoppingBag size={18} /> Đơn hàng</button>
-            <button onClick={() => setCurrentView('collections')} style={navItemStyle(currentView === 'collections')}><Layers size={18} /> Bộ sưu tập</button>
-            <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ (UC-B06)</button>
-            <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio (UC-B08)</button>
-            <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn (UC-F01)</button>
-            <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi (UC-P01)</button>
-            <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi (UC-H04/05)</button>
-            <button onClick={() => setCurrentView('trust')} style={navItemStyle(currentView === 'trust')}><Users size={18} /> Đánh giá khách hàng (UC-H06)</button>
+            <button onClick={() => { setCurrentView('collections'); setCollectionTab('products'); }} style={navItemStyle(currentView === 'collections' && collectionTab === 'products')}><Layers size={18} /> Bộ sưu tập</button>
+            <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ</button>
+            {hasPhotographyCapability && (
+            <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio</button>
+            )}
+            {hasPhotographyCapability && (
+              <button onClick={() => setCurrentView('photography-packages')} style={navItemStyle(currentView === 'photography-packages')}><Package size={18} /> Gói chụp ảnh</button>
+            )}
+            <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn</button>
+            <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi</button>
+            <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi</button>
+            <button onClick={() => setCurrentView('trust')} style={navItemStyle(currentView === 'trust')}><Users size={18} /> Đánh giá khách hàng</button>
+            <button onClick={() => setCurrentView('payouts')} style={navItemStyle(currentView === 'payouts')}><DollarSign size={18} /> Lịch sử quyết toán</button>
           </nav>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
@@ -1099,16 +2097,167 @@ export const ProviderDashboard: React.FC = () => {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, backgroundColor: 'var(--color-light-bg)' }}>
         {/* TOP BAR */}
         <header style={{
-          height: '60px', borderBottom: '1px solid var(--color-light-border)', backgroundColor: 'rgba(255,255,255,0.85)',
+          height: '60px', borderBottom: '1px solid var(--color-light-border)', backgroundColor: 'var(--color-light-card)',
           backdropFilter: 'blur(10px)', padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           position: 'sticky', top: 0, zIndex: 30,
         }}>
           <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Hệ thống Quản lý nhà cung cấp</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <button style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', position: 'relative' }}><Bell size={18} /><span style={{ position: 'absolute', top: '0', right: '0', width: '7px', height: '7px', backgroundColor: 'var(--color-primary)', borderRadius: '50%', border: '1px solid white' }} /></button>
+            <div style={{ position: 'relative' }} ref={notiRef}>
+              <button
+                onClick={() => { setIsNotiOpen(!isNotiOpen); if (!isNotiOpen) fetchNotifications(); }}
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', position: 'relative' }}
+              >
+                <Bell size={18} />
+                {providerUnreadCount > 0 && (
+                  <span style={{
+                    position: 'absolute', top: '-5px', right: '-5px',
+                    backgroundColor: 'var(--color-primary)', color: 'white',
+                    borderRadius: '50%', minWidth: '14px', height: '14px',
+                    fontSize: '8px', fontWeight: 'bold',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '0 2px', boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                  }}>
+                    {providerUnreadCount > 99 ? '99+' : providerUnreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Dropdown */}
+              {isNotiOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 10px)', right: '-20px',
+                  width: '380px', maxHeight: '480px',
+                  backgroundColor: 'white', borderRadius: '12px',
+                  boxShadow: '0 16px 48px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.04)',
+                  zIndex: 9999, overflow: 'hidden',
+                  animation: 'noti-slide-in 0.2s ease-out'
+                }}>
+                  {/* Header */}
+                  <div style={{
+                    padding: '14px 18px', borderBottom: '1px solid var(--color-light-border)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: 'linear-gradient(135deg, #FAF6F0 0%, #FFF 100%)'
+                  }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--color-primary-dark)' }}>Thông báo</h3>
+                      {providerUnreadCount > 0 && (
+                        <span style={{ fontSize: '10px', color: 'var(--color-gold)', fontWeight: 600 }}>{providerUnreadCount} chưa đọc</span>
+                      )}
+                    </div>
+                    {providerUnreadCount > 0 && (
+                      <button
+                        onClick={handleNotiMarkAllAsRead}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          padding: '4px 8px', border: '1px solid var(--color-light-border)', borderRadius: '5px',
+                          backgroundColor: 'white', color: 'var(--color-gold-dark)', fontSize: '10px',
+                          fontWeight: 600, cursor: 'pointer'
+                        }}
+                      >
+                        <CheckCheck size={11} />
+                        Đọc tất cả
+                      </button>
+                    )}
+                  </div>
+
+                  {/* List */}
+                  <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
+                    {loadingNoti ? (
+                      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 600 }}>Đang tải...</span>
+                      </div>
+                    ) : notifications.length === 0 ? (
+                      <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+                        <Bell size={28} color="var(--color-gold-light)" style={{ marginBottom: '8px' }} />
+                        <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Chưa có thông báo</p>
+                      </div>
+                    ) : (
+                      notifications.map((noti) => {
+                        const ts = getNotiTypeStyle(noti.type);
+                        return (
+                          <div
+                            key={noti._id}
+                            onClick={() => !noti.isRead && handleNotiMarkAsRead(noti._id)}
+                            style={{
+                              padding: '12px 18px', cursor: 'pointer',
+                              borderBottom: '1px solid var(--color-light-border)',
+                              backgroundColor: noti.isRead ? 'white' : '#FFFCF7',
+                              transition: 'background 0.15s',
+                              display: 'flex', gap: '10px', alignItems: 'flex-start',
+                              position: 'relative'
+                            }}
+                            onMouseOver={e => { e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
+                            onMouseOut={e => { e.currentTarget.style.backgroundColor = noti.isRead ? 'white' : '#FFFCF7'; }}
+                          >
+                            {!noti.isRead && (
+                              <div style={{
+                                position: 'absolute', left: '6px', top: '50%', transform: 'translateY(-50%)',
+                                width: '5px', height: '5px', borderRadius: '50%',
+                                backgroundColor: 'var(--color-primary)'
+                              }} />
+                            )}
+                            <div style={{
+                              width: '32px', height: '32px', borderRadius: '8px',
+                              backgroundColor: ts.bg, display: 'flex',
+                              alignItems: 'center', justifyContent: 'center',
+                              fontSize: '14px', flexShrink: 0
+                            }}>
+                              {ts.icon}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: noti.isRead ? 600 : 750, color: 'var(--color-text-primary)' }}>
+                                  {noti.title}
+                                </span>
+                                <span style={{
+                                  padding: '1px 4px', borderRadius: '3px', fontSize: '7px',
+                                  fontWeight: 700, backgroundColor: ts.bg, color: ts.color,
+                                  textTransform: 'uppercase', flexShrink: 0
+                                }}>
+                                  {noti.type}
+                                </span>
+                              </div>
+                              <p style={{
+                                margin: 0, fontSize: '11px', color: 'var(--color-text-secondary)',
+                                lineHeight: '1.4', display: '-webkit-box', WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical' as any, overflow: 'hidden'
+                              }}>
+                                {noti.content}
+                              </p>
+                              <span style={{ fontSize: '9px', color: 'var(--color-text-secondary)', fontWeight: 500, marginTop: '3px', display: 'block' }}>
+                                {getNotiTimeAgo(noti.createdAt)}
+                              </span>
+                            </div>
+                            {!noti.isRead && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleNotiMarkAsRead(noti._id); }}
+                                title="Đánh dấu đã đọc"
+                                style={{ background: 'none', border: 'none', padding: '3px', cursor: 'pointer', color: 'var(--color-gold)', flexShrink: 0, opacity: 0.6 }}
+                                onMouseOver={e => { e.currentTarget.style.opacity = '1'; }}
+                                onMouseOut={e => { e.currentTarget.style.opacity = '0.6'; }}
+                              >
+                                <Check size={12} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <style>{`
+                    @keyframes noti-slide-in {
+                      from { opacity: 0; transform: translateY(-6px); }
+                      to { opacity: 1; transform: translateY(0); }
+                    }
+                  `}</style>
+                </div>
+              )}
+            </div>
             <button style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer' }}><HelpCircle size={18} /></button>
             <div style={{ height: '24px', width: '1px', backgroundColor: 'var(--color-light-border)' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1163,7 +2312,7 @@ export const ProviderDashboard: React.FC = () => {
                 </div>
               </div>
               <div style={{
-                backgroundColor: '#FDF4F4', border: '1px solid rgba(161,30,34,0.12)', borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--color-primary-trans)', border: '1px solid rgba(161,30,34,0.12)', borderRadius: 'var(--radius-md)',
                 padding: '24px', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center',
               }}>
                 <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Doanh thu tháng này</div>
@@ -1212,12 +2361,11 @@ export const ProviderDashboard: React.FC = () => {
                               { label: 'Hoàn thành', status: 'HOÀN THÀNH', icon: <CheckCircle size={14} />, color: '#2e7d32' },
                               { label: 'Đang thực hiện', status: 'ĐANG XỬ LÝ', icon: <Play size={14} />, color: 'var(--color-gold)' },
                               { label: 'Chờ xử lý', status: 'CHỜ XỬ LÝ', icon: <FileText size={14} />, color: 'var(--color-primary)' },
-                              { label: 'Hủy đơn', status: 'ĐÃ HỦY', icon: <Trash2 size={14} />, color: 'var(--color-error)' },
                             ].map(a => (
                               <button key={a.label} onClick={() => changeOrderStatus(o._id, a.status)} style={{
                                 width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
                                 fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: a.color,
-                                fontWeight: a.label === 'Hủy đơn' ? 700 : 500, textAlign: 'left',
+                                fontWeight: 500, textAlign: 'left',
                               }}>{a.icon} {a.label}</button>
                             ))}
                             {(o.rawStatus === 'CONFIRMED' || o.rawStatus === 'COMPLETED' || o.rawStatus === 'PICKED_UP' || o.rawStatus === 'RETURNED' || o.rawStatus === 'RETURN_PENDING' || o.rawStatus === 'DISPUTED') && (
@@ -1256,18 +2404,100 @@ export const ProviderDashboard: React.FC = () => {
 
         {currentView === 'collections' && (
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
               <div>
                 <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Bộ sưu tập</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>
-                  Thêm mới, cập nhật giá, hình ảnh và quản lý kho áo dài của bạn.
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '560px' }}>
+                  {collectionTab === 'inventory'
+                    ? 'Xem tồn kho biến thể, bổ sung hàng hoặc cập nhật trạng thái làm sạch / bảo trì cho từng chiếc áo dài.'
+                    : 'Thêm mới, cập nhật giá, hình ảnh và quản lý bộ sưu tập áo dài của bạn.'}
                 </p>
               </div>
-              <button onClick={openAddModal} style={{
-                display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--color-primary)',
-                padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
-              }}><Plus size={14} /> Thêm Áo Dài mới</button>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                {collectionTab === 'products' ? (
+                  <>
+                    <button onClick={openCampaignModal} style={{
+                      display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: activeCampaign ? '#B91C1C' : '#EF4444',
+                      padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                      color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
+                    }}>
+                      <Tag size={14} /> {activeCampaign ? `Khuyến mãi (-${activeCampaign.discountPercent}%)` : 'Khuyến mãi'}
+                    </button>
+                    <button onClick={openAddModal} style={{
+                      display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--color-primary)',
+                      padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                      color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
+                    }}><Plus size={14} /> Thêm Áo Dài mới</button>
+                  </>
+                ) : (
+                  <button onClick={() => { if (myProductsList.length > 0) { setAddInvProductId(myProductsList[0]._id); } setIsAddInventoryOpen(true); }} style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--color-primary)',
+                    padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                    color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
+                  }}><Plus size={14} /> Nhập thêm hàng</button>
+                )}
+              </div>
+            </div>
+
+            {/* Tab con: Sản phẩm | Tồn kho */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--color-light-border)' }}>
+              {[{ key: 'products', label: 'Sản phẩm' }, { key: 'inventory', label: 'Tồn kho' }].map(t => {
+                const active = collectionTab === t.key;
+                return (
+                  <button key={t.key} type="button" onClick={() => setCollectionTab(t.key as 'products' | 'inventory')} style={{ padding: '10px 18px', border: 'none', borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent', background: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700, color: active ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {collectionTab === 'products' && (
+            <>
+            {/* Search and Sort controls */}
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '24px', backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+              <input
+                type="text"
+                placeholder="Tìm kiếm áo dài theo tên..."
+                value={prodSearch}
+                onChange={(e) => { setProdSearch(e.target.value); setProdPage(1); }}
+                style={{ flex: 1, minWidth: '200px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none' }}
+              />
+              <select
+                value={prodSizeFilter}
+                onChange={(e) => { setProdSizeFilter(e.target.value); setProdPage(1); }}
+                style={{ width: '130px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+              >
+                <option value="">Tất cả Size</option>
+                <option value="S">Size S</option>
+                <option value="M">Size M</option>
+                <option value="L">Size L</option>
+                <option value="XL">Size XL</option>
+                <option value="XXL">Size XXL</option>
+              </select>
+              <select
+                value={prodColorFilter}
+                onChange={(e) => { setProdColorFilter(e.target.value); setProdPage(1); }}
+                style={{ width: '140px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+              >
+                <option value="">Tất cả Màu</option>
+                <option value="RED">Đỏ (Red)</option>
+                <option value="WHITE">Trắng (White)</option>
+                <option value="GOLD">Vàng (Gold)</option>
+                <option value="BLACK">Đen (Black)</option>
+                <option value="PINK">Hồng (Pink)</option>
+                <option value="BLUE">Xanh dương</option>
+                <option value="GREEN">Xanh lá</option>
+                <option value="BROWN">Nâu</option>
+              </select>
+              <select
+                value={prodSortBy}
+                onChange={(e) => { setProdSortBy(e.target.value); setProdPage(1); }}
+                style={{ width: '180px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+              >
+                <option value="newest">Mới nhất (Newest)</option>
+                <option value="price_asc">Giá thuê: Thấp - Cao</option>
+                <option value="price_desc">Giá thuê: Cao - Thấp</option>
+              </select>
             </div>
 
             {loadingProducts ? (
@@ -1282,7 +2512,8 @@ export const ProviderDashboard: React.FC = () => {
                 <button onClick={openAddModal} className="vh-btn vh-btn-primary" style={{ padding: '10px 20px', borderRadius: '6px' }}>Thêm Áo Dài đầu tiên</button>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
                 {products.map((p) => (
                   <div key={p._id} style={{
                     backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)',
@@ -1290,10 +2521,10 @@ export const ProviderDashboard: React.FC = () => {
                   }}>
                     {/* Image */}
                     <div style={{ height: '220px', overflow: 'hidden', position: 'relative', backgroundColor: 'var(--color-light-bg)' }}>
-                      <img 
-                        src={getImageUrl(p.images?.[0])} 
-                        alt={p.name} 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      <img
+                        src={getImageUrl(p.images?.[0])}
+                        alt={p.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                       <span style={{
                         position: 'absolute', top: '12px', right: '12px',
@@ -1326,7 +2557,7 @@ export const ProviderDashboard: React.FC = () => {
                       <div style={{ borderTop: '1px solid var(--color-light-border)', paddingTop: '12px', marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>GIÁ THUÊ / NGÀY</div>
-                          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>{(p.basePrice ?? p.price ?? 0).toLocaleString('vi-VN')}đ</div>
+                          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>{(p.basePrice ?? (p as any).price ?? 0).toLocaleString('vi-VN')}đ</div>
                         </div>
                         <div>
                           <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600, textAlign: 'right' }}>TIỀN ĐẶT CỌC</div>
@@ -1336,7 +2567,7 @@ export const ProviderDashboard: React.FC = () => {
 
                       {/* Actions */}
                       <div style={{ display: 'flex', gap: '10px', marginTop: '12px', borderTop: '1px solid var(--color-light-border)', paddingTop: '12px' }}>
-                        <button 
+                        <button
                           onClick={() => openEditModal(p)}
                           style={{
                             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
@@ -1347,7 +2578,18 @@ export const ProviderDashboard: React.FC = () => {
                         >
                           <Pencil size={12} /> Chỉnh sửa
                         </button>
-                        <button 
+                        <button
+                          onClick={() => handleDuplicateProduct(p)}
+                          style={{
+                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                            backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '8px',
+                            borderRadius: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)',
+                            cursor: 'pointer', transition: 'all 0.2s',
+                          }}
+                        >
+                          <Copy size={12} /> Nhân bản
+                        </button>
+                        <button
                           onClick={() => handleDeleteProduct(p._id, p.name)}
                           style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px',
@@ -1363,6 +2605,39 @@ export const ProviderDashboard: React.FC = () => {
                   </div>
                 ))}
               </div>
+
+              {/* Product list pagination bar */}
+              {prodTotal > prodLimit && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '24px', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                    Hiển thị {products.length} trên tổng số {prodTotal} thiết kế
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      disabled={prodPage <= 1}
+                      onClick={() => setProdPage(p => Math.max(1, p - 1))}
+                      style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                    >
+                      Trang trước
+                    </button>
+                    <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
+                      {prodPage} / {Math.ceil(prodTotal / prodLimit)}
+                    </span>
+                    <button
+                      disabled={prodPage >= Math.ceil(prodTotal / prodLimit)}
+                      onClick={() => setProdPage(p => p + 1)}
+                      style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage < Math.ceil(prodTotal / prodLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                    >
+                      Trang sau
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>)}
+            </>
+            )}
+            {collectionTab === 'inventory' && (
+              <div>{renderInventoryView()}</div>
             )}
           </main>
         )}
@@ -1371,7 +2646,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Thông tin dịch vụ (UC-B06)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Thông tin dịch vụ</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Thiết lập thông tin thương hiệu, showroom nhận đồ và chính sách hủy dịch vụ.</p>
               </div>
             </div>
@@ -1421,8 +2696,20 @@ export const ProviderDashboard: React.FC = () => {
                       required
                     />
                   </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TỶ LỆ GIẢM GIÁ COMBO (%)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={comboDiscountPercent}
+                      onChange={(e) => setComboDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                      required
+                    />
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>CHÍNH SÁCH HỦY DỊCH VỤ / HOÀN CỌC (UC-B06)</label>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>CHÍNH SÁCH HỦY DỊCH VỤ / HOÀN CỌC</label>
                     <textarea
                       value={cancellationPolicy}
                       onChange={(e) => setCancellationPolicy(e.target.value)}
@@ -1443,15 +2730,19 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
-        {currentView === 'portfolio' && (
+        {hasPhotographyCapability && currentView === 'photography-packages' && (
+          <PhotographyPackageManager enabled={hasPhotographyCapability} />
+        )}
+
+        {hasPhotographyCapability && currentView === 'portfolio' && (
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Portfolio (UC-B08)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Portfolio</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Đăng tải các tác phẩm thiết kế mẫu hoặc các dự án đã hoàn thành của bạn.</p>
               </div>
               <button
-                onClick={handleAddPortfolio}
+                onClick={() => setIsPortfolioFormOpen(true)}
                 style={{ padding: '10px 20px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
                 <Plus size={14} />
@@ -1461,27 +2752,229 @@ export const ProviderDashboard: React.FC = () => {
 
             {isLoadingProvider ? (
               <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải portfolio...</div>
-            ) : !provider?.media?.images || provider.media.images.length === 0 ? (
+            ) : portfolioItems.length === 0 ? (
               <div style={{ padding: '80px 40px', textAlign: 'center', backgroundColor: 'white', border: '1px dashed var(--color-light-border)', borderRadius: 'var(--radius-md)' }}>
                 <Camera size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5, marginBottom: '16px', margin: '0 auto' }} />
                 <h4 style={{ fontSize: '16px', fontWeight: 700 }}>Chưa có tác phẩm nào trong Portfolio</h4>
                 <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '6px' }}>Bắt đầu đăng tải hình ảnh chất lượng cao để thu hút khách hàng đặt lịch chụp.</p>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '20px' }}>
-                {provider.media.images.map((img: string, idx: number) => (
-                  <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)' }}>
-                    <img src={img.startsWith('http') ? img : getImageUrl(img)} alt="Portfolio item" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', opacity: 0, transition: 'opacity 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '1'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}>
-                      <button
-                        onClick={() => handleRemovePortfolio(img)}
-                        style={{ padding: '8px 12px', backgroundColor: '#EF4444', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '12px' }}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '24px' }}>
+                {portfolioItems.map((item) => {
+                  const isHovered = hoveredItemId === item._id;
+
+                  let statusLabel = 'Chờ duyệt';
+                  let statusBgColor = '#F59E0B';
+                  if (item.moderationStatus === 'APPROVED') {
+                    statusLabel = 'Đã duyệt';
+                    statusBgColor = '#10B981';
+                  } else if (item.moderationStatus === 'REJECTED') {
+                    statusLabel = 'Từ chối';
+                    statusBgColor = '#EF4444';
+                  } else if (item.moderationStatus === 'HIDDEN') {
+                    statusLabel = 'Tạm ẩn';
+                    statusBgColor = '#6B7280';
+                  }
+
+                  return (
+                    <div
+                      key={item._id}
+                      onMouseEnter={() => setHoveredItemId(item._id)}
+                      onMouseLeave={() => setHoveredItemId(null)}
+                      style={{
+                        position: 'relative',
+                        aspectRatio: '1',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        border: '1px solid var(--color-light-border)',
+                        boxShadow: 'var(--shadow-sm)',
+                        transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                        transform: isHovered ? 'translateY(-4px)' : 'none',
+                      }}
+                    >
+                      {/* Artwork Image */}
+                      <img
+                        src={item.images[0].startsWith('http') ? item.images[0] : getImageUrl(item.images[0])}
+                        alt={item.title}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          transition: 'transform 0.3s ease',
+                          transform: isHovered ? 'scale(1.05)' : 'none',
+                        }}
+                      />
+
+                      {/* Always visible status badge at top-right */}
+                      <span
+                        style={{
+                          position: 'absolute',
+                          right: '12px',
+                          top: '12px',
+                          padding: '4px 10px',
+                          borderRadius: '20px',
+                          backgroundColor: statusBgColor,
+                          color: '#FFFFFF',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                          zIndex: 2,
+                          pointerEvents: 'none',
+                        }}
                       >
-                        Gỡ ảnh
-                      </button>
+                        {statusLabel}
+                      </span>
+
+                      {/* Always visible dark gradient title overlay at bottom */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          padding: '24px 12px 12px 12px',
+                          background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0) 100%)',
+                          color: '#FFFFFF',
+                          zIndex: 1,
+                          pointerEvents: 'none',
+                          display: 'flex',
+                          flexDirection: 'column',
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            fontSize: '13.5px',
+                            textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {item.title}
+                        </span>
+                      </div>
+
+                      {/* Hover blur overlay containing actions */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          backgroundColor: 'rgba(0,0,0,0.4)',
+                          backdropFilter: 'blur(3px)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '10px',
+                          opacity: isHovered ? 1 : 0,
+                          transition: 'opacity 0.25s ease',
+                          zIndex: 3,
+                          pointerEvents: isHovered ? 'auto' : 'none',
+                        }}
+                      >
+                        {/* Xem ảnh lớn */}
+                        <button
+                          onClick={() => {
+                            setPreviewPortfolioItem(item);
+                            setPreviewImageIndex(0);
+                          }}
+                          style={{
+                            width: '130px',
+                            padding: '8px 12px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: 'var(--color-text-primary)',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#FFFFFF';
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                        >
+                          <Eye size={12} />
+                          Xem ảnh lớn
+                        </button>
+
+                        {/* Sửa thông tin */}
+                        <button
+                          onClick={() => {
+                            setEditingPortfolioItem(item);
+                            setIsPortfolioFormOpen(true);
+                          }}
+                          style={{
+                            width: '130px',
+                            padding: '8px 12px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: 'var(--color-text-primary)',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#FFFFFF';
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                        >
+                          <Pencil size={11} />
+                          Sửa thông tin
+                        </button>
+
+                        {/* Gỡ ảnh */}
+                        <button
+                          onClick={() => handleDeletePortfolioItem(item._id)}
+                          style={{
+                            width: '130px',
+                            padding: '8px 12px',
+                            backgroundColor: '#EF4444',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 6px rgba(239, 68, 68, 0.2)',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        >
+                          <Trash2 size={11} />
+                          Gỡ tác phẩm
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </main>
@@ -1491,7 +2984,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Lịch làm việc & Chặn (UC-F01)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Lịch làm việc & Chặn</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Thiết lập khung giờ làm việc cố định hàng tuần và chặn các ngày bận đột xuất.</p>
               </div>
             </div>
@@ -1501,51 +2994,53 @@ export const ProviderDashboard: React.FC = () => {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
                 <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
-                    KHUNG GIỜ LÀM VIỆC CỐ ĐỊNH HẰNG TUẦN
-                  </h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', alignItems: 'flex-end' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY TRONG TUẦN</span>
-                      <select
-                        value={selectedDayOfWeek}
-                        onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))}
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      >
-                        {daysOfWeekVn.map((day, idx) => (
-                          <option key={idx} value={idx}>{day}</option>
-                        ))}
-                      </select>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '20px', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '14px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0 }}>KHUNG GIỜ LÀM VIỆC HẰNG TUẦN</h3>
+                      <p style={{ margin: '6px 0 0', color: 'var(--color-text-secondary)', fontSize: '13px' }}>Chọn nhiều ngày và thêm các ca phù hợp. Lịch cũ của các ngày được chọn sẽ được cập nhật.</p>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIỜ MỞ CỬA</span>
-                      <input
-                        type="text"
-                        value={startHour}
-                        onChange={(e) => setStartHour(e.target.value)}
-                        placeholder="Ví dụ: 08:00"
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      />
+                    {editingScheduleDay !== null && <span style={{ padding: '6px 10px', backgroundColor: '#FFF7ED', color: '#9A3412', borderRadius: '999px', fontWeight: 700, fontSize: '12px' }}>Đang sửa {daysOfWeekVn[editingScheduleDay]}</span>}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 750, color: 'var(--color-text-secondary)' }}>CHỌN NGÀY LÀM VIỆC</span>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button type="button" onClick={() => setSelectedScheduleDays([1, 2, 3, 4, 5])} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', fontSize: '12px' }}>Thứ 2 - Thứ 6</button>
+                      <button type="button" onClick={() => setSelectedScheduleDays([0, 1, 2, 3, 4, 5, 6])} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', fontSize: '12px' }}>Cả tuần</button>
+                      <button type="button" onClick={() => setSelectedScheduleDays([])} style={{ border: 'none', background: 'transparent', color: 'var(--color-text-secondary)', fontWeight: 700, cursor: 'pointer', fontSize: '12px' }}>Bỏ chọn</button>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIỜ ĐÓNG CỬA</span>
-                      <input
-                        type="text"
-                        value={endHour}
-                        onChange={(e) => setEndHour(e.target.value)}
-                        placeholder="Ví dụ: 18:00"
-                        style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      />
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '24px' }}>
+                    {daysOfWeekVn.map((day, index) => {
+                      const isSelected = selectedScheduleDays.includes(index);
+                      return <button key={day} type="button" onClick={() => toggleScheduleDay(index)} style={{ padding: '10px 14px', minWidth: '104px', borderRadius: '8px', border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)', backgroundColor: isSelected ? 'var(--color-primary)' : 'white', color: isSelected ? 'white' : 'var(--color-text-primary)', fontWeight: 700, cursor: 'pointer' }}>{day}</button>;
+                    })}
+                  </div>
+
+                  <div style={{ borderTop: '1px solid var(--color-light-border)', paddingTop: '18px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+                      <div>
+                        <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>Các ca làm việc</strong>
+                        <p style={{ margin: '3px 0 0', color: 'var(--color-text-secondary)', fontSize: '12px' }}>Ví dụ: 08:00 - 12:00 và 13:30 - 17:30.</p>
+                      </div>
+                      <button type="button" onClick={() => setWorkingHourRanges((current) => [...current, { start: '08:00', end: '17:00' }])} style={{ padding: '8px 12px', border: '1px solid var(--color-primary)', borderRadius: '6px', backgroundColor: 'white', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Plus size={15} /> Thêm ca</button>
                     </div>
-                    <button
-                      onClick={handleAddRecurringSchedule}
-                      style={{ padding: '11px 20px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
-                    >
-                      Lưu khung giờ
-                    </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {workingHourRanges.map((range, index) => (
+                        <div key={index} style={{ display: 'grid', gridTemplateColumns: 'minmax(130px, 1fr) minmax(130px, 1fr) auto', gap: '12px', alignItems: 'end', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+                          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>BẮT ĐẦU<input type="time" value={range.start} onChange={(event) => updateWorkingHourRange(index, 'start', event.target.value)} style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white' }} /></label>
+                          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>KẾT THÚC<input type="time" value={range.end} onChange={(event) => updateWorkingHourRange(index, 'end', event.target.value)} style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white' }} /></label>
+                          <button type="button" disabled={workingHourRanges.length === 1} onClick={() => setWorkingHourRanges((current) => current.filter((_, rangeIndex) => rangeIndex !== index))} title="Xóa ca" style={{ width: '40px', height: '40px', border: '1px solid #FECACA', borderRadius: '6px', backgroundColor: workingHourRanges.length === 1 ? '#F9FAFB' : '#FFF1F2', color: workingHourRanges.length === 1 ? '#9CA3AF' : '#DC2626', cursor: workingHourRanges.length === 1 ? 'not-allowed' : 'pointer' }}><Trash2 size={16} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '22px', flexWrap: 'wrap' }}>
+                    {editingScheduleDay !== null && <button type="button" onClick={() => { setEditingScheduleDay(null); setSelectedScheduleDays([1, 2, 3, 4, 5]); setWorkingHourRanges([{ start: '08:00', end: '17:00' }]); }} style={{ padding: '11px 16px', border: '1px solid var(--color-light-border)', borderRadius: '6px', backgroundColor: 'white', color: 'var(--color-text-primary)', fontWeight: 700, cursor: 'pointer' }}>Hủy sửa</button>}
+                    <button type="button" onClick={handleSaveRecurringSchedules} style={{ padding: '11px 20px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}>{editingScheduleDay !== null ? 'Cập nhật khung giờ' : 'Lưu lịch đã chọn'}</button>
                   </div>
                 </div>
-
                 <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
                     CHẶN LỊCH NGHỈ / LỊCH BẬN ĐỘT XUẤT
@@ -1571,25 +3066,26 @@ export const ProviderDashboard: React.FC = () => {
                 </div>
 
                 <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>
-                    LỊCH TRÌNH ĐÃ THIẾT LẬP
-                  </h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '10px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0 }}>LỊCH TRÌNH ĐÃ THIẾT LẬP</h3>
+                    <span style={{ color: 'var(--color-text-secondary)', fontSize: '12px', fontWeight: 700 }}>{schedules.length} thiết lập</span>
+                  </div>
                   {schedules.length === 0 ? (
                     <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Chưa có thiết lập khung giờ nào.</p>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {schedules.map((sch) => (
-                        <div key={sch._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '6px' }}>
-                          <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>
-                            {sch.scheduleType === 'RECURRING'
-                              ? `Mỗi tuần vào ${daysOfWeekVn[sch.dayOfWeek]}`
-                              : `Nghỉ ngày bận đột xuất: ${new Date(sch.specificDate).toLocaleDateString('vi-VN')}`}
-                          </strong>
-                          <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                            {sch.scheduleType === 'RECURRING'
-                              ? sch.workingHours?.map((h: any) => `${h.start} - ${h.end}`).join(', ')
-                              : 'CHẶN NGHỈ CẢ NGÀY'}
-                          </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {schedules.filter((schedule) => schedule.scheduleType === 'RECURRING').sort((a, b) => Number(a.dayOfWeek) - Number(b.dayOfWeek)).map((schedule) => (
+                        <div key={schedule._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', flexWrap: 'wrap', padding: '14px 16px', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px' }}>
+                          <div>
+                            <strong style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-primary)' }}>{daysOfWeekVn[Number(schedule.dayOfWeek)]}</strong>
+                            <span style={{ display: 'block', marginTop: '4px', fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>{schedule.workingHours?.map((range: any) => `${range.start} - ${range.end}`).join(' · ') || 'Chưa có ca làm việc'}</span>
+                          </div>
+                          <button type="button" onClick={() => handleEditRecurringSchedule(schedule)} style={{ padding: '8px 12px', border: '1px solid var(--color-primary)', borderRadius: '6px', backgroundColor: 'white', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Pencil size={14} /> Sửa</button>
+                        </div>
+                      ))}
+                      {schedules.filter((schedule) => schedule.scheduleType !== 'RECURRING').map((schedule) => (
+                        <div key={schedule._id} style={{ padding: '14px 16px', backgroundColor: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '8px' }}>
+                          <strong style={{ fontSize: '14px', color: '#9A3412' }}>Đã chặn ngày {schedule.specificDate ? new Date(schedule.specificDate).toLocaleDateString('vi-VN') : 'không xác định'}</strong>
                         </div>
                       ))}
                     </div>
@@ -1604,7 +3100,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Mã khuyến mãi (UC-P01)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Mã khuyến mãi</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Tạo các chương trình khuyến mãi, giảm giá trực tiếp theo % hoặc tiền mặt cho khách hàng.</p>
               </div>
             </div>
@@ -1704,7 +3200,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá & Phản hồi (UC-H04/H05/H03)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá & Phản hồi</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Theo dõi mức độ đánh giá trung bình và trả lời các thắc mắc, phản hồi từ khách hàng.</p>
               </div>
             </div>
@@ -1753,7 +3249,7 @@ export const ProviderDashboard: React.FC = () => {
                                 style={{ padding: '4px 10px', backgroundColor: '#FFF5F5', border: '1px solid #FEB2B2', borderRadius: '6px', color: '#C53030', fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                               >
                                 <Flag size={11} />
-                                Báo cáo Spam (UC-H03)
+                                Báo cáo Spam
                               </button>
                               <button
                                 onClick={() => { setReplyingReviewId(r._id); setReplyText(r.reply || ''); }}
@@ -1784,7 +3280,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá khách hàng & Tín nhiệm (UC-H06)</h2>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Đánh giá khách hàng & Tín nhiệm</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Đánh giá hai chiều sau khi hoàn thành dịch vụ và tra cứu độ uy tín của khách hàng.</p>
               </div>
             </div>
@@ -1794,7 +3290,7 @@ export const ProviderDashboard: React.FC = () => {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
                 <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>TRA CỨU ĐỘ TÍN NHIỆM KHÁCH HÀNG (UC-B05)</h3>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>TRA CỨU ĐỘ TÍN NHIỆM KHÁCH HÀNG</h3>
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <input
                       type="text"
@@ -1851,6 +3347,83 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
+        {currentView === 'payouts' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Lịch sử quyết toán từ hệ thống</h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Danh sách các khoản thanh toán đã được hệ thống chuyển khoản cho bạn sau khi đơn hàng hoàn thành.</p>
+              </div>
+            </div>
+
+            {isLoadingProvider ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải dữ liệu quyết toán...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 20px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>DANH SÁCH CÁC KHOẢN QUYẾT TOÁN</h3>
+                  {payouts.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 24px', color: 'var(--color-text-secondary)' }}>
+                      <DollarSign size={40} style={{ margin: '0 auto 12px auto', opacity: 0.3 }} />
+                      <p style={{ fontWeight: 700 }}>Chưa có khoản quyết toán nào</p>
+                      <p style={{ fontSize: '12.5px', marginTop: '4px' }}>Khi đơn hàng được hoàn thành, tiền quyết toán sẽ tự động gửi vào tài khoản ngân hàng của bạn.</p>
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
+                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ QUYẾT TOÁN</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ BOOKING</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>SỐ TIỀN THỰC NHẬN</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TÀI KHOẢN NHẬN</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TRẠNG THÁI</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>NGÀY THỰC HIỆN</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {payouts.map((p: any) => (
+                            <tr
+                              key={p.id}
+                              onClick={() => {
+                                const bId = p.bookingId?._id || p.bookingId;
+                                if (bId) {
+                                  setSelectedBookingId(bId);
+                                  setIsDetailModalOpen(true);
+                                }
+                              }}
+                              style={{ borderBottom: '1px solid var(--color-light-border)', cursor: 'pointer' }}
+                              className="hover:bg-stone-50 transition"
+                            >
+                              <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.id}</td>
+                              <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingCode || '—'}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.amount || 0).toLocaleString('vi-VN')}đ</td>
+                              <td style={{ padding: '16px 20px' }}>
+                                <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{p.bank}</span>
+                                <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{p.account} • {p.accountHolder}</span>
+                              </td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                                  backgroundColor: p.status === 'SUCCESS' ? '#F0FDF4' : p.status === 'PENDING' ? '#FEF3C7' : '#FEE2E2',
+                                  color: p.status === 'SUCCESS' ? '#166534' : p.status === 'PENDING' ? '#92400E' : '#991B1B'
+                                }}>
+                                  {p.status === 'SUCCESS' ? 'Thành công' : p.status === 'PENDING' ? 'Đang xử lý' : 'Thất bại'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>{p.date}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </main>
+        )}
+
         {/* Footer */}
         <footer style={{ borderTop: '1px solid var(--color-light-border)', padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
@@ -1865,25 +3438,141 @@ export const ProviderDashboard: React.FC = () => {
         </footer>
       </div>
 
-      {/* -------------------- MODALS: CREATE & EDIT PRODUCT -------------------- */}
-      <Modal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        title={editingProduct ? 'Chỉnh sửa thông tin Áo Dài' : 'Đăng ký Áo Dài mới'} 
-        maxWidth="650px"
+      {/* -------------------- MODAL: CAMPAIGN MANAGEMENT -------------------- */}
+      <Modal
+        isOpen={isCampaignModalOpen}
+        onClose={() => setIsCampaignModalOpen(false)}
+        title="Thiết lập chương trình khuyến mãi"
+        maxWidth="480px"
       >
-        <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
-          
+        <form onSubmit={handleCreateCampaign} style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
+          {activeCampaign && (
+            <div style={{ padding: '12px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '6px', fontSize: '13px', color: '#B91C1C', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontWeight: 700 }}>Đang chạy chiến dịch: {activeCampaign.occasion} (-{activeCampaign.discountPercent}%)</span>
+              <span>Thời gian: {new Date(activeCampaign.startDate).toLocaleDateString('vi-VN')} - {new Date(activeCampaign.endDate).toLocaleDateString('vi-VN')}</span>
+              <button
+                type="button"
+                onClick={handleDeactivateCampaign}
+                style={{
+                  marginTop: '8px', padding: '8px 12px', backgroundColor: '#EF4444', color: 'white', border: 'none',
+                  borderRadius: '4px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', alignSelf: 'flex-start'
+                }}
+              >
+                Về giá gốc (Hủy khuyến mãi)
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DỊP KHUYẾN MÃI *</label>
+            <input
+              type="text"
+              placeholder="Ví dụ: Sale Tết 2027, Khai xuân..."
+              value={campaignOccasion}
+              onChange={(e) => setCampaignOccasion(e.target.value)}
+              required
+              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>PHẦN TRĂM GIẢM GIÁ (%) *</label>
+            <input
+              type="number"
+              min="1"
+              max="90"
+              placeholder="10"
+              value={campaignPercent}
+              onChange={(e) => setCampaignPercent(e.target.value)}
+              required
+              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TỪ NGÀY *</label>
+              <input
+                type="date"
+                value={campaignStart}
+                onChange={(e) => setCampaignStart(e.target.value)}
+                required
+                style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>ĐẾN NGÀY *</label>
+              <input
+                type="date"
+                value={campaignEnd}
+                onChange={(e) => setCampaignEnd(e.target.value)}
+                required
+                style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px', borderTop: '1px solid var(--color-light-border)', paddingTop: '16px' }}>
+            <button
+              type="button"
+              onClick={() => setIsCampaignModalOpen(false)}
+              style={{ flex: 1, padding: '10px', backgroundColor: '#F3F4F6', color: '#4B5563', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              disabled={submittingCampaign}
+              style={{
+                flex: 2, padding: '10px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none',
+                borderRadius: '6px', fontWeight: 700, fontSize: '13px', cursor: submittingCampaign ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {submittingCampaign ? 'Đang xử lý...' : activeCampaign ? 'Cập nhật khuyến mãi mới' : 'Kích hoạt khuyến mãi'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* -------------------- MODALS: CREATE & EDIT PRODUCT -------------------- */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={handleWizardCancel}
+        title={editingProduct ? 'Chỉnh sửa thông tin Áo Dài' : 'Đăng ký Áo Dài mới'}
+        maxWidth="720px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
+          {/* Thanh chi buoc wizard */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {[{ n: 1, label: 'Thông tin & phân loại' }, { n: 2, label: 'Biến thể & kho' }, { n: 3, label: 'Thẻ thông minh' }].map(step => {
+              const active = wizardStep === step.n;
+              const done = wizardStep > step.n;
+              return (
+                <button
+                  key={step.n}
+                  type="button"
+                  onClick={() => { if (editingProduct) setWizardStep(step.n); }}
+                  style={{ flex: 1, textAlign: 'center', fontSize: '11.5px', fontWeight: 700, padding: '7px 4px', borderRadius: '6px', border: active ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)', backgroundColor: active ? 'var(--color-primary-trans)' : done ? 'var(--color-light-bg)' : 'white', color: active ? 'var(--color-primary)' : 'var(--color-text-secondary)', cursor: editingProduct ? 'pointer' : 'default' }}
+                >
+                  <span style={{ marginRight: '4px' }}>{done ? '✓' : step.n}</span>{step.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {wizardStep === 1 && (
+          <>
+
           {/* Name */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TÊN ÁO DÀI *</label>
-            <input 
-              type="text" 
-              value={prodName} 
-              onChange={e => setProdName(e.target.value)} 
-              placeholder="Ví dụ: Áo Dài Gấm Hoa Đỏ Hỷ Sự" 
+            <input
+              type="text"
+              value={prodName}
+              onChange={e => setProdName(e.target.value)}
+              placeholder="Ví dụ: Áo Dài Gấm Hoa Đỏ Hỷ Sự"
               style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-              required 
+              required
             />
           </div>
 
@@ -1891,23 +3580,23 @@ export const ProviderDashboard: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DANH MỤC *</label>
-              <select 
-                value={prodCategoryId} 
-                onChange={e => setProdCategoryId(e.target.value)} 
+              <select
+                value={prodCategoryId}
+                onChange={e => setProdCategoryId(e.target.value)}
                 style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
                 required
               >
                 {categories.map(c => (
-                  <option key={c._id} value={c._id}>{c.name}</option>
+                  <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TRẠNG THÁI HIỂN THỊ</label>
-              <select 
-                value={prodStatus} 
-                onChange={e => setProdStatus(e.target.value as any)} 
+              <select
+                value={prodStatus}
+                onChange={e => setProdStatus(e.target.value as any)}
                 style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
               >
                 <option value="ACTIVE">Đang hoạt động (Bán)</option>
@@ -1921,25 +3610,25 @@ export const ProviderDashboard: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>GIÁ THUÊ (VNĐ / NGÀY) *</label>
-              <input 
-                type="number" 
-                value={prodBasePrice} 
-                onChange={e => setProdBasePrice(e.target.value)} 
-                placeholder="Ví dụ: 350000" 
+              <input
+                type="number"
+                value={prodBasePrice}
+                onChange={e => setProdBasePrice(e.target.value)}
+                placeholder="Ví dụ: 350000"
                 style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                required 
+                required
               />
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TIỀN ĐẶT CỌC ĐỒ (VNĐ) *</label>
-              <input 
-                type="number" 
-                value={prodDepositAmount} 
-                onChange={e => setProdDepositAmount(e.target.value)} 
-                placeholder="Ví dụ: 500000" 
+              <input
+                type="number"
+                value={prodDepositAmount}
+                onChange={e => setProdDepositAmount(e.target.value)}
+                placeholder="Ví dụ: 500000"
                 style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                required 
+                required
               />
             </div>
           </div>
@@ -1947,10 +3636,10 @@ export const ProviderDashboard: React.FC = () => {
           {/* Description */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>MÔ TẢ SẢN PHẨM</label>
-            <textarea 
-              value={prodDescription} 
-              onChange={e => setProdDescription(e.target.value)} 
-              placeholder="Chất liệu lụa, độ co giãn, lưu ý giặt là..." 
+            <textarea
+              value={prodDescription}
+              onChange={e => setProdDescription(e.target.value)}
+              placeholder="Chất liệu lụa, độ co giãn, lưu ý giặt là..."
               rows={3}
               style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'vertical' }}
             />
@@ -1959,9 +3648,9 @@ export const ProviderDashboard: React.FC = () => {
           {/* Image Upload Component */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>HÌNH ẢNH SẢN PHẨM *</label>
-            
+
             {/* Drag & Drop Area */}
-            <div 
+            <div
               style={{
                 border: '2px dashed var(--color-light-border)',
                 borderRadius: '8px',
@@ -1974,13 +3663,13 @@ export const ProviderDashboard: React.FC = () => {
               }}
               onClick={() => document.getElementById('product-image-upload')?.click()}
             >
-              <input 
+              <input
                 id="product-image-upload"
-                type="file" 
-                multiple 
+                type="file"
+                multiple
                 accept="image/*"
                 onChange={handleImageChange}
-                style={{ display: 'none' }} 
+                style={{ display: 'none' }}
               />
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                 <Upload size={28} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
@@ -1996,10 +3685,10 @@ export const ProviderDashboard: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '12px', marginTop: '8px' }}>
                 {prodImages.map((imgUrl, index) => (
                   <div key={index} style={{ width: '80px', height: '80px', borderRadius: '6px', overflow: 'hidden', position: 'relative', border: '1px solid var(--color-light-border)' }}>
-                    <img 
-                      src={getImageUrl(imgUrl)} 
-                      alt={`preview-${index}`} 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    <img
+                      src={getImageUrl(imgUrl)}
+                      alt={`preview-${index}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                     <button
                       type="button"
@@ -2021,194 +3710,255 @@ export const ProviderDashboard: React.FC = () => {
             )}
           </div>
 
-          {/* Attributes Grid (Sizes, Colors, Materials, Styles, Occasions) */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1.2fr 0.8fr',
-            gap: '20px',
-            border: '1px solid var(--color-light-border)',
-            borderRadius: '8px',
-            padding: '20px',
-            backgroundColor: '#FAFAFA'
-          }}>
-            {/* Cột 1: Thuộc tính Vật lý */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Sizes */}
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kích thước có sẵn (Size)</label>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                  {sizesOptions.map(sz => {
-                    const isSelected = prodSizes.includes(sz);
-                    return (
-                      <button 
-                        key={sz} 
-                        type="button"
-                        onClick={() => handleSizeToggle(sz)}
-                        style={{
-                          padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                          cursor: 'pointer', transition: 'all 0.15s',
-                        }}
-                      >
-                        {sz}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Colors */}
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Màu sắc chủ đạo</label>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                  {colorsOptions.map(c => {
-                    const isSelected = prodColors.includes(c);
-                    const colorLabel = {
-                      RED: 'Đỏ', WHITE: 'Trắng', GOLD: 'Vàng', BLACK: 'Đen',
-                      PINK: 'Hồng', BLUE: 'Xanh dương', GREEN: 'Xanh lá', BROWN: 'Nâu'
-                    }[c] || c;
-                    return (
-                      <button 
-                        key={c} 
-                        type="button"
-                        onClick={() => handleColorToggle(c)}
-                        style={{
-                          padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                          cursor: 'pointer', transition: 'all 0.15s',
-                        }}
-                      >
-                        {colorLabel}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Materials */}
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Chất liệu</label>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                  {materialsOptions.map(m => {
-                    const isSelected = prodMaterials.includes(m);
-                    const materialLabel = {
-                      SILK: 'Lụa', VELVET: 'Nhung', BROCADE: 'Gấm', ORGANZA: 'Organza', LINEN: 'Linen'
-                    }[m] || m;
-                    return (
-                      <button 
-                        key={m} 
-                        type="button"
-                        onClick={() => handleMaterialToggle(m)}
-                        style={{
-                          padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                          cursor: 'pointer', transition: 'all 0.15s',
-                        }}
-                      >
-                        {materialLabel}
-                      </button>
-                    );
-                  })}
-                </div>
+          {/* Video Upload (tuỳ chọn) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>VIDEO GIỚI THIỆU (TÙY CHỌN)</label>
+            <div
+              style={{
+                border: '2px dashed var(--color-light-border)',
+                borderRadius: '8px',
+                padding: '16px',
+                textAlign: 'center',
+                backgroundColor: 'var(--color-light-bg)',
+                cursor: 'pointer',
+                transition: 'var(--transition-smooth)',
+              }}
+              onClick={() => document.getElementById('product-video-upload')?.click()}
+            >
+              <input
+                id="product-video-upload"
+                type="file"
+                multiple
+                accept="video/mp4,video/webm,video/quicktime"
+                onChange={handleVideoChange}
+                style={{ display: 'none' }}
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                <Play size={22} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                  {uploadingVideos ? 'Đang tải video lên máy chủ...' : 'Click để chọn video từ máy của bạn'}
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Hỗ trợ MP4, WEBM, MOV (Tối đa 50MB / video · tối đa 2 video)</span>
               </div>
             </div>
 
-            {/* Cột 2: Phân loại Onboarding (Trường phái & Dịp lễ) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '1px solid var(--color-light-border)', paddingLeft: '20px' }}>
-              {/* Design Style */}
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Trường phái thiết kế *</label>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                  {[
-                    { key: 'traditional', label: 'Truyền thống' },
-                    { key: 'modern', label: 'Cách tân' },
-                    { key: 'edgy', label: 'Phá cách' }
-                  ].map(st => {
-                    const isSelected = prodStyle === st.key;
-                    return (
-                      <button 
-                        key={st.key} 
-                        type="button"
-                        onClick={() => setProdStyle(st.key)}
-                        style={{
-                          padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                          cursor: 'pointer', transition: 'all 0.15s',
-                        }}
-                      >
-                        {st.label}
-                      </button>
-                    );
-                  })}
-                </div>
+            {prodVideos.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', marginTop: '8px' }}>
+                {prodVideos.map((videoUrl, index) => (
+                  <div key={index} style={{ position: 'relative', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-light-border)', backgroundColor: '#000' }}>
+                    <video
+                      src={getImageUrl(videoUrl)}
+                      controls
+                      preload="metadata"
+                      style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeVideo(index)}
+                      style={{
+                        position: 'absolute', top: '4px', right: '4px',
+                        width: '20px', height: '20px', borderRadius: '50%',
+                        backgroundColor: 'rgba(0,0,0,0.65)', color: 'white',
+                        border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', zIndex: 2,
+                      }}
+                      title="Xóa video này"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
               </div>
-
-              {/* Occasions */}
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dịp lễ / Sự kiện phù hợp</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
-                  {[
-                    { key: 'graduation', label: 'Chụp ảnh kỷ yếu' },
-                    { key: 'wedding', label: 'Dự đám cưới' },
-                    { key: 'festival', label: 'Lễ hội truyền thống' },
-                    { key: 'event', label: 'Biểu diễn/Sự kiện' }
-                  ].map(oc => {
-                    const isSelected = prodOccasions.includes(oc.key);
-                    return (
-                      <button 
-                        key={oc.key} 
-                        type="button"
-                        onClick={() => handleOccasionToggle(oc.key)}
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '8px 12px',
-                          borderRadius: '6px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)',
-                          backgroundColor: isSelected ? '#FDF4F4' : 'white',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s',
-                        }}
-                      >
-                        <span style={{ marginRight: '6px' }}>{isSelected ? '✓' : '+'}</span>
-                        {oc.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Form Actions */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', borderTop: '1px solid var(--color-light-border)', paddingTop: '16px' }}>
-            <button 
-              type="button" 
-              onClick={() => setIsModalOpen(false)}
-              style={{ padding: '10px 20px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'white', cursor: 'pointer' }}
-            >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>PHÂN LOẠI BỔ SUNG</p>
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Chọn để áo dài xuất hiện đúng trong các bộ lọc trên sàn. Thẻ thông minh ở bước 3 vẫn bổ sung gợi ý cá nhân hoá.</p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>PHONG CÁCH</span>
+              {styleCategories.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {styleCategories.map(category => {
+                    const selected = prodStyleCategoryIds.includes(category.id);
+                    return (
+                      <button
+                        key={category.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => toggleProductCategoryId(category.id, setProdStyleCategoryIds)}
+                        style={{ padding: '7px 12px', borderRadius: '999px', border: `1px solid ${selected ? 'var(--color-primary)' : 'var(--color-light-border)'}`, backgroundColor: selected ? 'rgba(154, 27, 27, 0.10)' : 'white', color: selected ? 'var(--color-primary)' : 'var(--color-text-primary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {selected ? '✓ ' : ''}{category.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Chưa có danh mục phong cách đang hoạt động.</span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DỊP PHÙ HỢP</span>
+              {eventCategories.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {eventCategories.map(category => {
+                    const selected = prodEventCategoryIds.includes(category.id);
+                    return (
+                      <button
+                        key={category.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => toggleProductCategoryId(category.id, setProdEventCategoryIds)}
+                        style={{ padding: '7px 12px', borderRadius: '999px', border: `1px solid ${selected ? 'var(--color-primary)' : 'var(--color-light-border)'}`, backgroundColor: selected ? 'rgba(154, 27, 27, 0.10)' : 'white', color: selected ? 'var(--color-primary)' : 'var(--color-text-primary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {selected ? '✓ ' : ''}{category.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Chưa có danh mục dịp phù hợp đang hoạt động.</span>
+              )}
+            </div>
+          </div>
+          </>
+          )}
+
+          {wizardStep === 2 && (
+          <>
+          {editingProduct ? (
+            <div style={{ padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Biến thể & tồn kho hiện có</p>
+                <button type="button" onClick={() => { setAddInvProductId(editingProduct._id); setIsAddInventoryOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}>
+                  <Plus size={13} /> Nhập thêm hàng
+                </button>
+              </div>
+              {editInvSummary.length === 0 ? (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {(prodSizes || []).map(sz => (<span key={'s' + sz} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{sz}</span>))}
+                  {(prodColors || []).map(c => (<span key={'c' + c} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{colorLabels[c] || c}</span>))}
+                  {(prodMaterials || []).map(m => (<span key={'m' + m} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{materialLabels[m] || m}</span>))}
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--color-light-border)', color: 'var(--color-text-secondary)' }}>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>SIZE</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>MÀU</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>CHẤT LIỆU</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>TỔNG</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>KHẢ DỤNG</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {editInvSummary.map((row: any, idx: number) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: 600 }}>{row.size}</td>
+                          <td style={{ padding: '8px 12px', fontWeight: 600 }}>{colorLabels[row.color] || row.color}</td>
+                          <td style={{ padding: '8px 12px' }}>{materialLabels[row.material] || row.material || '—'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>{row.total}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{row.available}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-secondary)' }}>Trạng thái giặt / bảo trì / thanh lý của từng chiếc quản lý ở tab Tồn kho.</p>
+            </div>
+          ) : (
+            <div>
+              <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '0 0 10px' }}>Mỗi dòng là một biến thể (khác màu / chất liệu / số lượng). Kho sẽ tự sinh theo số lượng.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', fontSize: '10.5px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', padding: '0 2px 6px' }}>
+                <span>Size</span><span>Màu</span><span>Chất liệu</span><span>SL</span><span>Tình trạng</span><span></span>
+              </div>
+              {variants.map((v, idx) => (
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                  <select value={v.size} onChange={e => updateVariantRow(idx, 'size', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                    {sizesOptions.map(sz => (<option key={sz} value={sz}>{sz}</option>))}
+                  </select>
+                  <select value={v.color} onChange={e => updateVariantRow(idx, 'color', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                    {colorsOptions.map(c => (<option key={c} value={c}>{colorLabels[c] || c}</option>))}
+                  </select>
+                  <select value={v.material} onChange={e => updateVariantRow(idx, 'material', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                    {materialsOptions.map(m => (<option key={m} value={m}>{materialLabels[m] || m}</option>))}
+                  </select>
+                  <input type="number" min={1} value={v.quantity} onChange={e => updateVariantRow(idx, 'quantity', Math.max(1, Number(e.target.value) || 1))} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }} />
+                  <select value={v.condition} onChange={e => updateVariantRow(idx, 'condition', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                    {conditionOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                  </select>
+                  <button type="button" onClick={() => removeVariantRow(idx)} title="Xóa dòng" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <X size={16} />
+                  </button>
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                <button type="button" onClick={addVariantRow} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px dashed var(--color-primary)', background: 'white', color: 'var(--color-primary)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
+                  <Plus size={14} /> Thêm dòng biến thể
+                </button>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Tổng kho: {variants.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)} chiếc · {variants.length} biến thể</span>
+              </div>
+            </div>
+          )}
+          </>
+          )}
+
+          {wizardStep === 3 && (
+          <>
+          <SmartTagEditor
+            productId={editingProduct?._id ?? createdDraftId ?? undefined}
+            initialDecisionVersion={editingProduct?.taggingDecisionVersion}
+            onActiveTagsChange={setActiveTagCodes}
+          />
+          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
+            {editingProduct
+              ? 'Trường phái & dịp lễ của sản phẩm được suy tự động từ các thẻ đã chọn.'
+              : 'Bấm "Tạo gợi ý", chọn thẻ phù hợp (cần ít nhất 1 thẻ). Trường phái & dịp lễ sẽ được suy tự động từ thẻ.'}
+          </p>
+          </>
+          )}
+
+          {/* Dieu huong wizard */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginTop: '16px', borderTop: '1px solid var(--color-light-border)', paddingTop: '16px' }}>
+            <button type="button" onClick={handleWizardCancel} style={{ padding: '10px 20px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'white', cursor: 'pointer' }}>
               Hủy
             </button>
-            <button 
-              type="submit"
-              style={{ padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}
-            >
-              {editingProduct ? 'Lưu thay đổi' : 'Đăng áo dài'}
-            </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              {editingProduct ? (
+                // Edit: nhảy tab tự do, nút Lưu luôn hiện — sửa nhanh giá/mô tả không phải đi hết 3 bước
+                <button type="button" onClick={handleWizardFinish} style={{ padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}>
+                  Lưu thay đổi
+                </button>
+              ) : (
+                <>
+                  {wizardStep > 1 && (
+                    <button type="button" onClick={handleWizardBack} style={{ padding: '10px 20px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'white', cursor: 'pointer' }}>
+                      Quay lại
+                    </button>
+                  )}
+                  {wizardStep < 3 && (
+                    <button type="button" onClick={handleWizardNext} disabled={savingDraft} style={{ padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: savingDraft ? 'not-allowed' : 'pointer', opacity: savingDraft ? 0.7 : 1, boxShadow: 'var(--shadow-sm)' }}>
+                      {savingDraft ? 'Đang lưu...' : (wizardStep === 2 ? 'Lưu & tạo thẻ' : 'Tiếp tục')}
+                    </button>
+                  )}
+                  {wizardStep === 3 && (
+                    <button type="button" onClick={handleWizardFinish} disabled={activeTagCodes.length < 1} style={{ padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: activeTagCodes.length < 1 ? 'not-allowed' : 'pointer', opacity: activeTagCodes.length < 1 ? 0.6 : 1, boxShadow: 'var(--shadow-sm)' }}>
+                      Đăng áo dài
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
-        </form>
+        </div>
       </Modal>
       {/* Review reply modal popup */}
       {replyingReviewId && (
@@ -2246,7 +3996,7 @@ export const ProviderDashboard: React.FC = () => {
               <button type="button" onClick={() => setReportingOrder(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
             </div>
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '80vh', overflowY: 'auto' }}>
-              
+
               {/* Chọn sản phẩm bị hỏng */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SẢN PHẨM GẶP SỰ CỐ *</span>
@@ -2386,6 +4136,388 @@ export const ProviderDashboard: React.FC = () => {
         </div>
       )}
 
+      <PortfolioItemFormModal
+        isOpen={isPortfolioFormOpen}
+        isSaving={isPortfolioSaving}
+        onClose={() => {
+          setIsPortfolioFormOpen(false);
+          setEditingPortfolioItem(null);
+        }}
+        onSubmit={handlePortfolioFormSubmit}
+        initialValues={editingPortfolioItem ? { title: editingPortfolioItem.title, description: editingPortfolioItem.description || undefined, images: editingPortfolioItem.images } : null}
+      />
+
+      {previewPortfolioItem && (
+        <div
+          onClick={() => setPreviewPortfolioItem(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            cursor: 'zoom-out',
+          }}
+        >
+          <button
+            onClick={() => setPreviewPortfolioItem(null)}
+            style={{
+              position: 'absolute',
+              right: '24px',
+              top: '24px',
+              background: 'rgba(255,255,255,0.15)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '20px',
+              zIndex: 10002,
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
+          >
+            ✕
+          </button>
+
+          {/* Navigation Buttons for multiple images */}
+          {previewPortfolioItem.images.length > 1 && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewImageIndex(prev => (prev === 0 ? previewPortfolioItem.images.length - 1 : prev - 1));
+                }}
+                style={{
+                  position: 'absolute',
+                  left: '24px',
+                  background: 'rgba(255,255,255,0.15)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '44px',
+                  height: '44px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '24px',
+                  zIndex: 10002,
+                  transition: 'background 0.2s',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
+              >
+                ‹
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewImageIndex(prev => (prev === previewPortfolioItem.images.length - 1 ? 0 : prev + 1));
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '24px',
+                  background: 'rgba(255,255,255,0.15)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '44px',
+                  height: '44px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '24px',
+                  zIndex: 10002,
+                  transition: 'background 0.2s',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)'}
+              >
+                ›
+              </button>
+            </>
+          )}
+
+          {/* Image & Description Box */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '16px',
+              maxWidth: '90%',
+              maxHeight: '90%',
+              cursor: 'default',
+            }}
+          >
+            <img
+              src={previewPortfolioItem.images[previewImageIndex].startsWith('http')
+                ? previewPortfolioItem.images[previewImageIndex]
+                : getImageUrl(previewPortfolioItem.images[previewImageIndex])}
+              alt={previewPortfolioItem.title}
+              style={{
+                maxWidth: '100%',
+                maxHeight: '75vh',
+                objectFit: 'contain',
+                borderRadius: '8px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              }}
+            />
+
+            {/* Caption */}
+            <div style={{ textAlign: 'center', color: 'white' }}>
+              <h4 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 700 }}>
+                {previewPortfolioItem.title}
+                {previewPortfolioItem.images.length > 1 && ` (${previewImageIndex + 1}/${previewPortfolioItem.images.length})`}
+              </h4>
+              {previewPortfolioItem.description && (
+                <p style={{ margin: 0, fontSize: '13.5px', color: 'rgba(255,255,255,0.8)', maxWidth: '600px', lineHeight: 1.5 }}>
+                  {previewPortfolioItem.description}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Booking Details Modal */}
+      <BookingDetailModal
+        bookingId={selectedBookingId}
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        onCustomerClick={viewCustomerTrust}
+        viewerRole="provider"
+      />
+
+      {/* Modal Nhập Kho Áo Dài */}
+      {isAddInventoryOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+          <form onSubmit={handleCreateInventoryItem} style={{ width: '100%', maxWidth: '480px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>NHẬP THÊM HÀNG VÀO KHO</h4>
+              <button type="button" onClick={() => setIsAddInventoryOpen(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+            </div>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* Chọn sản phẩm */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SẢN PHẨM *</label>
+                <select
+                  value={addInvProductId}
+                  onChange={(e) => setAddInvProductId(e.target.value)}
+                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none', fontSize: '13.5px', backgroundColor: 'white' }}
+                  required
+                >
+                  <option value="">-- Chọn áo dài của shop --</option>
+                  {editingProduct && !myProductsList.some((prod: any) => prod._id === editingProduct._id) && (
+                    <option value={editingProduct._id}>{editingProduct.name}</option>
+                  )}
+                  {myProductsList.map((prod: any) => (
+                    <option key={prod._id} value={prod._id}>{prod.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Kích cỡ & Màu sắc — chọn nhanh bằng nút, không dùng dropdown */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>KÍCH CỠ (SIZE) *</label>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {sizesOptions.map(sz => {
+                    const isSelected = addInvSize === sz;
+                    return (
+                      <button key={sz} type="button" onClick={() => setAddInvSize(sz)} style={{ padding: '7px 16px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)', backgroundColor: isSelected ? 'var(--color-primary-trans)' : 'white', color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)', cursor: 'pointer', transition: 'all 0.15s' }}>
+                        {sz}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU SẮC *</label>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {colorsOptions.map(c => {
+                    const isSelected = addInvColor === c;
+                    return (
+                      <button key={c} type="button" onClick={() => setAddInvColor(c)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-light-border)', backgroundColor: isSelected ? 'var(--color-primary-trans)' : 'white', color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)', cursor: 'pointer', transition: 'all 0.15s' }}>
+                        <span style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: colorSwatches[c] || '#ccc', border: '1px solid rgba(0,0,0,0.15)', display: 'inline-block' }} />
+                        {colorLabels[c] || c}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Chất liệu (đồng bộ với biến thể sản phẩm) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LIỆU</label>
+                <select
+                  value={addInvMaterial}
+                  onChange={(e) => setAddInvMaterial(e.target.value)}
+                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none', fontSize: '13.5px', backgroundColor: 'white' }}
+                >
+                  <option value="">— Không chỉ định —</option>
+                  {materialsOptions.map(m => (<option key={m} value={m}>{materialLabels[m] || m}</option>))}
+                </select>
+              </div>
+
+              {/* Số lượng & Chất lượng ban đầu */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SỐ LƯỢNG NHẬP KHO *</label>
+                  <input
+                    type="number"
+                    value={addInvQuantity}
+                    onChange={(e) => setAddInvQuantity(Number(e.target.value))}
+                    min={1}
+                    style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none', fontSize: '13.5px' }}
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÌNH TRẠNG CHẤT LƯỢNG *</label>
+                  <select
+                    value={addInvCondition}
+                    onChange={(e) => setAddInvCondition(e.target.value)}
+                    style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none', fontSize: '13.5px', backgroundColor: 'white' }}
+                    required
+                  >
+                    <option value="NEW">Mới (New)</option>
+                    <option value="GOOD">Tốt (Good)</option>
+                    <option value="MINOR_DAMAGE">Hỏng nhẹ (Minor Damage)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Ghi chú */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GHI CHÚ KHO</label>
+                <input
+                  type="text"
+                  value={addInvNotes}
+                  onChange={(e) => setAddInvNotes(e.target.value)}
+                  placeholder="Nhập ghi chú hoặc mã lô hàng..."
+                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none', fontSize: '13.5px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsAddInventoryOpen(false)}
+                  style={{ padding: '10px 18px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'white', cursor: 'pointer' }}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                >
+                  Thêm vào kho
+                </button>
+              </div>
+
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal Cập Nhật Trạng Thái & Chất Lượng */}
+      {isEditInventoryOpen && editInvItem && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+          <form onSubmit={handleUpdateInventoryItem} style={{ width: '100%', maxWidth: '440px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>CẬP NHẬT HIỆN VẬT: {editInvItem.sku}</h4>
+              <button type="button" onClick={() => setIsEditInventoryOpen(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+            </div>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* Thông tin cố định */}
+              <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-light-bg)', padding: '12px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                <strong>Sản phẩm:</strong> {editInvItem.productId?.name} <br />
+                <strong>Kích cỡ / Màu sắc:</strong> {editInvItem.size} / {editInvItem.color}
+              </div>
+
+              {/* Chọn trạng thái (AVAILABLE, CLEANING, MAINTENANCE) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TRẠNG THÁI HOẠT ĐỘNG *</label>
+                {editInvItem.status === 'RENTED' ? (
+                  <div style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: '#EFF6FF', color: '#1D4ED8', fontSize: '13.5px', fontWeight: 700 }}>
+                    ĐANG CHO THUÊ (Hệ thống tự động khóa)
+                  </div>
+                ) : (
+                  <select
+                    value={editInvStatus}
+                    onChange={(e) => setEditInvStatus(e.target.value)}
+                    style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none', fontSize: '13.5px', backgroundColor: 'white' }}
+                    required
+                  >
+                    <option value="AVAILABLE">Sẵn sàng (Available)</option>
+                    <option value="CLEANING">Đang giặt ủi (Cleaning)</option>
+                    <option value="MAINTENANCE">Bảo trì (Maintenance)</option>
+                  </select>
+                )}
+              </div>
+
+              {/* Chọn chất lượng (NEW, GOOD, MINOR_DAMAGE, LOCKED, RETIRED) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÌNH TRẠNG CHẤT LƯỢNG *</label>
+                <select
+                  value={editInvCondition}
+                  onChange={(e) => setEditInvCondition(e.target.value)}
+                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none', fontSize: '13.5px', backgroundColor: 'white' }}
+                  required
+                >
+                  <option value="NEW">Mới (New)</option>
+                  <option value="GOOD">Tốt (Good)</option>
+                  <option value="MINOR_DAMAGE">Hỏng nhẹ (Minor Damage)</option>
+                  <option value="LOCKED">Khóa tạm thời (Locked)</option>
+                  <option value="RETIRED">Thanh lý (Retired)</option>
+                </select>
+              </div>
+
+              {/* Ghi chú */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GHI CHÚ CHI TIẾT</label>
+                <textarea
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '13.5px', outline: 'none', resize: 'none', height: '60px', fontFamily: 'inherit' }}
+                  placeholder="Mô tả sự cố hoặc tình trạng hiện tại..."
+                  value={editInvNotes}
+                  onChange={(e) => setEditInvNotes(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsEditInventoryOpen(false)}
+                  style={{ padding: '10px 18px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'white', cursor: 'pointer' }}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                >
+                  Lưu thay đổi
+                </button>
+              </div>
+
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

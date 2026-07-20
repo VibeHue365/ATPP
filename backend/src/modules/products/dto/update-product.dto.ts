@@ -1,6 +1,8 @@
 import {
   IsArray,
+  ArrayUnique,
   IsEnum,
+  IsMongoId,
   IsNumber,
   IsOptional,
   IsString,
@@ -10,9 +12,20 @@ import { ProductStatus } from '../schemas/product.schema';
 
 export class UpdateProductDto {
   @IsOptional()
-  @IsString()
+  @IsMongoId()
   categoryId?: string;
 
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsMongoId({ each: true })
+  styleCategoryIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsMongoId({ each: true })
+  eventCategoryIds?: string[];
   @IsOptional()
   @IsString()
   name?: string;
@@ -25,6 +38,11 @@ export class UpdateProductDto {
   @IsArray()
   @IsString({ each: true })
   images?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  videos?: string[];
 
   @IsOptional()
   @IsNumber()

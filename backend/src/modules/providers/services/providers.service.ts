@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -22,6 +23,18 @@ import { Booking } from '../../bookings/schemas/booking.schema';
 import { BookingItem } from '../../bookings/schemas/booking-item.schema';
 import { Review } from '../../reviews/schemas/review.schema';
 import { Payment } from '../../payments/schemas/payment.schema';
+import { ProductModerationStatus } from '../../products/schemas/product.schema';
+import {
+  PortfolioItem,
+  PortfolioItemDocument,
+} from '../schemas/portfolio-item.schema';
+import {
+  CreatePortfolioItemDto,
+  ModeratePortfolioItemDto,
+  UpdatePortfolioItemDto,
+} from '../dto/portfolio-item.dto';
+import { SmartTaggingService } from '../../smart-tagging/services/smart-tagging.service';
+import { SmartTagEntityType } from '../../smart-tagging/constants/smart-tag.constants';
 
 export interface UpdateProviderProfileDto {
   businessName?: string;
@@ -30,6 +43,7 @@ export interface UpdateProviderProfileDto {
   address?: ProviderAddress;
   policies?: ProviderPolicies;
   media?: ProviderMedia;
+  comboDiscountPercent?: number;
 }
 
 @Injectable()
@@ -38,9 +52,13 @@ export class ProvidersService {
     private readonly providersRepository: ProvidersRepository,
     @InjectModel(Product.name) private readonly productModel: Model<Product>,
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
-    @InjectModel(BookingItem.name) private readonly bookingItemModel: Model<BookingItem>,
+    @InjectModel(BookingItem.name)
+    private readonly bookingItemModel: Model<BookingItem>,
     @InjectModel(Review.name) private readonly reviewModel: Model<Review>,
     @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
+    @InjectModel(PortfolioItem.name)
+    private readonly portfolioItemModel: Model<PortfolioItem>,
+    private readonly smartTaggingService: SmartTaggingService,
   ) {}
 
   async getOrCreateProvider(
@@ -139,6 +157,125 @@ export class ProvidersService {
     return updated;
   }
 
+  async listMyPortfolioItems(
+    userIdStr: string,
+  ): Promise<PortfolioItemDocument[]> {
+    const provider = await this.requireProvider(userIdStr);
+    return this.portfolioItemModel
+      .find({ providerId: provider._id })
+      .sort({ updatedAt: -1 })
+      .exec();
+  }
+
+  async createPortfolioItem(
+    userIdStr: string,
+    dto: CreatePortfolioItemDto,
+  ): Promise<PortfolioItemDocument> {
+    const provider = await this.requireProvider(userIdStr);
+    return this.portfolioItemModel.create({
+      providerId: provider._id,
+      title: dto.title,
+      description: dto.description || null,
+      images: dto.images,
+      taggingRevision: 1,
+      taggingDecisionVersion: 0,
+      moderationStatus: ProductModerationStatus.PendingReview,
+      moderationReason: null,
+    });
+  }
+
+  async updatePortfolioItem(
+    userIdStr: string,
+    itemId: string,
+    dto: UpdatePortfolioItemDto,
+  ): Promise<PortfolioItemDocument> {
+    const provider = await this.requireProvider(userIdStr);
+    const item = await this.portfolioItemModel
+      .findOneAndUpdate(
+        { _id: this.toObjectId(itemId), providerId: provider._id },
+        {
+          $set: {
+            ...dto,
+            moderationStatus: ProductModerationStatus.PendingReview,
+            moderationReason: null,
+            moderatedBy: null,
+            moderatedAt: null,
+          },
+          $inc: { taggingRevision: 1 },
+        },
+        { new: true },
+      )
+      .exec();
+    if (!item) throw new NotFoundException('Portfolio item not found');
+    await this.smartTaggingService.markAssignmentsStale(
+      SmartTagEntityType.Portfolio,
+      item._id,
+      item.taggingRevision,
+    );
+    return item;
+  }
+
+  async removePortfolioItem(userIdStr: string, itemId: string): Promise<void> {
+    const provider = await this.requireProvider(userIdStr);
+    const item = await this.portfolioItemModel
+      .findOneAndDelete({
+        _id: this.toObjectId(itemId),
+        providerId: provider._id,
+      })
+      .exec();
+    if (!item) throw new NotFoundException('Portfolio item not found');
+  }
+
+  async listPortfolioModeration(
+    status = ProductModerationStatus.PendingReview,
+  ): Promise<PortfolioItemDocument[]> {
+    return this.portfolioItemModel
+      .find({ moderationStatus: status })
+      .sort({ updatedAt: 1 })
+      .populate('providerId')
+      .exec();
+  }
+
+  async moderatePortfolioItem(
+    adminId: string,
+    itemId: string,
+    dto: ModeratePortfolioItemDto,
+  ): Promise<PortfolioItemDocument> {
+    const allowed = [
+      ProductModerationStatus.Approved,
+      ProductModerationStatus.Rejected,
+      ProductModerationStatus.Hidden,
+    ];
+    if (!allowed.includes(dto.action))
+      throw new BadRequestException('Unsupported moderation action');
+    const expected =
+      dto.action === ProductModerationStatus.Hidden
+        ? ProductModerationStatus.Approved
+        : ProductModerationStatus.PendingReview;
+    const item = await this.portfolioItemModel
+      .findOneAndUpdate(
+        { _id: this.toObjectId(itemId), moderationStatus: expected },
+        {
+          $set: {
+            moderationStatus: dto.action,
+            moderationReason:
+              dto.action === ProductModerationStatus.Approved
+                ? null
+                : dto.reason!.trim(),
+            moderatedBy: this.toObjectId(adminId),
+            moderatedAt: new Date(),
+          },
+        },
+        { new: true },
+      )
+      .exec();
+    if (!item)
+      throw new ConflictException(
+        'Portfolio moderation state was already changed',
+      );
+    return item;
+  }
+
   async getSchedules(userIdStr: string): Promise<ProviderScheduleDocument[]> {
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
@@ -154,19 +291,79 @@ export class ProvidersService {
     dayOfWeek: number,
     workingHours: Array<{ start: string; end: string }>,
   ): Promise<ProviderScheduleDocument> {
+    const schedules = await this.updateRecurringSchedules(
+      userIdStr,
+      [dayOfWeek],
+      workingHours,
+    );
+    return schedules[0];
+  }
+
+  async updateRecurringSchedules(
+    userIdStr: string,
+    dayOfWeeks: number[],
+    workingHours: Array<{ start: string; end: string }>,
+  ): Promise<ProviderScheduleDocument[]> {
+    const normalizedDays = [...new Set(dayOfWeeks)]
+      .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+      .sort((a, b) => a - b);
+    if (normalizedDays.length === 0) {
+      throw new BadRequestException('Hãy chọn ít nhất một ngày làm việc.');
+    }
+
+    const normalizedHours = this.validateWorkingHours(workingHours);
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
     if (!provider) {
       throw new NotFoundException('Provider profile not found');
     }
 
-    return this.providersRepository.upsertRecurringSchedule(
-      provider._id,
-      dayOfWeek,
-      workingHours,
+    return Promise.all(
+      normalizedDays.map((dayOfWeek) =>
+        this.providersRepository.upsertRecurringSchedule(
+          provider._id,
+          dayOfWeek,
+          normalizedHours,
+        ),
+      ),
     );
   }
 
+  private validateWorkingHours(
+    workingHours: Array<{ start: string; end: string }>,
+  ): Array<{ start: string; end: string }> {
+    if (!Array.isArray(workingHours) || workingHours.length === 0) {
+      throw new BadRequestException('Hãy thêm ít nhất một ca làm việc.');
+    }
+
+    const toMinutes = (time: string): number | null => {
+      if (!/^\d{2}:\d{2}$/.test(time)) return null;
+      const [hour, minute] = time.split(':').map(Number);
+      if (hour > 23 || minute > 59) return null;
+      return hour * 60 + minute;
+    };
+
+    const normalized = workingHours.map((slot) => {
+      const start = String(slot?.start || '').trim();
+      const end = String(slot?.end || '').trim();
+      const startMinutes = toMinutes(start);
+      const endMinutes = toMinutes(end);
+      if (startMinutes === null || endMinutes === null || startMinutes >= endMinutes) {
+        throw new BadRequestException(
+          'Mỗi ca phải có giờ bắt đầu trước giờ kết thúc (định dạng HH:mm).',
+        );
+      }
+      return { start, end, startMinutes, endMinutes };
+    }).sort((a, b) => a.startMinutes - b.startMinutes);
+
+    for (let index = 1; index < normalized.length; index += 1) {
+      if (normalized[index].startMinutes < normalized[index - 1].endMinutes) {
+        throw new BadRequestException('Các ca làm việc không được chồng lên nhau.');
+      }
+    }
+
+    return normalized.map(({ start, end }) => ({ start, end }));
+  }
   async updateSpecificDateSchedule(
     userIdStr: string,
     dateStr: string,
@@ -202,41 +399,58 @@ export class ProvidersService {
     // 1. UC-K04 & UC-K09: Doanh thu & hoa hồng
     const bookings = await this.bookingModel.find({
       providerIds: providerId,
-      status: { $in: ['COMPLETED', 'CONFIRMED', 'DEPOSIT_PAID', 'PICKED_UP', 'RETURNED'] }
+      status: {
+        $in: [
+          'COMPLETED',
+          'CONFIRMED',
+          'DEPOSIT_PAID',
+          'PICKED_UP',
+          'RETURNED',
+        ],
+      },
     } as any);
 
     let totalRevenue = 0;
     for (const b of bookings) {
       const items = await this.bookingItemModel.find({
         bookingId: b._id,
-        providerId: providerId
+        providerId: providerId,
       } as any);
-      const bRevenue = items.reduce((sum, item) => sum + (item.unitPrice * (item.quantity || 1)), 0);
+      const bRevenue = items.reduce(
+        (sum, item) => sum + item.unitPrice * (item.quantity || 1),
+        0,
+      );
       totalRevenue += bRevenue;
     }
 
     const commissionFee = Math.round(totalRevenue * 0.15);
 
     // 2. UC-K13: Tỷ lệ đặt lịch thành công & hủy lịch
-    const allBookingsCount = await this.bookingModel.countDocuments({ providerIds: providerId } as any);
+    const allBookingsCount = await this.bookingModel.countDocuments({
+      providerIds: providerId,
+    } as any);
     const successBookingsCount = await this.bookingModel.countDocuments({
       providerIds: providerId,
-      status: 'COMPLETED'
+      status: 'COMPLETED',
     } as any);
     const cancelledBookingsCount = await this.bookingModel.countDocuments({
       providerIds: providerId,
-      status: 'CANCELLED'
+      status: 'CANCELLED',
     } as any);
 
-    const successRate = allBookingsCount ? Math.round((successBookingsCount / allBookingsCount) * 1000) / 10 : 94.2;
-    const cancelRate = allBookingsCount ? Math.round((cancelledBookingsCount / allBookingsCount) * 1000) / 10 : 1.8;
+    const successRate = allBookingsCount
+      ? Math.round((successBookingsCount / allBookingsCount) * 1000) / 10
+      : 94.2;
+    const cancelRate = allBookingsCount
+      ? Math.round((cancelledBookingsCount / allBookingsCount) * 1000) / 10
+      : 1.8;
 
     // 3. UC-K05: Sản phẩm phổ biến nhất (Top 3)
     const popularItems = await this.bookingItemModel.aggregate([
       { $match: { providerId } },
       { $group: { _id: '$productId', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
-      { $limit: 3 }
+      { $limit: 3 },
     ]);
 
     const popularProducts = [];
@@ -247,21 +461,42 @@ export class ProvidersService {
           popularProducts.push({
             name: prod.name,
             image: prod.images?.[0] || '/hong_lien_hoa.png',
-            count: item.count
+            count: item.count,
           });
         }
       }
     }
     // 4. UC-K06: Quản lý tồn kho / Trạng thái sản phẩm
-    const totalProducts = await this.productModel.countDocuments({ providerId } as any);
+    const totalProducts = await this.productModel.countDocuments({
+      providerId,
+    } as any);
     const inventoryStatus = [
-      { name: 'Áo dài Tứ Thân Lụa Hà Đông', status: 'ĐANG CHO THUÊ', count: '02 Bộ', detail: 'Lịch thuê tiếp theo: 02/07', color: 'rental' },
-      { name: 'Áo dài Cách Tân Cấm Thượng Hải', status: 'CẦN BẢO TRÌ', count: '15 Bộ', detail: 'Cần làm sạch', color: 'maintenance' }
+      {
+        name: 'Áo dài Tứ Thân Lụa Hà Đông',
+        status: 'ĐANG CHO THUÊ',
+        count: '02 Bộ',
+        detail: 'Lịch thuê tiếp theo: 02/07',
+        color: 'rental',
+      },
+      {
+        name: 'Áo dài Cách Tân Cấm Thượng Hải',
+        status: 'CẦN BẢO TRÌ',
+        count: '15 Bộ',
+        detail: 'Cần làm sạch',
+        color: 'maintenance',
+      },
     ];
 
     // 5. UC-K08: Doanh thu theo thời gian (6 tháng gần đây)
     const revenueGrowth = [];
-    const labels = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6'];
+    const labels = [
+      'Tháng 1',
+      'Tháng 2',
+      'Tháng 3',
+      'Tháng 4',
+      'Tháng 5',
+      'Tháng 6',
+    ];
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
@@ -270,50 +505,79 @@ export class ProvidersService {
 
       const mBookings = await this.bookingModel.find({
         providerIds: providerId,
-        status: { $in: ['COMPLETED', 'CONFIRMED', 'DEPOSIT_PAID', 'PICKED_UP', 'RETURNED'] },
-        createdAt: { $gte: start, $lte: end }
+        status: {
+          $in: [
+            'COMPLETED',
+            'CONFIRMED',
+            'DEPOSIT_PAID',
+            'PICKED_UP',
+            'RETURNED',
+          ],
+        },
+        createdAt: { $gte: start, $lte: end },
       } as any);
 
       let mRevenue = 0;
       for (const b of mBookings) {
         const items = await this.bookingItemModel.find({
           bookingId: b._id,
-          providerId: providerId
+          providerId: providerId,
         } as any);
-        mRevenue += items.reduce((sum, item) => sum + (item.unitPrice * (item.quantity || 1)), 0);
+        mRevenue += items.reduce(
+          (sum, item) => sum + item.unitPrice * (item.quantity || 1),
+          0,
+        );
       }
 
       revenueGrowth.push({
         label: labels[5 - i],
-        value: mRevenue
+        value: mRevenue,
       });
     }
 
     // 6. UC-K10: Lịch booking (Lấy lịch chụp thật của photographer)
     const upcomingSchedules = [];
     try {
-      const dbSchedules = await this.bookingModel.db.model('BookingSchedule').find({
-        bookingId: { $in: bookings.map(b => b._id) },
-        scheduleType: 'PHOTOSHOOT',
-        scheduledDate: { $gte: new Date(new Date().setHours(0,0,0,0)) }
-      } as any).populate({
-        path: 'bookingId',
-        populate: { path: 'customerId' }
-      } as any).sort({ scheduledDate: 1 }).limit(5).lean().exec();
+      const dbSchedules = await this.bookingModel.db
+        .model('BookingSchedule')
+        .find({
+          bookingId: { $in: bookings.map((b) => b._id) },
+          scheduleType: 'PHOTOSHOOT',
+          scheduledDate: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+        } as any)
+        .populate({
+          path: 'bookingId',
+          populate: { path: 'customerId' },
+        } as any)
+        .sort({ scheduledDate: 1 })
+        .limit(5)
+        .lean()
+        .exec();
 
-      for (const s of (dbSchedules as any[])) {
+      for (const s of dbSchedules as any[]) {
         const b = s.bookingId;
         if (!b) continue;
         const cust = b.customerId;
-        const custName = s.notes || cust?.fullName || cust?.email?.split('@')[0] || 'Khách hàng';
-        const dateStr = s.scheduledDate ? new Date(s.scheduledDate).toLocaleDateString('vi-VN') : '';
-        const statusStr = b.status === 'DEPOSIT_PAID' ? 'Đã cọc' : b.status === 'PENDING' ? 'Chờ duyệt' : 'Đã xác nhận';
+        const custName =
+          s.notes ||
+          cust?.fullName ||
+          cust?.email?.split('@')[0] ||
+          'Khách hàng';
+        const dateStr = s.scheduledDate
+          ? new Date(s.scheduledDate).toLocaleDateString('vi-VN')
+          : '';
+        const statusStr =
+          b.status === 'DEPOSIT_PAID'
+            ? 'Đã cọc'
+            : b.status === 'PENDING'
+              ? 'Chờ duyệt'
+              : 'Đã xác nhận';
         upcomingSchedules.push({
           customerName: custName,
           date: dateStr,
           time: s.timeSlot || 'Cả ngày',
           status: statusStr,
-          color: b.status === 'DEPOSIT_PAID' ? 'deposit' : 'pending'
+          color: b.status === 'DEPOSIT_PAID' ? 'deposit' : 'pending',
         });
       }
     } catch (err) {
@@ -327,18 +591,22 @@ export class ProvidersService {
         { $match: { providerId, photographyPackageId: { $ne: null } } } as any,
         { $group: { _id: '$photographyPackageId', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
-        { $limit: 4 }
+        { $limit: 4 },
       ]);
 
       let totalConceptBookings = 0;
       const tempConcepts = [];
       for (const item of popularPhotoPackages) {
         if (item._id) {
-          const pkg = await this.bookingModel.db.model('PhotographyPackage').findById(item._id).lean().exec() as any;
+          const pkg = (await this.bookingModel.db
+            .model('PhotographyPackage')
+            .findById(item._id)
+            .lean()
+            .exec()) as any;
           if (pkg) {
             tempConcepts.push({
               name: pkg.name,
-              count: item.count
+              count: item.count,
             });
             totalConceptBookings += item.count;
           }
@@ -347,11 +615,13 @@ export class ProvidersService {
 
       const colors = ['#4A0E17', '#706E3B', '#B89047', '#A0A0A0'];
       for (let i = 0; i < tempConcepts.length; i++) {
-        const pct = totalConceptBookings ? Math.round((tempConcepts[i].count / totalConceptBookings) * 100) : 0;
+        const pct = totalConceptBookings
+          ? Math.round((tempConcepts[i].count / totalConceptBookings) * 100)
+          : 0;
         popularConcepts.push({
           name: tempConcepts[i].name,
           percentage: pct,
-          color: colors[i % colors.length]
+          color: colors[i % colors.length],
         });
       }
     } catch (err) {
@@ -374,7 +644,7 @@ export class ProvidersService {
       revenueGrowth,
       upcomingSchedules,
       popularConcepts,
-      averageRating: avgRating
+      averageRating: avgRating,
     };
   }
 
@@ -383,5 +653,13 @@ export class ProvidersService {
       throw new BadRequestException('Invalid ID');
     }
     return new Types.ObjectId(id);
+  }
+
+  private async requireProvider(userIdStr: string): Promise<ProviderDocument> {
+    const provider = await this.providersRepository.findByUserId(
+      this.toObjectId(userIdStr),
+    );
+    if (!provider) throw new NotFoundException('Provider profile not found');
+    return provider;
   }
 }

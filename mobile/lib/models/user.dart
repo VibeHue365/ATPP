@@ -1,3 +1,29 @@
+class UserFavorite {
+  final String targetType;
+  final String targetId;
+  final DateTime addedAt;
+
+  UserFavorite({
+    required this.targetType,
+    required this.targetId,
+    required this.addedAt,
+  });
+
+  factory UserFavorite.fromJson(Map<String, dynamic> json) {
+    return UserFavorite(
+      targetType: json['targetType'] ?? '',
+      targetId: json['targetId'] ?? '',
+      addedAt: json['addedAt'] != null ? DateTime.parse(json['addedAt']) : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'targetType': targetType,
+        'targetId': targetId,
+        'addedAt': addedAt.toIso8601String(),
+      };
+}
+
 class User {
   final String id;
   final String email;
@@ -7,11 +33,18 @@ class User {
   final String status;
   final List<String> roles;
   final UserProfile? profile;
+  final List<UserFavorite> favorites;
 
   // Convenience
   String get role => roles.isNotEmpty ? roles.first : 'CUSTOMER';
   String get name => profile?.fullName ?? email;
-  String? get avatarUrl => profile?.avatarUrl;
+  String? get avatarUrl {
+    final url = profile?.avatarUrl;
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('http')) return url;
+    return 'http://10.0.2.2:3000$url';
+  }
+
 
   User({
     required this.id,
@@ -22,11 +55,17 @@ class User {
     this.status = 'active',
     this.roles = const [],
     this.profile,
+    this.favorites = const [],
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
+    var favList = json['favorites'] as List?;
+    List<UserFavorite> parsedFavorites = favList != null
+        ? favList.map((x) => UserFavorite.fromJson(x)).toList()
+        : [];
+
     return User(
-      id: json['id'] ?? '',
+      id: json['_id'] ?? json['id'] ?? '',
       email: json['email'] ?? '',
       phone: json['phone'],
       emailVerified: json['emailVerified'] ?? false,
@@ -34,6 +73,7 @@ class User {
       status: json['status'] ?? 'active',
       roles: List<String>.from(json['roles'] ?? []),
       profile: json['profile'] != null ? UserProfile.fromJson(json['profile']) : null,
+      favorites: parsedFavorites,
     );
   }
 
@@ -46,8 +86,10 @@ class User {
         'status': status,
         'roles': roles,
         'profile': profile?.toJson(),
+        'favorites': favorites.map((x) => x.toJson()).toList(),
       };
 }
+
 
 class UserProfile {
   final String? fullName;

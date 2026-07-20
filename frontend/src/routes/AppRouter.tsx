@@ -30,6 +30,7 @@ import OnboardingPage from '../pages/onboarding/OnboardingPage';
 import ProviderDashboard from '../pages/providerdashboard/ProviderDashboard';
 import BecomeProviderPage from '../pages/provider/BecomeProviderPage';
 import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
+import AdminDashboardRefactored from '../pages/admin/AdminDashboardRefactored';
 
 export const AppRouter: React.FC = () => {
   return (
@@ -75,6 +76,8 @@ export const AppRouter: React.FC = () => {
         </Route>
         {/* Admin Dashboard Page (No MainLayout header/footer) */}
         <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardPage />} />
+        {/* Parallel preview route: legacy dashboard remains the production route during refactor. */}
+        <Route path={ROUTES.ADMIN_DASHBOARD_REFACTORED} element={<AdminDashboardRefactored />} />
       </Route>
 
       {/* 404 Route Fallback */}

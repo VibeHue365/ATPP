@@ -1,8 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards, UseInterceptors, UploadedFile, BadRequestException, UnsupportedMediaTypeException } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException, UnsupportedMediaTypeException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
@@ -14,6 +12,7 @@ import {
   CreatePhotographyBookingDto,
 } from '../services/bookings.service';
 import { IsString, IsNotEmpty } from 'class-validator';
+import { PublicMediaService } from '../../storage/services/public-media.service';
 
 export class CancelBookingDto {
   @IsString()
@@ -24,7 +23,10 @@ export class CancelBookingDto {
 @Controller(['bookings', 'api/bookings'])
 @UseGuards(JwtAuthGuard)
 export class BookingsController {
-  constructor(private readonly bookingsService: BookingsService) {}
+  constructor(
+    private readonly bookingsService: BookingsService,
+    private readonly publicMedia: PublicMediaService,
+  ) {}
 
   @Post('upload-reference')
   @UseInterceptors(
@@ -43,31 +45,15 @@ export class BookingsController {
         }
         callback(null, true);
       },
-      storage: diskStorage({
-        destination: (_request, _file, callback) => {
-          const dest = join(process.cwd(), 'uploads', 'bookings');
-          if (!existsSync(dest)) {
-            mkdirSync(dest, { recursive: true });
-          }
-          callback(null, dest);
-        },
-        filename: (_request, file, callback) => {
-          const safeExt = extname(file.originalname).toLowerCase() || '.jpg';
-          callback(
-            null,
-            `ref-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`,
-          );
-        },
-      }),
+      storage: memoryStorage(),
     }),
   )
-  uploadReferenceFile(
+  async uploadReferenceFile(
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
-    if (!file) {
-      throw new BadRequestException('No file uploaded');
-    }
-    return { url: `/uploads/bookings/${file.filename}` };
+    if (!file) throw new BadRequestException('No file uploaded');
+    const upload = await this.publicMedia.uploadImage('bookings', file);
+    return { url: upload.url };
   }
 
 
@@ -118,24 +104,31 @@ export class BookingsController {
 
   /** GET /bookings/:id hoặc GET /api/bookings/:id */
   @Get(':id')
-  async getById(@Param('id') id: string): Promise<Record<string, any>> {
-    return this.bookingsService.getBookingById(id);
+  async getById(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string
+  ): Promise<Record<string, any>> {
+    return this.bookingsService.getBookingById(id, user.sub, user.roles);
   }
 
   /** POST /bookings/:id/complete */
   @Post(':id/complete')
-  async complete(@Param('id') id: string) {
-    return this.bookingsService.completeBooking(id);
+  async complete(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string
+  ) {
+    return this.bookingsService.completeBooking(id, user.sub, user.roles);
   }
 
   /** PATCH /bookings/:id/status — Provider cập nhật trạng thái đơn hàng */
   @Patch(':id/status')
   async updateStatus(
+    @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() body: { status: string; note?: string },
   ) {
     if (!body?.status) throw new BadRequestException('Thiếu trường status');
-    return this.bookingsService.updateBookingStatus(id, body.status, body.note);
+    return this.bookingsService.updateBookingStatus(id, body.status, body.note, user.sub, user.roles);
   }
 
   /** POST /bookings/:id/cancel hoặc POST /api/bookings/:id/cancel */
@@ -148,6 +141,25 @@ export class BookingsController {
     const reason = body?.reason || (typeof body === 'string' ? body : undefined);
     return this.bookingsService.cancelBooking(id, user.sub, user.roles || [], reason);
   }
+
+  /** PATCH /bookings/:id/reschedule — Khách hàng đổi lịch đơn hàng (UC-E06) */
+  @Patch(':id/reschedule')
+  async reschedule(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: {
+      itemId: string;
+      newRentalFrom?: string;
+      newRentalTo?: string;
+      newShootDate?: string;
+      newShootTimeSlot?: string;
+      reason?: string;
+    },
+  ) {
+    if (!body?.itemId) throw new BadRequestException('Thiếu trường itemId');
+    return this.bookingsService.rescheduleBooking(id, user.sub, body);
+  }
+
 
   /** GET /bookings hoặc GET /api/bookings */
   @Get()

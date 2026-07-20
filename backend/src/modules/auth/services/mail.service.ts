@@ -59,6 +59,10 @@ export class MailService {
     await this.send(email, subject, text, html);
   }
 
+  async sendMail(to: string, subject: string, html: string, text?: string): Promise<void> {
+    await this.send(to, subject, text || html.replace(/<[^>]*>/g, ''), html);
+  }
+
   private async send(
     to: string,
     subject: string,

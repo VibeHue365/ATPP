@@ -39,13 +39,19 @@ export class AuthController {
   ) {}
 
   @Post('register')
-  register(@Body() dto: RegisterDto): Promise<Record<string, unknown>> {
-    return this.authService.register(dto);
+  register(
+    @Body() dto: RegisterDto,
+    @Req() request: RequestMeta,
+  ): Promise<Record<string, unknown>> {
+    return this.authService.register(dto, this.context(request));
   }
 
   @Post('verify-email')
-  verifyEmail(@Body() dto: VerifyEmailDto): Promise<Record<string, unknown>> {
-    return this.authService.verifyEmail(dto);
+  verifyEmail(
+    @Body() dto: VerifyEmailDto,
+    @Req() request: RequestMeta,
+  ): Promise<Record<string, unknown>> {
+    return this.authService.verifyEmail(dto, this.context(request));
   }
 
   @Post('resend-verification')
@@ -90,22 +96,25 @@ export class AuthController {
   changePassword(
     @CurrentUser() user: AuthUser,
     @Body() dto: ChangePasswordDto,
+    @Req() request: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    return this.authService.changePassword(user.sub, dto);
+    return this.authService.changePassword(user.sub, dto, this.context(request));
   }
 
   @Post('forgot-password')
   forgotPassword(
     @Body() dto: ForgotPasswordDto,
+    @Req() request: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    return this.authService.forgotPassword(dto);
+    return this.authService.forgotPassword(dto, this.context(request));
   }
 
   @Post('reset-password')
   resetPassword(
     @Body() dto: ResetPasswordDto,
+    @Req() request: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    return this.authService.resetPassword(dto);
+    return this.authService.resetPassword(dto, this.context(request));
   }
 
   @Get('google')

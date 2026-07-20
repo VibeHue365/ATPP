@@ -11,11 +11,10 @@ import {
   UseInterceptors,
   UploadedFiles,
   UnsupportedMediaTypeException,
+  Query,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { memoryStorage } from 'multer';
 import { ProductsService } from '../services/products.service';
 import { ProductDocument } from '../schemas/product.schema';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -23,14 +22,45 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
+import { PublicMediaService } from '../../storage/services/public-media.service';
+import { InventoryService } from '../services/inventory.service';
+import { ProductAvailabilityService } from '../services/product-availability.service';
 
-@Controller('products')
+@Controller(['products', 'api/products'])
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly publicMedia: PublicMediaService,
+    private readonly inventoryService: InventoryService,
+    private readonly availabilityService: ProductAvailabilityService,
+  ) {}
 
   @Get()
-  async getAll(): Promise<ProductDocument[]> {
-    return this.productsService.getAllActiveProducts();
+  async getAll(
+    @Query('search') search?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('minRating') minRating?: string,
+    @Query('colors') colors?: string,
+    @Query('sizes') sizes?: string,
+    @Query('materials') materials?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('styleCategoryIds') styleCategoryIds?: string,
+    @Query('eventCategoryIds') eventCategoryIds?: string,
+  ): Promise<any[]> {
+    const options = {
+      search,
+      minPrice: minPrice ? Number(minPrice) : undefined,
+      maxPrice: maxPrice ? Number(maxPrice) : undefined,
+      minRating: minRating ? Number(minRating) : undefined,
+      colors: colors ? colors.split(',').map(c => c.trim()).filter(Boolean) : undefined,
+      sizes: sizes ? sizes.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+      materials: materials ? materials.split(',').map(m => m.trim()).filter(Boolean) : undefined,
+      categoryId,
+      styleCategoryIds: styleCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
+      eventCategoryIds: eventCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
+    };
+    return this.productsService.getAllActiveProducts(options);
   }
 
   @Get('categories')
@@ -38,10 +68,33 @@ export class ProductsController {
     return this.productsService.getCategories();
   }
 
+  @Get('featured')
+  async getFeatured(@Query('limit') limit?: string): Promise<any[]> {
+    const parsedLimit = Number.parseInt(limit || '8', 10);
+    return this.productsService.getFeaturedProducts(
+      Number.isFinite(parsedLimit) ? parsedLimit : 8,
+    );
+  }
+
+  @Get(':id/availability')
+  async getAvailability(@Param('id') id: string, @Query('size') size: string, @Query('color') color: string, @Query('rentalFrom') rentalFrom: string, @Query('rentalTo') rentalTo: string, @Query('quantity') quantity?: string, @Query('rentalType') rentalType?: string, @Query('startTime') startTime?: string, @Query('endTime') endTime?: string) {
+    return this.availabilityService.check(id, size, color, rentalFrom, rentalTo, quantity ? Number(quantity) : 1, rentalType, startTime, endTime);
+  }
+
   @Get('my-listings')
   @UseGuards(JwtAuthGuard)
-  async getMyProducts(@CurrentUser() user: AuthUser): Promise<ProductDocument[]> {
-    return this.productsService.getMyProducts(user.sub);
+  async getMyProducts(
+    @CurrentUser() user: AuthUser,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sizes') sizes?: string,
+    @Query('colors') colors?: string,
+  ): Promise<any> {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 10;
+    return this.productsService.getMyProducts(user.sub, search, sortBy, pageNum, limitNum, sizes, colors);
   }
 
   @Post()
@@ -90,33 +143,60 @@ export class ProductsController {
         }
         callback(null, true);
       },
-      storage: diskStorage({
-        destination: (_request, _file, callback) => {
-          const productDestination = join(process.cwd(), 'uploads', 'products');
-          if (!existsSync(productDestination)) {
-            mkdirSync(productDestination, { recursive: true });
-          }
-          callback(null, productDestination);
-        },
-        filename: (_request, file, callback) => {
-          const safeExt = extname(file.originalname).toLowerCase() || '.jpg';
-          callback(
-            null,
-            `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`,
-          );
-        },
-      }),
+      storage: memoryStorage(),
     }),
   )
   async uploadImages(
     @UploadedFiles() files: Express.Multer.File[],
   ): Promise<{ urls: string[] }> {
-    const urls = (files || []).map(file => `/uploads/products/${file.filename}`);
-    return { urls };
+    const uploads = await Promise.all(
+      (files || []).map((file) => this.publicMedia.uploadImage('products', file)),
+    );
+    return { urls: uploads.map((upload) => upload.url) };
+  }
+
+  @Post('upload-videos')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FilesInterceptor('videos', 2, {
+      limits: { fileSize: 50 * 1024 * 1024 },
+      fileFilter: (_request, file, callback) => {
+        const allowedMimeTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
+        if (!allowedMimeTypes.includes(file.mimetype)) {
+          callback(
+            new UnsupportedMediaTypeException(
+              'Only mp4, webm, and mov videos are allowed',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+      storage: memoryStorage(),
+    }),
+  )
+  async uploadVideos(
+    @UploadedFiles() files: Express.Multer.File[],
+  ): Promise<{ urls: string[] }> {
+    const uploads = await Promise.all(
+      (files || []).map((file) => this.publicMedia.uploadVideo('products', file)),
+    );
+    return { urls: uploads.map((upload) => upload.url) };
+  }
+
+  // Public: tồn kho khả dụng theo size/màu trong khoảng ngày — cho khách xem trước khi đặt
+  @Get(':id/availability')
+  async availability(
+    @Param('id') id: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.inventoryService.getPublicAvailability(id, from, to);
   }
 
   @Get(':id')
-  async getOne(@Param('id') id: string): Promise<ProductDocument> {
+  async getOne(@Param('id') id: string): Promise<any> {
     const product = await this.productsService.getProductById(id);
     if (!product) {
       throw new NotFoundException(`Product with ID ${id} not found`);

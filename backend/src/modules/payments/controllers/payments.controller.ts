@@ -10,57 +10,18 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { IsEnum, IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { PaymentsService } from '../services/payments.service';
-import { Payment, PaymentPurpose } from '../schemas/payment.schema';
-
-export class CreatePaymentLinkDto {
-  @IsString()
-  @IsNotEmpty()
-  bookingId: string;
-
-  @IsEnum(PaymentPurpose)
-  purpose: PaymentPurpose;
-}
-
-export class ResolveDisputeDto {
-  @IsNumber()
-  @Min(0)
-  refundToCustomer: number;
-
-  @IsNumber()
-  @Min(0)
-  payToProvider: number;
-}
-
-export class WebhookBodyDto {
-  @IsString()
-  @IsNotEmpty()
-  code: string;
-
-  @IsString()
-  @IsNotEmpty()
-  desc: string;
-
-  @IsNotEmpty()
-  data: Record<string, unknown>;
-
-  @IsString()
-  @IsNotEmpty()
-  signature: string;
-}
-
-interface WebhookData {
-  orderCode?: number;
-  status?: string;
-}
+import { PaymentsRepository } from '../repositories/payments.repository';
+import { WebhookEventRepository } from '../repositories/webhook-event.repository';
+import { CreatePaymentLinkDto } from '../dto/create-payment-link.dto';
+import { ResolveDisputeDto } from '../dto/resolve-dispute.dto';
+import { WebhookBodyDto } from '../dto/webhook-body.dto';
+import { WebhookData } from '../interfaces/webhook.interfaces';
 
 @Controller('payments')
 export class PaymentsController {
@@ -69,7 +30,8 @@ export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly configService: ConfigService,
-    @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
+    private readonly paymentsRepository: PaymentsRepository,
+    private readonly webhookEventRepository: WebhookEventRepository,
   ) {}
 
   @Post('create-link')
@@ -82,6 +44,12 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   async getHistory(@CurrentUser() user: AuthUser) {
     return this.paymentsService.getTransactions(user.sub, user.roles);
+  }
+
+  @Get('settlement-transfers/provider')
+  @UseGuards(JwtAuthGuard)
+  async getProviderSettlementTransfers(@CurrentUser() user: AuthUser) {
+    return this.paymentsService.getProviderSettlementTransfers(user.sub);
   }
 
   @Post(':code/confirm')
@@ -105,45 +73,55 @@ export class PaymentsController {
 
   @Post('webhook')
   async handlePayOSWebhook(@Body() body: WebhookBodyDto) {
-    const checksumKey = this.configService.get<string>(
-      'PAYOS_CHECKSUM_KEY',
-      '',
-    );
+    const webhookData = body.data as WebhookData;
+    const orderCode = webhookData?.orderCode;
+    const status = webhookData?.status;
+    if (orderCode === undefined || !status) {
+      throw new BadRequestException('Webhook PayOS thiếu orderCode hoặc trạng thái.');
+    }
 
-    if (!checksumKey || checksumKey.includes('your_')) {
-      this.logger.warn(
-        `PAYOS_CHECKSUM_KEY not configured or is placeholder. Bypassing signature check for simulation.`,
-      );
-    } else {
-      const isVerified = this.verifyPayOSSignature(
-        body.data,
-        body.signature,
-        checksumKey,
-      );
-      if (!isVerified) {
-        this.logger.warn(`Invalid signature detected in payOS webhook!`);
+    const checksumKey = this.configService.get<string>('PAYOS_CHECKSUM_KEY', '');
+    if (checksumKey && !checksumKey.includes('your_')) {
+      if (!this.verifyPayOSSignature(body.data, body.signature, checksumKey)) {
+        this.logger.warn(`Invalid signature detected in PayOS webhook for order ${orderCode}.`);
         throw new BadRequestException('Signature verification failed');
       }
+    } else {
+      this.logger.warn('PAYOS_CHECKSUM_KEY is not configured; signature check is bypassed for the local simulator.');
     }
 
-    const webhookData = body.data as WebhookData;
-    const orderCode = webhookData.orderCode;
-    const status = webhookData.status;
+    const webhookId = `payos_${orderCode}_${status}`;
+    const claim = await this.webhookEventRepository.claimVerifiedEvent(
+      webhookId,
+      body.data,
+      body.signature,
+    );
+    if (claim.state === 'processed') {
+      return { status: 'success', note: 'already_processed' };
+    }
+    if (claim.state === 'processing') {
+      return { status: 'success', note: 'already_processing' };
+    }
 
-    this.logger.log(`Received payOS webhook for orderCode: ${orderCode}`);
-
-    if (status === 'PAID' && orderCode !== undefined) {
-      const payment = await this.paymentModel.findOne({
-        'payos.orderCode': orderCode,
-      });
-      if (payment) {
+    try {
+      this.logger.log(`Processing PayOS webhook ${webhookId}.`);
+      if (status === 'PAID') {
+        const payment = await this.paymentsRepository.findByOrderCode(orderCode);
+        if (!payment) {
+          throw new BadRequestException(`Không tìm thấy giao dịch PayOS có orderCode ${orderCode}.`);
+        }
         await this.paymentsService.confirmPayment(payment.paymentCode);
       }
+      await this.webhookEventRepository.markProcessed(webhookId);
+      return { status: 'success' };
+    } catch (error: any) {
+      await this.webhookEventRepository.markError(
+        webhookId,
+        error?.message || 'Webhook processing failed',
+      );
+      throw error;
     }
-
-    return { status: 'success' };
   }
-
   private verifyPayOSSignature(
     data: Record<string, unknown>,
     signature: string,
@@ -178,15 +156,16 @@ export class PaymentsController {
   @Get('checkout/:code')
   async renderCheckout(@Param('code') code: string, @Res() res: Response) {
     try {
-      const payment = await this.paymentModel.findOne({ paymentCode: code }).populate('bookingId');
+      const payment = await this.paymentsRepository.findPaymentWithBooking(code);
       if (!payment) {
         return res.status(404).send('Không tìm thấy thông tin thanh toán.');
       }
 
-      const booking = payment.bookingId as any;
+       const booking = payment.bookingId as any;
       const bookingCode = booking?.bookingCode || 'N/A';
       const amount = payment.amount;
       const memo = `VIBEHUE PAY ${payment.paymentCode}`;
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
       const html = `
         <!DOCTYPE html>
@@ -246,15 +225,15 @@ export class PaymentsController {
                   </div>
                   <div class="flex justify-between text-sm py-1 border-b border-stone-100">
                     <span class="text-stone-500 font-medium">Hình thức:</span>
-                    <strong class="text-stone-800 font-bold">Đặt cọc giữ lịch (20%)</strong>
+                    <strong class="text-stone-800 font-bold">Đặt cọc giữ lịch</strong>
                   </div>
                 </div>
               </div>
 
               <!-- Back link -->
               <div class="mt-8 pt-4 border-t border-stone-100">
-                <a href="http://localhost:5173/cart" class="text-xs font-bold text-stone-500 hover:text-stone-700 flex items-center gap-1">
-                  ← Quay lại giỏ hàng
+                <a id="cancel-back-btn" href="vibehue://payment/cancel" class="text-xs font-bold text-stone-500 hover:text-stone-700 flex items-center gap-1">
+                  ← Hủy thanh toán
                 </a>
               </div>
             </div>
@@ -332,8 +311,8 @@ export class PaymentsController {
             <p class="text-sm text-stone-500 mb-6 leading-relaxed">
               Hệ thống đã xác nhận khoản chuyển tiền cọc trị giá <strong>${amount.toLocaleString('vi-VN')}đ</strong> cho giao dịch <strong>${payment.paymentCode}</strong> hoàn tất thành công.
             </p>
-            <a href="http://localhost:5173/dashboard/profile?tab=payments" class="w-full py-3.5 vh-bg-red vh-bg-red-hover text-white font-bold text-sm rounded-xl transition inline-flex items-center justify-center shadow-md">
-              Quay lại Cửa Hàng
+            <a id="success-back-btn" href="vibehue://payment/success" class="w-full py-3.5 vh-bg-red vh-bg-red-hover text-white font-bold text-sm rounded-xl transition inline-flex items-center justify-center shadow-md">
+              Xác nhận và quay lại
             </a>
           </div>
 
@@ -342,6 +321,7 @@ export class PaymentsController {
             const amount = ${amount};
             const memo = "${memo}";
             const code = "${payment.paymentCode}";
+            const frontendUrl = "${frontendUrl}";
 
             const bankSelect = document.getElementById('bank-select');
             const accInput = document.getElementById('acc-input');
@@ -351,7 +331,7 @@ export class PaymentsController {
             
             const lblHolder = document.getElementById('lbl-holder');
             const lblBank = document.getElementById('lbl-bank');
-
+ 
             // Toggle Config panel drawer
             const toggleBtn = document.getElementById('toggle-config-btn');
             const configPanel = document.getElementById('config-panel');
@@ -408,6 +388,25 @@ export class PaymentsController {
             // Init
             updateQR();
 
+            // Setup deep link click handlers with web redirects fallbacks
+            const cancelBackBtn = document.getElementById('cancel-back-btn');
+            cancelBackBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              window.location.href = 'vibehue://payment/cancel';
+              setTimeout(() => {
+                window.location.href = frontendUrl + '/dashboard/profile';
+              }, 500);
+            });
+
+            const successBackBtn = document.getElementById('success-back-btn');
+            successBackBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              window.location.href = 'vibehue://payment/success';
+              setTimeout(() => {
+                window.location.href = frontendUrl + '/dashboard/profile';
+              }, 500);
+            });
+
             // Confirm payment API call
             const confirmBtn = document.getElementById('confirm-btn');
             const spinner = document.getElementById('spinner');
@@ -431,7 +430,12 @@ export class PaymentsController {
                   setTimeout(() => {
                     successCard.classList.remove('opacity-0', 'scale-95');
                     successCard.classList.add('opacity-100', 'scale-100');
-                  }, 50);
+                    // Thử chuyển hướng ứng dụng di động trước, sau đó fallback về web sau 1.5s
+                    window.location.href = 'vibehue://payment/success';
+                    setTimeout(() => {
+                      window.location.href = frontendUrl + '/dashboard/profile';
+                    }, 1500);
+                  }, 800);
                 } else {
                   alert('Xác nhận thanh toán thất bại. Vui lòng thử lại!');
                   confirmBtn.disabled = false;

@@ -28,18 +28,20 @@ class Booking {
   });
 
   factory Booking.fromJson(Map<String, dynamic> json) {
+    final rawProviderIds = json['providerIds'] as List?;
+    final parsedProviderIds = rawProviderIds
+            ?.map((x) => x is Map ? (x['_id'] ?? x['id'] ?? '').toString() : x.toString())
+            .where((x) => x.isNotEmpty)
+            .toList() ??
+        <String>[];
+
     return Booking(
       id: json['_id'] ?? json['id'] ?? '',
       bookingCode: json['bookingCode'] ?? '',
       customerId: json['customerId'] is Map
           ? (json['customerId']['_id'] ?? json['customerId']['id'] ?? '').toString()
           : (json['customerId'] ?? '').toString(),
-      providerIds: List<String>.from((json['providerIds'] ?? []).map((x) {
-        if (x is Map) {
-          return (x['_id'] ?? x['id'] ?? '').toString();
-        }
-        return x.toString();
-      })),
+      providerIds: parsedProviderIds,
       bookingType: json['bookingType'] ?? 'AODAI_RENTAL',
       status: json['status'] ?? 'DRAFT',
       pricingSummary: BookingPricingSummary.fromJson(json['pricingSummary'] ?? {}),
@@ -153,6 +155,7 @@ class BookingItem {
   final String? selectedSize;
   final String? selectedColor;
   final String? customRequests;
+  final bool isReviewed;
 
   BookingItem({
     required this.id,
@@ -173,22 +176,17 @@ class BookingItem {
     this.selectedSize,
     this.selectedColor,
     this.customRequests,
+    this.isReviewed = false,
   });
 
   factory BookingItem.fromJson(Map<String, dynamic> json) {
     return BookingItem(
       id: json['_id'] ?? json['id'] ?? '',
-      bookingId: json['bookingId'] ?? '',
-      providerId: json['providerId'] is Map
-          ? (json['providerId']['_id'] ?? json['providerId']['id'] ?? '').toString()
-          : (json['providerId'] ?? '').toString(),
+      bookingId: json['bookingId'] is Map ? (json['bookingId']['_id'] ?? json['bookingId']['id'] ?? '') : (json['bookingId'] ?? ''),
+      providerId: json['providerId'] is Map ? (json['providerId']['_id'] ?? json['providerId']['id'] ?? '') : (json['providerId'] ?? ''),
       itemType: json['itemType'] ?? 'PRODUCT',
-      productId: json['productId'] is Map
-          ? (json['productId']['_id'] ?? json['productId']['id'] ?? '').toString()
-          : json['productId']?.toString(),
-      photographyPackageId: json['photographyPackageId'] is Map
-          ? (json['photographyPackageId']['_id'] ?? json['photographyPackageId']['id'] ?? '').toString()
-          : json['photographyPackageId']?.toString(),
+      productId: json['productId'] is Map ? (json['productId']['_id'] ?? json['productId']['id']) : json['productId'],
+      photographyPackageId: json['photographyPackageId'] is Map ? (json['photographyPackageId']['_id'] ?? json['photographyPackageId']['id']) : json['photographyPackageId'],
       unitPrice: (json['unitPrice'] ?? 0.0).toDouble(),
       depositAmount: (json['depositAmount'] ?? 0.0).toDouble(),
       quantity: json['quantity'] ?? 1,
@@ -201,6 +199,7 @@ class BookingItem {
       selectedSize: json['selectedSize'],
       selectedColor: json['selectedColor'],
       customRequests: json['customRequests'],
+      isReviewed: json['isReviewed'] ?? false,
     );
   }
 }

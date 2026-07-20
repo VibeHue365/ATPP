@@ -6,10 +6,12 @@ import {
   LoginProvider,
   LoginStatus,
 } from '../schemas/login-history.schema';
+import { OAuthState, OAuthStateDocument } from '../schemas/oauth-state.schema';
 import {
   RefreshToken,
   RefreshTokenDocument,
 } from '../schemas/refresh-token.schema';
+import { RateLimit, RateLimitDocument } from '../schemas/rate-limit.schema';
 import {
   VerificationPurpose,
   VerificationToken,
@@ -25,6 +27,10 @@ export class AuthRepository {
     private readonly refreshTokenModel: Model<RefreshToken>,
     @InjectModel(LoginHistory.name)
     private readonly loginHistoryModel: Model<LoginHistory>,
+    @InjectModel(RateLimit.name)
+    private readonly rateLimitModel: Model<RateLimit>,
+    @InjectModel(OAuthState.name)
+    private readonly oauthStateModel: Model<OAuthState>,
   ) {}
 
   createVerificationToken(
@@ -44,6 +50,7 @@ export class AuthRepository {
         target,
         purpose,
         verifiedAt: null,
+        revokedAt: null,
       })
       .sort({ createdAt: -1 });
   }
@@ -59,8 +66,8 @@ export class AuthRepository {
     purpose: VerificationPurpose,
   ): Promise<void> {
     await this.verificationTokenModel.updateMany(
-      { userId, purpose, verifiedAt: null },
-      { $set: { verifiedAt: new Date() } },
+      { userId, purpose, verifiedAt: null, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
     );
   }
 
@@ -75,8 +82,9 @@ export class AuthRepository {
         userId,
         purpose,
         verifiedAt: null,
+        revokedAt: null,
       },
-      { $set: { verifiedAt: new Date() } },
+      { $set: { revokedAt: new Date() } },
     );
   }
 
@@ -84,7 +92,7 @@ export class AuthRepository {
     tokenId: Types.ObjectId,
   ): Promise<boolean> {
     const result = await this.verificationTokenModel.updateOne(
-      { _id: tokenId, verifiedAt: null },
+      { _id: tokenId, verifiedAt: null, revokedAt: null },
       { $set: { verifiedAt: new Date() } },
     );
 
@@ -109,17 +117,31 @@ export class AuthRepository {
   ): Promise<void> {
     await this.refreshTokenModel.updateOne(
       { _id: refreshTokenId, userId },
-      { $set: { revokedAt: new Date() } },
+      { $set: { revokedAt: new Date(), revokedReason: 'LOGOUT' } },
     );
   }
 
   async revokeRefreshTokenIfActive(
     refreshTokenId: Types.ObjectId,
     userId: Types.ObjectId,
+    replacedByTokenId?: Types.ObjectId,
   ): Promise<boolean> {
+    const update: Record<string, unknown> = {
+      revokedAt: new Date(),
+      revokedReason: 'ROTATED',
+    };
+    if (replacedByTokenId) {
+      update.replacedByTokenId = replacedByTokenId;
+    }
+
     const result = await this.refreshTokenModel.updateOne(
-      { _id: refreshTokenId, userId, revokedAt: null },
-      { $set: { revokedAt: new Date() } },
+      {
+        _id: refreshTokenId,
+        userId,
+        revokedAt: null,
+        expiresAt: { $gt: new Date() },
+      },
+      { $set: update },
     );
 
     return result.modifiedCount === 1;
@@ -127,7 +149,7 @@ export class AuthRepository {
   async revokeActiveRefreshTokens(userId: Types.ObjectId): Promise<void> {
     await this.refreshTokenModel.updateMany(
       { userId, revokedAt: null },
-      { $set: { revokedAt: new Date() } },
+      { $set: { revokedAt: new Date(), revokedReason: 'REVOKED_ALL' } },
     );
   }
 
@@ -152,5 +174,49 @@ export class AuthRepository {
       deviceId,
       loggedInAt: new Date(),
     });
+  }
+
+  async consumeRateLimit(
+    key: string,
+    windowSeconds: number,
+  ): Promise<RateLimitDocument> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + windowSeconds * 1000);
+    const existing = await this.rateLimitModel.findOne({ key });
+
+    if (!existing || existing.expiresAt.getTime() <= now.getTime()) {
+      return this.rateLimitModel.findOneAndUpdate(
+        { key },
+        { $set: { count: 1, expiresAt, lastAttemptAt: now } },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+    }
+
+    existing.count += 1;
+    existing.lastAttemptAt = now;
+    return existing.save();
+  }
+
+  createOAuthState(
+    data: Partial<OAuthState> & { _id: Types.ObjectId },
+  ): Promise<OAuthStateDocument> {
+    return this.oauthStateModel.create(data);
+  }
+
+  findOAuthStateById(stateId: string): Promise<OAuthStateDocument | null> {
+    return this.oauthStateModel.findById(stateId);
+  }
+
+  async markOAuthStateUsedIfActive(stateId: Types.ObjectId): Promise<boolean> {
+    const result = await this.oauthStateModel.updateOne(
+      {
+        _id: stateId,
+        usedAt: null,
+        expiresAt: { $gt: new Date() },
+      },
+      { $set: { usedAt: new Date() } },
+    );
+
+    return result.modifiedCount === 1;
   }
 }

@@ -56,6 +56,24 @@ export enum OcrStatus {
   NeedsManualReview = 'NEEDS_MANUAL_REVIEW',
 }
 
+/** Legacy API status is retained only for backwards-compatible responses. */
+export enum OcrExecutionStatus {
+  NotStarted = 'NOT_STARTED',
+  Processing = 'PROCESSING',
+  Succeeded = 'SUCCEEDED',
+  Failed = 'FAILED',
+  Timeout = 'TIMEOUT',
+  Skipped = 'SKIPPED',
+}
+
+export enum OcrAssessment {
+  Passed = 'PASSED',
+  LowConfidence = 'LOW_CONFIDENCE',
+  Mismatch = 'MISMATCH',
+  ManualReview = 'MANUAL_REVIEW',
+  ReuploadRequired = 'REUPLOAD_REQUIRED',
+}
+
 export interface ProviderVerificationConsent {
   accepted: boolean;
   version?: string | null;
@@ -89,6 +107,13 @@ export interface ProviderVerificationPhotographyInfo {
   portfolioUrls?: string[];
 }
 
+export interface OcrExtractedField<T> {
+  value: T | null;
+  confidence: number | null;
+  sourceLine?: number | null;
+  boundingBox?: { x: number; y: number; width: number; height: number } | null;
+}
+
 export interface ProviderVerificationDocumentVersion {
   versionNo: number;
   isCurrent: boolean;
@@ -105,6 +130,25 @@ export interface ProviderVerificationDocumentVersion {
   ocrConfidence?: number | null;
   extractedFields: Record<string, unknown>;
   mismatchFlags: string[];
+  ocr?: {
+    executionStatus: OcrExecutionStatus;
+    assessment?: OcrAssessment | null;
+    activeAttemptId?: string | null;
+    operationId?: string | null;
+    startedAt?: Date | null;
+    heartbeatAt?: Date | null;
+    completedAt?: Date | null;
+    retryCount: number;
+    warningCodes: string[];
+    qualityIssues: string[];
+    profileSnapshotHash?: string | null;
+    crossCheckComputedAt?: Date | null;
+    identityFingerprint?: { keyId: string; value: string } | null;
+    engine?: string | null;
+    engineVersion?: string | null;
+    language?: string | null;
+    psmMode?: number | null;
+  };
   uploadedAt?: Date | null;
   processedAt?: Date | null;
   replacedAt?: Date | null;
@@ -118,12 +162,36 @@ export interface ProviderVerificationDocumentItem {
   versions: ProviderVerificationDocumentVersion[];
 }
 
+export enum ProviderChangeRequestTarget {
+  IdentityCardFront = 'IDENTITY_CARD_FRONT',
+  IdentityCardBack = 'IDENTITY_CARD_BACK',
+  BusinessProfile = 'BUSINESS_PROFILE',
+  Portfolio = 'PORTFOLIO',
+  Other = 'OTHER',
+}
+
+export enum ProviderChangeRequestAction {
+  Reupload = 'REUPLOAD',
+  UpdateProfile = 'UPDATE_PROFILE',
+  ProvideMoreInfo = 'PROVIDE_MORE_INFO',
+}
+
+export interface ProviderVerificationChangeRequest {
+  target: ProviderChangeRequestTarget;
+  action: ProviderChangeRequestAction;
+  reasonCode: string;
+  note?: string | null;
+  documentVersionNo?: number | null;
+  requestedRevision?: number | null;
+}
+
 export interface ProviderVerificationReview {
   reviewedBy?: Types.ObjectId | null;
   reviewedAt?: Date | null;
   decision?: VerificationReviewDecision | null;
   reason?: string | null;
   note?: string | null;
+  changeRequests?: ProviderVerificationChangeRequest[];
 }
 
 export interface ProviderVerificationStatusTimeline {
@@ -165,6 +233,9 @@ export class ProviderVerification {
     index: true,
   })
   status: VerificationStatus;
+
+  @Prop({ type: Number, default: 0 })
+  verificationRevision: number;
 
   @Prop({
     type: {
@@ -253,6 +324,41 @@ export class ProviderVerification {
               ocrConfidence: { type: Number, default: null },
               extractedFields: { type: Object, default: {} },
               mismatchFlags: { type: [String], default: [] },
+              ocr: {
+                type: {
+                  executionStatus: {
+                    type: String,
+                    enum: Object.values(OcrExecutionStatus),
+                    default: OcrExecutionStatus.NotStarted,
+                  },
+                  assessment: {
+                    type: String,
+                    enum: Object.values(OcrAssessment),
+                    default: null,
+                  },
+                  activeAttemptId: { type: String, default: null },
+                  operationId: { type: String, default: null },
+                  startedAt: { type: Date, default: null },
+                  heartbeatAt: { type: Date, default: null },
+                  completedAt: { type: Date, default: null },
+                  retryCount: { type: Number, default: 0 },
+                  warningCodes: { type: [String], default: [] },
+                  qualityIssues: { type: [String], default: [] },
+                  profileSnapshotHash: { type: String, default: null },
+                  crossCheckComputedAt: { type: Date, default: null },
+                  identityFingerprint: { type: { keyId: { type: String }, value: { type: String } }, default: null },
+                  engine: { type: String, default: null },
+                  engineVersion: { type: String, default: null },
+                  language: { type: String, default: null },
+                  psmMode: { type: Number, default: null },
+                },
+                default: () => ({
+                  executionStatus: OcrExecutionStatus.NotStarted,
+                  retryCount: 0,
+                  warningCodes: [],
+                  qualityIssues: [],
+                }),
+              },
               uploadedAt: { type: Date, default: null },
               processedAt: { type: Date, default: null },
               replacedAt: { type: Date, default: null },
@@ -278,6 +384,20 @@ export class ProviderVerification {
       },
       reason: { type: String, default: null, trim: true },
       note: { type: String, default: null, trim: true },
+      changeRequests: {
+        type: [
+          {
+            _id: false,
+            target: { type: String, enum: Object.values(ProviderChangeRequestTarget), required: true },
+            action: { type: String, enum: Object.values(ProviderChangeRequestAction), required: true },
+            reasonCode: { type: String, required: true, trim: true },
+            note: { type: String, default: null, trim: true },
+            documentVersionNo: { type: Number, default: null },
+            requestedRevision: { type: Number, default: null },
+          },
+        ],
+        default: [],
+      },
     },
     default: {},
   })

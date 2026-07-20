@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Param,
   Patch,
   Post,
   Query,
@@ -10,6 +11,8 @@ import {
 } from '@nestjs/common';
 import {
   IsArray,
+  ArrayNotEmpty,
+  ArrayUnique,
   IsBoolean,
   IsEnum,
   IsNotEmpty,
@@ -24,6 +27,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { ProvidersService } from '../services/providers.service';
 import { ProviderCapability } from '../schemas/provider.schema';
+import { CreatePortfolioItemDto, UpdatePortfolioItemDto } from '../dto/portfolio-item.dto';
 
 export class UpdateProviderProfileDto {
   @IsString()
@@ -55,6 +59,12 @@ export class UpdateProviderProfileDto {
     cancellationPolicy?: string | null;
     rentalPolicy?: string | null;
   };
+
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  comboDiscountPercent?: number;
 }
 
 export class AddPortfolioImageDto {
@@ -73,6 +83,19 @@ export class RecurringScheduleDto {
   workingHours: Array<{ start: string; end: string }>;
 }
 
+export class BulkRecurringScheduleDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsNumber({}, { each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  dayOfWeeks: number[];
+
+  @IsArray()
+  @ArrayNotEmpty()
+  workingHours: Array<{ start: string; end: string }>;
+}
 export class SpecificDateScheduleDto {
   @IsString()
   @IsNotEmpty()
@@ -129,6 +152,27 @@ export class ProvidersController {
     return this.providersService.removePortfolioImage(user.sub, imageUrl);
   }
 
+  @Get('me/portfolio-items')
+  async listPortfolioItems(@CurrentUser() user: AuthUser) {
+    return this.providersService.listMyPortfolioItems(user.sub);
+  }
+
+  @Post('me/portfolio-items')
+  async createPortfolioItem(@CurrentUser() user: AuthUser, @Body() dto: CreatePortfolioItemDto) {
+    return this.providersService.createPortfolioItem(user.sub, dto);
+  }
+
+  @Patch('me/portfolio-items/:id')
+  async updatePortfolioItem(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdatePortfolioItemDto) {
+    return this.providersService.updatePortfolioItem(user.sub, id, dto);
+  }
+
+  @Delete('me/portfolio-items/:id')
+  async deletePortfolioItem(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    await this.providersService.removePortfolioItem(user.sub, id);
+    return { message: 'Portfolio item deleted' };
+  }
+
   @Get('me/schedules')
   async getSchedules(@CurrentUser() user: AuthUser) {
     return this.providersService.getSchedules(user.sub);
@@ -146,6 +190,17 @@ export class ProvidersController {
     );
   }
 
+  @Post('me/schedules/recurring/bulk')
+  async updateRecurringBulk(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: BulkRecurringScheduleDto,
+  ) {
+    return this.providersService.updateRecurringSchedules(
+      user.sub,
+      dto.dayOfWeeks,
+      dto.workingHours,
+    );
+  }
   @Post('me/schedules/specific-date')
   async updateSpecificDate(
     @CurrentUser() user: AuthUser,

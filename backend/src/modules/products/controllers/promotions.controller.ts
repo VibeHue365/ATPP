@@ -135,6 +135,11 @@ export class PromotionsController {
     return { success: true };
   }
 
+  @Get('provider-promotions/:providerId')
+  async getPromotionsByProvider(@Param('providerId') providerId: string) {
+    return this.promotionsService.getProviderPromotions(providerId);
+  }
+
   @Post('validate')
   async validate(@Body() dto: ValidatePromotionDto) {
     const promotion = await this.promotionsService.validatePromotion(

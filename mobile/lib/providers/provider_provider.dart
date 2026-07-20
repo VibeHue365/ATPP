@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/booking.dart';
 import '../models/voucher.dart';
 import '../models/review.dart';
+import '../models/product.dart';
 import '../services/api_service.dart';
 
 class ProviderProvider extends ChangeNotifier {
@@ -10,6 +11,7 @@ class ProviderProvider extends ChangeNotifier {
   List<Booking> _providerBookings = [];
   List<Voucher> _providerVouchers = [];
   List<Review> _reviews = [];
+  List<Product> _myProducts = [];
   Map<String, dynamic> _reviewStats = {};
   Map<String, dynamic> _providerProfile = {};
   Map<String, dynamic> _schedules = {};
@@ -20,11 +22,13 @@ class ProviderProvider extends ChangeNotifier {
   List<Booking> get providerBookings => _providerBookings;
   List<Voucher> get providerVouchers => _providerVouchers;
   List<Review> get reviews => _reviews;
+  List<Product> get myProducts => _myProducts;
   Map<String, dynamic> get reviewStats => _reviewStats;
   Map<String, dynamic> get providerProfile => _providerProfile;
   Map<String, dynamic> get schedules => _schedules;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
 
   Future<void> loadProviderProfile() async {
     _isLoading = true;
@@ -227,4 +231,86 @@ class ProviderProvider extends ChangeNotifier {
       return false;
     }
   }
-}
+
+  Future<void> loadMyProducts() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      _myProducts = await _apiService.getMyProducts();
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> addProduct(Map<String, dynamic> data, List<String> imagePaths) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      List<String> uploadedUrls = [];
+      if (imagePaths.isNotEmpty) {
+        uploadedUrls = await _apiService.uploadProductImages(imagePaths);
+      }
+      final productData = Map<String, dynamic>.from(data);
+      productData['images'] = uploadedUrls;
+      
+      await _apiService.createProduct(productData);
+      await loadMyProducts();
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> editProduct(String id, Map<String, dynamic> data, List<String> newImagePaths, List<String> existingImages) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      List<String> uploadedUrls = [];
+      if (newImagePaths.isNotEmpty) {
+        uploadedUrls = await _apiService.uploadProductImages(newImagePaths);
+      }
+      final productData = Map<String, dynamic>.from(data);
+      productData['images'] = [...existingImages, ...uploadedUrls];
+      
+      await _apiService.updateProduct(id, productData);
+      await loadMyProducts();
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> removeProduct(String id) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await _apiService.deleteProduct(id);
+      await loadMyProducts();
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+}

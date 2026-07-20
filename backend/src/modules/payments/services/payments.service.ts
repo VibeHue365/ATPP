@@ -1,7 +1,10 @@
 import {
   BadRequestException,
   Injectable,
+  Inject,
+  forwardRef,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -14,6 +17,7 @@ import {
 import {
   Booking,
   BookingStatus,
+  BookingType,
   PaymentStatus as BookingPaymentStatus,
 } from '../../bookings/schemas/booking.schema';
 import { BookingEscrow, EscrowStatus } from '../schemas/booking-escrow.schema';
@@ -21,14 +25,17 @@ import {
   SettlementTransfer,
   SettlementTransferStatus,
 } from '../schemas/settlement-transfer.schema';
-import {
-  BookingSettlement,
-  SettlementStatus,
-  CommissionCollectionMethod,
-  CommissionCollectionStatus,
-} from '../schemas/booking-settlement.schema';
 import { PayOSRefundService } from './payos-refund.service';
 import { MockBankingService } from './mock-banking.service';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/schemas/notification.schema';
+import { PaymentsRepository } from '../repositories/payments.repository';
+import { EscrowRepository } from '../repositories/escrow.repository';
+import { SettlementRepository } from '../repositories/settlement.repository';
+import { TransferRepository } from '../repositories/transfer.repository';
+import { SettlementTransferMapper } from '../mappers/settlement-transfer.mapper';
+import { SettlementsService } from '../../settlements/services/settlements.service';
+import { PhotographyHoldService } from '../../bookings/services/photography-hold.service';
 
 interface PaymentAccountDoc {
   bankName?: string;
@@ -57,17 +64,25 @@ interface TransferResult {
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
-    @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
+    private readonly paymentsRepository: PaymentsRepository,
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
+    private readonly escrowRepository: EscrowRepository,
+    private readonly transferRepository: TransferRepository,
+    private readonly settlementRepository: SettlementRepository,
+    private readonly refundService: PayOSRefundService,
+    private readonly bankingService: MockBankingService,
+    private readonly notificationsService: NotificationsService,
+    private readonly transferMapper: SettlementTransferMapper,
     @InjectModel(BookingEscrow.name)
     private readonly escrowModel: Model<BookingEscrow>,
     @InjectModel(SettlementTransfer.name)
     private readonly transferModel: Model<SettlementTransfer>,
-    @InjectModel(BookingSettlement.name)
-    private readonly settlementModel: Model<BookingSettlement>,
-    private readonly refundService: PayOSRefundService,
-    private readonly bankingService: MockBankingService,
+    private readonly settlementsService: SettlementsService,
+    @Inject(forwardRef(() => PhotographyHoldService))
+    private readonly photographyHoldService: PhotographyHoldService,
   ) {}
 
   async createPaymentLink(
@@ -80,9 +95,28 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     }
 
+    // Check for existing PENDING payment for the same booking — reuse if found
+    const existingPendingPayment = await this.paymentsRepository.findPendingPaymentByBooking(bookingId);
+    if (existingPendingPayment) {
+      return existingPendingPayment;
+    }
+
     let amount = 0;
     if (purpose === PaymentPurpose.DepositPayment) {
-      amount = booking.pricingSummary.depositTotal;
+      if (booking.bookingType === BookingType.Combo) {
+        // Combo deposit = 100% Product rental + 100% Product deposit + 30% Photographer fee + serviceFee - comboDiscount
+        const items = await this.bookingModel.db.model('BookingItem').find({ bookingId: booking._id });
+        const prodItems = items.filter((i: any) => i.itemType === 'PRODUCT');
+        const photoItems = items.filter((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+
+        const prodRentalTotal = prodItems.reduce((sum: number, i: any) => sum + i.unitPrice * i.quantity, 0);
+        const prodDepositTotal = prodItems.reduce((sum: number, i: any) => sum + i.depositAmount * i.quantity, 0);
+        const photoDepositTotal = photoItems.reduce((sum: number, i: any) => sum + Math.round(i.unitPrice * 0.3) * i.quantity, 0);
+
+        amount = prodRentalTotal + prodDepositTotal + photoDepositTotal - (booking.pricingSummary.comboDiscountTotal || 0);
+      } else {
+        amount = booking.pricingSummary.depositTotal;
+      }
     } else if (purpose === PaymentPurpose.FullPayment) {
       amount = booking.pricingSummary.grandTotal;
     } else if (purpose === PaymentPurpose.RemainingPayment) {
@@ -100,7 +134,7 @@ export class PaymentsService {
     const orderCode = Math.floor(100000 + Math.random() * 900000);
     const checkoutUrl = `http://127.0.0.1:3000/payments/checkout/${paymentCode}`;
 
-    const payment = await this.paymentModel.create({
+    const payment = await this.paymentsRepository.createPayment({
       bookingId,
       paymentCode,
       amount,
@@ -123,9 +157,6 @@ export class PaymentsService {
     const userId = new Types.ObjectId(userIdStr);
 
     if (roles.includes('PROVIDER')) {
-      interface ProviderDoc {
-        _id: Types.ObjectId;
-      }
       const providerDoc = await this.bookingModel.db
         .model('Provider')
         .findOne({ userId })
@@ -138,75 +169,181 @@ export class PaymentsService {
         providerIds: provider._id,
       });
       const bookingIds = bookings.map((b) => b._id);
-      return this.paymentModel
-        .find({ bookingId: { $in: bookingIds } })
-        .sort({ createdAt: -1 })
-        .populate('bookingId');
+      return this.paymentsRepository.findByBookingIds(bookingIds);
     } else {
       const bookings = await this.bookingModel.find({ customerId: userId });
       const bookingIds = bookings.map((b) => b._id);
-      return this.paymentModel
-        .find({ bookingId: { $in: bookingIds } })
-        .sort({ createdAt: -1 })
-        .populate('bookingId');
+      return this.paymentsRepository.findByBookingIds(bookingIds);
     }
   }
 
+  async getProviderSettlementTransfers(userIdStr: string): Promise<any[]> {
+    const userId = new Types.ObjectId(userIdStr);
+    const providerDoc = await this.bookingModel.db
+      .model('Provider')
+      .findOne({ userId })
+      .lean()
+      .exec();
+    if (!providerDoc) return [];
+
+    const transfers = await this.transferRepository.findTransfersByProvider((providerDoc as any)._id);
+    return this.transferMapper.toProviderResponseList(transfers);
+  }
+
   async confirmPayment(paymentCode: string): Promise<PaymentDocument> {
-    const payment = await this.paymentModel.findOne({ paymentCode });
+    const payment = await this.paymentsRepository.confirmPayment(paymentCode);
+
     if (!payment) {
-      throw new NotFoundException('Payment not found');
+      const existing = await this.paymentsRepository.findPaymentByCode(paymentCode);
+      if (!existing) {
+        throw new NotFoundException('Payment not found');
+      }
+      if (existing.status === PaymentStatus.Success) {
+        await this.photographyHoldService.confirmForBooking(existing.bookingId);
+        return existing;
+      }
+      throw new BadRequestException(
+        `Cannot confirm payment with status: ${existing.status}`,
+      );
     }
-
-    if (payment.status === PaymentStatus.Success) {
-      return payment;
-    }
-
-    payment.status = PaymentStatus.Success;
-    payment.paidAt = new Date();
-    await payment.save();
 
     const booking = await this.bookingModel.findById(payment.bookingId);
-    if (booking) {
-      booking.paymentSummary.totalPaid += payment.amount;
+    if (!booking) {
+      throw new NotFoundException('Không tìm thấy đơn đặt lịch tương ứng với giao dịch.');
+    }
+    if (booking.status === BookingStatus.Cancelled) {
+      throw new BadRequestException('Đơn đặt lịch đã bị hủy, không thể tiếp tục xác nhận thanh toán.');
+    }
 
-      if (
-        booking.paymentSummary.totalPaid >= booking.pricingSummary.grandTotal
-      ) {
-        booking.paymentSummary.paymentStatus = BookingPaymentStatus.Paid;
-        booking.status = BookingStatus.Confirmed;
-      } else if (booking.paymentSummary.totalPaid > 0) {
-        booking.paymentSummary.paymentStatus =
-          BookingPaymentStatus.PartiallyPaid;
+    const updatedBooking = await this.bookingModel.findOneAndUpdate(
+      { _id: payment.bookingId },
+      { $inc: { 'paymentSummary.totalPaid': payment.amount } },
+      { new: true },
+    );
+
+    if (updatedBooking) {
+      const holdConfirmation = await this.photographyHoldService.confirmForBooking(
+        payment.bookingId,
+      );
+      const isPaid =
+        updatedBooking.paymentSummary.totalPaid >=
+        updatedBooking.pricingSummary.grandTotal;
+
+      let isConfirmedEligible = false;
+      if (updatedBooking.bookingType === BookingType.Photography) {
+        isConfirmedEligible =
+          updatedBooking.paymentSummary.totalPaid >=
+          updatedBooking.pricingSummary.depositTotal;
+      } else if (updatedBooking.bookingType === BookingType.Combo) {
+        const items = await this.bookingModel.db.model('BookingItem').find({ bookingId: updatedBooking._id });
+        const photoItems = items.filter((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+        const photoRemainingTotal = photoItems.reduce((sum: number, i: any) => sum + Math.round(i.unitPrice * 0.7) * i.quantity, 0);
+
+        isConfirmedEligible =
+          updatedBooking.paymentSummary.totalPaid >=
+          (updatedBooking.pricingSummary.grandTotal - photoRemainingTotal);
+      } else {
+        isConfirmedEligible = isPaid;
       }
 
-      booking.statusTimeline.push({
-        status: booking.status,
-        changedAt: new Date(),
-        note: 'Thanh toán thành công đơn hàng',
-      });
+      const newStatus =
+        isConfirmedEligible && holdConfirmation.confirmed
+          ? BookingStatus.Confirmed
+          : updatedBooking.status;
 
-      await booking.save();
+      const newPaymentStatus = isPaid
+        ? BookingPaymentStatus.Paid
+        : updatedBooking.paymentSummary.totalPaid > 0
+          ? BookingPaymentStatus.PartiallyPaid
+          : BookingPaymentStatus.Unpaid;
+
+      await this.bookingModel.updateOne(
+        { _id: payment.bookingId },
+        {
+          $set: {
+            status: newStatus,
+            'paymentSummary.paymentStatus': newPaymentStatus,
+          },
+          $push: {
+            statusTimeline: {
+              status: newStatus,
+              changedAt: new Date(),
+              note: 'Thanh toán thành công đơn hàng',
+            },
+          },
+        },
+      );
+
+      if (newStatus === BookingStatus.Confirmed || newStatus === BookingStatus.DepositPaid) {
+        const reservationModel = this.bookingModel.db.model('InventoryReservation');
+        await reservationModel.updateMany(
+          { bookingId: payment.bookingId },
+          {
+            $set: { status: 'CONFIRMED' },
+            $unset: { expiresAt: 1 }
+          }
+        );
+      }
+
+      try {
+        if (holdConfirmation.paymentReviewRequired) {
+          await this.notificationsService.createNotification(
+            updatedBooking.customerId.toString(),
+            'Thanh toán đang chờ kiểm tra',
+            'Hệ thống đã ghi nhận ' +
+              payment.amount.toLocaleString('vi-VN') +
+              'đ cho đơn ' +
+              updatedBooking.bookingCode +
+              ', nhưng lịch chụp giữ chỗ đã hết hạn. Chúng tôi sẽ liên hệ để xác nhận lại lịch hoặc hỗ trợ hoàn tiền.',
+            NotificationType.Payment,
+            { bookingId: updatedBooking._id, paymentReviewRequired: true },
+          );
+        } else {
+          await this.notificationsService.createNotification(
+            updatedBooking.customerId.toString(),
+            'Thanh toán thành công',
+            'Bạn đã thanh toán thành công số tiền ' +
+              payment.amount.toLocaleString('vi-VN') +
+              'đ cho đơn hàng ' +
+              updatedBooking.bookingCode +
+              '.',
+            NotificationType.Payment,
+            { bookingId: updatedBooking._id },
+          );
+
+          for (const providerId of updatedBooking.providerIds) {
+            await this.notificationsService.createNotification(
+              providerId.toString(),
+              'Lịch đặt mới được thanh toán',
+              'Đơn đặt lịch ' +
+                updatedBooking.bookingCode +
+                ' đã được khách hàng thanh toán cọc thành công.',
+              NotificationType.Booking,
+              { bookingId: updatedBooking._id },
+            );
+          }
+        }
+      } catch (e) {
+        console.error('Failed to create payment/booking notifications:', e);
+      }
 
       // Tạo Escrow Entry ghi nhận tiền ký quỹ
       await this.createEscrowEntry(
-        booking._id,
-        booking.pricingSummary.grandTotal,
-        booking.pricingSummary.depositTotal,
+        updatedBooking._id,
+        updatedBooking.pricingSummary.grandTotal,
+        updatedBooking.pricingSummary.depositTotal,
       );
+
     }
 
     return payment;
   }
 
   async cancelPayment(paymentCode: string): Promise<PaymentDocument> {
-    const payment = await this.paymentModel.findOne({ paymentCode });
+    const payment = await this.paymentsRepository.updateStatus(paymentCode, PaymentStatus.Cancelled);
     if (!payment) {
       throw new NotFoundException('Payment not found');
     }
-
-    payment.status = PaymentStatus.Cancelled;
-    await payment.save();
     return payment;
   }
 
@@ -215,16 +352,10 @@ export class PaymentsService {
     totalAmountCollected: number,
     damageDepositAmount: number,
   ): Promise<BookingEscrow> {
-    return this.escrowModel.findOneAndUpdate(
-      { bookingId },
-      {
-        $set: {
-          totalAmountCollected,
-          damageDepositAmount,
-          status: EscrowStatus.Held,
-        },
-      },
-      { upsert: true, new: true },
+    return this.escrowRepository.createOrUpdateEscrow(
+      bookingId,
+      totalAmountCollected,
+      damageDepositAmount,
     );
   }
 
@@ -244,107 +375,12 @@ export class PaymentsService {
     );
   }
 
-  async executeProfitSplit(booking: any): Promise<void> {
-    const items = await this.bookingModel.db
-      .model('BookingItem')
-      .find({ bookingId: booking._id });
-
-    // Group items by provider
-    const providerItems = new Map<string, any[]>();
-    for (const item of items) {
-      const pId = item.providerId.toString();
-      if (!providerItems.has(pId)) providerItems.set(pId, []);
-      providerItems.get(pId)!.push(item);
-    }
-
-    const totalSubTotal = booking.pricingSummary.subTotal;
-    const discount = booking.pricingSummary.discountAmount || 0;
-    const travelFee = booking.pricingSummary.travelFee || 0;
-
-    for (const [providerIdStr, pItems] of providerItems.entries()) {
-      let providerSubTotal = 0;
-      let hasPhotography = false;
-      for (const item of pItems) {
-        providerSubTotal += item.unitPrice * item.quantity;
-        if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
-          hasPhotography = true;
-        }
-      }
-
-      // Phân bổ mã giảm giá theo tỷ lệ
-      const providerDiscount = totalSubTotal > 0
-        ? Math.round((providerSubTotal / totalSubTotal) * discount)
-        : 0;
-
-      // Phân bổ phí đi lại cho nhiếp ảnh gia
-      const providerTravelFee = hasPhotography ? travelFee : 0;
-
-      const providerReceivableRaw = providerSubTotal - providerDiscount + providerTravelFee;
-      const platformCommission = Math.round(providerReceivableRaw * 0.1);
-      const providerReceivable = providerReceivableRaw - platformCommission;
-
-      if (providerReceivable > 0) {
-        const provider = await this.bookingModel.db
-          .model('Provider')
-          .findById(new Types.ObjectId(providerIdStr));
-
-        if (provider) {
-          let bankName = 'VietinBank';
-          let accountNumber = '1029384756';
-          let accountHolder = 'PROVIDER STUDIO';
-
-          if (provider.paymentAccounts && provider.paymentAccounts.length > 0) {
-            const activeAccount = provider.paymentAccounts.find((a: any) => a.isDefault) || provider.paymentAccounts[0];
-            bankName = activeAccount.bankName || bankName;
-            accountNumber = activeAccount.accountNumberMasked
-              ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
-              : accountNumber;
-            accountHolder = activeAccount.accountHolder || accountHolder;
-          }
-
-          const transferRef = `SETTLE_${booking.bookingCode}`;
-          const transferResult = await this.bankingService.executeAutoTransfer(
-            bankName,
-            accountNumber,
-            accountHolder,
-            providerReceivable,
-            transferRef,
-          );
-
-          // Tạo lịch sử giao dịch chuyển khoản
-          await this.transferModel.create({
-            bookingId: booking._id,
-            providerId: provider._id,
-            amountSent: providerReceivable,
-            destinationBankAccount: {
-              bankName,
-              accountNumber,
-              accountHolder,
-            },
-            status: transferResult.success
-              ? SettlementTransferStatus.Success
-              : SettlementTransferStatus.Failed,
-            transactionReference: transferRef,
-            errorMessage: transferResult.error || null,
-          });
-
-          // Tạo BookingSettlement lưu trữ
-          await this.settlementModel.create({
-            bookingId: booking._id,
-            providerId: provider._id,
-            grossAmount: providerReceivableRaw,
-            platformCommission,
-            providerReceivable,
-            commissionCollection: {
-              method: CommissionCollectionMethod.DirectDeduction,
-              status: CommissionCollectionStatus.CommissionPaid,
-              paidAt: new Date(),
-            },
-            settlementStatus: SettlementStatus.Completed,
-          });
-        }
-      }
-    }
+  async executeProfitSplit(
+    booking: { _id: Types.ObjectId | string },
+  ): Promise<void> {
+    await this.settlementsService.createSettlementsForBooking(
+      booking._id.toString(),
+    );
   }
 
   async settleBooking(bookingIdStr: string): Promise<any> {
@@ -354,29 +390,34 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     }
 
-    let escrow = await this.escrowModel.findOne({ bookingId });
-    if (escrow && escrow.status === EscrowStatus.Settled) {
-      return { message: 'Booking already settled' };
-    }
-
-    // 1. Chuyển khoản trực tiếp chia tiền dịch vụ cho các Provider
-    await this.executeProfitSplit(booking);
-
-    // 2. Tự động hoàn cọc giữ đồ (depositTotal) cho khách hàng
-    if (booking.pricingSummary.depositTotal > 0) {
-      await this.refundDeposit(bookingIdStr, booking.pricingSummary.depositTotal);
-    }
+    // Cập nhật trạng thái Escrow sang Settled một cách atomic để chặn các request song song
+    const escrow = await this.escrowRepository.trySettleEscrow(bookingId);
 
     if (!escrow) {
-      escrow = await this.escrowModel.create({
-        bookingId,
-        totalAmountCollected: booking.pricingSummary.grandTotal,
-        damageDepositAmount: booking.pricingSummary.depositTotal,
-        status: EscrowStatus.Settled,
-      });
-    } else {
-      escrow.status = EscrowStatus.Settled;
-      await escrow.save();
+      const currentEscrow = await this.escrowRepository.findByBookingId(bookingId);
+      if (currentEscrow && currentEscrow.status === EscrowStatus.Settled) {
+        return { message: 'Booking already settled' };
+      }
+      throw new BadRequestException(
+        'Booking escrow is not in Held status or not found',
+      );
+    }
+
+    try {
+      // 1. Chuyển khoản trực tiếp chia tiền dịch vụ cho các Provider
+      await this.executeProfitSplit(booking);
+
+      // 2. Tự động hoàn cọc giữ đồ (depositTotal) cho khách hàng
+      if (booking.pricingSummary.depositTotal > 0) {
+        await this.refundDeposit(
+          bookingIdStr,
+          booking.pricingSummary.depositTotal,
+        );
+      }
+    } catch (err) {
+      // Revert lại trạng thái Held nếu gặp lỗi để có thể retry
+      await this.escrowRepository.updateEscrowStatus(bookingId, EscrowStatus.Held);
+      throw err;
     }
 
     return {
@@ -402,10 +443,10 @@ export class PaymentsService {
       return { message: 'No deposit to refund' };
     }
 
-    const payment = await this.paymentModel.findOne({
+    const payment = await this.paymentsRepository.findPaymentByBookingAndStatus(
       bookingId,
-      status: PaymentStatus.Success,
-    });
+      PaymentStatus.Success,
+    );
 
     const orderCode =
       payment?.payos?.orderCode || Math.floor(100000 + Math.random() * 900000);
@@ -415,7 +456,23 @@ export class PaymentsService {
       amountToRefund,
     );
 
-    const escrow = await this.escrowModel.findOne({ bookingId });
+    // Create a Payment record representing the deposit refund for transaction history
+    try {
+      const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
+      await this.paymentsRepository.createPayment({
+        bookingId,
+        paymentCode: refundPaymentCode,
+        amount: amountToRefund,
+        purpose: PaymentPurpose.DepositRefund,
+        paymentMethod: 'PAYOS_REFUND',
+        status: PaymentStatus.Success,
+        paidAt: new Date(),
+      });
+    } catch (createRefundErr) {
+      this.logger.error(`Failed to create refund payment record for booking ${bookingIdStr}:`, createRefundErr);
+    }
+
+    const escrow = await this.escrowRepository.findByBookingId(bookingId);
     if (escrow) {
       escrow.status =
         refundAmount !== undefined &&
@@ -443,7 +500,7 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     }
 
-    const escrow = await this.escrowModel.findOne({ bookingId });
+    const escrow = await this.escrowRepository.findByBookingId(bookingId);
     if (!escrow) {
       throw new NotFoundException('Booking escrow not found');
     }
@@ -492,7 +549,7 @@ export class PaymentsService {
         transactionReference,
       );
 
-      await this.transferModel.create({
+      await this.transferRepository.createTransfer({
         bookingId,
         providerId: booking.providerIds[0],
         amountSent: payToProvider,
@@ -531,5 +588,12 @@ export class PaymentsService {
       refundResult,
       transferResult,
     };
+  }
+
+    async cancelSettlementsForBooking(bookingIdStr: string): Promise<void> {
+    await this.settlementsService.cancelSettlementsForBooking(
+      bookingIdStr,
+      'PAYMENT_CANCELLED',
+    );
   }
 }

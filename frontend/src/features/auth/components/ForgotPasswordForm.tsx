@@ -4,6 +4,7 @@ import { Button } from "../../../components/common/Button";
 import { Input } from "../../../components/common/Input";
 import { useToast } from "../../../components/feedback/Toast";
 import { useAuth } from "../hooks/useAuth";
+import { translateError } from "../../../utils/errorTranslator";
 
 export const ForgotPasswordForm: React.FC = () => {
   const { forgotPassword } = useAuth();
@@ -24,7 +25,7 @@ export const ForgotPasswordForm: React.FC = () => {
       await forgotPassword({ email });
       toast.success("Yêu cầu thành công. Vui lòng kiểm tra hộp thư của bạn.");
     } catch (err: any) {
-      toast.error(err.message || "Không thể gửi yêu cầu khôi phục mật khẩu.");
+      toast.error(translateError(err.message) || "Không thể gửi yêu cầu khôi phục mật khẩu.");
     } finally {
       setIsLoading(false);
     }

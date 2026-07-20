@@ -9,6 +9,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  permissions: string[];
+  hasPermission: (permission: string) => boolean;
+  refreshPermissions: () => Promise<string[]>;
   login: (payload: any) => Promise<UserProfile>;
   register: (payload: any) => Promise<any>;
   verifyEmail: (payload: any) => Promise<void>;
@@ -19,7 +22,7 @@ interface AuthContextType {
   updateProfile: (payload: any) => Promise<void>;
   updateAvatar: (formData: FormData) => Promise<void>;
   updatePreferences: (payload: any) => Promise<void>;
-  setSession: (accessToken: string, refreshToken: string) => Promise<UserProfile>;
+  toggleFavorite: (targetType: 'PRODUCT' | 'PHOTOGRAPHER' | 'PROVIDER', targetId: string) => Promise<void>;  setSession: (accessToken: string, refreshToken: string) => Promise<UserProfile>;
   clearError: () => void;
 }
 
@@ -32,11 +35,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
+
+  const refreshPermissions = async (): Promise<string[]> => {
+    const access = await authService.getPermissions();
+    const nextPermissions = access.permissions || [];
+    setPermissions(nextPermissions);
+    return nextPermissions;
+  };
 
   const fetchProfile = async (): Promise<UserProfile> => {
     try {
-      const profile = await userService.getMe();
+      const [profile, access] = await Promise.all([
+        userService.getMe(),
+        authService.getPermissions(),
+      ]);
       setUser(profile);
+      setPermissions(access.permissions || []);
       setIsAuthenticated(true);
       return profile;
     } catch (err: any) {
@@ -49,6 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const logoutLocal = () => {
     tokenStorage.clearTokens();
     setUser(null);
+    setPermissions([]);
     setIsAuthenticated(false);
   };
 
@@ -189,6 +205,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const toggleFavorite = async (targetType: 'PRODUCT' | 'PHOTOGRAPHER' | 'PROVIDER', targetId: string) => {
+    setError(null);
+    try {
+      const updated = await userService.toggleFavorite(targetType, targetId);
+      setUser(updated);
+    } catch (err: any) {
+      setError(err.message || "Toggling favorite failed");
+      throw err;
+    }
+  };
+
   const setSession = async (
     accessToken: string,
     refreshToken: string,
@@ -203,6 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const clearError = () => setError(null);
+  const hasPermission = (permission: string) => permissions.includes(permission);
 
   return (
     <AuthContext.Provider
@@ -211,6 +239,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         isAuthenticated,
         isLoading,
         error,
+        permissions,
+        hasPermission,
+        refreshPermissions,
         login,
         register,
         verifyEmail,
@@ -221,6 +252,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         updateProfile,
         updateAvatar,
         updatePreferences,
+        toggleFavorite,
         setSession,
         clearError,
       }}

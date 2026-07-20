@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { PrivateEvidenceImage } from '../../components/common/PrivateEvidenceImage';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { useAuth } from '../../features/auth/hooks/useAuth';
@@ -12,7 +13,7 @@ import {
   Mail, 
   Phone, 
   CalendarRange, 
-  Star, 
+  Star,
   Pencil,
   AlertTriangle
 } from 'lucide-react';
@@ -20,7 +21,6 @@ import { API_BASE_URL } from '../../config/env';
 import { ROUTES } from '../../config/routes';
 import { Modal } from '../../components/common/Modal';
 import { CustomerDashboard } from '../../features/dashboard/components/CustomerDashboard';
-import { ProviderDashboard } from '../../features/dashboard/components/ProviderDashboard';
 
 export const ProfilePage: React.FC = () => {
   const { user } = useAuth();
@@ -36,8 +36,46 @@ export const ProfilePage: React.FC = () => {
   const [bookingToCancel, setBookingToCancel] = useState<any>(null);
   const [cancelReason, setCancelReason] = useState('');
 
+  // Reschedule state (UC-E06)
+  const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
+  const [rescheduleItem, setRescheduleItem] = useState<any>(null);
+  const [rescheduleFrom, setRescheduleFrom] = useState('');
+  const [rescheduleTo, setRescheduleTo] = useState('');
+  const [rescheduleShootDate, setRescheduleShootDate] = useState('');
+  const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
+  const [rescheduleReason, setRescheduleReason] = useState('');
+
   // Bookings list state
   const [bookings, setBookings] = useState<any[]>([]);
+
+  // Review states (UC-B03/UC-D05)
+  const [reviewingItem, setReviewingItem] = useState<any>(null);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+
+  const handleCreateReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewingItem) return;
+
+    try {
+      await httpClient.post('/reviews', {
+        bookingId: reviewingItem.bookingId,
+        bookingItemId: reviewingItem.itemId,
+        rating,
+        comment,
+        productId: reviewingItem.productId || undefined,
+        photographyPackageId: reviewingItem.photographyPackageId || undefined,
+      });
+
+      toast.success('Gửi đánh giá dịch vụ thành công!');
+      setReviewingItem(null);
+      setComment('');
+      setRating(5);
+      fetchBookings();
+    } catch (err: any) {
+      toast.error(err.message || 'Gửi đánh giá thất bại');
+    }
+  };
 
   // Incident & Dispute States for selected booking
   const [bookingIncident, setBookingIncident] = useState<any | null>(null);
@@ -175,7 +213,7 @@ export const ProfilePage: React.FC = () => {
   const statusLabels: Record<string, { label: string, color: string, bg: string }> = {
     DRAFT: { label: 'Nháp', color: '#7F8C8D', bg: '#F2F4F4' },
     PENDING_PAYMENT: { label: 'Chờ cọc', color: '#D35400', bg: '#FDEBD0' },
-    DEPOSIT_PAID: { label: 'Đã cọc (20%)', color: '#2980B9', bg: '#EBF5FB' },
+    DEPOSIT_PAID: { label: 'Đã đặt cọc', color: '#2980B9', bg: '#EBF5FB' },
     CONFIRMED: { label: 'Đã xác nhận', color: '#27AE60', bg: '#E8F8F5' },
     PICKUP_PENDING: { label: 'Chờ nhận đồ', color: '#8E44AD', bg: '#F5EEF8' },
     PICKED_UP: { label: 'Đang thuê', color: '#16A085', bg: '#E8F8F5' },
@@ -295,6 +333,63 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
+  const handleContinuePayment = async (bookingId: string) => {
+    try {
+      toast.info('Đang tải liên kết thanh toán...');
+      const paymentRes: any = await httpClient.post('/payments/create-link', {
+        bookingId,
+        purpose: 'FULL_PAYMENT',
+      });
+      if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
+        toast.success('Đang chuyển hướng tới cổng thanh toán PayOS Simulator...');
+        setTimeout(() => {
+          window.location.href = paymentRes.payos.checkoutUrl;
+        }, 1200);
+      } else {
+        toast.error('Không tìm thấy liên kết thanh toán cho đơn hàng này.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Lỗi khi kết nối đến cổng thanh toán.');
+    }
+  };
+
+  // ── UC-E06: Reschedule handler ──
+  const handleReschedule = async () => {
+    if (!rescheduleItem || !activeDetailBooking) return;
+    const isProduct = rescheduleItem.itemType === 'PRODUCT';
+    if (isProduct && (!rescheduleFrom || !rescheduleTo)) {
+      toast.error('Vui lòng chọn ngày nhận và ngày trả mới');
+      return;
+    }
+    if (!isProduct && !rescheduleShootDate) {
+      toast.error('Vui lòng chọn ngày chụp mới');
+      return;
+    }
+    try {
+      await httpClient.patch<any>(`/api/bookings/${activeDetailBooking._id}/reschedule`, {
+        itemId: rescheduleItem._id,
+        ...(isProduct ? { newRentalFrom: rescheduleFrom, newRentalTo: rescheduleTo } : {
+          newShootDate: rescheduleShootDate,
+          newShootTimeSlot: rescheduleTimeSlot || undefined,
+        }),
+        reason: rescheduleReason || undefined,
+      });
+      toast.success('Đổi lịch thành công!');
+      setIsRescheduleOpen(false);
+      setRescheduleItem(null);
+      setRescheduleFrom('');
+      setRescheduleTo('');
+      setRescheduleShootDate('');
+      setRescheduleTimeSlot('');
+      setRescheduleReason('');
+      fetchBookings();
+      setActiveDetailBooking(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể đổi lịch. Vui lòng thử lại!');
+    }
+  };
+
   return (
     <div className="vh-profile-redesigned-page">
       {/* Visual User Hero Card - Fully Restyled */}
@@ -355,16 +450,51 @@ export const ProfilePage: React.FC = () => {
 
       {/* Tabs System Container */}
       <section className="vh-profile-tabs-section-container">
-        {user?.roles?.includes('PROVIDER') ? (
-          <ProviderDashboard />
-        ) : (
-          <CustomerDashboard 
-            user={user} 
-            bookings={bookings} 
-            onViewDetails={(b) => setActiveDetailBooking(b)} 
-            onRefresh={fetchBookings} 
-          />
+        {user?.roles?.includes('PROVIDER') && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            backgroundColor: '#FAF6F0',
+            border: '1px solid #E8E2D5',
+            padding: '16px 24px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            fontFamily: 'Inter, sans-serif'
+          }}>
+            <div>
+              <h4 style={{ margin: 0, color: '#4A0E17', fontSize: '14px', fontWeight: 700 }}>Kênh quản trị của Đối tác</h4>
+              <p style={{ margin: '4px 0 0 0', color: '#7A7A7A', fontSize: '12.5px' }}>Bạn đang đăng nhập với quyền đối tác. Để quản lý bộ sưu tập áo dài, lịch chụp ảnh, mã giảm giá và đối soát quyết toán, vui lòng truy cập Kênh Đối tác.</p>
+            </div>
+            <button
+              onClick={() => navigate(ROUTES.PROVIDER_DASHBOARD)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#4A0E17',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'background-color 0.15s',
+                whiteSpace: 'nowrap',
+                marginLeft: '16px'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#360A10'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#4A0E17'}
+            >
+              Truy cập Kênh Đối Tác →
+            </button>
+          </div>
         )}
+
+        <CustomerDashboard 
+          user={user} 
+          bookings={bookings} 
+          onViewDetails={(b) => setActiveDetailBooking(b)} 
+          onRefresh={fetchBookings} 
+        />
       </section>
 
       {/* AI Recommendation Showcase Section */}
@@ -537,9 +667,40 @@ export const ProfilePage: React.FC = () => {
                     
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                       <div>
-                        <h5 style={{ fontSize: '15px', fontWeight: 700, color: '#2D2926', margin: 0 }}>
-                          {item.name || (isProduct ? 'Sản phẩm áo dài' : 'Gói chụp ảnh cổ phục')}
-                        </h5>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <h5 style={{ fontSize: '15px', fontWeight: 700, color: '#2D2926', margin: 0 }}>
+                            {item.name || (isProduct ? 'Sản phẩm áo dài' : 'Gói chụp ảnh cổ phục')}
+                          </h5>
+                          {activeDetailBooking.status === 'COMPLETED' && (
+                            item.isReviewed ? (
+                              <span style={{ color: '#10B981', fontSize: '12px', fontWeight: 650 }}>Đã đánh giá</span>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setActiveDetailBooking(null);
+                                  setReviewingItem({
+                                    bookingId: activeDetailBooking._id,
+                                    itemId: item._id,
+                                    productId: item.productId?._id || item.productId,
+                                    photographyPackageId: item.photographyPackageId?._id || item.photographyPackageId
+                                  });
+                                }}
+                                style={{
+                                  padding: '4px 10px',
+                                  backgroundColor: 'var(--color-primary-dark)',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Đánh giá
+                              </button>
+                            )
+                          )}
+                        </div>
                         
                         <div style={{ fontSize: '12px', color: '#7E6D5B', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span>Thời gian: <strong>{formattedDateStr}</strong></span>
@@ -626,9 +787,13 @@ export const ProfilePage: React.FC = () => {
                       <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#4A5568', marginBottom: '4px' }}>Hình ảnh bằng chứng:</span>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         {bookingIncident.evidencePhotos.map((photo: string, idx: number) => (
-                          <a key={idx} href={photo} target="_blank" rel="noopener noreferrer">
-                            <img src={photo} alt={`Bằng chứng ${idx + 1}`} style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #FEB2B2' }} />
-                          </a>
+                          <PrivateEvidenceImage
+                            key={idx}
+                            reference={photo}
+                            legacyUrl={photo?.startsWith('http') ? photo : `${API_BASE_URL}${photo}`}
+                            alt={`Bằng chứng ${idx + 1}`}
+                            imageStyle={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #FEB2B2' }}
+                          />
                         ))}
                       </div>
                     </div>
@@ -719,6 +884,41 @@ export const ProfilePage: React.FC = () => {
 
             {/* Footer action buttons */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px', borderTop: '1px solid #EAEAE8', paddingTop: '16px' }}>
+              {/* Reschedule button - allowed only for CONFIRMED/DEPOSIT_PAID */}
+              {(activeDetailBooking.status === 'CONFIRMED' || activeDetailBooking.status === 'DEPOSIT_PAID') && (
+                <button
+                  className="vh-btn"
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    backgroundColor: '#2980B9',
+                    color: 'white',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  onClick={() => {
+                    if (activeDetailBooking.items && activeDetailBooking.items.length > 0) {
+                      setRescheduleItem(activeDetailBooking.items[0]);
+                      const item = activeDetailBooking.items[0];
+                      if (item.itemType === 'PRODUCT') {
+                        setRescheduleFrom(item.startDate || item.rentalFrom || '');
+                        setRescheduleTo(item.endDate || item.rentalTo || '');
+                      } else {
+                        setRescheduleShootDate(item.shootDate || '');
+                        setRescheduleTimeSlot(item.shootTimeSlot || '');
+                      }
+                      setIsRescheduleOpen(true);
+                    }
+                  }}
+                >
+                  <Calendar size={14} /> Đổi lịch hẹn
+                </button>
+              )}
+
               {/* Only show Cancel button if status is cancellable */}
               {activeDetailBooking.status !== 'CANCELLED' && 
                activeDetailBooking.status !== 'COMPLETED' && 
@@ -740,6 +940,24 @@ export const ProfilePage: React.FC = () => {
                   Hủy lịch / Trả hàng
                 </button>
               )}
+
+              {activeDetailBooking.status === 'PENDING_PAYMENT' && (
+                <button 
+                  className="vh-btn" 
+                  style={{ 
+                    padding: '8px 24px', 
+                    borderRadius: '8px', 
+                    fontSize: '13px', 
+                    backgroundColor: '#8B1E22', 
+                    color: 'white', 
+                    border: 'none', 
+                    cursor: 'pointer' 
+                  }} 
+                  onClick={() => handleContinuePayment(activeDetailBooking._id)}
+                >
+                  Tiếp tục thanh toán
+                </button>
+              )}
               
               <button 
                 className="vh-btn vh-btn-outline" 
@@ -754,7 +972,100 @@ export const ProfilePage: React.FC = () => {
         </Modal>
       )}
 
-      {/* 3. Modal View: Xác nhận hủy lịch và chính sách hoàn tiền */}
+      {/* 3. Modal View: Đổi lịch hẹn (UC-E06) */}
+      {isRescheduleOpen && rescheduleItem && activeDetailBooking && (
+        <Modal
+          isOpen={true}
+          onClose={() => { setIsRescheduleOpen(false); setRescheduleItem(null); }}
+          title={`ĐỔI LỊCH: ${activeDetailBooking.bookingCode}`}
+          maxWidth="480px"
+        >
+          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
+            <div style={{ backgroundColor: '#EBF5FB', borderRadius: '8px', padding: '12px 14px', fontSize: '13px', color: '#1A5276', lineHeight: 1.5 }}>
+              <strong>Lưu ý:</strong> Chỉ có thể đổi lịch trước giờ bắt đầu ít nhất <strong>24 tiếng</strong>. Lịch mới phải còn trống và không trùng với đơn khác.
+            </div>
+
+            {rescheduleItem.itemType === 'PRODUCT' ? (
+              <>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>NGÀY NHẬN MỚI</label>
+                    <input
+                      type="date"
+                      min={new Date().toISOString().split('T')[0]}
+                      value={rescheduleFrom}
+                      onChange={e => setRescheduleFrom(e.target.value)}
+                      style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
+                    />
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>NGÀY TRẢ MỚI</label>
+                    <input
+                      type="date"
+                      min={rescheduleFrom || new Date().toISOString().split('T')[0]}
+                      value={rescheduleTo}
+                      onChange={e => setRescheduleTo(e.target.value)}
+                      style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>NGÀY CHỤP MỚI</label>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().split('T')[0]}
+                    value={rescheduleShootDate}
+                    onChange={e => setRescheduleShootDate(e.target.value)}
+                    style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>KHUNG GIỜ MỚI (tùy chọn)</label>
+                  <input
+                    type="text"
+                    placeholder="VD: 09:00 - 11:00"
+                    value={rescheduleTimeSlot}
+                    onChange={e => setRescheduleTimeSlot(e.target.value)}
+                    style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
+                  />
+                </div>
+              </>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>LÝ DO ĐỔI LỊCH (tùy chọn)</label>
+              <textarea
+                placeholder="Nhập lý do đổi lịch..."
+                value={rescheduleReason}
+                onChange={e => setRescheduleReason(e.target.value)}
+                style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%', minHeight: '64px', fontFamily: 'inherit', resize: 'none' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #EAEAE8', paddingTop: '14px' }}>
+              <button
+                className="vh-btn vh-btn-outline"
+                style={{ padding: '8px 20px', borderRadius: '8px', fontSize: '13px' }}
+                onClick={() => { setIsRescheduleOpen(false); setRescheduleItem(null); }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                className="vh-btn"
+                style={{ padding: '8px 24px', borderRadius: '8px', fontSize: '13px', backgroundColor: '#2980B9', color: 'white', border: 'none', cursor: 'pointer' }}
+                onClick={handleReschedule}
+              >
+                Xác nhận đổi lịch
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* 4. Modal View: Xác nhận hủy lịch và chính sách hoàn tiền */}
       {isCancelConfirmOpen && bookingToCancel && (
         <Modal 
           isOpen={true} 
@@ -828,6 +1139,56 @@ export const ProfilePage: React.FC = () => {
 
           </div>
         </Modal>
+      )}
+
+      {/* Review Modal popup */}
+      {reviewingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <form onSubmit={handleCreateReview} className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden" style={{ width: '100%', maxWidth: '448px', backgroundColor: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', fontFamily: 'Inter, sans-serif' }}>
+            <div style={{ backgroundColor: '#2D2926', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px' }}>
+              <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>Viết đánh giá dịch vụ</h4>
+              <button type="button" onClick={() => setReviewingItem(null)} style={{ background: 'none', border: 'none', color: '#A0A0A0', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+            </div>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '11px', color: '#7E6D5B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>CHỌN SỐ SAO ĐÁNH GIÁ</span>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setRating(star)}
+                      style={{ background: 'none', border: 'none', color: '#D4AF37', cursor: 'pointer', fontSize: '24px', transition: 'transform 0.15s', padding: 0 }}
+                      onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                      onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      <Star size={32} fill={star <= rating ? '#D4AF37' : 'none'} color="#D4AF37" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '11px', color: '#2D2926', fontWeight: 700, textTransform: 'uppercase' }}>NỘI DUNG NHẬN XÉT</label>
+                <textarea
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #D5C2AD', fontSize: '13px', minHeight: '96px', fontFamily: 'inherit', outline: 'none', resize: 'none', boxSizing: 'border-box' }}
+                  rows={4}
+                  placeholder="Chia sẻ trải nghiệm của bạn về phom dáng áo dài hoặc tác phong chụp ảnh..."
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                style={{ width: '100%', padding: '12px', backgroundColor: '#8B1E22', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'background-color 0.15s' }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#72181B'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8B1E22'}
+              >
+                GỬI ĐÁNH GIÁ NGAY
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
     </div>

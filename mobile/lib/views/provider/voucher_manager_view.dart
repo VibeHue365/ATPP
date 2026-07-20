@@ -11,6 +11,9 @@ class VoucherManagerView extends StatefulWidget {
 }
 
 class _VoucherManagerViewState extends State<VoucherManagerView> {
+  int _currentPage = 1;
+  final int _pageSize = 5;
+
   @override
   void initState() {
     super.initState();
@@ -142,47 +145,97 @@ class _VoucherManagerViewState extends State<VoucherManagerView> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ProviderProvider>();
+    final vouchers = provider.providerVouchers;
+
+    final totalVouchers = vouchers.length;
+    final totalPages = (totalVouchers / _pageSize).ceil();
+    if (_currentPage > totalPages && totalPages > 0) {
+      _currentPage = totalPages;
+    }
+    final paginatedVouchers = vouchers
+        .skip((_currentPage - 1) * _pageSize)
+        .take(_pageSize)
+        .toList();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Quản lý khuyến mãi'),
       ),
-      body: provider.isLoading && provider.providerVouchers.isEmpty
+      body: provider.isLoading && vouchers.isEmpty
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : RefreshIndicator(
               color: AppColors.primary,
               onRefresh: () => provider.loadProviderVouchers(),
-              child: provider.providerVouchers.isEmpty
+              child: vouchers.isEmpty
                   ? const Center(
                       child: Text('Bạn chưa tạo chương trình khuyến mãi nào.'),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: provider.providerVouchers.length,
-                      itemBuilder: (context, index) {
-                        final voucher = provider.providerVouchers[index];
-                        final isPercentage = voucher.discountType == 'PERCENTAGE';
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          child: ListTile(
-                            leading: const CircleAvatar(
-                              backgroundColor: AppColors.primaryTrans,
-                              child: Icon(Icons.local_offer, color: AppColors.primary),
-                            ),
-                            title: Text(
-                              voucher.code,
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
-                            ),
-                            subtitle: Text(
-                              'Giảm: ${voucher.discountValue.toStringAsFixed(0)}${isPercentage ? "%" : "đ"} | Đơn tối thiểu: ${voucher.minOrderValue.toStringAsFixed(0)}đ',
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline, color: AppColors.error),
-                              onPressed: () => _confirmDelete(voucher.id),
+                  : Column(
+                      children: [
+                        Expanded(
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: paginatedVouchers.length,
+                            itemBuilder: (context, index) {
+                              final voucher = paginatedVouchers[index];
+                              final isPercentage = voucher.discountType == 'PERCENTAGE';
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                child: ListTile(
+                                  leading: const CircleAvatar(
+                                    backgroundColor: AppColors.primaryTrans,
+                                    child: Icon(Icons.local_offer, color: AppColors.primary),
+                                  ),
+                                  title: Text(
+                                    voucher.code,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                                  ),
+                                  subtitle: Text(
+                                    'Giảm: ${voucher.discountValue.toStringAsFixed(0)}${isPercentage ? "%" : "đ"} | Đơn tối thiểu: ${voucher.minOrderValue.toStringAsFixed(0)}đ',
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                                    onPressed: () => _confirmDelete(voucher.id),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        if (totalPages > 1)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_back_ios, size: 16),
+                                  onPressed: _currentPage > 1
+                                      ? () {
+                                          setState(() {
+                                            _currentPage--;
+                                          });
+                                        }
+                                      : null,
+                                ),
+                                Text(
+                                  'Trang $_currentPage / $totalPages',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                                  onPressed: _currentPage < totalPages
+                                      ? () {
+                                          setState(() {
+                                            _currentPage++;
+                                          });
+                                        }
+                                      : null,
+                                ),
+                              ],
                             ),
                           ),
-                        );
-                      },
+                      ],
                     ),
             ),
       floatingActionButton: FloatingActionButton(

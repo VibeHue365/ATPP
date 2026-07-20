@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  UnsupportedMediaTypeException,
+  ForbiddenException,
+} from '@nestjs/common';
 import {
   IsArray,
   IsNotEmpty,
@@ -8,10 +20,15 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { Permissions } from '../../../common/decorators/permissions.decorator';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { ReviewsService } from '../services/reviews.service';
+import { PublicMediaService } from '../../storage/services/public-media.service';
 
 export class CreateReviewDto {
   @IsString()
@@ -71,9 +88,22 @@ export class RateCustomerDto {
   comment?: string;
 }
 
+export class HandleReportDto {
+  @IsString()
+  @IsNotEmpty()
+  action: 'DELETE' | 'DISMISS';
+
+  @IsString()
+  @IsNotEmpty()
+  reason: string;
+}
+
 @Controller('reviews')
 export class ReviewsController {
-  constructor(private readonly reviewsService: ReviewsService) {}
+  constructor(
+    private readonly reviewsService: ReviewsService,
+    private readonly publicMedia: PublicMediaService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -108,6 +138,15 @@ export class ReviewsController {
     return this.reviewsService.getReviewsForProvider(providerId);
   }
 
+  @Get('my-status/:productId')
+  @UseGuards(JwtAuthGuard)
+  async getMyReviewStatus(
+    @CurrentUser() user: AuthUser,
+    @Param('productId') productId: string,
+  ) {
+    return this.reviewsService.getMyReviewStatus(user.sub, productId);
+  }
+
   @Get('item/:itemId')
   async getByItem(@Param('itemId') itemId: string) {
     return this.reviewsService.getReviewsForItem(itemId);
@@ -123,5 +162,65 @@ export class ReviewsController {
   @UseGuards(JwtAuthGuard)
   async getTrustScore(@Param('customerId') customerId: string) {
     return this.reviewsService.getCustomerTrustScore(customerId);
+  }
+
+  private checkAdmin(user: AuthUser) {
+    const roles = user.roles || [];
+    if (!roles.includes('ADMIN') && !roles.includes('admin')) {
+      throw new ForbiddenException('Bạn không có quyền truy cập chức năng Admin');
+    }
+  }
+
+  @Post('upload')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_request, file, callback) => {
+        const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedMimeTypes.includes(file.mimetype)) {
+          callback(
+            new UnsupportedMediaTypeException(
+              'Only jpg, png, and webp images are allowed',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+      storage: memoryStorage(),
+    }),
+  )
+  async uploadImage(
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ): Promise<{ url: string }> {
+    if (!file) throw new BadRequestException('File is required');
+    const upload = await this.publicMedia.uploadImage('reviews', file);
+    return { url: upload.url };
+  }
+
+  @Get('admin/reported')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('moderation:read')
+  async getReportedReviews(@CurrentUser() user: AuthUser) {
+    this.checkAdmin(user);
+    return this.reviewsService.getReportedReviewsForAdmin();
+  }
+
+  @Post(':id/handle-report')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('moderation:manage')
+  async handleReport(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: HandleReportDto,
+  ) {
+    this.checkAdmin(user);
+    return this.reviewsService.handleReportedReview(
+      id,
+      dto.action,
+      dto.reason,
+    );
   }
 }

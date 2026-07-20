@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/cart_item.dart';
 import '../models/product.dart';
 import '../models/booking.dart';
 import '../models/voucher.dart';
@@ -107,6 +108,62 @@ class BookingProvider extends ChangeNotifier {
     _appliedVoucher = null;
     _voucherDiscount = 0.0;
     notifyListeners();
+  }
+
+  Future<Booking> createMultiItemBooking({
+    required List<CartItem> cartItems,
+    required DateTime rentalFrom,
+    required DateTime rentalTo,
+    String? customRequests,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    // Format date as YYYY-MM-DD
+    String formatDate(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    try {
+      final List<Map<String, dynamic>> itemsList = cartItems.map((item) {
+        final isHourly = item.rentalType == 'HOURLY';
+        return {
+          'productId': item.product.id,
+          'quantity': item.quantity,
+          'rentalType': item.rentalType,
+          'rentalFrom': item.rentalType == 'DAILY' ? formatDate(rentalFrom) : formatDate(item.startDate),
+          'rentalTo': item.rentalType == 'DAILY' ? formatDate(rentalTo) : formatDate(item.endDate),
+          'selectedSize': item.selectedSize.toUpperCase(),
+          'selectedColor': item.selectedColor.toUpperCase(),
+          if (isHourly) ...{
+            'shootDate': formatDate(item.startDate),
+            'shootTimeSlot': '${item.startTime ?? "08:00"}-${item.endTime ?? "10:00"}',
+          },
+          if (customRequests != null && customRequests.isNotEmpty)
+            'customRequests': customRequests,
+        };
+      }).toList();
+
+      final Map<String, dynamic> body = {
+        'bookingType': 'AODAI_RENTAL',
+        'items': itemsList,
+      };
+
+      if (_appliedVoucher != null) {
+        body['promoCode'] = _appliedVoucher!.code;
+      }
+
+      final booking = await _apiService.createMultiItemBooking(body);
+      _isLoading = false;
+      loadMyBookings(); // Reload list
+      notifyListeners();
+      return booking;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<Booking> createProductBooking({
@@ -219,6 +276,23 @@ class BookingProvider extends ChangeNotifier {
       await loadMyBookings();
     } catch (e) {
       _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Hủy đặt lịch và trả về kết quả chi tiết (isFreeCancel, refundAmount, penaltyReason)
+  Future<Map<String, dynamic>> cancelBookingWithResult(String bookingId, String reason) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final result = await _apiService.cancelBookingWithResult(bookingId, reason);
+      await loadMyBookings();
+      return result;
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
     } finally {
       _isLoading = false;
       notifyListeners();

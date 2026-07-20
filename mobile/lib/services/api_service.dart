@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
 import '../core/network/api_client.dart';
 import '../models/product.dart';
@@ -29,15 +30,17 @@ class ApiService {
     }
   }
 
-  Future<List<String>> getCategories() async {
+  Future<List<CategoryItem>> getCategories() async {
     try {
       final response = await _publicDio.get('/products/categories');
       final List data = response.data;
-      return data.map((x) => x.toString()).toList();
+      return data.map((x) => CategoryItem.fromJson(x)).toList();
     } on DioException catch (e) {
       throw e.response?.data?['message'] ?? 'Failed to fetch categories';
     }
   }
+
+
 
   // Photographers
   Future<List<Map<String, dynamic>>> getPhotographers() async {
@@ -64,6 +67,15 @@ class ApiService {
   Future<Booking> createProductBooking(Map<String, dynamic> data) async {
     try {
       final response = await _dio.post('/bookings/product', data: data);
+      return Booking.fromJson(response.data);
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to create booking';
+    }
+  }
+
+  Future<Booking> createMultiItemBooking(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post('/bookings', data: data);
       return Booking.fromJson(response.data);
     } on DioException catch (e) {
       throw e.response?.data?['message'] ?? 'Failed to create booking';
@@ -125,6 +137,25 @@ class ApiService {
     }
   }
 
+  /// Trả về raw Map gồm: isFreeCancel, refundAmount, penaltyReason (giống web ProfilePage)
+  Future<Map<String, dynamic>> cancelBookingWithResult(String bookingId, String reason) async {
+    try {
+      final response = await _dio.post('/bookings/$bookingId/cancel', data: {'reason': reason});
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        return {
+          'isFreeCancel': data['isFreeCancel'] ?? true,
+          'refundAmount': (data['refundAmount'] ?? data['booking']?['cancellation']?['refundAmount'] ?? 0).toDouble(),
+          'penaltyReason': data['penaltyReason'] ?? '',
+        };
+      }
+      // Nếu server trả về booking object trực tiếp (không có isFreeCancel) → mặc định miễn phí
+      return {'isFreeCancel': true, 'refundAmount': 0.0, 'penaltyReason': ''};
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to cancel booking';
+    }
+  }
+
   // Voucher / Promotion
   Future<Voucher> validateVoucher({
     required String code,
@@ -150,10 +181,15 @@ class ApiService {
         'bookingId': bookingId,
         'purpose': purpose,
       });
-      if (response.data != null && response.data['payos'] != null && response.data['payos'] is Map) {
-        return (response.data['payos']['checkoutUrl'] ?? '').toString();
+      final data = response.data;
+      if (data is Map) {
+        String url = data['payos']?['checkoutUrl'] ?? data['checkoutUrl'] ?? data['paymentUrl'] ?? '';
+        if (Platform.isAndroid) {
+          url = url.replaceAll('127.0.0.1', '10.0.2.2').replaceAll('localhost', '10.0.2.2');
+        }
+        return url;
       }
-      return (response.data['checkoutUrl'] ?? response.data['paymentUrl'] ?? '').toString();
+      return '';
     } on DioException catch (e) {
       final msg = e.response?.data?['message'];
       if (msg is List) {
@@ -167,6 +203,16 @@ class ApiService {
   Future<List<Review>> getProviderReviews(String providerId) async {
     try {
       final response = await _dio.get('/reviews/provider/$providerId');
+      final List data = response.data;
+      return data.map((x) => Review.fromJson(x)).toList();
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to fetch reviews';
+    }
+  }
+
+  Future<List<Review>> getReviewsForItem(String itemId) async {
+    try {
+      final response = await _publicDio.get('/reviews/item/$itemId');
       final List data = response.data;
       return data.map((x) => Review.fromJson(x)).toList();
     } on DioException catch (e) {
@@ -279,6 +325,16 @@ class ApiService {
     }
   }
 
+  Future<List<Voucher>> getPromotionsByProvider(String providerId) async {
+    try {
+      final response = await _dio.get('/promotions/provider-promotions/$providerId');
+      final List data = response.data;
+      return data.map((x) => Voucher.fromJson(x)).toList();
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to fetch provider promotions';
+    }
+  }
+
   Future<Voucher> createVoucher(Map<String, dynamic> data) async {
     try {
       final response = await _dio.post('/promotions', data: data);
@@ -294,5 +350,88 @@ class ApiService {
     } on DioException catch (e) {
       throw e.response?.data?['message'] ?? 'Failed to delete promotion';
     }
+  }
+
+  // Product CRUD (Provider)
+  Future<List<Product>> getMyProducts() async {
+    try {
+      final response = await _dio.get('/products/my-listings');
+      final List data = response.data;
+      return data.map((x) => Product.fromJson(x)).toList();
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to fetch your products';
+    }
+  }
+
+  Future<Product> createProduct(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post('/products', data: data);
+      return Product.fromJson(response.data);
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to create product';
+    }
+  }
+
+  Future<Product> updateProduct(String id, Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.patch('/products/$id', data: data);
+      return Product.fromJson(response.data);
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to update product';
+    }
+  }
+
+  Future<void> deleteProduct(String id) async {
+    try {
+      await _dio.delete('/products/$id');
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to delete product';
+    }
+  }
+
+  Future<List<String>> uploadProductImages(List<String> filePaths) async {
+    try {
+      final List<MultipartFile> files = [];
+      for (final path in filePaths) {
+        final fileName = path.split('/').last;
+        files.add(await MultipartFile.fromFile(path, filename: fileName));
+      }
+      final formData = FormData.fromMap({
+        'images': files,
+      });
+      final response = await _dio.post('/products/upload', data: formData);
+      final List urls = response.data['urls'] ?? [];
+      return urls.map((x) => x.toString()).toList();
+    } on DioException catch (e) {
+      throw e.response?.data?['message'] ?? 'Failed to upload images';
+    }
+  }
+
+  Future<Map<String, dynamic>> getProductBusyDates(String productId) async {
+    try {
+      // Endpoint yêu cầu JWT auth (class-level guard trên controller)
+      final response = await _dio.get('/bookings/busy-dates/product/$productId');
+      return response.data;
+    } on DioException catch (e) {
+      // Nếu 401 (chưa đăng nhập) thì trả về rỗng thay vì throw, tránh crash
+      if (e.response?.statusCode == 401) {
+        return {'bookedDates': [], 'bookedSlots': []};
+      }
+      throw e.response?.data?['message'] ?? 'Failed to fetch busy schedules';
+    }
+  }
+}
+
+class CategoryItem {
+  final String id;
+  final String name;
+
+  CategoryItem({required this.id, required this.name});
+
+  factory CategoryItem.fromJson(Map<String, dynamic> json) {
+    return CategoryItem(
+      id: json['_id'] ?? json['id'] ?? '',
+      name: json['name'] ?? '',
+    );
   }
 }

@@ -3,6 +3,24 @@ import { HydratedDocument, Types } from 'mongoose';
 
 export type BookingItemDocument = HydratedDocument<BookingItem>;
 
+export interface PhotographyPackageSnapshot {
+  name: string;
+  basePrice: number;
+  pricingUnit: 'PER_SESSION' | 'PER_DAY' | 'PER_BOOKING';
+  includedDurationMinutes: number;
+  includedSessionCount?: number | null;
+  includedDayCount?: number | null;
+  overtimeFeePerHour: number;
+  overtimeIncrementMinutes: number;
+  maxOvertimeMinutes: number;
+}
+
+export interface BookingPriceBreakdownItem {
+  type: 'BASE_PACKAGE' | 'OVERTIME' | 'TRAVEL' | 'SURCHARGE' | 'MULTI_DAY_DISCOUNT';
+  label: string;
+  amount: number;
+  scheduleId?: Types.ObjectId | null;
+}
 export enum BookingItemType {
   Product = 'PRODUCT',
   PhotographyPackage = 'PHOTOGRAPHY_PACKAGE',
@@ -26,6 +44,11 @@ export class BookingItem {
   @Prop({ type: Types.ObjectId, ref: 'Product', default: null, index: true })
   productId?: Types.ObjectId | null;
 
+  /**
+   * @deprecated Nguồn chân lý cho tồn kho thực tế của đơn hàng sẽ là truy vấn bảng InventoryReservation:
+   * `InventoryReservation.find({ bookingItemId })`.
+   * Trường này chỉ được giữ lại để tương thích ngược.
+   */
   @Prop({
     type: Types.ObjectId,
     ref: 'InventoryItem',
@@ -92,6 +115,24 @@ export class BookingItem {
 
   @Prop({ type: String, default: null, trim: true })
   customRequests?: string | null;
+
+  @Prop({ type: Boolean, default: false })
+  isReviewed?: boolean;
+
+  @Prop({ type: Object, default: null })
+  packageSnapshot?: PhotographyPackageSnapshot | null;
+
+  @Prop({ type: [Object], default: [] })
+  priceBreakdown: BookingPriceBreakdownItem[];
+
+  @Prop({ type: Number, default: 1, min: 1 })
+  scheduleSchemaVersion: number;
+
+  @Prop({ type: Number, default: 0 })
+  comboDiscountPercent: number;
+
+  @Prop({ type: Number, default: 0 })
+  comboDiscountAmount: number;
 }
 
 export const BookingItemSchema = SchemaFactory.createForClass(BookingItem);

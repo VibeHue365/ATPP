@@ -9,7 +9,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { Permissions } from '../../../common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { AdminReviewDecisionDto } from '../dto/provider-verification.dto';
@@ -22,7 +26,9 @@ interface RequestMeta {
 }
 
 @Controller('admin/provider-verifications')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@Roles('ADMIN')
+@Permissions('provider:read')
 export class AdminProviderVerificationsController {
   constructor(
     private readonly providerVerificationService: ProviderVerificationService,
@@ -92,6 +98,7 @@ export class AdminProviderVerificationsController {
   }
 
   @Patch(':id/start-review')
+  @Permissions('provider:manage')
   startReview(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -105,6 +112,7 @@ export class AdminProviderVerificationsController {
   }
 
   @Patch(':id/approve')
+  @Permissions('provider:manage')
   approve(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -120,6 +128,7 @@ export class AdminProviderVerificationsController {
   }
 
   @Patch(':id/reject')
+  @Permissions('provider:manage')
   reject(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -135,6 +144,7 @@ export class AdminProviderVerificationsController {
   }
 
   @Patch(':id/request-changes')
+  @Permissions('provider:manage')
   requestChanges(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
