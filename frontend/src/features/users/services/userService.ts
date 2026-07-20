@@ -24,6 +24,7 @@ const normalizeUserProfile = (response: BackendUserProfileResponse): UserProfile
     hasCompletedOnboarding: response.hasCompletedOnboarding,
     preferences: response.preferences,
     favorites: response.favorites,
+    addresses: response.addresses,
     createdAt: response.createdAt,
   };
 };

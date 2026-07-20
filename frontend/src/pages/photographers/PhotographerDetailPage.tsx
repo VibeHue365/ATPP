@@ -9,7 +9,7 @@ import { useAuth } from '../../features/auth/hooks/useAuth';
 import './PhotographerDetailPage.css';
 import Swal from 'sweetalert2';
 import { usePhotographerDetail } from '../../features/photographers/hooks/usePhotographerDetail';
-import type { PhotographerPackage as Package, PhotographyQuote } from '../../features/photographers/types/photographer.types';
+import type { LocationSelection, PhotographerPackage as Package, PhotographyQuote } from '../../features/photographers/types/photographer.types';
 import { photographersApi } from '../../features/photographers/api/photographers.api';
 import { PhotographerPortfolioGrid } from '../../features/photographers/components/PhotographerPortfolioGrid';
 import { PhotographerPortfolioLightbox, type PhotographerPortfolioImage } from '../../features/photographers/components/PhotographerPortfolioLightbox';
@@ -163,7 +163,7 @@ export const PhotographerDetailPage: React.FC = () => {
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [isNextDurationQuoteLoading, setIsNextDurationQuoteLoading] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<string>('');
+  const [selectedLocation, setSelectedLocation] = useState<LocationSelection | null>(null);
   const [selectedConcept, setSelectedConcept] = useState<string>('');
   const [customRequest, setCustomRequest] = useState<string>('');
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
@@ -527,29 +527,12 @@ export const PhotographerDetailPage: React.FC = () => {
     });
   }, [selectedTimeSlot, bookedSlotsOnSelectedDate]);
 
-  const locations = useMemo(() => {
-    if (!photographer?.address) return [];
-    const address = [
-      photographer.address.addressLine,
-      photographer.address.ward,
-      photographer.address.district,
-      photographer.address.city,
-    ].filter(Boolean).join(", ");
-    return address ? [address] : [];
-  }, [photographer]);
-
-  useEffect(() => {
-    if (!selectedLocation && locations[0]) {
-      setSelectedLocation(locations[0]);
-    }
-  }, [locations, selectedLocation]);
-
   const quoteSessions = useMemo<PhotographySessionDraft[]>(() => (
     bookingMode === 'SINGLE'
       ? [{ clientId: 'main-session', date: selectedDate, startTime, durationMinutes: effectiveDurationMinutes }]
       : multiSessions
   ), [bookingMode, selectedDate, startTime, effectiveDurationMinutes, multiSessions]);
-  const isQuoteable = quoteSessions.length > 0 && quoteSessions.every((session) => Boolean(session.date && session.startTime));
+  const isQuoteable = Boolean(selectedLocation) && quoteSessions.length > 0 && quoteSessions.every((session) => Boolean(session.date && session.startTime));
   const nextDurationMinutes = effectiveDurationMinutes + overtimeIncrementMinutes;
   const canRequestNextDurationQuote = Boolean(
     bookingMode === 'SINGLE' && id && selectedPkg && selectedDate && startTime && nextDurationMinutes <= includedDurationMinutes + maxOvertimeMinutes,
@@ -572,7 +555,11 @@ export const PhotographerDetailPage: React.FC = () => {
         clientId: session.clientId,
         startsAt: `${session.date}T${session.startTime}:00+07:00`,
         endsAt: `${session.date}T${toTime(toMinutes(session.startTime) + session.durationMinutes)}:00+07:00`,
-        ...(selectedLocation ? { locationAddress: selectedLocation } : {}),
+        ...(selectedLocation ? {
+          locationAddress: selectedLocation.address,
+          locationLatitude: selectedLocation.latitude,
+          locationLongitude: selectedLocation.longitude,
+        } : {}),
       })),
     });
 
@@ -759,7 +746,7 @@ export const PhotographerDetailPage: React.FC = () => {
       depositAmount: Math.round(quote.totals.totalAmount * 0.3),
       shootDate: selectedDate,
       shootTimeSlot: selectedTimeSlot,
-      shootLocation: finalLocation,
+      shootLocation: finalLocation.address,
       shootConcept: selectedConcept,
       photographerCity: photographerCity,
       comboDiscountPercent: (photographer as any).comboDiscountPercent,
@@ -826,7 +813,9 @@ export const PhotographerDetailPage: React.FC = () => {
             clientId: session.clientId,
             startsAt: `${session.date}T${session.startTime}:00+07:00`,
             endsAt: `${session.date}T${toTime(toMinutes(session.startTime) + session.durationMinutes)}:00+07:00`,
-            locationAddress: finalLocation,
+            locationAddress: finalLocation.address,
+            locationLatitude: finalLocation.latitude,
+            locationLongitude: finalLocation.longitude,
           })),
           concept: selectedConcept,
           customRequests: customRequest || undefined,
@@ -1083,8 +1072,6 @@ export const PhotographerDetailPage: React.FC = () => {
               )}
 
               <PhotographySessionDetailsForm
-              locations={locations}
-              photographerCity={photographerCity}
               selectedLocation={selectedLocation}
               concept={selectedConcept}
               request={customRequest}
@@ -1120,7 +1107,7 @@ export const PhotographerDetailPage: React.FC = () => {
             selectedPackage={selectedPkg}
             selectedDate={bookingMode === 'SINGLE' ? selectedDate : (multiSessions[0]?.date || '')}
             selectedTimeSlot={bookingMode === 'SINGLE' ? selectedTimeSlot : `${multiSessions.length} buổi chụp`}
-            selectedLocation={selectedLocation}
+            selectedLocation={selectedLocation?.address ?? ''}
             selectedConcept={selectedConcept}
              quote={quote}
              quoteError={quoteError}
@@ -1128,7 +1115,7 @@ export const PhotographerDetailPage: React.FC = () => {
             agreeTerms={agreeTerms}
             isBusy={bookingMode === 'SINGLE' && isCurrentTimeSlotBusy}
             isBooking={isBookingNow}
-             canAddToCart={bookingMode === 'SINGLE'}
+             canAddToCart={false}
             onAgreeTermsChange={setAgreeTerms}
             onBookNow={handleDirectBooking}
             onAddToCart={handleAddBookingToCart}

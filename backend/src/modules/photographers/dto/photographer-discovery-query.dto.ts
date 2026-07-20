@@ -3,6 +3,7 @@ import {
   IsIn,
   IsInt,
   IsOptional,
+  IsNumber,
   IsString,
   Max,
   MaxLength,
@@ -83,6 +84,27 @@ export class PhotographerDiscoveryQueryDto {
   @Min(1)
   page?: number;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude?: number;
+
+  /** Customer search radius in kilometres. Applied together with provider radius. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(500)
+  searchRadiusKm?: number;
   @IsOptional()
   @Type(() => Number)
   @IsInt()

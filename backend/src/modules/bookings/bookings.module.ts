@@ -25,6 +25,12 @@ import { PhotographyHoldsController } from './controllers/photography-holds.cont
 import { BookingsService } from './services/bookings.service';
 import { BookingsSchedulerService } from './services/bookings-scheduler.service';
 import { PhotographyHoldService } from './services/photography-hold.service';
+import { RentalFulfillmentService } from './services/rental-fulfillment.service';
+import { RentalFulfillmentWorkflowService } from './services/rental-fulfillment-workflow.service';
+import { RentalDepositRefundCoordinatorService } from './services/rental-deposit-refund-coordinator.service';
+import { RentalFulfillmentController } from './controllers/rental-fulfillment.controller';
+import { AdminRentalMigrationController } from './controllers/admin-rental-migration.controller';
+import { RentalEvidenceUpload, RentalEvidenceUploadSchema } from './schemas/rental-evidence-upload.schema';
 import { PhotographyQuoteService } from '../photographers/services/photography-quote.service';
 import { ProductsModule } from '../products/products.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -42,6 +48,7 @@ export const bookingModels = MongooseModule.forFeature([
   { name: ProviderScheduleLock.name, schema: ProviderScheduleLockSchema },
   { name: DigitalContract.name, schema: DigitalContractSchema },
   { name: RentalHandover.name, schema: RentalHandoverSchema },
+  { name: RentalEvidenceUpload.name, schema: RentalEvidenceUploadSchema },
 ]);
 
 @Module({
@@ -55,18 +62,24 @@ export const bookingModels = MongooseModule.forFeature([
     SystemPoliciesModule,
     StorageModule,
   ],
-  controllers: [BookingsController, PhotographyHoldsController],
+  controllers: [BookingsController, PhotographyHoldsController, RentalFulfillmentController, AdminRentalMigrationController],
   providers: [
     BookingsService,
     BookingsSchedulerService,
     PhotographyQuoteService,
     PhotographyHoldService,
+    RentalFulfillmentService,
+    RentalFulfillmentWorkflowService,
+    RentalDepositRefundCoordinatorService,
   ],
   exports: [
     bookingModels,
     BookingsService,
     PhotographyQuoteService,
     PhotographyHoldService,
+    RentalFulfillmentService,
+    RentalFulfillmentWorkflowService,
+    RentalDepositRefundCoordinatorService,
   ],
 })
 export class BookingsModule {}

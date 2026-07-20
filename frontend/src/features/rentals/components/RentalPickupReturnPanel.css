@@ -1,0 +1,12 @@
+.rental-pickup-panel { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding: 13px; border: 1px solid rgba(182, 145, 91, 0.35); border-radius: 10px; background: #fffaf4; }
+.rental-pickup-panel__heading { display: flex; align-items: center; gap: 8px; color: var(--color-primary-dark); }
+.rental-pickup-panel__heading div { display: grid; gap: 1px; }
+.rental-pickup-panel__heading strong { font-size: 13px; }
+.rental-pickup-panel__heading span, .rental-pickup-panel__rule { color: var(--color-text-secondary); font-size: 11px; }
+.rental-pickup-panel__rule { margin: 0; }
+.rental-pickup-panel__address { margin: 0; color: var(--color-text-primary); font-size: 13px; font-weight: 650; }
+.rental-pickup-panel__map { width: 100%; height: 180px; overflow: hidden; border: 1px solid rgba(182, 145, 91, 0.28); border-radius: 8px; }
+.rental-pickup-panel__directions { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: fit-content; padding: 8px 10px; border-radius: 7px; background: var(--color-primary); color: #fff; font-size: 12px; font-weight: 700; text-decoration: none; }
+.rental-pickup-panel__directions:hover { background: var(--color-primary-dark); color: #fff; }
+.rental-pickup-marker { background: transparent; border: 0; }
+.rental-pickup-marker span { display: block; width: 24px; height: 24px; border: 3px solid #fff; border-radius: 50% 50% 50% 0; background: #a11e22; box-shadow: 0 3px 10px rgba(65, 17, 18, 0.35); transform: rotate(-45deg); }

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -16,6 +16,8 @@ import { PortfolioItem } from '../../providers/schemas/portfolio-item.schema';
 import { ProductModerationStatus } from '../../products/schemas/product.schema';
 import { SmartTagPublicProjectionService } from '../../smart-tagging/services/smart-tag-public-projection.service';
 import { PhotographerDiscoveryQueryDto, PhotographerSortOption } from '../dto/photographer-discovery-query.dto';
+
+const DISCOVERY_LOCATION_KEY = '__locationForDiscovery';
 
 @Injectable()
 export class PhotographersService {
@@ -43,7 +45,13 @@ export class PhotographersService {
     const start = (page - 1) * normalizedQuery.limit;
 
     return {
-      data: matchingPhotographers.slice(start, start + normalizedQuery.limit),
+      data: matchingPhotographers
+        .slice(start, start + normalizedQuery.limit)
+        .map((photographer) => {
+          const { [DISCOVERY_LOCATION_KEY]: _privateLocation, ...publicPhotographer } =
+            photographer;
+          return publicPhotographer;
+        }),
       meta: {
         page,
         limit: normalizedQuery.limit,
@@ -253,7 +261,18 @@ export class PhotographersService {
           })
           .sort({ price: 1, updatedAt: -1 })
           .exec();
-        return this.toPublicPhotographer(photographer, packages);
+        const publicPhotographer = await this.toPublicPhotographer(
+          photographer,
+          packages,
+        );
+        return {
+          ...publicPhotographer,
+          [DISCOVERY_LOCATION_KEY]: {
+            coordinates: photographer.address?.geo?.coordinates ?? null,
+            serviceRadiusKm:
+              photographer.photographySettings?.serviceRadiusKm ?? null,
+          },
+        };
       }),
     );
   }
@@ -263,12 +282,33 @@ export class PhotographersService {
     const limit = Math.min(48, Math.max(1, query.limit ?? 12));
     const minPrice = query.minPrice;
     const maxPrice = query.maxPrice;
+    const proximityValues = [
+      query.latitude,
+      query.longitude,
+      query.searchRadiusKm,
+    ];
+    const usesProximityFilter = proximityValues.some((value) => value !== undefined);
+    if (
+      usesProximityFilter &&
+      proximityValues.some((value) => value === undefined)
+    ) {
+      throw new BadRequestException(
+        'latitude, longitude and searchRadiusKm must be supplied together.',
+      );
+    }
     return {
       q: this.normalizeText(query.q),      concept: query.concept?.trim().toUpperCase() ?? '',
       packageCategoryId: Types.ObjectId.isValid(query.packageCategoryId ?? '') ? query.packageCategoryId ?? '' : '',
       conceptCategoryIds: this.toObjectIdList(query.conceptCategoryIds),
       styleCategoryIds: this.toObjectIdList(query.styleCategoryIds),
       eventCategoryIds: this.toObjectIdList(query.eventCategoryIds),      location: this.normalizeText(query.location),
+      proximity: usesProximityFilter
+        ? {
+            latitude: query.latitude as number,
+            longitude: query.longitude as number,
+            searchRadiusKm: query.searchRadiusKm as number,
+          }
+        : null,
       minPrice,
       maxPrice: maxPrice !== undefined && minPrice !== undefined && maxPrice < minPrice ? minPrice : maxPrice,
       minRating: query.minRating,
@@ -309,6 +349,37 @@ export class PhotographersService {
       badges?: Array<{ code?: string; label?: string }>;
     }>;
     const concepts = portfolioItems.flatMap((item) => item.badges ?? []);
+    const discoveryLocation = photographer[DISCOVERY_LOCATION_KEY] as
+      | {
+          coordinates?: [number, number] | null;
+          serviceRadiusKm?: number | null;
+        }
+      | undefined;
+
+    if (query.proximity) {
+      const coordinates = discoveryLocation?.coordinates;
+      const serviceRadiusKm = discoveryLocation?.serviceRadiusKm;
+      if (
+        !coordinates ||
+        coordinates.length !== 2 ||
+        !Number.isFinite(serviceRadiusKm) ||
+        serviceRadiusKm === null
+      ) {
+        return false;
+      }
+      const distanceKm = this.distanceKm(
+        query.proximity.latitude,
+        query.proximity.longitude,
+        coordinates[1],
+        coordinates[0],
+      );
+      if (
+        distanceKm > query.proximity.searchRadiusKm ||
+        distanceKm > (serviceRadiusKm as number)
+      ) {
+        return false;
+      }
+    }
 
     if (query.q) {
       const searchableText = [
@@ -357,6 +428,22 @@ export class PhotographersService {
     return true;
   }
 
+  private distanceKm(
+    latitudeA: number,
+    longitudeA: number,
+    latitudeB: number,
+    longitudeB: number,
+  ): number {
+    const toRadians = (value: number) => (value * Math.PI) / 180;
+    const latitudeDelta = toRadians(latitudeB - latitudeA);
+    const longitudeDelta = toRadians(longitudeB - longitudeA);
+    const a =
+      Math.sin(latitudeDelta / 2) ** 2 +
+      Math.cos(toRadians(latitudeA)) *
+        Math.cos(toRadians(latitudeB)) *
+        Math.sin(longitudeDelta / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.sqrt(a));
+  }
   private comparePhotographers(
     left: Record<string, unknown>,
     right: Record<string, unknown>,
@@ -433,6 +520,19 @@ export class PhotographersService {
       .sort({ updatedAt: -1 })
       .lean();
     const provider = photographer.toObject();
+    const {
+      address: providerAddress,
+      rentalSettings: _rentalSettings,
+      photographySettings,
+      ...publicProvider
+    } = provider;
+    const address = providerAddress
+      ? {
+          ward: providerAddress.ward ?? null,
+          district: providerAddress.district ?? null,
+          city: providerAddress.city ?? null,
+        }
+      : null;
     const media = { ...provider.media, images: provider.media?.images || [] };
     const badgeMap =
       await this.smartTagPublicProjectionService.projectPortfolioBadges(
@@ -447,7 +547,9 @@ export class PhotographersService {
     }));
 
     return {
-      ...provider,
+      ...publicProvider,
+      address,
+      serviceRadiusKm: photographySettings?.serviceRadiusKm ?? null,
       media,
       portfolioItems: publicPortfolioItems,
       packages,

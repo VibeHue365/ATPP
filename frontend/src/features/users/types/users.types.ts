@@ -1,3 +1,16 @@
+export interface UserAddress {
+  id?: string;
+  label: string;
+  recipientName?: string | null;
+  phone?: string | null;
+  addressLine: string;
+  ward?: string | null;
+  district?: string | null;
+  city?: string | null;
+  note?: string | null;
+  isDefault: boolean;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -13,6 +26,7 @@ export interface UserProfile {
   hasCompletedOnboarding?: boolean;
   preferences?: any;
   favorites?: any[];
+  addresses?: UserAddress[];
   createdAt?: string;
 }
 
@@ -26,6 +40,7 @@ export interface BackendUserProfileResponse {
   hasCompletedOnboarding?: boolean;
   preferences?: any;
   favorites?: any[];
+  addresses?: UserAddress[];
   createdAt?: string;
   profile?: {
     fullName?: string;

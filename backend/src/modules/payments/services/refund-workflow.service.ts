@@ -70,6 +70,17 @@ export class RefundWorkflowService {
     return this.createRequest({ ...input, type: RefundType.Dispute, autoApprove: input.autoApprove ?? true });
   }
 
+  /** Idempotent, booking-level refund for finalized physical rental deposits. */
+  async createFromRentalSettlement(input: { bookingId: string; requestedBy: string; amount: number; sourceEventId: string }) {
+    return this.createRequest({
+      ...input,
+      reason: 'Hoàn cọc áo dài sau khi tất toán từng item.',
+      type: RefundType.AdminManual,
+      // Admin has already approved every deduction in the rental workflow.
+      autoApprove: true,
+    });
+  }
+
   async listMine(userId: string) {
     return this.refundModel.find({ requestedBy: this.id(userId) }).sort({ createdAt: -1 }).lean();
   }
@@ -138,7 +149,16 @@ export class RefundWorkflowService {
     if (existing) return existing;
     await this.buildAllocations(input.bookingId, input.amount);
     const policy = await this.policyResolverService.getRefundPolicy();
-    const created = await this.refundModel.create({ code: `RF-${Date.now()}-${Math.floor(Math.random() * 1000)}`, bookingId: this.id(input.bookingId), requestedBy: this.id(input.requestedBy), type: input.type, sourceEventId: input.sourceEventId, mode: policy.refundProcessingMode as RefundMode, amount: input.amount, reason: input.reason, approvedAmount: 0, processedAmount: 0, reservedAmount: 0, allocations: [] });
+    let created: any;
+    try {
+      created = await this.refundModel.create({ code: `RF-${Date.now()}-${Math.floor(Math.random() * 1000)}`, bookingId: this.id(input.bookingId), requestedBy: this.id(input.requestedBy), type: input.type, sourceEventId: input.sourceEventId, mode: policy.refundProcessingMode as RefundMode, amount: input.amount, reason: input.reason, approvedAmount: 0, processedAmount: 0, reservedAmount: 0, allocations: [] });
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        const concurrent = await this.refundModel.findOne({ sourceEventId: input.sourceEventId });
+        if (concurrent) return concurrent;
+      }
+      throw error;
+    }
     if (!input.autoApprove) return created;
     const approved = await this.approve(created._id.toString(), input.requestedBy, input.amount, 0, 'Automatically approved by workflow');
     if (policy.refundProcessingMode !== RefundMode.Simulated) return approved;

@@ -118,7 +118,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   };
 
   // --- 1. APPOINTMENTS (Lịch hẹn của tôi) ---
-  const realAppointments = bookings.filter(b => 
+  const realAppointments = bookings.filter(b =>
     b.items?.some((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE')
   ).map(b => {
     const photoItem = b.items.find((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE');
@@ -174,7 +174,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   // --- 3. FAVORITES (Danh sách yêu thích) ---
   const realFavorites = React.useMemo(() => {
     if (!user?.favorites || !Array.isArray(user.favorites)) return [];
-    
+
     const list: any[] = [];
     user.favorites.forEach((fav: any) => {
       const targetId = fav.targetId?.toString() || fav.targetId;
@@ -223,7 +223,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
-      
+
       {/* Pending incident compensation notification section */}
       {pendingIncidents.length > 0 && (
         <div style={{
@@ -398,7 +398,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
       {/* Tab Panels */}
       <div className="vh-profile-tab-content-panel">
-        
+
         {/* PANEL 1: APPOINTMENTS */}
         {activeTab === 'appointments' && (
           <div className="vh-profile-appointments-grid">
@@ -410,8 +410,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               </div>
             ) : (
               displayAppointments.map((app) => (
-                <div 
-                  key={app.id} 
+                <div
+                  key={app.id}
                   className={`vh-profile-appointment-card ${app.statusType === 'UPCOMING' ? 'vh-appointment-upcoming' : 'vh-appointment-past'}`}
                 >
                   <div className="vh-appointment-card-header">
@@ -427,7 +427,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       </span>
                     )}
                   </div>
-                  
+
                   <div>
                     <h4 className="vh-appointment-card-title font-header">{app.title}</h4>
                     <div className="vh-appointment-card-detail-item">
@@ -439,16 +439,16 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       <span>{app.detailText}</span>
                     </div>
                   </div>
-                  
+
                   <div className="vh-appointment-card-footer">
                     {app.statusType === 'UPCOMING' ? (
                       <span className="vh-appointment-time-badge">{app.timeStr}</span>
                     ) : (
                       <span className="vh-appointment-status-success">{app.timeStr}</span>
                     )}
-                    
+
                     {app.isReal ? (
-                      <button 
+                      <button
                         className="vh-appointment-action-link"
                         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
                         onClick={() => onViewDetails(app.booking)}
@@ -466,7 +466,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             )}
 
             {/* Dashed placeholder card to book new appointment */}
-            <button 
+            <button
               onClick={() => navigate('/photographers')}
               className="vh-profile-appointment-card-dashed-btn"
               style={{ width: '100%', height: '100%', minHeight: '184px' }}
@@ -502,7 +502,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   <div key={item.id} className="vh-profile-rental-product-card">
                     <div className="vh-profile-rental-img-wrapper" style={{ height: '280px' }}>
                       <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
-                      <span 
+                      <span
                         className={`vh-profile-rental-status-badge ${isReturned ? 'status-returned' : 'status-renting'}`}
                         style={{
                           backgroundColor: isIncidentPending ? '#FEF3C7' : isDisputed ? '#FEE2E2' : undefined,
@@ -532,12 +532,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           <strong>{item.unitPrice?.toLocaleString('vi-VN')}đ</strong>
                         </div>
                         {item.booking ? (
-                          <button 
+                          <button
                             className="vh-appointment-action-link"
-                            style={{ 
-                              background: 'none', 
-                              border: 'none', 
-                              padding: 0, 
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              padding: 0,
                               cursor: 'pointer',
                               color: (isIncidentPending || isDisputed) ? '#C0392B' : undefined,
                               fontWeight: (isIncidentPending || isDisputed) ? 700 : undefined
@@ -626,7 +626,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             <span>Giá cọc / dịch vụ tham khảo</span>
                             <strong>{item.price.toLocaleString('vi-VN')}đ</strong>
                           </div>
-                          <button 
+                          <button
                             className="vh-appointment-action-link"
                             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
                             onClick={() => navigate(item.link)}
@@ -663,7 +663,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             <span>Giá dịch vụ tham khảo</span>
                             <strong>{item.price.toLocaleString('vi-VN')}đ</strong>
                           </div>
-                          <button 
+                          <button
                             className="vh-appointment-action-link"
                             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
                             onClick={() => navigate(item.link)}
@@ -702,8 +702,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 </thead>
                 <tbody>
                   {payments.map((p) => (
-                    <tr 
-                      key={p._id || p.paymentCode} 
+                    <tr
+                      key={p._id || p.paymentCode}
                       onClick={() => {
                         let bId = p.bookingId;
                         if (bId && typeof bId === 'object') {
@@ -719,21 +719,21 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     >
                       <td style={{ fontWeight: 700 }}>{p.paymentCode}</td>
                       <td style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                        {p.purpose === 'DEPOSIT_PAYMENT' 
-                          ? 'Đặt cọc giữ chỗ' 
-                          : p.purpose === 'DEPOSIT_REFUND' 
-                            ? 'Hoàn trả tiền cọc' 
+                        {p.purpose === 'DEPOSIT_PAYMENT'
+                          ? 'Đặt cọc giữ chỗ'
+                          : p.purpose === 'DEPOSIT_REFUND'
+                            ? 'Hoàn trả tiền cọc'
                             : 'Thanh toán hoàn tất'}
                       </td>
-                      <td style={{ 
-                        fontWeight: 800, 
-                        color: p.purpose === 'DEPOSIT_REFUND' ? '#2e7d32' : 'var(--color-primary-dark)' 
+                      <td style={{
+                        fontWeight: 800,
+                        color: p.purpose === 'DEPOSIT_REFUND' ? '#2e7d32' : 'var(--color-primary-dark)'
                       }}>
                         {p.purpose === 'DEPOSIT_REFUND' ? '+' : ''}{p.amount?.toLocaleString('vi-VN')}đ
                       </td>
                       <td>
-                        {p.paymentMethod === 'PAYOS_REFUND' 
-                          ? 'Hoàn tiền (PayOS)' 
+                        {p.paymentMethod === 'PAYOS_REFUND'
+                          ? 'Hoàn tiền (PayOS)'
                           : p.paymentMethod || 'PayOS (VietQR)'}
                       </td>
                       <td>
@@ -802,7 +802,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       )}
 
       {/* Booking Details Modal */}
-      <BookingDetailModal 
+      <BookingDetailModal
         bookingId={selectedBookingId}
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
