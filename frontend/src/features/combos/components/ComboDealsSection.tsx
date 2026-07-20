@@ -57,7 +57,10 @@ export const ComboDealsSection: React.FC = () => {
       try {
         setLoading(true);
         const data = await httpClient.get<ComboDeal[]>('/combo-promotions/public');
-        setCombos(data || []);
+        const validData = (data || []).filter(
+          (c) => c && c.productId && c.photographyPackageId,
+        );
+        setCombos(validData);
       } catch (err: any) {
         console.warn('Lỗi tải danh sách combo deals:', err);
         setError(err.message || 'Không thể tải danh sách combo khuyến mãi.');

@@ -152,6 +152,11 @@ export class PaymentsController {
     return this.paymentsService.confirmPayment(code);
   }
 
+  @Post('checkout/:code/cancel')
+  async cancelSimulation(@Param('code') code: string) {
+    return this.paymentsService.cancelPayment(code);
+  }
+
   // CHECKOUT SCREEN SIMULATOR (HTML View)
   @Get('checkout/:code')
   async renderCheckout(@Param('code') code: string, @Res() res: Response) {
@@ -390,8 +395,16 @@ export class PaymentsController {
 
             // Setup deep link click handlers with web redirects fallbacks
             const cancelBackBtn = document.getElementById('cancel-back-btn');
-            cancelBackBtn.addEventListener('click', (e) => {
+            cancelBackBtn.addEventListener('click', async (e) => {
               e.preventDefault();
+              try {
+                await fetch('/payments/checkout/' + code + '/cancel', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' }
+                });
+              } catch (err) {
+                console.error('Failed to cancel payment:', err);
+              }
               window.location.href = 'vibehue://payment/cancel';
               setTimeout(() => {
                 window.location.href = frontendUrl + '/dashboard/profile';

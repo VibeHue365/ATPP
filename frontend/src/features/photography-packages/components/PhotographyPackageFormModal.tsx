@@ -38,7 +38,7 @@ export function PhotographyPackageFormModal({
   const [categoryId, setCategoryId] = useState(() => initialPackage?.categoryId || '');
   const [conceptCategoryIds, setConceptCategoryIds] = useState<string[]>(() => initialPackage?.conceptCategoryIds || []);
   const [styleCategoryIds, setStyleCategoryIds] = useState<string[]>(() => initialPackage?.styleCategoryIds || []);
-  const [eventCategoryIds, setEventCategoryIds] = useState<string[]>(() => initialPackage?.eventCategoryIds || []);  const [name, setName] = useState(() => initialPackage?.name || '');
+  const [eventCategoryIds, setEventCategoryIds] = useState<string[]>(() => initialPackage?.eventCategoryIds || []); const [name, setName] = useState(() => initialPackage?.name || '');
   const [description, setDescription] = useState(() => initialPackage?.description || '');
   const [price, setPrice] = useState(() => initialPackage ? String(initialPackage.price) : '');
   const [durationHours, setDurationHours] = useState(() => initialPackage ? String(initialPackage.durationHours) : '1');
@@ -161,7 +161,9 @@ export function PhotographyPackageFormModal({
         <div className="photography-package-form__grid">
           <section className="photography-package-form__section">
             <h3>Thông tin hiển thị</h3>
-            <label>Danh mục nhiếp ảnh <b>*</b>
+            <label><span>
+              Danh mục nhiếp ảnh <b>*</b>
+            </span>
               <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
                 <option value="">Chọn danh mục dịch vụ</option>
                 {packageCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
@@ -181,13 +183,13 @@ export function PhotographyPackageFormModal({
                   })}
                 </div>
               </div>
-            ))}            <label>Tên gói <b>*</b><input value={name} onChange={(event) => setName(event.target.value)} maxLength={160} placeholder="Ví dụ: Chụp áo dài ngoại cảnh Huế" /></label>
+            ))}            <label><span>Tên gói <b>*</b></span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={160} placeholder="Ví dụ: Chụp áo dài ngoại cảnh Huế" /></label>
             <label>Mô tả <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={1000} rows={4} placeholder="Điểm nổi bật, concept và những trải nghiệm khách nhận được..." /></label>
             <div className="photography-package-form__two-columns">
-              <label>Giá gói (đ) <b>*</b><input type="number" min="0" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="1500000" /></label>
-              <label>Thời lượng (giờ) <b>*</b><input type="number" min="0.5" step="0.5" value={durationHours} onChange={(event) => setDurationHours(event.target.value)} /></label>
-              <label>Số người chụp tối đa <b>*</b><input type="number" min="1" value={maxPeople} onChange={(event) => setMaxPeople(event.target.value)} placeholder="1" /><small>Số người tối đa được chụp trong gói.</small></label>
-              <label>Ảnh thành phẩm đã chỉnh sửa <b>*</b><input type="number" min="0" value={editedPhotosCount} onChange={(event) => setEditedPhotosCount(event.target.value)} placeholder="20" /><small>Ảnh đã chọn lọc, chỉnh màu và gửi cho khách.</small></label>
+              <label><span>Giá gói (đ) <b>*</b></span><input type="number" min="0" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="1500000" /></label>
+              <label><span>Thời lượng (giờ) <b>*</b></span><input type="number" min="0.5" step="0.5" value={durationHours} onChange={(event) => setDurationHours(event.target.value)} /></label>
+              <label><span>Số người chụp tối đa <b>*</b></span><input type="number" min="1" value={maxPeople} onChange={(event) => setMaxPeople(event.target.value)} placeholder="1" /><small>Số người tối đa được chụp trong gói.</small></label>
+              <label><span>Ảnh thành phẩm đã chỉnh sửa <b>*</b></span><input type="number" min="0" value={editedPhotosCount} onChange={(event) => setEditedPhotosCount(event.target.value)} placeholder="20" /><small>Ảnh đã chọn lọc, chỉnh màu và gửi cho khách.</small></label>
               <div className="photography-package-form__raw-photos-option">
                 <div><strong>Có gửi ảnh gốc cho khách?</strong><small>Ảnh từ máy ảnh, chưa chỉnh sửa.</small></div>
                 <button type="button" role="switch" aria-checked={includesRawPhotos} className={includesRawPhotos ? 'is-enabled' : ''} onClick={() => setIncludesRawPhotos((current) => !current)}>
@@ -195,8 +197,8 @@ export function PhotographyPackageFormModal({
                 </button>
                 {includesRawPhotos && <label>Số ảnh gốc dự kiến<input type="number" min="1" value={rawPhotosCount} onChange={(event) => setRawPhotosCount(event.target.value)} placeholder="150" /></label>}
               </div>
-              <label>Trả ảnh sau (ngày) <b>*</b><input type="number" min="0" value={deliveryDays} onChange={(event) => setDeliveryDays(event.target.value)} /></label>
-              <label>Phí tăng giờ (đ)<input type="number" min="0" value={overtimeFeePerHour} onChange={(event) => setOvertimeFeePerHour(event.target.value)} /></label>
+              <label><span>Trả ảnh sau (ngày) <b>*</b></span><input type="number" min="0" value={deliveryDays} onChange={(event) => setDeliveryDays(event.target.value)} /></label>
+              <label><span>Phí tăng giờ (đ)</span><input type="number" min="0" value={overtimeFeePerHour} onChange={(event) => setOvertimeFeePerHour(event.target.value)} /></label>
             </div>
             <label>Ghi chú di chuyển<textarea value={travelFeeNotes} onChange={(event) => setTravelFeeNotes(event.target.value)} maxLength={500} rows={2} placeholder="Ví dụ: Miễn phí trong nội thành Huế..." /></label>
           </section>

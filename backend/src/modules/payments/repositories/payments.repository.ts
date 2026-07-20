@@ -22,7 +22,7 @@ export class PaymentsRepository {
 
   async findByBookingIds(bookingIds: Types.ObjectId[]): Promise<PaymentDocument[]> {
     return this.paymentModel
-      .find({ bookingId: { $in: bookingIds } })
+      .find({ bookingId: { $in: bookingIds }, status: PaymentStatus.Success })
       .sort({ createdAt: -1 })
       .populate('bookingId')
       .exec();

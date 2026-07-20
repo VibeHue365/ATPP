@@ -1601,6 +1601,7 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const bookings = await this.bookingModel
       .find({ providerIds: provider._id })
+      .populate('customerId')
       .sort({ createdAt: -1 });
 
     const results: Record<string, unknown>[] = [];
@@ -1804,12 +1805,12 @@ export class BookingsService implements OnApplicationBootstrap {
       [BookingStatus.PendingPayment]: [BookingStatus.Confirmed, BookingStatus.DepositPaid, BookingStatus.Cancelled],
       [BookingStatus.DepositPaid]: [BookingStatus.Confirmed, BookingStatus.PickupPending, BookingStatus.Cancelled],
       [BookingStatus.Confirmed]: [BookingStatus.PickupPending, BookingStatus.InProgress, BookingStatus.Cancelled],
-      [BookingStatus.PickupPending]: [BookingStatus.PickedUp, BookingStatus.Cancelled],
-      [BookingStatus.PickedUp]: [BookingStatus.ReturnPending, BookingStatus.Disputed, BookingStatus.Returned],
+      [BookingStatus.PickupPending]: [BookingStatus.PickedUp, BookingStatus.Cancelled, BookingStatus.InProgress],
+      [BookingStatus.PickedUp]: [BookingStatus.ReturnPending, BookingStatus.Disputed, BookingStatus.Returned, BookingStatus.InProgress],
       [BookingStatus.ReturnPending]: [BookingStatus.Returned, BookingStatus.Disputed],
       [BookingStatus.Returned]: [BookingStatus.Completed, BookingStatus.Disputed],
-      [BookingStatus.InProgress]: [BookingStatus.AwaitingReview, BookingStatus.Cancelled],
-      [BookingStatus.AwaitingReview]: [BookingStatus.Completed, BookingStatus.Disputed],
+      [BookingStatus.InProgress]: [BookingStatus.AwaitingReview, BookingStatus.Cancelled, BookingStatus.Returned, BookingStatus.ReturnPending],
+      [BookingStatus.AwaitingReview]: [BookingStatus.Completed, BookingStatus.Disputed, BookingStatus.Returned, BookingStatus.ReturnPending],
       [BookingStatus.Disputed]: [BookingStatus.Completed, BookingStatus.Refunded, BookingStatus.PartiallyRefunded],
       [BookingStatus.Completed]: [],
       [BookingStatus.Cancelled]: [],

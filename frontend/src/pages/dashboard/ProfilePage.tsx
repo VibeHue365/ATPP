@@ -750,7 +750,7 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             {/* Incident / Dispute section */}
-            {bookingIncident && (
+            {bookingIncident && bookingIncident._id && bookingIncident.status === 'RESOLVED' && (
               <div style={{
                 backgroundColor: '#FFF5F5',
                 border: '1px solid #FEB2B2',

@@ -71,7 +71,10 @@ export const ComboListingPage: React.FC = () => {
       try {
         setLoading(true);
         const data = await httpClient.get<ComboDeal[]>('/combo-promotions/public');
-        setCombos(data || []);
+        const validData = (data || []).filter(
+          (c) => c && c.productId && c.photographyPackageId,
+        );
+        setCombos(validData);
       } catch (err: any) {
         console.warn('Lỗi tải combo:', err);
       } finally {

@@ -26,6 +26,7 @@ import { useAuth } from '../../features/auth/hooks/useAuth';
 import { providerVerificationService } from '../../features/provider-verifications/services/providerVerificationService';
 import { API_BASE_URL } from '../../config/env';
 import { tokenStorage } from '../../services/tokenStorage';
+import { httpClient } from '../../services/httpClient';
 import type {
   AodaiInfo,
   PhotographyInfo,
@@ -407,14 +408,66 @@ export const BecomeProviderPage: React.FC = () => {
     setError(null);
     try {
       const current = await providerVerificationService.getCurrent();
+      
+      let existingProvider: any = null;
+      if (user?.roles?.includes('PROVIDER')) {
+        try {
+          existingProvider = await httpClient.get('/providers/me');
+        } catch (e) {
+          console.warn('Failed to load existing provider profile', e);
+        }
+      }
+
       if (current) {
         const normalized = normalizeVerificationDetail(current);
+        
+        if (existingProvider) {
+          if (!normalized.businessProfile?.businessName) {
+            normalized.businessProfile.businessName = existingProvider.businessName || '';
+          }
+          if (!normalized.businessProfile?.ownerName) {
+            normalized.businessProfile.ownerName = user?.fullName || '';
+          }
+          if (!normalized.businessProfile?.phone) {
+            normalized.businessProfile.phone = existingProvider.contact?.phone || '';
+          }
+          if (!normalized.businessProfile?.email) {
+            normalized.businessProfile.email = existingProvider.contact?.email || '';
+          }
+          if (!normalized.businessProfile?.address) {
+            normalized.businessProfile.address = existingProvider.address?.addressLine || '';
+          }
+          if (!normalized.businessProfile?.province) {
+            normalized.businessProfile.province = existingProvider.address?.city || '';
+          }
+          
+          if (existingProvider.capabilities?.includes('PHOTOGRAPHY')) {
+            if (!normalized.photographyInfo?.studioName) {
+              normalized.photographyInfo.studioName = existingProvider.businessName || '';
+            }
+            if (!normalized.photographyInfo?.workingArea) {
+              normalized.photographyInfo.workingArea = existingProvider.address?.addressLine || '';
+            }
+          }
+          
+          if (existingProvider.capabilities?.includes('AODAI_RENTAL') || existingProvider.capabilities?.includes('RENTAL')) {
+            if (!normalized.aodaiInfo?.shopName) {
+              normalized.aodaiInfo.shopName = existingProvider.businessName || '';
+            }
+            if (!normalized.aodaiInfo?.pickupAddress) {
+              normalized.aodaiInfo.pickupAddress = existingProvider.address?.addressLine || '';
+            }
+            if (!normalized.aodaiInfo?.rentalPolicy) {
+              normalized.aodaiInfo.rentalPolicy = existingProvider.policies?.rentalPolicy || '';
+            }
+          }
+        }
+
         hydrateFromVerification(normalized);
         setVerification(normalized);
         setActiveStep(stepFromVerification(normalized));
         setShowStatusDashboard(normalized.status !== 'DRAFT');
         
-        // If profile details exist, keep address input stable (don't force editor)
         if (normalized.businessProfile?.address) {
           setIsAddressEditing(false);
         } else {
@@ -426,15 +479,47 @@ export const BecomeProviderPage: React.FC = () => {
           setIsPickupAddressEditing(true);
         }
       } else if (user) {
-        setBusinessProfile({
+        const upgradeCap = new URLSearchParams(window.location.search).get('upgrade') as ProviderCapability;
+        if (upgradeCap && ['AODAI_RENTAL', 'PHOTOGRAPHY'].includes(upgradeCap)) {
+          setSelectedCapabilities([upgradeCap]);
+        }
+        
+        const initialBusinessProfile = {
           ...emptyBusinessProfile,
           ownerName: user.fullName,
           email: user.email,
           phone: user.phone ?? '',
-        });
+        };
+
+        const initialAodaiInfo = { ...emptyAodaiInfo };
+        const initialPhotographyInfo = { ...emptyPhotographyInfo };
+
+        if (existingProvider) {
+          initialBusinessProfile.businessName = existingProvider.businessName || '';
+          initialBusinessProfile.phone = existingProvider.contact?.phone || initialBusinessProfile.phone;
+          initialBusinessProfile.email = existingProvider.contact?.email || initialBusinessProfile.email;
+          initialBusinessProfile.address = existingProvider.address?.addressLine || '';
+          initialBusinessProfile.province = existingProvider.address?.city || '';
+          
+          if (existingProvider.capabilities?.includes('PHOTOGRAPHY')) {
+            initialPhotographyInfo.studioName = existingProvider.businessName || '';
+            initialPhotographyInfo.workingArea = existingProvider.address?.addressLine || '';
+          }
+          
+          if (existingProvider.capabilities?.includes('AODAI_RENTAL') || existingProvider.capabilities?.includes('RENTAL')) {
+            initialAodaiInfo.shopName = existingProvider.businessName || '';
+            initialAodaiInfo.pickupAddress = existingProvider.address?.addressLine || '';
+            initialAodaiInfo.rentalPolicy = existingProvider.policies?.rentalPolicy || '';
+          }
+        }
+
+        setBusinessProfile(initialBusinessProfile);
+        setAodaiInfo(initialAodaiInfo);
+        setPhotographyInfo(initialPhotographyInfo);
+        
         setShowStatusDashboard(false);
-        setIsAddressEditing(true);
-        setIsPickupAddressEditing(true);
+        setIsAddressEditing(!initialBusinessProfile.address);
+        setIsPickupAddressEditing(!initialAodaiInfo.pickupAddress);
       }
     } catch (err) {
       setError(messageFromError(err));
