@@ -639,7 +639,7 @@ export class BookingsService implements OnApplicationBootstrap {
       const customerId = new Types.ObjectId(userIdStr);
       const bookingCode = `B${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
 
-      let subTotal = dto.items.length > 0 ? 50000 : 0;
+      let subTotal = 0;
       const itemDetails: Array<Partial<BookingItem> & { reservations?: any[] }> = [];
       const providerIdsSet = new Set<string>();
       let booking: any = null;
@@ -901,53 +901,7 @@ export class BookingsService implements OnApplicationBootstrap {
         }
       }
 
-      if (dto.bookingType === BookingType.Combo) {
-        const prodItem = itemDetails.find(item => item.itemType === BookingItemType.Product);
-        const photoItem = itemDetails.find(item => item.itemType === BookingItemType.PhotographyPackage);
 
-        if (!prodItem || !photoItem) {
-          throw new BadRequestException('Đơn hàng Combo bắt buộc phải có cả sản phẩm áo dài và gói chụp ảnh.');
-        }
-
-        const prodProvider = await this.providerModel.findById(prodItem.providerId).session(session);
-        const photoProvider = await this.providerModel.findById(photoItem.providerId).session(session);
-        if (prodProvider && photoProvider) {
-          const prodCity = prodProvider.address?.city || 'Thừa Thiên Huế';
-          const photoCity = photoProvider.address?.city || 'Thừa Thiên Huế';
-          
-          const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^(thanh pho|tp\.?|tinh)\s+/i, '').replace(/\s+/g, ' ').trim();
-          if (!normalize(prodCity).includes(normalize(photoCity)) && !normalize(photoCity).includes(normalize(prodCity))) {
-            throw new BadRequestException(`Không thể đặt Combo lệch khu vực địa lý: Áo dài tại ${prodCity} nhưng thợ ảnh tại ${photoCity}.`);
-          }
-        }
-
-        const rentalFrom = prodItem.rentalFrom;
-        const rentalTo = prodItem.rentalTo;
-        const shootDate = photoItem.shootDate;
-
-        if (rentalFrom && rentalTo && shootDate) {
-          const start = new Date(rentalFrom);
-          start.setHours(0,0,0,0);
-          const end = new Date(rentalTo);
-          end.setHours(23,59,59,999);
-          const shoot = new Date(shootDate);
-
-          if (shoot < start || shoot > end) {
-            throw new BadRequestException('Ngày chụp ảnh phải nằm trong khoảng thời gian thuê Áo dài.');
-          }
-
-          if (prodItem.rentalType === 'HOURLY' && prodItem.shootTimeSlot && photoItem.shootTimeSlot) {
-            const [prodStartStr, prodEndStr] = prodItem.shootTimeSlot.split('-').map(s => s.trim());
-            const [photoStartStr, photoEndStr] = photoItem.shootTimeSlot.split('-').map(s => s.trim());
-            
-            if (prodStartStr && prodEndStr && photoStartStr && photoEndStr) {
-              if (photoStartStr < prodStartStr || photoEndStr > prodEndStr) {
-                throw new BadRequestException(`Khung giờ chụp (${photoItem.shootTimeSlot}) phải nằm trong khung giờ thuê Áo dài (${prodItem.shootTimeSlot}).`);
-              }
-            }
-          }
-        }
-      }
 
       const travelFee = dto.travelFee || 0;
       const comboDiscountTotal = itemDetails.reduce((sum, item) => sum + (item.comboDiscountAmount || 0), 0);
@@ -1486,7 +1440,7 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const unitPrice = pkg.price;
     const subTotal = pkg.price;
-    const depositTotal = Math.round(pkg.price * 0.3);
+    const depositTotal = pkg.price; // 100% thanh toán trước cho dịch vụ chụp ảnh
     const grandTotal = pkg.price;
 
     let priceVersion = await this.priceVersionModel
@@ -1759,6 +1713,47 @@ export class BookingsService implements OnApplicationBootstrap {
     return booking;
   }
 
+  /**
+   * Customer xác nhận hài lòng sau buổi chụp ảnh.
+   * Chỉ cho phép khi booking đang ở AWAITING_REVIEW và người gọi là customer của booking.
+   * Sử dụng atomic findOneAndUpdate để đảm bảo idempotency (tránh double-complete với cron job).
+   */
+  async confirmCompleteByCustomer(
+    bookingIdStr: string,
+    userId: string,
+  ): Promise<BookingDocument> {
+    const booking = await this.bookingModel.findById(bookingIdStr);
+    if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
+
+    if (booking.customerId.toString() !== userId) {
+      throw new ForbiddenException('Bạn không có quyền xác nhận đơn hàng này.');
+    }
+
+    if (booking.status === BookingStatus.Completed) return booking;
+
+    if (booking.status !== BookingStatus.AwaitingReview) {
+      throw new BadRequestException(
+        `Chỉ có thể xác nhận hoàn thành khi đơn đang chờ đánh giá (AWAITING_REVIEW). Trạng thái hiện tại: ${booking.status}`,
+      );
+    }
+
+    // Atomic lock: prevents double-processing if cron job runs simultaneously
+    const locked = await this.bookingModel.findOneAndUpdate(
+      { _id: booking._id, status: BookingStatus.AwaitingReview },
+      { $set: { status: BookingStatus.Completed } },
+      { new: false },
+    );
+
+    if (!locked) {
+      // Another process already handled it — return current state
+      const current = await this.bookingModel.findById(bookingIdStr);
+      return current!;
+    }
+
+    // Run full completion flow (settlement + wallet update + notifications)
+    return this.completeBooking(bookingIdStr, userId, ['CUSTOMER']);
+  }
+
   /** Provider cập nhật trạng thái đơn hàng (CONFIRMED, PICKUP_PENDING, PICKED_UP, v.v.) */
   async updateBookingStatus(
     bookingIdStr: string,
@@ -1808,11 +1803,13 @@ export class BookingsService implements OnApplicationBootstrap {
       [BookingStatus.Draft]: [BookingStatus.PendingPayment, BookingStatus.Cancelled],
       [BookingStatus.PendingPayment]: [BookingStatus.Confirmed, BookingStatus.DepositPaid, BookingStatus.Cancelled],
       [BookingStatus.DepositPaid]: [BookingStatus.Confirmed, BookingStatus.PickupPending, BookingStatus.Cancelled],
-      [BookingStatus.Confirmed]: [BookingStatus.PickupPending, BookingStatus.Cancelled],
+      [BookingStatus.Confirmed]: [BookingStatus.PickupPending, BookingStatus.InProgress, BookingStatus.Cancelled],
       [BookingStatus.PickupPending]: [BookingStatus.PickedUp, BookingStatus.Cancelled],
-      [BookingStatus.PickedUp]: [BookingStatus.ReturnPending, BookingStatus.Disputed],
+      [BookingStatus.PickedUp]: [BookingStatus.ReturnPending, BookingStatus.Disputed, BookingStatus.Returned],
       [BookingStatus.ReturnPending]: [BookingStatus.Returned, BookingStatus.Disputed],
       [BookingStatus.Returned]: [BookingStatus.Completed, BookingStatus.Disputed],
+      [BookingStatus.InProgress]: [BookingStatus.AwaitingReview, BookingStatus.Cancelled],
+      [BookingStatus.AwaitingReview]: [BookingStatus.Completed, BookingStatus.Disputed],
       [BookingStatus.Disputed]: [BookingStatus.Completed, BookingStatus.Refunded, BookingStatus.PartiallyRefunded],
       [BookingStatus.Completed]: [],
       [BookingStatus.Cancelled]: [],
@@ -1826,6 +1823,9 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     booking.status = nextStatus;
+    if (nextStatus === BookingStatus.AwaitingReview) {
+      booking.awaitingReviewSince = new Date();
+    }
     booking.statusTimeline.push({
       status: newStatus as BookingStatus,
       changedAt: new Date(),
@@ -2212,7 +2212,7 @@ export class BookingsService implements OnApplicationBootstrap {
     return populatedBookings;
   }
 
-  async getBusySchedulesForProduct(productId: string): Promise<{ bookedDates: string[], bookedSlots: { date: string, timeSlot: string }[] }> {
+  async getBusySchedulesForProduct(productId: string): Promise<{ bookedDates: string[]; bookedSlots: { date: string; timeSlot: string }[]; workingDays?: number[]; offDays?: string[]; hasSchedule?: boolean }> {
     const inventoryItems = await this.inventoryItemModel.find({
       productId: new Types.ObjectId(productId),
       conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
@@ -2311,9 +2311,38 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     });
 
+    let workingDays: number[] = [];
+    let offDays: string[] = [];
+    let hasSchedule = false;
+
+    try {
+      const product = await this.productModel.findById(productId).select('providerId');
+      if (product && product.providerId) {
+        const providerScheduleModel = this.bookingModel.db.model('ProviderSchedule');
+        const schedules = await providerScheduleModel.find({ providerId: product.providerId }).lean().exec();
+        if (schedules && schedules.length > 0) {
+          hasSchedule = true;
+          const recurringSchedules = schedules.filter((s: any) => s.scheduleType === 'RECURRING');
+          const specificSchedules = schedules.filter((s: any) => s.scheduleType === 'SPECIFIC_DATE');
+          workingDays = Array.from(new Set(recurringSchedules.map((s: any) => s.dayOfWeek).filter((d: any) => d !== null && d !== undefined)));
+          specificSchedules.forEach((s: any) => {
+            if (s.offDays && s.offDays.length > 0) {
+              s.offDays.forEach((od: any) => {
+                const dStr = new Date(od).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+                offDays.push(dStr);
+              });
+            }
+          });
+        }
+      }
+    } catch (_) {}
+
     return {
       bookedDates,
       bookedSlots,
+      workingDays,
+      offDays,
+      hasSchedule,
     };
   }
 
@@ -2368,5 +2397,49 @@ export class BookingsService implements OnApplicationBootstrap {
     } catch (_) {
       return false;
     }
+  }
+
+  async getProductStockCount(
+    productId: string,
+    size: string,
+    color: string,
+  ): Promise<{ stock: number }> {
+    const sizeVal = size.trim().toUpperCase();
+    const colorVal = this.normalizeColor(color);
+
+    const count = await this.inventoryItemModel.countDocuments({
+      productId: new Types.ObjectId(productId),
+      size: sizeVal,
+      color: colorVal,
+      status: 'AVAILABLE',
+      conditionStatus: {
+        $nin: ['LOCKED', 'RETIRED'],
+      },
+    } as any);
+
+    return { stock: count };
+  }
+
+  async getProductStockSummary(productId: string): Promise<any[]> {
+    const items = await this.inventoryItemModel.find({
+      productId: new Types.ObjectId(productId),
+      status: 'AVAILABLE',
+      conditionStatus: {
+        $nin: ['LOCKED', 'RETIRED'],
+      },
+    } as any);
+
+    const summary: Record<string, number> = {};
+    items.forEach((item) => {
+      const sizeKey = (item.size || '').trim().toUpperCase();
+      const colorKey = (item.color || '').trim().toUpperCase();
+      const key = `${sizeKey}_${colorKey}`;
+      summary[key] = (summary[key] || 0) + 1;
+    });
+
+    return Object.entries(summary).map(([key, count]) => {
+      const [size, color] = key.split('_');
+      return { size, color, stock: count };
+    });
   }
 }

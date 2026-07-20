@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
-  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,Copy,Package, Eye,
-  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck
+  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, Trash2, Play, Pencil, Copy, Package, Eye,
+  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck, Clock, ShieldCheck
 } from 'lucide-react';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 import Swal from 'sweetalert2';
@@ -168,6 +168,7 @@ export const ProviderDashboard: React.FC = () => {
   const [reviewsData, setReviewsData] = useState<any>(null);
   const [bookingsState, setBookingsState] = useState<any[]>([]);
   const [payouts, setPayouts] = useState<any[]>([]);
+  const [walletData, setWalletData] = useState<{ pendingBalance: number; availableBalance: number; totalEarned: number } | null>(null);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isLoadingProvider, setIsLoadingProvider] = useState(false);
@@ -456,10 +457,22 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
+  const fetchWalletData = async () => {
+    try {
+      const res: any = await httpClient.get('/providers/me/wallet');
+      if (res && res.wallet) {
+        setWalletData(res.wallet);
+      }
+    } catch (err: any) {
+      console.error('Không thể tải thông tin ví:', err);
+    }
+  };
+
   const fetchPayouts = async () => {
     try {
       const res: any = await httpClient.get('/payments/settlement-transfers/provider');
       setPayouts(res || []);
+      fetchWalletData();
     } catch (err: any) {
       console.error('Không thể tải lịch sử quyết toán:', err);
     }
@@ -1389,6 +1402,7 @@ export const ProviderDashboard: React.FC = () => {
       const occasionsFromTags = activeTagCodes.map(code => TAG_TO_OCCASION[code]).filter(Boolean);
       await httpClient.patch(`/products/${targetId}`, {
         ...buildBasePayload(),
+        status: 'ACTIVE',
         style: activeTagCodes.length ? (styleFromTags || prodStyle) : prodStyle,
         occasions: activeTagCodes.length ? occasionsFromTags : prodOccasions,
       });
@@ -1459,13 +1473,20 @@ export const ProviderDashboard: React.FC = () => {
   }, [orders]);
 
   const statusBadgeStyle = (status: string): React.CSSProperties => {
-    const base: React.CSSProperties = { display: 'inline-block', padding: '4px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', color: 'white' };
+    const base: React.CSSProperties = { display: 'inline-block', padding: '4px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', color: 'white', whiteSpace: 'nowrap' };
     if (status === 'HOÀN THÀNH') return { ...base, backgroundColor: '#2e7d32' };
     if (status === 'CHỜ KHÁCH DUYỆT SỰ CỐ') return { ...base, backgroundColor: '#ed6c02' };
     if (status === 'TRANH CHẤP') return { ...base, backgroundColor: '#d32f2f' };
     if (status === 'ĐÃ HỦY') return { ...base, backgroundColor: '#757575' };
-    if (status === 'CHỜ XỬ LÝ' || status === 'CHỜ THANH TOÁN') return { ...base, backgroundColor: 'var(--color-primary)' };
-    if (status === 'ĐANG XỬ LÝ' || status === 'ĐANG THỰC HIỆN' || status === 'ĐANG THUÊ') return { ...base, backgroundColor: 'var(--color-gold)' };
+    if (status === 'CHỜ XỬ LÝ') return { ...base, backgroundColor: 'var(--color-primary)' };
+    if (status === 'CHỜ THANH TOÁN') return { ...base, backgroundColor: '#9C27B0' };
+    if (status === 'ĐÃ ĐẶT CỌC') return { ...base, backgroundColor: '#1565C0' };
+    if (status === 'ĐANG THỰC HIỆN') return { ...base, backgroundColor: 'var(--color-gold)' };
+    if (status === 'ĐANG CHỤP') return { ...base, backgroundColor: '#059669' };
+    if (status === 'CHỜ KHÁCH XÁC NHẬN') return { ...base, backgroundColor: '#0284C7' };
+    if (status === 'CHỜ NHẬN ĐỒ') return { ...base, backgroundColor: '#E67E22' };
+    if (status === 'ĐANG THUÊ') return { ...base, backgroundColor: '#27AE60' };
+    if (status === 'ĐÃ TRẢ ĐỒ') return { ...base, backgroundColor: '#558B2F' };
     return { ...base, backgroundColor: '#ccc', color: '#555' };
   };
 
@@ -1479,20 +1500,29 @@ export const ProviderDashboard: React.FC = () => {
     border: 'none',
   });
 
-  // Map từ trạng thái tiếng Việt → BookingStatus enum value
-  const statusApiMap: Record<string, string> = {
-    'HOÀN THÀNH': 'COMPLETED',
-    'ĐANG XỬ LÝ': 'CONFIRMED',
-    'CHỜ XỬ LÝ': 'PENDING_PAYMENT',
-    'ĐÃ HỦY': 'CANCELLED',
+  // Map từ BookingStatus enum value → Trạng thái tiếng Việt hiển thị
+  const statusDisplayMap: Record<string, string> = {
+    PENDING: 'CHỜ XỬ LÝ',
+    PENDING_PAYMENT: 'CHỜ THANH TOÁN',
+    DEPOSIT_PAID: 'ĐÃ ĐẶT CỌC',
+    CONFIRMED: 'ĐANG THỰC HIỆN',
+    IN_PROGRESS: 'ĐANG CHỤP',
+    AWAITING_REVIEW: 'CHỜ KHÁCH XÁC NHẬN',
+    PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
+    PICKED_UP: 'ĐANG THUÊ',
+    RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
+    RETURNED: 'ĐÃ TRẢ ĐỒ',
+    COMPLETED: 'HOÀN THÀNH',
+    CANCELLED: 'ĐÃ HỦY',
+    DISPUTED: 'TRANH CHẤP',
   };
 
-  const changeOrderStatus = async (_id: string, s: string) => {
-    const apiStatus = statusApiMap[s] || s;
+  const changeOrderStatus = async (_id: string, apiStatus: string) => {
     try {
       await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus });
-      setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: s } : o));
-      toast.success(`Đã cập nhật trạng thái đơn hàng thành "${s}"!`);
+      const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
+      setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus } : o));
+      toast.success(`Đã cập nhật trạng thái đơn hàng thành "${displayStatus}"!`);
     } catch (err: any) {
       toast.error(err.message || 'Cập nhật trạng thái thất bại');
     }
@@ -2355,36 +2385,73 @@ export const ProviderDashboard: React.FC = () => {
                       <td style={{ padding: '16px 20px', textAlign: 'center' }}><span style={statusBadgeStyle(o.status)}>{o.status}</span></td>
                       <td style={{ padding: '16px 20px', textAlign: 'center', position: 'relative' }}>
                         <button onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
-                        {actionMenuId === o._id && (
-                          <div style={{ position: 'absolute', right: '20px', top: '40px', width: '180px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
-                            {[
-                              { label: 'Hoàn thành', status: 'HOÀN THÀNH', icon: <CheckCircle size={14} />, color: '#2e7d32' },
-                              { label: 'Đang thực hiện', status: 'ĐANG XỬ LÝ', icon: <Play size={14} />, color: 'var(--color-gold)' },
-                              { label: 'Chờ xử lý', status: 'CHỜ XỬ LÝ', icon: <FileText size={14} />, color: 'var(--color-primary)' },
-                            ].map(a => (
-                              <button key={a.label} onClick={() => changeOrderStatus(o._id, a.status)} style={{
-                                width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: a.color,
-                                fontWeight: 500, textAlign: 'left',
-                              }}>{a.icon} {a.label}</button>
-                            ))}
-                            {(o.rawStatus === 'CONFIRMED' || o.rawStatus === 'COMPLETED' || o.rawStatus === 'PICKED_UP' || o.rawStatus === 'RETURNED' || o.rawStatus === 'RETURN_PENDING' || o.rawStatus === 'DISPUTED') && (
-                              <button onClick={() => {
-                                setReportingOrder(o);
-                                setSelectedItemId(o.items?.[0]?._id || '');
-                                setIncidentDesc('');
-                                setIncidentEvidence('');
-                                setIncidentAmount(o.depositTotal || 0);
-                                setIncidentActionType('CLEANING');
-                                setActionMenuId(null);
-                              }} style={{
-                                width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
-                                fontWeight: 700, textAlign: 'left', borderTop: '1px solid var(--color-light-border)'
-                              }}><Flag size={14} /> Báo cáo hỏng đồ</button>
-                            )}
-                          </div>
-                        )}
+                        {actionMenuId === o._id && (() => {
+                          // Các bước tiếp theo hợp lệ cho từng trạng thái (khớp với backend allowedTransitions)
+                          const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string }[]> = {
+                            PENDING_PAYMENT: [
+                              { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                              { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                            ],
+                            DEPOSIT_PAID: [
+                              { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                              { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                              { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                            ],
+                            CONFIRMED: [
+                              { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                              { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                            ],
+                            PICKUP_PENDING: [
+                              { label: 'Xác nhận đã lấy đồ', apiStatus: 'PICKED_UP', icon: <CheckCheck size={14} />, color: '#2e7d32' },
+                              { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                            ],
+                            PICKED_UP: [
+                              { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                              { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                            ],
+                            RETURN_PENDING: [
+                              { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                            ],
+                            RETURNED: [
+                              { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                            ],
+                          };
+                          const rawStatus = (o.rawStatus || '') as string;
+                          const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string }[] = nextStepsMap[rawStatus] || [];
+                          const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
+                          if (steps.length === 0 && !canReport) return null;
+                          return (
+                            <div style={{ position: 'absolute', right: '20px', top: '40px', width: '210px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
+                              {steps.length > 0 && (
+                                <div style={{ padding: '6px 12px 2px', fontSize: '10px', fontWeight: 700, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  Cập nhật trạng thái
+                                </div>
+                              )}
+                              {steps.map((a: { label: string; apiStatus: string; icon: React.ReactNode; color: string }) => (
+                                <button key={a.apiStatus} onClick={() => changeOrderStatus(o._id, a.apiStatus)} style={{
+                                  width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                  fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: a.color,
+                                  fontWeight: 600, textAlign: 'left',
+                                }}>{a.icon} {a.label}</button>
+                              ))}
+                              {canReport && (
+                                <button onClick={() => {
+                                  setReportingOrder(o);
+                                  setSelectedItemId(o.items?.[0]?._id || '');
+                                  setIncidentDesc('');
+                                  setIncidentEvidence('');
+                                  setIncidentAmount(o.depositTotal || 0);
+                                  setIncidentActionType('CLEANING');
+                                  setActionMenuId(null);
+                                }} style={{
+                                  width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                  fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
+                                  fontWeight: 700, textAlign: 'left', borderTop: steps.length > 0 ? '1px solid var(--color-light-border)' : 'none'
+                                }}><Flag size={14} /> Báo cáo hỏng đồ</button>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -3360,6 +3427,48 @@ export const ProviderDashboard: React.FC = () => {
               <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải dữ liệu quyết toán...</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                {/* WALLET SUMMARY CARDS */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
+                  <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#D97706', letterSpacing: '0.05em' }}>ĐANG GIỮ (PENDING)</span>
+                      <Clock size={20} style={{ color: '#D97706' }} />
+                    </div>
+                    <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--color-text-main)' }}>
+                      {(walletData?.pendingBalance || 0).toLocaleString('vi-VN')}đ
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+                      Tiền đơn đang thực hiện & chờ khách xác nhận
+                    </div>
+                  </div>
+
+                  <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#059669', letterSpacing: '0.05em' }}>KHẢ DỤNG (AVAILABLE)</span>
+                      <DollarSign size={20} style={{ color: '#059669' }} />
+                    </div>
+                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#059669' }}>
+                      {(walletData?.availableBalance || 0).toLocaleString('vi-VN')}đ
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+                      Tiền đã hoàn thành, sẵn sàng đối soát
+                    </div>
+                  </div>
+
+                  <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#0284C7', letterSpacing: '0.05em' }}>TỔNG THU NHẬP</span>
+                      <ShieldCheck size={20} style={{ color: '#0284C7' }} />
+                    </div>
+                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#0284C7' }}>
+                      {(walletData?.totalEarned || 0).toLocaleString('vi-VN')}đ
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+                      Doanh thu tích lũy toàn thời gian
+                    </div>
+                  </div>
+                </div>
+
                 <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 20px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>DANH SÁCH CÁC KHOẢN QUYẾT TOÁN</h3>
                   {payouts.length === 0 ? (

@@ -120,6 +120,19 @@ export class BookingsController {
     return this.bookingsService.completeBooking(id, user.sub, user.roles);
   }
 
+  /**
+   * POST /bookings/:id/confirm-complete
+   * Customer xác nhận hài lòng sau buổi chụp ảnh.
+   * Chỉ hoạt động khi booking ở trạng thái AWAITING_REVIEW và caller là customer của booking.
+   */
+  @Post(':id/confirm-complete')
+  async confirmComplete(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.bookingsService.confirmCompleteByCustomer(id, user.sub);
+  }
+
   /** PATCH /bookings/:id/status — Provider cập nhật trạng thái đơn hàng */
   @Patch(':id/status')
   async updateStatus(
@@ -177,5 +190,24 @@ export class BookingsController {
   @Get('busy-dates/provider/:providerId')
   async getProviderBusyDates(@Param('providerId') providerId: string) {
     return this.bookingsService.getBusySchedulesForProvider(providerId);
+  }
+
+  /** GET /bookings/stock/product/:productId/summary */
+  @Get('stock/product/:productId/summary')
+  async getProductStockSummary(@Param('productId') productId: string) {
+    return this.bookingsService.getProductStockSummary(productId);
+  }
+
+  /** GET /bookings/stock/product/:productId */
+  @Get('stock/product/:productId')
+  async getProductStock(
+    @Param('productId') productId: string,
+    @Query('size') size: string,
+    @Query('color') color: string,
+  ) {
+    if (!size || !color) {
+      throw new BadRequestException('size and color queries are required');
+    }
+    return this.bookingsService.getProductStockCount(productId, size, color);
   }
 }

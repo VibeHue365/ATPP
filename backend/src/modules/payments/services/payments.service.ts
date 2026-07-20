@@ -104,26 +104,27 @@ export class PaymentsService {
     let amount = 0;
     if (purpose === PaymentPurpose.DepositPayment) {
       if (booking.bookingType === BookingType.Combo) {
-        // Combo deposit = 100% Product rental + 100% Product deposit + 30% Photographer fee + serviceFee - comboDiscount
+        // Combo deposit = 100% Product rental + 100% Product deposit + 100% Photographer fee + serviceFee - comboDiscount
         const items = await this.bookingModel.db.model('BookingItem').find({ bookingId: booking._id });
         const prodItems = items.filter((i: any) => i.itemType === 'PRODUCT');
         const photoItems = items.filter((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
 
         const prodRentalTotal = prodItems.reduce((sum: number, i: any) => sum + i.unitPrice * i.quantity, 0);
         const prodDepositTotal = prodItems.reduce((sum: number, i: any) => sum + i.depositAmount * i.quantity, 0);
-        const photoDepositTotal = photoItems.reduce((sum: number, i: any) => sum + Math.round(i.unitPrice * 0.3) * i.quantity, 0);
+        const photoDepositTotal = photoItems.reduce((sum: number, i: any) => sum + i.unitPrice * i.quantity, 0);
 
         amount = prodRentalTotal + prodDepositTotal + photoDepositTotal - (booking.pricingSummary.comboDiscountTotal || 0);
+      } else if (booking.bookingType === BookingType.Photography) {
+        amount = booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
       } else {
-        amount = booking.pricingSummary.depositTotal;
+        amount = booking.pricingSummary.depositTotal || booking.pricingSummary.grandTotal;
       }
     } else if (purpose === PaymentPurpose.FullPayment) {
-      amount = booking.pricingSummary.grandTotal;
+      amount = booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
     } else if (purpose === PaymentPurpose.RemainingPayment) {
-      amount =
-        booking.pricingSummary.grandTotal - booking.paymentSummary.totalPaid;
+      amount = booking.pricingSummary.grandTotal - booking.paymentSummary.totalPaid;
     } else {
-      amount = booking.pricingSummary.grandTotal;
+      amount = booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
     }
 
     if (amount <= 0) {
@@ -283,6 +284,35 @@ export class PaymentsService {
             $unset: { expiresAt: 1 }
           }
         );
+
+        // Photography only: credit provider pendingBalance with estimated net amount.
+        // estimatedNetAmount = 80% of grandTotal (assuming ~20% platform commission).
+        // Stored on booking so settleBooking can deduct the exact same figure later.
+        if (
+          newStatus === BookingStatus.Confirmed &&
+          updatedBooking.bookingType === BookingType.Photography
+        ) {
+          const ESTIMATED_COMMISSION_RATE = 0.20;
+          const estimatedNetAmt = Math.round(
+            updatedBooking.pricingSummary.grandTotal * (1 - ESTIMATED_COMMISSION_RATE),
+          );
+          // Persist on booking for ghost-balance prevention
+          await this.bookingModel.updateOne(
+            { _id: updatedBooking._id },
+            { $set: { estimatedNetAmount: estimatedNetAmt } },
+          );
+          // Credit pending wallet using atomic $inc
+          if (updatedBooking.providerIds.length > 0) {
+            const providerModel = this.bookingModel.db.model('Provider');
+            await providerModel.updateMany(
+              { _id: { $in: updatedBooking.providerIds } },
+              {
+                $inc: { 'wallet.pendingBalance': estimatedNetAmt },
+                $set:  { 'wallet.lastUpdatedAt': new Date() },
+              },
+            );
+          }
+        }
       }
 
       try {
@@ -412,6 +442,34 @@ export class PaymentsService {
         await this.refundDeposit(
           bookingIdStr,
           booking.pricingSummary.depositTotal,
+        );
+      }
+
+      // 3. Update provider wallet: move pending → available.
+      //    deduct by estimatedNetAmount (stored at CONFIRMED time) to prevent ghost-balance,
+      //    credit available by actual netAmount (grandTotal - commission).
+      //    For photography bookings only (ao dai uses a different escrow flow).
+      if (
+        booking.bookingType === BookingType.Photography &&
+        booking.providerIds.length > 0
+      ) {
+        const COMMISSION_RATE = 0.20;
+        const actualNetAmount = Math.round(
+          booking.pricingSummary.grandTotal * (1 - COMMISSION_RATE),
+        );
+        // Use the stored estimate to deduct (prevents ghost-balance drift).
+        const estimatedDeduction = (booking as any).estimatedNetAmount ?? actualNetAmount;
+        const providerModel = this.bookingModel.db.model('Provider');
+        await providerModel.updateMany(
+          { _id: { $in: booking.providerIds } },
+          {
+            $inc: {
+              'wallet.pendingBalance':   -estimatedDeduction, // deduct estimate
+              'wallet.availableBalance': +actualNetAmount,    // credit actual
+              'wallet.totalEarned':      +actualNetAmount,   // cumulative (only grows)
+            },
+            $set: { 'wallet.lastUpdatedAt': new Date() },
+          },
         );
       }
     } catch (err) {

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -8,10 +8,11 @@ import {
   BookingScheduleStatus,
   BookingScheduleType,
 } from '../schemas/booking-schedule.schema';
-import { Booking, BookingDocument } from '../schemas/booking.schema';
+import { Booking, BookingDocument, BookingStatus } from '../schemas/booking.schema';
 import { Notification, NotificationDocument, NotificationType } from '../../notifications/schemas/notification.schema';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PhotographyHoldService } from './photography-hold.service';
+import { BookingStatusService } from './booking-status.service';
 
 @Injectable()
 export class BookingsSchedulerService {
@@ -26,6 +27,7 @@ export class BookingsSchedulerService {
     private readonly notificationModel: Model<NotificationDocument>,
     private readonly notificationsService: NotificationsService,
     private readonly photographyHoldService: PhotographyHoldService,
+    private readonly bookingStatusService: BookingStatusService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -39,6 +41,58 @@ export class BookingsSchedulerService {
       this.logger.error('Unable to expire photography schedule holds.', error);
     }
   }
+
+  /**
+   * Auto-complete photography bookings that have been in AWAITING_REVIEW for > 48 hours.
+   * Runs every hour. Uses atomic findOneAndUpdate to prevent double-processing
+   * (idempotency: if two cron instances run simultaneously, only one wins the status lock).
+   * TODO: Use Promise.all or batch processing for scalability at high volume.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async autoCompleteAwaitingReviewBookings() {
+    this.logger.log('Running auto-complete for AWAITING_REVIEW bookings...');
+    const deadline = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+    try {
+      // Find all bookings past deadline (just IDs — don't lock yet)
+      const candidates = await this.bookingModel
+        .find({
+          status: BookingStatus.AwaitingReview,
+          awaitingReviewSince: { $lte: deadline },
+        })
+        .select('_id bookingCode')
+        .lean();
+
+      if (candidates.length === 0) return;
+      this.logger.log(`Found ${candidates.length} AWAITING_REVIEW booking(s) to auto-complete.`);
+
+      for (const candidate of candidates) {
+        try {
+          // Atomic status lock: only succeeds if status is STILL AWAITING_REVIEW.
+          // Prevents double-processing if cron overlaps with a customer confirm-complete call.
+          const locked = await this.bookingModel.findOneAndUpdate(
+            { _id: candidate._id, status: BookingStatus.AwaitingReview },
+            { $set: { status: BookingStatus.Completed } },
+            { new: false }, // return OLD doc — if null, someone else already changed it
+          );
+
+          if (!locked) {
+            this.logger.warn(`Booking ${candidate.bookingCode} already processed — skipping.`);
+            continue;
+          }
+
+          // Run the full completion logic (settlement, wallet update, notifications)
+          await this.bookingStatusService.completeBooking(candidate._id.toString());
+          this.logger.log(`Auto-completed booking ${candidate.bookingCode} after 48h review window.`);
+        } catch (err) {
+          this.logger.error(`Failed to auto-complete booking ${candidate.bookingCode}:`, err);
+        }
+      }
+    } catch (err) {
+      this.logger.error('Auto-complete cron job failed:', err);
+    }
+  }
+
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleScheduleReminders() {
     this.logger.log('Running automatic schedule reminders cron-job...');

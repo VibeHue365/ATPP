@@ -8533,6 +8533,9 @@ button {
   position: sticky;
   top: 100px;
 }
+.vh-filter-sidebar::-webkit-scrollbar {
+  display: none;
+}
 
 .vh-filter-divider {
   height: 1px;

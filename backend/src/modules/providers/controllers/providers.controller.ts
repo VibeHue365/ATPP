@@ -127,6 +127,11 @@ export class ProvidersController {
     return this.providersService.getProviderAnalytics(user.sub);
   }
 
+  /** GET /providers/me/wallet — Xem số dư ví thợ ảnh */
+  @Get('me/wallet')
+  async getWallet(@CurrentUser() user: AuthUser) {
+    return this.providersService.getWallet(user.sub);
+  }
 
   @Patch('me')
   async updateMe(

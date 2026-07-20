@@ -662,4 +662,48 @@ export class ProvidersService {
     if (!provider) throw new NotFoundException('Provider profile not found');
     return provider;
   }
+
+  /**
+   * GET /providers/me/wallet
+   * Trả về số dư ví thợ ảnh (pendingBalance, availableBalance, totalEarned)
+   * và 10 settlement gần nhất để hiển thị lịch sử giao dịch.
+   */
+  async getWallet(userIdStr: string) {
+    const provider = await this.requireProvider(userIdStr);
+
+    const wallet = provider.wallet ?? {
+      pendingBalance:   0,
+      availableBalance: 0,
+      totalEarned:      0,
+      lastUpdatedAt:    null,
+    };
+
+    // Fetch 10 most recent completed settlements for this provider
+    const Settlement = this.bookingModel.db.model('Settlement');
+    const recentSettlements = await Settlement
+      .find({ providerId: provider._id })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .select('settlementCode bookingId netAmount payableAmount status createdAt')
+      .populate({ path: 'bookingId', select: 'bookingCode bookingType' })
+      .lean();
+
+    return {
+      wallet: {
+        pendingBalance:   wallet.pendingBalance,
+        availableBalance: wallet.availableBalance,
+        totalEarned:      wallet.totalEarned,
+        lastUpdatedAt:    wallet.lastUpdatedAt,
+      },
+      recentSettlements: recentSettlements.map((s: any) => ({
+        settlementCode: s.settlementCode,
+        bookingCode:    s.bookingId?.bookingCode ?? '—',
+        bookingType:    s.bookingId?.bookingType ?? '—',
+        netAmount:      s.netAmount,
+        payableAmount:  s.payableAmount,
+        status:         s.status,
+        createdAt:      s.createdAt,
+      })),
+    };
+  }
 }
