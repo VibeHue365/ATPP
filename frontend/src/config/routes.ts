@@ -19,4 +19,7 @@ export const ROUTES = {
   CART: '/cart',
   ADMIN_DASHBOARD: '/admin/dashboard',
   ADMIN_DASHBOARD_REFACTORED: '/admin/dashboard-refactored',
+  COMBOS: '/combos',
+  COMBO_DETAIL: '/combos/:id',
 } as const;
+// Touch to reload.

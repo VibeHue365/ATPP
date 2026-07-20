@@ -135,7 +135,6 @@ export const ProviderDashboard: React.FC = () => {
   const [myProductsList, setMyProductsList] = useState<any[]>([]);
   const [isLoadingInventory, setIsLoadingInventory] = useState(false);
 
-  // Discount Campaign State
   const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
   const [campaignOccasion, setCampaignOccasion] = useState('');
   const [campaignPercent, setCampaignPercent] = useState('10');
@@ -476,8 +475,19 @@ export const ProviderDashboard: React.FC = () => {
 
   const fetchPayouts = async () => {
     try {
-      const res: any = await httpClient.get('/payments/settlement-transfers/provider');
-      setPayouts(res || []);
+      let data: any[] = [];
+      try {
+        const res: any = await httpClient.get('/provider/settlements');
+        if (res && Array.isArray(res.items)) {
+          data = res.items;
+        } else if (Array.isArray(res)) {
+          data = res;
+        }
+      } catch (_e) {
+        const res: any = await httpClient.get('/payments/settlement-transfers/provider');
+        if (Array.isArray(res)) data = res;
+      }
+      setPayouts(data);
       fetchWalletData();
     } catch (err: any) {
       console.error('Không thể tải lịch sử quyết toán:', err);

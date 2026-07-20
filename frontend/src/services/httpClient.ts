@@ -150,6 +150,14 @@ class HttpClient {
     });
   }
 
+  put<T>(path: string, body?: any, options?: Omit<RequestInit, 'method' | 'body'>): Promise<T> {
+    return this.request<T>(path, {
+      ...options,
+      method: 'PUT',
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    });
+  }
+
   patch<T>(path: string, body?: any, options?: Omit<RequestInit, 'method' | 'body'>): Promise<T> {
     return this.request<T>(path, {
       ...options,

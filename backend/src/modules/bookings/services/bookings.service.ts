@@ -1846,6 +1846,7 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const bookings = await this.bookingModel
       .find({ providerIds: provider._id })
+      .populate('customerId')
       .sort({ createdAt: -1 });
 
     const results: Record<string, unknown>[] = [];
@@ -2107,11 +2108,13 @@ export class BookingsService implements OnApplicationBootstrap {
       [BookingStatus.PickupPending]: [
         BookingStatus.PickedUp,
         BookingStatus.Cancelled,
+        BookingStatus.InProgress,
       ],
       [BookingStatus.PickedUp]: [
         BookingStatus.ReturnPending,
         BookingStatus.Disputed,
         BookingStatus.Returned,
+        BookingStatus.InProgress,
       ],
       [BookingStatus.ReturnPending]: [
         BookingStatus.Returned,
@@ -2124,10 +2127,14 @@ export class BookingsService implements OnApplicationBootstrap {
       [BookingStatus.InProgress]: [
         BookingStatus.AwaitingReview,
         BookingStatus.Cancelled,
+        BookingStatus.Returned,
+        BookingStatus.ReturnPending,
       ],
       [BookingStatus.AwaitingReview]: [
         BookingStatus.Completed,
         BookingStatus.Disputed,
+        BookingStatus.Returned,
+        BookingStatus.ReturnPending,
       ],
       [BookingStatus.Disputed]: [
         BookingStatus.Completed,

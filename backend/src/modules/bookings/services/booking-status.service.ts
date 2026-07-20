@@ -715,11 +715,13 @@ export class BookingStatusService {
         [BookingStatus.PickupPending]: [
           BookingStatus.PickedUp,
           BookingStatus.Cancelled,
+          BookingStatus.InProgress,
         ],
         [BookingStatus.PickedUp]: [
           BookingStatus.Returned,
           BookingStatus.ReturnPending,
           BookingStatus.Disputed,
+          BookingStatus.InProgress,
         ],
         [BookingStatus.ReturnPending]: [
           BookingStatus.Returned,
@@ -733,11 +735,15 @@ export class BookingStatusService {
         [BookingStatus.InProgress]: [
           BookingStatus.AwaitingReview,
           BookingStatus.Cancelled,
+          BookingStatus.Returned,
+          BookingStatus.ReturnPending,
         ],
         // Photography only: customer confirms or 48h auto-complete
         [BookingStatus.AwaitingReview]: [
           BookingStatus.Completed,
           BookingStatus.Disputed,
+          BookingStatus.Returned,
+          BookingStatus.ReturnPending,
         ],
         [BookingStatus.Disputed]: [
           BookingStatus.Completed,

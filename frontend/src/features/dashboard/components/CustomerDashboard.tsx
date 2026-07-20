@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
-import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle, Check, XCircle } from 'lucide-react';
+import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle, Check, XCircle, X } from 'lucide-react';
 import { BookingDetailModal } from '../../../components/common/BookingDetailModal';
 import { API_BASE_URL } from '../../../config/env';
 
@@ -1188,13 +1188,57 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           : p.paymentMethod || 'PayOS (VietQR)'}
                       </td>
                       <td>
-                        <span className="vh-profile-payment-status-success-badge" style={{
-                          backgroundColor: p.purpose === 'DEPOSIT_REFUND' ? '#e8f5e9' : undefined,
-                          color: p.purpose === 'DEPOSIT_REFUND' ? '#2e7d32' : undefined,
-                        }}>
-                          <ShieldCheck size={12} style={{ marginRight: '4px' }} />
-                          <span>Thành công</span>
-                        </span>
+                        {p.status === 'SUCCESS' ? (
+                          <span className="vh-profile-payment-status-success-badge" style={{
+                            backgroundColor: p.purpose === 'DEPOSIT_REFUND' ? '#e8f5e9' : undefined,
+                            color: p.purpose === 'DEPOSIT_REFUND' ? '#2e7d32' : undefined,
+                          }}>
+                            <ShieldCheck size={12} style={{ marginRight: '4px' }} />
+                            <span>Thành công</span>
+                          </span>
+                        ) : p.status === 'PENDING' ? (
+                          <span className="vh-profile-payment-status-pending-badge" style={{
+                            backgroundColor: '#FEF3C7',
+                            color: '#D97706',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                          }}>
+                            <Clock size={12} style={{ marginRight: '4px' }} />
+                            <span>Chờ thanh toán</span>
+                          </span>
+                        ) : p.status === 'CANCELLED' ? (
+                          <span className="vh-profile-payment-status-cancelled-badge" style={{
+                            backgroundColor: '#FEE2E2',
+                            color: '#DC2626',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                          }}>
+                            <X size={12} style={{ marginRight: '4px' }} />
+                            <span>Đã hủy</span>
+                          </span>
+                        ) : (
+                          <span className="vh-profile-payment-status-failed-badge" style={{
+                            backgroundColor: '#FEE2E2',
+                            color: '#DC2626',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                          }}>
+                            <X size={12} style={{ marginRight: '4px' }} />
+                            <span>Thất bại</span>
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}

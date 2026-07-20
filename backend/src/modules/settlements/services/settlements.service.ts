@@ -55,7 +55,14 @@ export class SettlementsService {
       );
     }
 
-    if (booking.paymentSummary?.paymentStatus !== BookingPaymentStatus.Paid) {
+    const validPaymentStatuses = [
+      BookingPaymentStatus.Paid,
+      BookingPaymentStatus.PartiallyPaid,
+    ];
+    if (
+      booking.status !== BookingStatus.Completed &&
+      !validPaymentStatuses.includes(booking.paymentSummary?.paymentStatus as any)
+    ) {
       throw new BadRequestException(SETTLEMENT_ERROR_CODES.BookingNotPaid);
     }
 

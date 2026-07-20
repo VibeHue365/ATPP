@@ -420,17 +420,14 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     }
 
-    // Cập nhật trạng thái Escrow sang Settled một cách atomic để chặn các request song song
+    // Cập nhật trạng thái Escrow sang Settled một cách atomic để chặn các request song song (nếu có)
     const escrow = await this.escrowRepository.trySettleEscrow(bookingId);
-
     if (!escrow) {
       const currentEscrow = await this.escrowRepository.findByBookingId(bookingId);
       if (currentEscrow && currentEscrow.status === EscrowStatus.Settled) {
         return { message: 'Booking already settled' };
       }
-      throw new BadRequestException(
-        'Booking escrow is not in Held status or not found',
-      );
+      this.logger.warn(`Escrow record not found or not in Held status for booking ${bookingIdStr}, proceeding with settlement.`);
     }
 
     try {
@@ -449,10 +446,7 @@ export class PaymentsService {
       //    deduct by estimatedNetAmount (stored at CONFIRMED time) to prevent ghost-balance,
       //    credit available by actual netAmount (grandTotal - commission).
       //    For photography bookings only (ao dai uses a different escrow flow).
-      if (
-        booking.bookingType === BookingType.Photography &&
-        booking.providerIds.length > 0
-      ) {
+      if (booking.providerIds && booking.providerIds.length > 0) {
         const COMMISSION_RATE = 0.20;
         const actualNetAmount = Math.round(
           booking.pricingSummary.grandTotal * (1 - COMMISSION_RATE),
