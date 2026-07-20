@@ -24,7 +24,7 @@ export class PublicMediaService {
         },
         (error, result) => {
           if (error) return reject(error);
-          resolve({ key: result.public_id, url: result.secure_url });
+          resolve({ key: result!.public_id, url: result!.secure_url });
         },
       );
       uploadStream.end(file.buffer);
@@ -43,7 +43,7 @@ export class PublicMediaService {
         },
         (error, result) => {
           if (error) return reject(error);
-          resolve({ key: result.public_id, url: result.secure_url });
+          resolve({ key: result!.public_id, url: result!.secure_url });
         },
       );
       uploadStream.end(file.buffer);
@@ -57,7 +57,7 @@ export class PublicMediaService {
   async deleteByUrl(url: string | null | undefined): Promise<void> {
     const key = this.keyFromUrl(url);
     if (!key) return;
-    const isVideo = url.includes('/video/');
+    const isVideo = url!.includes('/video/');
     await cloudinary.uploader.destroy(key, { resource_type: isVideo ? 'video' : 'image' });
   }
 

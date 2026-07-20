@@ -870,6 +870,8 @@ export const ProductDetailPage: React.FC = () => {
         setLoading(true);
         const data = await httpClient.get<any>(`/products/${id}`);
         setProduct(data);
+        // Ghi nhận lượt xem sản phẩm (fire-and-forget)
+        void httpClient.post(`/analytics/products/${id}/view`, {}).catch(() => {});
 
         // Load busy dates/slots
         let loadedBookedDates: string[] = [];
