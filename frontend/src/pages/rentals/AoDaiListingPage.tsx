@@ -45,6 +45,7 @@ interface ProductFromDb {
   basePrice: number;
   depositAmount: number;
   images: string[];
+  colorImages?: { color: string; images: string[] }[];
   sizes: string[];
   colors: string[];
   materials: string[];
@@ -126,6 +127,8 @@ export const AoDaiListingPage: React.FC = () => {
 
   const [sortOption, setSortOption] = useState<string>("newest");
   const [favorites, setFavorites] = useState<string[]>([]);
+  // Màu khách đang xem trên từng thẻ sản phẩm (chỉ để đổi ảnh tại chỗ, không lọc danh sách)
+  const [cardColors, setCardColors] = useState<Record<string, string>>({});
   const [matchMySize, setMatchMySize] = useState<boolean>(false);
   const [recommendMyGu, setRecommendMyGu] = useState<boolean>(false);
 
@@ -1337,6 +1340,14 @@ export const AoDaiListingPage: React.FC = () => {
             <div className="vh-rentals-grid-3">
               {filteredProducts.map((p) => {
                 const isFavorite = favorites.includes(p._id);
+                // Màu đang xem trên từng thẻ; chưa chọn thì lấy ảnh mặc định của sản phẩm.
+                const previewColor = cardColors[p._id];
+                const cardImage =
+                  (previewColor &&
+                    p.colorImages?.find(
+                      (entry) => (entry.color || "").toUpperCase() === previewColor.toUpperCase(),
+                    )?.images?.[0]) ||
+                  p.images?.[0];
                 return (
                   <div
                     key={p._id}
@@ -1346,7 +1357,7 @@ export const AoDaiListingPage: React.FC = () => {
                     {/* Image Wrapper */}
                     <div className="vh-card-image-wrapper">
                       <img
-                        src={getImageUrl(p.images?.[0])}
+                        src={getImageUrl(cardImage)}
                         alt={p.name}
                         className="vh-card-image"
                       />
@@ -1523,14 +1534,28 @@ export const AoDaiListingPage: React.FC = () => {
                               (ac) => ac.value === c.toUpperCase(),
                             );
                             return (
-                              <span
+                              <button
                                 key={idx}
+                                type="button"
+                                title={foundColor?.name || c}
+                                aria-label={`Xem màu ${foundColor?.name || c}`}
+                                onClick={(e) => {
+                                  // Thẻ sản phẩm là link sang trang chi tiết -> chặn nổi bọt
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setCardColors((prev) => ({ ...prev, [p._id]: c }));
+                                }}
                                 style={{
-                                  width: "8px",
-                                  height: "8px",
+                                  width: "12px",
+                                  height: "12px",
+                                  padding: 0,
                                   borderRadius: "50%",
                                   backgroundColor: foundColor?.hex || "#ccc",
-                                  border: "1px solid rgba(0,0,0,0.1)",
+                                  border:
+                                    (previewColor || "").toUpperCase() === c.toUpperCase()
+                                      ? "2px solid var(--color-primary)"
+                                      : "1px solid rgba(0,0,0,0.15)",
+                                  cursor: "pointer",
                                 }}
                               />
                             );

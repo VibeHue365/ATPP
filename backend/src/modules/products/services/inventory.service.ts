@@ -9,6 +9,8 @@ import { UsersRepository } from '../../users/repositories/users.repository';
 import { CreateInventoryItemDto } from '../dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from '../dto/update-inventory-item.dto';
 import { AdjustVariantQuantityDto, VariantKeyDto } from '../dto/variant-inventory.dto';
+import { normalizeColor } from '../utils/color.util';
+import { PublicMediaService } from '../../storage/services/public-media.service';
 import { ConditionStatus, InventoryItemStatus } from '../schemas/inventory-item.schema';
 
 /** Kết quả một thao tác trên biến thể — luôn nêu rõ đã đụng vào SKU nào để đối tác kiểm chứng được. */
@@ -30,6 +32,7 @@ export class InventoryService {
     @InjectModel(Product.name) private readonly productModel: Model<Product>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
     private readonly usersRepository: UsersRepository,
+    private readonly publicMedia: PublicMediaService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -39,16 +42,6 @@ export class InventoryService {
       throw new ForbiddenException('Tài khoản không phải là đối tác hoặc không có ID đối tác.');
     }
     return user.provider.providerId.toString();
-  }
-
-  private normalizeColor(colorStr?: string | null): string {
-    if (!colorStr) return 'WHITE';
-    const norm = colorStr.trim().toUpperCase();
-    if (norm === 'ĐỎ' || norm === 'RED') return 'RED';
-    if (norm === 'TRẮNG' || norm === 'WHITE') return 'WHITE';
-    if (norm === 'VÀNG' || norm === 'GOLD') return 'GOLD';
-    if (norm === 'ĐEN' || norm === 'BLACK') return 'BLACK';
-    return norm;
   }
 
   /** Chất liệu rỗng/khoảng trắng và null được coi là cùng một biến thể. */
@@ -65,7 +58,7 @@ export class InventoryService {
   ): boolean {
     return (
       item.size.trim().toUpperCase() === sizeVal &&
-      this.normalizeColor(item.color) === colorVal &&
+      normalizeColor(item.color) === colorVal &&
       this.normalizeMaterial(item.material) === materialVal
     );
   }
@@ -80,7 +73,7 @@ export class InventoryService {
     const colors = (product.colors as string[]) || [];
     const sizes = (product.sizes as string[]) || [];
     const materials = (product.materials as string[]) || [];
-    const hasColor = colors.some((color) => this.normalizeColor(color) === colorVal);
+    const hasColor = colors.some((color) => normalizeColor(color) === colorVal);
     const hasSize = sizes.some((size) => size.trim().toUpperCase() === sizeVal);
     const hasMaterial =
       materialVal === null || materials.some((material) => this.normalizeMaterial(material) === materialVal);
@@ -205,7 +198,7 @@ export class InventoryService {
       throw new NotFoundException('Sản phẩm không tồn tại hoặc không thuộc quyền quản lý của bạn.');
     }
     const sizeVal = dto.size.trim().toUpperCase();
-    const colorVal = this.normalizeColor(dto.color);
+    const colorVal = normalizeColor(dto.color);
     // @IsNotEmpty của class-validator vẫn cho lọt chuỗi toàn khoảng trắng
     if (!sizeVal || !colorVal) {
       throw new BadRequestException('Size và màu của biến thể không được để trống.');
@@ -323,7 +316,7 @@ export class InventoryService {
       const prod = products.find((p) => p._id.toString() === item.productId.toString());
       const productName = prod ? prod.name : 'Sản phẩm không tên';
       const sizeVal = item.size.trim().toUpperCase();
-      const colorVal = this.normalizeColor(item.color);
+      const colorVal = normalizeColor(item.color);
       const materialVal = this.normalizeMaterial(item.material);
       const isRetired = item.conditionStatus === ConditionStatus.Retired;
 
@@ -379,7 +372,7 @@ export class InventoryService {
     }
 
     const sizeVal = dto.size.trim().toUpperCase();
-    const colorVal = this.normalizeColor(dto.color);
+    const colorVal = normalizeColor(dto.color);
     const materialVal = dto.material ? dto.material.trim() : null;
     const quantity = dto.quantity && dto.quantity > 0 ? dto.quantity : 1;
 
@@ -577,7 +570,11 @@ export class InventoryService {
     const { product, sizeVal, colorVal, materialVal } = await this.loadVariantContext(userId, dto);
     const label = this.variantLabel(sizeVal, colorVal, materialVal);
 
-    return this.runInTransaction(async (session) => {
+    // Xoá file chỉ được làm SAU khi transaction commit — nếu transaction abort mà file đã bay
+    // thì mất ảnh trong khi dữ liệu vẫn còn.
+    let imagesToDelete: string[] = [];
+
+    const result = await this.runInTransaction(async (session) => {
       // Đọc lại sản phẩm BÊN TRONG transaction: nếu đọc ngoài rồi $set đè cả mảng thì
       // thay đổi của request chạy song song sẽ bị ghi mất (lost update).
       const fresh = await this.productModel.findById(product._id).session(session);
@@ -625,11 +622,11 @@ export class InventoryService {
         this.isDeclaredVariant(
           fresh,
           item.size.trim().toUpperCase(),
-          this.normalizeColor(item.color),
+          normalizeColor(item.color),
           this.normalizeMaterial(item.material),
         ),
       );
-      const liveColors = new Set(declaredOthers.map((item) => this.normalizeColor(item.color)));
+      const liveColors = new Set(declaredOthers.map((item) => normalizeColor(item.color)));
       const liveSizes = new Set(declaredOthers.map((item) => item.size.trim().toUpperCase()));
       const liveMaterials = new Set(
         declaredOthers
@@ -639,7 +636,7 @@ export class InventoryService {
 
       const nextColors = liveColors.has(colorVal)
         ? currentColors
-        : currentColors.filter((color) => this.normalizeColor(color) !== colorVal);
+        : currentColors.filter((color) => normalizeColor(color) !== colorVal);
       const nextSizes = liveSizes.has(sizeVal)
         ? currentSizes
         : currentSizes.filter((size) => size.trim().toUpperCase() !== sizeVal);
@@ -679,10 +676,39 @@ export class InventoryService {
           .session(session);
       }
 
+      // Màu bị gỡ hẳn khỏi sản phẩm thì ảnh riêng của nó cũng phải đi theo, nếu không
+      // ảnh nằm lại vĩnh viễn: cron dọn rác thấy URL còn trong document nên không bao giờ thu hồi.
+      const colorRemoved = !liveColors.has(colorVal);
+      const currentColorImages = ((fresh.colorImages as { color: string; images: string[] }[]) || []).map(
+        (entry) => ({ color: entry.color, images: [...(entry.images || [])] }),
+      );
+      const nextColorImages = colorRemoved
+        ? currentColorImages.filter((entry) => normalizeColor(entry.color) !== colorVal)
+        : currentColorImages;
+
+      const orphanUrls = colorRemoved
+        ? currentColorImages
+            .filter((entry) => normalizeColor(entry.color) === colorVal)
+            .flatMap((entry) => entry.images)
+        : [];
+      // Chỉ xoá ảnh không còn ai dùng: màu khác có thể đang dùng chung tấm ảnh đó.
+      const stillUsed = new Set(nextColorImages.flatMap((entry) => entry.images));
+      const droppedUrls = orphanUrls.filter((url) => !stillUsed.has(url));
+      const nextImages = ((fresh.images as string[]) || []).filter((url) => !droppedUrls.includes(url));
+      imagesToDelete = droppedUrls;
+
       await this.productModel
         .updateOne(
           { _id: product._id },
-          { $set: { colors: nextColors, sizes: nextSizes, materials: nextMaterials } },
+          {
+            $set: {
+              colors: nextColors,
+              sizes: nextSizes,
+              materials: nextMaterials,
+              colorImages: nextColorImages,
+              images: nextImages,
+            },
+          },
         )
         .session(session);
 
@@ -695,6 +721,13 @@ export class InventoryService {
         shortfall: 0,
       };
     });
+
+    if (imagesToDelete.length > 0) {
+      await Promise.all(
+        imagesToDelete.map((url) => this.publicMedia.deleteByUrl(url).catch(() => undefined)),
+      );
+    }
+    return result;
   }
 
   private async runInTransaction<T>(work: (session: any) => Promise<T>): Promise<T> {
