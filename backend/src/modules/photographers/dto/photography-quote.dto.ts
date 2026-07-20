@@ -5,10 +5,13 @@ import {
   IsArray,
   IsDateString,
   IsMongoId,
+  IsNumber,
   IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
+  Max,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -33,6 +36,21 @@ export class PhotographyQuoteSessionDto {
   @IsString()
   @MaxLength(500)
   locationAddress?: string;
+
+  /** Exact shoot pin supplied by the map. Both coordinates must be provided together. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  locationLatitude?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  locationLongitude?: number;
 }
 
 export class CreatePhotographyQuoteDto {

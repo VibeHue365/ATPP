@@ -5,6 +5,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { CreateInventoryItemDto } from '../dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from '../dto/update-inventory-item.dto';
+import { AdjustVariantQuantityDto, VariantKeyDto } from '../dto/variant-inventory.dto';
 
 @Controller(['inventory', 'api/inventory'])
 @UseGuards(JwtAuthGuard)
@@ -38,6 +39,24 @@ export class InventoryController {
     @Body() dto: CreateInventoryItemDto,
   ) {
     return this.inventoryService.createInventoryItems(user.sub, dto);
+  }
+
+  // Hai route biến thể phải khai báo TRƯỚC các route ':itemId' và dùng path 2 đoạn
+  // để không bao giờ bị ':itemId' (1 đoạn) nuốt mất.
+  @Patch('variants/quantity')
+  async adjustVariantQuantity(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AdjustVariantQuantityDto,
+  ) {
+    return this.inventoryService.adjustVariantQuantity(user.sub, dto);
+  }
+
+  @Delete('variants/remove')
+  async removeVariant(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: VariantKeyDto,
+  ) {
+    return this.inventoryService.removeVariant(user.sub, dto);
   }
 
   @Patch(':itemId')

@@ -1,23 +1,20 @@
 import React from 'react';
 import { Upload } from 'lucide-react';
 import { PhotographyLocationPicker } from './PhotographyLocationPicker';
+import type { LocationSelection } from '../types/photographer.types';
 
 interface PhotographySessionDetailsFormProps {
-  locations: string[];
-  photographerCity: string;
-  selectedLocation: string;
+  selectedLocation: LocationSelection | null;
   concept: string;
   request: string;
   referenceFile: File | null;
-  onLocationChange: (location: string) => void;
+  onLocationChange: (location: LocationSelection) => void;
   onConceptChange: (value: string) => void;
   onRequestChange: (value: string) => void;
   onReferenceFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export const PhotographySessionDetailsForm: React.FC<PhotographySessionDetailsFormProps> = ({
-  locations,
-  photographerCity,
   selectedLocation,
   concept,
   request,
@@ -36,34 +33,7 @@ export const PhotographySessionDetailsForm: React.FC<PhotographySessionDetailsFo
       </h2>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
-        {locations.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#8C827A' }}>ĐỊA CHỈ CỦA NHIẾP ẢNH GIA</span>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              {locations.map((location) => (
-                <button
-                  key={location}
-                  type="button"
-                  onClick={() => onLocationChange(location)}
-                  className="vh-btn vh-btn-sm"
-                  style={{
-                    borderRadius: '8px',
-                    border: '1px solid rgba(45, 41, 38, 0.15)',
-                    backgroundColor: selectedLocation === location ? 'var(--color-primary-dark)' : 'white',
-                    color: selectedLocation === location ? 'white' : 'var(--color-text-secondary)',
-                    fontWeight: 700,
-                    padding: '10px 18px',
-                    textAlign: 'left',
-                    boxShadow: selectedLocation === location ? 'var(--shadow-sm)' : 'none',
-                  }}
-                >
-                  {location}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <PhotographyLocationPicker providerCity={photographerCity} onSelect={onLocationChange} />
+        <PhotographyLocationPicker value={selectedLocation} onSelect={onLocationChange} />
       </div>
     </section>
     {/* BƯỚC 4: Concept & Ý tưởng */}

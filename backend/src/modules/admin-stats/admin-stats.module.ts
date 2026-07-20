@@ -8,6 +8,7 @@ import { Product, ProductSchema } from '../products/schemas/product.schema';
 import { Booking, BookingSchema } from '../bookings/schemas/booking.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { RefreshToken, RefreshTokenSchema } from '../auth/schemas/refresh-token.schema';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { RefreshToken, RefreshTokenSchema } from '../auth/schemas/refresh-token.
       { name: Payment.name, schema: PaymentSchema },
       { name: RefreshToken.name, schema: RefreshTokenSchema },
     ]),
+    AnalyticsModule,
   ],
   controllers: [AdminStatsController],
   providers: [AdminStatsService],

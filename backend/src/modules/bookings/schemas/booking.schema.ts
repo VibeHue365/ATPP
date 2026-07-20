@@ -231,6 +231,26 @@ export class Booking {
     description: string | null;
     evidencePhotos: string[];
   } | null;
+
+  /** One booking-level refund request for all finalized Ao Dai item deposits. */
+  @Prop({
+    type: {
+      status: { type: String, enum: ['PENDING', 'NO_REFUND', 'REQUESTED', 'REFUNDED', 'FAILED'], default: 'PENDING' },
+      amount: { type: Number, min: 0, default: 0 },
+      refundRequestId: { type: Types.ObjectId, ref: 'RefundRequest', default: null },
+      requestedAt: { type: Date, default: null },
+      completedAt: { type: Date, default: null },
+      failureReason: { type: String, default: null },
+    },
+    default: () => ({ status: 'PENDING', amount: 0, refundRequestId: null, requestedAt: null, completedAt: null, failureReason: null }),
+  })
+  rentalDepositRefund?: {
+    status: 'PENDING' | 'NO_REFUND' | 'REQUESTED' | 'REFUNDED' | 'FAILED';
+    amount: number;
+    refundRequestId?: Types.ObjectId | null;
+    requestedAt?: Date | null;
+    completedAt?: Date | null;
+  };
 }
 
 export const BookingSchema = SchemaFactory.createForClass(Booking);

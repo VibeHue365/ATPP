@@ -25,6 +25,7 @@ import { SmartTagPublicProjectionService } from '../../smart-tagging/services/sm
 import { SmartTaggingService } from '../../smart-tagging/services/smart-tagging.service';
 import { SmartTagEntityType } from '../../smart-tagging/constants/smart-tag.constants';
 import { PublicMediaService } from '../../storage/services/public-media.service';
+import { normalizeColor } from '../utils/color.util';
 
 @Injectable()
 export class ProductsService implements OnModuleInit {
@@ -158,14 +159,33 @@ export class ProductsService implements OnModuleInit {
     return { items, total: result.total };
   }
 
-  private normalizeColor(colorStr?: string | null): string {
-    if (!colorStr) return 'WHITE';
-    const norm = colorStr.trim().toUpperCase();
-    if (norm === 'ĐỎ' || norm === 'RED') return 'RED';
-    if (norm === 'TRẮNG' || norm === 'WHITE') return 'WHITE';
-    if (norm === 'VÀNG' || norm === 'GOLD') return 'GOLD';
-    if (norm === 'ĐEN' || norm === 'BLACK') return 'BLACK';
-    return norm;
+
+  /**
+   * Giữ bất biến: `colorImages` chỉ được chứa URL đã có trong `images`.
+   * Lọc ở server chứ không tin client — nếu để lọt URL lạ thì phép so sánh xoá file khi
+   * cập nhật (tính trên `images`) sẽ xoá mất ảnh mà `colorImages` vẫn còn trỏ tới.
+   * Cũng gộp các mục trùng màu và bỏ mục rỗng để dữ liệu luôn gọn.
+   */
+  private sanitizeColorImages(
+    colorImages: Array<{ color: string; images?: string[] }> | undefined,
+    images: string[],
+  ): Array<{ color: string; images: string[] }> {
+    if (!colorImages || colorImages.length === 0) return [];
+    const allowed = new Set(images);
+    const merged = new Map<string, string[]>();
+    for (const entry of colorImages) {
+      const colorVal = normalizeColor(entry.color);
+      if (!colorVal) continue;
+      const kept = (entry.images || []).filter((url) => allowed.has(url));
+      const current = merged.get(colorVal) || [];
+      for (const url of kept) {
+        if (!current.includes(url)) current.push(url);
+      }
+      merged.set(colorVal, current);
+    }
+    return Array.from(merged.entries())
+      .filter(([, urls]) => urls.length > 0)
+      .map(([color, urls]) => ({ color, images: urls }));
   }
 
   async createProduct(
@@ -182,7 +202,7 @@ export class ProductsService implements OnModuleInit {
     }
 
     if (dto.depositAmount >= dto.basePrice) {
-      throw new BadRequestException('GiÃ¡ cá»c pháº£i nhá» hÆ¡n giÃ¡ thuÃª');
+      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
     }
 
     await this.categoriesService.assertActiveProductCategory(dto.categoryId);
@@ -200,7 +220,7 @@ export class ProductsService implements OnModuleInit {
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        .replace(/Ä‘/g, 'd')
+        .replace(/đ/g, 'd')
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '') +
       '-' +
@@ -216,7 +236,7 @@ export class ProductsService implements OnModuleInit {
       ? Array.from(new Set(variants.map((v) => v.size.trim().toUpperCase())))
       : dto.sizes || [];
     const productColors = variants
-      ? Array.from(new Set(variants.map((v) => this.normalizeColor(v.color))))
+      ? Array.from(new Set(variants.map((v) => normalizeColor(v.color))))
       : dto.colors || [];
     const productMaterials = variants
       ? Array.from(
@@ -237,6 +257,7 @@ export class ProductsService implements OnModuleInit {
       slug,
       description: dto.description || '',
       images: dto.images || [],
+      colorImages: this.sanitizeColorImages(dto.colorImages, dto.images || []),
       videos: dto.videos || [],
       basePrice: dto.basePrice,
       depositAmount: dto.depositAmount,
@@ -261,7 +282,7 @@ export class ProductsService implements OnModuleInit {
       const seqByBucket = new Map<string, number>();
       for (const variant of variants) {
         const sizeVal = variant.size.trim().toUpperCase();
-        const colorVal = this.normalizeColor(variant.color);
+        const colorVal = normalizeColor(variant.color);
         const materialVal = variant.material ? variant.material.trim() : null;
         const quantity =
           variant.quantity && variant.quantity > 0 ? variant.quantity : 1;
@@ -315,7 +336,7 @@ export class ProductsService implements OnModuleInit {
         ? dto.depositAmount
         : product.depositAmount;
     if (checkDeposit >= checkBasePrice) {
-      throw new BadRequestException('GiÃ¡ cá»c pháº£i nhá» hÆ¡n giÃ¡ thuÃª');
+      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
     }
 
     const productProviderId =
@@ -350,6 +371,15 @@ export class ProductsService implements OnModuleInit {
       (dto.depositAmount !== undefined && dto.depositAmount !== product.depositAmount) ||
       (dto.sizes !== undefined && !sameStringArray(dto.sizes, product.sizes)) ||
       (dto.videos !== undefined && !sameStringArray(dto.videos, product.videos || [])) ||
+      // Thiếu dòng này thì lần sửa nào CHỈ đổi ảnh-theo-màu sẽ trả 200 nhưng không lưu gì,
+      // vì hàm thoát sớm ngay bên dưới.
+      (dto.colorImages !== undefined &&
+        JSON.stringify(
+          this.sanitizeColorImages(
+            dto.colorImages,
+            dto.images !== undefined ? dto.images : product.images,
+          ),
+        ) !== JSON.stringify(product.colorImages || [])) ||
       (dto.status !== undefined && dto.status !== product.status);
 
     if (!productChanged) {
@@ -362,7 +392,7 @@ export class ProductsService implements OnModuleInit {
           .toLowerCase()
           .normalize('NFD')
           .replace(/[\u0300-\u036f]/g, '')
-          .replace(/Ä‘/g, 'd')
+          .replace(/đ/g, 'd')
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/(^-|-$)+/g, '') +
         '-' +
@@ -392,6 +422,12 @@ export class ProductsService implements OnModuleInit {
     }
     if (dto.description !== undefined) updateData.description = dto.description;
     if (dto.images !== undefined) updateData.images = dto.images;
+    if (dto.colorImages !== undefined) {
+      updateData.colorImages = this.sanitizeColorImages(
+        dto.colorImages,
+        dto.images !== undefined ? dto.images : product.images,
+      );
+    }
     if (dto.videos !== undefined) updateData.videos = dto.videos;
     if (dto.basePrice !== undefined) updateData.basePrice = dto.basePrice;
     if (dto.depositAmount !== undefined)
@@ -553,7 +589,7 @@ export class ProductsService implements OnModuleInit {
 
       if (activeBookings.length > 0) {
         throw new BadRequestException(
-          'KhÃ´ng thá»ƒ xÃ³a sáº£n pháº©m nÃ y vÃ¬ Ä‘ang náº±m trong má»™t lá»‹ch háº¹n Ä‘áº·t thuÃª Ä‘ang hoáº¡t Ä‘á»™ng.',
+          'Không thể xóa sản phẩm này vì đang nằm trong một lịch hẹn đặt thuê đang hoạt động.',
         );
       }
     }

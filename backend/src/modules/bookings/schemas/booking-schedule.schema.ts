@@ -79,8 +79,31 @@ export class BookingSchedule {
   @Prop({ type: String, default: null, trim: true })
   locationAddress?: string | null;
 
+  /** Immutable shoot-location snapshot captured when the hold is created. */
+  @Prop({ type: Object, default: null })
+  locationSnapshot?: {
+    address: string | null;
+    geo: {
+      type: 'Point';
+      coordinates: [number, number];
+    } | null;
+  } | null;
   @Prop({ type: Number, default: null, min: 0 })
   includedDurationMinutes?: number | null;
+  /** A customer request made after confirmation; only the assigned provider may resolve it. */
+  @Prop({ type: Object, default: null })
+  locationChangeRequest?: {
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    requestedBy: Types.ObjectId;
+    requestedAt: Date;
+    resolvedAt?: Date | null;
+    resolvedBy?: Types.ObjectId | null;
+    note?: string | null;
+    requestedLocation: {
+      address: string;
+      geo: { type: 'Point'; coordinates: [number, number] };
+    };
+  } | null;
 
   @Prop({ type: Number, default: 0, min: 0 })
   overtimeMinutes: number;

@@ -18,6 +18,7 @@ import {
   BookingItem,
   BookingItemType,
 } from '../schemas/booking-item.schema';
+import { createRentalFulfillment } from '../schemas/rental-fulfillment.types';
 import {
   BookingSchedule,
   BookingScheduleStatus,
@@ -32,6 +33,7 @@ import {
   PhotographyPackage,
 } from '../../products/schemas/photography-package.schema';
 import { Product, ProductStatus } from '../../products/schemas/product.schema';
+import { Provider } from '../../providers/schemas/provider.schema';
 import {
   ConditionStatus,
   InventoryItem,
@@ -66,6 +68,8 @@ type HoldSession = {
   providerLocalDate: string;
   durationMinutes: number;
   locationAddress?: string;
+  locationLatitude?: number;
+  locationLongitude?: number;
 };
 
 type LockKey = { providerId: Types.ObjectId; providerLocalDate: string };
@@ -82,6 +86,13 @@ type ComboAoDaiReservation = {
   depositAmount: number;
   selectedSize: string;
   selectedColor: string;
+  pickupReturnLocationSnapshot: {
+    address: string;
+    ward?: string | null;
+    district?: string | null;
+    city?: string | null;
+    geo: { type: 'Point'; coordinates: [number, number] } | null;
+  };
 };
 
 @Injectable()
@@ -98,6 +109,7 @@ export class PhotographyHoldService {
     private readonly packageModel: Model<PhotographyPackage>,
     @InjectModel(PriceVersion.name)
     private readonly priceVersionModel: Model<PriceVersion>,
+    @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
     @InjectModel(Product.name) private readonly productModel: Model<Product>,
     @InjectModel(InventoryItem.name)
     private readonly inventoryItemModel: Model<InventoryItem>,
@@ -113,13 +125,13 @@ export class PhotographyHoldService {
     idempotencyKey: string,
   ) {
     if (!Types.ObjectId.isValid(customerIdValue)) {
-      throw new BadRequestException('Tài khoản đặt lịch không hợp lệ.');
+      throw new BadRequestException('TÃ i khoáº£n Ä‘áº·t lá»‹ch khÃ´ng há»£p lá»‡.');
     }
     if (!Types.ObjectId.isValid(dto.packageId)) {
-      throw new BadRequestException('Gói chụp không hợp lệ.');
+      throw new BadRequestException('GÃ³i chá»¥p khÃ´ng há»£p lá»‡.');
     }
     if (idempotencyKey.length > 160) {
-      throw new BadRequestException('Idempotency-Key tối đa 160 ký tự.');
+      throw new BadRequestException('Idempotency-Key tá»‘i Ä‘a 160 kÃ½ tá»±.');
     }
 
     const customerId = new Types.ObjectId(customerIdValue);
@@ -133,7 +145,7 @@ export class PhotographyHoldService {
       status: PackageStatus.Active,
     });
     if (!packagePreview) {
-      throw new NotFoundException('Không tìm thấy gói chụp đang hoạt động.');
+      throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y gÃ³i chá»¥p Ä‘ang hoáº¡t Ä‘á»™ng.');
     }
 
     // The preflight checks working hours, blocked days and existing legacy data.
@@ -144,7 +156,7 @@ export class PhotographyHoldService {
     );
     if (!preflight.valid) {
       throw new BadRequestException({
-        message: 'Một hoặc nhiều buổi chụp không thể giữ lịch.',
+        message: 'Má»™t hoáº·c nhiá»u buá»•i chá»¥p khÃ´ng thá»ƒ giá»¯ lá»‹ch.',
         errors: preflight.errors,
       });
     }
@@ -165,13 +177,13 @@ export class PhotographyHoldService {
     idempotencyKey: string,
   ) {
     if (!Types.ObjectId.isValid(customerIdValue)) {
-      throw new BadRequestException('Tài khoản đặt lịch không hợp lệ.');
+      throw new BadRequestException('TÃ i khoáº£n Ä‘áº·t lá»‹ch khÃ´ng há»£p lá»‡.');
     }
     if (!Types.ObjectId.isValid(dto.packageId)) {
-      throw new BadRequestException('Gói chụp không hợp lệ.');
+      throw new BadRequestException('GÃ³i chá»¥p khÃ´ng há»£p lá»‡.');
     }
     if (idempotencyKey.length > 160) {
-      throw new BadRequestException('Idempotency-Key tối đa 160 ký tự.');
+      throw new BadRequestException('Idempotency-Key tá»‘i Ä‘a 160 kÃ½ tá»±.');
     }
 
     const customerId = new Types.ObjectId(customerIdValue);
@@ -185,7 +197,7 @@ export class PhotographyHoldService {
       status: PackageStatus.Active,
     });
     if (!packagePreview) {
-      throw new NotFoundException('Không tìm thấy gói chụp đang hoạt động.');
+      throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y gÃ³i chá»¥p Ä‘ang hoáº¡t Ä‘á»™ng.');
     }
 
     const preflight = await this.quoteService.quote(
@@ -194,7 +206,7 @@ export class PhotographyHoldService {
     );
     if (!preflight.valid) {
       throw new BadRequestException({
-        message: 'Một hoặc nhiều buổi chụp không thể giữ lịch.',
+        message: 'Má»™t hoáº·c nhiá»u buá»•i chá»¥p khÃ´ng thá»ƒ giá»¯ lá»‹ch.',
         errors: preflight.errors,
       });
     }
@@ -232,8 +244,14 @@ export class PhotographyHoldService {
       .session(session)
       .exec();
     if (!photographyPackage) {
-      throw new NotFoundException('Gói chụp không còn hoạt động.');
+      throw new NotFoundException('GÃ³i chá»¥p khÃ´ng cÃ²n hoáº¡t Ä‘á»™ng.');
     }
+
+    await this.assertProviderServiceRadius(
+      photographyPackage.providerId,
+      sessions,
+      session,
+    );
 
     await this.acquireLocks(
       sessions.map((item) => ({
@@ -313,7 +331,7 @@ export class PhotographyHoldService {
         {
           status: BookingStatus.PendingPayment,
           changedAt: new Date(),
-          note: 'Đã giữ lịch chụp và áo dài, chờ thanh toán.',
+          note: 'ÄÃ£ giá»¯ lá»‹ch chá»¥p vÃ  Ã¡o dÃ i, chá» thanh toÃ¡n.',
         },
       ],
     });
@@ -337,6 +355,7 @@ export class PhotographyHoldService {
       shootDate: null,
       shootTimeSlot: null,
       shootLocation: firstSession.locationAddress ?? null,
+      shootLocationSnapshot: this.toLocationSnapshot(firstSession),
       shootConcept: dto.concept ?? null,
       referenceImage: dto.referenceImage ?? null,
       rentalType: 'DAILY',
@@ -373,6 +392,7 @@ export class PhotographyHoldService {
         providerLocalDate: item.providerLocalDate,
         holdExpiresAt,
         locationAddress: item.locationAddress ?? null,
+        locationSnapshot: this.toLocationSnapshot(item),
         includedDurationMinutes:
           photographyPackage.includedDurationMinutes ??
           Math.round(photographyPackage.durationHours * 60),
@@ -384,37 +404,46 @@ export class PhotographyHoldService {
     );
 
     for (const reservation of aodaiReservations) {
+      if (reservation.inventoryItemIds.length !== reservation.quantity) {
+        throw new ConflictException('Số đơn vị tồn kho được giữ không khớp số lượng áo dài yêu cầu.');
+      }
       const productPriceVersion = await this.findOrCreateProductPriceVersion(
         reservation.product,
         session,
       );
-      const itemDiscount = Math.round(
+      const totalDiscount = Math.round(
         reservation.unitPrice * reservation.quantity * 0.1,
       );
-      const bookingItem = new this.bookingItemModel({
-        bookingId: booking._id,
-        providerId: reservation.product.providerId,
-        itemType: BookingItemType.Product,
-        productId: reservation.product._id,
-        inventoryItemId: reservation.inventoryItemIds[0],
-        priceVersionId: productPriceVersion._id,
-        unitPrice: reservation.unitPrice,
-        depositAmount: reservation.depositAmount,
-        quantity: reservation.quantity,
-        rentalFrom: reservation.rentalFrom,
-        rentalTo: reservation.rentalTo,
-        rentalType: 'DAILY',
-        selectedSize: reservation.selectedSize,
-        selectedColor: reservation.selectedColor,
-        customRequests: null,
-        priceBreakdown: [],
-        comboDiscountPercent: 10,
-        comboDiscountAmount: itemDiscount,
-      });
-      await bookingItem.save({ session });
-
-      await this.inventoryReservationModel.insertMany(
-        reservation.inventoryItemIds.map((inventoryItemId) => ({
+      let distributedDiscount = 0;
+      for (const [index, inventoryItemId] of reservation.inventoryItemIds.entries()) {
+        const itemDiscount = index === reservation.inventoryItemIds.length - 1
+          ? totalDiscount - distributedDiscount
+          : Math.round(totalDiscount / reservation.quantity);
+        distributedDiscount += itemDiscount;
+        const bookingItem = new this.bookingItemModel({
+          bookingId: booking._id,
+          providerId: reservation.product.providerId,
+          itemType: BookingItemType.Product,
+          productId: reservation.product._id,
+          inventoryItemId,
+          priceVersionId: productPriceVersion._id,
+          unitPrice: reservation.unitPrice,
+          depositAmount: reservation.depositAmount,
+          quantity: 1,
+          rentalFrom: reservation.rentalFrom,
+          rentalTo: reservation.rentalTo,
+          rentalType: 'DAILY',
+          selectedSize: reservation.selectedSize,
+          selectedColor: reservation.selectedColor,
+          pickupReturnLocationSnapshot: reservation.pickupReturnLocationSnapshot,
+          rentalFulfillment: createRentalFulfillment(reservation.rentalTo, reservation.rentalFrom),
+          customRequests: null,
+          priceBreakdown: [],
+          comboDiscountPercent: 10,
+          comboDiscountAmount: itemDiscount,
+        });
+        await bookingItem.save({ session });
+        await this.inventoryReservationModel.create([{
           inventoryItemId,
           bookingId: booking._id,
           bookingItemId: bookingItem._id,
@@ -422,9 +451,8 @@ export class PhotographyHoldService {
           reservedTo: reservation.rentalTo,
           status: ReservationStatus.TempReserved,
           expiresAt: holdExpiresAt,
-        })),
-        { session },
-      );
+        }], { session });
+      }
     }
 
     return this.toComboHoldResponse(booking, session);
@@ -437,7 +465,7 @@ export class PhotographyHoldService {
     session: ClientSession,
   ): Promise<ComboAoDaiReservation> {
     if (!Types.ObjectId.isValid(dto.productId)) {
-      throw new BadRequestException('Sản phẩm áo dài không hợp lệ.');
+      throw new BadRequestException('Sáº£n pháº©m Ã¡o dÃ i khÃ´ng há»£p lá»‡.');
     }
 
     const product = await this.productModel
@@ -448,8 +476,17 @@ export class PhotographyHoldService {
       .session(session)
       .exec();
     if (!product) {
-      throw new NotFoundException('Không tìm thấy áo dài đang hoạt động.');
+      throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y Ã¡o dÃ i Ä‘ang hoáº¡t Ä‘á»™ng.');
     }
+
+    const provider = await this.providerModel
+      .findById(product.providerId)
+      .select('address rentalSettings')
+      .session(session)
+      .lean()
+      .exec();
+    const pickupReturnLocationSnapshot =
+      this.toPickupReturnLocationSnapshot(provider);
 
     const selectedSize = dto.selectedSize.trim().toUpperCase();
     const selectedColor = this.normalizeInventoryColor(dto.selectedColor);
@@ -457,7 +494,7 @@ export class PhotographyHoldService {
       product.sizes.length &&
       !product.sizes.some((size) => size.trim().toUpperCase() === selectedSize)
     ) {
-      throw new BadRequestException('Kích cỡ áo dài đã chọn không khả dụng.');
+      throw new BadRequestException('KÃ­ch cá»¡ Ã¡o dÃ i Ä‘Ã£ chá»n khÃ´ng kháº£ dá»¥ng.');
     }
     if (
       product.colors.length &&
@@ -465,17 +502,17 @@ export class PhotographyHoldService {
         (color) => this.normalizeInventoryColor(color) === selectedColor,
       )
     ) {
-      throw new BadRequestException('Màu sắc áo dài đã chọn không khả dụng.');
+      throw new BadRequestException('MÃ u sáº¯c Ã¡o dÃ i Ä‘Ã£ chá»n khÃ´ng kháº£ dá»¥ng.');
     }
 
     const { rentalFrom, rentalTo } = this.toRentalRange(dto.rentalFrom, dto.rentalTo);
     if (rentalTo.getTime() < rentalFrom.getTime()) {
-      throw new BadRequestException('Ngày trả áo dài phải sau hoặc bằng ngày nhận.');
+      throw new BadRequestException('NgÃ y tráº£ Ã¡o dÃ i pháº£i sau hoáº·c báº±ng ngÃ y nháº­n.');
     }
     const rentalDurationDays =
       Math.floor((rentalTo.getTime() - rentalFrom.getTime()) / 86_400_000) + 1;
     if (rentalDurationDays > 30) {
-      throw new BadRequestException('Thời gian thuê áo dài tối đa là 30 ngày.');
+      throw new BadRequestException('Thá»i gian thuÃª Ã¡o dÃ i tá»‘i Ä‘a lÃ  30 ngÃ y.');
     }
 
     const rentalFromKey = this.toBusinessDateKey(rentalFrom);
@@ -488,7 +525,7 @@ export class PhotographyHoldService {
       )
     ) {
       throw new BadRequestException(
-        'Mọi ngày chụp phải nằm trong khoảng thời gian thuê áo dài.',
+        'Má»i ngÃ y chá»¥p pháº£i náº±m trong khoáº£ng thá»i gian thuÃª Ã¡o dÃ i.',
       );
     }
 
@@ -506,7 +543,7 @@ export class PhotographyHoldService {
       .exec();
     if (!inventoryItems.length) {
       throw new ConflictException(
-        'Không còn áo dài phù hợp với kích cỡ và màu sắc đã chọn.',
+        'KhÃ´ng cÃ²n Ã¡o dÃ i phÃ¹ há»£p vá»›i kÃ­ch cá»¡ vÃ  mÃ u sáº¯c Ä‘Ã£ chá»n.',
       );
     }
 
@@ -533,7 +570,7 @@ export class PhotographyHoldService {
       .slice(0, quantity);
     if (selectedInventory.length < quantity) {
       throw new ConflictException(
-        'Áo dài đã hết trong khoảng thời gian thuê đã chọn.',
+        'Ão dÃ i Ä‘Ã£ háº¿t trong khoáº£ng thá»i gian thuÃª Ä‘Ã£ chá»n.',
       );
     }
 
@@ -563,7 +600,7 @@ export class PhotographyHoldService {
       .session(session);
     if (conflictAfterLock) {
       throw new ConflictException(
-        'Áo dài vừa được khách khác giữ. Vui lòng chọn sản phẩm hoặc thời gian khác.',
+        'Ão dÃ i vá»«a Ä‘Æ°á»£c khÃ¡ch khÃ¡c giá»¯. Vui lÃ²ng chá»n sáº£n pháº©m hoáº·c thá»i gian khÃ¡c.',
       );
     }
 
@@ -577,6 +614,7 @@ export class PhotographyHoldService {
       depositAmount: product.depositAmount,
       selectedSize,
       selectedColor,
+      pickupReturnLocationSnapshot,
     };
   }
   async confirmForBooking(bookingIdValue: Types.ObjectId | string): Promise<{
@@ -584,7 +622,7 @@ export class PhotographyHoldService {
     confirmed: boolean;
     paymentReviewRequired: boolean;
   }> {
-    const bookingId = this.toObjectId(bookingIdValue, 'Đơn đặt lịch không hợp lệ.');
+    const bookingId = this.toObjectId(bookingIdValue, 'ÄÆ¡n Ä‘áº·t lá»‹ch khÃ´ng há»£p lá»‡.');
     return this.withTransactionRetry(async (session) => {
       const initialSchedules = await this.bookingScheduleModel
         .find({
@@ -638,7 +676,7 @@ export class PhotographyHoldService {
               holdExpiresAt: null,
               paymentReviewRequired: true,
               paymentReviewReason:
-                'Lịch giữ chỗ không còn hiệu lực khi thanh toán được ghi nhận.',
+                'Lá»‹ch giá»¯ chá»— khÃ´ng cÃ²n hiá»‡u lá»±c khi thanh toÃ¡n Ä‘Æ°á»£c ghi nháº­n.',
             },
           },
           { session },
@@ -721,7 +759,7 @@ export class PhotographyHoldService {
               holdExpiresAt: null,
               paymentReviewRequired: true,
               paymentReviewReason:
-                'Thanh toán được ghi nhận sau khi thời hạn giữ lịch đã kết thúc.',
+                'Thanh toÃ¡n Ä‘Æ°á»£c ghi nháº­n sau khi thá»i háº¡n giá»¯ lá»‹ch Ä‘Ã£ káº¿t thÃºc.',
             },
           },
           { session },
@@ -757,7 +795,7 @@ export class PhotographyHoldService {
                 holdExpiresAt: null,
                 paymentReviewRequired: true,
                 paymentReviewReason:
-                  'Không thể xác nhận toàn bộ áo dài đang giữ khi thanh toán được ghi nhận.',
+                  'KhÃ´ng thá»ƒ xÃ¡c nháº­n toÃ n bá»™ Ã¡o dÃ i Ä‘ang giá»¯ khi thanh toÃ¡n Ä‘Æ°á»£c ghi nháº­n.',
               },
             },
             { session },
@@ -809,7 +847,7 @@ export class PhotographyHoldService {
                 holdExpiresAt: null,
                 paymentReviewRequired: true,
                 paymentReviewReason:
-                  'Không thể xác nhận toàn bộ lịch giữ chỗ khi thanh toán được ghi nhận.',
+                  'KhÃ´ng thá»ƒ xÃ¡c nháº­n toÃ n bá»™ lá»‹ch giá»¯ chá»— khi thanh toÃ¡n Ä‘Æ°á»£c ghi nháº­n.',
               },
             },
             { session },
@@ -904,8 +942,14 @@ export class PhotographyHoldService {
       .session(session)
       .exec();
     if (!photographyPackage) {
-      throw new NotFoundException('Gói chụp không còn hoạt động.');
+      throw new NotFoundException('GÃ³i chá»¥p khÃ´ng cÃ²n hoáº¡t Ä‘á»™ng.');
     }
+
+    await this.assertProviderServiceRadius(
+      photographyPackage.providerId,
+      sessions,
+      session,
+    );
 
     const lockKeys = sessions.map((item) => ({
       providerId: photographyPackage.providerId,
@@ -953,7 +997,7 @@ export class PhotographyHoldService {
         {
           status: BookingStatus.PendingPayment,
           changedAt: new Date(),
-          note: 'Đã giữ lịch chụp, chờ thanh toán.',
+          note: 'ÄÃ£ giá»¯ lá»‹ch chá»¥p, chá» thanh toÃ¡n.',
         },
       ],
     });
@@ -974,6 +1018,7 @@ export class PhotographyHoldService {
       shootDate: null,
       shootTimeSlot: null,
       shootLocation: firstSession.locationAddress ?? null,
+      shootLocationSnapshot: this.toLocationSnapshot(firstSession),
       shootConcept: dto.concept ?? null,
       referenceImage: dto.referenceImage ?? null,
       rentalType: 'DAILY',
@@ -1008,6 +1053,7 @@ export class PhotographyHoldService {
         providerLocalDate: item.providerLocalDate,
         holdExpiresAt,
         locationAddress: item.locationAddress ?? null,
+        locationSnapshot: this.toLocationSnapshot(item),
         includedDurationMinutes:
           photographyPackage.includedDurationMinutes ??
           Math.round(photographyPackage.durationHours * 60),
@@ -1084,7 +1130,7 @@ export class PhotographyHoldService {
       );
       if (overlaps) {
         throw new ConflictException(
-          'Khung giờ chụp vừa được khách khác giữ hoặc xác nhận. Vui lòng chọn giờ khác.',
+          'Khung giá» chá»¥p vá»«a Ä‘Æ°á»£c khÃ¡ch khÃ¡c giá»¯ hoáº·c xÃ¡c nháº­n. Vui lÃ²ng chá»n giá» khÃ¡c.',
         );
       }
     }
@@ -1156,7 +1202,7 @@ export class PhotographyHoldService {
       price: product.basePrice,
       depositAmount: product.depositAmount,
       effectiveFrom: new Date(),
-      note: 'Tự động tạo khi giữ combo áo dài và gói chụp',
+      note: 'Tá»± Ä‘á»™ng táº¡o khi giá»¯ combo Ã¡o dÃ i vÃ  gÃ³i chá»¥p',
     });
     await priceVersion.save({ session });
     return priceVersion;
@@ -1181,7 +1227,7 @@ export class PhotographyHoldService {
         price,
         depositAmount: price, // 100% thanh toán trước cho thợ chụp
         effectiveFrom: new Date(),
-        note: 'Tự động tạo khi giữ lịch gói chụp',
+        note: 'Tá»± Ä‘á»™ng táº¡o khi giá»¯ lá»‹ch gÃ³i chá»¥p',
       });
       await priceVersion.save({ session });
     }
@@ -1251,10 +1297,133 @@ export class PhotographyHoldService {
         providerLocalDate: this.toBusinessDateKey(startsAt),
         durationMinutes: Math.round((endsAt.getTime() - startsAt.getTime()) / 60000),
         locationAddress: item.locationAddress,
+        locationLatitude: item.locationLatitude,
+        locationLongitude: item.locationLongitude,
       };
     });
   }
 
+  private async assertProviderServiceRadius(
+    providerId: Types.ObjectId,
+    sessions: HoldSession[],
+    session: ClientSession,
+  ): Promise<void> {
+    const provider = await this.providerModel
+      .findById(providerId)
+      .select('address.geo photographySettings.serviceRadiusKm')
+      .session(session)
+      .lean()
+      .exec();
+    if (!provider) {
+      throw new NotFoundException('Photography provider was not found.');
+    }
+
+    const radiusKm = provider.photographySettings?.serviceRadiusKm;
+    const coordinates = provider.address?.geo?.coordinates;
+    if (
+      radiusKm === null ||
+      radiusKm === undefined ||
+      !coordinates ||
+      coordinates.length !== 2
+    ) {
+      throw new BadRequestException(
+        'The photography provider must configure a service radius and base location before accepting bookings.',
+      );
+    }
+
+    const [providerLongitude, providerLatitude] = coordinates;
+    for (const item of sessions) {
+      if (
+        !Number.isFinite(item.locationLatitude) ||
+        !Number.isFinite(item.locationLongitude)
+      ) {
+        throw new BadRequestException(
+          'A precise shoot location is required before creating a photography hold.',
+        );
+      }
+      const distanceKm = this.distanceKm(
+        providerLatitude,
+        providerLongitude,
+        item.locationLatitude as number,
+        item.locationLongitude as number,
+      );
+      if (distanceKm > radiusKm) {
+        throw new BadRequestException(
+          'The shoot location is outside this photographer\'s service radius.',
+        );
+      }
+    }
+  }
+
+  private toLocationSnapshot(item: HoldSession): {
+    address: string | null;
+    geo: { type: 'Point'; coordinates: [number, number] } | null;
+  } {
+    const hasCoordinates =
+      Number.isFinite(item.locationLatitude) &&
+      Number.isFinite(item.locationLongitude);
+    return {
+      address: item.locationAddress?.trim() || null,
+      geo: hasCoordinates
+        ? {
+            type: 'Point',
+            coordinates: [
+              item.locationLongitude as number,
+              item.locationLatitude as number,
+            ],
+          }
+        : null,
+    };
+  }
+
+  private toPickupReturnLocationSnapshot(provider: Provider | null): {
+    address: string;
+    ward?: string | null;
+    district?: string | null;
+    city?: string | null;
+    geo: { type: 'Point'; coordinates: [number, number] } | null;
+  } {
+    if (!provider) {
+      throw new NotFoundException('Ao Dai provider was not found.');
+    }
+    const source =
+      provider.rentalSettings?.useBusinessAddressForPickup === false
+        ? provider.rentalSettings.pickupLocation
+        : provider.address;
+    if (!source?.addressLine?.trim()) {
+      throw new BadRequestException(
+        'The Ao Dai provider must configure a pickup and return location before accepting bookings.',
+      );
+    }
+    const coordinates = source.geo?.coordinates;
+    return {
+      address: source.addressLine.trim(),
+      ward: source.ward ?? null,
+      district: source.district ?? null,
+      city: source.city ?? null,
+      geo:
+        coordinates && coordinates.length === 2
+          ? { type: 'Point', coordinates: [coordinates[0], coordinates[1]] }
+          : null,
+    };
+  }
+
+  private distanceKm(
+    latitudeA: number,
+    longitudeA: number,
+    latitudeB: number,
+    longitudeB: number,
+  ): number {
+    const toRadians = (value: number) => (value * Math.PI) / 180;
+    const latitudeDelta = toRadians(latitudeB - latitudeA);
+    const longitudeDelta = toRadians(longitudeB - longitudeA);
+    const a =
+      Math.sin(latitudeDelta / 2) ** 2 +
+      Math.cos(toRadians(latitudeA)) *
+        Math.cos(toRadians(latitudeB)) *
+        Math.sin(longitudeDelta / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.sqrt(a));
+  }
   private toRentalRange(
     rentalFromValue: string,
     rentalToValue: string,
@@ -1262,12 +1431,12 @@ export class PhotographyHoldService {
     const toDateKey = (value: string, fieldLabel: string) => {
       const key = value.slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) {
-        throw new BadRequestException(fieldLabel + ' không hợp lệ.');
+        throw new BadRequestException(fieldLabel + ' khÃ´ng há»£p lá»‡.');
       }
       return key;
     };
-    const fromKey = toDateKey(rentalFromValue, 'Ngày nhận áo dài');
-    const toKey = toDateKey(rentalToValue, 'Ngày trả áo dài');
+    const fromKey = toDateKey(rentalFromValue, 'NgÃ y nháº­n Ã¡o dÃ i');
+    const toKey = toDateKey(rentalToValue, 'NgÃ y tráº£ Ã¡o dÃ i');
     return {
       rentalFrom: new Date(fromKey + 'T00:00:00.000+07:00'),
       rentalTo: new Date(toKey + 'T23:59:59.999+07:00'),
@@ -1276,10 +1445,10 @@ export class PhotographyHoldService {
 
   private normalizeInventoryColor(value: string): string {
     const normalized = value.trim().toUpperCase();
-    if (normalized === 'ĐỎ' || normalized === 'RED') return 'RED';
-    if (normalized === 'TRẮNG' || normalized === 'WHITE') return 'WHITE';
-    if (normalized === 'VÀNG' || normalized === 'GOLD') return 'GOLD';
-    if (normalized === 'ĐEN' || normalized === 'BLACK') return 'BLACK';
+    if (normalized === 'Äá»Ž' || normalized === 'RED') return 'RED';
+    if (normalized === 'TRáº®NG' || normalized === 'WHITE') return 'WHITE';
+    if (normalized === 'VÃ€NG' || normalized === 'GOLD') return 'GOLD';
+    if (normalized === 'ÄEN' || normalized === 'BLACK') return 'BLACK';
     return normalized;
   }
   private toBusinessDateKey(value: Date): string {

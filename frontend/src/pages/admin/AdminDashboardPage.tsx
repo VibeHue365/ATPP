@@ -15,6 +15,9 @@ import { useAuth } from '../../features/auth/hooks/useAuth';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 import { API_BASE_URL } from '../../config/env';
 import { tokenStorage } from '../../services/tokenStorage';
+import { Modal } from '../../components/common/Modal';
+import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
+import type { LocationSelection } from '../../features/photographers/types/photographer.types';
 
 // Modular Sub-components
 import { CategoryManagement } from './components/CategoryManagement';
@@ -292,6 +295,12 @@ export const AdminDashboardPage: React.FC = () => {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [rentalMigrationReport, setRentalMigrationReport] = useState<any>(null);
+  const [rentalMigrationReviewItems, setRentalMigrationReviewItems] = useState<any[]>([]);
+  const [loadingRentalMigration, setLoadingRentalMigration] = useState(false);
+  const [migrationLocationItem, setMigrationLocationItem] = useState<any>(null);
+  const [migrationLocation, setMigrationLocation] = useState<LocationSelection | null>(null);
+  const [resolvingRentalMigrationItem, setResolvingRentalMigrationItem] = useState<string | null>(null);
 
   // Reported Reviews states
   const [reportedReviews, setReportedReviews] = useState<any[]>([]);
@@ -506,6 +515,63 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  const fetchRentalMigrationReview = async () => {
+    setLoadingRentalMigration(true);
+    try {
+      const [report, review] = await Promise.all([
+        httpClient.get<any>('/admin/rental-migration/report'),
+        httpClient.get<any>('/admin/rental-migration/review?limit=20'),
+      ]);
+      setRentalMigrationReport(report);
+      setRentalMigrationReviewItems(Array.isArray(review?.items) ? review.items : []);
+    } catch (error) {
+      console.warn('Không thể tải báo cáo migration áo dài:', error);
+    } finally {
+      setLoadingRentalMigration(false);
+    }
+  };
+  const resolveLegacyLocation = async () => {
+    if (!migrationLocationItem || !migrationLocation) {
+      toast.error('Hãy xác nhận địa chỉ và pin vị trí thực tế trước khi lưu.');
+      return;
+    }
+    setResolvingRentalMigrationItem(migrationLocationItem._id);
+    try {
+      await httpClient.post(`/admin/rental-migration/review/${migrationLocationItem._id}/resolve-pickup-return-location`, migrationLocation);
+      toast.success('Đã bổ sung snapshot điểm nhận/trả và migrate item áo dài.');
+      setMigrationLocationItem(null);
+      setMigrationLocation(null);
+      await fetchRentalMigrationReview();
+    } catch (error: any) {
+      toast.error(error?.message || 'Không thể hoàn tất migration cho item này.');
+    } finally {
+      setResolvingRentalMigrationItem(null);
+    }
+  };
+
+  const keepLegacyReadOnly = async (item: any) => {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: 'Giữ dữ liệu legacy chỉ-đọc?',
+      text: 'Thao tác này không tạo snapshot hoặc evidence giả. Item sẽ chỉ dùng để tra cứu lịch sử và không đi tiếp vào luồng thuê mới.',
+      showCancelButton: true,
+      confirmButtonText: 'Giữ chỉ-đọc',
+      cancelButtonText: 'Quay lại',
+      confirmButtonColor: '#B45309',
+    });
+    if (!result.isConfirmed) return;
+
+    setResolvingRentalMigrationItem(item._id);
+    try {
+      await httpClient.post(`/admin/rental-migration/review/${item._id}/keep-legacy-read-only`);
+      toast.success('Đã chuyển item sang legacy read-only.');
+      await fetchRentalMigrationReview();
+    } catch (error: any) {
+      toast.error(error?.message || 'Không thể cập nhật item legacy.');
+    } finally {
+      setResolvingRentalMigrationItem(null);
+    }
+  };
   const fetchTransactions = async (page = 1) => {
     try {
       const res = await httpClient.get<any>(`/admin/stats/transactions?page=${page}&limit=10`);
@@ -560,6 +626,9 @@ export const AdminDashboardPage: React.FC = () => {
     }
   }, [transactionPage, isAuthenticated, isAdmin]);
 
+  useEffect(() => {
+    if (isAuthenticated && isAdmin && activeTab === 'bookings') void fetchRentalMigrationReview();
+  }, [activeTab, isAuthenticated, isAdmin]);
   // Reset drawer and reset page counters when tab changes
   useEffect(() => {
     setSelectedDetailItem(null);
@@ -1693,6 +1762,39 @@ export const AdminDashboardPage: React.FC = () => {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {rentalMigrationReport && (
+          <section style={{ border: '1px solid #FCD34D', background: '#FFFBEB', borderRadius: '12px', padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div><h3 style={{ margin: 0, fontSize: '14px', color: '#92400E' }}>Migration áo dài cũ</h3><p style={{ margin: '5px 0 0', fontSize: '12px', color: '#78350F' }}>Các item thiếu snapshot hoặc evidence không được tự suy diễn.</p></div>
+              <button type="button" onClick={() => void fetchRentalMigrationReview()} disabled={loadingRentalMigration} style={{ border: '1px solid #D97706', background: 'white', color: '#92400E', borderRadius: '6px', padding: '7px 10px', cursor: 'pointer', fontWeight: 700, fontSize: '12px' }}>{loadingRentalMigration ? 'Đang tải…' : 'Làm mới'}</button>
+            </div>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '12px', fontSize: '12px', color: '#78350F' }}><span>Cần review: <strong>{rentalMigrationReport.needsReview || 0}</strong></span><span>Legacy read-only: <strong>{rentalMigrationReport.legacyReadOnly || 0}</strong></span><span>Đã migrate: <strong>{rentalMigrationReport.migrated || 0}</strong></span></div>
+            {rentalMigrationReviewItems.length > 0 && (
+              <div style={{ marginTop: '12px', display: 'grid', gap: '7px' }}>
+                {rentalMigrationReviewItems.map((item) => {
+                  const booking = item.bookingId || {};
+                  const bookingId = booking._id || item.bookingId;
+                  const reasons = item.rentalMigration?.reasons || [];
+                  const canSupplyLocation = reasons.includes('MISSING_PICKUP_RETURN_SNAPSHOT');
+                  const isResolving = resolvingRentalMigrationItem === item._id;
+                  return (
+                    <div key={item._id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', padding: '9px', background: 'white', border: '1px solid #FDE68A', borderRadius: '7px', fontSize: '12px' }}>
+                      <div>
+                        <strong>{booking.bookingCode || String(bookingId || '').slice(-6).toUpperCase() || 'Booking cũ'}</strong> · {item.productId?.name || 'Áo dài'}
+                        <div style={{ color: '#92400E', marginTop: '3px' }}>{reasons.join(', ') || 'Cần kiểm tra dữ liệu legacy'}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {bookingId && <button type="button" onClick={() => { setSelectedBookingId(String(bookingId)); setIsDetailModalOpen(true); }} style={{ border: 'none', color: '#1D4ED8', background: 'transparent', cursor: 'pointer', fontWeight: 700 }}>Mở booking</button>}
+                        {canSupplyLocation && <button type="button" disabled={isResolving} onClick={() => { setMigrationLocationItem(item); setMigrationLocation(null); }} style={{ border: '1px solid #D97706', color: '#92400E', background: 'white', borderRadius: '6px', padding: '6px 8px', cursor: isResolving ? 'wait' : 'pointer', fontWeight: 700 }}>Bổ sung điểm nhận/trả</button>}
+                        <button type="button" disabled={isResolving} onClick={() => void keepLegacyReadOnly(item)} style={{ border: '1px solid #B45309', color: '#92400E', background: '#FFFBEB', borderRadius: '6px', padding: '6px 8px', cursor: isResolving ? 'wait' : 'pointer', fontWeight: 700 }}>{isResolving ? 'Đang lưu…' : 'Giữ legacy'}</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
         {/* Search & Filters */}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', backgroundColor: 'white', padding: '16px 20px', borderRadius: '8px', border: '1px solid #E8E2D5' }}>
           <div style={{ display: 'flex', flex: 1, maxWidth: '500px', alignItems: 'center', border: '1px solid #E8E2D5', borderRadius: '6px', padding: '0 12px', backgroundColor: '#FAF6F0' }}>
@@ -2934,6 +3036,26 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
           )}
 
+          <Modal
+            isOpen={Boolean(migrationLocationItem)}
+            onClose={() => { if (!resolvingRentalMigrationItem) { setMigrationLocationItem(null); setMigrationLocation(null); } }}
+            title="Xác minh điểm nhận và trả áo dài"
+            maxWidth="840px"
+          >
+            <p style={{ marginTop: 0, color: '#78350F', fontSize: '13px', lineHeight: 1.5 }}>
+              Chỉ dùng điểm đã đối chiếu từ dữ liệu vận hành thực tế. MVP dùng cùng một điểm cho nhận và trả áo dài; thao tác này không tạo bằng chứng nhận/trả.
+            </p>
+            <PhotographyLocationPicker
+              value={migrationLocation}
+              onSelect={setMigrationLocation}
+              title="Điểm nhận và trả đã xác minh"
+              hint="Tìm địa chỉ, kéo pin chính xác, sau đó bấm “Xác nhận pin” trước khi lưu."
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
+              <button type="button" className="vh-btn vh-btn-secondary" disabled={Boolean(resolvingRentalMigrationItem)} onClick={() => { setMigrationLocationItem(null); setMigrationLocation(null); }}>Hủy</button>
+              <button type="button" className="vh-btn vh-btn-primary" disabled={!migrationLocation || Boolean(resolvingRentalMigrationItem)} onClick={() => void resolveLegacyLocation()}>{resolvingRentalMigrationItem ? 'Đang lưu…' : 'Lưu điểm và migrate'}</button>
+            </div>
+          </Modal>
           {/* Booking Details Modal */}
           <BookingDetailModal
             bookingId={selectedBookingId}

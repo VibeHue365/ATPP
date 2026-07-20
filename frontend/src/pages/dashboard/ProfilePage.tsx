@@ -5,14 +5,14 @@ import Swal from 'sweetalert2';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
-import { 
-  Camera, 
-  ShieldCheck, 
-  Calendar, 
-  User, 
-  Mail, 
-  Phone, 
-  CalendarRange, 
+import {
+  Camera,
+  ShieldCheck,
+  Calendar,
+  User,
+  Mail,
+  Phone,
+  CalendarRange,
   Star,
   Pencil,
   AlertTriangle
@@ -21,6 +21,9 @@ import { API_BASE_URL } from '../../config/env';
 import { ROUTES } from '../../config/routes';
 import { Modal } from '../../components/common/Modal';
 import { CustomerDashboard } from '../../features/dashboard/components/CustomerDashboard';
+import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
+import type { LocationSelection } from '../../features/photographers/types/photographer.types';
+import { RentalPickupReturnPanel } from '../../features/rentals/components/RentalPickupReturnPanel';
 
 export const ProfilePage: React.FC = () => {
   const { user } = useAuth();
@@ -30,7 +33,17 @@ export const ProfilePage: React.FC = () => {
   // Modals state control
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [activeDetailBooking, setActiveDetailBooking] = useState<any>(null);
-  
+  const [locationChangeSchedule, setLocationChangeSchedule] = useState<any>(null);
+  const [requestedLocation, setRequestedLocation] = useState<LocationSelection | null>(null);
+  const [locationChangeNote, setLocationChangeNote] = useState('');
+  const [isSubmittingLocationChange, setIsSubmittingLocationChange] = useState(false);
+
+  useEffect(() => {
+    if (!activeDetailBooking?._id) return;
+    void httpClient.get<any>('/api/bookings/' + activeDetailBooking._id)
+      .then((detail) => setActiveDetailBooking(detail))
+      .catch(() => undefined);
+  }, [activeDetailBooking?._id]);
   // Booking Cancel Confirmation state
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const [bookingToCancel, setBookingToCancel] = useState<any>(null);
@@ -119,8 +132,8 @@ export const ProfilePage: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        const endpoint = agree 
-          ? `/api/disputes/incidents/${bookingIncident._id}/agree` 
+        const endpoint = agree
+          ? `/api/disputes/incidents/${bookingIncident._id}/agree`
           : `/api/disputes/incidents/${bookingIncident._id}/disagree`;
         await httpClient.post(endpoint, {});
         toast.success(agree ? 'Đã chấp nhận đền bù thành công!' : 'Đã gửi yêu cầu tranh chấp lên Admin!');
@@ -179,8 +192,8 @@ export const ProfilePage: React.FC = () => {
   const getAvatarUrl = () => {
     if (user?.avatar) {
       if (user.avatar.startsWith('http')) return user.avatar;
-      const filename = user.avatar.includes('/') || user.avatar.includes('\\') 
-        ? user.avatar.split(/[/\\]/).pop() 
+      const filename = user.avatar.includes('/') || user.avatar.includes('\\')
+        ? user.avatar.split(/[/\\]/).pop()
         : user.avatar;
       return `${API_BASE_URL}/uploads/avatars/${filename}`;
     }
@@ -322,7 +335,7 @@ export const ProfilePage: React.FC = () => {
         } else {
           toast.error(`Hủy đơn thành công! ${response.penaltyReason || 'Bạn bị phạt mất cọc giữ chỗ do hủy sát giờ.'}`);
         }
-        
+
         fetchBookings();
         setActiveDetailBooking(null);
         setIsCancelConfirmOpen(false);
@@ -357,6 +370,29 @@ export const ProfilePage: React.FC = () => {
   };
 
   // ── UC-E06: Reschedule handler ──
+  const submitLocationChange = async () => {
+    if (!activeDetailBooking || !locationChangeSchedule || !requestedLocation) {
+      toast.error('Vui lòng chọn pin địa điểm mới.');
+      return;
+    }
+    setIsSubmittingLocationChange(true);
+    try {
+      await httpClient.post(
+        '/api/bookings/' + activeDetailBooking._id + '/photoshoot-schedules/' + locationChangeSchedule._id + '/location-change-requests',
+        { address: requestedLocation.address, latitude: requestedLocation.latitude, longitude: requestedLocation.longitude, note: locationChangeNote || undefined },
+      );
+      const detail = await httpClient.get<any>('/api/bookings/' + activeDetailBooking._id);
+      setActiveDetailBooking(detail);
+      setLocationChangeSchedule(null);
+      setRequestedLocation(null);
+      setLocationChangeNote('');
+      toast.success('Đã gửi yêu cầu đổi địa điểm. Chờ photographer duyệt.');
+    } catch (requestError: any) {
+      toast.error(requestError?.message || 'Không thể gửi yêu cầu đổi địa điểm.');
+    } finally {
+      setIsSubmittingLocationChange(false);
+    }
+  };
   const handleReschedule = async () => {
     if (!rescheduleItem || !activeDetailBooking) return;
     const isProduct = rescheduleItem.itemType === 'PRODUCT';
@@ -414,7 +450,7 @@ export const ProfilePage: React.FC = () => {
                 <span>Thành viên Bạch Kim</span>
               </span>
             </div>
-            
+
             <p className="vh-profile-hero-tagline">
               {bio} • {locationText}
             </p>
@@ -491,11 +527,11 @@ export const ProfilePage: React.FC = () => {
           </div>
         )}
 
-        <CustomerDashboard 
-          user={user} 
-          bookings={bookings} 
-          onViewDetails={(b) => setActiveDetailBooking(b)} 
-          onRefresh={fetchBookings} 
+        <CustomerDashboard
+          user={user}
+          bookings={bookings}
+          onViewDetails={(b) => setActiveDetailBooking(b)}
+          onRefresh={fetchBookings}
         />
       </section>
 
@@ -530,7 +566,7 @@ export const ProfilePage: React.FC = () => {
       </section>
 
       {/* -------------------- MODALS -------------------- */}
-      
+
       {/* 1. Modal View: Chi tiết Hồ sơ cá nhân */}
       <Modal isOpen={isViewOpen} onClose={() => setIsViewOpen(false)} title="Thông tin tài khoản" maxWidth="500px">
         <div className="vh-modal-profile-info-details animate-fade-in">
@@ -541,7 +577,7 @@ export const ProfilePage: React.FC = () => {
             </span>
             <strong className="vh-modal-profile-info-value">{user?.fullName || 'Chưa cập nhật'}</strong>
           </div>
-          
+
           <div className="vh-modal-profile-info-row">
             <span className="vh-modal-profile-info-label">
               <Mail size={16} />
@@ -603,14 +639,14 @@ export const ProfilePage: React.FC = () => {
 
       {/* 2. Modal View: Chi tiết đơn đặt lịch (activeDetailBooking) */}
       {activeDetailBooking && (
-        <Modal 
-          isOpen={true} 
-          onClose={() => setActiveDetailBooking(null)} 
-          title={`CHI TIẾT ĐƠN HÀNG: ${activeDetailBooking.bookingCode}`} 
+        <Modal
+          isOpen={true}
+          onClose={() => setActiveDetailBooking(null)}
+          title={`CHI TIẾT ĐƠN HÀNG: ${activeDetailBooking.bookingCode}`}
           maxWidth="700px"
         >
           <div className="vh-modal-booking-details-wrapper animate-fade-in" style={{ padding: '8px 4px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            
+
             {/* Row Status Badges */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #EAEAE8', paddingBottom: '12px' }}>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -640,33 +676,33 @@ export const ProfilePage: React.FC = () => {
               <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary-dark)', margin: 0 }}>
                 DANH SÁCH DỊCH VỤ & SẢN PHẨM
               </h4>
-              
+
               {activeDetailBooking.items?.map((item: any, idx: number) => {
                 const isProduct = item.itemType === 'PRODUCT';
                 const formattedDateStr = isProduct
                   ? (item.rentalType === 'DAILY'
-                      ? `${formatDate(item.startDate || item.rentalFrom)} - ${formatDate(item.endDate || item.rentalTo)}`
-                      : `Ngày ${formatDate(item.startDate || item.rentalFrom)} (Khung giờ: ${item.startTime} - ${item.endTime})`)
+                    ? `${formatDate(item.startDate || item.rentalFrom)} - ${formatDate(item.endDate || item.rentalTo)}`
+                    : `Ngày ${formatDate(item.startDate || item.rentalFrom)} (Khung giờ: ${item.startTime} - ${item.endTime})`)
                   : `Ngày chụp: ${formatDate(item.shootDate)} (${item.shootTimeSlot || 'Trống'})`;
 
                 return (
-                  <div 
-                    key={idx} 
-                    style={{ 
-                      display: 'flex', 
-                      gap: '16px', 
-                      border: '1px solid #EAEAE8', 
-                      borderRadius: '8px', 
-                      padding: '16px', 
-                      backgroundColor: 'white' 
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      gap: '16px',
+                      border: '1px solid #EAEAE8',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      backgroundColor: 'white'
                     }}
                   >
-                    <img 
-                      src={item.image || item.productImage || (isProduct ? 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b' : '/avatar_hanna.png')} 
-                      alt={item.name} 
-                      style={{ width: '80px', height: '100px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #EAEAE8' }} 
+                    <img
+                      src={item.image || item.productImage || (isProduct ? 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b' : '/avatar_hanna.png')}
+                      alt={item.name}
+                      style={{ width: '80px', height: '100px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #EAEAE8' }}
                     />
-                    
+
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -703,7 +739,7 @@ export const ProfilePage: React.FC = () => {
                             )
                           )}
                         </div>
-                        
+
                         <div style={{ fontSize: '12px', color: '#7E6D5B', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span>Thời gian: <strong>{formattedDateStr}</strong></span>
                           {isProduct ? (
@@ -729,6 +765,7 @@ export const ProfilePage: React.FC = () => {
                               )}
                             </>
                           )}
+                          {isProduct && item.pickupReturnLocationSnapshot?.address && <RentalPickupReturnPanel location={item.pickupReturnLocationSnapshot} itemName={item.name} />}
                           {item.customRequests && (
                             <span style={{ color: '#C0392B', fontStyle: 'italic' }}>
                               Yêu cầu đặc biệt: "{item.customRequests}"
@@ -736,7 +773,7 @@ export const ProfilePage: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      
+
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '8px', borderTop: '1px dashed #EAEAE8', paddingTop: '8px' }}>
                         <span style={{ fontSize: '12px', color: '#7E6D5B' }}>
                           Đơn giá: {item.unitPrice?.toLocaleString('vi-VN')}đ x {item.quantity || 1}
@@ -779,11 +816,10 @@ export const ProfilePage: React.FC = () => {
                   </span>
                 </div>
                 <div style={{ fontSize: '13px', color: '#2D3748', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <span>Sản phẩm gặp sự cố: <strong>{bookingIncident.productId?.name || bookingIncident.bookingItemId?.productName || 'Sản phẩm'}</strong></span>
-                  <span>Hình thức xử lý: <strong>{bookingIncident.actionType === 'MAINTENANCE' ? 'Sửa chữa / Bảo dưỡng (MAINTENANCE)' : 'Giặt là / Tẩy rửa (CLEANING)'}</strong></span>
+                  <span>Sản phẩm gặp sự cố: <strong>{bookingIncident.bookingItemId?.name || bookingIncident.productId?.name || 'Sản phẩm'}</strong></span>
+                  <span>Hình thức xử lý: <strong>{bookingIncident.bookingItemId?.actionType === 'MAINTENANCE' || bookingIncident.actionType === 'MAINTENANCE' ? 'Sửa chữa / Bảo dưỡng (MAINTENANCE)' : 'Giặt là / Tẩy rửa (CLEANING)'}</strong></span>
                   <span>Mô tả sự cố: <em style={{ color: '#4A5568' }}>{bookingIncident.description ? `"${bookingIncident.description}"` : <span style={{ color: '#A0AEC0' }}>Không có mô tả</span>}</em></span>
                   <span>Số tiền đền bù yêu cầu: <strong style={{ color: '#C53030', fontSize: '15px' }}>{(bookingIncident.requestedAmount ?? 0).toLocaleString('vi-VN')}đ</strong></span>
-                  
                   {bookingIncident.evidencePhotos && bookingIncident.evidencePhotos.length > 0 && (
                     <div style={{ marginTop: '8px' }}>
                       <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#4A5568', marginBottom: '4px' }}>Hình ảnh bằng chứng:</span>
@@ -852,6 +888,21 @@ export const ProfilePage: React.FC = () => {
               </div>
             )}
 
+            {activeDetailBooking.status === 'CONFIRMED' && activeDetailBooking.schedules?.length > 0 && (
+              <section style={{ border: '1px solid #BFDBFE', background: '#EFF6FF', borderRadius: '10px', padding: '14px' }}>
+                <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#1D4ED8' }}>Địa điểm các buổi chụp</h4>
+                {activeDetailBooking.schedules.map((schedule: any) => {
+                  const request = schedule.locationChangeRequest;
+                  return <div key={schedule._id} style={{ padding: '10px 0', borderTop: '1px solid #DBEAFE', fontSize: '12px' }}>
+                    <div><strong>{schedule.locationSnapshot?.address || schedule.locationAddress || 'Chưa có địa điểm'}</strong></div>
+                    <div style={{ color: '#6B7280', marginTop: '3px' }}>{schedule.startsAt ? new Date(schedule.startsAt).toLocaleString('vi-VN') : ''}</div>
+                    {request?.status === 'PENDING' ? <div style={{ marginTop: '7px', color: '#92400E', fontWeight: 700 }}>Đang chờ photographer duyệt địa điểm mới.</div>
+                      : request?.status === 'REJECTED' ? <div style={{ marginTop: '7px', color: '#B91C1C', fontWeight: 700 }}>Yêu cầu gần nhất đã bị từ chối.</div>
+                        : <button type="button" onClick={() => { setLocationChangeSchedule(schedule); setRequestedLocation(null); setLocationChangeNote(''); }} style={{ marginTop: '8px', border: 'none', borderRadius: '6px', padding: '7px 10px', background: '#2563EB', color: 'white', fontWeight: 700, cursor: 'pointer' }}>Yêu cầu đổi địa điểm</button>}
+                  </div>;
+                })}
+              </section>
+            )}
             {/* Financial Summary */}
             <div style={{ marginLeft: 'auto', width: '320px', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #EAEAE8', paddingTop: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
@@ -976,26 +1027,26 @@ export const ProfilePage: React.FC = () => {
               )}
 
               {activeDetailBooking.status === 'PENDING_PAYMENT' && (
-                <button 
-                  className="vh-btn" 
-                  style={{ 
-                    padding: '8px 24px', 
-                    borderRadius: '8px', 
-                    fontSize: '13px', 
-                    backgroundColor: '#8B1E22', 
-                    color: 'white', 
-                    border: 'none', 
-                    cursor: 'pointer' 
-                  }} 
+                <button
+                  className="vh-btn"
+                  style={{
+                    padding: '8px 24px',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    backgroundColor: '#8B1E22',
+                    color: 'white',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
                   onClick={() => handleContinuePayment(activeDetailBooking._id)}
                 >
                   Tiếp tục thanh toán
                 </button>
               )}
-              
-              <button 
-                className="vh-btn vh-btn-outline" 
-                style={{ padding: '8px 24px', borderRadius: '8px', fontSize: '13px' }} 
+
+              <button
+                className="vh-btn vh-btn-outline"
+                style={{ padding: '8px 24px', borderRadius: '8px', fontSize: '13px' }}
                 onClick={() => setActiveDetailBooking(null)}
               >
                 Đóng
@@ -1100,21 +1151,34 @@ export const ProfilePage: React.FC = () => {
       )}
 
       {/* 4. Modal View: Xác nhận hủy lịch và chính sách hoàn tiền */}
+      {locationChangeSchedule && activeDetailBooking && (
+        <Modal isOpen={true} onClose={() => setLocationChangeSchedule(null)} title="YÊU CẦU ĐỔI ĐỊA ĐIỂM CHỤP" maxWidth="560px">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <p style={{ margin: 0, fontSize: '13px', color: '#6B7280' }}>Photographer phải duyệt trước khi địa điểm mới được áp dụng.</p>
+            <PhotographyLocationPicker value={requestedLocation} onSelect={setRequestedLocation} />
+            <textarea value={locationChangeNote} onChange={(event) => setLocationChangeNote(event.target.value)} placeholder="Ghi chú cho photographer (không bắt buộc)" maxLength={500} style={{ minHeight: '72px', border: '1px solid #D5C2AD', borderRadius: '6px', padding: '10px', fontFamily: 'inherit' }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button type="button" className="vh-btn vh-btn-outline" onClick={() => setLocationChangeSchedule(null)}>Hủy</button>
+              <button type="button" className="vh-btn" disabled={!requestedLocation || isSubmittingLocationChange} onClick={() => void submitLocationChange()} style={{ background: '#2563EB', color: 'white', border: 'none' }}>{isSubmittingLocationChange ? 'Đang gửi...' : 'Gửi yêu cầu'}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {isCancelConfirmOpen && bookingToCancel && (
-        <Modal 
-          isOpen={true} 
-          onClose={() => setIsCancelConfirmOpen(false)} 
-          title="XÁC NHẬN HỦY LỊCH ĐẶT CHỖ" 
+        <Modal
+          isOpen={true}
+          onClose={() => setIsCancelConfirmOpen(false)}
+          title="XÁC NHẬN HỦY LỊCH ĐẶT CHỖ"
           maxWidth="550px"
         >
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
-            
+
             {/* Warning block about refund policies */}
             <div style={{ backgroundColor: '#FDF2F2', border: '1px solid #FDE8E8', borderRadius: '8px', padding: '16px' }}>
               <h5 style={{ color: '#9B1C1C', fontSize: '14px', fontWeight: 700, margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <AlertTriangle size={16} /> QUY ĐỊNH HOÀN TIỀN CỌC
               </h5>
-              
+
               <ul style={{ fontSize: '12.5px', color: '#7F1D1D', paddingLeft: '18px', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <li><strong>Hủy trước 24 giờ:</strong> Khách hàng được hoàn trả <strong>100%</strong> tiền cọc đã đóng.</li>
                 <li><strong>Hủy trong vòng 24 giờ:</strong> Áp dụng phạt <strong>100%</strong> tiền cọc giữ chỗ (trừ các đơn đặt lịch mới trong vòng 60 phút - Grace Period).</li>
@@ -1125,14 +1189,14 @@ export const ProfilePage: React.FC = () => {
             {/* Input reason */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#4A4440' }}>Lý do hủy đơn (Bắt buộc)</label>
-              <textarea 
-                placeholder="Vui lòng cung cấp lý do hủy để chúng tôi cải thiện dịch vụ..." 
-                style={{ 
-                  width: '100%', 
-                  padding: '12px', 
-                  borderRadius: '8px', 
-                  border: '1px solid #EAE1D4', 
-                  fontSize: '13px', 
+              <textarea
+                placeholder="Vui lòng cung cấp lý do hủy để chúng tôi cải thiện dịch vụ..."
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #EAE1D4',
+                  fontSize: '13px',
                   minHeight: '80px',
                   fontFamily: 'inherit',
                   outline: 'none'
@@ -1145,26 +1209,26 @@ export const ProfilePage: React.FC = () => {
 
             {/* Action buttons */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #EAEAE8', paddingTop: '16px', marginTop: '8px' }}>
-              <button 
-                className="vh-btn vh-btn-outline" 
-                style={{ padding: '8px 20px', borderRadius: '8px', fontSize: '13px' }} 
+              <button
+                className="vh-btn vh-btn-outline"
+                style={{ padding: '8px 20px', borderRadius: '8px', fontSize: '13px' }}
                 onClick={() => { setIsCancelConfirmOpen(false); setBookingToCancel(null); setCancelReason(''); }}
               >
                 Hủy bỏ
               </button>
-              
-              <button 
-                className="vh-btn" 
+
+              <button
+                className="vh-btn"
                 disabled={!cancelReason.trim()}
-                style={{ 
-                  padding: '8px 24px', 
-                  borderRadius: '8px', 
-                  fontSize: '13px', 
-                  backgroundColor: cancelReason.trim() ? '#C0392B' : '#CCCCCC', 
-                  color: 'white', 
-                  border: 'none', 
-                  cursor: cancelReason.trim() ? 'pointer' : 'not-allowed' 
-                }} 
+                style={{
+                  padding: '8px 24px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  backgroundColor: cancelReason.trim() ? '#C0392B' : '#CCCCCC',
+                  color: 'white',
+                  border: 'none',
+                  cursor: cancelReason.trim() ? 'pointer' : 'not-allowed'
+                }}
                 onClick={handleCancelBooking}
               >
                 Xác nhận hủy lịch

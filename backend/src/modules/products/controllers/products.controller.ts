@@ -23,7 +23,6 @@ import type { AuthUser } from '../../../common/decorators/current-user.decorator
 import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
 import { PublicMediaService } from '../../storage/services/public-media.service';
-import { InventoryService } from '../services/inventory.service';
 import { ProductAvailabilityService } from '../services/product-availability.service';
 
 @Controller(['products', 'api/products'])
@@ -31,7 +30,6 @@ export class ProductsController {
   constructor(
     private readonly productsService: ProductsService,
     private readonly publicMedia: PublicMediaService,
-    private readonly inventoryService: InventoryService,
     private readonly availabilityService: ProductAvailabilityService,
   ) {}
 
@@ -183,16 +181,6 @@ export class ProductsController {
       (files || []).map((file) => this.publicMedia.uploadVideo('products', file)),
     );
     return { urls: uploads.map((upload) => upload.url) };
-  }
-
-  // Public: tồn kho khả dụng theo size/màu trong khoảng ngày — cho khách xem trước khi đặt
-  @Get(':id/availability')
-  async availability(
-    @Param('id') id: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
-    return this.inventoryService.getPublicAvailability(id, from, to);
   }
 
   @Get(':id')

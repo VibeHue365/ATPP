@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import type { RentalFulfillment } from './rental-fulfillment.types';
 
 export type BookingItemDocument = HydratedDocument<BookingItem>;
 
@@ -91,6 +92,49 @@ export class BookingItem {
 
   @Prop({ type: String, default: null })
   shootLocation?: string | null;
+
+  /** Immutable shoot location captured when the photography hold is created. */
+  @Prop({ type: Object, default: null })
+  shootLocationSnapshot?: {
+    address: string | null;
+    geo: {
+      type: 'Point';
+      coordinates: [number, number];
+    } | null;
+  } | null;
+
+  /** Ao Dai MVP: one provider-selected point is used for both pickup and return. */
+  @Prop({ type: Object, default: null })
+  pickupReturnLocationSnapshot?: {
+    address: string;
+    ward?: string | null;
+    district?: string | null;
+    city?: string | null;
+    geo: {
+      type: 'Point';
+      coordinates: [number, number];
+    } | null;
+  } | null;
+  /** Immutable, per physical rental unit fulfillment state. */
+  @Prop({ type: Object, default: null })
+  rentalFulfillment?: RentalFulfillment | null;
+
+  /** Audit marker set only by the v1 Ao Dai fulfillment migration. */
+  @Prop({
+    type: {
+      version: { type: Number, required: true },
+      status: { type: String, enum: ['MIGRATED', 'NEEDS_ADMIN_REVIEW', 'LEGACY_READ_ONLY'], required: true, index: true },
+      reasons: { type: [String], default: [] },
+      migratedAt: { type: Date, default: null },
+    },
+    default: null,
+  })
+  rentalMigration?: {
+    version: number;
+    status: 'MIGRATED' | 'NEEDS_ADMIN_REVIEW' | 'LEGACY_READ_ONLY';
+    reasons: string[];
+    migratedAt?: Date | null;
+  } | null;
 
   @Prop({ type: String, default: null })
   shootConcept?: string | null;

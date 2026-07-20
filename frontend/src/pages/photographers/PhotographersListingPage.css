@@ -754,3 +754,18 @@
   transform: translateY(-2px);
   box-shadow: 0 12px 30px rgba(161, 30, 34, 0.4);
 }
+
+.pl-discovery-map-panel {
+  border: 1px solid rgba(182, 145, 91, 0.25);
+  border-radius: 16px;
+  background: #fff;
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+}
+.pl-discovery-map-panel-header { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.pl-discovery-map-panel-header h2 { margin: 0; font-family: var(--font-header); font-size: 18px; color: var(--color-text-primary); }
+.pl-discovery-map-panel-header p { margin: 4px 0 0; max-width: 720px; color: var(--color-text-secondary); font-size: 13px; }
+.pl-discovery-map-clear { flex: 0 0 auto; align-self: flex-start; border: 0; background: transparent; color: var(--color-primary); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.pl-discovery-map-result-note { margin: 12px 0 0; color: var(--color-text-secondary); font-size: 13px; }
+.pl-map-floating-btn.active { background: var(--color-primary-dark); color: #fff; }
+@media (max-width: 640px) { .pl-discovery-map-panel { padding: 12px; } .pl-discovery-map-panel-header { flex-direction: column; gap: 8px; } }

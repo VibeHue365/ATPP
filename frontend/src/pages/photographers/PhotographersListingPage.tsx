@@ -10,7 +10,8 @@ import { categoryService } from '../../features/categories/services/categoryServ
 import type { Category } from '../../features/categories/types';
 import { PhotographerCard } from '../../features/photographers/components/PhotographerCard';
 import { usePhotographers } from '../../features/photographers/hooks/usePhotographers';
-import type { PhotographerConcept, PhotographerDiscoverySort } from '../../features/photographers/types/photographer.types';
+import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
+import type { LocationSelection, PhotographerConcept, PhotographerDiscoverySort } from '../../features/photographers/types/photographer.types';
 import './PhotographersListingPage.css';
 
 const sortOptions: Array<{ value: PhotographerDiscoverySort; label: string }> = [
@@ -47,6 +48,10 @@ export const PhotographersListingPage: React.FC = () => {
   const [searchInput, setSearchInput] = useState(searchParams.get('q') ?? '');
   const [compareList, setCompareList] = useState<string[]>([]);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [customerLocation, setCustomerLocation] = useState<LocationSelection | null>(null);
+  const [isDiscoveryMapOpen, setIsDiscoveryMapOpen] = useState(false);
+  const [searchRadiusKm, setSearchRadiusKm] = useState(15);
+  const [isLocating, setIsLocating] = useState(false);
   const hasAoDaiInCart = cart.some((item) => item.itemType === 'PRODUCT');
   const queryString = searchParams.toString();
 
@@ -64,13 +69,16 @@ export const PhotographersListingPage: React.FC = () => {
       minPrice: readNumber(params.get('minPrice')),
       maxPrice: readNumber(params.get('maxPrice')),
       minRating: readNumber(params.get('minRating')),
+      latitude: customerLocation?.latitude,
+      longitude: customerLocation?.longitude,
+      searchRadiusKm: customerLocation ? searchRadiusKm : undefined,
       sort: (sortOptions.some((option) => option.value === sort)
         ? sort
         : 'rating_desc') as PhotographerDiscoverySort,
       page: readNumber(params.get('page')) ?? 1,
       limit: 12,
     };
-  }, [queryString]);
+  }, [queryString, customerLocation, searchRadiusKm]);
 
   const { photographers, meta, isLoading, error } = usePhotographers(discoveryParams);
   const selectedConcept = discoveryParams.concept ?? '';
@@ -121,7 +129,7 @@ export const PhotographersListingPage: React.FC = () => {
 
   useEffect(() => {
     setSearchInput(searchParams.get('q') ?? '');
-  }, [queryString]);
+  }, [queryString, customerLocation, searchRadiusKm]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -150,6 +158,17 @@ export const PhotographersListingPage: React.FC = () => {
   const clearFilters = () => {
     setSearchInput('');
     setSearchParams({ sort: 'rating_desc' });
+    setCustomerLocation(null);
+  };
+
+  const useCustomerLocation = () => {
+    if (!navigator.geolocation) { toast.error('Trình duyệt không hỗ trợ lấy vị trí hiện tại.'); return; }
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => { setCustomerLocation({ address: 'Vị trí hiện tại', latitude: position.coords.latitude, longitude: position.coords.longitude }); setIsDiscoveryMapOpen(true); setIsLocating(false); },
+      () => { setIsLocating(false); toast.error('Không thể lấy vị trí. Hãy cho phép quyền vị trí rồi thử lại.'); },
+      { enableHighAccuracy: true, timeout: 10_000 },
+    );
   };
 
   const handleToggleFavorite = async (id: string, event: React.MouseEvent) => {
@@ -193,7 +212,7 @@ export const PhotographersListingPage: React.FC = () => {
 
   const activeConcept = concepts.find((concept) => concept.code === selectedConcept);
   const hasActiveFilters = Boolean(
-    discoveryParams.q || selectedConcept || selectedPackageCategory || selectedConceptCategory || selectedStyleCategory || selectedEventCategory || discoveryParams.location || discoveryParams.minPrice !== undefined || discoveryParams.minRating !== undefined,
+    discoveryParams.q || selectedConcept || selectedPackageCategory || selectedConceptCategory || selectedStyleCategory || selectedEventCategory || discoveryParams.location || discoveryParams.minPrice !== undefined || discoveryParams.minRating !== undefined || Boolean(customerLocation),
   );
 
   const renderCustomDropdown = (
@@ -287,6 +306,15 @@ export const PhotographersListingPage: React.FC = () => {
               (val) => updateQuery({ location: val }),
               Map
             )}
+             <div className="pl-h-filter-item-container" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+               <button type="button" className={'pl-h-filter-btn ' + (customerLocation ? 'active' : '')} onClick={useCustomerLocation} disabled={isLocating}>
+                 <Map size={13} className="pl-h-filter-icon-inline" />
+                 <span>{isLocating ? 'Đang lấy vị trí...' : customerLocation ? 'Gần tôi' : 'Dùng vị trí của tôi'}</span>
+               </button>
+               {customerLocation && <select aria-label="Bán kính tìm nhiếp ảnh gia" value={searchRadiusKm} onChange={(event) => setSearchRadiusKm(Number(event.target.value))} className="pl-sort-select" style={{ height: '34px', minWidth: '76px' }}>
+                 <option value={5}>5 km</option><option value={10}>10 km</option><option value={15}>15 km</option><option value={25}>25 km</option><option value={50}>50 km</option>
+               </select>}
+             </div>
 
             {/* Concept */}
             {renderCustomDropdown(
@@ -384,6 +412,28 @@ export const PhotographersListingPage: React.FC = () => {
           </div>
         </div>
 
+
+        {isDiscoveryMapOpen && (
+          <section className="pl-discovery-map-panel" aria-label="Tìm nhiếp ảnh gia theo vị trí">
+            <div className="pl-discovery-map-panel-header">
+              <div>
+                <h2>Tìm quanh địa điểm của bạn</h2>
+                <p>Chỉ pin của bạn và vòng tìm kiếm được hiển thị. Vị trí chính xác của photographer luôn được bảo mật.</p>
+              </div>
+              {customerLocation && <button type="button" className="pl-discovery-map-clear" onClick={() => setCustomerLocation(null)}>Bỏ vị trí</button>}
+            </div>
+            <PhotographyLocationPicker
+              value={customerLocation}
+              onSelect={setCustomerLocation}
+              title="Chọn vị trí để tìm photographer"
+              hint="Nhập địa chỉ, dùng vị trí hiện tại hoặc kéo pin. Danh sách sẽ tự lọc theo bán kính bên dưới."
+              radiusKm={searchRadiusKm}
+            />
+            <p className="pl-discovery-map-result-note">
+              {customerLocation ? `Đang tìm trong bán kính ${searchRadiusKm} km. ${isLoading ? 'Đang cập nhật kết quả...' : `Có ${meta.total} photographer phù hợp.`}` : 'Chọn một vị trí để bắt đầu lọc theo khoảng cách.'}
+            </p>
+          </section>
+        )}
         <section className="pl-content-section">
           <div className="pl-toolbar">
             <div className="pl-concepts-track">
@@ -541,8 +591,9 @@ export const PhotographersListingPage: React.FC = () => {
       </div>
       <button
         type="button"
-        onClick={() => toast.info('Chức năng bản đồ sẽ sớm được cập nhật.')}
-        className="pl-map-floating-btn"
+        onClick={() => setIsDiscoveryMapOpen((isOpen) => !isOpen)}
+        className={`pl-map-floating-btn ${isDiscoveryMapOpen ? 'active' : ''}`}
+        aria-expanded={isDiscoveryMapOpen}
       >
         <Map size={16} />
         Xem bản đồ

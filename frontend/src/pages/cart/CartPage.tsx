@@ -1574,6 +1574,12 @@ export const CartPage: React.FC = () => {
                 )}
 
                 {/* Warning message above checkout button */}
+                {selectedItems.some((item) => item.itemType === 'PRODUCT') && (
+                  <div style={{ display: 'flex', gap: '10px', padding: '12px', backgroundColor: '#FFF8E9', border: '1px solid #F2D9A6', borderRadius: '8px', marginBottom: '16px', color: '#6E5318' }}>
+                    <Building size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+                    <div style={{ fontSize: '12px', lineHeight: 1.55 }}><strong>Nhận và trả áo dài tại cùng một điểm.</strong><br />Điểm do cửa hàng thiết lập được snapshot khi tạo booking. Địa chỉ và nút chỉ đường chỉ hiện trong chi tiết booking, không hiển thị công khai trước đó.</div>
+                  </div>
+                )}
                 {checkedGroups.some(group => group.isCityMismatch) && (
                   <div style={{
                     color: '#C0392B',

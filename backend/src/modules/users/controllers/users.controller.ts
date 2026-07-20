@@ -2,8 +2,11 @@ import {
   UnsupportedMediaTypeException,
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
   Patch,
+  Post,
   Req,
   UploadedFile,
   UseGuards,
@@ -16,6 +19,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
+import { CreateUserAddressDto, UpdateUserAddressDto } from '../dto/user-address.dto';
 import { UsersService } from '../services/users.service';
 
 interface RequestMeta {
@@ -46,6 +50,44 @@ export class UsersController {
       this.userAgent(request),
       user.roles,
     );
+  }
+
+  @Get('me/addresses')
+  listAddresses(@CurrentUser() user: AuthUser): Promise<Record<string, unknown>[]> {
+    return this.usersService.listAddresses(user.sub);
+  }
+
+  @Post('me/addresses')
+  createAddress(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateUserAddressDto,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.createAddress(user.sub, dto);
+  }
+
+  @Patch('me/addresses/:addressId')
+  updateAddress(
+    @CurrentUser() user: AuthUser,
+    @Param('addressId') addressId: string,
+    @Body() dto: UpdateUserAddressDto,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.updateAddress(user.sub, addressId, dto);
+  }
+
+  @Delete('me/addresses/:addressId')
+  async removeAddress(
+    @CurrentUser() user: AuthUser,
+    @Param('addressId') addressId: string,
+  ): Promise<void> {
+    await this.usersService.removeAddress(user.sub, addressId);
+  }
+
+  @Post('me/addresses/:addressId/default')
+  setDefaultAddress(
+    @CurrentUser() user: AuthUser,
+    @Param('addressId') addressId: string,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.setDefaultAddress(user.sub, addressId);
   }
 
   @Patch('me/avatar')

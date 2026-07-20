@@ -4,6 +4,8 @@ import { httpClient } from '../../services/httpClient';
 import { Modal } from './Modal';
 import { ShieldAlert, User, Clock, FileText, CheckCircle, XCircle } from 'lucide-react';
 import { CustomerRefundPanel } from './CustomerRefundPanel';
+import { RentalPickupReturnPanel } from '../../features/rentals/components/RentalPickupReturnPanel';
+import { RentalFulfillmentOperationsPanel } from '../../features/rentals/components/RentalFulfillmentOperationsPanel';
 import { API_BASE_URL } from '../../config/env';
 
 interface BookingDetailModalProps {
@@ -30,6 +32,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   const [booking, setBooking] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [respondingIncident, setRespondingIncident] = useState(false);
+  const [resolvingLocationChangeId, setResolvingLocationChangeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [incident, setIncident] = useState<any>(null);
 
@@ -129,6 +132,22 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
     );
   };
 
+  const resolveLocationChange = async (scheduleId: string, approved: boolean) => {
+    if (!bookingId) return;
+    setResolvingLocationChangeId(scheduleId);
+    try {
+      await httpClient.patch(
+        '/api/bookings/' + bookingId + '/photoshoot-schedules/' + scheduleId + '/location-change-requests/resolve',
+        { approved },
+      );
+      await fetchBookingDetails();
+      onBookingChanged?.();
+    } catch (requestError: any) {
+      alert(requestError?.message || 'Không thể xử lý yêu cầu đổi địa điểm.');
+    } finally {
+      setResolvingLocationChangeId(null);
+    }
+  };
   const formatCurrency = (val: number) => {
     return (val || 0).toLocaleString('vi-VN') + 'đ';
   };
@@ -524,6 +543,59 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             </div>
           </div>
 
+          {booking.items?.some((item: any) => (item.itemType === 'PRODUCT' || item.productId) && item.pickupReturnLocationSnapshot?.address) && (
+            <section>
+              <h4 style={{ fontSize: '12px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase', marginBottom: '8px' }}>Nhận và trả áo dài</h4>
+              {booking.items.filter((item: any) => (item.itemType === 'PRODUCT' || item.productId) && item.pickupReturnLocationSnapshot?.address).map((item: any) => (
+                <RentalPickupReturnPanel key={item._id} location={item.pickupReturnLocationSnapshot} itemName={item.productId?.name || 'Sản phẩm áo dài'} />
+              ))}
+            </section>
+          )}
+          {booking.items?.some((item: any) => (item.itemType === 'PRODUCT' || item.productId) && item.rentalFulfillment) && (
+            <section>
+              <h4 style={{ fontSize: '12px', fontWeight: 750, color: '#4A0E17', textTransform: 'uppercase', marginBottom: '8px' }}>Tiến trình giao – nhận áo dài</h4>
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {booking.items.filter((item: any) => (item.itemType === 'PRODUCT' || item.productId) && item.rentalFulfillment).map((item: any) => (
+                  <RentalFulfillmentOperationsPanel
+                    key={item._id}
+                    bookingId={booking._id}
+                    item={item}
+                    viewerRole={viewerRole}
+                    onChanged={() => { void fetchBookingDetails(); onBookingChanged?.(); }}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+          {booking.rentalDepositRefund && booking.items?.some((item: any) => (item.itemType === 'PRODUCT' || item.productId) && item.rentalFulfillment) && (
+            <section style={{ border: '1px solid #BFDBFE', background: '#EFF6FF', borderRadius: '12px', padding: '12px', color: '#1E3A8A' }}>
+              <h4 style={{ margin: '0 0 5px', fontSize: '13px' }}>Hoàn cọc áo dài</h4>
+              <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.45 }}>
+                {booking.rentalDepositRefund.status === 'PENDING' && 'Đang chờ tất toán tất cả áo dài trong booking.'}
+                {booking.rentalDepositRefund.status === 'NO_REFUND' && 'Cọc áo dài đã được khấu trừ toàn bộ theo quyết định Admin.'}
+                {booking.rentalDepositRefund.status === 'REQUESTED' && `Yêu cầu hoàn ${formatCurrency(booking.rentalDepositRefund.amount)} đã được tạo, đang chờ xử lý thanh toán.`}
+                {booking.rentalDepositRefund.status === 'REFUNDED' && `Đã hoàn ${formatCurrency(booking.rentalDepositRefund.amount)} tiền cọc áo dài.`}
+                {booking.rentalDepositRefund.status === 'FAILED' && 'Yêu cầu hoàn cọc gặp lỗi; Admin sẽ xử lý lại.'}
+              </p>
+            </section>
+          )}
+          {viewerRole === 'provider' && booking.schedules?.some((schedule: any) => schedule.locationChangeRequest?.status === 'PENDING') && (
+            <section style={{ border: '1px solid #FCD34D', background: '#FFFBEB', borderRadius: '12px', padding: '14px' }}>
+              <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#92400E' }}>Yêu cầu đổi địa điểm chụp</h4>
+              {booking.schedules.filter((schedule: any) => schedule.locationChangeRequest?.status === 'PENDING').map((schedule: any) => {
+                const request = schedule.locationChangeRequest;
+                const isResolving = resolvingLocationChangeId === schedule._id;
+                return <div key={schedule._id} style={{ padding: '10px 0', borderTop: '1px solid #FDE68A' }}>
+                  <div style={{ fontSize: '12px', marginBottom: '6px' }}><strong>Địa điểm mới:</strong> {request.requestedLocation?.address}</div>
+                  {request.note && <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '8px' }}>Ghi chú: {request.note}</div>}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button type="button" disabled={isResolving} onClick={() => void resolveLocationChange(schedule._id, true)} style={{ border: 'none', borderRadius: '6px', padding: '7px 10px', background: '#166534', color: 'white', fontWeight: 700, cursor: 'pointer' }}>Duyệt</button>
+                    <button type="button" disabled={isResolving} onClick={() => void resolveLocationChange(schedule._id, false)} style={{ border: '1px solid #B91C1C', borderRadius: '6px', padding: '7px 10px', background: 'white', color: '#B91C1C', fontWeight: 700, cursor: 'pointer' }}>Từ chối</button>
+                  </div>
+                </div>;
+              })}
+            </section>
+          )}
           {/* Refund / Dispute Decision Info */}
           {renderRefundOrDisputeInfo()}
 

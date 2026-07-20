@@ -1,6 +1,6 @@
 import { Controller, Get, Patch, Param, UseGuards, ForbiddenException, NotFoundException, Query } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -10,12 +10,15 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { User, UserStatus } from '../users/schemas/user.schema';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema';
+import { BookingItem, BookingItemType } from '../bookings/schemas/booking-item.schema';
 import { Provider, ProviderCapability } from '../providers/schemas/provider.schema';
 import {
   ProviderVerification,
   VerificationStatus,
   VerificationType,
 } from '../providers/schemas/provider-verification.schema';
+import { Product } from '../products/schemas/product.schema';
+import { AnalyticsService } from '../analytics/services/analytics.service';
 
 @Controller('admin/dashboard')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
@@ -25,9 +28,12 @@ export class AdminController {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
+    @InjectModel(BookingItem.name) private readonly bookingItemModel: Model<BookingItem>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
     @InjectModel(ProviderVerification.name)
     private readonly providerVerificationModel: Model<ProviderVerification>,
+    @InjectModel(Product.name) private readonly productModel: Model<Product>,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   private checkAdmin(user: AuthUser) {
@@ -140,6 +146,65 @@ export class AdminController {
       }
     }
 
+    // ===== USER BEHAVIOR =====
+    // 1. Top searches
+    const topSearches = await this.analyticsService.getTopSearches(10);
+
+    // 2. Page views (hardcoded tracking keys mapped from frontend events)
+    const pageViews = {
+      homepage: 0,
+      rentals: 0,
+      productDetails: 0,
+      photographers: 0,
+    };
+
+    // 3. Popular products: top 10 bằng cách join booking_items + products
+    const rentAggregation = await this.bookingItemModel.aggregate([
+      { $match: { itemType: BookingItemType.Product, productId: { $ne: null } } },
+      { $group: { _id: '$productId', rentCount: { $sum: '$quantity' } } },
+      { $sort: { rentCount: -1 } },
+      { $limit: 10 },
+    ]);
+
+    const topProductIds = rentAggregation.map((r) => r._id as Types.ObjectId);
+    const viewCountMap = await this.analyticsService.getViewCountMap(topProductIds);
+
+    // Lấy thêm sản phẩm nếu chưa đủ 10 (để trường hợp chưa có booking nào)
+    const existingIds = new Set(topProductIds.map((id) => id.toString()));
+    const additionalProducts = topProductIds.length < 10
+      ? await this.productModel
+          .find({ _id: { $nin: topProductIds } })
+          .sort({ 'rating.totalReviews': -1 })
+          .limit(10 - topProductIds.length)
+          .lean()
+      : [];
+
+    const topProductDocs = topProductIds.length > 0
+      ? await this.productModel.find({ _id: { $in: topProductIds } }).lean()
+      : [];
+
+    const allPopularProducts = [
+      ...topProductDocs.map((p) => {
+        const agg = rentAggregation.find((r) => r._id.toString() === (p._id as Types.ObjectId).toString());
+        return {
+          _id: (p._id as Types.ObjectId).toString(),
+          name: p.name,
+          basePrice: p.basePrice,
+          viewCount: viewCountMap.get((p._id as Types.ObjectId).toString()) ?? 0,
+          rentCount: agg?.rentCount ?? 0,
+        };
+      }),
+      ...additionalProducts
+        .filter((p) => !existingIds.has((p._id as Types.ObjectId).toString()))
+        .map((p) => ({
+          _id: (p._id as Types.ObjectId).toString(),
+          name: p.name,
+          basePrice: p.basePrice,
+          viewCount: viewCountMap.get((p._id as Types.ObjectId).toString()) ?? 0,
+          rentCount: 0,
+        })),
+    ];
+
     return {
       totalCustomers,
       totalProviders,
@@ -148,6 +213,11 @@ export class AdminController {
       revenueByWeek,
       revenueByMonth,
       revenueByYear,
+      userBehavior: {
+        topSearches,
+        pageViews,
+        popularProducts: allPopularProducts,
+      },
     };
   }
 

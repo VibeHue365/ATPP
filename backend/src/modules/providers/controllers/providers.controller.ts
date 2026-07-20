@@ -17,6 +17,7 @@ import {
   IsEnum,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -52,12 +53,32 @@ export class UpdateProviderProfileDto {
     ward?: string | null;
     district?: string | null;
     city?: string | null;
+    geo?: { type: 'Point'; coordinates: [number, number] } | null;
   };
 
   @IsOptional()
   policies?: {
     cancellationPolicy?: string | null;
     rentalPolicy?: string | null;
+  };
+
+  @IsOptional()
+  @IsObject()
+  rentalSettings?: {
+    useBusinessAddressForPickup?: boolean;
+    pickupLocation?: {
+      addressLine: string;
+      ward?: string | null;
+      district?: string | null;
+      city?: string | null;
+      geo?: { type: 'Point'; coordinates: [number, number] } | null;
+    } | null;
+  };
+
+  @IsOptional()
+  @IsObject()
+  photographySettings?: {
+    serviceRadiusKm?: number | null;
   };
 
   @IsNumber()

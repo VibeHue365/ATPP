@@ -50,6 +50,7 @@ interface ProductFromDb {
   basePrice: number;
   depositAmount: number;
   images: string[];
+  colorImages?: { color: string; images: string[] }[];
   sizes: string[];
   colors: string[];
   materials: string[];
@@ -174,10 +175,13 @@ export const AoDaiListingPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const ITEMS_PER_PAGE = 12;
   const [favorites, setFavorites] = useState<string[]>([]);
+  // Màu khách đang xem trên từng thẻ sản phẩm (chỉ để đổi ảnh tại chỗ, không lọc danh sách)
+  const [cardColors, setCardColors] = useState<Record<string, string>>({});
   const [matchMySize, setMatchMySize] = useState<boolean>(false);
   const [recommendMyGu, setRecommendMyGu] = useState<boolean>(false);
   const [hoveredCardColors, setHoveredCardColors] = useState<Record<string, string>>({});
   const [lastSelectedColor, setLastSelectedColor] = useState<string | null>(null);
+  void hoveredCardColors; void lastSelectedColor;
 
   // Sync favorites with user context
   useEffect(() => {
@@ -484,7 +488,12 @@ export const AoDaiListingPage: React.FC = () => {
       ...prev,
       search: searchVal,
     }));
+    // Ghi nhận từ khóa tìm kiếm (fire-and-forget)
+    if (searchVal.trim().length >= 2) {
+      void httpClient.post('/analytics/search', { keyword: searchVal.trim() }).catch(() => {});
+    }
   };
+
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -1579,6 +1588,14 @@ export const AoDaiListingPage: React.FC = () => {
             >
               {filteredProducts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((p) => {
                 const isFavorite = favorites.includes(p._id);
+                // Màu đang xem trên từng thẻ; chưa chọn thì lấy ảnh mặc định của sản phẩm.
+                const previewColor = cardColors[p._id];
+                const cardImage =
+                  (previewColor &&
+                    p.colorImages?.find(
+                      (entry) => (entry.color || "").toUpperCase() === previewColor.toUpperCase(),
+                    )?.images?.[0]) ||
+                  p.images?.[0];
                 return (
                   <div
                     key={p._id}
@@ -1593,30 +1610,7 @@ export const AoDaiListingPage: React.FC = () => {
                     {/* Image Wrapper */}
                     <div className="vh-card-image-wrapper">
                       <img
-                        src={getImageUrl((() => {
-                          const hoveredColor = hoveredCardColors[p._id];
-                          if (hoveredColor) {
-                            const idx = p.colors.findIndex((c: string) => c.toUpperCase() === hoveredColor.toUpperCase());
-                            if (idx !== -1 && p.images?.[idx]) return p.images[idx];
-                          }
-                          if (lastSelectedColor && filters.colors.includes(lastSelectedColor)) {
-                            const hasLastColor = p.colors.some((c: string) => c.toUpperCase() === lastSelectedColor.toUpperCase());
-                            if (hasLastColor) {
-                              const idx = p.colors.findIndex((c: string) => c.toUpperCase() === lastSelectedColor.toUpperCase());
-                              if (idx !== -1 && p.images?.[idx]) return p.images[idx];
-                            }
-                          }
-                          if (filters.colors && filters.colors.length > 0) {
-                            const activeColorFilter = filters.colors.find((fColor: string) =>
-                              p.colors.some((c: string) => c.toUpperCase() === fColor.toUpperCase())
-                            );
-                            if (activeColorFilter) {
-                              const idx = p.colors.findIndex((c: string) => c.toUpperCase() === activeColorFilter.toUpperCase());
-                              if (idx !== -1 && p.images?.[idx]) return p.images[idx];
-                            }
-                          }
-                          return p.images?.[0];
-                        })())}
+                        src={getImageUrl(cardImage)}
                         alt={p.name}
                         className="vh-card-image"
                       />
@@ -1792,18 +1786,27 @@ export const AoDaiListingPage: React.FC = () => {
                               (ac) => ac.value === c.toUpperCase(),
                             );
                             return (
-                              <span
+                              <button
                                 key={idx}
-                                onMouseEnter={() => setHoveredCardColors(prev => ({ ...prev, [p._id]: c }))}
+                                type="button"
+                                title={foundColor?.name || c}
+                                aria-label={`Xem màu ${foundColor?.name || c}`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setCardColors((prev) => ({ ...prev, [p._id]: c }));
+                                }}
                                 style={{
-                                  width: '10px',
-                                  height: '10px',
-                                  borderRadius: '50%',
-                                  backgroundColor: foundColor?.hex || '#ccc',
-                                  border: hoveredCardColors[p._id] === c ? '1.5px solid var(--color-primary)' : '1px solid rgba(0,0,0,0.15)',
-                                  cursor: 'pointer',
-                                  transform: hoveredCardColors[p._id] === c ? 'scale(1.2)' : 'none',
-                                  transition: 'transform 0.15s ease, border 0.15s ease'
+                                  width: "12px",
+                                  height: "12px",
+                                  padding: 0,
+                                  borderRadius: "50%",
+                                  backgroundColor: foundColor?.hex || "#ccc",
+                                  border:
+                                    (previewColor || "").toUpperCase() === c.toUpperCase()
+                                      ? "2px solid var(--color-primary)"
+                                      : "1px solid rgba(0,0,0,0.15)",
+                                  cursor: "pointer",
                                 }}
                               />
                             );

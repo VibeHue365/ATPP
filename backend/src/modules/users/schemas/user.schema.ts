@@ -84,10 +84,13 @@ export interface UserPreferences {
 
 export interface UserAddress {
   label: string;
+  recipientName?: string | null;
+  phone?: string | null;
   addressLine: string;
   ward?: string | null;
   district?: string | null;
   city?: string | null;
+  note?: string | null;
   isDefault: boolean;
 }
 
@@ -203,10 +206,13 @@ export class User {
     type: [
       {
         label: { type: String, required: true, trim: true },
+        recipientName: { type: String, default: null, trim: true },
+        phone: { type: String, default: null, trim: true },
         addressLine: { type: String, required: true, trim: true },
         ward: { type: String, default: null, trim: true },
         district: { type: String, default: null, trim: true },
         city: { type: String, default: null, trim: true },
+        note: { type: String, default: null, trim: true },
         isDefault: { type: Boolean, default: false },
       },
     ],

@@ -30,11 +30,28 @@ export interface ProviderContact {
   website?: string | null;
 }
 
+export interface GeoPoint {
+  type: 'Point';
+  /** GeoJSON coordinate order: [longitude, latitude]. */
+  coordinates: [number, number];
+}
+
+export interface ProviderRentalSettings {
+  useBusinessAddressForPickup: boolean;
+  pickupLocation?: ProviderAddress | null;
+}
+
+export interface ProviderPhotographySettings {
+  /** Maximum straight-line distance from the provider base location in kilometres. */
+  serviceRadiusKm?: number | null;
+}
+
 export interface ProviderAddress {
   addressLine: string;
   ward?: string | null;
   district?: string | null;
   city?: string | null;
+  geo?: GeoPoint | null;
 }
 
 export interface ProviderMedia {
@@ -99,10 +116,17 @@ export class Provider {
       ward: { type: String, default: null, trim: true },
       district: { type: String, default: null, trim: true },
       city: { type: String, default: null, trim: true },
+      geo: { type: Object, default: null },
     },
     required: true,
   })
   address: ProviderAddress;
+
+  @Prop({ type: Object, default: { useBusinessAddressForPickup: true, pickupLocation: null } })
+  rentalSettings: ProviderRentalSettings;
+
+  @Prop({ type: Object, default: { serviceRadiusKm: null } })
+  photographySettings: ProviderPhotographySettings;
 
   @Prop({
     type: {
@@ -204,3 +228,5 @@ export const ProviderSchema = SchemaFactory.createForClass(Provider);
 ProviderSchema.index({ userId: 1, status: 1 });
 ProviderSchema.index({ capabilities: 1 });
 ProviderSchema.index({ 'address.city': 1 });
+ProviderSchema.index({ 'address.geo': '2dsphere' });
+ProviderSchema.index({ 'rentalSettings.pickupLocation.geo': '2dsphere' });
