@@ -7,6 +7,7 @@ import { Product, ProductDocument } from '../products/schemas/product.schema';
 import { Booking, BookingDocument } from '../bookings/schemas/booking.schema';
 import { Payment, PaymentDocument, PaymentStatus, PaymentPurpose } from '../payments/schemas/payment.schema';
 import { RefreshToken } from '../auth/schemas/refresh-token.schema';
+import { AnalyticsService } from '../analytics/services/analytics.service';
 
 @Injectable()
 export class AdminStatsService {
@@ -17,6 +18,7 @@ export class AdminStatsService {
     @InjectModel(Booking.name) private readonly bookingModel: Model<BookingDocument>,
     @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
     @InjectModel(RefreshToken.name) private readonly refreshTokenModel: Model<RefreshToken>,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   async getAdminStats() {
@@ -78,22 +80,33 @@ export class AdminStatsService {
     // Fallback: top 5 active products if join returns nothing
     const popularProducts = topProductsByBookings.length > 0
       ? topProductsByBookings.map((r: any) => ({
-          _id: r._id,
+          _id: r._id.toString(),
           name: r.product.name,
           basePrice: r.product.basePrice,
           viewCount: 0,
           rentCount: r.count
         }))
       : (await this.productModel.find({ status: 'ACTIVE' } as any).limit(5).select('name basePrice')).map(p => ({
-          _id: p._id,
+          _id: p._id.toString(),
           name: p.name,
           basePrice: p.basePrice,
           viewCount: 0,
           rentCount: 0
         }));
 
+    // Fetch real view counts from AnalyticsService
+    const topProductIds = popularProducts.map(p => new Types.ObjectId(p._id));
+    const viewCountMap = await this.analyticsService.getViewCountMap(topProductIds);
+    const popularProductsWithViews = popularProducts.map(p => ({
+      ...p,
+      viewCount: viewCountMap.get(p._id) ?? 0,
+    }));
+
+    // Fetch real top searches from AnalyticsService
+    const topSearches = await this.analyticsService.getTopSearches(10);
+
     const userBehavior = {
-      topSearches: [],
+      topSearches,
       pageViews: {
         homepage: totalCustomers * 6,
         rentals: totalCustomers * 4,
@@ -101,7 +114,7 @@ export class AdminStatsService {
         productDetails: activeProducts * 5
       },
       popularBookings,
-      popularProducts
+      popularProducts: popularProductsWithViews
     };
 
     // Get 6 months monthly growth data

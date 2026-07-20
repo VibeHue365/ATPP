@@ -8,6 +8,9 @@ import {
   ProviderVerification,
   ProviderVerificationSchema,
 } from '../providers/schemas/provider-verification.schema';
+import { AnalyticsModule } from '../analytics/analytics.module';
+import { Product, ProductSchema } from '../products/schemas/product.schema';
+import { BookingItem, BookingItemSchema } from '../bookings/schemas/booking-item.schema';
 
 @Module({
   imports: [
@@ -16,8 +19,12 @@ import {
       { name: Booking.name, schema: BookingSchema },
       { name: Provider.name, schema: ProviderSchema },
       { name: ProviderVerification.name, schema: ProviderVerificationSchema },
+      { name: Product.name, schema: ProductSchema },
+      { name: BookingItem.name, schema: BookingItemSchema },
     ]),
+    AnalyticsModule,
   ],
   controllers: [AdminController],
 })
 export class AdminModule {}
+

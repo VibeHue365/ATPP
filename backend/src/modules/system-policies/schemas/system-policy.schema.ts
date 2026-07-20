@@ -37,7 +37,6 @@ export class SystemPolicy {
     type: String,
     enum: Object.values(PolicyStatus),
     default: PolicyStatus.Draft,
-    index: true,
   })
   status: PolicyStatus;
 
