@@ -136,7 +136,7 @@ export class BookingsSchedulerService {
           // Notify customer
           try {
             await this.notificationsService.createNotification(
-              locked.customerId.toString(),
+              (locked.customerId?._id || locked.customerId).toString(),
               'Đơn hàng tự động nhận đồ',
               `Đơn hàng ${locked.bookingCode} đã tự động kích hoạt trạng thái Đang thuê do hết thời gian 30 phút xác nhận tại quầy.`,
               NotificationType.Booking,
@@ -236,7 +236,7 @@ export class BookingsSchedulerService {
       const booking = await this.bookingModel.findById(schedule.bookingId);
       if (!booking) return;
 
-      const customerId = booking.customerId.toString();
+      const customerId = (booking.customerId?._id || booking.customerId).toString();
 
       // Check if notification already sent to avoid duplicate
       const alreadySent = await this.notificationModel.findOne({

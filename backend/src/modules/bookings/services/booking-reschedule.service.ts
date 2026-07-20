@@ -205,7 +205,7 @@ export class BookingRescheduleService {
       );
       if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
 
-      if (booking.customerId.toString() !== userId) {
+      if (this.getCustomerIdStr(booking) !== userId) {
         throw new BadRequestException(
           'Bạn không có quyền đổi lịch đơn hàng này',
         );
@@ -526,7 +526,7 @@ export class BookingRescheduleService {
 
       try {
         await this.notificationsService.createNotification(
-          booking.customerId.toString(),
+          this.getCustomerIdStr(booking),
           'Đổi lịch thành công',
           `Đơn hàng ${booking.bookingCode} đã được đổi lịch thành công.`,
           NotificationType.Booking,
@@ -551,5 +551,10 @@ export class BookingRescheduleService {
         await session.endSession();
       }
     }
+  }
+
+  private getCustomerIdStr(booking: any): string {
+    if (!booking?.customerId) return '';
+    return (booking.customerId._id || booking.customerId).toString();
   }
 }

@@ -78,7 +78,8 @@ export class ReviewsService {
     }
 
     // Verify booking belongs to this customer
-    if (booking.customerId.toString() !== customerIdStr) {
+    const bookingCustomerId = (booking.customerId as any)?._id || booking.customerId;
+    if (bookingCustomerId.toString() !== customerIdStr) {
       throw new BadRequestException('Bạn không có quyền đánh giá đơn hàng này.');
     }
 

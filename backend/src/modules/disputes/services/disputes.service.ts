@@ -190,7 +190,7 @@ export class DisputesService {
     if (!booking) {
       throw new NotFoundException('Không tìm thấy đơn đặt lịch');
     }
-    if (booking.customerId.toString() === userId) {
+    if (this.getCustomerIdStr(booking) === userId) {
       return incident;
     }
 
@@ -260,7 +260,7 @@ export class DisputesService {
         console.log('[DEBUG] viewEvidence failed because booking not found:', incident.bookingId);
         throw new NotFoundException('Không tìm thấy đơn đặt lịch');
       }
-      const isCustomer = booking.customerId.toString() === userId;
+      const isCustomer = this.getCustomerIdStr(booking) === userId;
       let isReportingProvider = false;
       if (!isCustomer && roles?.some((role) => role.toUpperCase() === 'PROVIDER') && Types.ObjectId.isValid(userId)) {
         const provider = await this.bookingModel.db
@@ -271,7 +271,7 @@ export class DisputesService {
         );
       }
       console.log('[DEBUG] viewEvidence permission evaluation:', {
-        customerId: booking.customerId.toString(),
+        customerId: this.getCustomerIdStr(booking),
         userId,
         isCustomer,
         isReportingProvider,
@@ -388,7 +388,7 @@ export class DisputesService {
       throw new NotFoundException('Không tìm thấy đơn đặt lịch');
     }
 
-    if (booking.customerId.toString() !== customerUserId) {
+    if (this.getCustomerIdStr(booking) !== customerUserId) {
       throw new ForbiddenException('Bạn không có quyền thực hiện thao tác này');
     }
 
@@ -450,7 +450,7 @@ export class DisputesService {
       // 3. Hoàn trả số tiền cọc giữ đồ còn lại cho Khách hàng
       const remainingRefund = booking.pricingSummary.depositTotal - incident.requestedAmount;
       if (remainingRefund > 0) {
-        refundResult = await this.refundWorkflowService.createFromDispute({ bookingId: booking._id.toString(), requestedBy: booking.customerId.toString(), amount: remainingRefund, reason: 'Refund after customer accepted dispute resolution', type: RefundType.Dispute, sourceEventId: `refund:dispute:${incident._id}:customer-agree` });
+        refundResult = await this.refundWorkflowService.createFromDispute({ bookingId: booking._id.toString(), requestedBy: this.getCustomerIdStr(booking), amount: remainingRefund, reason: 'Refund after customer accepted dispute resolution', type: RefundType.Dispute, sourceEventId: `refund:dispute:${incident._id}:customer-agree` });
       }
 
       incident.status = IncidentStatus.Accepted;
@@ -499,7 +499,7 @@ export class DisputesService {
       throw new NotFoundException('Không tìm thấy đơn đặt lịch');
     }
 
-    if (booking.customerId.toString() !== customerUserId) {
+    if (this.getCustomerIdStr(booking) !== customerUserId) {
       throw new ForbiddenException('Bạn không có quyền thực hiện thao tác này');
     }
 
@@ -644,7 +644,7 @@ export class DisputesService {
       }
 
       if (refundAmount > 0) {
-        refundResult = await this.refundWorkflowService.createFromDispute({ bookingId: booking._id.toString(), requestedBy: booking.customerId.toString(), amount: refundAmount, reason: notes, type: RefundType.Dispute, sourceEventId: `refund:dispute:${incident._id}:admin-resolution` });
+        refundResult = await this.refundWorkflowService.createFromDispute({ bookingId: booking._id.toString(), requestedBy: this.getCustomerIdStr(booking), amount: refundAmount, reason: notes, type: RefundType.Dispute, sourceEventId: `refund:dispute:${incident._id}:admin-resolution` });
       }
 
       // Cập nhật trạng thái sự cố và tranh chấp
@@ -781,5 +781,10 @@ export class DisputesService {
     );
 
     return result;
+  }
+
+  private getCustomerIdStr(booking: any): string {
+    if (!booking?.customerId) return '';
+    return (booking.customerId._id || booking.customerId).toString();
   }
 }

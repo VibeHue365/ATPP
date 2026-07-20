@@ -460,7 +460,7 @@ export class BookingsService implements OnApplicationBootstrap {
     if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
 
     // Only customer who owns the booking can reschedule
-    if (booking.customerId.toString() !== userId) {
+    if (this.getCustomerIdStr(booking) !== userId) {
       throw new BadRequestException('Bạn không có quyền đổi lịch đơn hàng này');
     }
 
@@ -617,7 +617,7 @@ export class BookingsService implements OnApplicationBootstrap {
     // Send notification (best effort)
     try {
       await this.notificationsService.createNotification(
-        booking.customerId.toString(),
+        this.getCustomerIdStr(booking),
         'Đổi lịch thành công',
         `Đơn hàng ${booking.bookingCode} đã được đổi lịch thành công.`,
         NotificationType.Booking,
@@ -1661,7 +1661,7 @@ export class BookingsService implements OnApplicationBootstrap {
 
     if (userId) {
       const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
-      const isCustomer = booking.customerId.toString() === userId;
+      const isCustomer = this.getCustomerIdStr(booking) === userId;
       
       let isProvider = false;
       if (roles?.includes('PROVIDER')) {
@@ -1691,14 +1691,14 @@ export class BookingsService implements OnApplicationBootstrap {
 
     try {
       await this.notificationsService.createNotification(
-        booking.customerId.toString(),
+        this.getCustomerIdStr(booking),
         `Đơn hàng hoàn thành`,
         `Đơn hàng ${booking.bookingCode} của bạn đã được đánh dấu hoàn thành. Cảm ơn bạn!`,
         NotificationType.Booking,
         { bookingId: booking._id },
       );
       await this.notificationsService.createNotification(
-        booking.customerId.toString(),
+        this.getCustomerIdStr(booking),
         `Yêu cầu đánh giá dịch vụ`,
         `Đơn hàng ${booking.bookingCode} đã hoàn thành. Hãy chia sẻ trải nghiệm của bạn bằng cách để lại đánh giá nhé!`,
         NotificationType.System,
@@ -1725,7 +1725,7 @@ export class BookingsService implements OnApplicationBootstrap {
     const booking = await this.bookingModel.findById(bookingIdStr);
     if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
 
-    if (booking.customerId.toString() !== userId) {
+    if (this.getCustomerIdStr(booking) !== userId) {
       throw new ForbiddenException('Bạn không có quyền xác nhận đơn hàng này.');
     }
 
@@ -1852,14 +1852,11 @@ export class BookingsService implements OnApplicationBootstrap {
           $unset: { expiresAt: 1 }
         }
       );
-      try {
-        require('fs').appendFileSync('c:\\VibeHue\\ATPP\\backend\\debug.log', `[DEBUG] Update reservations result: \${JSON.stringify(updateRes)}\\n`);
-      } catch (e) {}
     }
 
     try {
       await this.notificationsService.createNotification(
-        booking.customerId.toString(),
+        this.getCustomerIdStr(booking),
         `Cập nhật trạng thái đơn hàng`,
         `Đơn hàng ${booking.bookingCode} của bạn đã chuyển sang trạng thái: ${newStatus}`,
         NotificationType.Booking,
@@ -1901,7 +1898,7 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     // Check authorization: customer, provider or admin
-    const isCustomer = booking.customerId.toString() === userId;
+    const isCustomer = this.getCustomerIdStr(booking) === userId;
     
     // Tìm các provider ứng với userId này để so sánh Provider ID thật sự
     const userProviders = userId ? await this.providerModel.find({ userId: new Types.ObjectId(userId) }) : [];
@@ -2136,7 +2133,7 @@ export class BookingsService implements OnApplicationBootstrap {
 
     try {
       await this.notificationsService.createNotification(
-        booking.customerId.toString(),
+        this.getCustomerIdStr(booking),
         `Đơn hàng đã hủy`,
         `Đơn hàng ${booking.bookingCode} của bạn đã bị hủy. Lý do: ${reason}`,
         NotificationType.Booking,
@@ -2163,7 +2160,7 @@ export class BookingsService implements OnApplicationBootstrap {
       try {
         await this.refundWorkflowService.createFromCancellation({
           bookingId: booking._id.toString(),
-          requestedBy: booking.customerId.toString(),
+          requestedBy: this.getCustomerIdStr(booking),
           amount: refundAmount,
           reason,
           type: RefundType.Cancellation,
@@ -2460,7 +2457,7 @@ export class BookingsService implements OnApplicationBootstrap {
     if (!booking) {
       throw new NotFoundException('Không tìm thấy đơn đặt lịch');
     }
-    if (booking.customerId.toString() !== customerId) {
+    if (this.getCustomerIdStr(booking) !== customerId) {
       throw new ForbiddenException('Bạn không có quyền xác nhận đơn này');
     }
     if (booking.status !== BookingStatus.PickupPending) {
@@ -2499,7 +2496,7 @@ export class BookingsService implements OnApplicationBootstrap {
     if (!booking) {
       throw new NotFoundException('Không tìm thấy đơn đặt lịch');
     }
-    if (booking.customerId.toString() !== customerId) {
+    if (this.getCustomerIdStr(booking) !== customerId) {
       throw new ForbiddenException('Bạn không có quyền báo cáo lỗi cho đơn này');
     }
     if (booking.status !== BookingStatus.PickupPending) {
@@ -2563,7 +2560,7 @@ export class BookingsService implements OnApplicationBootstrap {
     if (!booking) {
       throw new NotFoundException('Không tìm thấy đơn đặt lịch');
     }
-    if (booking.customerId.toString() !== customerId) {
+    if (this.getCustomerIdStr(booking) !== customerId) {
       throw new ForbiddenException('Bạn không có quyền từ chối đơn này');
     }
     if (booking.status !== BookingStatus.PickupPending) {
@@ -2619,5 +2616,10 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     return { success: true, result };
+  }
+
+  private getCustomerIdStr(booking: any): string {
+    if (!booking?.customerId) return '';
+    return (booking.customerId._id || booking.customerId).toString();
   }
 }

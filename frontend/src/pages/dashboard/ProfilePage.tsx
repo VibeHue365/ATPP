@@ -956,7 +956,8 @@ export const ProfilePage: React.FC = () => {
               {activeDetailBooking.status !== 'CANCELLED' && 
                activeDetailBooking.status !== 'COMPLETED' && 
                activeDetailBooking.status !== 'RETURNED' && 
-               activeDetailBooking.status !== 'PICKED_UP' && (
+               activeDetailBooking.status !== 'PICKED_UP' && 
+               activeDetailBooking.status !== 'DISPUTED' && (
                 <button 
                   className="vh-btn" 
                   style={{ 

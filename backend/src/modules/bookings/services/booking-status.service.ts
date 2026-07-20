@@ -141,7 +141,7 @@ export class BookingStatusService {
       // Authorization check (Customer is allowed to complete their own booking)
       if (userId) {
         const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
-        const isCustomer = booking.customerId.toString() === userId;
+        const isCustomer = this.getCustomerIdStr(booking) === userId;
         const userProviders = await this.providerModel
           .find({ userId: new Types.ObjectId(userId) })
           .session(session);
@@ -197,7 +197,7 @@ export class BookingStatusService {
 
       try {
         await this.notificationsService.createNotification(
-          booking.customerId.toString(),
+          this.getCustomerIdStr(booking),
           `Đơn hàng hoàn thành`,
           `Đơn hàng ${booking.bookingCode} của bạn đã được đánh dấu hoàn thành. Cảm ơn bạn!`,
           NotificationType.Booking,
@@ -272,7 +272,7 @@ export class BookingStatusService {
         roles = [];
       }
 
-      const isCustomer = booking.customerId.toString() === userId;
+      const isCustomer = this.getCustomerIdStr(booking) === userId;
       const userProviders = userId
         ? await this.providerModel
             .find({ userId: new Types.ObjectId(userId) })
@@ -536,7 +536,7 @@ export class BookingStatusService {
 
       try {
         await this.notificationsService.createNotification(
-          booking.customerId.toString(),
+          this.getCustomerIdStr(booking),
           `Đơn hàng đã hủy`,
           `Đơn hàng ${booking.bookingCode} của bạn đã bị hủy. Lý do: ${reason}`,
           NotificationType.Booking,
@@ -762,7 +762,7 @@ export class BookingStatusService {
         booking.awaitingReviewSince = new Date();
         try {
           await this.notificationsService.createNotification(
-            booking.customerId.toString(),
+            this.getCustomerIdStr(booking),
             'Buổi chụp đã hoàn thành – Vui lòng xác nhận',
             `Thợ ảnh đã hoàn thành buổi chụp cho đơn ${booking.bookingCode}. Vui lòng xác nhận trong vòng 48 giờ. Nếu không phản hồi, đơn sẽ tự động hoàn thành.`,
             NotificationType.Booking,
@@ -778,7 +778,7 @@ export class BookingStatusService {
         booking.handoverInitiatedAt = new Date();
         try {
           await this.notificationsService.createNotification(
-            booking.customerId.toString(),
+            this.getCustomerIdStr(booking),
             'Đơn hàng bắt đầu bàn giao',
             `Đơn hàng ${booking.bookingCode} của bạn đang được bàn giao tại quầy. Vui lòng kiểm tra và xác nhận nhận đồ trong vòng 30 phút.`,
             NotificationType.Booking,
@@ -806,7 +806,7 @@ export class BookingStatusService {
 
       try {
         await this.notificationsService.createNotification(
-          booking.customerId.toString(),
+          this.getCustomerIdStr(booking),
           `Cập nhật trạng thái đơn hàng`,
           `Đơn hàng ${booking.bookingCode} của bạn đã chuyển sang trạng thái: ${newStatus}`,
           NotificationType.Booking,
@@ -831,5 +831,10 @@ export class BookingStatusService {
         await session.endSession();
       }
     }
+  }
+
+  private getCustomerIdStr(booking: any): string {
+    if (!booking?.customerId) return '';
+    return (booking.customerId._id || booking.customerId).toString();
   }
 }
