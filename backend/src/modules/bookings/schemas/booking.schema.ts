@@ -18,6 +18,10 @@ export enum BookingStatus {
   PickedUp = 'PICKED_UP',
   ReturnPending = 'RETURN_PENDING',
   Returned = 'RETURNED',
+  /** Photography only: provider has started the shoot session */
+  InProgress = 'IN_PROGRESS',
+  /** Photography only: shoot done, waiting for customer confirmation (48h window) */
+  AwaitingReview = 'AWAITING_REVIEW',
   Completed = 'COMPLETED',
   Cancelled = 'CANCELLED',
   Disputed = 'DISPUTED',
@@ -189,6 +193,21 @@ export class Booking {
 
   @Prop({ type: String, default: null, trim: true })
   settlementGenerationError?: string | null;
+
+  /**
+   * Photography only: timestamp when booking entered AWAITING_REVIEW.
+   * Used by the auto-complete cron job to calculate the 48-hour window.
+   */
+  @Prop({ type: Date, default: null, index: true })
+  awaitingReviewSince?: Date | null;
+
+  /**
+   * Photography only: estimated net amount credited to provider's pendingBalance
+   * when booking enters CONFIRMED. Used at settlement time to deduct the exact
+   * same figure (preventing ghost-balance drift if fees change).
+   */
+  @Prop({ type: Number, default: null })
+  estimatedNetAmount?: number | null;
 }
 
 export const BookingSchema = SchemaFactory.createForClass(Booking);

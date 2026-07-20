@@ -117,23 +117,61 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     });
   };
 
+  const handleConfirmComplete = async (bookingId: string) => {
+    try {
+      toast.info('Đang xử lý xác nhận hoàn thành...');
+      await httpClient.post(`/bookings/${bookingId}/confirm-complete`);
+      toast.success('Đã xác nhận hoàn thành thành công! Tiền dịch vụ đã được giải ngân cho thợ chụp.');
+      onRefresh();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Lỗi khi xác nhận hoàn thành.');
+    }
+  };
+
+  const handleDisputeBooking = async (bookingId: string) => {
+    const reason = window.prompt('Nhập lý do khiếu nại (ví dụ: thợ đến trễ, chất lượng không đúng cam kết...):');
+    if (reason === null) return; // cancelled prompt
+    if (!reason.trim()) {
+      toast.error('Vui lòng nhập lý do khiếu nại.');
+      return;
+    }
+    try {
+      await httpClient.patch(`/bookings/${bookingId}/status`, { status: 'DISPUTED', note: reason });
+      toast.success('Đã gửi khiếu nại thành công. Admin sẽ liên hệ xử lý trong 24h.');
+      onRefresh();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Lỗi khi gửi khiếu nại.');
+    }
+  };
+
   // --- 1. APPOINTMENTS (Lịch hẹn của tôi) ---
   const realAppointments = bookings.filter(b => 
     b.items?.some((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE')
   ).map(b => {
     const photoItem = b.items.find((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE');
     const isPast = ['COMPLETED', 'CANCELLED', 'REFUNDED'].includes(b.status);
+    let statusLabel = 'Sắp tới';
+    if (b.status === 'IN_PROGRESS') statusLabel = 'Đang chụp';
+    else if (b.status === 'AWAITING_REVIEW') statusLabel = 'Chờ bạn duyệt';
+    else if (b.status === 'COMPLETED') statusLabel = 'Hoàn thành';
+    else if (b.status === 'CANCELLED') statusLabel = 'Đã hủy';
+    else if (b.status === 'DISPUTED') statusLabel = 'Tranh chấp';
+
     return {
       id: b._id,
       isReal: true,
       booking: b,
-      statusType: isPast ? 'PAST' : 'UPCOMING',
+      rawStatus: b.status,
+      awaitingReviewSince: b.awaitingReviewSince,
+      statusType: isPast ? 'PAST' : (b.status === 'AWAITING_REVIEW' || b.status === 'IN_PROGRESS') ? 'ACTION' : 'UPCOMING',
       dateStr: photoItem?.shootDate ? formatDate(photoItem.shootDate) : '',
-      title: photoItem?.name || 'Gói Chụp Ảnh Cổ Phong',
-      detailText: photoItem?.photographerName ? `Thợ ảnh: ${photoItem.photographerName}` : 'Showroom Nam Kỳ Khởi Nghĩa, Q.1',
-      detailType: photoItem?.photographerName ? 'USER' : 'LOCATION',
+      title: photoItem?.photographyPackageId?.name || photoItem?.name || 'Gói Chụp Ảnh Cổ Phong',
+      photographerName: photoItem?.providerId?.businessName || photoItem?.providerId?.fullName || photoItem?.photographerName || 'Nhiếp ảnh gia',
+      shootLocation: photoItem?.shootLocation || 'Showroom Nam Kỳ Khởi Nghĩa, Q.1',
       timeStr: photoItem?.shootTimeSlot || '09:00 - 11:00',
-      statusLabel: b.status === 'COMPLETED' ? 'Hoàn thành' : b.status === 'CANCELLED' ? 'Đã hủy' : 'Sắp tới'
+      statusLabel
     };
   });
 
@@ -145,6 +183,19 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     if (b.items) {
       b.items.forEach((item: any) => {
         if (item.itemType === 'PRODUCT') {
+          let providerName = 'Cửa hàng VibeHue';
+          let providerAddress = 'Showroom VibeHue';
+          if (item.productId && realProductList.length > 0) {
+            const prod = realProductList.find((p: any) => p._id === item.productId.toString() || p._id === item.productId);
+            if (prod && prod.providerId) {
+              providerName = prod.providerId.businessName || prod.providerId.fullName || providerName;
+              if (prod.providerId.address) {
+                const addr = prod.providerId.address;
+                providerAddress = `${addr.addressLine || ''}, ${addr.district || ''}, ${addr.city || ''}`.replace(/^,\s*/, '');
+              }
+            }
+          }
+
           rentalItems.push({
             id: item._id,
             bookingId: b._id,
@@ -159,9 +210,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             endDate: item.endDate || item.rentalTo,
             startTime: item.startTime,
             endTime: item.endTime,
+            shootTimeSlot: item.shootTimeSlot,
             unitPrice: item.unitPrice,
             quantity: item.quantity || 1,
             depositAmount: item.depositAmount || 0,
+            providerName,
+            providerAddress,
             booking: b
           });
         }
@@ -415,7 +469,17 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   className={`vh-profile-appointment-card ${app.statusType === 'UPCOMING' ? 'vh-appointment-upcoming' : 'vh-appointment-past'}`}
                 >
                   <div className="vh-appointment-card-header">
-                    {app.statusType === 'UPCOMING' ? (
+                    {app.rawStatus === 'AWAITING_REVIEW' ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#0284C7', color: 'white' }}>
+                        <Clock size={13} style={{ marginRight: '6px' }} />
+                        CHỜ XÁC NHẬN • {app.dateStr}
+                      </span>
+                    ) : app.rawStatus === 'IN_PROGRESS' ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#059669', color: 'white' }}>
+                        <Clock size={13} style={{ marginRight: '6px' }} />
+                        ĐANG CHỤP • {app.dateStr}
+                      </span>
+                    ) : app.statusType === 'UPCOMING' ? (
                       <span className="vh-appointment-status-label-upcoming">
                         <Calendar size={13} style={{ marginRight: '6px' }} />
                         SẮP TỚI • {app.dateStr}
@@ -423,29 +487,62 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     ) : (
                       <span className="vh-appointment-status-label-past">
                         <History size={13} style={{ marginRight: '6px' }} />
-                        ĐÃ QUA • {app.dateStr}
+                        {app.statusLabel.toUpperCase()} • {app.dateStr}
                       </span>
                     )}
                   </div>
                   
                   <div>
                     <h4 className="vh-appointment-card-title font-header">{app.title}</h4>
-                    <div className="vh-appointment-card-detail-item">
-                      {app.detailType === 'LOCATION' ? (
-                        <MapPin size={14} className="vh-appointment-icon-muted" />
-                      ) : (
-                        <User size={14} className="vh-appointment-icon-muted" />
-                      )}
-                      <span>{app.detailText}</span>
+                    <div className="vh-appointment-card-detail-item" style={{ marginBottom: '6px' }}>
+                      <User size={13} className="vh-appointment-icon-muted" style={{ marginRight: '6px' }} />
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Thợ ảnh: <strong>{app.photographerName}</strong></span>
                     </div>
+                    <div className="vh-appointment-card-detail-item">
+                      <MapPin size={13} className="vh-appointment-icon-muted" style={{ marginRight: '6px', marginTop: '2px', flexShrink: 0 }} />
+                      <span 
+                        style={{ 
+                          fontSize: '13px', 
+                          color: 'var(--color-text-secondary)',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          lineHeight: 1.4,
+                          textAlign: 'left'
+                        }} 
+                        title={app.shootLocation}
+                      >
+                        {app.shootLocation}
+                      </span>
+                    </div>
+
+                    {app.rawStatus === 'AWAITING_REVIEW' && (
+                      <div style={{ marginTop: '14px', padding: '12px', backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: '8px' }}>
+                        <p style={{ fontSize: '12px', color: '#0369A1', fontWeight: 600, margin: '0 0 10px 0', lineHeight: 1.4 }}>
+                          📷 Thợ ảnh đã báo hoàn thành buổi chụp. Vui lòng kiểm tra & xác nhận trong 48h (hệ thống sẽ tự động xác nhận sau 48h).
+                        </p>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={() => handleConfirmComplete(app.id)}
+                            style={{ flex: 1, backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                          >
+                            ✓ Xác nhận hài lòng
+                          </button>
+                          <button
+                            onClick={() => handleDisputeBooking(app.id)}
+                            style={{ backgroundColor: 'white', color: '#DC2626', border: '1px solid #FCA5A5', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            Khiếu nại
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="vh-appointment-card-footer">
-                    {app.statusType === 'UPCOMING' ? (
-                      <span className="vh-appointment-time-badge">{app.timeStr}</span>
-                    ) : (
-                      <span className="vh-appointment-status-success">{app.timeStr}</span>
-                    )}
+                    <span className="vh-appointment-time-badge">{app.timeStr}</span>
                     
                     {app.isReal ? (
                       <button 
@@ -482,9 +579,9 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
         {/* PANEL 2: RENTALS */}
         {activeTab === 'rentals' && (
-          <div className="vh-profile-rentals-grid-layout">
+          <div className="vh-profile-appointments-grid">
             {displayRentals.length === 0 ? (
-              <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', width: '100%' }}>
+              <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8' }}>
                 <History size={32} style={{ color: '#8C827A', margin: '0 auto 12px' }} />
                 <h5 className="font-header" style={{ fontSize: '16px', color: '#2D2926', marginBottom: '4px' }}>Chưa có trang phục nào được thuê</h5>
                 <p style={{ fontSize: '13px', color: '#8C827A' }}>Hãy khám phá các bộ sưu tập áo dài của chúng tôi để bắt đầu thuê.</p>
@@ -494,64 +591,171 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 const isReturned = item.status === 'RETURNED' || item.status === 'COMPLETED';
                 const isIncidentPending = item.status === 'RETURN_PENDING';
                 const isDisputed = item.status === 'DISPUTED';
+                
+                const timeSlotStr = item.shootTimeSlot || (item.startTime && item.endTime ? `${item.startTime} - ${item.endTime}` : '');
                 const rentalDateFormatted = item.rentalType === 'DAILY'
                   ? `${formatDate(item.startDate)} - ${formatDate(item.endDate)}`
-                  : `Ngày ${formatDate(item.startDate)} (${item.startTime} - ${item.endTime})`;
+                  : `Ngày ${formatDate(item.startDate)}${timeSlotStr ? ' (' + timeSlotStr + ')' : ''}`;
+
+                const getRentalStatus = () => {
+                  if (item.status === 'PENDING_PAYMENT') {
+                    return { 
+                      label: 'CHỜ THANH TOÁN', 
+                      color: '#E67E22', 
+                      bgColor: '#FFF5EC', 
+                      borderColor: '#FFE0C2',
+                      icon: History
+                    };
+                  }
+                  if (item.status === 'CANCELLED') {
+                    return { 
+                      label: 'ĐÃ HỦY', 
+                      color: '#7F8C8D', 
+                      bgColor: '#F8F9F9', 
+                      borderColor: '#EAEDED',
+                      icon: History
+                    };
+                  }
+                  if (isReturned) {
+                    return { 
+                      label: 'ĐÃ TRẢ ĐỒ', 
+                      color: '#27AE60', 
+                      bgColor: '#EDF9F2', 
+                      borderColor: '#C2F0D7',
+                      icon: History
+                    };
+                  }
+                  if (isIncidentPending) {
+                    return { 
+                      label: 'YÊU CẦU ĐỀN BÙ', 
+                      color: '#D97706', 
+                      bgColor: '#FEF3C7', 
+                      borderColor: '#FDE68A',
+                      icon: AlertTriangle
+                    };
+                  }
+                  if (isDisputed) {
+                    return { 
+                      label: 'ĐANG TRANH CHẤP', 
+                      color: '#B91C1C', 
+                      bgColor: '#FEE2E2', 
+                      borderColor: '#FCA5A5',
+                      icon: AlertTriangle
+                    };
+                  }
+                  
+                  // For CONFIRMED, DEPOSIT_PAID, PICKED_UP
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  
+                  const start = item.startDate ? new Date(item.startDate) : null;
+                  if (start) start.setHours(0, 0, 0, 0);
+                  
+                  const end = item.endDate ? new Date(item.endDate) : null;
+                  if (end) end.setHours(23, 59, 59, 999);
+                  
+                  if (start && today < start) {
+                    return { 
+                      label: 'SẮP THUÊ', 
+                      color: '#2980B9', 
+                      bgColor: '#EBF5FB', 
+                      borderColor: '#AED6F1',
+                      icon: Calendar
+                    };
+                  }
+                  if (end && today > end) {
+                    return { 
+                      label: 'CHỜ TRẢ ĐỒ', 
+                      color: '#E74C3C', 
+                      bgColor: '#FDEDEC', 
+                      borderColor: '#FADBD8',
+                      icon: Calendar
+                    };
+                  }
+                  
+                  return { 
+                    label: 'ĐANG THUÊ', 
+                    color: '#27AE60', 
+                    bgColor: '#EDF9F2', 
+                    borderColor: '#C2F0D7',
+                    icon: Calendar
+                  };
+                };
+                
+                const statusInfo = getRentalStatus();
+                const StatusIcon = statusInfo.icon;
 
                 return (
-                  <div key={item.id} className="vh-profile-rental-product-card">
-                    <div className="vh-profile-rental-img-wrapper" style={{ height: '280px' }}>
-                      <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
+                  <div
+                    key={item.id}
+                    className={`vh-profile-appointment-card ${isReturned || item.status === 'CANCELLED' ? 'vh-appointment-past' : 'vh-appointment-upcoming'}`}
+                  >
+                    <div className="vh-appointment-card-header">
                       <span 
-                        className={`vh-profile-rental-status-badge ${isReturned ? 'status-returned' : 'status-renting'}`}
-                        style={{
-                          backgroundColor: isIncidentPending ? '#FEF3C7' : isDisputed ? '#FEE2E2' : undefined,
-                          color: isIncidentPending ? '#D97706' : isDisputed ? '#B91C1C' : undefined,
-                          border: isIncidentPending ? '1px solid #FDE68A' : isDisputed ? '1px solid #FCA5A5' : undefined
+                        className="vh-appointment-status-label-upcoming" 
+                        style={{ 
+                          color: statusInfo.color, 
+                          backgroundColor: statusInfo.bgColor, 
+                          border: `1px solid ${statusInfo.borderColor}`
                         }}
                       >
-                        {isReturned ? 'ĐÃ TRẢ ĐỒ' : isIncidentPending ? 'YÊU CẦU ĐỀN BÙ' : isDisputed ? 'ĐANG TRANH CHẤP' : 'ĐANG THUÊ'}
+                        <StatusIcon size={13} style={{ marginRight: '6px' }} />
+                        {statusInfo.label} • {rentalDateFormatted}
                       </span>
                     </div>
-                    <div className="vh-profile-rental-details">
-                      <div>
-                        <div className="vh-profile-rental-name-row">
-                          <h4 className="vh-profile-rental-name font-header">{item.name}</h4>
-                        </div>
-                        <span className="vh-profile-rental-material" style={{ marginTop: '8px', display: 'block' }}>
-                          Kích cỡ: <strong>{item.size}</strong> • Màu: <strong>{item.color}</strong>
-                        </span>
-                        <span className="vh-profile-rental-date" style={{ marginTop: '8px', display: 'block' }}>
-                          Thời hạn: <strong>{rentalDateFormatted}</strong>
+                    
+                    <div>
+                      <h4 className="vh-appointment-card-title font-header">{item.name}</h4>
+                      <div className="vh-appointment-card-detail-item" style={{ marginBottom: '6px' }}>
+                        <User size={13} className="vh-appointment-icon-muted" style={{ marginRight: '6px' }} />
+                        <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Kích cỡ: <strong>{item.size}</strong> • Màu: <strong>{item.color}</strong></span>
+                      </div>
+                      <div className="vh-appointment-card-detail-item">
+                        <MapPin size={13} className="vh-appointment-icon-muted" style={{ marginRight: '6px', marginTop: '2px', flexShrink: 0 }} />
+                        <span 
+                          style={{ 
+                            fontSize: '13px', 
+                            color: 'var(--color-text-secondary)',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            lineHeight: 1.4,
+                            textAlign: 'left'
+                          }} 
+                          title={item.providerAddress}
+                        >
+                          Cửa hàng: <strong>{item.providerName}</strong> ({item.providerAddress})
                         </span>
                       </div>
-
-                      <div className="vh-profile-rental-price-row">
-                        <div className="vh-profile-rental-price-sub">
-                          <span>TỔNG CHI PHÍ</span>
-                          <strong>{item.unitPrice?.toLocaleString('vi-VN')}đ</strong>
-                        </div>
-                        {item.booking ? (
-                          <button 
-                            className="vh-appointment-action-link"
-                            style={{ 
-                              background: 'none', 
-                              border: 'none', 
-                              padding: 0, 
-                              cursor: 'pointer',
-                              color: (isIncidentPending || isDisputed) ? '#C0392B' : undefined,
-                              fontWeight: (isIncidentPending || isDisputed) ? 700 : undefined
-                            }}
-                            onClick={() => onViewDetails(item.booking)}
-                          >
-                            {isIncidentPending ? 'Phản hồi đền bù' : isDisputed ? 'Chi tiết tranh chấp' : 'Hóa đơn'}
-                          </button>
-                        ) : (
-                          <span className="vh-appointment-action-link" style={{ cursor: 'pointer' }}>
-                            Hóa đơn
-                          </span>
-                        )}
-                      </div>
+                    </div>
+                    
+                    <div className="vh-appointment-card-footer">
+                      <span className={isReturned ? 'vh-appointment-status-success' : 'vh-appointment-time-badge'}>
+                        {item.unitPrice?.toLocaleString('vi-VN')}đ
+                      </span>
+                      
+                      {item.booking ? (
+                        <button 
+                          className="vh-appointment-action-link"
+                          style={{ 
+                            background: 'none', 
+                            border: 'none', 
+                            padding: 0, 
+                            cursor: 'pointer',
+                            color: (isIncidentPending || isDisputed) ? '#C0392B' : undefined,
+                            fontWeight: (isIncidentPending || isDisputed) ? 700 : undefined
+                          }}
+                          onClick={() => onViewDetails(item.booking)}
+                        >
+                          {isIncidentPending ? 'Phản hồi đền bù' : isDisputed ? 'Chi tiết tranh chấp' : 'Hóa đơn'}
+                        </button>
+                      ) : (
+                        <span className="vh-appointment-action-link" style={{ cursor: 'pointer' }}>
+                          Hóa đơn
+                        </span>
+                      )}
                     </div>
                   </div>
                 );

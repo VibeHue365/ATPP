@@ -257,7 +257,7 @@ export class PhotographyHoldService {
       );
     }
 
-    const photoDeposit = Math.round(quote.totalAmount * 0.3);
+    const photoDeposit = quote.totalAmount; // 100% thanh toán trước cho thợ chụp
     const photoDiscount = Math.round(quote.totalAmount * 0.1);
     const productRentalTotal = aodaiReservations.reduce(
       (sum, item) => sum + item.unitPrice * item.quantity,
@@ -925,7 +925,7 @@ export class PhotographyHoldService {
       quote.totalAmount,
       session,
     );
-    const depositTotal = Math.round(quote.totalAmount * 0.3);
+    const depositTotal = quote.totalAmount; // 100% thanh toán trước cho thợ chụp
     const booking = new this.bookingModel({
       bookingCode: this.createBookingCode(),
       customerId,
@@ -1179,7 +1179,7 @@ export class PhotographyHoldService {
         targetType: PriceTargetType.PhotographyPackage,
         targetId: photographyPackage._id,
         price,
-        depositAmount: Math.round(price * 0.3),
+        depositAmount: price, // 100% thanh toán trước cho thợ chụp
         effectiveFrom: new Date(),
         note: 'Tự động tạo khi giữ lịch gói chụp',
       });

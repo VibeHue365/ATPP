@@ -218,6 +218,11 @@ export class ProductsRepository {
         },
       },
     );
+    // Tự động chuyển tất cả sản phẩm đang ở bản nháp DỰ THẢO (DRAFT) sang ĐANG BÁN (ACTIVE)
+    await this.productModel.updateMany(
+      { status: ProductStatus.Draft },
+      { $set: { status: ProductStatus.Active } },
+    );
   }
 
   async moderate(

@@ -49,17 +49,17 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setIsConnected(true);
         });
 
-        socketInstance.on('disconnect', (reason) => {
+        socketInstance.on('disconnect', (reason: string) => {
           console.log('[Socket] Disconnected from server. Reason:', reason);
           setIsConnected(false);
         });
 
-        socketInstance.on('connect_error', (error) => {
+        socketInstance.on('connect_error', (error: any) => {
           console.error('[Socket] Connection error:', error.message);
           setIsConnected(false);
         });
 
-        socketInstance.on('authenticated', (data) => {
+        socketInstance.on('authenticated', (data: any) => {
           console.log('[Socket] Handshake authenticated successfully. Payload:', data);
         });
 

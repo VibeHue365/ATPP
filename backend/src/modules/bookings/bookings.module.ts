@@ -34,6 +34,10 @@ import { SettlementsModule } from '../settlements/settlements.module';
 import { SystemPoliciesModule } from '../system-policies/system-policies.module';
 import { StorageModule } from '../storage/storage.module';
 
+import { BookingStatusService } from './services/booking-status.service';
+import { BookingCreationService } from './services/booking-creation.service';
+import { BookingsRepository } from './repositories/bookings.repository';
+
 export const bookingModels = MongooseModule.forFeature([
   { name: Cart.name, schema: CartSchema },
   { name: Booking.name, schema: BookingSchema },
@@ -57,7 +61,10 @@ export const bookingModels = MongooseModule.forFeature([
   ],
   controllers: [BookingsController, PhotographyHoldsController],
   providers: [
+    BookingsRepository,
     BookingsService,
+    BookingStatusService,
+    BookingCreationService,
     BookingsSchedulerService,
     PhotographyQuoteService,
     PhotographyHoldService,
@@ -65,6 +72,7 @@ export const bookingModels = MongooseModule.forFeature([
   exports: [
     bookingModels,
     BookingsService,
+    BookingStatusService,
     PhotographyQuoteService,
     PhotographyHoldService,
   ],

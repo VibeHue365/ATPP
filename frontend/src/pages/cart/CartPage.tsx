@@ -52,21 +52,7 @@ const CustomCheckbox: React.FC<{ checked: boolean; onChange: () => void }> = ({ 
   );
 };
 
-const normalizeCity = (city?: string | null) => {
-  if (!city) return '';
-  return city.toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/^(thanh pho|tp\.?|tinh)\s+/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-};
 
-const isSameCity = (city1?: string | null, city2?: string | null) => {
-  const c1 = normalizeCity(city1 || 'Thừa Thiên Huế');
-  const c2 = normalizeCity(city2 || 'Thừa Thiên Huế');
-  return c1.includes(c2) || c2.includes(c1);
-};
 
 const isMongoObjectId = (id?: string | null) => /^[a-f\d]{24}$/i.test(id || '');
 
@@ -99,6 +85,45 @@ export const CartPage: React.FC = () => {
   const { cart, removeFromCart, updateCartItemDate, updateCartItemTimeSlot, updateCartItemQuantity, updateCartItemSize, updateCartItemColor, updateCartItemDates } = useCart();
   const toast = useToast();
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [itemStocks, setItemStocks] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const fetchStocks = async () => {
+      const productItems = cart.filter(item => item.itemType === 'PRODUCT' && item.productId);
+      const stockMap: Record<string, number> = {};
+      
+      await Promise.all(
+        productItems.map(async (item) => {
+          try {
+            const res = await httpClient.get<{ stock: number }>(
+              `/bookings/stock/product/${item.productId}?size=${encodeURIComponent(item.size || '')}&color=${encodeURIComponent(item.color || '')}`
+            );
+            stockMap[item.id] = res.stock || 0;
+          } catch (e) {
+            console.error('Error fetching stock for item:', item.id, e);
+            stockMap[item.id] = 999;
+          }
+        })
+      );
+      
+      setItemStocks(prev => ({ ...prev, ...stockMap }));
+    };
+    
+    if (cart.length > 0) {
+      fetchStocks();
+    }
+  }, [cart]);
+
+  useEffect(() => {
+    cart.forEach(item => {
+      if (item.itemType === 'PRODUCT' && item.productId) {
+        const maxStock = itemStocks[item.id];
+        if (maxStock !== undefined && maxStock > 0 && item.quantity > maxStock) {
+          updateCartItemQuantity(item.id, maxStock);
+        }
+      }
+    });
+  }, [itemStocks, cart]);
   const [isCheckoutSuccess, setIsCheckoutSuccess] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'MOMO' | 'BANK'>('BANK');
@@ -412,13 +437,16 @@ export const CartPage: React.FC = () => {
           hours = Math.max((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60), 2);
         }
         
-        const hourlyRate = dbProduct.hourlyPrice || Math.round(dbProduct.basePrice * 0.3) || 80000;
-        const basePrice = item.rentalType === 'HOURLY' ? hourlyRate * hours : dbProduct.basePrice * days;
+        const discountedBasePrice = dbProduct.discountedPrice || dbProduct.basePrice;
+        const hourlyRate = dbProduct.hourlyPrice || Math.round(discountedBasePrice * 0.3) || 80000;
+        const basePrice = item.rentalType === 'HOURLY' ? hourlyRate * hours : discountedBasePrice * days;
+        const originalBasePrice = item.rentalType === 'HOURLY' ? (dbProduct.hourlyPrice || Math.round(dbProduct.basePrice * 0.3) || 80000) * hours : dbProduct.basePrice * days;
 
         return {
           ...item,
           depositAmount: dbProduct.depositAmount,
           basePrice,
+          originalPrice: originalBasePrice,
           providerCity: dbProduct.providerId?.address?.city || item.providerCity,
           providerAddress: dbProduct.providerId?.address?.addressLine || item.providerAddress,
         };
@@ -427,141 +455,18 @@ export const CartPage: React.FC = () => {
     return item;
   });
 
-  // Grouping logic for items (Combo 1, Combo 2, Others)
-  const checkedItems = enrichedCart.filter(item => selectedItemIds.includes(item.id));
-  const uncheckedItems = enrichedCart.filter(item => !selectedItemIds.includes(item.id));
+  const checkedGroups: any[] = [];
 
-  // Helper to find combos in a list of items
-  const findCombos = (itemsList: CartItem[], startIndex: number) => {
-    const listGroups: any[] = [];
-    const photographersList = itemsList.filter(item => item.itemType === 'PHOTOGRAPHY_PACKAGE');
-    const productsList = itemsList.filter(item => item.itemType === 'PRODUCT' && (item.rentalFrom || item.startDate));
-    const groupedIdsInList = new Set<string>();
 
-    let idx = startIndex;
-
-    // A. Match success combos (overlapping dates AND overlapping time slots if hourly, AND matching city location)
-    photographersList.forEach(photo => {
-      if (groupedIdsInList.has(photo.id)) return;
-
-      const matchingProduct = productsList.find(prod => {
-        if (groupedIdsInList.has(prod.id)) return false;
-        
-        // City match check is mandatory for a successful combo
-        const isCityMatch = isSameCity(prod.providerCity, photo.photographerCity);
-        if (!isCityMatch) return false;
-        
-        const rentalFrom = prod.rentalFrom || prod.startDate;
-        const rentalTo = prod.rentalTo || prod.endDate;
-        const shootDate = photo.shootDate;
-        if (!rentalFrom || !rentalTo || !shootDate) return false;
-        
-        const start = new Date(rentalFrom);
-        const end = new Date(rentalTo);
-        const shoot = new Date(shootDate);
-        
-        // Date overlap check
-        const isDateOverlap = shoot >= start && shoot <= end;
-        if (!isDateOverlap) return false;
-
-        // Time slot overlap check (only if hourly rental)
-        if (prod.startTime && prod.endTime && photo.shootTimeSlot) {
-          const parts = photo.shootTimeSlot.split('-');
-          const photoStart = parts[0]?.trim();
-          const photoEnd = parts[1]?.trim();
-          if (photoStart && photoEnd) {
-            // Check if photo is within prod rental period
-            const isTimeOverlap = photoStart >= prod.startTime && photoEnd <= prod.endTime;
-            return isTimeOverlap;
-          }
-        }
-        
-        return true;
-      });
-
-      if (matchingProduct) {
-        listGroups.push({
-          id: `combo_${idx++}`,
-          title: `NHÓM COMBO ${idx - 1} - ĐỒNG BỘ THÀNH CÔNG`,
-          type: 'SUCCESS',
-          items: [matchingProduct, photo],
-          syncDate: matchingProduct.rentalFrom || matchingProduct.startDate
-        });
-        groupedIdsInList.add(photo.id);
-        groupedIdsInList.add(matchingProduct.id);
-      }
-    });
-
-    // B. Match mismatched combos
-    photographersList.forEach(photo => {
-      if (groupedIdsInList.has(photo.id)) return;
-
-      const matchingProduct = productsList.find(prod => !groupedIdsInList.has(prod.id));
-
-      if (matchingProduct) {
-        const rentalFrom = matchingProduct.rentalFrom || matchingProduct.startDate;
-        const shootDate = photo.shootDate;
-        const prodDateFormatted = getDayMonth(rentalFrom);
-        const photoDateFormatted = getDayMonth(shootDate);
-        const prodCity = matchingProduct.providerCity || 'Thừa Thiên Huế';
-        const photoCity = photo.photographerCity || 'Thừa Thiên Huế';
-        const isCityMatch = isSameCity(prodCity, photoCity);
-        
-        let warning = '';
-        let isCityMismatch = false;
-        
-        if (!isCityMatch) {
-          warning = `Không thể đi chung Combo: Áo dài nhận tại ${prodCity} nhưng Thợ ảnh hoạt động ở ${photoCity}.`;
-          isCityMismatch = true;
-        } else if (rentalFrom !== shootDate) {
-          warning = `Ngày thuê Áo dài (${prodDateFormatted}) và Ngày chụp (${photoDateFormatted}) đang không trùng khớp.`;
-        } else if (matchingProduct.startTime && matchingProduct.endTime && photo.shootTimeSlot) {
-          const parts = photo.shootTimeSlot.split('-');
-          const photoStart = parts[0]?.trim();
-          const photoEnd = parts[1]?.trim();
-          warning = `Khung giờ thuê Áo dài (${matchingProduct.startTime} - ${matchingProduct.endTime}) và Giờ chụp (${photoStart} - ${photoEnd}) đang không trùng khớp.`;
-        } else {
-          warning = `Khung giờ thuê Áo dài và Lịch chụp ảnh đang không trùng khớp.`;
-        }
-
-        listGroups.push({
-          id: `combo_${idx++}`,
-          title: isCityMismatch ? `NHÓM COMBO ${idx - 1} - LỆCH KHU VỰC ĐỊA LÝ` : `NHÓM COMBO ${idx - 1} - LỆCH LỊCH TRÌNH`,
-          type: 'MISMATCH',
-          items: [matchingProduct, photo],
-          warning,
-          isCityMismatch
-        });
-        groupedIdsInList.add(photo.id);
-        groupedIdsInList.add(matchingProduct.id);
-      }
-    });
-
-    // C. Standalone items
-    const remaining = itemsList.filter(item => !groupedIdsInList.has(item.id));
-
-    return { listGroups, remaining, nextIndex: idx };
-  };
-
-  // Run pairing for checked items
-  const { listGroups: checkedGroups, remaining: checkedRemaining, nextIndex: afterCheckedIdx } = findCombos(checkedItems, 1);
-
-  // Run pairing for unchecked items
-  const { listGroups: uncheckedGroups, remaining: uncheckedRemaining } = findCombos(uncheckedItems, afterCheckedIdx);
-
-  // Combine groups
-  const groups = [...checkedGroups, ...uncheckedGroups];
-
-  // Standalone/Others
-  const allRemaining = [...checkedRemaining, ...uncheckedRemaining];
-  if (allRemaining.length > 0) {
-    groups.push({
-      id: 'others',
-      title: 'SẢN PHẨM KHÁC',
+  // Combine groups: flat list of all items in the cart, no combos
+  const groups: any[] = enrichedCart.length > 0 ? [
+    {
+      id: 'all-items',
+      title: 'DANH SÁCH SẢN PHẨM',
       type: 'OTHERS',
-      items: allRemaining
-    });
-  }
+      items: enrichedCart
+    }
+  ] : [];
 
   // Checkbox functions
   const isAllSelected = enrichedCart.length > 0 && selectedItemIds.length === enrichedCart.length;
@@ -641,8 +546,8 @@ export const CartPage: React.FC = () => {
       return sum + prodDiscount + photoDiscount;
     }, 0);
 
-  const totalPhotographerDeposit = Math.round(totalPhotographerFee * 0.3);
-  const totalPhotographerRemaining = totalPhotographerFee - totalPhotographerDeposit;
+  const totalPhotographerDeposit = totalPhotographerFee; // 100% thanh toán trước cho thợ chụp
+  const totalPhotographerRemaining = 0;
 
   const grandTotal = Math.max(totalProductRental + totalPhotographerFee + totalOthersFee - comboDiscountTotal, 0);
   const depositToPayNow = Math.max(totalProductRental + totalPhotographerDeposit + totalOthersFee + serviceFee + totalProductDeposit - comboDiscountTotal, 0);
@@ -651,11 +556,7 @@ export const CartPage: React.FC = () => {
   const handleCheckout = async () => {
     if (selectedItems.length === 0) return;
     
-    const hasCityMismatch = checkedGroups.some(group => group.isCityMismatch);
-    if (hasCityMismatch) {
-      toast.error('Không thể tiến hành thanh toán do có sự lệch khu vực địa lý giữa Áo dài và Thợ ảnh trong giỏ hàng. Vui lòng kiểm tra lại!');
-      return;
-    }
+
     
     const invalidProduct = selectedItems.find((item) =>
       item.itemType === 'PRODUCT' && (
@@ -763,7 +664,7 @@ export const CartPage: React.FC = () => {
 
       const paymentRes: any = await httpClient.post('/payments/create-link', {
         bookingId: bookingRes._id,
-        purpose: bookingType === 'AODAI_RENTAL' ? 'FULL_PAYMENT' : 'DEPOSIT_PAYMENT',
+        purpose: (bookingType === 'AODAI_RENTAL' || bookingType === 'PHOTOGRAPHY') ? 'FULL_PAYMENT' : 'DEPOSIT_PAYMENT',
       });
 
       if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
@@ -1116,7 +1017,21 @@ export const CartPage: React.FC = () => {
                                                 {sizes.map(sz => (
                                                   <button
                                                     key={sz}
-                                                    onClick={() => updateCartItemSize(item.id, sz)}
+                                                    onClick={async () => {
+                                                      updateCartItemSize(item.id, sz);
+                                                      try {
+                                                        const res = await httpClient.get<{ stock: number }>(
+                                                          `/bookings/stock/product/${item.productId}?size=${encodeURIComponent(sz)}&color=${encodeURIComponent(item.color || '')}`
+                                                        );
+                                                        const newStock = res.stock || 0;
+                                                        setItemStocks(prev => ({ ...prev, [item.id]: newStock }));
+                                                        if (item.quantity > newStock && newStock > 0) {
+                                                          updateCartItemQuantity(item.id, newStock);
+                                                        }
+                                                      } catch (e) {
+                                                        console.error('Lỗi tải tồn kho:', e);
+                                                      }
+                                                    }}
                                                     style={{
                                                       padding: '5px 12px',
                                                       borderRadius: '4px',
@@ -1142,7 +1057,21 @@ export const CartPage: React.FC = () => {
                                                   {colors.map(cl => (
                                                     <button
                                                       key={cl}
-                                                      onClick={() => updateCartItemColor(item.id, cl)}
+                                                      onClick={async () => {
+                                                        updateCartItemColor(item.id, cl);
+                                                        try {
+                                                          const res = await httpClient.get<{ stock: number }>(
+                                                            `/bookings/stock/product/${item.productId}?size=${encodeURIComponent(item.size || '')}&color=${encodeURIComponent(cl)}`
+                                                          );
+                                                          const newStock = res.stock || 0;
+                                                          setItemStocks(prev => ({ ...prev, [item.id]: newStock }));
+                                                          if (item.quantity > newStock && newStock > 0) {
+                                                            updateCartItemQuantity(item.id, newStock);
+                                                          }
+                                                        } catch (e) {
+                                                          console.error('Lỗi tải tồn kho:', e);
+                                                        }
+                                                      }}
                                                       style={{
                                                         padding: '5px 12px',
                                                         borderRadius: '4px',
@@ -1385,6 +1314,11 @@ export const CartPage: React.FC = () => {
                                           <span>Kích cỡ: <strong>{item.size}</strong> {item.color && <> • Màu: <strong>{item.color}</strong></>}</span>
                                           <span>Ngày thuê: <strong>{formatDateRange(item.rentalFrom || item.startDate, item.rentalTo || item.endDate)}{item.startTime && item.endTime ? ` (${item.startTime} - ${item.endTime})` : ''}</strong></span>
                                           <span>Nơi nhận: <strong>{item.providerCity || 'Thừa Thiên Huế'}</strong></span>
+                                          {itemStocks[item.id] !== undefined && (
+                                            <span style={{ fontSize: '11px', color: '#8B1E22', fontWeight: 600, marginTop: '2px' }}>
+                                              (Còn lại {itemStocks[item.id]} sản phẩm trong kho)
+                                            </span>
+                                          )}
                                         </div>
                                         <button
                                           onClick={() => setEditingItemId(item.id)}
@@ -1424,8 +1358,15 @@ export const CartPage: React.FC = () => {
 
                             {/* Price and Quantity Selector */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', maxWidth: '350px' }}>
-                              <div style={{ fontSize: '16px', fontWeight: 700, color: '#2D2926' }}>
-                                {item.basePrice?.toLocaleString('vi-VN')}đ
+                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                <span style={{ fontSize: '16px', fontWeight: 700, color: '#8B1E22' }}>
+                                  {item.basePrice?.toLocaleString('vi-VN')}đ
+                                </span>
+                                {(item as any).originalPrice && (item as any).originalPrice > (item.basePrice || 0) && (
+                                  <span style={{ fontSize: '13px', textDecoration: 'line-through', color: '#9C9C9C', fontWeight: 500 }}>
+                                    {(item as any).originalPrice.toLocaleString('vi-VN')}đ
+                                  </span>
+                                )}
                               </div>
 
                               {/* Premium Quantity Selector */}
@@ -1461,20 +1402,29 @@ export const CartPage: React.FC = () => {
                                   {item.quantity}
                                 </span>
                                 <button
-                                  onClick={() => updateCartItemQuantity(item.id, item.quantity + 1)}
+                                  onClick={() => {
+                                    const maxStock = itemStocks[item.id] ?? 999;
+                                    if (item.quantity >= maxStock) {
+                                      toast.error(`Chỉ còn ${maxStock} sản phẩm khả dụng cho kích cỡ và màu sắc này.`);
+                                      return;
+                                    }
+                                    updateCartItemQuantity(item.id, item.quantity + 1);
+                                  }}
+                                  disabled={item.quantity >= (itemStocks[item.id] ?? 999)}
                                   style={{
                                     border: 'none',
                                     background: 'none',
                                     width: '28px',
                                     height: '28px',
-                                    cursor: 'pointer',
-                                    color: '#2D2926',
+                                    cursor: item.quantity >= (itemStocks[item.id] ?? 999) ? 'not-allowed' : 'pointer',
+                                    color: item.quantity >= (itemStocks[item.id] ?? 999) ? '#C5B39E' : '#2D2926',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     fontSize: '14px',
                                     fontWeight: 'bold',
-                                    transition: 'all 0.2s'
+                                    transition: 'all 0.2s',
+                                    opacity: item.quantity >= (itemStocks[item.id] ?? 999) ? 0.3 : 1
                                   }}
                                 >
                                   +
@@ -1537,18 +1487,35 @@ export const CartPage: React.FC = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#5D4037' }}>
-                    <span>Tổng tiền hàng ({selectedItems.length} mục)</span>
+                    <span>Tổng tiền dịch vụ ({selectedItems.length} mục)</span>
                     <span style={{ color: '#2D2926', fontWeight: 700 }}>
                       {grandTotal.toLocaleString('vi-VN')}đ
                     </span>
                   </div>
 
+                  {totalProductRental > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#5D4037' }}>
+                      <span>Tiền thuê Áo dài</span>
+                      <span style={{ color: '#2D2926', fontWeight: 600 }}>
+                        {totalProductRental.toLocaleString('vi-VN')}đ
+                      </span>
+                    </div>
+                  )}
 
                   {totalProductDeposit > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#5D4037' }}>
                       <span>Tiền cọc Áo dài</span>
-                      <span style={{ color: '#2D2926', fontWeight: 700 }}>
+                      <span style={{ color: '#2D2926', fontWeight: 600 }}>
                         {totalProductDeposit.toLocaleString('vi-VN')}đ
+                      </span>
+                    </div>
+                  )}
+
+                  {totalPhotographerFee > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#5D4037' }}>
+                      <span>Phí Thợ chụp ảnh</span>
+                      <span style={{ color: '#2D2926', fontWeight: 600 }}>
+                        {totalPhotographerFee.toLocaleString('vi-VN')}đ
                       </span>
                     </div>
                   )}
@@ -1599,10 +1566,12 @@ export const CartPage: React.FC = () => {
                 </div>
 
                 {/* Nested box for pay later */}
-                <div style={{ backgroundColor: '#F5EFE6', padding: '12px 16px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', color: '#5D4037' }}>
-                  <span>Tiền trả sau cho thợ chụp</span>
-                  <strong style={{ color: '#2D2926' }}>{remainingToPayLater.toLocaleString('vi-VN')}đ</strong>
-                </div>
+                {remainingToPayLater > 0 && (
+                  <div style={{ backgroundColor: '#F5EFE6', padding: '12px 16px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', color: '#5D4037', marginBottom: '16px' }}>
+                    <span>Tiền trả sau cho thợ chụp</span>
+                    <strong style={{ color: '#2D2926' }}>{remainingToPayLater.toLocaleString('vi-VN')}đ</strong>
+                  </div>
+                )}
 
                 {/* Warning message above checkout button */}
                 {checkedGroups.some(group => group.isCityMismatch) && (

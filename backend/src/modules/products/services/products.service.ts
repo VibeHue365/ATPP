@@ -3,12 +3,14 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { ProductsRepository } from '../repositories/products.repository';
 import { UsersRepository } from '../../users/repositories/users.repository';
 import {
+  Product,
   ProductDocument,
   ProductModerationStatus,
   ProductStatus,
@@ -25,7 +27,7 @@ import { SmartTagEntityType } from '../../smart-tagging/constants/smart-tag.cons
 import { PublicMediaService } from '../../storage/services/public-media.service';
 
 @Injectable()
-export class ProductsService {
+export class ProductsService implements OnModuleInit {
   constructor(
     private readonly productsRepository: ProductsRepository,
     private readonly usersRepository: UsersRepository,
@@ -36,6 +38,14 @@ export class ProductsService {
     private readonly campaignService: DiscountCampaignService,
     private readonly publicMedia: PublicMediaService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.productsRepository.moveLegacyProductsToPendingReview();
+    } catch (e) {
+      console.error('Failed to auto-activate draft products on startup:', e);
+    }
+  }
 
   async getAllActiveProducts(options?: {
     search?: string;
@@ -233,7 +243,7 @@ export class ProductsService {
       sizes: productSizes,
       colors: productColors,
       materials: productMaterials,
-      status: dto.status || ProductStatus.Draft,
+      status: dto.status || ProductStatus.Active,
       moderationStatus: ProductModerationStatus.PendingReview,
       moderationReason: null,
       style: dto.style || null,
@@ -470,7 +480,7 @@ export class ProductsService {
       );
     }
 
-    const updated = await this.productsRepository.moderate(id, expectedStatus, {
+    const updateData: Partial<Product> = {
       moderationStatus: dto.action,
       moderationReason:
         dto.action === ProductModerationStatus.Rejected ||
@@ -479,7 +489,13 @@ export class ProductsService {
           : null,
       moderatedBy: new Types.ObjectId(adminId),
       moderatedAt: new Date(),
-    });
+    };
+
+    if (dto.action === ProductModerationStatus.Approved) {
+      updateData.status = ProductStatus.Active;
+    }
+
+    const updated = await this.productsRepository.moderate(id, expectedStatus, updateData);
 
     if (!updated) {
       throw new ConflictException(

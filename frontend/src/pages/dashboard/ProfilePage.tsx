@@ -338,7 +338,7 @@ export const ProfilePage: React.FC = () => {
       toast.info('Đang tải liên kết thanh toán...');
       const paymentRes: any = await httpClient.post('/payments/create-link', {
         bookingId,
-        purpose: 'FULL_PAYMENT',
+        purpose: activeDetailBooking?.bookingType === 'COMBO' ? 'DEPOSIT_PAYMENT' : 'FULL_PAYMENT',
       });
       if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
         toast.success('Đang chuyển hướng tới cổng thanh toán PayOS Simulator...');
@@ -870,16 +870,47 @@ export const ProfilePage: React.FC = () => {
                 <span>Tổng chi phí:</span>
                 <span>{(activeDetailBooking.pricingSummary?.grandTotal || 0).toLocaleString('vi-VN')}đ</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#8C827A', marginTop: '4px' }}>
-                <span>Đã cọc (thanh toán online):</span>
-                <span style={{ fontWeight: 600 }}>{(activeDetailBooking.paymentSummary?.totalPaid || 0).toLocaleString('vi-VN')}đ</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#8C827A' }}>
-                <span>Còn lại thanh toán tại tiệm:</span>
-                <span style={{ fontWeight: 600, color: (activeDetailBooking.pricingSummary?.grandTotal - activeDetailBooking.paymentSummary?.totalPaid) > 0 ? '#D35400' : '#27AE60' }}>
-                  {Math.max(0, (activeDetailBooking.pricingSummary?.grandTotal || 0) - (activeDetailBooking.paymentSummary?.totalPaid || 0)).toLocaleString('vi-VN')}đ
-                </span>
-              </div>
+              {(() => {
+                const isCombo = activeDetailBooking.bookingType === 'COMBO';
+                const items = activeDetailBooking.items || [];
+                const prodItems = items.filter((i: any) => i.itemType === 'PRODUCT');
+                const photoItems = items.filter((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+                
+                const prodRentalTotal = prodItems.reduce((sum: number, i: any) => sum + (i.unitPrice || 0) * (i.quantity || 1), 0);
+                const prodDepositTotal = prodItems.reduce((sum: number, i: any) => sum + (i.depositAmount || 0) * (i.quantity || 1), 0);
+                const photoDepositTotal = photoItems.reduce((sum: number, i: any) => sum + (i.unitPrice || 0) * (i.quantity || 1), 0); // 100% thanh toán trước cho thợ chụp
+                const comboDiscount = activeDetailBooking.pricingSummary?.comboDiscountTotal || 0;
+                
+                const requiredDeposit = isCombo 
+                  ? (prodRentalTotal + prodDepositTotal + photoDepositTotal - comboDiscount)
+                  : (activeDetailBooking.pricingSummary?.depositTotal || 0);
+
+                const isPaid = activeDetailBooking.status !== 'PENDING_PAYMENT';
+                const paidAmount = activeDetailBooking.paymentSummary?.totalPaid || 0;
+                
+                const depositLabel = isPaid ? 'Đã cọc (thanh toán online):' : 'Tiền cọc cần thanh toán (online):';
+                const depositVal = isPaid ? paidAmount : requiredDeposit;
+                
+                const remainingLabel = 'Còn lại thanh toán tại tiệm:';
+                const remainingVal = Math.max(0, (activeDetailBooking.pricingSummary?.grandTotal || 0) - depositVal);
+
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#8C827A', marginTop: '4px' }}>
+                      <span>{depositLabel}</span>
+                      <span style={{ fontWeight: 600, color: isPaid ? '#27AE60' : 'var(--color-text-primary)' }}>
+                        {depositVal.toLocaleString('vi-VN')}đ
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#8C827A' }}>
+                      <span>{remainingLabel}</span>
+                      <span style={{ fontWeight: 600, color: remainingVal > 0 ? '#D35400' : '#27AE60' }}>
+                        {remainingVal.toLocaleString('vi-VN')}đ
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Footer action buttons */}

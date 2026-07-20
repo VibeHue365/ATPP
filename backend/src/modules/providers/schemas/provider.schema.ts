@@ -175,6 +175,29 @@ export class Provider {
 
   @Prop({ type: Number, default: 0 })
   violationCount: number;
+
+  /**
+   * Virtual escrow wallet — tracks provider earnings without a separate collection.
+   * pendingBalance:   sum of estimated net amounts for CONFIRMED bookings not yet COMPLETED.
+   * availableBalance: sum of actual net amounts from COMPLETED settlements (ready to withdraw).
+   * totalEarned:      cumulative lifetime earnings (only increases).
+   * lastUpdatedAt:    last time any balance field changed (for cache invalidation).
+   */
+  @Prop({
+    type: {
+      pendingBalance:   { type: Number, default: 0, min: 0 },
+      availableBalance: { type: Number, default: 0, min: 0 },
+      totalEarned:      { type: Number, default: 0, min: 0 },
+      lastUpdatedAt:    { type: Date,   default: null },
+    },
+    default: { pendingBalance: 0, availableBalance: 0, totalEarned: 0, lastUpdatedAt: null },
+  })
+  wallet: {
+    pendingBalance:   number;
+    availableBalance: number;
+    totalEarned:      number;
+    lastUpdatedAt:    Date | null;
+  };
 }
 
 export const ProviderSchema = SchemaFactory.createForClass(Provider);

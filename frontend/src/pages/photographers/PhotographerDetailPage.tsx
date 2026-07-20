@@ -189,33 +189,7 @@ export const PhotographerDetailPage: React.FC = () => {
 
   const photographerCity = photographer?.address?.city || "";
 
-  const isCitySynced = useMemo(() => {
-    if (!aoDaiInCart || !aoDaiInCart.providerCity) return true;
-    const aoDaiCity = aoDaiInCart.providerCity;
-    const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-    return normalize(photographerCity).includes(normalize(aoDaiCity)) || normalize(aoDaiCity).includes(normalize(photographerCity));
-  }, [aoDaiInCart, photographerCity]);
-
-  const isDateSynced = useMemo(() => {
-    if (!aoDaiInCart || !rentalFrom || !selectedDate) return false;
-    return selectedDate >= rentalFrom && (!rentalTo || selectedDate <= rentalTo);
-  }, [aoDaiInCart, rentalFrom, rentalTo, selectedDate]);
-
-  const isTimeSynced = useMemo(() => {
-    if (!aoDaiInCart) return true;
-    if (!aoDaiInCart.startTime || !aoDaiInCart.endTime) return true;
-    return startTime >= aoDaiInCart.startTime && endTime <= aoDaiInCart.endTime;
-  }, [aoDaiInCart, startTime, endTime]);
-
-  const isFullySynced = isDateSynced && isTimeSynced;
-
-  const handleSyncWithAoDai = () => {
-    if (aoDaiInCart && rentalFrom) {
-      setSelectedDate(rentalFrom);
-      if (aoDaiInCart.startTime) setStartTime(aoDaiInCart.startTime);
-      toast.success('Đã đồng bộ lịch trình theo Áo dài thành công!');
-    }
-  };
+  const isCitySynced = true;
 
   const formatSingleDate = (dateStr?: string | null) => {
     if (!dateStr) return '';
@@ -226,91 +200,7 @@ export const PhotographerDetailPage: React.FC = () => {
   };
 
   const renderBanner = () => {
-    if (!aoDaiInCart) return null;
-
-    if (!isCitySynced) {
-      return (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          backgroundColor: '#FADBD8',
-          border: '1px solid #F1948A',
-          padding: '16px 20px',
-          borderRadius: '12px',
-          marginBottom: '40px',
-          boxShadow: 'var(--shadow-sm)',
-          color: '#C0392B',
-          textAlign: 'left'
-        }}>
-          <AlertCircle size={18} color="#C0392B" style={{ marginRight: '12px', flexShrink: 0 }} />
-          <span style={{ fontSize: '14px', fontWeight: 650 }}>
-            ⚠️ LỆCH KHU VỰC: Thợ chụp {photographer?.businessName} hoạt động tại <strong>{photographerCity}</strong>, nhưng Áo dài <strong>{aoDaiInCart.productName}</strong> trong giỏ hàng ở <strong>{aoDaiInCart.providerCity}</strong>. Vui lòng chọn thợ ảnh ở cùng khu vực!
-          </span>
-        </div>
-      );
-    }
-
-    if (isFullySynced) {
-      return (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          backgroundColor: '#EDF9F2',
-          border: '1px solid #C2F0D7',
-          padding: '16px 20px',
-          borderRadius: '12px',
-          marginBottom: '40px',
-          boxShadow: 'var(--shadow-sm)'
-        }}>
-          <CheckCircle size={18} color="#27AE60" />
-          <span style={{ fontSize: '14px', fontWeight: 600, color: '#27AE60' }}>
-            Lịch chụp của bạn đã đồng bộ hoàn toàn với Áo dài <strong>{aoDaiInCart.productName}</strong> trong giỏ hàng (Ngày {formatSingleDate(selectedDate)}, {selectedTimeSlot}). Đủ điều kiện áp dụng Combo giảm giá 10%!
-          </span>
-        </div>
-      );
-    }
-
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: '#FFF7F0',
-        border: '1px solid #FAD7A0',
-        padding: '16px 20px',
-        borderRadius: '12px',
-        marginBottom: '40px',
-        boxShadow: 'var(--shadow-sm)',
-        animation: 'fadeIn 0.3s ease-out'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <AlertCircle size={18} color="#D35400" />
-          <span style={{ fontSize: '14px', fontWeight: 650, color: '#D35400', textAlign: 'left' }}>
-            Lịch chụp ({formatSingleDate(selectedDate)} lúc {selectedTimeSlot}) đang lệch với thời gian thuê Áo dài <strong>{aoDaiInCart.productName}</strong> trong giỏ hàng ({formatSingleDate(rentalFrom)}{rentalTo && rentalTo !== rentalFrom ? ' đến ' + formatSingleDate(rentalTo) : ''}{aoDaiInCart.startTime ? ' ' + aoDaiInCart.startTime + ' - ' + aoDaiInCart.endTime : ''}).
-          </span>
-        </div>
-        <button
-          onClick={handleSyncWithAoDai}
-          style={{
-            backgroundColor: '#D35400',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            padding: '8px 16px',
-            fontSize: '12px',
-            fontWeight: 700,
-            cursor: 'pointer',
-            transition: 'background-color 0.2s',
-            flexShrink: 0
-          }}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#A04000'}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#D35400'}
-        >
-          ĐỒNG BỘ LỊCH
-        </button>
-      </div>
-    );
+    return null;
   };
 
   // Load booking availability separately from the public photographer profile.
@@ -756,7 +646,7 @@ export const PhotographerDetailPage: React.FC = () => {
       photographerAvatar: photographer.portfolio[0] || '',
       packageName: selectedPkg.name,
       basePrice: quote.totals.totalAmount,
-      depositAmount: Math.round(quote.totals.totalAmount * 0.3),
+      depositAmount: quote.totals.totalAmount,
       shootDate: selectedDate,
       shootTimeSlot: selectedTimeSlot,
       shootLocation: finalLocation,
@@ -841,7 +731,7 @@ export const PhotographerDetailPage: React.FC = () => {
 
       const paymentRes: any = await httpClient.post('/payments/create-link', {
         bookingId: holdRes.bookingId,
-        purpose: 'DEPOSIT_PAYMENT',
+        purpose: 'FULL_PAYMENT',
       });
 
       if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
@@ -915,9 +805,9 @@ export const PhotographerDetailPage: React.FC = () => {
                 </div>
                 <div style={{ height: '1px', backgroundColor: 'rgba(0,0,0,0.06)', margin: '4px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#8C827A' }}>Cọc giữ chỗ (30%):</span>
+                  <span style={{ color: '#8C827A' }}>Thanh toán trước (100%):</span>
                   <strong style={{ color: 'var(--color-primary)' }}>
-                    {selectedPkg ? Math.round(selectedPkg.price * 0.3).toLocaleString('vi-VN') + 'đ' : ''}
+                    {selectedPkg ? selectedPkg.price.toLocaleString('vi-VN') + 'đ' : ''}
                   </strong>
                 </div>
               </div>
