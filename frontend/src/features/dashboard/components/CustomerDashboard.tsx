@@ -87,7 +87,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const handleConfirmPickup = async (bookingId: string) => {
     try {
       toast.info('Đang xác nhận nhận đồ...');
-      await httpClient.post(`/api/bookings/${bookingId}/customer-confirm-pickup`, {});
+      await httpClient.post(`/bookings/${bookingId}/customer-confirm-pickup`, {});
       toast.success('Xác nhận nhận đồ thành công!');
       onRefresh();
     } catch (err: any) {
@@ -105,7 +105,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       for (let i = 0; i < files.length; i++) {
         const formData = new FormData();
         formData.append('file', files[i]);
-        const res: any = await httpClient.post('/api/bookings/upload-reference', formData);
+        const res: any = await httpClient.post('/bookings/upload-reference', formData);
         if (res.url) urls.push(res.url);
       }
       setReportPhotos(prev => [...prev, ...urls]);
@@ -128,17 +128,17 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     try {
       toast.info('Đang gửi báo cáo...');
       if (reportModalType === 'DAMAGE') {
-        await httpClient.post(`/api/bookings/${selectedBookingId}/customer-report-damage`, {
+        await httpClient.post(`/bookings/${selectedBookingId}/customer-report-damage`, {
           description: reportDesc,
           evidencePhotos: reportPhotos
         });
         toast.success('Đã gửi báo cáo lỗi và nhận đồ thành công!');
       } else {
-        await httpClient.post(`/api/bookings/${selectedBookingId}/customer-reject-handover`, {
+        await httpClient.post(`/bookings/${selectedBookingId}/customer-reject-handover`, {
           reason: reportDesc,
           evidencePhotos: reportPhotos
         });
-        toast.success('Đã từ chối nhận đồ và hoàn tiền thành công!');
+        toast.success('Đã gửi khiếu nại từ chối nhận đồ. Đơn hàng chuyển sang tranh chấp để Admin đối soát xử lý!');
       }
       setIsReportModalOpen(false);
       onRefresh();
@@ -185,7 +185,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       console.error('Failed to fetch products for dashboard favorites', e);
     }
     try {
-      const phs = await httpClient.get<any[]>('/api/photographers');
+      const phs = await httpClient.get<any[]>('/photographers');
       setRealPhotographersList(phs || []);
     } catch (e) {
       console.error('Failed to fetch photographers for dashboard favorites', e);
@@ -296,45 +296,50 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const rentalItems: any[] = [];
   bookings.forEach(b => {
     if (b.items) {
-      b.items.forEach((item: any) => {
-        if (item.itemType === 'PRODUCT') {
-          let providerName = 'Cửa hàng VibeHue';
-          let providerAddress = 'Showroom VibeHue';
-          if (item.productId && realProductList.length > 0) {
-            const prod = realProductList.find((p: any) => p._id === item.productId.toString() || p._id === item.productId);
-            if (prod && prod.providerId) {
-              providerName = prod.providerId.businessName || prod.providerId.fullName || providerName;
-              if (prod.providerId.address) {
-                const addr = prod.providerId.address;
-                providerAddress = `${addr.addressLine || ''}, ${addr.district || ''}, ${addr.city || ''}`.replace(/^,\s*/, '');
-              }
+      const productItems = b.items.filter((item: any) => item.itemType === 'PRODUCT');
+      if (productItems.length > 0) {
+        const firstItem = productItems[0];
+        let providerName = 'Cửa hàng VibeHue';
+        let providerAddress = 'Showroom VibeHue';
+        if (firstItem.productId && realProductList.length > 0) {
+          const prod = realProductList.find((p: any) => p._id === firstItem.productId.toString() || p._id === firstItem.productId);
+          if (prod && prod.providerId) {
+            providerName = prod.providerId.businessName || prod.providerId.fullName || providerName;
+            if (prod.providerId.address) {
+              const addr = prod.providerId.address;
+              providerAddress = `${addr.addressLine || ''}, ${addr.district || ''}, ${addr.city || ''}`.replace(/^,\s*/, '');
             }
           }
-
-          rentalItems.push({
-            id: item._id,
-            bookingId: b._id,
-            bookingCode: b.bookingCode,
-            status: b.status,
-            name: item.name || 'Mẫu Áo Dài Di Sản',
-            image: item.image || item.productImage || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
-            size: item.size || 'M',
-            color: item.color || 'RED',
-            rentalType: item.rentalType || 'DAILY',
-            startDate: item.startDate || item.rentalFrom,
-            endDate: item.endDate || item.rentalTo,
-            startTime: item.startTime,
-            endTime: item.endTime,
-            shootTimeSlot: item.shootTimeSlot,
-            unitPrice: item.unitPrice,
-            quantity: item.quantity || 1,
-            depositAmount: item.depositAmount || 0,
-            providerName,
-            providerAddress,
-            booking: b
-          });
         }
-      });
+
+        const totalQuantity = productItems.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
+        const sizes = Array.from(new Set(productItems.map((it: any) => it.size || 'M'))).join(', ');
+        const colors = Array.from(new Set(productItems.map((it: any) => it.color || 'RED'))).join(', ');
+        const totalCost = b.totalAmount || productItems.reduce((sum: number, it: any) => sum + (it.unitPrice || 0), 0);
+
+        rentalItems.push({
+          id: b._id,
+          bookingId: b._id,
+          bookingCode: b.bookingCode,
+          status: b.status,
+          name: firstItem.name || 'Mẫu Áo Dài Di Sản',
+          totalQuantity,
+          image: firstItem.image || firstItem.productImage || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+          size: sizes,
+          color: colors,
+          rentalType: firstItem.rentalType || 'DAILY',
+          startDate: firstItem.startDate || firstItem.rentalFrom,
+          endDate: firstItem.endDate || firstItem.rentalTo,
+          startTime: firstItem.startTime,
+          endTime: firstItem.endTime,
+          shootTimeSlot: firstItem.shootTimeSlot,
+          unitPrice: totalCost,
+          depositAmount: b.depositAmount || 0,
+          providerName,
+          providerAddress,
+          booking: b
+        });
+      }
     }
   });
 
@@ -824,24 +829,28 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 const StatusIcon = statusInfo.icon;
 
                 return (
-                  <div key={item.id} className="vh-profile-rental-product-card">
-                    <div className="vh-profile-rental-img-wrapper" style={{ height: '280px' }}>
-                      <img src={item.image} alt={item.name} className="vh-profile-rental-img" />
+                  <div
+                    key={item.id}
+                    className={`vh-profile-appointment-card ${isReturned || item.status === 'CANCELLED' ? 'vh-appointment-past' : 'vh-appointment-upcoming'}`}
+                  >
+                    <div className="vh-appointment-card-header">
                       <span
-                        className={`vh-profile-rental-status-badge ${isReturned ? 'status-returned' : 'status-renting'}`}
+                        className={isReturned || item.status === 'CANCELLED' ? 'vh-appointment-status-label-past' : 'vh-appointment-status-label-upcoming'}
                         style={{
-                          backgroundColor: isIncidentPending ? '#FEF3C7' : isDisputed ? '#FEE2E2' : undefined,
-                          color: isIncidentPending ? '#D97706' : isDisputed ? '#B91C1C' : undefined,
-                          border: isIncidentPending ? '1px solid #FDE68A' : isDisputed ? '1px solid #FCA5A5' : undefined
+                          color: statusInfo.color,
+                          backgroundColor: statusInfo.bgColor,
+                          border: `1px solid ${statusInfo.borderColor}`
                         }}
                       >
                         <StatusIcon size={13} style={{ marginRight: '6px' }} />
-                        {statusInfo.label} • {rentalDateFormatted}
+                        {statusInfo.label.toUpperCase()} • {rentalDateFormatted}
                       </span>
                     </div>
                     
                     <div>
-                      <h4 className="vh-appointment-card-title font-header">{item.name}</h4>
+                      <h4 className="vh-appointment-card-title font-header">
+                        {item.name} {item.totalQuantity > 1 ? `(x${item.totalQuantity})` : ''}
+                      </h4>
                       <div className="vh-appointment-card-detail-item" style={{ marginBottom: '6px' }}>
                         <User size={13} className="vh-appointment-icon-muted" style={{ marginRight: '6px' }} />
                         <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Kích cỡ: <strong>{item.size}</strong> • Màu: <strong>{item.color}</strong></span>
@@ -865,148 +874,126 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           Cửa hàng: <strong>{item.providerName}</strong> ({item.providerAddress})
                         </span>
                       </div>
-                    </div>
 
-                    {item.status === 'PICKUP_PENDING' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px', width: '100%' }}>
-                        {/* Shop Handover Photos Section */}
-                        {item.booking?.handoverPhotos && item.booking.handoverPhotos.length > 0 && (
-                          <div style={{
-                            backgroundColor: '#EDF9F2',
-                            border: '1px solid #C2F0D7',
-                            borderRadius: '8px',
-                            padding: '8px 10px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '6px'
-                          }}>
-                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#27AE60', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Check size={12} /> Ảnh bàn giao từ Shop:
-                            </span>
-                            <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
-                              {item.booking.handoverPhotos.map((photo: string, index: number) => {
-                                const url = photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`;
-                                return (
-                                  <a key={index} href={url} target="_blank" rel="noreferrer" style={{ width: '48px', height: '48px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #C2F0D7', flexShrink: 0 }}>
-                                    <img src={url} alt="Handover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  </a>
-                                );
-                              })}
+                      {/* Các nút giao nhận: Chỉ hiển thị khi đơn ở trạng thái chờ nhận đồ PICKUP_PENDING */}
+                      {item.status === 'PICKUP_PENDING' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px', width: '100%' }}>
+                          {/* Ảnh bàn giao từ Shop nếu có */}
+                          {item.booking?.handoverPhotos && item.booking.handoverPhotos.length > 0 && (
+                            <div style={{
+                              backgroundColor: '#EDF9F2',
+                              border: '1px solid #C2F0D7',
+                              borderRadius: '8px',
+                              padding: '8px 10px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px'
+                            }}>
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#27AE60', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Check size={12} /> Ảnh bàn giao từ Shop:
+                              </span>
+                              <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+                                {item.booking.handoverPhotos.map((photo: string, index: number) => {
+                                  const url = photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`;
+                                  return (
+                                    <a key={index} href={url} target="_blank" rel="noreferrer" style={{ width: '48px', height: '48px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #C2F0D7', flexShrink: 0 }}>
+                                      <img src={url} alt="Handover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    </a>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                          )}
 
-                    <div className="vh-profile-rental-price-row">
-                      <div className="vh-profile-rental-price-sub">
-                        <span>TỔNG CHI PHÍ</span>
-                        <strong>{item.unitPrice?.toLocaleString('vi-VN')}đ</strong>
-                      </div>
-                      {item.booking ? (
-                        <button
-                          className="vh-appointment-action-link"
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
-                            cursor: 'pointer',
-                            color: (isIncidentPending || isDisputed) ? '#C0392B' : undefined,
-                            fontWeight: (isIncidentPending || isDisputed) ? 700 : undefined
-                          }}
-                          onClick={() => onViewDetails(item.booking)}
-                        >
-                          {isIncidentPending ? 'Phản hồi đền bù' : isDisputed ? 'Chi tiết tranh chấp' : 'Hóa đơn'}
-                        </button>
-                      ) : (
-                        <span className="vh-appointment-action-link" style={{ cursor: 'pointer' }}>
-                          Hóa đơn
-                        </span>
+                          {/* Đếm ngược 30 phút xác nhận */}
+                          {item.booking?.handoverInitiatedAt && (
+                            <HandoverCountdown 
+                              initiatedAt={item.booking.handoverInitiatedAt} 
+                              onTimeout={() => {
+                                onRefresh();
+                              }} 
+                            />
+                          )}
+
+                          {/* Các nút bấm thao tác giao nhận */}
+                          <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap' }}>
+                            <button 
+                              onClick={() => handleConfirmPickup(item.booking?._id || item.booking?.id)}
+                              style={{
+                                flex: 1, backgroundColor: '#27AE60', color: 'white', border: 'none',
+                                padding: '8px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                                minWidth: '90px'
+                              }}
+                            >
+                              <Check size={13} /> Nhận đồ
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setSelectedBookingId(item.booking?._id || item.booking?.id);
+                                setReportModalType('DAMAGE');
+                                setReportDesc('');
+                                setReportPhotos([]);
+                                setIsReportModalOpen(true);
+                              }}
+                              style={{
+                                flex: 1, backgroundColor: '#F39C12', color: 'white', border: 'none',
+                                padding: '8px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                                minWidth: '90px'
+                              }}
+                            >
+                              <AlertTriangle size={13} /> Báo lỗi nhẹ
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setSelectedBookingId(item.booking?._id || item.booking?.id);
+                                setReportModalType('REJECT');
+                                setReportDesc('');
+                                setReportPhotos([]);
+                                setIsReportModalOpen(true);
+                              }}
+                              style={{
+                                flex: 1, backgroundColor: '#C0392B', color: 'white', border: 'none',
+                                padding: '8px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                                minWidth: '90px'
+                              }}
+                            >
+                              <XCircle size={13} /> Từ chối nhận
+                            </button>
+                          </div>
+                        </div>
                       )}
 
-                        {item.booking?.handoverInitiatedAt && (
-                          <HandoverCountdown 
-                            initiatedAt={item.booking.handoverInitiatedAt} 
-                            onTimeout={() => {
-                              onRefresh();
-                            }} 
-                          />
-                        )}
-                        <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap' }}>
-                          <button 
-                            onClick={() => handleConfirmPickup(item.booking?._id || item.booking?.id)}
-                            style={{
-                              flex: 1, backgroundColor: '#27AE60', color: 'white', border: 'none',
-                              padding: '8px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                              minWidth: '90px'
-                            }}
-                          >
-                            <Check size={13} /> Nhận đồ
-                          </button>
-                          <button 
-                            onClick={() => {
-                              setSelectedBookingId(item.booking?._id || item.booking?.id);
-                              setReportModalType('DAMAGE');
-                              setReportDesc('');
-                              setReportPhotos([]);
-                              setIsReportModalOpen(true);
-                            }}
-                            style={{
-                              flex: 1, backgroundColor: '#F39C12', color: 'white', border: 'none',
-                              padding: '8px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                              minWidth: '90px'
-                            }}
-                          >
-                            <AlertTriangle size={13} /> Báo lỗi nhẹ
-                          </button>
-                          <button 
-                            onClick={() => {
-                              setSelectedBookingId(item.booking?._id || item.booking?.id);
-                              setReportModalType('REJECT');
-                              setReportDesc('');
-                              setReportPhotos([]);
-                              setIsReportModalOpen(true);
-                            }}
-                            style={{
-                              flex: 1, backgroundColor: '#C0392B', color: 'white', border: 'none',
-                              padding: '8px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                              minWidth: '90px'
-                            }}
-                          >
-                            <XCircle size={13} /> Từ chối nhận
-                          </button>
+                      {/* Cảnh báo sự cố nếu có */}
+                      {isIncidentPending && (
+                        <div style={{
+                          backgroundColor: '#FFF7ED',
+                          border: '1px solid #FDE68A',
+                          borderRadius: '8px',
+                          padding: '10px 12px',
+                          marginTop: '12px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                          fontSize: '12px',
+                          textAlign: 'left',
+                          width: '100%',
+                          boxSizing: 'border-box'
+                        }}>
+                          <div style={{ fontWeight: 700, color: '#92400E', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <AlertTriangle size={14} style={{ flexShrink: 0 }} /> Shop yêu cầu đền bù sự cố hỏng đồ!
+                          </div>
+                          <div style={{ color: '#78350F', lineHeight: 1.4 }}>
+                            Vui lòng bấm nút <strong style={{ color: '#C0392B' }}>"Phản hồi đền bù"</strong> bên dưới để xem ảnh bằng chứng và chọn phương án Chấp nhận hoặc Khiếu nại.
+                          </div>
                         </div>
-                      </div>
+                      )}
+                    </div>
 
-                    {isIncidentPending && (
-                      <div style={{
-                        backgroundColor: '#FFF7ED',
-                        border: '1px solid #FDE68A',
-                        borderRadius: '8px',
-                        padding: '10px 12px',
-                        marginTop: '12px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px',
-                        fontSize: '12px',
-                        textAlign: 'left',
-                        width: '100%',
-                        boxSizing: 'border-box'
-                      }}>
-                        <div style={{ fontWeight: 700, color: '#92400E', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <AlertTriangle size={14} style={{ flexShrink: 0 }} /> Shop yêu cầu đền bù sự cố hỏng đồ!
-                        </div>
-                        <div style={{ color: '#78350F', lineHeight: 1.4 }}>
-                          Vui lòng bấm nút <strong style={{ color: '#C0392B' }}>"Phản hồi đền bù"</strong> bên dưới để xem ảnh bằng chứng và chọn phương án Chấp nhận hoặc Khiếu nại.
-                        </div>
-                      </div>
-                    )}
-                    
                     <div className="vh-appointment-card-footer">
-                      <span className={isReturned ? 'vh-appointment-status-success' : 'vh-appointment-time-badge'}>
+                      <span className={isReturned || item.status === 'CANCELLED' ? 'vh-appointment-status-success' : 'vh-appointment-time-badge'}>
                         {item.unitPrice?.toLocaleString('vi-VN')}đ
                       </span>
                       
@@ -1023,11 +1010,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           }}
                           onClick={() => onViewDetails(item.booking)}
                         >
-                          {isIncidentPending ? 'Phản hồi đền bù' : isDisputed ? 'Chi tiết tranh chấp' : 'Hóa đơn'}
+                          {isIncidentPending ? 'Phản hồi đền bù' : isDisputed ? 'Chi tiết tranh chấp' : 'Chi tiết'}
                         </button>
                       ) : (
                         <span className="vh-appointment-action-link" style={{ cursor: 'pointer' }}>
-                          Hóa đơn
+                          Chi tiết
                         </span>
                       )}
                     </div>

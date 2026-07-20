@@ -18,6 +18,7 @@ import {
   forwardRef,
   ForbiddenException,
   OnApplicationBootstrap,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -29,7 +30,10 @@ import {
   PaymentStatus,
 } from '../schemas/booking.schema';
 import { BookingItem, BookingItemType } from '../schemas/booking-item.schema';
-import { createRentalFulfillment, RentalFulfillmentStatus } from '../schemas/rental-fulfillment.types';
+import {
+  createRentalFulfillment,
+  RentalFulfillmentStatus,
+} from '../schemas/rental-fulfillment.types';
 import { Product } from '../../products/schemas/product.schema';
 import { PhotographyPackage } from '../../products/schemas/photography-package.schema';
 import { PromotionsService } from '../../products/services/promotions.service';
@@ -747,14 +751,23 @@ export class BookingsService implements OnApplicationBootstrap {
     shootDate?: string | Date | null,
     shootTimeSlot?: string | null,
   ) {
-    const pickupDueAt = rentalFrom ? new Date(rentalFrom) : shootDate ? new Date(shootDate) : new Date();
-    let returnDueAt = rentalTo ? new Date(rentalTo) : shootDate ? new Date(shootDate) : new Date(pickupDueAt);
+    const pickupDueAt = rentalFrom
+      ? new Date(rentalFrom)
+      : shootDate
+        ? new Date(shootDate)
+        : new Date();
+    const returnDueAt = rentalTo
+      ? new Date(rentalTo)
+      : shootDate
+        ? new Date(shootDate)
+        : new Date(pickupDueAt);
     if (rentalType === 'DAILY') {
       returnDueAt.setHours(23, 59, 59, 999);
     } else if (shootTimeSlot?.includes('-')) {
       const endTime = shootTimeSlot.split('-')[1]?.trim();
       const [hours, minutes] = (endTime || '').split(':').map(Number);
-      if (Number.isFinite(hours) && Number.isFinite(minutes)) returnDueAt.setHours(hours, minutes, 0, 0);
+      if (Number.isFinite(hours) && Number.isFinite(minutes))
+        returnDueAt.setHours(hours, minutes, 0, 0);
     }
     return createRentalFulfillment(returnDueAt, pickupDueAt);
   }
@@ -771,16 +784,21 @@ export class BookingsService implements OnApplicationBootstrap {
         expanded.push({ ...detail, quantity: 1 });
         continue;
       }
-      const reservations = Array.isArray(detail.reservations) ? detail.reservations : [];
+      const reservations = Array.isArray(detail.reservations)
+        ? detail.reservations
+        : [];
       if (reservations.length !== quantity) {
-        throw new BadRequestException('Mỗi đơn vị áo dài phải có một inventory reservation riêng.');
+        throw new BadRequestException(
+          'Mỗi đơn vị áo dài phải có một inventory reservation riêng.',
+        );
       }
       const totalDiscount = Number(detail.comboDiscountAmount || 0);
       let distributedDiscount = 0;
       reservations.forEach((reservation: any, index: number) => {
-        const unitDiscount = index === reservations.length - 1
-          ? totalDiscount - distributedDiscount
-          : Math.round(totalDiscount / quantity);
+        const unitDiscount =
+          index === reservations.length - 1
+            ? totalDiscount - distributedDiscount
+            : Math.round(totalDiscount / quantity);
         distributedDiscount += unitDiscount;
         expanded.push({
           ...detail,
@@ -1074,8 +1092,17 @@ export class BookingsService implements OnApplicationBootstrap {
           selectedSize: item.selectedSize || null,
           selectedColor: item.selectedColor || null,
           pickupReturnLocationSnapshot,
-          rentalFulfillment: itemType === BookingItemType.Product ? this.createRentalFulfillmentForDates(item.rentalType, item.rentalFrom, item.rentalTo, item.shootDate, item.shootTimeSlot) : null,
-          rentalType: (item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY') as 'DAILY' | 'HOURLY',
+          rentalFulfillment:
+            itemType === BookingItemType.Product
+              ? this.createRentalFulfillmentForDates(
+                  item.rentalType,
+                  item.rentalFrom,
+                  item.rentalTo,
+                  item.shootDate,
+                  item.shootTimeSlot,
+                )
+              : null,
+          rentalType: item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY',
           comboDiscountPercent,
           comboDiscountAmount,
           reservations: itemReservations,
@@ -1245,10 +1272,15 @@ export class BookingsService implements OnApplicationBootstrap {
 
       const bookingItemDetails = this.expandRentalUnits(itemDetails);
       for (const detail of bookingItemDetails) {
-        const [savedItem] = await this.bookingItemModel.create([{
-          ...detail,
-          bookingId: booking._id,
-        }], { session });
+        const [savedItem] = await this.bookingItemModel.create(
+          [
+            {
+              ...detail,
+              bookingId: booking._id,
+            },
+          ],
+          { session },
+        );
 
         if (detail.reservations) {
           for (const res of detail.reservations) {
@@ -1365,7 +1397,9 @@ export class BookingsService implements OnApplicationBootstrap {
     } = dto;
 
     if (quantity !== 1) {
-      throw new BadRequestException('MVP yêu cầu quantity = 1 cho API thuê đơn lẻ. Với nhiều áo dài, hãy tạo nhiều booking item qua checkout.');
+      throw new BadRequestException(
+        'MVP yêu cầu quantity = 1 cho API thuê đơn lẻ. Với nhiều áo dài, hãy tạo nhiều booking item qua checkout.',
+      );
     }
 
     if (!Types.ObjectId.isValid(productId)) {
@@ -1628,7 +1662,13 @@ export class BookingsService implements OnApplicationBootstrap {
         selectedSize: size.toUpperCase(),
         selectedColor: color.toUpperCase(),
         pickupReturnLocationSnapshot,
-        rentalFulfillment: this.createRentalFulfillmentForDates(rentalType, rentalFrom, rentalTo, shootDate, shootTimeSlot),
+        rentalFulfillment: this.createRentalFulfillmentForDates(
+          rentalType,
+          rentalFrom,
+          rentalTo,
+          shootDate,
+          shootTimeSlot,
+        ),
         customRequests: null,
       });
 
@@ -1913,31 +1953,56 @@ export class BookingsService implements OnApplicationBootstrap {
     bookingIdValue: string,
     scheduleIdValue: string,
     customerIdValue: string,
-    input: { address: string; latitude: number; longitude: number; note?: string },
+    input: {
+      address: string;
+      latitude: number;
+      longitude: number;
+      note?: string;
+    },
   ) {
-    if (!Types.ObjectId.isValid(bookingIdValue) || !Types.ObjectId.isValid(scheduleIdValue)) {
-      throw new BadRequestException('Booking or photoshoot schedule is invalid.');
+    if (
+      !Types.ObjectId.isValid(bookingIdValue) ||
+      !Types.ObjectId.isValid(scheduleIdValue)
+    ) {
+      throw new BadRequestException(
+        'Booking or photoshoot schedule is invalid.',
+      );
     }
-    if (!input.address?.trim() || !Number.isFinite(input.latitude) || !Number.isFinite(input.longitude)) {
-      throw new BadRequestException('A precise replacement shoot location is required.');
+    if (
+      !input.address?.trim() ||
+      !Number.isFinite(input.latitude) ||
+      !Number.isFinite(input.longitude)
+    ) {
+      throw new BadRequestException(
+        'A precise replacement shoot location is required.',
+      );
     }
     const booking = await this.bookingModel.findById(bookingIdValue).exec();
     if (!booking) throw new NotFoundException('Booking not found.');
     if (booking.customerId.toString() !== customerIdValue) {
-      throw new ForbiddenException('Only the booking customer can request a location change.');
+      throw new ForbiddenException(
+        'Only the booking customer can request a location change.',
+      );
     }
     if (booking.status !== BookingStatus.Confirmed) {
-      throw new BadRequestException('A location change request is available only after provider confirmation.');
+      throw new BadRequestException(
+        'A location change request is available only after provider confirmation.',
+      );
     }
-    const schedule = await this.bookingScheduleModel.findOne({
-      _id: new Types.ObjectId(scheduleIdValue),
-      bookingId: booking._id,
-      scheduleType: BookingScheduleType.Photoshoot,
-      status: BookingScheduleStatus.Confirmed,
-    }).exec();
-    if (!schedule) throw new NotFoundException('Confirmed photoshoot schedule not found.');
+    const schedule = await this.bookingScheduleModel
+      .findOne({
+        _id: new Types.ObjectId(scheduleIdValue),
+        bookingId: booking._id,
+        scheduleType: BookingScheduleType.Photoshoot,
+        status: BookingScheduleStatus.Confirmed,
+      })
+      .exec();
+    if (!schedule)
+      throw new NotFoundException('Confirmed photoshoot schedule not found.');
     if (schedule.locationChangeRequest?.status === 'PENDING') {
-      throw new BadRequestException('A location change request is already pending for this photoshoot.');
+      throw new BadRequestException(
+        'A location change request is already pending for this photoshoot.',
+      );
     }
     schedule.locationChangeRequest = {
       status: 'PENDING',
@@ -1960,18 +2025,27 @@ export class BookingsService implements OnApplicationBootstrap {
     approved: boolean,
     note?: string,
   ) {
-    if (!Types.ObjectId.isValid(bookingIdValue) || !Types.ObjectId.isValid(scheduleIdValue)) {
-      throw new BadRequestException('Booking or photoshoot schedule is invalid.');
+    if (
+      !Types.ObjectId.isValid(bookingIdValue) ||
+      !Types.ObjectId.isValid(scheduleIdValue)
+    ) {
+      throw new BadRequestException(
+        'Booking or photoshoot schedule is invalid.',
+      );
     }
-    const provider = await this.providerModel.findOne({ userId: new Types.ObjectId(providerUserIdValue) }).exec();
+    const provider = await this.providerModel
+      .findOne({ userId: new Types.ObjectId(providerUserIdValue) })
+      .exec();
     if (!provider) throw new ForbiddenException('Provider profile not found.');
-    const schedule = await this.bookingScheduleModel.findOne({
-      _id: new Types.ObjectId(scheduleIdValue),
-      bookingId: new Types.ObjectId(bookingIdValue),
-      providerId: provider._id,
-      scheduleType: BookingScheduleType.Photoshoot,
-      status: BookingScheduleStatus.Confirmed,
-    }).exec();
+    const schedule = await this.bookingScheduleModel
+      .findOne({
+        _id: new Types.ObjectId(scheduleIdValue),
+        bookingId: new Types.ObjectId(bookingIdValue),
+        providerId: provider._id,
+        scheduleType: BookingScheduleType.Photoshoot,
+        status: BookingScheduleStatus.Confirmed,
+      })
+      .exec();
     const request = schedule?.locationChangeRequest;
     if (!schedule || !request || request.status !== 'PENDING') {
       throw new NotFoundException('Pending location change request not found.');
@@ -2073,7 +2147,11 @@ export class BookingsService implements OnApplicationBootstrap {
       .find({ bookingId })
       .populate('productId')
       .populate('photographyPackageId');
-    const schedules = await this.bookingScheduleModel.find({ bookingId, scheduleType: BookingScheduleType.Photoshoot }).sort({ startsAt: 1 }).lean().exec();
+    const schedules = await this.bookingScheduleModel
+      .find({ bookingId, scheduleType: BookingScheduleType.Photoshoot })
+      .sort({ startsAt: 1 })
+      .lean()
+      .exec();
 
     const bookingObj = booking.toObject();
     const customerUser = booking.customerId as any;
@@ -2120,13 +2198,24 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     }
 
-    const rentalLifecycleItems = await this.bookingItemModel.find({
-      bookingId,
-      itemType: BookingItemType.Product,
-      'rentalFulfillment.status': { $exists: true },
-    }).lean().exec();
-    if (rentalLifecycleItems.length && rentalLifecycleItems.some((item) => item.rentalFulfillment?.status !== RentalFulfillmentStatus.Completed)) {
-      throw new BadRequestException('Không thể hoàn tất booking áo dài trước khi tất cả physical item đã được trả, chốt cọc và hoàn tất theo lifecycle.');
+    const rentalLifecycleItems = await this.bookingItemModel
+      .find({
+        bookingId,
+        itemType: BookingItemType.Product,
+        'rentalFulfillment.status': { $exists: true },
+      })
+      .lean()
+      .exec();
+    if (
+      rentalLifecycleItems.length &&
+      rentalLifecycleItems.some(
+        (item) =>
+          item.rentalFulfillment?.status !== RentalFulfillmentStatus.Completed,
+      )
+    ) {
+      throw new BadRequestException(
+        'Không thể hoàn tất booking áo dài trước khi tất cả physical item đã được trả, chốt cọc và hoàn tất theo lifecycle.',
+      );
     }
     if (booking.status === BookingStatus.Completed) return booking;
 
@@ -2235,21 +2324,6 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     // Nếu chuyển sang COMPLETED → dùng completeBooking để trigger settlement
-    const hasRentalLifecycle = await this.bookingItemModel.exists({
-      bookingId: booking._id,
-      itemType: BookingItemType.Product,
-      'rentalFulfillment.status': { $exists: true },
-    });
-    const lifecycleManagedStatuses = [
-      BookingStatus.PickupPending,
-      BookingStatus.PickedUp,
-      BookingStatus.ReturnPending,
-      BookingStatus.Returned,
-      BookingStatus.Completed,
-    ];
-    if (hasRentalLifecycle && lifecycleManagedStatuses.includes(newStatus as BookingStatus)) {
-      throw new BadRequestException('Booking áo dài dùng lifecycle theo từng physical item. Hãy thao tác trong phần vận hành áo dài để bắt buộc evidence, tất toán cọc và cập nhật kho.');
-    }
     if (newStatus === BookingStatus.Completed) {
       return this.completeBooking(bookingIdStr, userId, roles);
     }
@@ -2368,6 +2442,27 @@ export class BookingsService implements OnApplicationBootstrap {
     });
 
     await booking.save();
+
+    let nextFulfillmentStatus: string | null = null;
+    if (nextStatus === BookingStatus.PickupPending)
+      nextFulfillmentStatus = RentalFulfillmentStatus.ReadyForPickup;
+    else if (nextStatus === BookingStatus.PickedUp)
+      nextFulfillmentStatus = RentalFulfillmentStatus.PickedUp;
+    else if (nextStatus === BookingStatus.Returned)
+      nextFulfillmentStatus = RentalFulfillmentStatus.Returned;
+    else if (nextStatus === BookingStatus.Completed)
+      nextFulfillmentStatus = RentalFulfillmentStatus.Completed;
+
+    if (nextFulfillmentStatus) {
+      await this.bookingItemModel.updateMany(
+        {
+          bookingId: booking._id,
+          itemType: BookingItemType.Product,
+          'rentalFulfillment.status': { $exists: true },
+        },
+        { $set: { 'rentalFulfillment.status': nextFulfillmentStatus } },
+      );
+    }
 
     if (
       nextStatus === BookingStatus.Confirmed ||
@@ -3223,6 +3318,8 @@ export class BookingsService implements OnApplicationBootstrap {
       const items = await this.bookingItemModel.find({
         bookingId: booking._id,
       });
+
+      // 1. Khóa tạm thời áo dài bị báo lỗi
       const maintenanceUntil = new Date(Date.now() + 48 * 60 * 60 * 1000);
       const notes = `LOCKED_UNTIL_${maintenanceUntil.toISOString()}: Khách từ chối nhận do lỗi nặng: ${reason}`;
 
@@ -3237,35 +3334,63 @@ export class BookingsService implements OnApplicationBootstrap {
           );
         }
       }
-    } catch (err) {
-      console.error('Failed to lock inventory items on rejection:', err);
-    }
 
-    const result = await this.cancelBooking(
-      bookingId,
-      customerId,
-      `Khách từ chối nhận do lỗi nặng tại quầy: ${reason}`,
-    );
+      // 2. Chuyển trạng thái đơn hàng sang DISPUTED (Tranh chấp)
+      booking.status = BookingStatus.Disputed;
+      booking.statusTimeline.push({
+        status: BookingStatus.Disputed,
+        changedAt: new Date(),
+        note: `Khách hàng từ chối nhận đồ do lỗi nặng tại quầy: ${reason}`,
+      });
+      await booking.save();
 
-    // Notify provider of rejection
-    try {
+      // 3. Đóng băng các khoản quyết toán (Hold settlements)
+      await this.settlementsService.holdSettlementsForBooking(
+        booking._id.toString(),
+        `Booking is under dispute (Customer reject handover)`,
+      );
+
+      // 4. Tạo Dispute Record cho Admin xử lý
+      const disputeModel = this.bookingModel.db.model('Dispute');
+      const firstItem =
+        items.find((it) => it.itemType === BookingItemType.Product) || items[0];
+      await disputeModel.findOneAndUpdate(
+        { bookingId: booking._id },
+        {
+          $setOnInsert: {
+            bookingId: booking._id,
+            bookingItemId: firstItem?._id,
+            openedBy: new Types.ObjectId(customerId),
+            againstProviderId: booking.providerIds[0],
+            reason: `Khách hàng từ chối nhận đồ do lỗi nặng tại quầy: ${reason}`,
+            evidencePhotos: evidencePhotos,
+            status: 'OPEN',
+          },
+        },
+        { upsert: true, new: true },
+      );
+
+      // 5. Gửi thông báo cho Shop đối tác
       for (const pId of booking.providerIds) {
         const provider = await this.providerModel.findById(pId);
         if (provider && provider.userId) {
           await this.notificationsService.createNotification(
             provider.userId.toString(),
             'Khách từ chối nhận đồ',
-            `Khách hàng đã từ chối nhận trang phục cho đơn hàng ${booking.bookingCode} do lỗi nặng tại quầy: ${reason}.`,
+            `Khách hàng đã từ chối nhận trang phục cho đơn hàng ${booking.bookingCode} do lỗi nặng tại quầy: ${reason}. Đơn hàng đã được chuyển sang trạng thái tranh chấp cho Admin xử lý.`,
             NotificationType.Booking,
             { bookingId: booking._id },
           );
         }
       }
-    } catch (e) {
-      console.error('Failed to notify provider of rejection:', e);
-    }
 
-    return { success: true, result };
+      return { success: true, booking };
+    } catch (err: any) {
+      console.error('Failed to process customer reject handover dispute:', err);
+      throw new InternalServerErrorException(
+        err.message || 'Lỗi xảy ra khi xử lý khiếu nại từ chối nhận đồ',
+      );
+    }
   }
 
   private getCustomerIdStr(booking: any): string {

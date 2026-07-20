@@ -50,6 +50,7 @@ interface DisputeItem {
   adminNotes?: string;
   resolvedAt?: string;
   createdAt: string;
+  isDirectDispute?: boolean;
 }
 
 interface VerificationDocumentVersion {
@@ -2196,7 +2197,7 @@ export const AdminDashboardPage: React.FC = () => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', overflow: 'hidden' }}>
           <div style={{ padding: '20px 24px', borderBottom: '1px solid #E8E2D5', backgroundColor: '#FAF6F0' }}>
-            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17' }}>DANH SÁCH YÊU CẦU ĐỀN BÙ SỰ CỐ ĐANG TRANH CHẤP</h3>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: '#4A0E17' }}>DANH SÁCH YÊU CẦU ĐỀN BÙ SỰ CỐ & TRANH CHẤP ĐANG XỬ LÝ</h3>
           </div>
           {disputes.length === 0 ? (
             <div style={{ padding: '60px', textAlign: 'center', color: '#7A7A7A', fontWeight: 600 }}>Không có cuộc tranh chấp sự cố nào cần xử lý.</div>
@@ -2205,10 +2206,11 @@ export const AdminDashboardPage: React.FC = () => {
               <thead>
                 <tr style={{ borderBottom: '1px solid #E8E2D5', backgroundColor: '#FAF6F0' }}>
                   <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>MÃ ĐƠN HÀNG</th>
-                  <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>SẢN PHẨM SỰ CỐ</th>
-                  <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>ĐỐI TÁC KHAI BÁO</th>
-                  <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>YÊU CẦU ĐỀN BÙ</th>
-                  <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>TIỀN CỌC GIỮ ĐỒ</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>LOẠI TRANH CHẤP</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>SẢN PHẨM</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>ĐỐI TÁC LIÊN QUAN</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>SỐ TIỀN TRANH CHẤP</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>GIỚI HẠN QUỸ</th>
                   <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>THAO TÁC</th>
                 </tr>
               </thead>
@@ -2216,17 +2218,28 @@ export const AdminDashboardPage: React.FC = () => {
                 {disputes.map(d => {
                   const bookingCode = d.bookingId?.bookingCode || 'N/A';
                   const productName = d.productId?.name || d.bookingItemId?.name || 'Sản phẩm';
-                  const shopName = d.reportedBy?.businessName || d.reportedBy?.profile?.fullName || 'Shop';
+                  const shopName = d.reportedBy?.businessName || d.reportedBy?.profile?.fullName || d.reportedBy?.fullName || 'Shop';
                   const reqAmt = d.requestedAmount;
-                  const depTotal = d.bookingId?.pricingSummary?.depositTotal || 0;
+                  const limitTotal = d.isDirectDispute ? d.requestedAmount : (d.bookingId?.pricingSummary?.depositTotal || 0);
+                  const disputeTypeLabel = d.isDirectDispute ? 'Từ chối nhận đồ' : 'Báo hỏng đền bù';
+                  const disputeTypeColor = d.isDirectDispute ? '#C53030' : '#D69E2E';
+                  const disputeTypeBg = d.isDirectDispute ? '#FFF5F5' : '#FEFCBF';
 
                   return (
                     <tr key={d._id} style={{ borderBottom: '1px solid #E8E2D5', backgroundColor: selectedDetailItem?._id === d._id ? '#FFF9F9' : 'transparent' }}>
                       <td style={{ padding: '16px 20px', fontWeight: 700 }}>{bookingCode}</td>
+                      <td style={{ padding: '16px 20px' }}>
+                        <span style={{
+                          padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
+                          color: disputeTypeColor, backgroundColor: disputeTypeBg, border: `1px solid ${disputeTypeColor}33`
+                        }}>
+                          {disputeTypeLabel.toUpperCase()}
+                        </span>
+                      </td>
                       <td style={{ padding: '16px 20px', fontWeight: 600 }}>{productName}</td>
                       <td style={{ padding: '16px 20px', color: '#4A0E17', fontWeight: 600 }}>{shopName}</td>
                       <td style={{ padding: '16px 20px', fontWeight: 700, color: '#C53030', textAlign: 'right' }}>{reqAmt.toLocaleString()}đ</td>
-                      <td style={{ padding: '16px 20px', fontWeight: 700, color: '#2B6CB0', textAlign: 'right' }}>{depTotal.toLocaleString()}đ</td>
+                      <td style={{ padding: '16px 20px', fontWeight: 700, color: '#2B6CB0', textAlign: 'right' }}>{limitTotal.toLocaleString()}đ</td>
                       <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                         <button
                           onClick={() => {
@@ -2648,8 +2661,8 @@ export const AdminDashboardPage: React.FC = () => {
     if (selectedDetailItem.type === 'DISPUTE') {
       const d = selectedDetailItem as DisputeItem;
       const bookingCode = d.bookingId?.bookingCode || 'N/A';
-      const shopName = d.reportedBy?.businessName || 'Shop';
-      const depositTotal = d.bookingId?.pricingSummary?.depositTotal || 0;
+      const shopName = d.reportedBy?.businessName || d.reportedBy?.fullName || 'Shop';
+      const depositTotal = d.isDirectDispute ? d.requestedAmount : (d.bookingId?.pricingSummary?.depositTotal || 0);
 
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -2658,22 +2671,55 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#7A7A7A' }}>Đối tác báo cáo:</span> <strong>{shopName}</strong></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#7A7A7A' }}>Khách hàng khiếu nại:</span> <strong>{d.bookingId?.customerId?.profile?.fullName || 'Khách hàng'}</strong></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#7A7A7A' }}>SẢN PHẨM HƯ HẠI:</span> <strong>{d.productId?.name || d.bookingItemId?.name || 'Sản phẩm'}</strong></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#7A7A7A' }}>Yêu cầu đền bù của Shop:</span> <strong style={{ color: '#C53030' }}>{d.requestedAmount.toLocaleString()}đ</strong></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#7A7A7A' }}>Tổng cọc giữ đồ của khách:</span> <strong style={{ color: '#2B6CB0' }}>{depositTotal.toLocaleString()}đ</strong></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: '#7A7A7A' }}>{d.isDirectDispute ? 'Đối tác bị khiếu nại:' : 'Đối tác báo cáo:'}</span> 
+              <strong>{shopName}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: '#7A7A7A' }}>{d.isDirectDispute ? 'Người mở tranh chấp (Khách):' : 'Khách hàng khiếu nại:'}</span> 
+              <strong>{d.bookingId?.customerId?.profile?.fullName || d.bookingId?.customerId?.fullName || 'Khách hàng'}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: '#7A7A7A' }}>{d.isDirectDispute ? 'SẢN PHẨM LIÊN QUAN:' : 'SẢN PHẨM HƯ HẠI:'}</span> 
+              <strong>{d.productId?.name || d.bookingItemId?.name || 'Sản phẩm'}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: '#7A7A7A' }}>{d.isDirectDispute ? 'Tiền tranh chấp đơn hàng:' : 'Yêu cầu đền bù của Shop:'}</span> 
+              <strong style={{ color: '#C53030' }}>{d.requestedAmount.toLocaleString()}đ</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: '#7A7A7A' }}>{d.isDirectDispute ? 'Giới hạn quỹ giải quyết:' : 'Tổng cọc giữ đồ của khách:'}</span> 
+              <strong style={{ color: '#2B6CB0' }}>{depositTotal.toLocaleString()}đ</strong>
+            </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
-              <span style={{ color: '#7A7A7A' }}>Mô tả sự việc từ Shop:</span>
+              <span style={{ color: '#7A7A7A' }}>{d.isDirectDispute ? 'Mô tả từ Khách hàng (Lý do từ chối):' : 'Mô tả sự việc từ Shop:'}</span>
               <p style={{ margin: 0, padding: '10px', backgroundColor: '#FFF5F5', borderRadius: '6px', borderLeft: '4px solid #E53E3E', fontSize: '13px', fontStyle: 'italic' }}>
                 "{d.description}"
               </p>
             </div>
 
-            {d.evidencePhotos && d.evidencePhotos.length > 0 && (
+            {d.bookingId?.handoverPhotos && d.bookingId.handoverPhotos.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
-                <span style={{ color: '#7A7A7A', display: 'flex', alignItems: 'center', gap: '4px' }}><ImageIcon size={14} /> Bằng chứng sự cố gửi lên:</span>
+                <span style={{ color: '#7A7A7A', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}><ImageIcon size={14} style={{ color: '#706E3B' }} /> Ảnh bàn giao chuẩn bị đồ từ Shop:</span>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {d.bookingId.handoverPhotos.map((photo: string, idx: number) => (
+                    <PrivateEvidenceImage
+                      key={idx}
+                      reference={photo}
+                      legacyUrl={getImageUrl(photo)}
+                      alt={`Ảnh bàn giao ${idx + 1}`}
+                      linkStyle={{ display: 'block', borderRadius: '6px', overflow: 'hidden', border: '1px solid #E8E2D5' }}
+                      imageStyle={{ width: '65px', height: '65px', objectFit: 'cover' }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {d.evidencePhotos && d.evidencePhotos.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                <span style={{ color: '#7A7A7A', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}><ImageIcon size={14} style={{ color: '#C53030' }} /> Bằng chứng khiếu nại gửi lên (Khách):</span>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   {d.evidencePhotos.map((photo, idx) => (
                     <PrivateEvidenceImage
