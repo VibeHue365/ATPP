@@ -27,6 +27,7 @@ import {
 } from '../dto/admin-users.dto';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
+import { CreateUserAddressDto, UpdateUserAddressDto } from '../dto/user-address.dto';
 import { UserProfileMapper } from '../mappers/user-profile.mapper';
 import { UsersRepository } from '../repositories/users.repository';
 import { PublicMediaService } from '../../storage/services/public-media.service';
@@ -94,10 +95,89 @@ export class UsersService {
     }
 
     await this.usersRepository.updateProfile(userObjectId, update);
-
     return this.getMe(userId, roles);
   }
 
+  async listAddresses(userId: string): Promise<Record<string, unknown>[]> {
+    const user = await this.findUserForAddresses(userId);
+    return this.toAddressResponses(user);
+  }
+
+  async createAddress(userId: string, dto: CreateUserAddressDto): Promise<Record<string, unknown>> {
+    const user = await this.findUserForAddresses(userId);
+    const addresses = this.addressEntries(user);
+    const shouldBecomeDefault = dto.isDefault === true || addresses.length === 0;
+    if (shouldBecomeDefault) addresses.forEach((address) => { address.isDefault = false; });
+    addresses.push({ ...this.normalizeAddress(dto), isDefault: shouldBecomeDefault });
+    await user.save();
+    return this.toAddressResponses(user).at(-1)!;
+  }
+
+  async updateAddress(userId: string, addressId: string, dto: UpdateUserAddressDto): Promise<Record<string, unknown>> {
+    if (Object.keys(dto).length === 0) throw new BadRequestException('No address fields to update');
+    const user = await this.findUserForAddresses(userId);
+    const address = this.findAddressEntry(user, addressId);
+    Object.assign(address, this.normalizeAddress(dto));
+    await user.save();
+    return this.toAddressResponse(address);
+  }
+
+  async removeAddress(userId: string, addressId: string): Promise<void> {
+    const user = await this.findUserForAddresses(userId);
+    const addresses = this.addressEntries(user);
+    const index = addresses.findIndex((address) => String(address._id) === addressId);
+    if (index < 0) throw new NotFoundException('Address not found');
+    const [removed] = addresses.splice(index, 1);
+    if (removed.isDefault && addresses.length > 0) addresses[0].isDefault = true;
+    await user.save();
+  }
+
+  async setDefaultAddress(userId: string, addressId: string): Promise<Record<string, unknown>> {
+    const user = await this.findUserForAddresses(userId);
+    const selected = this.findAddressEntry(user, addressId);
+    this.addressEntries(user).forEach((address) => { address.isDefault = String(address._id) === String(selected._id); });
+    await user.save();
+    return this.toAddressResponse(selected);
+  }
+
+  private async findUserForAddresses(userId: string): Promise<UserDocument> {
+    const user = await this.usersRepository.findUserById(this.toObjectId(userId));
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  private addressEntries(user: UserDocument): Array<Record<string, any>> {
+    return ((user.addresses || []) as unknown) as Array<Record<string, any>>;
+  }
+
+  private findAddressEntry(user: UserDocument, addressId: string): Record<string, any> {
+    if (!Types.ObjectId.isValid(addressId)) throw new NotFoundException('Address not found');
+    const address = this.addressEntries(user).find((entry) => String(entry._id) === addressId);
+    if (!address) throw new NotFoundException('Address not found');
+    return address;
+  }
+
+  private normalizeAddress(dto: Partial<CreateUserAddressDto>): Record<string, unknown> {
+    const normalized: Record<string, unknown> = {};
+    const textFields = ['label', 'recipientName', 'phone', 'addressLine', 'ward', 'district', 'city', 'note'] as const;
+    for (const field of textFields) {
+      if (dto[field] !== undefined) normalized[field] = dto[field]?.trim() || null;
+    }
+    return normalized;
+  }
+
+  private toAddressResponses(user: UserDocument): Record<string, unknown>[] {
+    return this.addressEntries(user).map((address) => this.toAddressResponse(address));
+  }
+
+  private toAddressResponse(address: Record<string, any>): Record<string, unknown> {
+    return {
+      id: String(address._id), label: address.label, recipientName: address.recipientName ?? null,
+      phone: address.phone ?? null, addressLine: address.addressLine, ward: address.ward ?? null,
+      district: address.district ?? null, city: address.city ?? null, note: address.note ?? null,
+      isDefault: Boolean(address.isDefault),
+    };
+  }
   async updateAvatar(
     userId: string,
     file: Express.Multer.File | undefined,

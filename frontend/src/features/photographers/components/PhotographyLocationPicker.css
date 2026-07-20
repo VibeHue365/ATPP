@@ -1,0 +1,19 @@
+.pd-location-picker { display: flex; flex-direction: column; gap: 13px; padding: 16px; border: 1px solid rgba(182, 145, 91, 0.28); border-radius: 12px; background: #fffdfa; }
+.pd-location-picker-heading { display: flex; align-items: center; gap: 8px; color: var(--color-primary-dark); font-size: 14px; font-weight: 800; }
+.pd-location-picker-hint { margin: -4px 0 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.5; }
+.pd-location-picker-fields { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(120px, 1fr)); gap: 10px; }
+.pd-location-picker-fields label { display: grid; gap: 6px; color: #514a45; font-size: 12px; font-weight: 700; }
+.pd-location-picker-fields input { width: 100%; min-height: 40px; padding: 9px 10px; border: 1px solid rgba(182, 145, 91, 0.3); border-radius: 8px; background: #fff; color: var(--color-text-primary); font: inherit; }
+.pd-location-search { display: flex; gap: 8px; }
+.pd-location-search input { min-width: 0; }
+.pd-location-search .vh-btn { flex: 0 0 auto; }
+.pd-location-search-results { position: relative; z-index: 2; display: grid; max-height: 180px; overflow: auto; border: 1px solid rgba(182, 145, 91, 0.28); border-radius: 8px; background: #fff; box-shadow: var(--shadow-sm); }
+.pd-location-search-results button { padding: 9px 10px; border: 0; border-bottom: 1px solid rgba(45, 41, 38, 0.08); background: #fff; color: var(--color-text-primary); text-align: left; font: inherit; font-weight: 500; cursor: pointer; }
+.pd-location-search-results button:hover { background: #fff6ec; }
+.pd-location-map { position: relative; z-index: 0; isolation: isolate; width: 100%; height: 300px; overflow: hidden; border: 1px solid rgba(182, 145, 91, 0.35); border-radius: 10px; }
+.pd-location-picker-note, .pd-location-picker-error { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; }
+.pd-location-picker-note { color: var(--color-text-secondary); }
+.pd-location-picker-error { color: #b42318; }
+@media (max-width: 760px) { .pd-location-picker-fields { grid-template-columns: 1fr; } .pd-location-map { height: 260px; } }
+.pd-osm-marker { background: transparent; border: 0; }
+.pd-osm-marker span { display: block; width: 28px; height: 28px; border: 3px solid #fff; border-radius: 50% 50% 50% 0; background: #a11e22; box-shadow: 0 3px 10px rgba(65, 17, 18, 0.35); transform: rotate(-45deg); }

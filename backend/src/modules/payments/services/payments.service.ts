@@ -443,10 +443,7 @@ export class PaymentsService {
       return { message: 'No deposit to refund' };
     }
 
-    const payment = await this.paymentsRepository.findPaymentByBookingAndStatus(
-      bookingId,
-      PaymentStatus.Success,
-    );
+    const payment = await this.paymentsRepository.findDepositPaymentByBooking(bookingId);
 
     const orderCode =
       payment?.payos?.orderCode || Math.floor(100000 + Math.random() * 900000);

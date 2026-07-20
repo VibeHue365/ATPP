@@ -58,6 +58,7 @@ describe('PhotographyHoldService.confirmForBooking', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
       inventoryReservationModel as any,
       {} as any,
     );
@@ -170,10 +171,20 @@ describe('PhotographyHoldService.confirmForBooking', () => {
       basePrice: 500000,
       depositAmount: 300000,
     };
+    const providerModel = {
+      findById: jest.fn().mockReturnValue(
+        queryResult({
+          address: {
+            addressLine: '1 Nguyen Hue, District 1',
+            geo: { type: 'Point', coordinates: [106.7, 10.77] },
+          },
+          rentalSettings: { useBusinessAddressForPickup: true },
+        }),
+      ),
+    };
     const productModel = {
       findOne: jest.fn().mockReturnValue(queryResult(product)),
-    };
-    const inventoryModel = {
+    };    const inventoryModel = {
       find: jest.fn().mockReturnValue(
         queryResult([
           {
@@ -205,6 +216,7 @@ describe('PhotographyHoldService.confirmForBooking', () => {
       {} as any,
       {} as any,
       {} as any,
+      providerModel as any,
       productModel as any,
       inventoryModel as any,
       inventoryReservationModel as any,

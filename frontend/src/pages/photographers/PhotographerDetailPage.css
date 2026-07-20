@@ -882,21 +882,6 @@
   .pd-lightbox-meta { flex-direction: column; align-items: flex-start; gap: 8px; }
   .pd-lightbox-counter { white-space: normal; text-align: left; }
 }
-/* Administrative location picker for photography bookings */
-.pd-location-picker { display: flex; flex-direction: column; gap: 13px; padding: 16px; border: 1px solid rgba(182, 145, 91, 0.28); border-radius: 12px; background: #fffdfa; }
-.pd-location-picker-heading { display: flex; align-items: center; gap: 8px; color: var(--color-primary-dark); font-size: 14px; font-weight: 800; }
-.pd-location-picker-hint { margin: -4px 0 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.5; }
-.pd-location-picker-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.pd-location-picker-fields label { display: grid; gap: 6px; color: #514A45; font-size: 12px; font-weight: 700; }
-.pd-location-picker-fields input, .pd-location-picker-fields select { width: 100%; box-sizing: border-box; min-height: 40px; padding: 9px 10px; border: 1px solid rgba(182, 145, 91, 0.3); border-radius: 8px; background: #fff; color: var(--color-text-primary); font: inherit; }
-.pd-location-picker-fields input { background: #f7f3ed; color: #6e655f; cursor: not-allowed; }
-.pd-location-picker-fields select:disabled { cursor: not-allowed; opacity: 0.58; }
-.pd-location-picker-note, .pd-location-picker-error { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; }
-.pd-location-picker-note { color: var(--color-text-secondary); }
-.pd-location-picker-error { color: #b42318; }
-.pd-location-picker-spinner { animation: pd-location-spin 0.9s linear infinite; }
-@keyframes pd-location-spin { to { transform: rotate(360deg); } }
-@media (max-width: 760px) { .pd-location-picker-fields { grid-template-columns: 1fr; } }
 /* Phase 4: duration and server-quoted pricing */
 .pd-duration-control {
   margin-top: 18px;

@@ -19,6 +19,18 @@ export class UserProfileMapper {
       hasCompletedOnboarding: user.hasCompletedOnboarding,
       preferences: user.preferences,
       favorites: user.favorites || [],
+      addresses: (user.addresses || []).map((address) => ({
+        id: (address as unknown as { _id?: Types.ObjectId })._id?.toString(),
+        label: address.label,
+        recipientName: address.recipientName ?? null,
+        phone: address.phone ?? null,
+        addressLine: address.addressLine,
+        ward: address.ward ?? null,
+        district: address.district ?? null,
+        city: address.city ?? null,
+        note: address.note ?? null,
+        isDefault: Boolean(address.isDefault),
+      })),
       profile: {
         fullName: user.profile.fullName,
         phone: user.auth.phone,

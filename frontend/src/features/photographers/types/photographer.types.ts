@@ -19,6 +19,11 @@ export interface PhotographerPackage {
   maxOvertimeMinutes?: number;
 }
 
+export interface LocationSelection {
+  address: string;
+  latitude: number;
+  longitude: number;
+}
 export interface PhotographyQuoteBreakdownItem {
   type: 'BASE_PACKAGE' | 'OVERTIME' | 'SURCHARGE';
   label: string;
@@ -167,6 +172,10 @@ export interface PhotographerDiscoveryParams {
   minPrice?: number;
   maxPrice?: number;
   minRating?: number;
+  /** Customer-only search point. It is sent for filtering and never displayed. */
+  latitude?: number;
+  longitude?: number;
+  searchRadiusKm?: number;
   sort?: PhotographerDiscoverySort;
   page?: number;
   limit?: number;

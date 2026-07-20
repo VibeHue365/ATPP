@@ -32,6 +32,8 @@ export const photographersApi = {
         startsAt: string;
         endsAt: string;
         locationAddress?: string;
+        locationLatitude?: number;
+        locationLongitude?: number;
       }>;
     },
   ) => httpClient.post<PhotographyQuote>(`/api/photographers/${providerId}/quote`, payload),

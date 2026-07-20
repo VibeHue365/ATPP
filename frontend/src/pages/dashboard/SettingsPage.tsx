@@ -16,8 +16,9 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/env';
 import { httpClient } from '../../services/httpClient';
+import { AddressBook } from '../../features/users/components/AddressBook';
 
-type SettingsTab = 'personal' | 'preferences' | 'security' | 'notifications' | 'transactions';
+type SettingsTab = 'personal' | 'addresses' | 'preferences' | 'security' | 'notifications' | 'transactions';
 
 export const SettingsPage: React.FC = () => {
   const { user, updateProfile, updateAvatar } = useAuth();
@@ -32,9 +33,7 @@ export const SettingsPage: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER' | ''>('');
-  
-  // Custom address persistent in localStorage
-  const [address, setAddress] = useState('');
+
 
   // Avatar states
   const [isUploading, setIsUploading] = useState(false);
@@ -111,7 +110,6 @@ export const SettingsPage: React.FC = () => {
       if (user.dateOfBirth) {
         setDateOfBirth(new Date(user.dateOfBirth).toISOString().split('T')[0]);
       }
-      setAddress(localStorage.getItem(`vh_user_address_${user.id}`) || '123 Phố Huế, Quận Hai Bà Trưng, Hà Nội, Việt Nam');
     }
   }, [user]);
 
@@ -173,19 +171,7 @@ export const SettingsPage: React.FC = () => {
       if (dateOfBirth) payload.dateOfBirth = dateOfBirth;
 
       await updateProfile(payload);
-
-      // Save custom address
-      if (user?.id) {
-        localStorage.setItem(`vh_user_address_${user.id}`, address);
-        // Also ensure location matches address city/province
-        const parts = address.split(',');
-        const lastPart = parts[parts.length - 1]?.trim() || 'Hà Nội, VN';
-        localStorage.setItem(`vh_user_location_${user.id}`, lastPart);
-        
-        // Dispatch global sync event
-        window.dispatchEvent(new Event('vh-profile-updated'));
-      }
-
+      window.dispatchEvent(new Event('vh-profile-updated'));
       toast.success('Lưu thay đổi thông tin cá nhân thành công!');
       navigate(ROUTES.PROFILE);
     } catch (err: any) {
@@ -236,6 +222,14 @@ export const SettingsPage: React.FC = () => {
             >
               <User size={16} />
               <span>Thông tin cá nhân</span>
+            </button>
+
+            <button
+              className={`vh-settings-aside-nav-item ${activeTab === 'addresses' ? 'nav-item-active' : ''}`}
+              onClick={() => setActiveTab('addresses')}
+            >
+              <History size={16} />
+              <span>Sổ địa chỉ</span>
             </button>
 
             <button
@@ -420,17 +414,6 @@ export const SettingsPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Address */}
-                  <div className="vh-settings-input-block col-span-2" style={{ gridColumn: 'span 2' }}>
-                    <label className="vh-settings-input-label">ĐỊA CHỈ</label>
-                    <input 
-                      type="text" 
-                      className="vh-settings-input-field" 
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="123 Phố Huế, Quận Hai Bà Trưng, Hà Nội, Việt Nam"
-                    />
-                  </div>
                 </div>
 
                 {/* Redirect button to change password tab */}
@@ -466,7 +449,9 @@ export const SettingsPage: React.FC = () => {
             </div>
           )}
 
-          {/* Tab 2: Security */}
+          {activeTab === 'addresses' && <AddressBook />}
+
+          {/* Tab 2: Preferences */}
           {activeTab === 'preferences' && (
             <div className="vh-settings-tab-view animate-fade-in" style={{ maxWidth: '680px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '4px' }}>

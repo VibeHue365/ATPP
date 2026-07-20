@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Payment, PaymentDocument, PaymentStatus } from '../schemas/payment.schema';
+import { Payment, PaymentDocument, PaymentPurpose, PaymentStatus } from '../schemas/payment.schema';
 
 @Injectable()
 export class PaymentsRepository {
@@ -54,6 +54,14 @@ export class PaymentsRepository {
     return this.paymentModel.findOne({ bookingId, status });
   }
 
+  async findDepositPaymentByBooking(bookingId: Types.ObjectId): Promise<PaymentDocument | null> {
+    return this.paymentModel.findOne({ bookingId, status: PaymentStatus.Success, purpose: PaymentPurpose.DepositPayment });
+  }
+
+  async completedRefundedAmount(bookingId: Types.ObjectId): Promise<number> {
+    const payments = await this.paymentModel.find({ bookingId, status: PaymentStatus.Success }).lean().exec();
+    return payments.reduce((sum, payment) => sum + (payment.refundedAmount || 0), 0);
+  }
   async updateStatus(paymentCode: string, status: PaymentStatus): Promise<PaymentDocument | null> {
     return this.paymentModel.findOneAndUpdate(
       { paymentCode },

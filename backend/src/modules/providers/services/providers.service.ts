@@ -15,6 +15,8 @@ import {
   ProviderAddress,
   ProviderPolicies,
   ProviderMedia,
+  ProviderRentalSettings,
+  ProviderPhotographySettings,
 } from '../schemas/provider.schema';
 import type { ProviderDocument } from '../schemas/provider.schema';
 import type { ProviderScheduleDocument } from '../../products/schemas/provider-schedule.schema';
@@ -43,6 +45,8 @@ export interface UpdateProviderProfileDto {
   address?: ProviderAddress;
   policies?: ProviderPolicies;
   media?: ProviderMedia;
+  rentalSettings?: Partial<ProviderRentalSettings>;
+  photographySettings?: Partial<ProviderPhotographySettings>;
   comboDiscountPercent?: number;
 }
 
@@ -107,7 +111,8 @@ export class ProvidersService {
       throw new NotFoundException('Provider profile not found');
     }
 
-    const updated = await this.providersRepository.update(provider._id, dto);
+    const update = this.normalizeLocationUpdate(provider, dto);
+    const updated = await this.providersRepository.update(provider._id, update as Partial<Provider>);
     if (!updated) {
       throw new NotFoundException('Failed to update provider profile');
     }
@@ -115,6 +120,68 @@ export class ProvidersService {
     return updated;
   }
 
+  private normalizeLocationUpdate(
+    provider: ProviderDocument,
+    dto: UpdateProviderProfileDto,
+  ): UpdateProviderProfileDto {
+    const rentalSettings = dto.rentalSettings
+      ? { ...provider.rentalSettings, ...dto.rentalSettings }
+      : undefined;
+    const photographySettings = dto.photographySettings
+      ? { ...provider.photographySettings, ...dto.photographySettings }
+      : undefined;
+
+    this.assertGeoPoint(dto.address?.geo, 'address.geo');
+    this.assertGeoPoint(rentalSettings?.pickupLocation?.geo, 'rentalSettings.pickupLocation.geo');
+
+    if (rentalSettings) {
+      if (rentalSettings.useBusinessAddressForPickup && rentalSettings.pickupLocation) {
+        throw new BadRequestException(
+          'pickupLocation must be empty when useBusinessAddressForPickup is true',
+        );
+      }
+      if (!rentalSettings.useBusinessAddressForPickup && !rentalSettings.pickupLocation?.addressLine?.trim()) {
+        throw new BadRequestException(
+          'pickupLocation is required when useBusinessAddressForPickup is false',
+        );
+      }
+    }
+
+    const serviceRadiusKm = photographySettings?.serviceRadiusKm;
+    if (serviceRadiusKm !== undefined && serviceRadiusKm !== null) {
+      if (!Number.isFinite(serviceRadiusKm) || serviceRadiusKm < 0 || serviceRadiusKm > 500) {
+        throw new BadRequestException('serviceRadiusKm must be between 0 and 500');
+      }
+      const effectiveAddress = dto.address ?? provider.address;
+      if (serviceRadiusKm > 0 && !effectiveAddress.geo?.coordinates) {
+        throw new BadRequestException(
+          'A provider base location is required before configuring a service radius',
+        );
+      }
+    }
+
+    return {
+      ...dto,
+      ...(rentalSettings ? { rentalSettings } : {}),
+      ...(photographySettings ? { photographySettings } : {}),
+    };
+  }
+
+  private assertGeoPoint(
+    geo: ProviderAddress['geo'] | undefined | null,
+    field: string,
+  ): void {
+    if (geo === undefined || geo === null) return;
+    const [longitude, latitude] = geo.coordinates ?? [];
+    if (
+      geo.type !== 'Point' ||
+      !Number.isFinite(longitude) ||
+      !Number.isFinite(latitude) ||
+      longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90
+    ) {
+      throw new BadRequestException(`${field} must contain [longitude, latitude]`);
+    }
+  }
   async addPortfolioImage(
     userIdStr: string,
     imageUrl: string,

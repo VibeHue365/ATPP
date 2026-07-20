@@ -17,6 +17,7 @@ import { PortfolioItemFormModal, type PortfolioItemFormValues } from '../../feat
 import { PhotographyPackageManager } from '../../features/photography-packages/components/PhotographyPackageManager';
 import { categoryService } from '../../features/categories/services/categoryService';
 import type { Category } from '../../features/categories/types';
+import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
 
 interface Order {
   _id: string;
@@ -89,7 +90,7 @@ export const ProviderDashboard: React.FC = () => {
   }, [user, isAuthenticated, navigate, toast]);
 
   // Views navigation state
-  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'photography-packages' | 'calendar' | 'vouchers' | 'inventory' | 'reviews' | 'trust' | 'analytics' | 'payouts'>('analytics');
+  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'photography-packages' | 'calendar' | 'vouchers' | 'inventory' | 'reviews' | 'trust' | 'analytics' | 'payouts' | 'rental-operations'>('analytics');
   const [collectionTab, setCollectionTab] = useState<'products' | 'inventory'>('products');
 
   // Provider Specific States
@@ -179,6 +180,13 @@ export const ProviderDashboard: React.FC = () => {
   const [city, setCity] = useState('');
   const [cancellationPolicy, setCancellationPolicy] = useState('');
   const [comboDiscountPercent, setComboDiscountPercent] = useState(0);
+  const [baseLatitude, setBaseLatitude] = useState('');
+  const [baseLongitude, setBaseLongitude] = useState('');
+  const [serviceRadiusKm, setServiceRadiusKm] = useState('');
+  const [useBusinessAddressForPickup, setUseBusinessAddressForPickup] = useState(true);
+  const [pickupAddressLine, setPickupAddressLine] = useState('');
+  const [pickupLatitude, setPickupLatitude] = useState('');
+  const [pickupLongitude, setPickupLongitude] = useState('');
 
   // Form states - Voucher
   const [vCode, setVCode] = useState('');
@@ -294,6 +302,13 @@ export const ProviderDashboard: React.FC = () => {
       setCity(pRes.address?.city || '');
       setCancellationPolicy(pRes.policies?.cancellationPolicy || '');
       setComboDiscountPercent(pRes.comboDiscountPercent ?? 0);
+      setBaseLatitude(pRes.address?.geo?.coordinates?.[1]?.toString() ?? '');
+      setBaseLongitude(pRes.address?.geo?.coordinates?.[0]?.toString() ?? '');
+      setServiceRadiusKm(pRes.photographySettings?.serviceRadiusKm?.toString() ?? '');
+      setUseBusinessAddressForPickup(pRes.rentalSettings?.useBusinessAddressForPickup !== false);
+      setPickupAddressLine(pRes.rentalSettings?.pickupLocation?.addressLine ?? '');
+      setPickupLatitude(pRes.rentalSettings?.pickupLocation?.geo?.coordinates?.[1]?.toString() ?? '');
+      setPickupLongitude(pRes.rentalSettings?.pickupLocation?.geo?.coordinates?.[0]?.toString() ?? '');
 
       if (Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY')) {
         const portfolioRes: any = await httpClient.get('/providers/me/portfolio-items');
@@ -483,7 +498,9 @@ export const ProviderDashboard: React.FC = () => {
       await httpClient.patch('/providers/me', {
         businessName,
         contact: { ...provider?.contact, phone },
-        address: { ...provider?.address, addressLine, city },
+        address: { ...provider?.address, addressLine, city, geo: baseLatitude && baseLongitude ? { type: 'Point', coordinates: [Number(baseLongitude), Number(baseLatitude)] } : null },
+        rentalSettings: { useBusinessAddressForPickup, pickupLocation: useBusinessAddressForPickup ? null : { addressLine: pickupAddressLine, geo: pickupLatitude && pickupLongitude ? { type: 'Point', coordinates: [Number(pickupLongitude), Number(pickupLatitude)] } : null } },
+        photographySettings: { serviceRadiusKm: serviceRadiusKm === '' ? null : Number(serviceRadiusKm) },
         policies: { ...provider?.policies, cancellationPolicy },
         comboDiscountPercent: Number(comboDiscountPercent),
       });
@@ -969,7 +986,7 @@ export const ProviderDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    if (currentView === 'orders') {
+    if (currentView === 'orders' || currentView === 'rental-operations') {
       fetchOrders();
     } else if (currentView === 'collections') {
       fetchProducts();
@@ -1447,6 +1464,11 @@ export const ProviderDashboard: React.FC = () => {
     ? orders
     : orders.filter(o => getOrderGroup(o.status) === orderTab);
 
+  const rentalOperationItems = React.useMemo(() => orders.flatMap((order) =>
+    (order.items || [])
+      .filter((item: any) => item?.rentalFulfillment && item.rentalFulfillment.status !== 'COMPLETED' && item.rentalFulfillment.status !== 'CANCELLED')
+      .map((item: any) => ({ order, item })),
+  ), [orders]);
   // Monthly revenue from completed orders
   const monthlyRevenue = React.useMemo(() => {
     const now = new Date();
@@ -2075,6 +2097,7 @@ export const ProviderDashboard: React.FC = () => {
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <button onClick={() => setCurrentView('analytics')} style={navItemStyle(currentView === 'analytics')}><BarChart3 size={18} /> Thống kê & Hiệu suất</button>
             <button onClick={() => setCurrentView('orders')} style={navItemStyle(currentView === 'orders')}><ShoppingBag size={18} /> Đơn hàng</button>
+            <button onClick={() => setCurrentView('rental-operations')} style={navItemStyle(currentView === 'rental-operations')}><Package size={18} /> Giao & nhận áo dài</button>
             <button onClick={() => { setCurrentView('collections'); setCollectionTab('products'); }} style={navItemStyle(currentView === 'collections' && collectionTab === 'products')}><Layers size={18} /> Bộ sưu tập</button>
             <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ</button>
             {hasPhotographyCapability && (
@@ -2337,7 +2360,9 @@ export const ProviderDashboard: React.FC = () => {
                     <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải đơn hàng...</td></tr>
                   ) : filteredOrders.length === 0 ? (
                     <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Không có đơn hàng nào.</td></tr>
-                  ) : filteredOrders.map(o => (
+                  ) : filteredOrders.map(o => {
+                    const hasRentalLifecycle = Array.isArray(o.items) && o.items.some((item: any) => Boolean(item.rentalFulfillment));
+                    return (
                     <tr key={o._id} style={{ borderBottom: '1px solid var(--color-light-border)', transition: 'var(--transition-smooth)' }}>
                       <td style={{ padding: '16px 20px', fontWeight: 700 }}>{o.id}</td>
                       <td style={{ padding: '16px 20px' }}>
@@ -2354,12 +2379,29 @@ export const ProviderDashboard: React.FC = () => {
                       <td style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'right' }}>{o.total}</td>
                       <td style={{ padding: '16px 20px', textAlign: 'center' }}><span style={statusBadgeStyle(o.status)}>{o.status}</span></td>
                       <td style={{ padding: '16px 20px', textAlign: 'center', position: 'relative' }}>
-                        <button onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          {hasRentalLifecycle && (
+                            <button type="button" onClick={() => { setSelectedBookingId(o._id); setIsDetailModalOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', background: '#FFF7F7', borderRadius: '6px', padding: '6px 9px', cursor: 'pointer', fontSize: '11px', fontWeight: 750, whiteSpace: 'nowrap' }}>
+                              <Package size={14} /> Vận hành áo dài
+                            </button>
+                          )}
+                          <button aria-label="Thao tác khác" onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
+                        </div>
                         {actionMenuId === o._id && (
                           <div style={{ position: 'absolute', right: '20px', top: '40px', width: '180px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
-                            {[
+                            {hasRentalLifecycle ? (
+                              <button onClick={() => {
+                                setSelectedBookingId(o._id);
+                                setIsDetailModalOpen(true);
+                                setActionMenuId(null);
+                              }} style={{
+                                width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
+                                fontWeight: 700, textAlign: 'left',
+                              }}><FileText size={14} /> Vận hành áo dài</button>
+                            ) : [
                               { label: 'Hoàn thành', status: 'HOÀN THÀNH', icon: <CheckCircle size={14} />, color: '#2e7d32' },
-                              { label: 'Đang thực hiện', status: 'ĐANG XỬ LÝ', icon: <Play size={14} />, color: 'var(--color-gold)' },
+                              { label: 'Đang xử lý', status: 'ĐANG XỬ LÝ', icon: <Play size={14} />, color: 'var(--color-gold)' },
                               { label: 'Chờ xử lý', status: 'CHỜ XỬ LÝ', icon: <FileText size={14} />, color: 'var(--color-primary)' },
                             ].map(a => (
                               <button key={a.label} onClick={() => changeOrderStatus(o._id, a.status)} style={{
@@ -2367,8 +2409,7 @@ export const ProviderDashboard: React.FC = () => {
                                 fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: a.color,
                                 fontWeight: 500, textAlign: 'left',
                               }}>{a.icon} {a.label}</button>
-                            ))}
-                            {(o.rawStatus === 'CONFIRMED' || o.rawStatus === 'COMPLETED' || o.rawStatus === 'PICKED_UP' || o.rawStatus === 'RETURNED' || o.rawStatus === 'RETURN_PENDING' || o.rawStatus === 'DISPUTED') && (
+                            ))}                            {!hasRentalLifecycle && (o.rawStatus === 'CONFIRMED' || o.rawStatus === 'COMPLETED' || o.rawStatus === 'PICKED_UP' || o.rawStatus === 'RETURNED' || o.rawStatus === 'RETURN_PENDING' || o.rawStatus === 'DISPUTED') && (
                               <button onClick={() => {
                                 setReportingOrder(o);
                                 setSelectedItemId(o.items?.[0]?._id || '');
@@ -2387,7 +2428,8 @@ export const ProviderDashboard: React.FC = () => {
                         )}
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
               <div style={{ borderTop: '1px solid var(--color-light-border)', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', fontSize: '12px' }}>
@@ -2402,6 +2444,54 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
+        {currentView === 'rental-operations' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', alignItems: 'flex-start', marginBottom: '28px', flexWrap: 'wrap' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Giao & nhận áo dài</h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '660px', lineHeight: 1.5 }}>Danh sách áo dài shop cần chuẩn bị, giao hoặc nhận lại. Mỗi bước giao/nhận yêu cầu ảnh evidence riêng tư.</p>
+              </div>
+              <button type="button" onClick={() => void fetchOrders()} disabled={loadingOrders} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: loadingOrders ? 'wait' : 'pointer', color: 'var(--color-text-primary)' }}><CheckCircle size={15} /> {loadingOrders ? 'Đang tải…' : 'Làm mới'}</button>
+            </div>
+
+            <section style={{ border: '1px solid #F3D3D3', background: '#FFF8F7', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
+              <strong style={{ color: 'var(--color-primary-dark)', fontSize: '14px' }}>{rentalOperationItems.length} áo dài đang cần theo dõi</strong>
+              <p style={{ margin: '6px 0 0', color: 'var(--color-text-secondary)', fontSize: '12px', lineHeight: 1.5 }}>Shop chỉ xác nhận chuẩn bị, giao/nhận kèm evidence và đề xuất phí. Admin mới được chốt cọc cùng trạng thái kho.</p>
+            </section>
+
+            {loadingOrders ? (
+              <div style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>Đang tải danh sách áo dài…</div>
+            ) : rentalOperationItems.length === 0 ? (
+              <section style={{ background: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '42px', textAlign: 'center' }}>
+                <Package size={34} color="var(--color-primary)" style={{ marginBottom: '12px' }} />
+                <h3 style={{ margin: '0 0 8px', fontSize: '17px' }}>Chưa có áo dài nào cần vận hành</h3>
+                <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: '13px', lineHeight: 1.55 }}>Các đơn chụp ảnh, đơn đã hủy và áo dài legacy chưa được Admin migrate sẽ không xuất hiện ở đây. Tạo hoặc xác nhận một booking áo dài mới để bắt đầu.</p>
+              </section>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+                {rentalOperationItems.map(({ order, item }: any) => {
+                  const fulfillment = item.rentalFulfillment;
+                  const labels: Record<string, string> = { PENDING: 'Chờ shop chuẩn bị', READY_FOR_PICKUP: 'Sẵn sàng giao áo', PICKED_UP: 'Khách đang thuê', RETURNED: 'Đã nhận lại, chờ tất toán' };
+                  const productName = item.productId?.name || item.name || order.productName || 'Áo dài';
+                  return (
+                    <article key={item._id} style={{ background: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '18px', boxShadow: 'var(--shadow-sm)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
+                        <div><div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>{order.id || 'BOOKING'}</div><h3 style={{ margin: '5px 0 0', fontSize: '16px' }}>{productName}</h3></div>
+                        <span style={{ fontSize: '11px', padding: '5px 8px', borderRadius: '999px', background: '#FFF1EE', color: 'var(--color-primary-dark)', fontWeight: 750 }}>{labels[fulfillment.status] || fulfillment.status}</span>
+                      </div>
+                      <div style={{ marginTop: '14px', display: 'grid', gap: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                        <span>Khách: <strong style={{ color: 'var(--color-text-primary)' }}>{order.customerName}</strong></span>
+                        <span>Hạn nhận: {fulfillment.pickupDueAt ? new Date(fulfillment.pickupDueAt).toLocaleString('vi-VN') : '—'}</span>
+                        <span>Hạn trả: {fulfillment.returnDueAt ? new Date(fulfillment.returnDueAt).toLocaleString('vi-VN') : '—'}</span>
+                      </div>
+                      <button type="button" onClick={() => { setSelectedBookingId(order._id); setIsDetailModalOpen(true); }} style={{ marginTop: '16px', width: '100%', display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: '7px', border: 'none', background: 'var(--color-primary)', color: 'white', borderRadius: '6px', padding: '10px 12px', cursor: 'pointer', fontWeight: 750, fontSize: '12px' }}><Package size={15} /> Mở giao diện vận hành</button>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </main>
+        )}
         {currentView === 'collections' && (
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
@@ -2716,6 +2806,38 @@ export const ProviderDashboard: React.FC = () => {
                       rows={3}
                       style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'none', fontFamily: 'inherit' }}
                     />
+                  </div>
+                  <div style={{ gridColumn: 'span 2', borderTop: '1px solid var(--color-light-border)', paddingTop: '20px', marginTop: '4px' }}>
+                    <h3 style={{ margin: '0 0 8px', fontSize: '16px', color: 'var(--color-text-primary)' }}>Địa điểm và phạm vi phục vụ</h3>
+                    <p style={{ margin: '0 0 14px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Pin nội bộ này dùng để kiểm tra bán kính. Tọa độ chính xác không hiển thị công khai cho khách.</p>
+                    <PhotographyLocationPicker
+                      value={baseLatitude !== '' && baseLongitude !== '' ? { address: addressLine, latitude: Number(baseLatitude), longitude: Number(baseLongitude) } : null}
+                      onSelect={(location) => {
+                        setAddressLine(location.address);
+                        setBaseLatitude(location.latitude.toString());
+                        setBaseLongitude(location.longitude.toString());
+                      }}
+                      title="Pin địa chỉ kinh doanh / điểm xuất phát"
+                      hint="Kéo pin để chọn vị trí chính xác. Đây là tâm để kiểm tra bán kính phục vụ chụp ảnh."
+                      radiusKm={hasPhotographyCapability && serviceRadiusKm !== '' ? Number(serviceRadiusKm) : null}
+                    />
+                    {hasPhotographyCapability && <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '14px', maxWidth: '280px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>BÁN KÍNH PHỤC VỤ CHỤP (KM)</label>
+                      <input type="number" min={0} max={500} step="0.1" value={serviceRadiusKm} onChange={(e) => setServiceRadiusKm(e.target.value)} placeholder="Ví dụ: 15" style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }} />
+                    </div>}
+                  </div>
+                  <div style={{ gridColumn: 'span 2', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: useBusinessAddressForPickup ? 0 : '14px' }}><input type="checkbox" checked={useBusinessAddressForPickup} onChange={(e) => setUseBusinessAddressForPickup(e.target.checked)} /> Dùng địa chỉ kinh doanh cho cả nhận và trả áo dài</label>
+                    {!useBusinessAddressForPickup && <PhotographyLocationPicker
+                      value={pickupLatitude !== '' && pickupLongitude !== '' ? { address: pickupAddressLine, latitude: Number(pickupLatitude), longitude: Number(pickupLongitude) } : null}
+                      onSelect={(location) => {
+                        setPickupAddressLine(location.address);
+                        setPickupLatitude(location.latitude.toString());
+                        setPickupLongitude(location.longitude.toString());
+                      }}
+                      title="Pin điểm nhận và trả áo dài"
+                      hint="MVP dùng cùng một điểm cho cả nhận và trả áo dài."
+                    />}
                   </div>
                 </div>
                 <button
@@ -4299,6 +4421,7 @@ export const ProviderDashboard: React.FC = () => {
         onClose={() => setIsDetailModalOpen(false)}
         onCustomerClick={viewCustomerTrust}
         viewerRole="provider"
+        onBookingChanged={fetchOrders}
       />
 
       {/* Modal Nhập Kho Áo Dài */}

@@ -103,6 +103,26 @@ export class BookingsController {
   }
 
   /** GET /bookings/:id hoặc GET /api/bookings/:id */
+  @Post(':id/photoshoot-schedules/:scheduleId/location-change-requests')
+  async requestPhotographyLocationChange(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('scheduleId') scheduleId: string,
+    @Body() body: { address: string; latitude: number; longitude: number; note?: string },
+  ) {
+    return this.bookingsService.requestPhotographyLocationChange(id, scheduleId, user.sub, body);
+  }
+
+  @Patch(':id/photoshoot-schedules/:scheduleId/location-change-requests/resolve')
+  async resolvePhotographyLocationChange(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('scheduleId') scheduleId: string,
+    @Body() body: { approved: boolean; note?: string },
+  ) {
+    if (typeof body?.approved !== 'boolean') throw new BadRequestException('approved must be a boolean.');
+    return this.bookingsService.resolvePhotographyLocationChange(id, scheduleId, user.sub, body.approved, body.note);
+  }
   @Get(':id')
   async getById(
     @CurrentUser() user: AuthUser,
