@@ -37,6 +37,17 @@ export class ProductVariantDto {
   conditionStatus?: ConditionStatus;
 }
 
+export class ColorImagesDto {
+  @IsString()
+  @IsNotEmpty()
+  color: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+}
+
 export class CreateProductDto {
   @IsMongoId()
   categoryId: string;
@@ -68,6 +79,14 @@ export class CreateProductDto {
   @IsArray()
   @IsString({ each: true })
   videos?: string[];
+
+  // Ảnh theo màu. Mọi URL ở đây cũng phải có mặt trong `images` (kho hợp nhất) —
+  // xem ghi chú ở product.schema.ts. Optional nên client cũ gửi thiếu vẫn chạy bình thường.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ColorImagesDto)
+  colorImages?: ColorImagesDto[];
 
   @IsNumber()
   @Min(0)

@@ -52,6 +52,25 @@ export class Product {
   @Prop({ type: [String], default: [] })
   images: string[];
 
+  /**
+   * Ảnh gắn theo từng màu, để khách đổi màu thì ảnh đổi theo.
+   * CHỈ LÀ CHỈ MỤC: mọi URL ở đây BẮT BUỘC cũng phải nằm trong `images` — `images` vẫn là
+   * kho ảnh hợp nhất và `images[0]` vẫn là ảnh bìa. Nhờ vậy toàn bộ code cũ đọc `images`
+   * chạy y nguyên, và phép so sánh xoá file khi cập nhật vẫn đúng.
+   * Màu nào không có mục ở đây thì tự dùng ảnh chung.
+   */
+  @Prop({
+    type: [
+      {
+        _id: false,
+        color: { type: String, required: true, trim: true, uppercase: true },
+        images: { type: [String], default: [] },
+      },
+    ],
+    default: [],
+  })
+  colorImages: { color: string; images: string[] }[];
+
   @Prop({ type: [String], default: [] })
   videos: string[];
 
