@@ -36,6 +36,9 @@ import { ProductAvailabilityService } from './services/product-availability.serv
 import { DiscountCampaign, DiscountCampaignSchema } from './schemas/discount-campaign.schema';
 import { DiscountCampaignService } from './services/discount-campaign.service';
 import { DiscountCampaignController } from './controllers/discount-campaign.controller';
+import { ComboPromotion, ComboPromotionSchema } from './schemas/combo-promotion.schema';
+import { ComboPromotionService } from './services/combo-promotion.service';
+import { ComboPromotionController } from './controllers/combo-promotion.controller';
 import { UsersModule } from '../users/users.module';
 import { SmartTaggingModule } from '../smart-tagging/smart-tagging.module';
 import { StorageModule } from '../storage/storage.module';
@@ -50,6 +53,7 @@ export const productModels = MongooseModule.forFeature([
   { name: ProviderSchedule.name, schema: ProviderScheduleSchema },
   { name: Provider.name, schema: ProviderSchema },
   { name: DiscountCampaign.name, schema: DiscountCampaignSchema },
+  { name: ComboPromotion.name, schema: ComboPromotionSchema },
 ]);
 
 @Module({
@@ -60,6 +64,7 @@ export const productModels = MongooseModule.forFeature([
     AdminProductsModerationController,
     InventoryController,
     DiscountCampaignController,
+    ComboPromotionController,
   ],
   providers: [
     PromotionsService,
@@ -68,6 +73,7 @@ export const productModels = MongooseModule.forFeature([
     InventoryService,
     ProductAvailabilityService,
     DiscountCampaignService,
+    ComboPromotionService,
   ],
   exports: [
     productModels,
@@ -75,6 +81,7 @@ export const productModels = MongooseModule.forFeature([
     ProductsService,
     InventoryService,
     DiscountCampaignService,
+    ComboPromotionService,
   ],
 })
 export class ProductsModule {}

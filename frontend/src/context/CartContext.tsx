@@ -41,6 +41,7 @@ export interface CartItem {
   providerAddress?: string | null;
   photographerCity?: string | null;
   comboDiscountPercent?: number;
+  comboPromotionId?: string | null;
 }
 
 interface CartContextType {

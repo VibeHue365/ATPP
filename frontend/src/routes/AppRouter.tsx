@@ -31,6 +31,8 @@ import ProviderDashboard from '../pages/providerdashboard/ProviderDashboard';
 import BecomeProviderPage from '../pages/provider/BecomeProviderPage';
 import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
 import AdminDashboardRefactored from '../pages/admin/AdminDashboardRefactored';
+import { ComboListingPage } from '../pages/combos/ComboListingPage';
+import ComboDetailPage from '../pages/combos/ComboDetailPage';
 
 export const AppRouter: React.FC = () => {
   return (
@@ -48,6 +50,8 @@ export const AppRouter: React.FC = () => {
         <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
         <Route path={ROUTES.PHOTOGRAPHERS} element={<PhotographersListingPage />} />
         <Route path={ROUTES.PHOTOGRAPHER_DETAIL} element={<PhotographerDetailPage />} />
+        <Route path={ROUTES.COMBOS} element={<ComboListingPage />} />
+        <Route path={ROUTES.COMBO_DETAIL} element={<ComboDetailPage />} />
         <Route path={ROUTES.CART} element={<CartPage />} />
       </Route>
 
@@ -87,3 +91,4 @@ export const AppRouter: React.FC = () => {
 };
 
 export default AppRouter;
+// Force Vite HMR reload to recognize the new ComboDetailPage route.

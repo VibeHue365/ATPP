@@ -67,6 +67,8 @@ interface PortfolioItem {
   moderationStatus: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'HIDDEN';
   moderationReason?: string | null;
 }
+
+
 export const ProviderDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { logout, user, isAuthenticated } = useAuth();
@@ -165,6 +167,38 @@ export const ProviderDashboard: React.FC = () => {
   }, [analyticsData]);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
+  const [combos, setCombos] = useState<any[]>([]);
+  const [photoPackages, setPhotoPackages] = useState<any[]>([]);
+  const [cName, setCName] = useState('');
+  const [cDesc, setCDesc] = useState('');
+  const [cProductId, setCProductId] = useState('');
+  const [cPackageId, setCPackageId] = useState('');
+  const [cDiscount, setCDiscount] = useState<number | ''>(10);
+  const [cPrice, setCPrice] = useState('');
+
+  // Tự động tính toán giá combo hợp lý
+  useEffect(() => {
+    if (cProductId && cPackageId) {
+      const prod = myProductsList.find(p => p._id === cProductId);
+      const pkg = photoPackages.find(p => p._id === cPackageId);
+      if (prod && pkg) {
+        const discountPercent = Number(cDiscount) || 0;
+        const originalPrice = (prod.basePrice || 0) + (pkg.price || 0);
+        const calculatedPrice = Math.round(originalPrice * (1 - discountPercent / 100));
+        setCPrice(String(calculatedPrice));
+      }
+    }
+  }, [cProductId, cPackageId, cDiscount, myProductsList, photoPackages]);
+  const [cValidFrom, setCValidFrom] = useState('');
+  const [cValidTo, setCValidTo] = useState('');
+  const [cMaxUsage, setCMaxUsage] = useState<number | ''>(10);
+  const [cAoDaiQuantity, setCAoDaiQuantity] = useState<number | ''>(1);
+  const [cShootPeopleCount, setCShootPeopleCount] = useState<number | ''>(1);
+  const [isAoDaiModalOpen, setIsAoDaiModalOpen] = useState(false);
+  const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
+  const [aoDaiSearch, setAoDaiSearch] = useState('');
+  const [packageSearch, setPackageSearch] = useState('');
+  const [editingComboId, setEditingComboId] = useState<string | null>(null);
   const [reviewsData, setReviewsData] = useState<any>(null);
   const [bookingsState, setBookingsState] = useState<any[]>([]);
   const [payouts, setPayouts] = useState<any[]>([]);
@@ -298,8 +332,29 @@ export const ProviderDashboard: React.FC = () => {
       if (Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY')) {
         const portfolioRes: any = await httpClient.get('/providers/me/portfolio-items');
         setPortfolioItems(Array.isArray(portfolioRes) ? portfolioRes : []);
+        
+        const packagesRes: any = await httpClient.get('/providers/me/photography-packages');
+        setPhotoPackages(Array.isArray(packagesRes) ? packagesRes : []);
       } else {
         setPortfolioItems([]);
+        setPhotoPackages([]);
+      }
+
+      const hasAodai = Array.isArray(pRes.capabilities) && (pRes.capabilities.includes('AODAI_RENTAL') || pRes.capabilities.includes('RENTAL'));
+      if (hasAodai) {
+        const productsRes: any = await httpClient.get('/products/my-listings?limit=999');
+        setMyProductsList(productsRes?.items || []);
+
+        // Load inventory summary so combo form can show Ao Dai stock
+        const summary: any = await httpClient.get('/inventory/summary');
+        setInventorySummary(summary || []);
+      }
+
+      if (hasAodai && Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY')) {
+        const combosRes: any = await httpClient.get('/combo-promotions/my');
+        setCombos(Array.isArray(combosRes) ? combosRes : []);
+      } else {
+        setCombos([]);
       }
 
       const sRes: any = await httpClient.get('/providers/me/schedules');
@@ -523,6 +578,111 @@ export const ProviderDashboard: React.FC = () => {
     } catch (err: any) {
       toast.error('Xóa voucher thất bại');
     }
+  };
+
+  const handleCreateOrUpdateCombo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cProductId || !cPackageId) {
+      toast.error('Vui lòng chọn cả áo dài và gói chụp ảnh');
+      return;
+    }
+    if (!cName.trim()) {
+      toast.error('Vui lòng nhập tên combo');
+      return;
+    }
+    if (cDiscount === '' || cDiscount < 1 || cDiscount > 80) {
+      toast.error('Phần trăm giảm giá phải nằm trong khoảng 1 - 80%');
+      return;
+    }
+    if (!cValidFrom || !cValidTo) {
+      toast.error('Vui lòng chọn khoảng thời gian hiệu lực của combo');
+      return;
+    }
+    if (cValidFrom > cValidTo) {
+      toast.error('Ngày bắt đầu không được lớn hơn ngày kết thúc');
+      return;
+    }
+    if (cMaxUsage === '' || Number(cMaxUsage) < 1) {
+      toast.error('Số lượng giới hạn combo phải lớn hơn hoặc bằng 1');
+      return;
+    }
+
+    const payload: any = {
+      name: cName,
+      description: cDesc,
+      discountPercent: Number(cDiscount),
+      comboPrice: cPrice ? Number(cPrice) : undefined,
+      validFrom: new Date(cValidFrom).toISOString(),
+      validTo: new Date(cValidTo).toISOString(),
+      maxUsage: Number(cMaxUsage),
+      aoDaiQuantity: Number(cAoDaiQuantity || 1),
+      shootPeopleCount: Number(cShootPeopleCount || 1),
+    };
+
+    if (!editingComboId) {
+      payload.productId = cProductId;
+      payload.photographyPackageId = cPackageId;
+    }
+
+    try {
+      if (editingComboId) {
+        await httpClient.put(`/combo-promotions/${editingComboId}`, payload);
+        toast.success(`Cập nhật combo "${cName}" thành công!`);
+      } else {
+        await httpClient.post('/combo-promotions', payload);
+        toast.success(`Tạo combo "${cName}" thành công!`);
+      }
+      clearComboForm();
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error(err.message || 'Thao tác combo thất bại');
+    }
+  };
+
+  const handleEditCombo = (combo: any) => {
+    setEditingComboId(combo._id);
+    setCName(combo.name);
+    setCDesc(combo.description || '');
+    setCProductId(combo.productId?._id || combo.productId || '');
+    setCPackageId(combo.photographyPackageId?._id || combo.photographyPackageId || '');
+    setCDiscount(combo.discountPercent);
+    setCPrice(combo.comboPrice ? String(combo.comboPrice) : '');
+    setCMaxUsage(combo.maxUsage || 10);
+    setCAoDaiQuantity(combo.aoDaiQuantity || 1);
+    setCShootPeopleCount(combo.shootPeopleCount || 1);
+    
+    if (combo.validFrom) {
+      setCValidFrom(new Date(combo.validFrom).toISOString().split('T')[0]);
+    }
+    if (combo.validTo) {
+      setCValidTo(new Date(combo.validTo).toISOString().split('T')[0]);
+    }
+  };
+
+  const handleDeleteCombo = async (id: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa combo khuyến mãi này?')) return;
+    try {
+      await httpClient.delete(`/combo-promotions/${id}`);
+      toast.success('Xóa combo thành công!');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error(err.message || 'Xóa combo thất bại');
+    }
+  };
+
+  const clearComboForm = () => {
+    setEditingComboId(null);
+    setCName('');
+    setCDesc('');
+    setCProductId('');
+    setCPackageId('');
+    setCDiscount(10);
+    setCPrice('');
+    setCValidFrom('');
+    setCValidTo('');
+    setCMaxUsage(10);
+    setCAoDaiQuantity(1);
+    setCShootPeopleCount(1);
   };
 
   const toggleScheduleDay = (day: number) => {
@@ -3191,6 +3351,391 @@ export const ProviderDashboard: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {/* COMBO PROMOTION SECTION */}
+                {hasPhotographyCapability && Array.isArray(provider?.capabilities) && (provider.capabilities.includes('AODAI_RENTAL') || provider.capabilities.includes('RENTAL')) && (
+                  <div style={{ borderTop: '2px dashed var(--color-light-border)', paddingTop: '40px', marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--color-primary-dark)', margin: 0 }}>Quản lý Combo Khuyến Mãi (Áo Dài + Photographer)</h3>
+                      <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '6px' }}>
+                        Tạo gói combo kết hợp thuê áo dài và thuê thợ chụp ảnh để được hưởng mức chiết khấu hấp dẫn hơn.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', alignItems: 'start' }}>
+                      {/* Form Create/Edit Combo */}
+                      <form onSubmit={handleCreateOrUpdateCombo} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <h4 style={{ fontSize: '15px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px', textTransform: 'uppercase' }}>
+                          {editingComboId ? 'CẬP NHẬT COMBO' : 'TẠO COMBO MỚI'}
+                        </h4>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN COMBO KHUYẾN MÃI</span>
+                          <input
+                            type="text"
+                            placeholder="Ví dụ: Combo Tràng An - Lưu giữ khoảnh khắc"
+                            value={cName}
+                            onChange={(e) => setCName(e.target.value)}
+                            style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                            required
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÔ TẢ COMBO (MÔ TẢ NGẮN)</span>
+                          <textarea
+                            placeholder="Mô tả quyền lợi combo, ví dụ: Bao gồm 1 bộ áo dài và 2 tiếng chụp hình ngoại cảnh..."
+                            value={cDesc}
+                            onChange={(e) => setCDesc(e.target.value)}
+                            rows={2}
+                            style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'none', fontFamily: 'inherit' }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHỌN ÁO DÀI</span>
+                            {cProductId ? (
+                              (() => {
+                                const prod = myProductsList.find(p => p._id === cProductId);
+                                return (
+                                  <div style={{ display: 'flex', gap: '10px', padding: '8px', border: '1px solid var(--color-primary)', borderRadius: '8px', backgroundColor: 'var(--color-primary-trans)', alignItems: 'center' }}>
+                                    <img src={prod?.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'} alt={prod?.name} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prod?.name}</div>
+                                      <div style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600 }}>{prod?.basePrice?.toLocaleString('vi-VN')}đ</div>
+                                    </div>
+                                    <button type="button" onClick={() => setIsAoDaiModalOpen(true)} style={{ border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Đổi</button>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setIsAoDaiModalOpen(true)}
+                                style={{ padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '6px', fontSize: '13px', fontWeight: 600, color: '#64748B', backgroundColor: '#F8FAFC', cursor: 'pointer', textAlign: 'center' }}
+                              >
+                                + Chọn Áo Dài
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHỌN GÓI CHỤP ẢNH</span>
+                            {cPackageId ? (
+                              (() => {
+                                const pkg = photoPackages.find(p => p._id === cPackageId);
+                                return (
+                                  <div style={{ display: 'flex', gap: '10px', padding: '8px', border: '1px solid var(--color-primary)', borderRadius: '8px', backgroundColor: 'var(--color-primary-trans)', alignItems: 'center' }}>
+                                    <img src={pkg?.images?.[0] || 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb'} alt={pkg?.name} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pkg?.name}</div>
+                                      <div style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600 }}>{pkg?.price?.toLocaleString('vi-VN')}đ ({pkg?.durationHours}h)</div>
+                                    </div>
+                                    <button type="button" onClick={() => setIsPackageModalOpen(true)} style={{ border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Đổi</button>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setIsPackageModalOpen(true)}
+                                style={{ padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '6px', fontSize: '13px', fontWeight: 600, color: '#64748B', backgroundColor: '#F8FAFC', cursor: 'pointer', textAlign: 'center' }}
+                              >
+                                + Chọn Gói Chụp
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>PHẦN TRĂM GIẢM GIÁ (%)</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={80}
+                              value={cDiscount}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '') {
+                                  setCDiscount('');
+                                } else {
+                                  const num = Number(val);
+                                  if (!isNaN(num)) {
+                                    setCDiscount(num);
+                                  }
+                                }
+                              }}
+                              onBlur={() => {
+                                if (cDiscount === '' || cDiscount < 1) {
+                                  setCDiscount(1);
+                                } else if (cDiscount > 80) {
+                                  setCDiscount(80);
+                                }
+                              }}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIÁ COMBO TỰ ĐỊNH NGHĨA (Đ - TÙY CHỌN)</span>
+                            <input
+                              type="number"
+                              placeholder="Để trống nếu tính theo %"
+                              value={cPrice}
+                              onChange={(e) => setCPrice(e.target.value)}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY BẮT ĐẦU COMBO</span>
+                            <input
+                              type="date"
+                              value={cValidFrom}
+                              onChange={(e) => setCValidFrom(e.target.value)}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY KẾT THÚC COMBO</span>
+                            <input
+                              type="date"
+                              value={cValidTo}
+                              onChange={(e) => setCValidTo(e.target.value)}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SỐ LƯỢNG COMBO GIỚI HẠN (STOCK)</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={cMaxUsage}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setCMaxUsage(val === '' ? '' : Number(val));
+                              }}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SỐ LƯỢNG NGƯỜI CHỤP TRONG COMBO</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={cShootPeopleCount}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setCShootPeopleCount(val === '' ? '' : Number(val));
+                              }}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SỐ LƯỢNG ÁO DÀI THUÊ TRONG COMBO</span>
+                            {(() => {
+                              const selectedAoDaiStock = cProductId && inventorySummary
+                                ? inventorySummary
+                                    .filter((item: any) => item.productId === cProductId)
+                                    .reduce((sum: number, item: any) => sum + (item.available || 0), 0)
+                                : 0;
+                              return (
+                                <>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={selectedAoDaiStock || 1}
+                                    value={cAoDaiQuantity}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const num = val === '' ? '' : Number(val);
+                                      if (num !== '' && num > selectedAoDaiStock && selectedAoDaiStock > 0) {
+                                        setCAoDaiQuantity(selectedAoDaiStock);
+                                      } else {
+                                        setCAoDaiQuantity(num);
+                                      }
+                                    }}
+                                    style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                                    required
+                                  />
+                                  <small style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                                    Tồn kho áo dài khả dụng: <strong style={{ color: 'var(--color-primary)' }}>{selectedAoDaiStock}</strong> sản phẩm
+                                  </small>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                          <button
+                            type="submit"
+                            style={{ padding: '11px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                          >
+                            {editingComboId ? 'Cập nhật Combo' : 'Tạo Combo ngay'}
+                          </button>
+                          {editingComboId && (
+                            <button
+                              type="button"
+                              onClick={clearComboForm}
+                              style={{ padding: '11px 24px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'white', color: 'var(--color-text-primary)', cursor: 'pointer' }}
+                            >
+                              Hủy bỏ
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Modals Inline */}
+                        {isAoDaiModalOpen && (
+                          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                            <div style={{ backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} onClick={(e) => e.stopPropagation()}>
+                              <div style={{ padding: '20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>Chọn Áo Dài Cho Combo</h3>
+                                <button type="button" onClick={() => setIsAoDaiModalOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}><X size={20} /></button>
+                              </div>
+                              <div style={{ padding: '16px', borderBottom: '1px solid #E2E8F0' }}>
+                                <input 
+                                  type="text" 
+                                  placeholder="Tìm kiếm áo dài theo tên..." 
+                                  value={aoDaiSearch} 
+                                  onChange={(e) => setAoDaiSearch(e.target.value)} 
+                                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
+                                />
+                              </div>
+                              <div style={{ padding: '20px', overflowY: 'auto', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {myProductsList.filter(p => p.name.toLowerCase().includes(aoDaiSearch.toLowerCase())).map((prod) => (
+                                  <div 
+                                    key={prod._id} 
+                                    onClick={() => { setCProductId(prod._id); setIsAoDaiModalOpen(false); }}
+                                    style={{ display: 'flex', gap: '12px', padding: '12px', border: cProductId === prod._id ? '2px solid var(--color-primary)' : '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', backgroundColor: cProductId === prod._id ? 'var(--color-primary-trans)' : 'white', transition: 'all 0.2s', alignItems: 'center' }}
+                                  >
+                                    <img src={prod.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'} alt={prod.name} style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1 }}>
+                                      <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{prod.name}</strong>
+                                      <div style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 700, marginTop: '2px' }}>{prod.basePrice?.toLocaleString('vi-VN')}đ</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {isPackageModalOpen && (
+                          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                            <div style={{ backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} onClick={(e) => e.stopPropagation()}>
+                              <div style={{ padding: '20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>Chọn Gói Chụp Cho Combo</h3>
+                                <button type="button" onClick={() => setIsPackageModalOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}><X size={20} /></button>
+                              </div>
+                              <div style={{ padding: '16px', borderBottom: '1px solid #E2E8F0' }}>
+                                <input 
+                                  type="text" 
+                                  placeholder="Tìm kiếm gói chụp theo tên..." 
+                                  value={packageSearch} 
+                                  onChange={(e) => setPackageSearch(e.target.value)} 
+                                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
+                                />
+                              </div>
+                              <div style={{ padding: '20px', overflowY: 'auto', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {photoPackages.filter(p => p.name.toLowerCase().includes(packageSearch.toLowerCase())).map((pkg) => (
+                                  <div 
+                                    key={pkg._id} 
+                                    onClick={() => { setCPackageId(pkg._id); setIsPackageModalOpen(false); }}
+                                    style={{ display: 'flex', gap: '12px', padding: '12px', border: cPackageId === pkg._id ? '2px solid var(--color-primary)' : '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', backgroundColor: cPackageId === pkg._id ? 'var(--color-primary-trans)' : 'white', transition: 'all 0.2s', alignItems: 'center' }}
+                                  >
+                                    <img src={pkg.images?.[0] || 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb'} alt={pkg.name} style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1 }}>
+                                      <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{pkg.name}</strong>
+                                      <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>Thời lượng: {pkg.durationHours}h</div>
+                                      <div style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 700, marginTop: '2px' }}>{pkg.price?.toLocaleString('vi-VN')}đ</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </form>
+
+                      {/* Combos list */}
+                      <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+                        <h4 style={{ fontSize: '15px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px', textTransform: 'uppercase' }}>
+                          DANH SÁCH COMBO ĐANG CHẠY
+                        </h4>
+                        {combos.length === 0 ? (
+                          <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', margin: 'auto' }}>Chưa có combo khuyến mãi nào được tạo.</p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', maxHeight: '480px' }}>
+                            {combos.map((cb) => (
+                              <div key={cb._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+                                <div style={{ flex: 1, marginRight: '16px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ padding: '2px 8px', backgroundColor: 'var(--color-primary)', color: 'white', borderRadius: '4px', fontWeight: 700, fontSize: '11px' }}>
+                                      -{cb.discountPercent}%
+                                    </span>
+                                    <h5 style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{cb.name}</h5>
+                                  </div>
+                                  {cb.description && (
+                                    <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 8px 0' }}>{cb.description}</p>
+                                  )}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--color-text-primary)', marginTop: '8px' }}>
+                                    <div><strong>Áo dài:</strong> {cb.productId?.name || 'Sản phẩm đã bị xóa'}</div>
+                                    <div><strong>Gói chụp:</strong> {cb.photographyPackageId?.name || 'Gói chụp đã bị xóa'}</div>
+                                    <div style={{ color: 'var(--color-primary)', fontSize: '12px', fontWeight: 600, marginTop: '4px' }}>
+                                      Lịch chụp: {cb.shootDate ? new Date(cb.shootDate).toLocaleDateString('vi-VN') : ''} ({cb.shootTimeSlot || 'Trống'})
+                                    </div>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                                  <div style={{ textAlign: 'right' }}>
+                                    <div style={{ textDecoration: 'line-through', color: '#94A3B8', fontSize: '11px' }}>
+                                      {((cb.productId?.basePrice || 0) + (cb.photographyPackageId?.price || 0)).toLocaleString('vi-VN')}đ
+                                    </div>
+                                    <div style={{ color: '#EF4444', fontWeight: 700, fontSize: '15px' }}>
+                                      {cb.comboPrice ? cb.comboPrice.toLocaleString('vi-VN') : Math.round(((cb.productId?.basePrice || 0) + (cb.photographyPackageId?.price || 0)) * (1 - cb.discountPercent / 100)).toLocaleString('vi-VN')}đ
+                                    </div>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                                    <button
+                                      onClick={() => handleEditCombo(cb)}
+                                      style={{ padding: '6px 10px', border: '1px solid var(--color-primary)', borderRadius: '4px', backgroundColor: 'white', color: 'var(--color-primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      Sửa
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteCombo(cb._id)}
+                                      style={{ padding: '6px 10px', border: '1px solid #EF4444', borderRadius: '4px', backgroundColor: 'white', color: '#EF4444', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      Xóa
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </main>

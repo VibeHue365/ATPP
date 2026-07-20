@@ -183,12 +183,12 @@ export const MainLayout: React.FC = () => {
               Nhiếp ảnh
             </Link>
 
-            <a 
-              href="/#heritage" 
-              className={`vh-header-nav-link-custom ${location.hash === '#heritage' ? 'active' : ''}`}
+            <Link 
+              to={ROUTES.COMBOS} 
+              className={`vh-header-nav-link-custom ${location.pathname === ROUTES.COMBOS ? 'active' : ''}`}
             >
-              Di sản
-            </a>
+              Combo
+            </Link>
           </nav>
 
           {/* Search bar Pill-shaped */}

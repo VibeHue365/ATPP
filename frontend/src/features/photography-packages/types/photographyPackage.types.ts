@@ -10,6 +10,7 @@ export interface PhotographyPackage {
   description?: string | null;
   price: number;
   durationHours: number;
+  maxPeople?: number;
   editedPhotosCount: number;
   rawPhotosCount?: number;
   deliveryDays: number;
@@ -30,6 +31,7 @@ export interface PhotographyPackagePayload {
   description?: string;
   price: number;
   durationHours: number;
+  maxPeople?: number;
   editedPhotosCount: number;
   rawPhotosCount?: number;
   deliveryDays: number;

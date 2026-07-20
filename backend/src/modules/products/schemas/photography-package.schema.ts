@@ -112,6 +112,9 @@ export class PhotographyPackage {
   })
   status: PackageStatus;
 
+  @Prop({ type: Number, default: 1, min: 1 })
+  maxPeople: number;
+
   @Prop({
     type: {
       averageRating: { type: Number, default: 0 },
