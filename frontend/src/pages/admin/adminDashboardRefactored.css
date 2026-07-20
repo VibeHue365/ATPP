@@ -384,6 +384,19 @@
   cursor: pointer;
 }
 
+.admin-refactor-notification__list > .admin-refactor-notification__error {
+  padding: 10px 20px;
+  border-bottom: 1px solid #fecaca;
+  background: #fff7f7;
+  color: #991b1b;
+  text-align: left;
+}
+
+.admin-refactor-notification__list time {
+  color: #a0a0a0;
+  font-size: 10px;
+}
+
 @media (max-width: 900px) {
   .admin-refactor-sidebar {
     width: 68px;
@@ -425,17 +438,23 @@
   }
 
   .admin-refactor-sidebar__top {
+    flex: 0 0 auto;
     overflow: visible;
   }
 
   .admin-refactor-nav {
-    display: flex;
+    flex: 0 0 auto;
+    flex-direction: row;
+    gap: 4px;
     overflow-x: auto;
+    padding: 0 0 2px;
+    scrollbar-width: thin;
   }
 
   .admin-refactor-nav button {
     width: 44px;
     flex: 0 0 44px;
+    min-height: 44px;
   }
 
   .admin-refactor-sidebar__footer {
@@ -448,6 +467,7 @@
   }
 
   .admin-refactor-header {
+    min-height: 62px;
     padding: 0 16px;
   }
 
@@ -466,6 +486,12 @@
   }
 
   .admin-refactor-notification__menu {
-    right: -48px;
+    right: 0;
+    width: min(380px, calc(100vw - 32px));
+  }
+
+  .admin-refactor-content {
+    padding-top: 16px;
+    padding-bottom: 20px;
   }
 }

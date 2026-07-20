@@ -23,12 +23,16 @@ import type { AuthUser } from '../../../common/decorators/current-user.decorator
 import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
 import { PublicMediaService } from '../../storage/services/public-media.service';
+import { InventoryService } from '../services/inventory.service';
+import { ProductAvailabilityService } from '../services/product-availability.service';
 
 @Controller(['products', 'api/products'])
 export class ProductsController {
   constructor(
     private readonly productsService: ProductsService,
     private readonly publicMedia: PublicMediaService,
+    private readonly inventoryService: InventoryService,
+    private readonly availabilityService: ProductAvailabilityService,
   ) {}
 
   @Get()
@@ -41,6 +45,8 @@ export class ProductsController {
     @Query('sizes') sizes?: string,
     @Query('materials') materials?: string,
     @Query('categoryId') categoryId?: string,
+    @Query('styleCategoryIds') styleCategoryIds?: string,
+    @Query('eventCategoryIds') eventCategoryIds?: string,
   ): Promise<any[]> {
     const options = {
       search,
@@ -51,6 +57,8 @@ export class ProductsController {
       sizes: sizes ? sizes.split(',').map(s => s.trim()).filter(Boolean) : undefined,
       materials: materials ? materials.split(',').map(m => m.trim()).filter(Boolean) : undefined,
       categoryId,
+      styleCategoryIds: styleCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
+      eventCategoryIds: eventCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
     };
     return this.productsService.getAllActiveProducts(options);
   }
@@ -58,6 +66,19 @@ export class ProductsController {
   @Get('categories')
   async getCategories(): Promise<any[]> {
     return this.productsService.getCategories();
+  }
+
+  @Get('featured')
+  async getFeatured(@Query('limit') limit?: string): Promise<any[]> {
+    const parsedLimit = Number.parseInt(limit || '8', 10);
+    return this.productsService.getFeaturedProducts(
+      Number.isFinite(parsedLimit) ? parsedLimit : 8,
+    );
+  }
+
+  @Get(':id/availability')
+  async getAvailability(@Param('id') id: string, @Query('size') size: string, @Query('color') color: string, @Query('rentalFrom') rentalFrom: string, @Query('rentalTo') rentalTo: string, @Query('quantity') quantity?: string, @Query('rentalType') rentalType?: string, @Query('startTime') startTime?: string, @Query('endTime') endTime?: string) {
+    return this.availabilityService.check(id, size, color, rentalFrom, rentalTo, quantity ? Number(quantity) : 1, rentalType, startTime, endTime);
   }
 
   @Get('my-listings')
@@ -132,6 +153,46 @@ export class ProductsController {
       (files || []).map((file) => this.publicMedia.uploadImage('products', file)),
     );
     return { urls: uploads.map((upload) => upload.url) };
+  }
+
+  @Post('upload-videos')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FilesInterceptor('videos', 2, {
+      limits: { fileSize: 50 * 1024 * 1024 },
+      fileFilter: (_request, file, callback) => {
+        const allowedMimeTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
+        if (!allowedMimeTypes.includes(file.mimetype)) {
+          callback(
+            new UnsupportedMediaTypeException(
+              'Only mp4, webm, and mov videos are allowed',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+      storage: memoryStorage(),
+    }),
+  )
+  async uploadVideos(
+    @UploadedFiles() files: Express.Multer.File[],
+  ): Promise<{ urls: string[] }> {
+    const uploads = await Promise.all(
+      (files || []).map((file) => this.publicMedia.uploadVideo('products', file)),
+    );
+    return { urls: uploads.map((upload) => upload.url) };
+  }
+
+  // Public: tồn kho khả dụng theo size/màu trong khoảng ngày — cho khách xem trước khi đặt
+  @Get(':id/availability')
+  async availability(
+    @Param('id') id: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.inventoryService.getPublicAvailability(id, from, to);
   }
 
   @Get(':id')

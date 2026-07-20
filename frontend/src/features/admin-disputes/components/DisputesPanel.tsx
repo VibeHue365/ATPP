@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import Swal from 'sweetalert2';
+import { PrivateEvidenceImage } from '../../../components/common/PrivateEvidenceImage';
+import { API_BASE_URL } from '../../../config/env';
 import { adminDisputesApi } from '../api/adminDisputesApi';
 import { useDisputes } from '../hooks/useDisputes';
 import type { Dispute, DisputeDecision, ResolvePayload } from '../types';
@@ -14,6 +16,11 @@ const decisionLabels: Record<DisputeDecision, string> = {
 };
 
 const getDepositTotal = (dispute: Dispute) => dispute.bookingId?.pricingSummary?.depositTotal ?? 0;
+
+const evidenceUrl = (reference: string) =>
+  reference.startsWith('http://') || reference.startsWith('https://')
+    ? reference
+    : `${API_BASE_URL}${reference}`;
 
 export function DisputesPanel() {
   const { error, items, loading, refresh, setError } = useDisputes();
@@ -123,9 +130,30 @@ export function DisputesPanel() {
               <p>{selected.description || 'Không có mô tả bổ sung.'}</p>
             </div>
             <dl className="admin-disputes__summary">
+              <div><dt>Đối tác báo cáo</dt><dd>{selected.reportedBy?.businessName || selected.reportedBy?.profile?.fullName || 'Đối tác'}</dd></div>
+              <div><dt>Khách hàng</dt><dd>{selected.bookingId?.customerId?.profile?.fullName || 'Khách hàng'}</dd></div>
+              <div><dt>Sản phẩm</dt><dd>{selected.productId?.name || selected.bookingItemId?.name || 'Sản phẩm'}</dd></div>
               <div><dt>Tiền cọc</dt><dd>{formatCurrency(depositTotal)}</dd></div>
               <div><dt>Khoản yêu cầu</dt><dd>{formatCurrency(selected.requestedAmount)}</dd></div>
             </dl>
+
+            {selected.evidencePhotos?.length ? (
+              <section className='admin-disputes__evidence' aria-label='Bằng chứng sự cố'>
+                <h4>Bằng chứng sự cố</h4>
+                <div>
+                  {selected.evidencePhotos.map((reference, index) => (
+                    <PrivateEvidenceImage
+                      key={reference}
+                      reference={reference}
+                      legacyUrl={evidenceUrl(reference)}
+                      alt={`Bằng chứng ${index + 1}`}
+                      linkStyle={{ display: 'block', borderRadius: '6px', overflow: 'hidden', border: '1px solid #e8e2d5' }}
+                      imageStyle={{ width: '72px', height: '72px', objectFit: 'cover' }}
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <label>
               Quyết định

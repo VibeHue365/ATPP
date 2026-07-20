@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { checkProductAvailability } from '../../features/rentals/services/productAvailabilityService';
 import { useCart } from '../../context/CartContext';
 import type { CartItem } from '../../context/CartContext';
 import { httpClient } from '../../services/httpClient';
@@ -656,6 +657,28 @@ export const CartPage: React.FC = () => {
       return;
     }
     
+    const invalidProduct = selectedItems.find((item) =>
+      item.itemType === 'PRODUCT' && (
+        !isMongoObjectId(item.productId) ||
+        !item.size ||
+        !item.color ||
+        !(item.rentalFrom || item.startDate) ||
+        ((item.rentalType || 'DAILY') === 'DAILY' && !(item.rentalTo || item.endDate)) ||
+        ((item.rentalType || 'DAILY') === 'HOURLY' && (!item.startTime || !item.endTime))
+      )
+    );
+    if (invalidProduct) {
+      toast.error('M?t s?n ph?m trong gi? thi?u th?ng tin thu? h?p l?. Vui l?ng ch?n l?i l?ch, size v? m?u.');
+      return;
+    }
+    try {
+      await Promise.all(selectedItems.filter((item) => item.itemType === 'PRODUCT').map(async (item) => {
+        const from = item.rentalFrom || item.startDate || '';
+        const to = item.rentalTo || item.endDate || from;
+        const result = await checkProductAvailability(item.productId || '', item.size || '', item.color || '', from, to, item.quantity, item.rentalType || 'DAILY', item.startTime || undefined, item.endTime || undefined);
+        if (!result.available) throw new Error(`${item.name || item.productName || 'S?n ph?m'} kh?ng c?n ?? s? l??ng cho l?ch ?? ch?n.`);
+      }));
+    } catch (error: any) { toast.error(error.message || 'Kh?ng th? ki?m tra l?ch thu?.'); return; }
     setIsLoading(true);
     try {
       const itemsPayload = selectedItems.map(item => {

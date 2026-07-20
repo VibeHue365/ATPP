@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useState } from "react";
+﻿import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Sparkles, X } from "lucide-react";
 import { smartTagService } from "../services/smartTagService";
 import type {
@@ -10,6 +10,8 @@ import type {
 interface Props {
   productId?: string;
   initialDecisionVersion?: number;
+  onActiveCountChange?: (count: number) => void;
+  onActiveTagsChange?: (codes: string[]) => void;
 }
 
 const statusLabel: Record<SmartTagAssignment["status"], string> = {
@@ -23,21 +25,24 @@ const statusLabel: Record<SmartTagAssignment["status"], string> = {
 export const SmartTagEditor: React.FC<Props> = ({
   productId,
   initialDecisionVersion = 0,
+  onActiveCountChange,
+  onActiveTagsChange,
 }) => {
   const [assignments, setAssignments] = useState<SmartTagAssignment[]>([]);
   const [taxonomy, setTaxonomy] = useState<SmartTagDefinition[]>([]);
-  const [decisionVersion, setDecisionVersion] = useState(
-    initialDecisionVersion,
-  );
+  // Version quản lý bằng ref để đọc/ghi đồng bộ (tránh stale closure khi bấm nhanh);
+  // mutatingRef là khoá dùng chung để decide + toggleManualTag không chạy chồng nhau.
+  const decisionVersionRef = useRef(initialDecisionVersion);
+  const mutatingRef = useRef(false);
   const [loading, setLoading] = useState(Boolean(productId));
   const [generating, setGenerating] = useState(false);
   const [savingSelection, setSavingSelection] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!productId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [nextAssignments, nextTaxonomy] = await Promise.all([
@@ -54,25 +59,33 @@ export const SmartTagEditor: React.FC<Props> = ({
     } catch (requestError: any) {
       setError(requestError.message || "Không thể tải thẻ thông minh.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [productId]);
 
   useEffect(() => {
-    setDecisionVersion(initialDecisionVersion);
+    decisionVersionRef.current = initialDecisionVersion;
   }, [initialDecisionVersion, productId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const activeCodes = assignments
+      .filter((assignment) => assignment.status === "ACTIVE")
+      .map((assignment) => assignment.tagCode);
+    onActiveCountChange?.(activeCodes.length);
+    onActiveTagsChange?.(activeCodes);
+  }, [assignments, onActiveCountChange, onActiveTagsChange]);
+
   const generate = async () => {
-    if (!productId || generating) return;
+    if (!productId || generating || mutatingRef.current) return;
     setGenerating(true);
     setError(null);
     try {
       await smartTagService.generate(productId);
-      await load();
+      await load(true);
     } catch (requestError: any) {
       setError(requestError.message || "Không thể tạo gợi ý lúc này.");
     } finally {
@@ -84,47 +97,59 @@ export const SmartTagEditor: React.FC<Props> = ({
     assignment: SmartTagAssignment,
     action: SmartTagDecisionAction,
   ) => {
-    if (!productId) return;
-    const requiresReason = action === "REJECT" || action === "REMOVE";
-    const reason = requiresReason
-      ? window.prompt("Nhập lý do:")?.trim()
-      : undefined;
-    if (requiresReason && !reason) return;
+    if (!productId || mutatingRef.current) return;
+    const reason =
+      action === "REJECT"
+        ? "Không phù hợp sản phẩm"
+        : action === "REMOVE"
+          ? "Người bán gỡ thẻ"
+          : undefined;
 
+    mutatingRef.current = true;
     try {
       await smartTagService.decide(
         productId,
         assignment.tagCode,
         action,
-        decisionVersion,
+        decisionVersionRef.current,
         reason,
       );
-      setDecisionVersion((version) => version + 1);
-      await load();
+      decisionVersionRef.current += 1;
+      await load(true);
     } catch (requestError: any) {
       setError(
         requestError.message ||
           "Thao tác thẻ không thành công. Vui lòng tải lại.",
       );
+      await load(true);
+    } finally {
+      mutatingRef.current = false;
     }
   };
 
-  const saveSelection = async () => {
-    if (!productId || savingSelection) return;
+  const toggleManualTag = async (code: string, isSelected: boolean) => {
+    if (!productId || mutatingRef.current) return;
+    const next = isSelected
+      ? selectedCodes.filter((existing) => existing !== code)
+      : [...selectedCodes, code];
+    setSelectedCodes(next);
     setSavingSelection(true);
+    mutatingRef.current = true;
     try {
       const nextAssignments = await smartTagService.select(
         productId,
-        selectedCodes,
-        decisionVersion,
+        next,
+        decisionVersionRef.current,
       );
       setAssignments(nextAssignments);
-      setDecisionVersion((version) => version + 1);
+      decisionVersionRef.current += 1;
     } catch (requestError: any) {
       setError(
-        requestError.message || "Không thể lưu lựa chọn. Vui lòng tải lại.",
+        requestError.message || "Không thể cập nhật thẻ. Vui lòng tải lại.",
       );
+      await load(true);
     } finally {
+      mutatingRef.current = false;
       setSavingSelection(false);
     }
   };
@@ -272,6 +297,7 @@ export const SmartTagEditor: React.FC<Props> = ({
             >
               <p style={{ ...hintStyle, margin: "0 0 8px" }}>
                 Chọn thủ công ({selectedCodes.length} thẻ đã chọn)
+                {savingSelection ? " · đang lưu…" : ""}
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
                 {taxonomy.map((definition) => {
@@ -281,13 +307,8 @@ export const SmartTagEditor: React.FC<Props> = ({
                       key={definition.code}
                       type="button"
                       title={definition.description}
-                      onClick={() =>
-                        setSelectedCodes((codes) =>
-                          selected
-                            ? codes.filter((code) => code !== definition.code)
-                            : [...codes, definition.code],
-                        )
-                      }
+                      disabled={savingSelection}
+                      onClick={() => toggleManualTag(definition.code, selected)}
                       style={{
                         ...tagToggleStyle,
                         borderColor: selected
@@ -299,6 +320,7 @@ export const SmartTagEditor: React.FC<Props> = ({
                         color: selected
                           ? definition.displayConfig.color
                           : "#57534e",
+                        cursor: savingSelection ? "wait" : "pointer",
                       }}
                     >
                       {selected && <Check size={13} />}
@@ -307,23 +329,9 @@ export const SmartTagEditor: React.FC<Props> = ({
                   );
                 })}
               </div>
-              <button
-                type="button"
-                onClick={saveSelection}
-                disabled={savingSelection || selectedCodes.length === 0}
-                style={{
-                  ...secondaryButtonStyle,
-                  marginTop: "10px",
-                  opacity: selectedCodes.length === 0 ? 0.55 : 1,
-                  cursor: selectedCodes.length === 0 ? "not-allowed" : "pointer",
-                }}
-              >
-                {savingSelection
-                  ? "Đang lưu..."
-                  : selectedCodes.length === 0
-                    ? "Chọn ít nhất một thẻ"
-                    : "Lưu lựa chọn"}
-              </button>
+              <p style={{ ...hintStyle, margin: "8px 0 0" }}>
+                Bấm để thêm / bỏ thẻ — thay đổi lưu ngay và đồng bộ với danh sách phía trên.
+              </p>
             </div>
           )}
         </>

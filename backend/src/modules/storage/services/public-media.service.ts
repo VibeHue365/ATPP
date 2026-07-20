@@ -34,6 +34,19 @@ export class PublicMediaService {
     return { key, url: this.publicUrl(key) };
   }
 
+  async uploadVideo(scope: string, file: Express.Multer.File): Promise<{ key: string; url: string }> {
+    if (!file?.buffer?.length) throw new ServiceUnavailableException('Video buffer is required');
+    this.assertValidVideo(file);
+    await this.ensureBucket();
+    const extension = this.videoExtension(file);
+    const key = `${this.safeSegment(scope)}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${extension}`;
+    await this.client.putObject(this.bucket, key, file.buffer, file.buffer.length, {
+      'Content-Type': file.mimetype,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    });
+    return { key, url: this.publicUrl(key) };
+  }
+
   async health(): Promise<{ bucket: string }> {
     await this.ensureBucket();
     return { bucket: this.bucket };
@@ -83,6 +96,23 @@ export class PublicMediaService {
       throw new UnsupportedMediaTypeException('Image content does not match its declared format');
     }
   }
+  private assertValidVideo(file: Express.Multer.File): void {
+    const allowedMimeTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new UnsupportedMediaTypeException('Only mp4, webm, and mov videos are allowed');
+    }
+    const header = file.buffer.subarray(0, 12);
+    // mp4 / mov: chuỗi "ftyp" ở byte 4-8; webm: EBML header 0x1A45DFA3
+    const validMp4Like =
+      (file.mimetype === 'video/mp4' || file.mimetype === 'video/quicktime') &&
+      header.toString('ascii', 4, 8) === 'ftyp';
+    const validWebm =
+      file.mimetype === 'video/webm' &&
+      header[0] === 0x1a && header[1] === 0x45 && header[2] === 0xdf && header[3] === 0xa3;
+    if (!validMp4Like && !validWebm) {
+      throw new UnsupportedMediaTypeException('Video content does not match its declared format');
+    }
+  }
   private async ensureBucket(): Promise<void> {
     if (this.ensured) return;
     const exists = await this.client.bucketExists(this.bucket);
@@ -114,6 +144,11 @@ export class PublicMediaService {
 
   private extension(file: Express.Multer.File): string {
     const byMime: Record<string, string> = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+    return byMime[file.mimetype] ?? (extname(file.originalname).toLowerCase() || '.bin');
+  }
+
+  private videoExtension(file: Express.Multer.File): string {
+    const byMime: Record<string, string> = { 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov' };
     return byMime[file.mimetype] ?? (extname(file.originalname).toLowerCase() || '.bin');
   }
 

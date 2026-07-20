@@ -17,6 +17,7 @@ import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
 import { DiscountCampaignService } from './discount-campaign.service';
 import { CategoriesService } from '../../categories/services/categories.service';
+import { ServiceCategoryType } from '../../categories/schemas/category.schema';
 import { ModerateProductDto } from '../dto/product-moderation.dto';
 import { SmartTagPublicProjectionService } from '../../smart-tagging/services/smart-tag-public-projection.service';
 import { SmartTaggingService } from '../../smart-tagging/services/smart-tagging.service';
@@ -44,6 +45,10 @@ export class ProductsService {
     colors?: string[];
     sizes?: string[];
     materials?: string[];
+    categoryId?: string;
+    styleCategoryIds?: string[];
+    eventCategoryIds?: string[];
+    limit?: number;
   }): Promise<any[]> {
     const products = await this.productsRepository.findAllActive(options);
     const productsWithBadges = await this.attachPublicBadges(products);
@@ -72,12 +77,19 @@ export class ProductsService {
     });
   }
 
+  async getFeaturedProducts(limit = 8): Promise<any[]> {
+    // Engagement metrics are not persisted yet, so newest public listings are
+    // the deterministic fallback for the landing featured section.
+    return this.getAllActiveProducts({ limit });
+  }
+
   async getCategories(): Promise<any[]> {
     return this.categoriesService.listActiveCategoriesForProducts();
   }
 
   async getProductById(productId: string): Promise<any | null> {
-    const product = await this.productsRepository.findById(new Types.ObjectId(productId));
+    if (!Types.ObjectId.isValid(productId)) return null;
+    const product = await this.productsRepository.findPublicById(new Types.ObjectId(productId));
     if (!product) return null;
     const plain = product.toObject() as any;
     const pId = typeof plain.providerId === 'object' && plain.providerId ? plain.providerId._id : plain.providerId;
@@ -164,6 +176,14 @@ export class ProductsService {
     }
 
     await this.categoriesService.assertActiveProductCategory(dto.categoryId);
+    await this.categoriesService.assertActiveCategories(
+      dto.styleCategoryIds ?? [],
+      ServiceCategoryType.Style,
+    );
+    await this.categoriesService.assertActiveCategories(
+      dto.eventCategoryIds ?? [],
+      ServiceCategoryType.Event,
+    );
 
     const slug =
       dto.name
@@ -176,18 +196,43 @@ export class ProductsService {
       '-' +
       Date.now();
 
+    const variants =
+      dto.variants && dto.variants.length > 0 ? dto.variants : null;
+
+    // When variants are provided they are the single source of truth for
+    // sizes/colors/materials (used by search filters + smart-tag inputs);
+    // otherwise fall back to the explicit arrays.
+    const productSizes = variants
+      ? Array.from(new Set(variants.map((v) => v.size.trim().toUpperCase())))
+      : dto.sizes || [];
+    const productColors = variants
+      ? Array.from(new Set(variants.map((v) => this.normalizeColor(v.color))))
+      : dto.colors || [];
+    const productMaterials = variants
+      ? Array.from(
+          new Set(
+            variants
+              .map((v) => (v.material ? v.material.trim() : ''))
+              .filter((m) => m.length > 0),
+          ),
+        )
+      : dto.materials || [];
+
     const product = await this.productsRepository.create({
       providerId: user.provider.providerId,
       categoryId: new Types.ObjectId(dto.categoryId),
+      styleCategoryIds: (dto.styleCategoryIds ?? []).map((id) => new Types.ObjectId(id)),
+      eventCategoryIds: (dto.eventCategoryIds ?? []).map((id) => new Types.ObjectId(id)),
       name: dto.name,
       slug,
       description: dto.description || '',
       images: dto.images || [],
+      videos: dto.videos || [],
       basePrice: dto.basePrice,
       depositAmount: dto.depositAmount,
-      sizes: dto.sizes || [],
-      colors: dto.colors || [],
-      materials: dto.materials || [],
+      sizes: productSizes,
+      colors: productColors,
+      materials: productMaterials,
       status: dto.status || ProductStatus.Draft,
       moderationStatus: ProductModerationStatus.PendingReview,
       moderationReason: null,
@@ -198,26 +243,36 @@ export class ProductsService {
       rating: { averageRating: 0, totalReviews: 0 },
     });
 
-    const sizes = dto.sizes && dto.sizes.length > 0 ? dto.sizes : ['M'];
-    const colors = dto.colors && dto.colors.length > 0 ? dto.colors : ['WHITE'];
-    const initialQuantity = dto.initialQuantity !== undefined ? dto.initialQuantity : 2;
-
-    const inventoryItemModel = this.connection.model('InventoryItem');
-    for (const size of sizes) {
-      const sizeVal = size.trim().toUpperCase();
-      for (const color of colors) {
-        const colorVal = this.normalizeColor(color);
-        for (let i = 0; i < initialQuantity; i++) {
-          const sku = `AD-${product._id.toString().slice(-6)}-${sizeVal}-${colorVal}-${Math.floor(100 + Math.random() * 900)}`.toUpperCase();
+    // Create real inventory items only from the provider's declared variants.
+    // No variants => no stock is fabricated (the old default-of-2 behaviour is
+    // intentionally removed so onboarding never invents phantom inventory).
+    if (variants) {
+      const inventoryItemModel = this.connection.model('InventoryItem');
+      const seqByBucket = new Map<string, number>();
+      for (const variant of variants) {
+        const sizeVal = variant.size.trim().toUpperCase();
+        const colorVal = this.normalizeColor(variant.color);
+        const materialVal = variant.material ? variant.material.trim() : null;
+        const quantity =
+          variant.quantity && variant.quantity > 0 ? variant.quantity : 1;
+        const bucket = `${sizeVal}_${colorVal}`;
+        let seq = seqByBucket.get(bucket) || 0;
+        for (let i = 0; i < quantity; i++) {
+          seq += 1;
+          const seqStr = seq.toString().padStart(3, '0');
+          const sku =
+            `AD-${product._id.toString().slice(-6)}-${sizeVal}-${colorVal}-${seqStr}`.toUpperCase();
           await inventoryItemModel.create({
             productId: product._id,
             sku,
             size: sizeVal,
             color: colorVal,
-            conditionStatus: 'GOOD',
+            material: materialVal,
+            conditionStatus: variant.conditionStatus || 'GOOD',
             status: 'AVAILABLE',
           });
         }
+        seqByBucket.set(bucket, seq);
       }
     }
 
@@ -276,12 +331,15 @@ export class ProductsService {
       (dto.colors !== undefined && !sameStringArray(dto.colors, product.colors)) ||
       (dto.materials !== undefined && !sameStringArray(dto.materials, product.materials)) ||
       (dto.style !== undefined && dto.style !== product.style) ||
-      (dto.occasions !== undefined && !sameStringArray(dto.occasions, product.occasions));
+      (dto.occasions !== undefined && !sameStringArray(dto.occasions, product.occasions)) ||
+      (dto.styleCategoryIds !== undefined && !sameStringArray(dto.styleCategoryIds, (product.styleCategoryIds ?? []).map((id) => id.toString()))) ||
+      (dto.eventCategoryIds !== undefined && !sameStringArray(dto.eventCategoryIds, (product.eventCategoryIds ?? []).map((id) => id.toString())));
     const productChanged =
       taggingInputChanged ||
       (dto.basePrice !== undefined && dto.basePrice !== product.basePrice) ||
       (dto.depositAmount !== undefined && dto.depositAmount !== product.depositAmount) ||
       (dto.sizes !== undefined && !sameStringArray(dto.sizes, product.sizes)) ||
+      (dto.videos !== undefined && !sameStringArray(dto.videos, product.videos || [])) ||
       (dto.status !== undefined && dto.status !== product.status);
 
     if (!productChanged) {
@@ -304,8 +362,27 @@ export class ProductsService {
       await this.categoriesService.assertActiveProductCategory(dto.categoryId);
       updateData.categoryId = new Types.ObjectId(dto.categoryId);
     }
+    if (dto.styleCategoryIds !== undefined) {
+      await this.categoriesService.assertActiveCategories(
+        dto.styleCategoryIds,
+        ServiceCategoryType.Style,
+      );
+      updateData.styleCategoryIds = dto.styleCategoryIds.map(
+        (id) => new Types.ObjectId(id),
+      );
+    }
+    if (dto.eventCategoryIds !== undefined) {
+      await this.categoriesService.assertActiveCategories(
+        dto.eventCategoryIds,
+        ServiceCategoryType.Event,
+      );
+      updateData.eventCategoryIds = dto.eventCategoryIds.map(
+        (id) => new Types.ObjectId(id),
+      );
+    }
     if (dto.description !== undefined) updateData.description = dto.description;
     if (dto.images !== undefined) updateData.images = dto.images;
+    if (dto.videos !== undefined) updateData.videos = dto.videos;
     if (dto.basePrice !== undefined) updateData.basePrice = dto.basePrice;
     if (dto.depositAmount !== undefined)
       updateData.depositAmount = dto.depositAmount;
@@ -335,7 +412,14 @@ export class ProductsService {
       await Promise.all(
         removedImages.map((image) => this.publicMedia.deleteByUrl(image).catch(() => undefined)),
       );
-    }    if (taggingInputChanged) {
+    }
+    if (dto.videos !== undefined) {
+      const removedVideos = (product.videos || []).filter((video) => !dto.videos!.includes(video));
+      await Promise.all(
+        removedVideos.map((video) => this.publicMedia.deleteByUrl(video).catch(() => undefined)),
+      );
+    }
+    if (taggingInputChanged) {
       await this.smartTaggingService.markAssignmentsStale(
         SmartTagEntityType.Product,
         updated._id,
@@ -458,9 +542,30 @@ export class ProductsService {
       }
     }
 
+    // Cascade: remove this product's inventory items and their reservations so
+    // deleting a product (e.g. an abandoned onboarding draft) never leaves
+    // orphaned stock behind. Active bookings were already rejected above.
+    const inventoryItemModel = this.connection.model('InventoryItem');
+    const ownedItems = await inventoryItemModel
+      .find({ productId: new Types.ObjectId(productId) })
+      .select({ _id: 1 })
+      .lean()
+      .exec();
+    if (ownedItems.length > 0) {
+      const itemIds = ownedItems.map((item: any) => item._id);
+      await this.connection
+        .model('InventoryReservation')
+        .deleteMany({ inventoryItemId: { $in: itemIds } });
+      await inventoryItemModel.deleteMany({
+        productId: new Types.ObjectId(productId),
+      });
+    }
+
     await this.productsRepository.delete(new Types.ObjectId(productId));
     await Promise.all(
-      product.images.map((image) => this.publicMedia.deleteByUrl(image).catch(() => undefined)),
+      [...product.images, ...(product.videos || [])].map((media) =>
+        this.publicMedia.deleteByUrl(media).catch(() => undefined),
+      ),
     );
     return { message: 'Product deleted successfully' };
   }

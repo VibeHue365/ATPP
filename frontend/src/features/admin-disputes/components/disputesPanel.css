@@ -98,6 +98,10 @@
   font-weight: 700;
 }
 
+.admin-disputes__evidence { display: grid; gap: 8px; }
+.admin-disputes__evidence h4 { margin: 0; color: #7a7a7a; font-size: 11px; text-transform: uppercase; }
+.admin-disputes__evidence > div { display: flex; flex-wrap: wrap; gap: 8px; }
+
 .admin-disputes__split {
   grid-template-columns: repeat(2, 1fr);
 }

@@ -3,14 +3,15 @@ import {
   lazy,
   Suspense,
   useCallback,
+  useEffect,
   useState,
   type ComponentType,
   type ErrorInfo,
   type ReactNode,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  AlertTriangle,
+AlertTriangle,
   Ban,
   BarChart3,
   Bell,
@@ -33,6 +34,7 @@ import { adminDisputesApi } from '../../features/admin-disputes/api/adminDispute
 import { adminReportedReviewsApi } from '../../features/admin-reviews/api/adminReportedReviewsApi';
 import { adminVerificationApi } from '../../features/admin-verifications/api/adminVerificationApi';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import { useToast } from '../../components/feedback/Toast';
 import './adminDashboardRefactored.css';
 
 type AdminTab =
@@ -64,6 +66,7 @@ type AttentionItem = {
   tab: AdminTab;
   title: string;
   description: string;
+  occurredAt?: string;
   type: 'verification' | 'dispute' | 'review';
 };
 
@@ -117,7 +120,6 @@ const tabs: TabDefinition[] = [
   { id: 'categories', label: 'Quản lý Danh mục', title: 'Quản lý Danh mục Dịch vụ', icon: Layers },
   { id: 'bookings', label: 'Lịch trình & Đặt lịch', title: 'Quản lý Lịch trình & Booking', icon: Calendar },
   { id: 'settlements', label: 'Đối soát & Quyết toán', title: 'Đối soát & Quyết toán Tài chính', icon: DollarSign },
-  { id: 'refunds', label: 'Quản lý hoàn tiền', title: 'Quản lý hoàn tiền', icon: DollarSign },
   { id: 'revenue', label: 'Báo cáo Doanh thu', title: 'Thống kê Doanh thu Hệ thống', icon: TrendingUp },
   { id: 'verifications', label: 'Phê duyệt hồ sơ đối tác', title: 'Phê duyệt hồ sơ đăng ký đối tác', icon: FileCheck },
   { id: 'disputes', label: 'Giải quyết tranh chấp', title: 'Giải quyết tranh chấp sự cố', icon: AlertTriangle },
@@ -126,7 +128,14 @@ const tabs: TabDefinition[] = [
   { id: 'policies', label: 'Cấu hình Chính sách', title: 'Cấu hình Chính sách Hệ thống', icon: Settings },
   { id: 'users-roles', label: 'Tài khoản & Phân quyền', title: 'Tài khoản & Quản trị Phân quyền', icon: ShieldCheck },
   { id: 'behavior', label: 'Phân tích hành vi', title: 'Phân tích hành vi người dùng', icon: BarChart3 },
+  { id: 'refunds', label: 'Quản lý hoàn tiền', title: 'Quản lý hoàn tiền', icon: DollarSign },
 ];
+
+const adminTabIds = new Set<AdminTab>(tabs.map((tab) => tab.id));
+
+function isAdminTab(value: string | null): value is AdminTab {
+  return value !== null && adminTabIds.has(value as AdminTab);
+}
 
 const attentionStyles = {
   verification: { label: 'HỒ SƠ', className: 'admin-refactor-notification__type--verification' },
@@ -191,16 +200,41 @@ function TabPanel({ tab }: { tab: AdminTab }) {
 
 export default function AdminDashboardRefactored() {
   const navigate = useNavigate();
+  const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { logout, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const requestedTab = searchParams.get('tab');
+  const activeTab: AdminTab = isAdminTab(requestedTab) ? requestedTab : 'overview';
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isLoadingAttention, setIsLoadingAttention] = useState(false);
+  const [attentionError, setAttentionError] = useState<string | null>(null);
   const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
   const activeDefinition = tabs.find((tab) => tab.id === activeTab)!;
   const avatar = user?.avatar || user?.avatarUrl || '/avatar_hanna.png';
+  const isAdmin = user?.roles?.some((role) => role.toUpperCase() === 'ADMIN') ?? false;
+
+  const setActiveTab = useCallback((tab: AdminTab, options?: { replace?: boolean }) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', tab);
+    setSearchParams(nextParams, { replace: options?.replace ?? false });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (requestedTab !== null && !isAdminTab(requestedTab)) {
+      setActiveTab('overview', { replace: true });
+    }
+  }, [requestedTab, setActiveTab]);
+
+  useEffect(() => {
+    if (user && !isAdmin) {
+      toast.error('Bạn không có quyền truy cập trang quản trị!');
+      navigate(ROUTES.LANDING, { replace: true });
+    }
+  }, [isAdmin, navigate, toast, user]);
 
   const loadAttention = useCallback(async () => {
     setIsLoadingAttention(true);
+    setAttentionError(null);
 
     const [verificationResult, disputeResult, reviewResult] = await Promise.allSettled([
       adminVerificationApi.list(),
@@ -218,6 +252,7 @@ export default function AdminDashboardRefactored() {
           type: 'verification',
           title: item.businessProfile.businessName || 'Hồ sơ đối tác',
           description: `Hồ sơ đang ở trạng thái ${item.status}.`,
+          occurredAt: item.createdAt,
         }));
     }
     if (disputeResult.status === 'fulfilled') {
@@ -236,10 +271,16 @@ export default function AdminDashboardRefactored() {
         type: 'review',
         title: 'Báo cáo đánh giá cần kiểm duyệt',
         description: item.reportReason || 'Review được báo cáo vi phạm.',
+        occurredAt: item.reportedAt,
       }));
     }
 
     setAttentionItems(nextItems.slice(0, 20));
+    const failedSources = [verificationResult, disputeResult, reviewResult]
+      .filter((result) => result.status === 'rejected').length;
+    if (failedSources > 0) {
+      setAttentionError(`Không thể tải ${failedSources}/3 nguồn thông báo.`);
+    }
     setIsLoadingAttention(false);
   }, []);
 
@@ -281,6 +322,8 @@ export default function AdminDashboardRefactored() {
                   type="button"
                   className={isActive ? 'is-active' : ''}
                   aria-current={isActive ? 'page' : undefined}
+                  aria-label={tab.label}
+                  title={tab.label}
                   onClick={() => setActiveTab(tab.id)}
                 >
                   <Icon size={16} color={isActive ? '#4A0E17' : '#B89047'} />
@@ -292,11 +335,11 @@ export default function AdminDashboardRefactored() {
         </div>
 
         <div className="admin-refactor-sidebar__footer">
-          <button type="button" onClick={() => navigate(ROUTES.LANDING)}>
+          <button type="button" aria-label="Trở về Trang chủ" onClick={() => navigate(ROUTES.LANDING)}>
             <Home size={16} color="#B89047" />
             <span>Trở về Trang chủ</span>
           </button>
-          <button className="admin-refactor-logout" type="button" onClick={() => void handleLogout()}>
+          <button className="admin-refactor-logout" type="button" aria-label="Đăng xuất" onClick={() => void handleLogout()}>
             <LogOut size={16} color="#F87171" />
             <span>Đăng xuất</span>
           </button>
@@ -329,6 +372,9 @@ export default function AdminDashboardRefactored() {
                     {isLoadingAttention && <span>Đang tải…</span>}
                   </div>
                   <div className="admin-refactor-notification__list">
+                    {attentionError && (
+                      <p className='admin-refactor-notification__error' role='alert'>{attentionError}</p>
+                    )}
                     {!isLoadingAttention && !attentionItems.length && (
                       <p>Không có thông báo mới nào cần xử lý.</p>
                     )}
@@ -339,6 +385,11 @@ export default function AdminDashboardRefactored() {
                           <span className={`admin-refactor-notification__type ${style.className}`}>{style.label}</span>
                           <strong>{item.title}</strong>
                           <small>{item.description}</small>
+                          {item.occurredAt && (
+                            <time dateTime={item.occurredAt}>
+                              {new Date(item.occurredAt).toLocaleString('vi-VN')}
+                            </time>
+                          )}
                         </button>
                       );
                     })}

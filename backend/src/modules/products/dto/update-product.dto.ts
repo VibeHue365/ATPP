@@ -1,5 +1,6 @@
 import {
   IsArray,
+  ArrayUnique,
   IsEnum,
   IsMongoId,
   IsNumber,
@@ -15,6 +16,17 @@ export class UpdateProductDto {
   categoryId?: string;
 
   @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsMongoId({ each: true })
+  styleCategoryIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsMongoId({ each: true })
+  eventCategoryIds?: string[];
+  @IsOptional()
   @IsString()
   name?: string;
 
@@ -26,6 +38,11 @@ export class UpdateProductDto {
   @IsArray()
   @IsString({ each: true })
   images?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  videos?: string[];
 
   @IsOptional()
   @IsNumber()

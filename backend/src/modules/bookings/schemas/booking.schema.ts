@@ -172,8 +172,30 @@ export class Booking {
   @Prop({ type: Date, default: null })
   settlementGenerationFailedAt?: Date | null;
 
+  /** Key from the client retrying a photography hold request. */
+  @Prop({ type: String, default: null, trim: true, maxlength: 160 })
+  holdIdempotencyKey?: string | null;
+
+  /** Present only while a photography schedule is temporarily held. */
+  @Prop({ type: Date, default: null, index: true })
+  holdExpiresAt?: Date | null;
+
+  /** A payment received after expiry must be reviewed/refunded manually. */
+  @Prop({ type: Boolean, default: false })
+  paymentReviewRequired: boolean;
+
+  @Prop({ type: String, default: null, trim: true })
+  paymentReviewReason?: string | null;
+
   @Prop({ type: String, default: null, trim: true })
   settlementGenerationError?: string | null;
 }
 
 export const BookingSchema = SchemaFactory.createForClass(Booking);
+BookingSchema.index(
+  { customerId: 1, holdIdempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { holdIdempotencyKey: { $type: 'string' } },
+  },
+);

@@ -372,18 +372,35 @@ export class CategoriesService {
   }
 
   async assertActiveProductCategory(categoryId: string): Promise<void> {
-    const category = await this.categoryModel.exists({
-      _id: this.toObjectId(categoryId),
-      type: ServiceCategoryType.AodaiCategory,
+    await this.assertActiveCategory(categoryId, ServiceCategoryType.AodaiCategory);
+  }
+
+  async assertActiveCategory(
+    categoryId: string,
+    type: ServiceCategoryType,
+  ): Promise<void> {
+    await this.assertActiveCategories([categoryId], type);
+  }
+
+  async assertActiveCategories(
+    categoryIds: string[],
+    type: ServiceCategoryType,
+  ): Promise<void> {
+    const uniqueIds = [...new Set(categoryIds)];
+    if (uniqueIds.length === 0) return;
+
+    const objectIds = uniqueIds.map((categoryId) => this.toObjectId(categoryId));
+    const validCount = await this.categoryModel.countDocuments({
+      _id: { $in: objectIds },
+      type,
       status: CategoryStatus.Active,
       deletedAt: { $exists: false },
     });
 
-    if (!category) {
-      throw new BadRequestException('CATEGORY_NOT_AVAILABLE_FOR_PRODUCT');
+    if (validCount !== uniqueIds.length) {
+      throw new BadRequestException('CATEGORY_NOT_ACTIVE_OR_TYPE_MISMATCH');
     }
   }
-
   private buildFilter(query: QueryCategoriesDto): Record<string, unknown> {
     const filter: Record<string, unknown> = {};
 

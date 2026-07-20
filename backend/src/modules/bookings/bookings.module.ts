@@ -7,6 +7,11 @@ import {
   BookingSchedule,
   BookingScheduleSchema,
 } from './schemas/booking-schedule.schema';
+
+import {
+  ProviderScheduleLock,
+  ProviderScheduleLockSchema,
+} from './schemas/provider-schedule-lock.schema';
 import {
   DigitalContract,
   DigitalContractSchema,
@@ -16,8 +21,11 @@ import {
   RentalHandoverSchema,
 } from './schemas/rental-handover.schema';
 import { BookingsController } from './controllers/bookings.controller';
+import { PhotographyHoldsController } from './controllers/photography-holds.controller';
 import { BookingsService } from './services/bookings.service';
 import { BookingsSchedulerService } from './services/bookings-scheduler.service';
+import { PhotographyHoldService } from './services/photography-hold.service';
+import { PhotographyQuoteService } from '../photographers/services/photography-quote.service';
 import { ProductsModule } from '../products/products.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -31,6 +39,7 @@ export const bookingModels = MongooseModule.forFeature([
   { name: Booking.name, schema: BookingSchema },
   { name: BookingItem.name, schema: BookingItemSchema },
   { name: BookingSchedule.name, schema: BookingScheduleSchema },
+  { name: ProviderScheduleLock.name, schema: ProviderScheduleLockSchema },
   { name: DigitalContract.name, schema: DigitalContractSchema },
   { name: RentalHandover.name, schema: RentalHandoverSchema },
 ]);
@@ -46,8 +55,18 @@ export const bookingModels = MongooseModule.forFeature([
     SystemPoliciesModule,
     StorageModule,
   ],
-  controllers: [BookingsController],
-  providers: [BookingsService, BookingsSchedulerService],
-  exports: [bookingModels, BookingsService],
+  controllers: [BookingsController, PhotographyHoldsController],
+  providers: [
+    BookingsService,
+    BookingsSchedulerService,
+    PhotographyQuoteService,
+    PhotographyHoldService,
+  ],
+  exports: [
+    bookingModels,
+    BookingsService,
+    PhotographyQuoteService,
+    PhotographyHoldService,
+  ],
 })
 export class BookingsModule {}

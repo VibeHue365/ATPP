@@ -34,6 +34,16 @@ interface UserItem {
   createdAt: string;
 }
 
+const userStatusLabels: Record<UserItem['status'], string> = {
+  ACTIVE: 'Hoạt động',
+  PENDING_EMAIL_VERIFICATION: 'Chờ xác thực email',
+  SUSPENDED: 'Tạm ngưng',
+  BANNED: 'Đã khóa',
+  DELETED: 'Đã xóa',
+};
+
+const userStatusLabel = (status: UserItem['status']) => userStatusLabels[status] ?? status;
+
 interface RoleItem {
   code: string;
   name: string;
@@ -670,7 +680,7 @@ export const AccessControl: React.FC = () => {
                               backgroundColor: u.status === 'ACTIVE' ? '#F0FDF4' : u.status === 'BANNED' ? '#FEE2E2' : '#FEF3C7',
                               color: u.status === 'ACTIVE' ? '#166534' : u.status === 'BANNED' ? '#991B1B' : '#92400E'
                             }}>
-                              {u.status === 'ACTIVE' ? 'Hoạt động' : u.status === 'BANNED' ? 'Khóa' : u.status === 'SUSPENDED' ? 'Tạm ngưng' : u.status}
+                              {userStatusLabel(u.status)}
                             </span>
                           </td>
 
@@ -778,7 +788,7 @@ export const AccessControl: React.FC = () => {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#7A7A7A' }}>Trạng thái tài khoản:</span>
-                  <strong style={{ color: selectedUser.status === 'ACTIVE' ? '#166534' : '#E53E3E' }}>{selectedUser.status}</strong>
+                  <strong style={{ color: selectedUser.status === 'ACTIVE' ? '#166534' : '#E53E3E' }}>{userStatusLabel(selectedUser.status)}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#7A7A7A' }}>Ngày tạo:</span>

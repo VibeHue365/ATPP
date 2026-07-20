@@ -48,14 +48,14 @@ export const AoDaiProductGrid: React.FC = () => {
     const fetchProducts = async () => {
       try {
         setLoading(true);
-        const data = await httpClient.get<ProductFromDb[]>('/products');
+        const data = await httpClient.get<ProductFromDb[]>('/products/featured?limit=8');
         
         const mappedItems: AoDaiItem[] = data.map((p) => ({
           id: p._id,
           name: p.name,
           material: p.materials?.[0] ? translateMaterial(p.materials[0]) : 'Lụa cao cấp',
           price: p.basePrice.toLocaleString('vi-VN') + 'đ',
-          status: p.status === 'ACTIVE' ? 'AVAILABLE' : 'RESERVED',
+          status: 'AVAILABLE',
           image: p.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
           badges: p.badges,
         }));
@@ -127,15 +127,14 @@ export const AoDaiProductGrid: React.FC = () => {
                     <button 
                       className="vh-btn vh-btn-sm" 
                       style={{ padding: '8px', borderRadius: '6px', backgroundColor: 'rgba(255, 255, 255, 0.95)', color: 'var(--color-primary-dark)', border: '1px solid rgba(0,0,0,0.1)', minWidth: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                      onClick={() => navigate(`/rentals/${item.id}`)}
                       title="Thêm vào giỏ hàng"
                     >
                       <ShoppingCart size={16} />
                     </button>
                   </div>
                   {/* Status Tag Overlay */}
-                  <span className={`vh-status-badge ${
-                    item.status === 'AVAILABLE' ? 'vh-status-available' : 'vh-status-reserved'
-                  }`}>
+                  <span className="vh-status-badge vh-status-available" style={{ display: 'none' }}>
                     {item.status === 'AVAILABLE' ? 'CÓ SẴN' : 'ĐÃ ĐẶT'}
                   </span>
                 </div>

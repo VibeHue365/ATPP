@@ -8,6 +8,9 @@ import {
   ShoppingCart,
   Settings,
   Search,
+  Ruler,
+  Palette,
+  Fingerprint,
 } from "lucide-react";
 import { httpClient } from "../../services/httpClient";
 import { API_BASE_URL } from "../../config/env";
@@ -63,6 +66,8 @@ interface ProductFromDb {
 
 interface FilterState {
   categoryId: string;
+  styleCategoryIds: string[];
+  eventCategoryIds: string[];
   colors: string[];
   sizes: string[];
   materials: string[];
@@ -94,6 +99,8 @@ export const AoDaiListingPage: React.FC = () => {
 
   const [products, setProducts] = useState<ProductFromDb[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [styleCategories, setStyleCategories] = useState<Category[]>([]);
+  const [eventCategories, setEventCategories] = useState<Category[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductFromDb[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +113,8 @@ export const AoDaiListingPage: React.FC = () => {
   // Filters State passed to API
   const [filters, setFilters] = useState<FilterState>({
     categoryId: "",
+    styleCategoryIds: [],
+    eventCategoryIds: [],
     colors: [],
     sizes: [],
     materials: [],
@@ -190,12 +199,16 @@ export const AoDaiListingPage: React.FC = () => {
   useEffect(() => {
     const fetchAllProducts = async () => {
       try {
-        const [productData, categoryData] = await Promise.all([
+        const [productData, categoryData, styleCategoryData, eventCategoryData] = await Promise.all([
           httpClient.get<ProductFromDb[]>("/products"),
           categoryService.getPublic({ type: "AODAI_CATEGORY" }),
+        categoryService.getPublic({ type: "STYLE" }),
+          categoryService.getPublic({ type: "EVENT" }),
         ]);
         setProducts(productData);
         setCategories(categoryData);
+        setStyleCategories(styleCategoryData);
+        setEventCategories(eventCategoryData);
       } catch (err) {
         console.error("Lỗi tải danh mục gốc:", err);
       }
@@ -215,11 +228,17 @@ export const AoDaiListingPage: React.FC = () => {
 
   // Fetch filtered products from backend API when filters or sorting changes
   useEffect(() => {
+    let active = true;
     const fetchFiltered = async () => {
       try {
         setLoading(true);
+        setError(null);
         const params = new URLSearchParams();
         if (filters.categoryId) params.append("categoryId", filters.categoryId);
+        if (filters.styleCategoryIds.length > 0)
+          params.append("styleCategoryIds", filters.styleCategoryIds.join(","));
+        if (filters.eventCategoryIds.length > 0)
+          params.append("eventCategoryIds", filters.eventCategoryIds.join(","));
         if (filters.search) params.append("search", filters.search);
         if (filters.minPrice) params.append("minPrice", filters.minPrice);
         if (filters.maxPrice) params.append("maxPrice", filters.maxPrice);
@@ -316,16 +335,18 @@ export const AoDaiListingPage: React.FC = () => {
           );
         }
 
-        setFilteredProducts(result);
+        if (active) setFilteredProducts(result);
       } catch (err: any) {
         console.error("Lỗi khi lọc sản phẩm từ API:", err);
+        if (!active) return;
         setError(err.message || "Không thể tải sản phẩm.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     fetchFiltered();
+    return () => { active = false; };
   }, [
     filters,
     sortOption,
@@ -361,6 +382,17 @@ export const AoDaiListingPage: React.FC = () => {
         : [...prev.materials, materialValue],
     }));
   };
+  const toggleCategoryFilter = (
+    field: 'styleCategoryIds' | 'eventCategoryIds',
+    categoryId: string,
+  ) => {
+    setFilters((prev) => ({
+      ...prev,
+      [field]: prev[field].includes(categoryId)
+        ? prev[field].filter((id) => id !== categoryId)
+        : [...prev[field], categoryId],
+    }));
+  };
 
   const applyPriceFilter = () => {
     setFilters((prev) => ({
@@ -389,7 +421,9 @@ export const AoDaiListingPage: React.FC = () => {
     setMaxPriceVal("");
     setFilters({
       categoryId: "",
-      colors: [],
+      styleCategoryIds: [],
+    eventCategoryIds: [],
+    colors: [],
       sizes: [],
       materials: [],
       minPrice: "",
@@ -411,7 +445,7 @@ export const AoDaiListingPage: React.FC = () => {
         cancelButtonText: "Hủy",
       }).then((result) => {
         if (result.isConfirmed) {
-          navigate("/login");
+          navigate("/auth/login");
         }
       });
       return;
@@ -536,7 +570,61 @@ export const AoDaiListingPage: React.FC = () => {
               ))}
             </select>
           </div>
-          <div className="vh-filter-divider" />
+          <div className="vh-filter-section" style={{ marginBottom: "20px" }}>
+            <h4 className="vh-filter-section-title">PHONG CÁCH</h4>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+              {styleCategories.map((category) => {
+                const selected = filters.styleCategoryIds.includes(category.id);
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => toggleCategoryFilter("styleCategoryIds", category.id)}
+                    style={{
+                      border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-light-border)"}`,
+                      backgroundColor: selected ? "rgba(118, 20, 28, 0.08)" : "white",
+                      color: selected ? "var(--color-primary-dark)" : "var(--color-text-primary)",
+                      borderRadius: "999px",
+                      padding: "7px 10px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {category.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="vh-filter-section" style={{ marginBottom: "20px" }}>
+            <h4 className="vh-filter-section-title">DỊP / SỰ KIỆN</h4>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+              {eventCategories.map((category) => {
+                const selected = filters.eventCategoryIds.includes(category.id);
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => toggleCategoryFilter("eventCategoryIds", category.id)}
+                    style={{
+                      border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-light-border)"}`,
+                      backgroundColor: selected ? "rgba(118, 20, 28, 0.08)" : "white",
+                      color: selected ? "var(--color-primary-dark)" : "var(--color-text-primary)",
+                      borderRadius: "999px",
+                      padding: "7px 10px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {category.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>          <div className="vh-filter-divider" />
 
           {/* SMART FILTER FOR ONBOARDED USERS */}
           {showPersonalization ? (
@@ -544,10 +632,11 @@ export const AoDaiListingPage: React.FC = () => {
               <div
                 className="vh-filter-section"
                 style={{
-                  backgroundColor: "var(--color-light-bg)",
+                  background:
+                    "linear-gradient(180deg, var(--color-primary-trans) 0%, var(--color-light-bg) 70%)",
                   padding: "16px",
-                  borderRadius: "8px",
-                  border: "1px solid var(--color-light-border)",
+                  borderRadius: "12px",
+                  border: "1px solid var(--color-primary-trans)",
                 }}
               >
                 <h4
@@ -564,10 +653,26 @@ export const AoDaiListingPage: React.FC = () => {
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: "6px",
+                      gap: "8px",
+                      fontWeight: 800,
                     }}
                   >
-                    <Sparkles size={14} /> GỢI Ý CÁ NHÂN HÓA
+                    <span
+                      style={{
+                        width: "26px",
+                        height: "26px",
+                        borderRadius: "50%",
+                        backgroundColor: "var(--color-primary)",
+                        color: "white",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Fingerprint size={15} />
+                    </span>
+                    Gợi ý cá nhân hóa
                   </span>
                   <button
                     onClick={() => navigate("/onboarding")}
@@ -600,25 +705,44 @@ export const AoDaiListingPage: React.FC = () => {
                       style={{
                         display: "flex",
                         alignItems: "center",
+                        justifyContent: "space-between",
                         gap: "8px",
                         cursor: "pointer",
-                        fontSize: "13px",
-                        fontWeight: 600,
+                        padding: "10px 12px",
+                        borderRadius: "10px",
+                        backgroundColor: "white",
+                        border: matchMySize
+                          ? "1.5px solid var(--color-primary)"
+                          : "1px solid var(--color-light-border)",
+                        boxShadow: matchMySize
+                          ? "0 0 0 3px var(--color-primary-trans)"
+                          : "none",
+                        transition: "all 0.15s",
                       }}
                     >
+                      <span style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                        <Ruler size={17} style={{ color: "var(--color-primary)", flexShrink: 0 }} />
+                        <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--color-text-primary)" }}>
+                            Khớp số đo của tôi
+                          </span>
+                          {isFallbackApplied ? (
+                            <span style={{ fontSize: "11px", fontWeight: 600, color: "#B45309" }}>
+                              Size {displaySize} · kho chưa có XXL, tạm dùng XL
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+                              Ưu tiên size {displaySize}
+                            </span>
+                          )}
+                        </span>
+                      </span>
                       <input
                         type="checkbox"
                         checked={matchMySize}
                         onChange={(e) => setMatchMySize(e.target.checked)}
-                        style={{ accentColor: "var(--color-primary)" }}
+                        style={{ accentColor: "var(--color-primary)", width: "16px", height: "16px", flexShrink: 0 }}
                       />
-                      {isFallbackApplied ? (
-                        <span title="Hệ thống tự động lùi về size lớn nhất hiện có (XL) do kho chưa có sản phẩm size XXL của bạn.">
-                          📏 Khớp số đo (Size XL - khuyên dùng XXL ⚠️)
-                        </span>
-                      ) : (
-                        `📏 Khớp số đo (Size ${displaySize})`
-                      )}
                     </label>
                   )}
                   {hasGuPreference && (
@@ -626,19 +750,33 @@ export const AoDaiListingPage: React.FC = () => {
                       style={{
                         display: "flex",
                         alignItems: "center",
+                        justifyContent: "space-between",
                         gap: "8px",
                         cursor: "pointer",
-                        fontSize: "13px",
-                        fontWeight: 600,
+                        padding: "10px 12px",
+                        borderRadius: "10px",
+                        backgroundColor: "white",
+                        border: recommendMyGu
+                          ? "1.5px solid var(--color-primary)"
+                          : "1px solid var(--color-light-border)",
+                        boxShadow: recommendMyGu
+                          ? "0 0 0 3px var(--color-primary-trans)"
+                          : "none",
+                        transition: "all 0.15s",
                       }}
                     >
+                      <span style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <Palette size={17} style={{ color: "var(--color-primary)", flexShrink: 0 }} />
+                        <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--color-text-primary)" }}>
+                          Đề xuất theo gu của tôi
+                        </span>
+                      </span>
                       <input
                         type="checkbox"
                         checked={recommendMyGu}
                         onChange={(e) => setRecommendMyGu(e.target.checked)}
-                        style={{ accentColor: "var(--color-primary)" }}
+                        style={{ accentColor: "var(--color-primary)", width: "16px", height: "16px", flexShrink: 0 }}
                       />
-                      ✨ Đề xuất theo gu của tôi
                     </label>
                   )}
                 </div>
@@ -1266,6 +1404,7 @@ export const AoDaiListingPage: React.FC = () => {
                             justifyContent: "center",
                             cursor: "pointer",
                           }}
+                          onClick={() => navigate(`/rentals/${p._id}`)}
                           title="Thêm vào giỏ hàng"
                         >
                           <ShoppingCart size={16} />
@@ -1275,7 +1414,7 @@ export const AoDaiListingPage: React.FC = () => {
                       {/* Status badge */}
                       <span
                         className="vh-status-badge vh-status-available"
-                        style={{ top: "42px", left: "12px", right: "auto" }}
+                        style={{ display: 'none', top: "42px", left: "12px", right: "auto" }}
                       >
                         CÓ SẴN
                       </span>

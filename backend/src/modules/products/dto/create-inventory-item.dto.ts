@@ -15,6 +15,10 @@ export class CreateInventoryItemDto {
   color: string;
 
   @IsOptional()
+  @IsString()
+  material?: string;
+
+  @IsOptional()
   @IsEnum(ConditionStatus)
   conditionStatus?: ConditionStatus;
 

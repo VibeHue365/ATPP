@@ -9,6 +9,11 @@ export enum PackageStatus {
   Draft = 'DRAFT',
 }
 
+export enum PhotographyPricingUnit {
+  PerSession = 'PER_SESSION',
+  PerDay = 'PER_DAY',
+  PerBooking = 'PER_BOOKING',
+}
 export interface PackageRating {
   averageRating: number;
   totalReviews: number;
@@ -22,6 +27,14 @@ export class PhotographyPackage {
   @Prop({ type: Types.ObjectId, ref: 'Category', default: null, index: true })
   categoryId?: Types.ObjectId | null;
 
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Category' }], default: [] })
+  conceptCategoryIds: Types.ObjectId[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Category' }], default: [] })
+  styleCategoryIds: Types.ObjectId[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Category' }], default: [] })
+  eventCategoryIds: Types.ObjectId[];
   @Prop({ required: true, trim: true })
   name: string;
 
@@ -43,6 +56,24 @@ export class PhotographyPackage {
   @Prop({ required: true, min: 0 })
   durationHours: number;
 
+  @Prop({
+    type: String,
+    enum: Object.values(PhotographyPricingUnit),
+    default: PhotographyPricingUnit.PerSession,
+  })
+  pricingUnit: PhotographyPricingUnit;
+
+  @Prop({ type: Number, default: null, min: 30 })
+  includedDurationMinutes?: number | null;
+
+  @Prop({ type: Number, default: null, min: 1 })
+  includedSessionCount?: number | null;
+
+  @Prop({ type: Number, default: null, min: 1 })
+  includedDayCount?: number | null;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  additionalSessionFee: number;
   @Prop({ required: true, min: 0 })
   editedPhotosCount: number;
 
@@ -57,6 +88,18 @@ export class PhotographyPackage {
 
   @Prop({ type: Number, default: 0, min: 0 })
   overtimeFeePerHour: number;
+
+  @Prop({ type: Number, default: 30, min: 30 })
+  overtimeIncrementMinutes: number;
+
+  @Prop({ type: Number, default: 240, min: 0 })
+  maxOvertimeMinutes: number;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  bufferBeforeMinutes: number;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  bufferAfterMinutes: number;
 
   @Prop({ type: [String], default: [] })
   images: string[];
