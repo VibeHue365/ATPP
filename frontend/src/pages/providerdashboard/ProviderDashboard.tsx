@@ -129,6 +129,11 @@ export const ProviderDashboard: React.FC = () => {
   const [myProductsList, setMyProductsList] = useState<any[]>([]);
   const [isLoadingInventory, setIsLoadingInventory] = useState(false);
 
+  // Thao tác trên cả một BIẾN THỂ (size + màu + chất liệu), khác với thao tác từng hiện vật
+  const [variantEditRow, setVariantEditRow] = useState<any | null>(null);
+  const [variantEditQty, setVariantEditQty] = useState<number>(1);
+  const [variantBusy, setVariantBusy] = useState(false);
+
   // Discount Campaign State
   const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
   const [campaignOccasion, setCampaignOccasion] = useState('');
@@ -453,6 +458,101 @@ export const ProviderDashboard: React.FC = () => {
           confirmButtonColor: 'var(--color-primary)'
         });
       }
+    }
+  };
+
+  /** Khoá gửi lên backend để xác định biến thể — phải khớp đúng với bảng tổng hợp. */
+  const variantKeyOf = (row: any) => ({
+    productId: row.productId,
+    size: row.size,
+    color: row.color,
+    ...(row.material ? { material: row.material } : {}),
+  });
+
+  const variantLabelOf = (row: any) =>
+    `${row.size} / ${colorLabels[row.color] || row.color}${row.material ? ` / ${materialLabels[row.material] || row.material}` : ''}`;
+
+  /** Sau mỗi thao tác biến thể: số dòng có thể đổi nên đưa về trang 1 rồi tải lại cả hai bảng. */
+  const refreshAfterVariantChange = async () => {
+    setInvSummaryPage(1);
+    setInvPage(1);
+    await fetchInventoryData({ silent: true });
+    if (editingProduct) {
+      void loadEditInvSummary(editingProduct._id);
+    }
+  };
+
+  const handleAdjustVariantQuantity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!variantEditRow || variantBusy) return;
+    const target = Number(variantEditQty);
+    if (!Number.isInteger(target) || target < 0 || target > 100) {
+      toast.error('Số lượng phải là số nguyên từ 0 đến 100.');
+      return;
+    }
+    setVariantBusy(true);
+    try {
+      const res: any = await httpClient.patch('/inventory/variants/quantity', {
+        ...variantKeyOf(variantEditRow),
+        targetQuantity: target,
+      });
+      setVariantEditRow(null);
+      await refreshAfterVariantChange();
+      if (res?.skipped?.length > 0) {
+        await Swal.fire({
+          title: 'Đã xử lý một phần',
+          html: `${res.message}<br/><br/><b>Không thể thanh lý:</b><br/>${res.skipped
+            .map((s: any) => `${s.sku} — ${s.reason}`)
+            .join('<br/>')}`,
+          icon: 'warning',
+          confirmButtonColor: 'var(--color-primary)',
+        });
+      } else {
+        toast.success(res?.message || 'Cập nhật số lượng thành công!');
+      }
+    } catch (err: any) {
+      Swal.fire({
+        title: 'Không thể đổi số lượng',
+        text: err.message || 'Lỗi xảy ra khi cập nhật số lượng biến thể.',
+        icon: 'error',
+        confirmButtonColor: 'var(--color-primary)',
+      });
+    } finally {
+      setVariantBusy(false);
+    }
+  };
+
+  const handleRemoveVariant = async (row: any) => {
+    if (variantBusy) return;
+    const label = variantLabelOf(row);
+    const result = await Swal.fire({
+      title: 'Xoá biến thể này?',
+      html: `Sẽ gỡ hẳn <b>${label}</b> khỏi sản phẩm <b>${row.productName}</b> và thanh lý <b>${row.total}</b> chiếc.<br/><br/>Khách sẽ không còn nhìn thấy lựa chọn này nữa. Nếu chỉ muốn tạm hết hàng, hãy dùng "Sửa số lượng" và đặt về 0.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Xoá biến thể',
+      cancelButtonText: 'Hủy bỏ',
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#71717A',
+    });
+    if (!result.isConfirmed) return;
+
+    setVariantBusy(true);
+    try {
+      const res: any = await httpClient.delete('/inventory/variants/remove', {
+        body: JSON.stringify(variantKeyOf(row)),
+      });
+      await refreshAfterVariantChange();
+      toast.success(res?.message || 'Đã xoá biến thể!');
+    } catch (err: any) {
+      Swal.fire({
+        title: 'Không thể xoá biến thể',
+        text: err.message || 'Lỗi xảy ra khi xoá biến thể.',
+        icon: 'error',
+        confirmButtonColor: 'var(--color-primary)',
+      });
+    } finally {
+      setVariantBusy(false);
     }
   };
 
@@ -1892,6 +1992,7 @@ export const ProviderDashboard: React.FC = () => {
                         <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>KHẢ DỤNG</th>
                         <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>ĐANG THUÊ</th>
                         <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>GIẶT / BẢO TRÌ</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>THAO TÁC</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1905,6 +2006,32 @@ export const ProviderDashboard: React.FC = () => {
                           <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{item.available}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>{item.rented}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>{item.maintenance}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                              <button
+                                disabled={variantBusy}
+                                onClick={() => { setVariantEditRow(item); setVariantEditQty(item.total); }}
+                                style={{
+                                  padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
+                                  backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer',
+                                  fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1
+                                }}
+                              >
+                                Sửa số lượng
+                              </button>
+                              <button
+                                disabled={variantBusy}
+                                onClick={() => handleRemoveVariant(item)}
+                                style={{
+                                  padding: '6px 12px', border: '1px solid #FECACA', borderRadius: '4px',
+                                  backgroundColor: '#FEF2F2', cursor: variantBusy ? 'not-allowed' : 'pointer',
+                                  fontWeight: 700, fontSize: '11px', color: '#DC2626', opacity: variantBusy ? 0.5 : 1
+                                }}
+                              >
+                                Xoá biến thể
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -4483,7 +4610,7 @@ export const ProviderDashboard: React.FC = () => {
                   <option value="GOOD">Tốt (Good)</option>
                   <option value="MINOR_DAMAGE">Hỏng nhẹ (Minor Damage)</option>
                   <option value="LOCKED">Khóa tạm thời (Locked)</option>
-                  <option value="RETIRED">Thanh lý (Retired)</option>
+                  {/* Cố ý bỏ "Thanh lý" ở đây — thanh lý phải đi qua nút Thanh lý để được kiểm tra lịch thuê */}
                 </select>
               </div>
 
@@ -4514,6 +4641,62 @@ export const ProviderDashboard: React.FC = () => {
                 </button>
               </div>
 
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: SỬA SỐ LƯỢNG CỦA CẢ MỘT BIẾN THỂ */}
+      {variantEditRow && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <form onSubmit={handleAdjustVariantQuantity} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', width: '100%', maxWidth: '440px', boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--color-light-border)' }}>
+              <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>SỬA SỐ LƯỢNG BIẾN THỂ</h4>
+              <p style={{ margin: '6px 0 0 0', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}>
+                {variantEditRow.productName} — <b>{variantLabelOf(variantEditRow)}</b>
+              </p>
+            </div>
+
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '12px 16px' }}>
+                <span style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Hiện có trong kho</span>
+                <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--color-primary-dark)' }}>{variantEditRow.total} chiếc</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ĐỔI THÀNH *</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={variantEditQty}
+                  onChange={(e) => setVariantEditQty(Number(e.target.value))}
+                  style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none' }}
+                  required
+                />
+                <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                  Tăng lên thì hệ thống nhập thêm hiện vật mới. Giảm xuống thì thanh lý bớt, ưu tiên hàng hỏng và hàng đang bảo trì — chiếc nào đang có lịch thuê sẽ được giữ lại và báo cho bạn.
+                  {' '}Đặt <b>0</b> nghĩa là <b>hết hàng</b>: khách vẫn thấy biến thể này nhưng không đặt được, sau này nhập thêm là bán lại bình thường.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => setVariantEditRow(null)}
+                  disabled={variantBusy}
+                  style={{ padding: '10px 18px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer' }}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={variantBusy}
+                  style={{ padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer', opacity: variantBusy ? 0.6 : 1 }}
+                >
+                  {variantBusy ? 'Đang lưu...' : 'Lưu số lượng'}
+                </button>
+              </div>
             </div>
           </form>
         </div>
