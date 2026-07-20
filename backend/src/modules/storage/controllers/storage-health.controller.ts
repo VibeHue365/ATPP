@@ -9,7 +9,7 @@ export class StorageHealthController {
   async check() {
     try {
       const result = await this.publicMedia.health();
-      return { status: 'UP', provider: 'CLOUDINARY', ...result };
+      return { status: result.status, provider: 'CLOUDINARY' };
     } catch {
       throw new ServiceUnavailableException({ status: 'DOWN', provider: 'CLOUDINARY' });
     }
