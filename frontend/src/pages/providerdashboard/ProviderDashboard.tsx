@@ -1470,8 +1470,10 @@ export const ProviderDashboard: React.FC = () => {
       toast.error('Vui lòng điền đầy đủ thông tin bắt buộc ở bước 1');
       return false;
     }
-    if (Number(prodDepositAmount) > Number(prodBasePrice)) {
-      toast.error('Giá cọc không được lớn hơn giá thuê');
+    // Phải dùng >= cho khớp với backend (products.service.ts), nếu chỉ chặn > thì
+    // trường hợp cọc BẰNG giá thuê sẽ lọt qua bước 1 rồi mới bị từ chối ở bước 2.
+    if (Number(prodDepositAmount) >= Number(prodBasePrice)) {
+      toast.error('Giá cọc phải nhỏ hơn giá thuê');
       return false;
     }
     if (prodImages.length === 0) {

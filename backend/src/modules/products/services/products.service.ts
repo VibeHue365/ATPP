@@ -172,7 +172,7 @@ export class ProductsService {
     }
 
     if (dto.depositAmount >= dto.basePrice) {
-      throw new BadRequestException('GiÃ¡ cá»c pháº£i nhá» hÆ¡n giÃ¡ thuÃª');
+      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
     }
 
     await this.categoriesService.assertActiveProductCategory(dto.categoryId);
@@ -190,7 +190,7 @@ export class ProductsService {
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        .replace(/Ä‘/g, 'd')
+        .replace(/đ/g, 'd')
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '') +
       '-' +
@@ -305,7 +305,7 @@ export class ProductsService {
         ? dto.depositAmount
         : product.depositAmount;
     if (checkDeposit >= checkBasePrice) {
-      throw new BadRequestException('GiÃ¡ cá»c pháº£i nhá» hÆ¡n giÃ¡ thuÃª');
+      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
     }
 
     const productProviderId =
@@ -352,7 +352,7 @@ export class ProductsService {
           .toLowerCase()
           .normalize('NFD')
           .replace(/[\u0300-\u036f]/g, '')
-          .replace(/Ä‘/g, 'd')
+          .replace(/đ/g, 'd')
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/(^-|-$)+/g, '') +
         '-' +
@@ -537,7 +537,7 @@ export class ProductsService {
 
       if (activeBookings.length > 0) {
         throw new BadRequestException(
-          'KhÃ´ng thá»ƒ xÃ³a sáº£n pháº©m nÃ y vÃ¬ Ä‘ang náº±m trong má»™t lá»‹ch háº¹n Ä‘áº·t thuÃª Ä‘ang hoáº¡t Ä‘á»™ng.',
+          'Không thể xóa sản phẩm này vì đang nằm trong một lịch hẹn đặt thuê đang hoạt động.',
         );
       }
     }
