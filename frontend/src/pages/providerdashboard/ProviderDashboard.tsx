@@ -131,7 +131,7 @@ export const ProviderDashboard: React.FC = () => {
 
   // Thao tác trên cả một BIẾN THỂ (size + màu + chất liệu), khác với thao tác từng hiện vật
   const [variantEditRow, setVariantEditRow] = useState<any | null>(null);
-  const [variantEditQty, setVariantEditQty] = useState<number>(1);
+  const [variantEditQty, setVariantEditQty] = useState<string>('1');
   const [variantBusy, setVariantBusy] = useState(false);
 
   // Discount Campaign State
@@ -355,11 +355,14 @@ export const ProviderDashboard: React.FC = () => {
 
   // silent: giữ nguyên bảng đang hiện (không chớp màn "Đang tải...") khi đổi trang/bộ lọc
   // itemsOnly: chỉ tải lại danh sách hiện vật, khỏi kéo lại summary + danh sách sản phẩm
-  const fetchInventoryData = async (options?: { silent?: boolean; itemsOnly?: boolean }) => {
+  // page: truyền vào khi vừa đổi trang bằng tay — state React cập nhật bất đồng bộ nên
+  // đọc invPage trong closure sẽ ra giá trị CŨ và tải nhầm trang.
+  const fetchInventoryData = async (options?: { silent?: boolean; itemsOnly?: boolean; page?: number }) => {
     if (!options?.silent) setIsLoadingInventory(true);
+    const pageToLoad = options?.page ?? invPage;
     try {
       const res: any = await httpClient.get(
-        `/inventory?search=${encodeURIComponent(invSearch)}&status=${invStatusFilter}&conditionStatus=${invConditionFilter}&sortBy=${invSortBy}&page=${invPage}&limit=${invLimit}`
+        `/inventory?search=${encodeURIComponent(invSearch)}&status=${invStatusFilter}&conditionStatus=${invConditionFilter}&sortBy=${invSortBy}&page=${pageToLoad}&limit=${invLimit}`
       );
       setInventoryItems(res?.items || []);
       setInvTotal(res?.total || 0);
@@ -385,12 +388,16 @@ export const ProviderDashboard: React.FC = () => {
       toast.error('Vui lòng chọn sản phẩm');
       return;
     }
+    if (!addInvMaterial) {
+      toast.error('Vui lòng chọn chất liệu');
+      return;
+    }
     try {
       await httpClient.post('/inventory', {
         productId: addInvProductId,
         size: addInvSize,
         color: addInvColor,
-        material: addInvMaterial || undefined,
+        material: addInvMaterial,
         quantity: Number(addInvQuantity),
         conditionStatus: addInvCondition,
         notes: addInvNotes
@@ -476,8 +483,8 @@ export const ProviderDashboard: React.FC = () => {
   const refreshAfterVariantChange = async () => {
     setInvSummaryPage(1);
     setInvPage(1);
-    await fetchInventoryData({ silent: true });
-    if (editingProduct) {
+    await fetchInventoryData({ silent: true, page: 1 });
+    if (isModalOpen && editingProduct) {
       void loadEditInvSummary(editingProduct._id);
     }
   };
@@ -485,11 +492,34 @@ export const ProviderDashboard: React.FC = () => {
   const handleAdjustVariantQuantity = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!variantEditRow || variantBusy) return;
-    const target = Number(variantEditQty);
-    if (!Number.isInteger(target) || target < 0 || target > 100) {
+    const raw = variantEditQty.trim();
+    const target = Number(raw);
+    if (raw === '' || !Number.isInteger(target) || target < 0 || target > 100) {
       toast.error('Số lượng phải là số nguyên từ 0 đến 100.');
       return;
     }
+
+    // Giảm số lượng là thao tác thanh lý, không lùi lại được — phải hỏi lại cho chắc
+    const current = Number(variantEditRow.total) || 0;
+    if (target < current) {
+      const willRetire = current - target;
+      const confirm = await Swal.fire({
+        title: target === 0 ? 'Đưa biến thể về HẾT HÀNG?' : 'Xác nhận giảm số lượng?',
+        html:
+          `Sẽ thanh lý <b>${willRetire}</b> chiếc của <b>${variantLabelOf(variantEditRow)}</b>.` +
+          (target === 0
+            ? '<br/><br/>Biến thể vẫn còn trên sản phẩm nhưng khách sẽ không đặt được. Bạn có thể nhập thêm hàng bất cứ lúc nào.'
+            : ''),
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Đồng ý',
+        cancelButtonText: 'Hủy bỏ',
+        confirmButtonColor: 'var(--color-primary)',
+        cancelButtonColor: '#71717A',
+      });
+      if (!confirm.isConfirmed) return;
+    }
+
     setVariantBusy(true);
     try {
       const res: any = await httpClient.patch('/inventory/variants/quantity', {
@@ -498,7 +528,7 @@ export const ProviderDashboard: React.FC = () => {
       });
       setVariantEditRow(null);
       await refreshAfterVariantChange();
-      if (res?.skipped?.length > 0) {
+      if (res?.shortfall > 0) {
         await Swal.fire({
           title: 'Đã xử lý một phần',
           html: `${res.message}<br/><br/><b>Không thể thanh lý:</b><br/>${res.skipped
@@ -760,7 +790,17 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
   const handleDeletePortfolioItem = async (itemId: string) => {
-    if (!window.confirm('G\u1EE1 t\u00E1c ph\u1EA9m n\u00E0y kh\u1ECFi portfolio?')) return;
+    const result = await Swal.fire({
+      title: 'G\u1EE1 t\u00E1c ph\u1EA9m n\u00E0y?',
+      text: 'T\u00E1c ph\u1EA9m s\u1EBD b\u1ECB g\u1EE1 kh\u1ECFi portfolio c\u1EE7a b\u1EA1n.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'G\u1EE1 t\u00E1c ph\u1EA9m',
+      cancelButtonText: 'H\u1EE7y b\u1ECF',
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#71717A',
+    });
+    if (!result.isConfirmed) return;
     try {
       await httpClient.delete(`/providers/me/portfolio-items/${itemId}`);
       toast.success('\u0110\u00E3 g\u1EE1 t\u00E1c ph\u1EA9m kh\u1ECFi portfolio.');
@@ -1258,8 +1298,17 @@ export const ProviderDashboard: React.FC = () => {
   };
 
   const handleDeactivateCampaign = async () => {
-    const confirm = window.confirm('Bạn có chắc chắn muốn tắt chương trình khuyến mãi và quay về giá gốc?');
-    if (!confirm) return;
+    const result = await Swal.fire({
+      title: 'Tắt chương trình khuyến mãi?',
+      text: 'Tất cả sản phẩm sẽ quay về giá gốc ngay lập tức.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Tắt khuyến mãi',
+      cancelButtonText: 'Giữ nguyên',
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#71717A',
+    });
+    if (!result.isConfirmed) return;
 
     setSubmittingCampaign(true);
     try {
@@ -1504,8 +1553,17 @@ export const ProviderDashboard: React.FC = () => {
   const handleWizardCancel = async () => {
     // Bỏ dở một bản nháp vừa tạo -> xóa nó (kèm tồn kho) cho sạch.
     if (createdDraftId && !editingProduct) {
-      const ok = window.confirm('Hủy sẽ xóa áo dài nháp vừa tạo. Bạn có chắc không?');
-      if (!ok) return;
+      const result = await Swal.fire({
+        title: 'Hủy tạo áo dài?',
+        html: 'Bản nháp vừa tạo sẽ bị xóa, kèm theo toàn bộ biến thể và số lượng đã nhập.<br/><br/>Thao tác này không thể hoàn tác.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Hủy và xóa nháp',
+        cancelButtonText: 'Tiếp tục tạo',
+        confirmButtonColor: '#DC2626',
+        cancelButtonColor: '#71717A',
+      });
+      if (!result.isConfirmed) return;
       try { await httpClient.delete(`/products/${createdDraftId}`); } catch { /* ignore */ }
     }
     setCreatedDraftId(null);
@@ -2000,9 +2058,15 @@ export const ProviderDashboard: React.FC = () => {
                         <tr key={`${item.productId}-${item.size}-${item.color}-${item.material || ''}-${idx}`} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
                           <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.productName}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{item.color}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{colorLabels[item.color] || item.color}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{materialLabels[item.material] || item.material || '—'}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>{item.total}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>
+                            {item.total > 0 ? item.total : (
+                              <span style={{ padding: '3px 8px', borderRadius: '999px', fontSize: '10.5px', fontWeight: 800, backgroundColor: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' }}>
+                                HẾT HÀNG
+                              </span>
+                            )}
+                          </td>
                           <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{item.available}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>{item.rented}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>{item.maintenance}</td>
@@ -2010,7 +2074,7 @@ export const ProviderDashboard: React.FC = () => {
                             <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                               <button
                                 disabled={variantBusy}
-                                onClick={() => { setVariantEditRow(item); setVariantEditQty(item.total); }}
+                                onClick={() => { setVariantEditRow(item); setVariantEditQty(String(item.total)); }}
                                 style={{
                                   padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
                                   backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer',
@@ -2122,6 +2186,7 @@ export const ProviderDashboard: React.FC = () => {
                               {!isRetired && (
                                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                                   <button
+                                    disabled={variantBusy}
                                     onClick={() => {
                                       setEditInvItem(item);
                                       setEditInvStatus(item.status);
@@ -2131,16 +2196,19 @@ export const ProviderDashboard: React.FC = () => {
                                     }}
                                     style={{
                                       padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
-                                      backgroundColor: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)'
+                                      backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px',
+                                      color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1
                                     }}
                                   >
                                     Cập nhật
                                   </button>
                                   <button
+                                    disabled={variantBusy}
                                     onClick={() => handleDeleteInventoryItem(item._id)}
                                     style={{
                                       padding: '6px 12px', border: 'none', borderRadius: '4px',
-                                      backgroundColor: '#FEE2E2', cursor: 'pointer', fontWeight: 700, fontSize: '11px', color: '#991B1B'
+                                      backgroundColor: '#FEE2E2', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px',
+                                      color: '#991B1B', opacity: variantBusy ? 0.5 : 1
                                     }}
                                   >
                                     Thanh lý
@@ -2417,7 +2485,7 @@ export const ProviderDashboard: React.FC = () => {
                 <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý Đơn hàng</h2>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Theo dõi và cập nhật trạng thái đơn hàng từ các bộ sưu tập di sản Silk & Stone.</p>
               </div>
-              <button onClick={() => alert('Export CSV')} style={{
+              <button onClick={() => toast.info('Tính năng xuất CSV đang được phát triển.')} style={{
                 display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', border: '1px solid var(--color-light-border)',
                 padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
                 color: 'var(--color-text-primary)', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
@@ -4488,13 +4556,14 @@ export const ProviderDashboard: React.FC = () => {
 
               {/* Chất liệu (đồng bộ với biến thể sản phẩm) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LIỆU</label>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LIỆU *</label>
                 <select
                   value={addInvMaterial}
                   onChange={(e) => setAddInvMaterial(e.target.value)}
                   style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none', fontSize: '13.5px', backgroundColor: 'white' }}
+                  required
                 >
-                  <option value="">— Không chỉ định —</option>
+                  <option value="" disabled>— Chọn chất liệu —</option>
                   {materialsOptions.map(m => (<option key={m} value={m}>{materialLabels[m] || m}</option>))}
                 </select>
               </div>
@@ -4670,7 +4739,7 @@ export const ProviderDashboard: React.FC = () => {
                   min={0}
                   max={100}
                   value={variantEditQty}
-                  onChange={(e) => setVariantEditQty(Number(e.target.value))}
+                  onChange={(e) => setVariantEditQty(e.target.value)}
                   style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none' }}
                   required
                 />
