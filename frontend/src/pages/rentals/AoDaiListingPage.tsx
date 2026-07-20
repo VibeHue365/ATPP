@@ -410,7 +410,12 @@ export const AoDaiListingPage: React.FC = () => {
       ...prev,
       search: searchVal,
     }));
+    // Ghi nhận từ khóa tìm kiếm (fire-and-forget)
+    if (searchVal.trim().length >= 2) {
+      void httpClient.post('/analytics/search', { keyword: searchVal.trim() }).catch(() => {});
+    }
   };
+
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
