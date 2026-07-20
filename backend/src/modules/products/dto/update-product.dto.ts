@@ -7,7 +7,10 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ColorImagesDto } from './create-product.dto';
 import { ProductStatus } from '../schemas/product.schema';
 
 export class UpdateProductDto {
@@ -43,6 +46,14 @@ export class UpdateProductDto {
   @IsArray()
   @IsString({ each: true })
   videos?: string[];
+
+  // Ảnh theo màu. Mọi URL ở đây cũng phải có mặt trong `images` (kho hợp nhất) —
+  // xem ghi chú ở product.schema.ts. Optional nên client cũ gửi thiếu vẫn chạy bình thường.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ColorImagesDto)
+  colorImages?: ColorImagesDto[];
 
   @IsOptional()
   @IsNumber()

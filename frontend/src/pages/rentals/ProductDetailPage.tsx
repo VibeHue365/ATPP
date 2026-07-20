@@ -28,6 +28,7 @@ interface ProductDetail {
   name: string;
   description: string;
   images: string[];
+  colorImages?: { color: string; images: string[] }[];
   basePrice: number;
   hourlyPrice?: number | null;
   depositAmount: number;
@@ -391,6 +392,22 @@ export const ProductDetailPage: React.FC = () => {
 
   // Selector choices
   const [selectedColor, setSelectedColor] = useState<string>("");
+
+  // Ảnh của màu đang chọn; màu nào chưa có ảnh riêng thì rơi về ảnh chung của sản phẩm.
+  const imagesForColor = (color: string): string[] => {
+    const tagged = product?.colorImages?.find(
+      entry => (entry.color || '').toUpperCase() === (color || '').toUpperCase(),
+    )?.images;
+    return tagged && tagged.length > 0 ? tagged : (product?.images ?? []);
+  };
+  // Dải ảnh nhỏ vẫn hiện TẤT CẢ ảnh của sản phẩm; chỉ ảnh lớn mới đổi theo màu đang chọn.
+  // Đổi màu thì ảnh lớn nhảy về ảnh đầu tiên của màu đó. Chỉ chạy khi đổi màu/đổi sản phẩm
+  // nên không đè lên thao tác bấm chọn ảnh nhỏ của khách.
+  useEffect(() => {
+    const next = imagesForColor(selectedColor);
+    if (next.length > 0) setActiveImage(next[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedColor, product?._id, product?.colorImages]);
   const [selectedSize, setSelectedSize] = useState<string>("");
 
   // Rental configuration: 'DAILY' | 'HOURLY'
@@ -1238,7 +1255,10 @@ export const ProductDetailPage: React.FC = () => {
       itemType: "PRODUCT" as const,
       productId: product?._id,
       name: product?.name,
+      // Lưu ảnh ĐÚNG MÀU khách chọn, không phải ảnh đầu tiên của sản phẩm —
+      // nếu không khách đặt màu xanh mà giỏ hàng và email xác nhận vẫn hiện màu đỏ.
       image:
+        imagesForColor(selectedColor)[0] ||
         product?.images?.[0] ||
         "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b",
       basePrice: computedPrice,
@@ -1282,7 +1302,10 @@ export const ProductDetailPage: React.FC = () => {
       itemType: "PRODUCT" as const,
       productId: product?._id,
       name: product?.name,
+      // Lưu ảnh ĐÚNG MÀU khách chọn, không phải ảnh đầu tiên của sản phẩm —
+      // nếu không khách đặt màu xanh mà giỏ hàng và email xác nhận vẫn hiện màu đỏ.
       image:
+        imagesForColor(selectedColor)[0] ||
         product?.images?.[0] ||
         "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b",
       basePrice: computedPrice,
@@ -1439,7 +1462,7 @@ export const ProductDetailPage: React.FC = () => {
                 flexShrink: 0,
               }}
             >
-              {(product.images.length > 0
+              {((product.images?.length ?? 0) > 0
                 ? product.images
                 : [
                     "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b",

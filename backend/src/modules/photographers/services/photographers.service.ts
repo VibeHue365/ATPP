@@ -115,7 +115,7 @@ export class PhotographersService {
 
   async findOne(id: string): Promise<any> {
     if (!Types.ObjectId.isValid(id)) {
-      throw new NotFoundException('ID nhiáº¿p áº£nh gia khÃ´ng há»£p lá»‡');
+      throw new NotFoundException('ID nhiếp ảnh gia không hợp lệ');
     }
     const photographer = await this.providerModel.findOne({
       _id: new Types.ObjectId(id),
@@ -123,7 +123,7 @@ export class PhotographersService {
       status: ProviderStatus.Active,
     }).exec();
     if (!photographer) {
-      throw new NotFoundException(`KhÃ´ng tÃ¬m tháº¥y nhiáº¿p áº£nh gia vá»›i ID: ${id}`);
+      throw new NotFoundException(`Không tìm thấy nhiếp ảnh gia với ID: ${id}`);
     }
 
     const packages = await this.packageModel
@@ -146,7 +146,7 @@ export class PhotographersService {
 
   async findPackages(providerId: string): Promise<PhotographyPackage[]> {
     if (!Types.ObjectId.isValid(providerId)) {
-      throw new NotFoundException('ID nhÃ  cung cáº¥p khÃ´ng há»£p lá»‡');
+      throw new NotFoundException('ID nhà cung cấp không hợp lệ');
     }
     const photographer = await this.providerModel.exists({
       _id: new Types.ObjectId(providerId),

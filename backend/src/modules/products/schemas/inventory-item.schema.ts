@@ -59,6 +59,15 @@ export class InventoryItem {
 
   @Prop({ type: String, default: null, trim: true })
   notes?: string | null;
+
+  /**
+   * Đánh dấu hiện vật thuộc một biến thể đã bị XOÁ HẲN khỏi sản phẩm.
+   * Khác với thanh lý lẻ: hiện vật chỉ RETIRED vẫn được coi là biến thể "còn đăng bán
+   * nhưng hết hàng" và vẫn hiện một dòng trong bảng tồn kho để đối tác nhập lại.
+   * Không thể suy ra điều này từ product.colors/sizes vì cùng một màu có thể còn dùng ở size khác.
+   */
+  @Prop({ type: Date, default: null })
+  variantRemovedAt?: Date | null;
 }
 
 export const InventoryItemSchema = SchemaFactory.createForClass(InventoryItem);
