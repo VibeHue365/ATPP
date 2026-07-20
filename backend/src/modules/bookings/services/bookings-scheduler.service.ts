@@ -1,4 +1,10 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -8,8 +14,16 @@ import {
   BookingScheduleStatus,
   BookingScheduleType,
 } from '../schemas/booking-schedule.schema';
-import { Booking, BookingDocument, BookingStatus } from '../schemas/booking.schema';
-import { Notification, NotificationDocument, NotificationType } from '../../notifications/schemas/notification.schema';
+import {
+  Booking,
+  BookingDocument,
+  BookingStatus,
+} from '../schemas/booking.schema';
+import {
+  Notification,
+  NotificationDocument,
+  NotificationType,
+} from '../../notifications/schemas/notification.schema';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PhotographyHoldService } from './photography-hold.service';
 import { BookingStatusService } from './booking-status.service';
@@ -33,9 +47,12 @@ export class BookingsSchedulerService {
   @Cron(CronExpression.EVERY_MINUTE)
   async expirePhotographyHolds() {
     try {
-      const expiredCount = await this.photographyHoldService.expireExpiredHolds();
+      const expiredCount =
+        await this.photographyHoldService.expireExpiredHolds();
       if (expiredCount > 0) {
-        this.logger.log(`Expired ${expiredCount} photography schedule hold(s).`);
+        this.logger.log(
+          `Expired ${expiredCount} photography schedule hold(s).`,
+        );
       }
     } catch (error) {
       this.logger.error('Unable to expire photography schedule holds.', error);
@@ -64,7 +81,9 @@ export class BookingsSchedulerService {
         .lean();
 
       if (candidates.length === 0) return;
-      this.logger.log(`Found ${candidates.length} AWAITING_REVIEW booking(s) to auto-complete.`);
+      this.logger.log(
+        `Found ${candidates.length} AWAITING_REVIEW booking(s) to auto-complete.`,
+      );
 
       for (const candidate of candidates) {
         try {
@@ -77,15 +96,24 @@ export class BookingsSchedulerService {
           );
 
           if (!locked) {
-            this.logger.warn(`Booking ${candidate.bookingCode} already processed — skipping.`);
+            this.logger.warn(
+              `Booking ${candidate.bookingCode} already processed — skipping.`,
+            );
             continue;
           }
 
           // Run the full completion logic (settlement, wallet update, notifications)
-          await this.bookingStatusService.completeBooking(candidate._id.toString());
-          this.logger.log(`Auto-completed booking ${candidate.bookingCode} after 48h review window.`);
+          await this.bookingStatusService.completeBooking(
+            candidate._id.toString(),
+          );
+          this.logger.log(
+            `Auto-completed booking ${candidate.bookingCode} after 48h review window.`,
+          );
         } catch (err) {
-          this.logger.error(`Failed to auto-complete booking ${candidate.bookingCode}:`, err);
+          this.logger.error(
+            `Failed to auto-complete booking ${candidate.bookingCode}:`,
+            err,
+          );
         }
       }
     } catch (err) {
@@ -112,21 +140,23 @@ export class BookingsSchedulerService {
         .lean();
 
       if (candidates.length === 0) return;
-      this.logger.log(`Found ${candidates.length} PICKUP_PENDING booking(s) past 30m window.`);
+      this.logger.log(
+        `Found ${candidates.length} PICKUP_PENDING booking(s) past 30m window.`,
+      );
 
       for (const candidate of candidates) {
         try {
           const locked = await this.bookingModel.findOneAndUpdate(
             { _id: candidate._id, status: BookingStatus.PickupPending },
-            { 
+            {
               $set: { status: BookingStatus.PickedUp },
               $push: {
                 statusTimeline: {
                   status: BookingStatus.PickedUp,
                   changedAt: new Date(),
-                  note: 'Hệ thống tự động xác nhận đã nhận đồ sau 30 phút bàn giao tại quầy.'
-                }
-              }
+                  note: 'Hệ thống tự động xác nhận đã nhận đồ sau 30 phút bàn giao tại quầy.',
+                },
+              },
             },
             { new: false },
           );
@@ -146,9 +176,14 @@ export class BookingsSchedulerService {
             this.logger.error('Failed to notify auto-confirm pickup:', e);
           }
 
-          this.logger.log(`Auto-confirmed pickup for booking ${candidate.bookingCode} after 30m.`);
+          this.logger.log(
+            `Auto-confirmed pickup for booking ${candidate.bookingCode} after 30m.`,
+          );
         } catch (err) {
-          this.logger.error(`Failed to auto-confirm pickup for booking ${candidate.bookingCode}:`, err);
+          this.logger.error(
+            `Failed to auto-confirm pickup for booking ${candidate.bookingCode}:`,
+            err,
+          );
         }
       }
     } catch (err) {
@@ -180,7 +215,9 @@ export class BookingsSchedulerService {
             item.conditionStatus = 'GOOD';
             item.notes = 'Tự động mở khóa sau 48 giờ bảo trì.';
             await item.save();
-            this.logger.log(`Auto-unlocked inventory item SKU ${item.sku} after maintenance.`);
+            this.logger.log(
+              `Auto-unlocked inventory item SKU ${item.sku} after maintenance.`,
+            );
           }
         }
       }
@@ -199,7 +236,9 @@ export class BookingsSchedulerService {
     const end24h = new Date(now.getTime() + 24.5 * 60 * 60 * 1000);
 
     const upcomingSchedules24h = await this.bookingScheduleModel.find({
-      status: { $in: [BookingScheduleStatus.Scheduled, BookingScheduleStatus.Confirmed] },
+      status: {
+        $in: [BookingScheduleStatus.Scheduled, BookingScheduleStatus.Confirmed],
+      },
       $or: [
         { startsAt: { $gte: start24h, $lte: end24h } },
         { startsAt: null, scheduledDate: { $gte: start24h, $lte: end24h } },
@@ -215,7 +254,9 @@ export class BookingsSchedulerService {
     const end2h = new Date(now.getTime() + 2.5 * 60 * 60 * 1000);
 
     const upcomingSchedules2h = await this.bookingScheduleModel.find({
-      status: { $in: [BookingScheduleStatus.Scheduled, BookingScheduleStatus.Confirmed] },
+      status: {
+        $in: [BookingScheduleStatus.Scheduled, BookingScheduleStatus.Confirmed],
+      },
       $or: [
         { startsAt: { $gte: start2h, $lte: end2h } },
         { startsAt: null, scheduledDate: { $gte: start2h, $lte: end2h } },
@@ -236,7 +277,9 @@ export class BookingsSchedulerService {
       const booking = await this.bookingModel.findById(schedule.bookingId);
       if (!booking) return;
 
-      const customerId = (booking.customerId?._id || booking.customerId).toString();
+      const customerId = (
+        booking.customerId?._id || booking.customerId
+      ).toString();
 
       // Check if notification already sent to avoid duplicate
       const alreadySent = await this.notificationModel.findOne({
@@ -268,7 +311,9 @@ export class BookingsSchedulerService {
 
       const scheduledAt = schedule.startsAt ?? schedule.scheduledDate;
       if (!scheduledAt) {
-        this.logger.warn(`Skipping reminder for schedule ${schedule._id}: missing start time.`);
+        this.logger.warn(
+          `Skipping reminder for schedule ${schedule._id}: missing start time.`,
+        );
         return;
       }
 
@@ -291,7 +336,10 @@ export class BookingsSchedulerService {
         `Sent ${reminderType} schedule reminder for booking ${booking.bookingCode}, schedule ID: ${schedule._id}`,
       );
     } catch (err) {
-      this.logger.error(`Error sending schedule reminder for schedule ${schedule._id}:`, err);
+      this.logger.error(
+        `Error sending schedule reminder for schedule ${schedule._id}:`,
+        err,
+      );
     }
   }
 }

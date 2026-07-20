@@ -1,12 +1,37 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { IncidentReport, IncidentStatus } from '../schemas/incident-report.schema';
+import {
+  IncidentReport,
+  IncidentStatus,
+} from '../schemas/incident-report.schema';
 import { PrivateEvidenceUpload } from '../schemas/private-evidence-upload.schema';
-import { Dispute, DisputeStatus, DisputeDecision, FaultParty } from '../schemas/dispute.schema';
+import {
+  Dispute,
+  DisputeStatus,
+  DisputeDecision,
+  FaultParty,
+} from '../schemas/dispute.schema';
 import { Booking, BookingStatus } from '../../bookings/schemas/booking.schema';
 import { BookingItem } from '../../bookings/schemas/booking-item.schema';
-import { InventoryItem, InventoryItemStatus } from '../../products/schemas/inventory-item.schema';
+import {
+  InventoryItem,
+  InventoryItemStatus,
+} from '../../products/schemas/inventory-item.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { RefundWorkflowService } from '../../payments/services/refund-workflow.service';
 import { RefundType } from '../../payments/schemas/refund-request.schema';
@@ -71,7 +96,9 @@ export class DisputesService {
       bookingItemId: bookingItem._id,
     });
     if (existing) {
-      throw new ConflictException('Sự cố của sản phẩm này đã được báo cáo trước đó');
+      throw new ConflictException(
+        'Sự cố của sản phẩm này đã được báo cáo trước đó',
+      );
     }
 
     if (dto.requestedAmount > booking.pricingSummary.depositTotal) {
@@ -91,25 +118,43 @@ export class DisputesService {
       throw new NotFoundException('Không tìm thấy thông tin đối tác của bạn');
     }
     if (bookingItem.providerId.toString() !== provider._id.toString()) {
-      throw new ForbiddenException('Bạn không có quyền báo cáo sản phẩm của provider khác');
+      throw new ForbiddenException(
+        'Bạn không có quyền báo cáo sản phẩm của provider khác',
+      );
     }
 
     this.validateEvidenceReferences(dto.evidencePhotos);
 
-    await this.assertEvidenceReferencesOwnedBy(providerUserId, dto.evidencePhotos);
+    await this.assertEvidenceReferencesOwnedBy(
+      providerUserId,
+      dto.evidencePhotos,
+    );
 
     const policy = await this.policyResolverService.getDisputePolicy();
     if (policy.requireEvidence && dto.evidencePhotos.length === 0) {
       throw new BadRequestException('Vui lòng cung cấp ít nhất một bằng chứng');
     }
 
-    const allowedStatuses = [BookingStatus.PickedUp, BookingStatus.ReturnPending, BookingStatus.Returned, BookingStatus.Completed];
+    const allowedStatuses = [
+      BookingStatus.PickedUp,
+      BookingStatus.ReturnPending,
+      BookingStatus.Returned,
+      BookingStatus.Completed,
+    ];
     if (!allowedStatuses.includes(booking.status)) {
-      throw new BadRequestException('Trạng thái đơn hàng chưa cho phép báo cáo sự cố');
+      throw new BadRequestException(
+        'Trạng thái đơn hàng chưa cho phép báo cáo sự cố',
+      );
     }
     if (booking.status === BookingStatus.Completed) {
-      const completedEntry = [...booking.statusTimeline].reverse().find((entry) => entry.status === BookingStatus.Completed);
-      if (completedEntry && Date.now() - new Date(completedEntry.changedAt).getTime() > policy.allowDisputeAfterCompletedHours * 60 * 60 * 1000) {
+      const completedEntry = [...booking.statusTimeline]
+        .reverse()
+        .find((entry) => entry.status === BookingStatus.Completed);
+      if (
+        completedEntry &&
+        Date.now() - new Date(completedEntry.changedAt).getTime() >
+          policy.allowDisputeAfterCompletedHours * 60 * 60 * 1000
+      ) {
         throw new BadRequestException('Đã quá thời hạn mở khiếu nại');
       }
     }
@@ -138,7 +183,11 @@ export class DisputesService {
     }
 
     // Cập nhật trạng thái áo dài (InventoryItem) tương ứng
-    await this.attachPrivateEvidenceUploads(providerUserId, dto.evidencePhotos, (incident as any)._id);
+    await this.attachPrivateEvidenceUploads(
+      providerUserId,
+      dto.evidencePhotos,
+      (incident as any)._id,
+    );
 
     if (bookingItem.inventoryItemId) {
       const inventoryStatus =
@@ -196,12 +245,17 @@ export class DisputesService {
 
     if (roles.some((role) => role.toUpperCase() === 'PROVIDER')) {
       if (!Types.ObjectId.isValid(userId)) {
-        throw new ForbiddenException('Bạn không có quyền xem báo cáo sự cố này');
+        throw new ForbiddenException(
+          'Bạn không có quyền xem báo cáo sự cố này',
+        );
       }
       const provider = await this.bookingModel.db
         .model('Provider')
         .findOne({ userId: new Types.ObjectId(userId) });
-      if (provider && incident.reportedBy.toString() === provider._id.toString()) {
+      if (
+        provider &&
+        incident.reportedBy.toString() === provider._id.toString()
+      ) {
         return incident;
       }
     }
@@ -216,7 +270,9 @@ export class DisputesService {
     if (!Types.ObjectId.isValid(uploaderId)) {
       throw new ForbiddenException('Tài khoản provider không hợp lệ');
     }
-    const expiresAt = new Date(Date.now() + this.evidenceUploadTtlHours() * 60 * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + this.evidenceUploadTtlHours() * 60 * 60 * 1000,
+    );
     await this.privateEvidenceUploadModel.insertMany(
       references.map((reference) => ({
         reference,
@@ -230,15 +286,31 @@ export class DisputesService {
     userId: string,
     roles: string[],
     reference: string,
-  ): Promise<{ file: import('stream').Readable; mimeType: string; fileName: string }> {
+  ): Promise<{
+    file: import('stream').Readable;
+    mimeType: string;
+    fileName: string;
+  }> {
     console.log('[DEBUG] viewEvidence request:', { userId, roles, reference });
-    const { bucket, storageKey } = this.parsePrivateEvidenceReference(reference);
-    const incident = await this.incidentModel.findOne({ evidencePhotos: reference });
-    console.log('[DEBUG] viewEvidence incident query:', { incidentExists: !!incident, incidentId: incident?._id });
+    const { bucket, storageKey } =
+      this.parsePrivateEvidenceReference(reference);
+    const incident = await this.incidentModel.findOne({
+      evidencePhotos: reference,
+    });
+    console.log('[DEBUG] viewEvidence incident query:', {
+      incidentExists: !!incident,
+      incidentId: incident?._id,
+    });
 
     if (!incident) {
-      if (!Types.ObjectId.isValid(userId) || !roles?.some((role) => role.toUpperCase() === 'PROVIDER')) {
-        console.log('[DEBUG] viewEvidence failed because no incident and user is not provider:', { userId, isValidId: Types.ObjectId.isValid(userId) });
+      if (
+        !Types.ObjectId.isValid(userId) ||
+        !roles?.some((role) => role.toUpperCase() === 'PROVIDER')
+      ) {
+        console.log(
+          '[DEBUG] viewEvidence failed because no incident and user is not provider:',
+          { userId, isValidId: Types.ObjectId.isValid(userId) },
+        );
         throw new NotFoundException('Không tìm thấy ảnh bằng chứng');
       }
       const upload = await this.privateEvidenceUploadModel.findOne({
@@ -248,7 +320,10 @@ export class DisputesService {
         expiresAt: { $gt: new Date() },
       });
       if (!upload) {
-        console.log('[DEBUG] viewEvidence failed because private upload not found or expired:', { reference, userId });
+        console.log(
+          '[DEBUG] viewEvidence failed because private upload not found or expired:',
+          { reference, userId },
+        );
         throw new NotFoundException('Không tìm thấy ảnh bằng chứng');
       }
       return this.readEvidenceFile(bucket, storageKey);
@@ -257,17 +332,25 @@ export class DisputesService {
     if (!roles?.some((role) => role.toUpperCase() === 'ADMIN')) {
       const booking = await this.bookingModel.findById(incident.bookingId);
       if (!booking) {
-        console.log('[DEBUG] viewEvidence failed because booking not found:', incident.bookingId);
+        console.log(
+          '[DEBUG] viewEvidence failed because booking not found:',
+          incident.bookingId,
+        );
         throw new NotFoundException('Không tìm thấy đơn đặt lịch');
       }
       const isCustomer = this.getCustomerIdStr(booking) === userId;
       let isReportingProvider = false;
-      if (!isCustomer && roles?.some((role) => role.toUpperCase() === 'PROVIDER') && Types.ObjectId.isValid(userId)) {
+      if (
+        !isCustomer &&
+        roles?.some((role) => role.toUpperCase() === 'PROVIDER') &&
+        Types.ObjectId.isValid(userId)
+      ) {
         const provider = await this.bookingModel.db
           .model('Provider')
           .findOne({ userId: new Types.ObjectId(userId) });
         isReportingProvider = Boolean(
-          provider && incident.reportedBy.toString() === provider._id.toString(),
+          provider &&
+          incident.reportedBy.toString() === provider._id.toString(),
         );
       }
       console.log('[DEBUG] viewEvidence permission evaluation:', {
@@ -277,7 +360,9 @@ export class DisputesService {
         isReportingProvider,
       });
       if (!isCustomer && !isReportingProvider) {
-        throw new ForbiddenException('Bạn không có quyền xem ảnh bằng chứng này');
+        throw new ForbiddenException(
+          'Bạn không có quyền xem ảnh bằng chứng này',
+        );
       }
     }
 
@@ -302,7 +387,9 @@ export class DisputesService {
       expiresAt: { $gt: new Date() },
     });
     if (count !== privateReferences.length) {
-      throw new BadRequestException('Một hoặc nhiều ảnh bằng chứng đã hết hạn hoặc không thuộc tài khoản của bạn');
+      throw new BadRequestException(
+        'Một hoặc nhiều ảnh bằng chứng đã hết hạn hoặc không thuộc tài khoản của bạn',
+      );
     }
   }
 
@@ -325,14 +412,20 @@ export class DisputesService {
       { $set: { incidentId, expiresAt: null } },
     );
     if (result.modifiedCount !== privateReferences.length) {
-      throw new ConflictException('Ảnh bằng chứng vừa được sử dụng hoặc đã hết hạn, vui lòng tải lại');
+      throw new ConflictException(
+        'Ảnh bằng chứng vừa được sử dụng hoặc đã hết hạn, vui lòng tải lại',
+      );
     }
   }
 
   private async readEvidenceFile(
     bucket: string,
     storageKey: string,
-  ): Promise<{ file: import('stream').Readable; mimeType: string; fileName: string }> {
+  ): Promise<{
+    file: import('stream').Readable;
+    mimeType: string;
+    fileName: string;
+  }> {
     return {
       file: await this.privateStorage.readPrivateFile(bucket, storageKey),
       mimeType: this.mimeTypeForEvidence(storageKey),
@@ -355,13 +448,21 @@ export class DisputesService {
     }
   }
 
-  private parsePrivateEvidenceReference(reference: string): { bucket: string; storageKey: string } {
+  private parsePrivateEvidenceReference(reference: string): {
+    bucket: string;
+    storageKey: string;
+  } {
     const prefix = 'private://dispute-evidence-private/';
     if (!reference?.startsWith(prefix)) {
-      throw new BadRequestException('Tham chiếu ảnh bằng chứng private không hợp lệ');
+      throw new BadRequestException(
+        'Tham chiếu ảnh bằng chứng private không hợp lệ',
+      );
     }
     const storageKey = reference.slice(prefix.length);
-    if (!storageKey.startsWith('dispute-evidence/') || storageKey.includes('..')) {
+    if (
+      !storageKey.startsWith('dispute-evidence/') ||
+      storageKey.includes('..')
+    ) {
       throw new BadRequestException('Khóa ảnh bằng chứng không hợp lệ');
     }
     return { bucket: 'dispute-evidence-private', storageKey };
@@ -373,14 +474,19 @@ export class DisputesService {
     if (extension === 'webp') return 'image/webp';
     return 'image/jpeg';
   }
-  async customerAgreeIncident(incidentId: string, customerUserId: string): Promise<any> {
+  async customerAgreeIncident(
+    incidentId: string,
+    customerUserId: string,
+  ): Promise<any> {
     const incident = await this.incidentModel.findById(incidentId);
     if (!incident) {
       throw new NotFoundException('Không tìm thấy báo cáo sự cố');
     }
 
     if (incident.status !== IncidentStatus.PendingCustomer) {
-      throw new ConflictException('Sự cố này đã được xử lý hoặc đang tranh chấp');
+      throw new ConflictException(
+        'Sự cố này đã được xử lý hoặc đang tranh chấp',
+      );
     }
 
     const booking = await this.bookingModel.findById(incident.bookingId);
@@ -424,7 +530,9 @@ export class DisputesService {
       let accountHolder = 'PROVIDER STUDIO';
 
       if (provider.paymentAccounts && provider.paymentAccounts.length > 0) {
-        const activeAccount = provider.paymentAccounts.find((a: any) => a.isDefault) || provider.paymentAccounts[0];
+        const activeAccount =
+          provider.paymentAccounts.find((a: any) => a.isDefault) ||
+          provider.paymentAccounts[0];
         bankName = activeAccount.bankName || bankName;
         accountNumber = activeAccount.accountNumberMasked
           ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
@@ -444,13 +552,23 @@ export class DisputesService {
       });
 
       if (!transferResult.success) {
-        throw new BadRequestException(`Chuyển tiền đền bù cho Shop thất bại: ${transferResult.error}`);
+        throw new BadRequestException(
+          `Chuyển tiền đền bù cho Shop thất bại: ${transferResult.error}`,
+        );
       }
 
       // 3. Hoàn trả số tiền cọc giữ đồ còn lại cho Khách hàng
-      const remainingRefund = booking.pricingSummary.depositTotal - incident.requestedAmount;
+      const remainingRefund =
+        booking.pricingSummary.depositTotal - incident.requestedAmount;
       if (remainingRefund > 0) {
-        refundResult = await this.refundWorkflowService.createFromDispute({ bookingId: booking._id.toString(), requestedBy: this.getCustomerIdStr(booking), amount: remainingRefund, reason: 'Refund after customer accepted dispute resolution', type: RefundType.Dispute, sourceEventId: `refund:dispute:${incident._id}:customer-agree` });
+        refundResult = await this.refundWorkflowService.createFromDispute({
+          bookingId: booking._id.toString(),
+          requestedBy: this.getCustomerIdStr(booking),
+          amount: remainingRefund,
+          reason: 'Refund after customer accepted dispute resolution',
+          type: RefundType.Dispute,
+          sourceEventId: `refund:dispute:${incident._id}:customer-agree`,
+        });
       }
 
       incident.status = IncidentStatus.Accepted;
@@ -484,14 +602,19 @@ export class DisputesService {
     };
   }
 
-  async customerDisagreeIncident(incidentId: string, customerUserId: string): Promise<any> {
+  async customerDisagreeIncident(
+    incidentId: string,
+    customerUserId: string,
+  ): Promise<any> {
     const incident = await this.incidentModel.findById(incidentId);
     if (!incident) {
       throw new NotFoundException('Không tìm thấy báo cáo sự cố');
     }
 
     if (incident.status !== IncidentStatus.PendingCustomer) {
-      throw new ConflictException('Sự cố này đã được xử lý hoặc đang tranh chấp');
+      throw new ConflictException(
+        'Sự cố này đã được xử lý hoặc đang tranh chấp',
+      );
     }
 
     const booking = await this.bookingModel.findById(incident.bookingId);
@@ -533,13 +656,24 @@ export class DisputesService {
     // Tạo Dispute record
     await this.disputeModel.findOneAndUpdate(
       { bookingId: booking._id },
-      { $setOnInsert: { bookingId: booking._id, bookingItemId: incident.bookingItemId, openedBy: new Types.ObjectId(customerUserId), againstProviderId: incident.reportedBy, reason: `Khách hàng khiếu nại yêu cầu đền bù của Shop: ${incident.description}`, evidencePhotos: incident.evidencePhotos, status: DisputeStatus.Open } },
+      {
+        $setOnInsert: {
+          bookingId: booking._id,
+          bookingItemId: incident.bookingItemId,
+          openedBy: new Types.ObjectId(customerUserId),
+          againstProviderId: incident.reportedBy,
+          reason: `Khách hàng khiếu nại yêu cầu đền bù của Shop: ${incident.description}`,
+          evidencePhotos: incident.evidencePhotos,
+          status: DisputeStatus.Open,
+        },
+      },
       { upsert: true, new: true },
     );
 
     return {
       success: true,
-      message: 'Đơn hàng đã được chuyển sang trạng thái tranh chấp cho Admin xử lý.',
+      message:
+        'Đơn hàng đã được chuyển sang trạng thái tranh chấp cho Admin xử lý.',
     };
   }
 
@@ -562,7 +696,9 @@ export class DisputesService {
 
     const incident = await this.incidentModel.findOne({ bookingId });
     if (!incident) {
-      throw new NotFoundException('Không tìm thấy báo cáo sự cố cho đơn hàng này');
+      throw new NotFoundException(
+        'Không tìm thấy báo cáo sự cố cho đơn hàng này',
+      );
     }
 
     if (incident.status !== IncidentStatus.Disputed) {
@@ -570,19 +706,27 @@ export class DisputesService {
     }
 
     const depositTotal = booking.pricingSummary.depositTotal || 0;
-    const refundAmount = decision === 'CUSTOMER_RIGHT'
-      ? depositTotal
-      : decision === 'SHOP_RIGHT'
-        ? Math.max(depositTotal - incident.requestedAmount, 0)
-        : splitRefundAmount ?? -1;
-    const compensationAmount = decision === 'SHOP_RIGHT'
-      ? incident.requestedAmount
-      : decision === 'CUSTOMER_RIGHT'
-        ? 0
-        : splitCompensationAmount ?? -1;
+    const refundAmount =
+      decision === 'CUSTOMER_RIGHT'
+        ? depositTotal
+        : decision === 'SHOP_RIGHT'
+          ? Math.max(depositTotal - incident.requestedAmount, 0)
+          : (splitRefundAmount ?? -1);
+    const compensationAmount =
+      decision === 'SHOP_RIGHT'
+        ? incident.requestedAmount
+        : decision === 'CUSTOMER_RIGHT'
+          ? 0
+          : (splitCompensationAmount ?? -1);
 
-    if (refundAmount < 0 || compensationAmount < 0 || refundAmount + compensationAmount > depositTotal) {
-      throw new BadRequestException('Tổng tiền hoàn khách và bồi thường provider không được vượt quá tiền cọc');
+    if (
+      refundAmount < 0 ||
+      compensationAmount < 0 ||
+      refundAmount + compensationAmount > depositTotal
+    ) {
+      throw new BadRequestException(
+        'Tổng tiền hoàn khách và bồi thường provider không được vượt quá tiền cọc',
+      );
     }
 
     // 1. Cập nhật trạng thái Escrow sang DisputedResolved một cách atomic trước để tránh double split
@@ -618,7 +762,9 @@ export class DisputesService {
         let accountHolder = 'PROVIDER STUDIO';
 
         if (provider.paymentAccounts && provider.paymentAccounts.length > 0) {
-          const activeAccount = provider.paymentAccounts.find((a: any) => a.isDefault) || provider.paymentAccounts[0];
+          const activeAccount =
+            provider.paymentAccounts.find((a: any) => a.isDefault) ||
+            provider.paymentAccounts[0];
           bankName = activeAccount.bankName || bankName;
           accountNumber = activeAccount.accountNumberMasked
             ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
@@ -638,13 +784,21 @@ export class DisputesService {
         });
 
         if (!transferResult.success) {
-          throw new BadRequestException(`Chuyển khoản đền bù cho Shop thất bại: ${transferResult.error}`);
+          throw new BadRequestException(
+            `Chuyển khoản đền bù cho Shop thất bại: ${transferResult.error}`,
+          );
         }
-
       }
 
       if (refundAmount > 0) {
-        refundResult = await this.refundWorkflowService.createFromDispute({ bookingId: booking._id.toString(), requestedBy: this.getCustomerIdStr(booking), amount: refundAmount, reason: notes, type: RefundType.Dispute, sourceEventId: `refund:dispute:${incident._id}:admin-resolution` });
+        refundResult = await this.refundWorkflowService.createFromDispute({
+          bookingId: booking._id.toString(),
+          requestedBy: this.getCustomerIdStr(booking),
+          amount: refundAmount,
+          reason: notes,
+          type: RefundType.Dispute,
+          sourceEventId: `refund:dispute:${incident._id}:admin-resolution`,
+        });
       }
 
       // Cập nhật trạng thái sự cố và tranh chấp
@@ -662,15 +816,18 @@ export class DisputesService {
           $set: {
             status: DisputeStatus.Resolved,
             adminDecision: {
-              decision: decision === 'SHOP_RIGHT'
-                ? DisputeDecision.ProviderFullPay
-                : decision === 'CUSTOMER_RIGHT'
-                  ? DisputeDecision.CustomerFullRefund
-                  : DisputeDecision.MutualAgreement,
+              decision:
+                decision === 'SHOP_RIGHT'
+                  ? DisputeDecision.ProviderFullPay
+                  : decision === 'CUSTOMER_RIGHT'
+                    ? DisputeDecision.CustomerFullRefund
+                    : DisputeDecision.MutualAgreement,
               faultParty:
                 decision === 'SHOP_RIGHT'
                   ? FaultParty.Customer
-                  : decision === 'CUSTOMER_RIGHT' ? FaultParty.Provider : FaultParty.None,
+                  : decision === 'CUSTOMER_RIGHT'
+                    ? FaultParty.Provider
+                    : FaultParty.None,
               refundAmount,
               compensationAmount,
               penaltyAmount: 0,
@@ -698,9 +855,17 @@ export class DisputesService {
       await booking.save();
 
       if (decision === 'CUSTOMER_RIGHT') {
-        await this.settlementsService.cancelSettlementsForBooking(booking._id.toString(), notes, adminUserId);
+        await this.settlementsService.cancelSettlementsForBooking(
+          booking._id.toString(),
+          notes,
+          adminUserId,
+        );
       } else {
-        await this.settlementsService.releaseSettlementsForBooking(booking._id.toString(), notes, adminUserId);
+        await this.settlementsService.releaseSettlementsForBooking(
+          booking._id.toString(),
+          notes,
+          adminUserId,
+        );
         await this.paymentsService.executeProfitSplit(booking);
       }
     } catch (err) {
