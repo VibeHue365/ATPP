@@ -113,7 +113,7 @@ export const ProviderDashboard: React.FC = () => {
   const [previewPortfolioItem, setPreviewPortfolioItem] = useState<PortfolioItem | null>(null);
   const [previewImageIndex, setPreviewImageIndex] = useState<number>(0);
   const hasPhotographyCapability = Array.isArray(provider?.capabilities) && provider.capabilities.includes('PHOTOGRAPHY');
-  const hasAodaiCapability = Array.isArray(provider?.capabilities) && (provider.capabilities.includes('AODAI_RENTAL') || provider.capabilities.includes('RENTAL'));
+  const hasAodaiCapability = Array.isArray(provider?.capabilities) && (provider.capabilities.includes('COSTUME_RENTAL') || provider.capabilities.includes('AODAI_RENTAL') || provider.capabilities.includes('RENTAL'));
   const [subTab, setSubTab] = useState<'shop' | 'photo'>('shop');
   // Product Search / Sort / Filter States
   const [prodSearch, setProdSearch] = useState('');
@@ -173,7 +173,7 @@ export const ProviderDashboard: React.FC = () => {
 
   useEffect(() => {
     if (analyticsData) {
-      const isShop = analyticsData.capabilities?.includes('AODAI_RENTAL') || analyticsData.capabilities?.includes('RENTAL');
+      const isShop = analyticsData.capabilities?.includes('COSTUME_RENTAL') || analyticsData.capabilities?.includes('AODAI_RENTAL') || analyticsData.capabilities?.includes('RENTAL');
       if (!isShop) {
         setSubTab('photo');
       }
@@ -1185,8 +1185,8 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
-  const fetchOrders = async () => {
-    setLoadingOrders(true);
+  const fetchOrders = async (silent = false) => {
+    if (!silent) setLoadingOrders(true);
     try {
       const bRes: any = await httpClient.get('/bookings/provider');
       const mapped: Order[] = (Array.isArray(bRes) ? bRes : []).map((b: any) => {
@@ -1239,11 +1239,26 @@ export const ProviderDashboard: React.FC = () => {
           bookingType: b.bookingType,
         };
       });
-      setOrders(mapped);
+
+      const isOrdersChanged = (prev: Order[], next: Order[]) => {
+        if (prev.length !== next.length) return true;
+        for (let i = 0; i < prev.length; i++) {
+          if (prev[i]._id !== next[i]._id) return true;
+          if (prev[i].rawStatus !== next[i].rawStatus) return true;
+          if (prev[i].status !== next[i].status) return true;
+        }
+        return false;
+      };
+
+      setOrders(prevOrders => {
+        if (actionMenuId !== null) return prevOrders;
+        const changed = isOrdersChanged(prevOrders, mapped);
+        return changed ? mapped : prevOrders;
+      });
     } catch (err: any) {
-      toast.error('Không thể tải danh sách đơn hàng');
+      if (!silent) toast.error('Không thể tải danh sách đơn hàng');
     } finally {
-      setLoadingOrders(false);
+      if (!silent) setLoadingOrders(false);
     }
   };
 
@@ -1386,6 +1401,8 @@ export const ProviderDashboard: React.FC = () => {
       fetchProviderData();
     }
   }, [currentView]);
+
+
 
   useEffect(() => {
     if (currentView === 'collections') {
@@ -2808,8 +2825,12 @@ export const ProviderDashboard: React.FC = () => {
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <button onClick={() => setCurrentView('analytics')} style={navItemStyle(currentView === 'analytics')}><BarChart3 size={18} /> Thống kê & Hiệu suất</button>
             <button onClick={() => setCurrentView('orders')} style={navItemStyle(currentView === 'orders')}><ShoppingBag size={18} /> Đơn hàng</button>
-            <button onClick={() => setCurrentView('rental-operations')} style={navItemStyle(currentView === 'rental-operations')}><Package size={18} /> Giao & nhận áo dài</button>
-            <button onClick={() => { setCurrentView('collections'); setCollectionTab('products'); }} style={navItemStyle(currentView === 'collections' && collectionTab === 'products')}><Layers size={18} /> Bộ sưu tập</button>
+            {hasAodaiCapability && (
+              <button onClick={() => setCurrentView('rental-operations')} style={navItemStyle(currentView === 'rental-operations')}><Package size={18} /> Giao & nhận áo dài</button>
+            )}
+            {hasAodaiCapability && (
+              <button onClick={() => { setCurrentView('collections'); setCollectionTab('products'); }} style={navItemStyle(currentView === 'collections' && collectionTab === 'products')}><Layers size={18} /> Bộ sưu tập</button>
+            )}
             <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ</button>
             {hasPhotographyCapability && (
               <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio</button>
@@ -2817,7 +2838,9 @@ export const ProviderDashboard: React.FC = () => {
             {hasPhotographyCapability && (
               <button onClick={() => setCurrentView('photography-packages')} style={navItemStyle(currentView === 'photography-packages')}><Package size={18} /> Gói chụp ảnh</button>
             )}
-            <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn</button>
+            {hasPhotographyCapability && (
+              <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn</button>
+            )}
             <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi & Combo</button>
             <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi</button>
             <button onClick={() => setCurrentView('trust')} style={navItemStyle(currentView === 'trust')}><Users size={18} /> Đánh giá khách hàng</button>

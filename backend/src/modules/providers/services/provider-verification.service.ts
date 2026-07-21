@@ -147,7 +147,9 @@ export class ProviderVerificationService {
     dto: CreateProviderVerificationDto,
     meta: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    this.requireRole(actor, 'CUSTOMER');
+    if (!actor.roles?.includes('CUSTOMER') && !actor.roles?.includes('PROVIDER')) {
+      throw new ForbiddenException('CUSTOMER or PROVIDER role is required');
+    }
     const user = await this.loadUser(actor.sub);
     if (!user.auth.emailVerified) {
       throw new BadRequestException('Email must be verified');
@@ -224,7 +226,9 @@ export class ProviderVerificationService {
   async getCurrentVerification(
     actor: AuthUser,
   ): Promise<Record<string, unknown> | null> {
-    this.requireRole(actor, 'CUSTOMER');
+    if (!actor.roles?.includes('CUSTOMER') && !actor.roles?.includes('PROVIDER')) {
+      throw new ForbiddenException('CUSTOMER or PROVIDER role is required');
+    }
     const verification = await this.verificationModel
       .findOne({
         userId: this.toObjectId(actor.sub),

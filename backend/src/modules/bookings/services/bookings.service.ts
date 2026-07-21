@@ -2246,9 +2246,16 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const results: Record<string, any>[] = [];
     for (const booking of bookings) {
-      const items = await this.bookingItemModel.find({
-        bookingId: booking._id,
-      });
+      const items = await this.bookingItemModel
+        .find({ bookingId: booking._id })
+        .populate({
+          path: 'productId',
+          populate: { path: 'providerId' }
+        })
+        .populate('photographyPackageId')
+        .populate('providerId')
+        .lean()
+        .exec();
       results.push({ ...booking.toObject(), items });
     }
     return results;

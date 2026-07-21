@@ -299,9 +299,25 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       const productItems = b.items.filter((item: any) => item.itemType === 'PRODUCT');
       if (productItems.length > 0) {
         const firstItem = productItems[0];
+        const productInfo = firstItem.productId && typeof firstItem.productId === 'object' ? firstItem.productId : null;
         let providerName = 'Cửa hàng VibeHue';
         let providerAddress = 'Showroom VibeHue';
-        if (firstItem.productId && realProductList.length > 0) {
+        
+        if (productInfo && productInfo.providerId) {
+          const prov = productInfo.providerId;
+          providerName = prov.businessName || prov.fullName || providerName;
+          if (prov.address) {
+            const addr = prov.address;
+            providerAddress = `${addr.addressLine || ''}, ${addr.district || ''}, ${addr.city || ''}`.replace(/^,\s*/, '');
+          }
+        } else if (firstItem.providerId && typeof firstItem.providerId === 'object') {
+          const prov = firstItem.providerId;
+          providerName = prov.businessName || prov.fullName || providerName;
+          if (prov.address) {
+            const addr = prov.address;
+            providerAddress = `${addr.addressLine || ''}, ${addr.district || ''}, ${addr.city || ''}`.replace(/^,\s*/, '');
+          }
+        } else if (firstItem.productId && realProductList.length > 0) {
           const prod = realProductList.find((p: any) => p._id === firstItem.productId.toString() || p._id === firstItem.productId);
           if (prod && prod.providerId) {
             providerName = prod.providerId.businessName || prod.providerId.fullName || providerName;
@@ -313,18 +329,27 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
         }
 
         const totalQuantity = productItems.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
-        const sizes = Array.from(new Set(productItems.map((it: any) => it.size || 'M'))).join(', ');
-        const colors = Array.from(new Set(productItems.map((it: any) => it.color || 'RED'))).join(', ');
+        const sizes = Array.from(new Set(productItems.map((it: any) => it.selectedSize || it.size || 'M'))).join(', ');
+        const colors = Array.from(new Set(productItems.map((it: any) => it.selectedColor || it.color || 'RED'))).join(', ');
         const totalCost = b.totalAmount || productItems.reduce((sum: number, it: any) => sum + (it.unitPrice || 0), 0);
+
+        let productImage = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
+        if (productInfo?.images && productInfo.images.length > 0) {
+          const img = productInfo.images[0];
+          productImage = img.startsWith('http') ? img : `${API_BASE_URL}${img}`;
+        } else if (firstItem.image || firstItem.productImage) {
+          const img = firstItem.image || firstItem.productImage;
+          productImage = img.startsWith('http') ? img : `${API_BASE_URL}${img}`;
+        }
 
         rentalItems.push({
           id: b._id,
           bookingId: b._id,
           bookingCode: b.bookingCode,
           status: b.status,
-          name: firstItem.name || 'Mẫu Áo Dài Di Sản',
+          name: productInfo?.name || firstItem.name || 'Mẫu Áo Dài Di Sản',
           totalQuantity,
-          image: firstItem.image || firstItem.productImage || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+          image: productImage,
           size: sizes,
           color: colors,
           rentalType: firstItem.rentalType || 'DAILY',

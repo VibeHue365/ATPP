@@ -15,7 +15,8 @@ import {
   CalendarRange,
   Star,
   Pencil,
-  AlertTriangle
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/env';
 import { ROUTES } from '../../config/routes';
@@ -90,6 +91,7 @@ export const ProfilePage: React.FC = () => {
 
   // Bookings list state
   const [bookings, setBookings] = useState<any[]>([]);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(true);
 
   // Review states (UC-B03/UC-D05)
   const [reviewingItem, setReviewingItem] = useState<any>(null);
@@ -183,12 +185,36 @@ export const ProfilePage: React.FC = () => {
     return localStorage.getItem(`vh_user_location_${user?.id}`) || 'Hà Nội, VN';
   });
 
-  const fetchBookings = async () => {
+  const fetchBookings = async (silent = false) => {
+    if (!silent) setIsLoadingBookings(true);
     try {
       const data = await httpClient.get<any[]>('/api/bookings');
-      setBookings(data || []);
+      
+      setBookings(prevBookings => {
+        const isBookingsChanged = (prev: any[], next: any[]) => {
+          if (prev.length !== next.length) return true;
+          for (let i = 0; i < prev.length; i++) {
+            if (prev[i]._id !== next[i]._id) return true;
+            if (prev[i].status !== next[i].status) return true;
+            
+            const prevItems = prev[i].items || [];
+            const nextItems = next[i].items || [];
+            if (prevItems.length !== nextItems.length) return true;
+            for (let j = 0; j < prevItems.length; j++) {
+              if (prevItems[j].rentalFulfillment?.status !== nextItems[j].rentalFulfillment?.status) return true;
+              if (prevItems[j].rescheduleRequest?.status !== nextItems[j].rescheduleRequest?.status) return true;
+            }
+          }
+          return false;
+        };
+        
+        const changed = isBookingsChanged(prevBookings, data || []);
+        return changed ? (data || []) : prevBookings;
+      });
     } catch (err) {
       console.error('Lỗi khi tải danh sách đơn hàng:', err);
+    } finally {
+      if (!silent) setIsLoadingBookings(false);
     }
   };
 
@@ -629,12 +655,19 @@ export const ProfilePage: React.FC = () => {
           </div>
         )}
 
-        <CustomerDashboard
-          user={user}
-          bookings={bookings}
-          onViewDetails={(b) => setActiveDetailBooking(b)}
-          onRefresh={fetchBookings}
-        />
+        {isLoadingBookings ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '16px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', margin: '20px 0' }}>
+            <Loader2 size={36} style={{ color: '#8B1E22', animation: 'spin 1.5s linear infinite' }} />
+            <span style={{ fontSize: '13px', color: '#8C827A', fontWeight: 500 }}>Đang đồng bộ dữ liệu đơn hàng...</span>
+          </div>
+        ) : (
+          <CustomerDashboard
+            user={user}
+            bookings={bookings}
+            onViewDetails={(b) => setActiveDetailBooking(b)}
+            onRefresh={fetchBookings}
+          />
+        )}
       </section>
 
       {/* AI Recommendation Showcase Section */}
@@ -891,7 +924,7 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             {/* Incident / Dispute section */}
-            {bookingIncident && bookingIncident._id && bookingIncident.status === 'RESOLVED' && (
+            {bookingIncident && bookingIncident._id && (
               <div style={{
                 backgroundColor: '#FFF5F5',
                 border: '1px solid #FEB2B2',
@@ -1114,7 +1147,9 @@ export const ProfilePage: React.FC = () => {
                activeDetailBooking.status !== 'COMPLETED' && 
                activeDetailBooking.status !== 'RETURNED' && 
                activeDetailBooking.status !== 'PICKED_UP' && 
-               activeDetailBooking.status !== 'DISPUTED' && (
+               activeDetailBooking.status !== 'RETURN_PENDING' && 
+               activeDetailBooking.status !== 'DISPUTED' && 
+               !bookingIncident && (
                 <button 
                   className="vh-btn" 
                   style={{ 
