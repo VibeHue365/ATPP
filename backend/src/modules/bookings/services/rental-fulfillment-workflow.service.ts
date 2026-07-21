@@ -35,7 +35,7 @@ export class RentalFulfillmentWorkflowService {
     private readonly rentalFulfillment: RentalFulfillmentService,
     private readonly rentalDepositRefundCoordinator: RentalDepositRefundCoordinatorService,
     private readonly paymentsService: PaymentsService,
-  ) {}
+  ) { }
 
   async markReady(bookingId: string, itemId: string, user: AuthUser, note?: string) {
     const access = await this.requireProviderOrAdmin(bookingId, itemId, user);
@@ -82,6 +82,7 @@ export class RentalFulfillmentWorkflowService {
       conditionNote: input.conditionNote,
     });
     await this.syncBookingProgress(access.bookingId, access.actor);
+    await this.rentalDepositRefundCoordinator.coordinate(access.bookingId.toString());
     return updated;
   }
 
@@ -136,6 +137,7 @@ export class RentalFulfillmentWorkflowService {
       inventoryStatus,
     );
     await this.syncBookingProgress(access.bookingId, access.actor);
+    await this.rentalDepositRefundCoordinator.coordinate(access.bookingId.toString());
     return updated;
   }
 

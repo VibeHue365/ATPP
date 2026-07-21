@@ -43,8 +43,8 @@ export class RefundWorkflowService {
 
   async getEligibility(bookingId: string, customerId: string) {
     const booking = await this.findOwnedBooking(bookingId, customerId);
-    if ([BookingStatus.Cancelled, BookingStatus.Disputed].includes(booking.status)) {
-      return { eligible: false, reason: 'Đơn hàng đang được xử lý bởi luồng hủy hoặc tranh chấp.' };
+    if ([BookingStatus.Cancelled, BookingStatus.Disputed, BookingStatus.Returned, BookingStatus.Completed].includes(booking.status)) {
+      return { eligible: false, reason: 'Đơn hàng đã được hoàn thành, trả đồ, hủy hoặc đang tranh chấp. Tiền cọc/hoàn tiền được hệ thống xử lý tự động.' };
     }
     const payments = await this.paymentModel.find({ bookingId: booking._id, status: PaymentStatus.Success }).lean();
     const capturedAmount = payments.reduce((sum, payment) => sum + payment.amount, 0);

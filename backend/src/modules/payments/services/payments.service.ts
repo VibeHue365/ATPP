@@ -29,6 +29,7 @@ import {
 import { PayOSRefundService } from './payos-refund.service';
 import { MockBankingService } from './mock-banking.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { RentalDepositRefundCoordinatorService } from '../../bookings/services/rental-deposit-refund-coordinator.service';
 import { NotificationType } from '../../notifications/schemas/notification.schema';
 import { PaymentsRepository } from '../repositories/payments.repository';
 import { EscrowRepository } from '../repositories/escrow.repository';
@@ -84,6 +85,8 @@ export class PaymentsService {
     private readonly settlementsService: SettlementsService,
     @Inject(forwardRef(() => PhotographyHoldService))
     private readonly photographyHoldService: PhotographyHoldService,
+    @Inject(forwardRef(() => RentalDepositRefundCoordinatorService))
+    private readonly depositCoordinator: RentalDepositRefundCoordinatorService,
   ) {}
 
   async createPaymentLink(
@@ -258,6 +261,13 @@ export class PaymentsService {
       return this.paymentsRepository.findByBookingIds(bookingIds);
     } else {
       const bookings = await this.bookingModel.find({ customerId: userId });
+      for (const booking of bookings) {
+        if (['RETURNED', 'COMPLETED'].includes(booking.status)) {
+          try {
+            await this.depositCoordinator.coordinate(booking._id.toString());
+          } catch { }
+        }
+      }
       const bookingIds = bookings.map((b) => b._id);
       return this.paymentsRepository.findByBookingIds(bookingIds);
     }

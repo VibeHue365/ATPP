@@ -611,7 +611,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               </div>
               <div style={{ fontSize: '13px', fontWeight: 600 }}>
                 {onCustomerClick ? (
-                  <span 
+                  <span
                     onClick={() => {
                       const custId = booking.customerId?._id || booking.customerId;
                       if (custId) onCustomerClick(custId);
@@ -664,10 +664,10 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                   {booking.items && booking.items.length > 0 ? (
                     booking.items.map((item: any) => {
                       const isProduct = item.itemType === 'PRODUCT' || !!item.productId;
-                      const name = isProduct 
+                      const name = isProduct
                         ? (item.productId?.name || 'Sản phẩm áo dài')
                         : (item.photographyPackageId?.name || 'Gói chụp ảnh');
-                      
+
                       return (
                         <tr key={item._id} style={{ borderBottom: '1px solid #F3F4F6' }}>
                           <td style={{ padding: '10px 12px' }}>
@@ -676,7 +676,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                               Loại: {isProduct ? 'Thuê áo dài' : 'Lịch chụp ảnh'}
                             </div>
                             <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
-                              {isProduct 
+                              {isProduct
                                 ? `Thời gian thuê: ${formatDate(item.rentalFrom)} - ${formatDate(item.rentalTo)}`
                                 : `Ngày chụp: ${formatDate(item.shootDate)}`
                               }
@@ -801,7 +801,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           {/* Refund / Dispute Decision Info */}
           {renderRefundOrDisputeInfo()}
 
-          {viewerRole === 'customer' && bookingId && <CustomerRefundPanel bookingId={bookingId} />}
+          {viewerRole === 'customer' && bookingId && !['RETURNED', 'COMPLETED', 'CANCELLED', 'DISPUTED'].includes(booking?.status) && (
+            <CustomerRefundPanel bookingId={bookingId} />
+          )}
 
           {/* Pricing & Billing Summary */}
           <div style={{
