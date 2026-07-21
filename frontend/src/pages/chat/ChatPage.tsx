@@ -195,8 +195,8 @@ export const ChatPage: React.FC = () => {
     setIsNewChatOpen(true);
     try {
       setLoadingPartners(true);
-      const data = await httpClient.get<any[]>('/api/photographers');
-      setPotentialPartners(data);
+      const res = await httpClient.get<any>('/api/photographers');
+      setPotentialPartners(res?.data || []);
     } catch (err: any) {
       toast.error('Không thể lấy danh sách đối tác');
     } finally {

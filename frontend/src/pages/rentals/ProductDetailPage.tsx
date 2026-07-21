@@ -1071,7 +1071,8 @@ export const ProductDetailPage: React.FC = () => {
     if (!product) return;
     const fetchSuggestions = async () => {
       try {
-        const data = await httpClient.get<any[]>("/api/photographers");
+        const res = await httpClient.get<any>("/api/photographers");
+        const data = res?.data || [];
         const productCity =
           product.providerId?.address?.city || "Thừa Thiên Huế";
 
