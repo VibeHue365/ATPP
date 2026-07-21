@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../services/httpClient';
-import { RefreshCw, DollarSign, CheckCircle2, XCircle, Clock, Search, RotateCcw, AlertTriangle } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, Clock, Search, AlertTriangle } from 'lucide-react';
 
 type Refund = {
   _id: string;

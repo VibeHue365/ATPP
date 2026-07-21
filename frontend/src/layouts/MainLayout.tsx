@@ -572,10 +572,10 @@ export const MainLayout: React.FC = () => {
           </div>
           
           <div className="vh-footer-right-links">
-            <a href="#about">About Us</a>
-            <a href="#terms">Terms of Service</a>
-            <a href="#privacy">Privacy Policy</a>
-            <a href="#contact">Contact</a>
+            <a href="#about">Về chúng tôi</a>
+            <a href="#terms">Điều khoản dịch vụ</a>
+            <a href="#privacy">Chính sách bảo mật</a>
+            <a href="#contact">Liên hệ</a>
           </div>
         </div>
       </footer>

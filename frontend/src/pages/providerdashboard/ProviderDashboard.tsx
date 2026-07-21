@@ -2606,7 +2606,7 @@ export const ProviderDashboard: React.FC = () => {
                       <thead>
                         <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
                           <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
-                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SIZE</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>KÍCH CỠ</th>
                           <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU SẮC</th>
                           <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LIỆU</th>
                           <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TỔNG KHO</th>
@@ -2709,7 +2709,7 @@ export const ProviderDashboard: React.FC = () => {
                         <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
                           <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SKU</th>
                           <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
-                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SIZE</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>KÍCH CỠ</th>
                           <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU</th>
                           <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LƯỢNG</th>
                           <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TRẠNG THÁI</th>
@@ -2828,7 +2828,7 @@ export const ProviderDashboard: React.FC = () => {
         <div>
           <div style={{ marginBottom: '40px' }}>
             <h1 style={{ fontFamily: 'var(--font-header)', fontSize: '22px', fontWeight: 800, color: 'white', margin: 0 }}>Silk & Stone</h1>
-            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 600 }}>Rental Marketplace</p>
+            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 600 }}>Sàn cho thuê</p>
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <button onClick={() => setCurrentView('analytics')} style={navItemStyle(currentView === 'analytics')}><BarChart3 size={18} /> Thống kê & Hiệu suất</button>
@@ -3028,7 +3028,7 @@ export const ProviderDashboard: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.2 }}>{provider?.businessName || 'Provider'}</div>
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>PROVIDER</div>
+                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>NHÀ CUNG CẤP</div>
               </div>
               {provider?.avatar || provider?.logoUrl ? (
                 <img src={getImageUrl(provider.avatar || provider.logoUrl)} alt="Avatar" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--color-light-border)' }} />
@@ -3059,7 +3059,7 @@ export const ProviderDashboard: React.FC = () => {
                 display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', border: '1px solid var(--color-light-border)',
                 padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
                 color: 'var(--color-text-primary)', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
-              }}><Download size={14} /> Export CSV</button>
+              }}><Download size={14} /> Xuất tệp CSV</button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginBottom: '32px' }}>
@@ -3384,11 +3384,11 @@ export const ProviderDashboard: React.FC = () => {
                     style={{ width: '130px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
                   >
                     <option value="">Tất cả Size</option>
-                    <option value="S">Size S</option>
-                    <option value="M">Size M</option>
-                    <option value="L">Size L</option>
-                    <option value="XL">Size XL</option>
-                    <option value="XXL">Size XXL</option>
+                    <option value="S">Kích cỡ S</option>
+                    <option value="M">Kích cỡ M</option>
+                    <option value="L">Kích cỡ L</option>
+                    <option value="XL">Kích cỡ XL</option>
+                    <option value="XXL">Kích cỡ XXL</option>
                   </select>
                   <select
                     value={prodColorFilter}
@@ -5447,7 +5447,7 @@ export const ProviderDashboard: React.FC = () => {
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid var(--color-light-border)', color: 'var(--color-text-secondary)' }}>
-                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>SIZE</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>KÍCH CỠ</th>
                             <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>MÀU</th>
                             <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>CHẤT LIỆU</th>
                             <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>TỔNG</th>
@@ -5498,7 +5498,7 @@ export const ProviderDashboard: React.FC = () => {
                 <div>
                   <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '0 0 10px' }}>Mỗi dòng là một biến thể (khác màu / chất liệu / số lượng). Kho sẽ tự sinh theo số lượng.</p>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', fontSize: '10.5px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', padding: '0 2px 6px' }}>
-                    <span>Size</span><span>Màu</span><span>Chất liệu</span><span>SL</span><span>Tình trạng</span><span></span>
+                    <span>Kích cỡ</span><span>Màu</span><span>Chất liệu</span><span>SL</span><span>Tình trạng</span><span></span>
                   </div>
                   {variants.map((v, idx) => (
                     <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>

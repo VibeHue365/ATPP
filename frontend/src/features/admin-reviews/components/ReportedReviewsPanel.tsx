@@ -88,7 +88,7 @@ export function ReportedReviewsPanel() {
         <table>
           <thead>
             <tr>
-              <th>Booking</th>
+              <th>Đơn hàng</th>
               <th>Đối tác</th>
               <th>Khách hàng & đánh giá</th>
               <th>Lý do báo cáo</th>

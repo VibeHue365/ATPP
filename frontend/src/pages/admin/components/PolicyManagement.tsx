@@ -189,7 +189,7 @@ export const PolicyManagement: React.FC = () => {
     try {
       const parsed = JSON.parse(jsonValue) as unknown;
       if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-        throw new Error('Policy value must be an object');
+        throw new Error('Giá trị chính sách phải là một đối tượng hợp lệ');
       }
       parsedValue = parsed as Record<string, unknown>;
     } catch (err) {
@@ -231,7 +231,7 @@ export const PolicyManagement: React.FC = () => {
     try {
       const parsed = JSON.parse(jsonValue) as unknown;
       if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-        throw new Error('Policy value must be an object');
+        throw new Error('Giá trị chính sách phải là một đối tượng hợp lệ');
       }
       parsedValue = parsed as Record<string, unknown>;
     } catch {
