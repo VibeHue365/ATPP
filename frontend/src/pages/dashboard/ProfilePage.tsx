@@ -51,9 +51,17 @@ const timeSlotsOverlap = (first: string, second: string): boolean => {
 };
 
 const getEntityId = (value: unknown): string | null => {
-  if (typeof value === 'string') return value;
-  if (value && typeof value === 'object' && '_id' in value && typeof value._id === 'string') {
-    return value._id;
+  if (typeof value === 'string') {
+    if (/^[0-9a-fA-F]{24}$/.test(value)) return value;
+    return null;
+  }
+  if (value && typeof value === 'object') {
+    if ('_id' in value && typeof (value as any)._id === 'string' && /^[0-9a-fA-F]{24}$/.test((value as any)._id)) {
+      return (value as any)._id;
+    }
+    if ('providerId' in value) {
+      return getEntityId((value as any).providerId);
+    }
   }
   return null;
 };
@@ -90,6 +98,7 @@ export const ProfilePage: React.FC = () => {
   const [rescheduleShootDate, setRescheduleShootDate] = useState('');
   const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
   const [rescheduleReason, setRescheduleReason] = useState('');
+  const [customRescheduleDuration, setCustomRescheduleDuration] = useState<number>(0);
   const [availableRescheduleSlots, setAvailableRescheduleSlots] = useState<string[]>([]);
   const [isLoadingRescheduleSlots, setIsLoadingRescheduleSlots] = useState(false);
   const [rescheduleSlotsError, setRescheduleSlotsError] = useState<string | null>(null);
@@ -455,20 +464,23 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
-  const rescheduleDurationMinutes = useMemo(() => {
-    const currentSlot = String(rescheduleItem?.shootTimeSlot || '');
-    const [start, end] = currentSlot.split('-').map(toMinutes);
-    if (Number.isFinite(start) && Number.isFinite(end) && end > start) return end - start;
-
+  const rescheduleIncludedDuration = useMemo(() => {
     const packageDuration = Number(
       rescheduleItem?.photographyPackageId?.includedDurationMinutes
       || rescheduleItem?.photographyPackageId?.durationMinutes,
     );
     if (Number.isFinite(packageDuration) && packageDuration > 0) return packageDuration;
-
     const packageHours = Number(rescheduleItem?.photographyPackageId?.durationHours);
     return Number.isFinite(packageHours) && packageHours > 0 ? packageHours * 60 : 120;
   }, [rescheduleItem]);
+
+  const rescheduleDurationMinutes = useMemo(() => {
+    if (customRescheduleDuration > 0) return customRescheduleDuration;
+    const currentSlot = String(rescheduleItem?.shootTimeSlot || '');
+    const [start, end] = currentSlot.split('-').map(toMinutes);
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) return end - start;
+    return rescheduleIncludedDuration;
+  }, [rescheduleItem, customRescheduleDuration, rescheduleIncludedDuration]);
 
   useEffect(() => {
     if (!isRescheduleOpen || !rescheduleItem || rescheduleItem.itemType === 'PRODUCT' || !rescheduleShootDate) {
@@ -477,20 +489,26 @@ export const ProfilePage: React.FC = () => {
       return;
     }
 
-    const photographerId = getEntityId(rescheduleItem.photographerId) || getEntityId(rescheduleItem.providerId);
+    const photographerId =
+      getEntityId(rescheduleItem.providerId) ||
+      getEntityId(rescheduleItem.photographerId) ||
+      getEntityId(rescheduleItem.photographyPackageId?.providerId) ||
+      getEntityId(activeDetailBooking?.providerIds?.[0]);
+
     if (!photographerId) {
       setAvailableRescheduleSlots([]);
       setRescheduleSlotsError('Không xác định được nhiếp ảnh gia của lịch này.');
       return;
     }
 
+    const cleanShootDate = String(rescheduleShootDate).slice(0, 10);
     let isCurrent = true;
     setIsLoadingRescheduleSlots(true);
     setRescheduleSlotsError(null);
     setRescheduleTimeSlot('');
 
     Promise.all([
-      httpClient.get<{ timeRanges: TimeRange[] }>(`/api/photographers/${photographerId}/availability?date=${rescheduleShootDate}`),
+      httpClient.get<{ timeRanges: TimeRange[] }>(`/api/photographers/${photographerId}/availability?date=${cleanShootDate}`),
       httpClient.get<{ bookedSlots: BusyTimeSlot[] }>(`/api/bookings/busy-dates/provider/${photographerId}`),
     ])
       .then(([availability, busy]) => {
@@ -538,7 +556,7 @@ export const ProfilePage: React.FC = () => {
       return;
     }
     try {
-      await httpClient.patch<any>(`/api/bookings/${activeDetailBooking._id}/reschedule`, {
+      const res = await httpClient.patch<any>(`/api/bookings/${activeDetailBooking._id}/reschedule`, {
         itemId: rescheduleItem._id,
         ...(isProduct ? { newRentalFrom: rescheduleFrom, newRentalTo: rescheduleTo } : {
           newShootDate: rescheduleShootDate,
@@ -546,7 +564,11 @@ export const ProfilePage: React.FC = () => {
         }),
         reason: rescheduleReason || undefined,
       });
-      toast.success('Đã gửi yêu cầu đổi lịch. Vui lòng chờ provider xác nhận.');
+      if (res?.directUpdate || res?.status === 'APPROVED') {
+        toast.success('Lịch chụp mới đã được cập nhật trực tiếp thành công!');
+      } else {
+        toast.success('Đã gửi yêu cầu đổi lịch. Vui lòng chờ provider xác nhận.');
+      }
       setIsRescheduleOpen(false);
       setRescheduleItem(null);
       setRescheduleFrom('');
@@ -819,8 +841,9 @@ export const ProfilePage: React.FC = () => {
                 : (isPhotography && activeDetailBooking.handoverPhotos && activeDetailBooking.handoverPhotos.length > 0)
                   ? activeDetailBooking.handoverPhotos
                   : [];
+              const driveUrl = activeDetailBooking.deliveryDriveUrl;
 
-              if (photos.length === 0) return null;
+              if (photos.length === 0 && !driveUrl) return null;
 
               return (
                 <div style={{
@@ -832,57 +855,82 @@ export const ProfilePage: React.FC = () => {
                   flexDirection: 'column',
                   gap: '10px',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1D4ED8', fontWeight: 700, fontSize: '13px' }}>
                       <Camera size={16} />
                       <span>📸 ẢNH KẾT QUẢ TỪ THỢ CHỤP</span>
                     </div>
-                    <button
-                      onClick={() => {
-                        const zipName = `anh_chup_${activeDetailBooking.bookingCode || 'ket_qua'}.zip`;
-                        void downloadPhotosAsZip(photos, zipName, toast);
-                      }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '4px',
-                        background: '#1D4ED8', color: 'white', border: 'none',
-                        borderRadius: '6px', padding: '5px 10px', fontSize: '11px',
-                        fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
-                      }}
-                      onMouseOver={(e) => (e.currentTarget.style.background = '#1E40AF')}
-                      onMouseOut={(e) => (e.currentTarget.style.background = '#1D4ED8')}
-                    >
-                      <Download size={12} /> Tải tất cả ({photos.length})
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {driveUrl && (
+                        <a
+                          href={driveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            background: '#2563EB', color: 'white', border: 'none',
+                            borderRadius: '6px', padding: '6px 12px', fontSize: '12px',
+                            fontWeight: 700, textDecoration: 'none', transition: 'all 0.2s',
+                            boxShadow: '0 2px 4px rgba(37,99,235,0.2)'
+                          }}
+                        >
+                          🔗 Mở Kho Ảnh Gốc (Google Drive)
+                        </a>
+                      )}
+                      {photos.length > 0 && (
+                        <button
+                          onClick={() => {
+                            const zipName = `anh_chup_${activeDetailBooking.bookingCode || 'ket_qua'}.zip`;
+                            void downloadPhotosAsZip(photos, zipName, toast);
+                          }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            background: '#1D4ED8', color: 'white', border: 'none',
+                            borderRadius: '6px', padding: '5px 10px', fontSize: '11px',
+                            fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                          }}
+                          onMouseOver={(e) => (e.currentTarget.style.background = '#1E40AF')}
+                          onMouseOut={(e) => (e.currentTarget.style.background = '#1D4ED8')}
+                        >
+                          <Download size={12} /> Tải tất cả ({photos.length})
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    {photos.map((photo: string, index: number) => {
-                      const photoUrl = photo.startsWith('http') ? photo : `${import.meta.env.VITE_API_URL || ''}${photo}`;
-                      return (
-                        <div key={index} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #BFDBFE', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}>
-                          <a href={photoUrl} target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
-                            <img src={photoUrl} alt={`Ảnh kết quả ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => void downloadSinglePhoto(photoUrl, `photo_${index + 1}.jpg`)}
-                            style={{
-                              position: 'absolute', bottom: '3px', right: '3px',
-                              background: 'rgba(29, 78, 216, 0.85)', color: 'white',
-                              border: 'none', borderRadius: '4px', padding: '3px', display: 'flex',
-                              alignItems: 'center', justifyContent: 'center',
-                              cursor: 'pointer', transition: 'all 0.2s',
-                            }}
-                            title="Tải xuống"
-                          >
-                            <Download size={12} />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <p style={{ fontSize: '11px', color: '#6B7280', margin: 0, lineHeight: 1.4 }}>
-                    Thợ chụp đã bàn giao {photos.length} ảnh. Bấm vào ảnh để xem hoặc nút ⬇ để tải về.
-                  </p>
+
+                  {photos.length > 0 && (
+                    <>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        {photos.map((photo: string, index: number) => {
+                          const photoUrl = photo.startsWith('http') ? photo : `${import.meta.env.VITE_API_URL || ''}${photo}`;
+                          return (
+                            <div key={index} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #BFDBFE', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}>
+                              <a href={photoUrl} target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
+                                <img src={photoUrl} alt={`Ảnh kết quả ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => void downloadSinglePhoto(photoUrl, `photo_${index + 1}.jpg`)}
+                                style={{
+                                  position: 'absolute', bottom: '3px', right: '3px',
+                                  background: 'rgba(29, 78, 216, 0.85)', color: 'white',
+                                  border: 'none', borderRadius: '4px', padding: '3px', display: 'flex',
+                                  alignItems: 'center', justifyContent: 'center',
+                                  cursor: 'pointer', transition: 'all 0.2s',
+                                }}
+                                title="Tải xuống"
+                              >
+                                <Download size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p style={{ fontSize: '11px', color: '#6B7280', margin: 0, lineHeight: 1.4 }}>
+                        Thợ chụp đã bàn giao {photos.length} ảnh. Bấm vào ảnh để xem hoặc nút ⬇ để tải về.
+                      </p>
+                    </>
+                  )}
                 </div>
               );
             })()}
@@ -1268,68 +1316,79 @@ export const ProfilePage: React.FC = () => {
                 })}
               </section>
             )}
+
             {/* Financial Summary */}
-            <div style={{ marginLeft: 'auto', width: '320px', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #EAEAE8', paddingTop: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span>Giá thuê/chụp:</span>
-                <span>{(activeDetailBooking.pricingSummary?.subTotal || 0).toLocaleString('vi-VN')}đ</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span>Tiền cọc trang phục:</span>
-                <span>{(activeDetailBooking.pricingSummary?.depositTotal || 0).toLocaleString('vi-VN')}đ</span>
-              </div>
-              {activeDetailBooking.pricingSummary?.discountAmount > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#27AE60' }}>
-                  <span>Giảm giá:</span>
-                  <span>-{(activeDetailBooking.pricingSummary?.discountAmount || 0).toLocaleString('vi-VN')}đ</span>
+            {(() => {
+              const bType = activeDetailBooking.bookingType || 'PHOTOGRAPHY';
+              const depositTotal = activeDetailBooking.pricingSummary?.depositTotal || 0;
+              const subTotal = activeDetailBooking.pricingSummary?.subTotal || 0;
+              const discountAmount = activeDetailBooking.pricingSummary?.discountAmount || 0;
+              const grandTotal = activeDetailBooking.pricingSummary?.grandTotal || 0;
+              const isPaid = activeDetailBooking.status !== 'PENDING_PAYMENT' && activeDetailBooking.status !== 'WAITING_PAYMENT';
+              const totalPaid = activeDetailBooking.paymentSummary?.totalPaid || (isPaid ? grandTotal : 0);
+
+              const photoBasePrice = grandTotal || subTotal;
+              const photoDeposit = Math.round(photoBasePrice * 0.3);
+
+              return (
+                <div style={{ marginLeft: 'auto', width: '350px', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #EAEAE8', paddingTop: '12px' }}>
+                  {bType === 'PHOTOGRAPHY' ? (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                        <span>Tiền gói dịch vụ chụp ảnh:</span>
+                        <span style={{ fontWeight: 600 }}>{photoBasePrice.toLocaleString('vi-VN')}đ</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#D97706', paddingLeft: '8px' }}>
+                        <span>• Trong đó: Cọc giữ lịch chụp (30%):</span>
+                        <span style={{ fontWeight: 600 }}>{photoDeposit.toLocaleString('vi-VN')}đ</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                        <span>{bType === 'AODAI_RENTAL' ? 'Tiền thuê áo dài:' : 'Tiền dịch vụ chụp & thuê:'}</span>
+                        <span>{subTotal.toLocaleString('vi-VN')}đ</span>
+                      </div>
+
+                      {depositTotal > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                          <span>Tiền cọc giữ đồ trang phục (Hoàn trả khi trả đồ):</span>
+                          <span style={{ color: '#D97706', fontWeight: 600 }}>{depositTotal.toLocaleString('vi-VN')}đ</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {discountAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#27AE60' }}>
+                      <span>Giảm giá:</span>
+                      <span>-{discountAmount.toLocaleString('vi-VN')}đ</span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', borderTop: '1px dashed #EAEAE8', paddingTop: '8px' }}>
+                    <span>Tổng chi phí:</span>
+                    <span style={{ color: '#4A0E17' }}>{grandTotal.toLocaleString('vi-VN')}đ</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#059669', marginTop: '4px', fontWeight: 700 }}>
+                    <span>{isPaid ? 'Thanh toán online (100%):' : 'Cần thanh toán online:'}</span>
+                    <span>{(isPaid ? (totalPaid || grandTotal) : grandTotal).toLocaleString('vi-VN')}đ</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#8C827A' }}>
+                    <span>Còn lại thanh toán tại tiệm:</span>
+                    <span style={{ fontWeight: 700, color: '#27AE60' }}>0đ</span>
+                  </div>
+
+                  {isPaid && (
+                    <div style={{ fontSize: '11px', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '4px 8px', borderRadius: '6px', textAlign: 'center', marginTop: '2px', fontWeight: 700 }}>
+                      ✅ Đã thanh toán đầy đủ 100% online
+                    </div>
+                  )}
                 </div>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', borderTop: '1px dashed #EAEAE8', paddingTop: '8px' }}>
-                <span>Tổng chi phí:</span>
-                <span>{(activeDetailBooking.pricingSummary?.grandTotal || 0).toLocaleString('vi-VN')}đ</span>
-              </div>
-              {(() => {
-                const isCombo = activeDetailBooking.bookingType === 'COMBO';
-                const items = activeDetailBooking.items || [];
-                const prodItems = items.filter((i: any) => i.itemType === 'PRODUCT');
-                const photoItems = items.filter((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
-                
-                const prodRentalTotal = prodItems.reduce((sum: number, i: any) => sum + (i.unitPrice || 0) * (i.quantity || 1), 0);
-                const prodDepositTotal = prodItems.reduce((sum: number, i: any) => sum + (i.depositAmount || 0) * (i.quantity || 1), 0);
-                const photoDepositTotal = photoItems.reduce((sum: number, i: any) => sum + (i.unitPrice || 0) * (i.quantity || 1), 0); // 100% thanh toán trước cho thợ chụp
-                const comboDiscount = activeDetailBooking.pricingSummary?.comboDiscountTotal || 0;
-                
-                const requiredDeposit = isCombo 
-                  ? (prodRentalTotal + prodDepositTotal + photoDepositTotal - comboDiscount)
-                  : (activeDetailBooking.pricingSummary?.depositTotal || 0);
-
-                const isPaid = activeDetailBooking.status !== 'PENDING_PAYMENT';
-                const paidAmount = activeDetailBooking.paymentSummary?.totalPaid || 0;
-                
-                const depositLabel = isPaid ? 'Đã cọc (thanh toán online):' : 'Tiền cọc cần thanh toán (online):';
-                const depositVal = isPaid ? paidAmount : requiredDeposit;
-                
-                const remainingLabel = 'Còn lại thanh toán tại tiệm:';
-                const remainingVal = Math.max(0, (activeDetailBooking.pricingSummary?.grandTotal || 0) - depositVal);
-
-                return (
-                  <>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#8C827A', marginTop: '4px' }}>
-                      <span>{depositLabel}</span>
-                      <span style={{ fontWeight: 600, color: isPaid ? '#27AE60' : 'var(--color-text-primary)' }}>
-                        {depositVal.toLocaleString('vi-VN')}đ
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#8C827A' }}>
-                      <span>{remainingLabel}</span>
-                      <span style={{ fontWeight: 600, color: remainingVal > 0 ? '#D35400' : '#27AE60' }}>
-                        {remainingVal.toLocaleString('vi-VN')}đ
-                      </span>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
+              );
+            })()}
 
             {/* Footer action buttons */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px', borderTop: '1px solid #EAEAE8', paddingTop: '16px' }}>
@@ -1361,7 +1420,8 @@ export const ProfilePage: React.FC = () => {
                         setRescheduleFrom(item.startDate || item.rentalFrom || '');
                         setRescheduleTo(item.endDate || item.rentalTo || '');
                       } else {
-                        setRescheduleShootDate(item.shootDate || '');
+                        const rawDate = item.shootDate ? String(item.shootDate).slice(0, 10) : '';
+                        setRescheduleShootDate(rawDate);
                         setRescheduleTimeSlot(item.shootTimeSlot || '');
                       }
                       setIsRescheduleOpen(true);
@@ -1436,11 +1496,30 @@ export const ProfilePage: React.FC = () => {
           isOpen={true}
           onClose={() => { setIsRescheduleOpen(false); setRescheduleItem(null); }}
           title={`ĐỔI LỊCH: ${activeDetailBooking.bookingCode}`}
-          maxWidth="480px"
+          maxWidth="600px"
         >
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
-            <div style={{ backgroundColor: '#EBF5FB', borderRadius: '8px', padding: '12px 14px', fontSize: '13px', color: '#1A5276', lineHeight: 1.5 }}>
-              <strong>Lưu ý:</strong> Chỉ có thể gửi yêu cầu đổi lịch trước giờ bắt đầu ít nhất <strong>24 tiếng</strong>. Lịch mới chỉ được áp dụng sau khi provider xác nhận.
+            
+            {/* Thẻ Thông tin Lịch Hiện Tại */}
+            <div style={{ backgroundColor: '#FDF8F5', border: '1px solid #F3E4D8', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span style={{ color: '#8C6D1F', fontWeight: 700 }}>📌 LỊCH CHỤP HIỆN TẠI:</span>
+                <strong style={{ color: '#7D161A' }}>
+                  {rescheduleItem.shootDate ? formatDate(rescheduleItem.shootDate) : 'Chưa có'} {rescheduleItem.shootTimeSlot ? `(${rescheduleItem.shootTimeSlot.replace('-', ' - ')})` : ''}
+                </strong>
+              </div>
+              {rescheduleItem.photographyPackageId && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666', borderTop: '1px dashed #EAD8C7', paddingTop: '6px', marginTop: '2px' }}>
+                  <span>Gói dịch vụ:</span>
+                  <span style={{ fontWeight: 600, color: '#333' }}>
+                    {rescheduleItem.photographyPackageId.name || 'Gói chụp ảnh'} ({rescheduleDurationMinutes / 60} giờ)
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div style={{ backgroundColor: '#EBF5FB', borderRadius: '8px', padding: '12px 14px', fontSize: '12.5px', color: '#1A5276', lineHeight: 1.5 }}>
+              <strong>Lưu ý nghiệp vụ:</strong> Yêu cầu đổi lịch phải được gửi trước giờ chụp ít nhất <strong>24 tiếng</strong>. Khung giờ mới sẽ được tạm <strong>khóa giữ chỗ (TTL 12h)</strong> chờ Nhiếp ảnh gia xác nhận.
             </div>
 
             {rescheduleItem.itemType === 'PRODUCT' ? (
@@ -1471,22 +1550,179 @@ export const ProfilePage: React.FC = () => {
             ) : (
               <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>NGÀY CHỤP MỚI</label>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>CHỌN NGÀY CHỤP MỚI</label>
                   <input
                     type="date"
                     min={new Date().toISOString().split('T')[0]}
                     value={rescheduleShootDate}
-                    onChange={e => setRescheduleShootDate(e.target.value)}
+                    onChange={e => {
+                      setRescheduleShootDate(e.target.value);
+                      setRescheduleTimeSlot('');
+                    }}
                     style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
                   />
                 </div>
+
+                {/* Bộ Tăng / Giảm Thời Lượng Chụp khi Đổi Lịch */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>KHUNG GIỜ MỚI</label>
-                  <select value={rescheduleTimeSlot} onChange={(event) => setRescheduleTimeSlot(event.target.value)} disabled={!rescheduleShootDate || isLoadingRescheduleSlots || availableRescheduleSlots.length === 0} style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}>
-                    <option value="">{!rescheduleShootDate ? 'Chọn ngày chụp trước' : isLoadingRescheduleSlots ? 'Đang tải khung giờ trống' : availableRescheduleSlots.length ? 'Chọn khung giờ' : 'Không còn khung giờ phù hợp'}</option>
-                    {availableRescheduleSlots.map((slot) => <option key={slot} value={slot}>{slot.replace('-', ' - ')}</option>)}
-                  </select>
-                  {rescheduleSlotsError ? <small style={{ color: '#C0392B' }}>{rescheduleSlotsError}</small> : rescheduleShootDate && !isLoadingRescheduleSlots && availableRescheduleSlots.length === 0 ? <small style={{ color: '#8C6D1F' }}>Ngày này không còn khung giờ phù hợp với thời lượng gói chụp.</small> : null}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>THỜI LƯỢNG BUỔI CHỤP MỚI</label>
+                    <span style={{ fontSize: '12.5px', color: '#7D161A', fontWeight: 700 }}>
+                      {Math.floor(rescheduleDurationMinutes / 60)} giờ {rescheduleDurationMinutes % 60 ? `${rescheduleDurationMinutes % 60}p` : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: '#F9F6F0', padding: '8px 12px', borderRadius: '8px', border: '1px solid #EAD8C7' }}>
+                    <button
+                      type="button"
+                      disabled={rescheduleDurationMinutes <= rescheduleIncludedDuration}
+                      onClick={() => {
+                        setCustomRescheduleDuration(Math.max(rescheduleIncludedDuration, rescheduleDurationMinutes - 30));
+                        setRescheduleTimeSlot('');
+                      }}
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        border: '1px solid #D5C2AD',
+                        backgroundColor: rescheduleDurationMinutes <= rescheduleIncludedDuration ? '#EAEAE8' : '#FFF',
+                        color: rescheduleDurationMinutes <= rescheduleIncludedDuration ? '#AAA' : '#333',
+                        cursor: rescheduleDurationMinutes <= rescheduleIncludedDuration ? 'not-allowed' : 'pointer',
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      -
+                    </button>
+                    <div style={{ flex: 1, textAlign: 'center', fontSize: '12px' }}>
+                      {rescheduleDurationMinutes > rescheduleIncludedDuration ? (
+                        <span style={{ color: '#C0392B', fontWeight: 700 }}>
+                          Tăng giờ thêm: +{Math.floor((rescheduleDurationMinutes - rescheduleIncludedDuration) / 60)}h {(rescheduleDurationMinutes - rescheduleIncludedDuration) % 60 ? `${(rescheduleDurationMinutes - rescheduleIncludedDuration) % 60}p` : ''} (sẽ tính phí phụ thu)
+                        </span>
+                      ) : (
+                        <span style={{ color: '#27AE60', fontWeight: 600 }}>Thời lượng gói chụp gốc ({rescheduleIncludedDuration / 60} giờ)</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={rescheduleDurationMinutes >= rescheduleIncludedDuration + 240}
+                      onClick={() => {
+                        setCustomRescheduleDuration(rescheduleDurationMinutes + 30);
+                        setRescheduleTimeSlot('');
+                      }}
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        border: '1px solid #D5C2AD',
+                        backgroundColor: rescheduleDurationMinutes >= rescheduleIncludedDuration + 240 ? '#EAEAE8' : '#FFF',
+                        color: rescheduleDurationMinutes >= rescheduleIncludedDuration + 240 ? '#AAA' : '#333',
+                        cursor: rescheduleDurationMinutes >= rescheduleIncludedDuration + 240 ? 'not-allowed' : 'pointer',
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bộ Chọn Khung Giờ Mới dạng Grid Phân Ca Sáng / Ca Chiều */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>CHỌN KHUNG GIỜ MỚI</label>
+                  
+                  {!rescheduleShootDate ? (
+                    <p style={{ fontSize: '12.5px', color: '#888', fontStyle: 'italic', margin: 0 }}>Vui lòng chọn Ngày chụp mới ở trên trước.</p>
+                  ) : isLoadingRescheduleSlots ? (
+                    <p style={{ fontSize: '12.5px', color: '#2980B9', fontStyle: 'italic', margin: 0 }}>Đang kiểm tra ca làm việc & lịch bận của nhiếp ảnh gia...</p>
+                  ) : rescheduleSlotsError ? (
+                    <small style={{ color: '#C0392B', fontSize: '12px' }}>{rescheduleSlotsError}</small>
+                  ) : availableRescheduleSlots.length === 0 ? (
+                    <small style={{ color: '#C0392B', fontSize: '12px' }}>Nhiếp ảnh gia đã kín lịch hoặc không có ca làm việc phù hợp vào ngày này.</small>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '220px', overflowY: 'auto', paddingRight: '4px' }}>
+                      {/* Ca Sáng */}
+                      {availableRescheduleSlots.some((slot) => Number(slot.split('-')[0].split(':')[0]) < 12) && (
+                        <div>
+                          <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#555', display: 'block', marginBottom: '6px' }}>🌅 Ca Sáng (Bắt đầu trước 12:00)</span>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px' }}>
+                            {availableRescheduleSlots.filter((slot) => Number(slot.split('-')[0].split(':')[0]) < 12).map((slot) => {
+                              const isSelected = rescheduleTimeSlot === slot;
+                              const isSameAsCurrent = String(rescheduleItem.shootDate || '').slice(0, 10) === rescheduleShootDate && rescheduleItem.shootTimeSlot === slot;
+                              return (
+                                <button
+                                  key={slot}
+                                  type="button"
+                                  disabled={isSameAsCurrent}
+                                  onClick={() => setRescheduleTimeSlot(slot)}
+                                  style={{
+                                    padding: '9px 8px',
+                                    borderRadius: '8px',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    border: isSelected ? '1.5px solid #7D161A' : '1px solid #D5C2AD',
+                                    backgroundColor: isSelected ? '#7D161A' : isSameAsCurrent ? '#F3F4F6' : '#FFFFFF',
+                                    color: isSelected ? '#FFFFFF' : isSameAsCurrent ? '#9CA3AF' : '#2C3E50',
+                                    cursor: isSameAsCurrent ? 'not-allowed' : 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                  }}
+                                >
+                                  <span>{slot.replace('-', ' - ')}</span>
+                                  <span style={{ fontSize: '10px', fontWeight: 600, opacity: 0.85 }}>
+                                    {isSameAsCurrent ? 'Lịch hiện tại' : isSelected ? 'Đã chọn' : 'Trống'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Ca Chiều */}
+                      {availableRescheduleSlots.some((slot) => Number(slot.split('-')[0].split(':')[0]) >= 12) && (
+                        <div>
+                          <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#555', display: 'block', marginBottom: '6px' }}>🌇 Ca Chiều (Bắt đầu từ 12:00)</span>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px' }}>
+                            {availableRescheduleSlots.filter((slot) => Number(slot.split('-')[0].split(':')[0]) >= 12).map((slot) => {
+                              const isSelected = rescheduleTimeSlot === slot;
+                              const isSameAsCurrent = String(rescheduleItem.shootDate || '').slice(0, 10) === rescheduleShootDate && rescheduleItem.shootTimeSlot === slot;
+                              return (
+                                <button
+                                  key={slot}
+                                  type="button"
+                                  disabled={isSameAsCurrent}
+                                  onClick={() => setRescheduleTimeSlot(slot)}
+                                  style={{
+                                    padding: '9px 8px',
+                                    borderRadius: '8px',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    border: isSelected ? '1.5px solid #7D161A' : '1px solid #D5C2AD',
+                                    backgroundColor: isSelected ? '#7D161A' : isSameAsCurrent ? '#F3F4F6' : '#FFFFFF',
+                                    color: isSelected ? '#FFFFFF' : isSameAsCurrent ? '#9CA3AF' : '#2C3E50',
+                                    cursor: isSameAsCurrent ? 'not-allowed' : 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                  }}
+                                >
+                                  <span>{slot.replace('-', ' - ')}</span>
+                                  <span style={{ fontSize: '10px', fontWeight: 600, opacity: 0.85 }}>
+                                    {isSameAsCurrent ? 'Lịch hiện tại' : isSelected ? 'Đã chọn' : 'Trống'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </>
             )}

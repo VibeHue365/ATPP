@@ -562,8 +562,14 @@ export class BookingsService implements OnApplicationBootstrap {
     if (this.getCustomerIdStr(booking) !== userId) {
       throw new BadRequestException('Bạn không có quyền đổi lịch đơn hàng này');
     }
-    if (![BookingStatus.Confirmed, BookingStatus.DepositPaid].includes(booking.status)) {
-      throw new BadRequestException('Chỉ có thể gửi yêu cầu đổi lịch cho đơn đã xác nhận hoặc đã đặt cọc.');
+    if (
+      ![BookingStatus.Confirmed, BookingStatus.DepositPaid].includes(
+        booking.status,
+      )
+    ) {
+      throw new BadRequestException(
+        'Chỉ có thể gửi yêu cầu đổi lịch cho đơn đã xác nhận hoặc đã đặt cọc.',
+      );
     }
     if (!Types.ObjectId.isValid(dto.itemId)) {
       throw new BadRequestException('Mục đặt lịch không hợp lệ.');
@@ -574,15 +580,27 @@ export class BookingsService implements OnApplicationBootstrap {
       bookingId: new Types.ObjectId(bookingId),
     });
     if (!item) throw new NotFoundException('Không tìm thấy mục đặt lịch');
-    if (['PENDING', 'PROCESSING'].includes((item as any).rescheduleRequest?.status)) {
-      throw new BadRequestException('Đơn này đang có một yêu cầu đổi lịch chờ provider phản hồi.');
+    if (
+      ['PENDING', 'PROCESSING'].includes(
+        (item as any).rescheduleRequest?.status,
+      )
+    ) {
+      throw new BadRequestException(
+        'Đơn này đang có một yêu cầu đổi lịch chờ provider phản hồi.',
+      );
     }
 
-    const currentStart = item.itemType === BookingItemType.Product
-      ? item.rentalFrom
-      : item.shootDate;
-    if (currentStart && (currentStart.getTime() - Date.now()) / 3_600_000 < 24) {
-      throw new BadRequestException('Chỉ có thể đổi lịch trước giờ bắt đầu ít nhất 24 tiếng.');
+    const currentStart =
+      item.itemType === BookingItemType.Product
+        ? item.rentalFrom
+        : item.shootDate;
+    if (
+      currentStart &&
+      (currentStart.getTime() - Date.now()) / 3_600_000 < 24
+    ) {
+      throw new BadRequestException(
+        'Chỉ có thể đổi lịch trước giờ bắt đầu ít nhất 24 tiếng.',
+      );
     }
 
     const today = new Date().toISOString().slice(0, 10);
@@ -593,8 +611,67 @@ export class BookingsService implements OnApplicationBootstrap {
       if (dto.newRentalFrom < today || dto.newRentalTo < dto.newRentalFrom) {
         throw new BadRequestException('Khoảng ngày thuê mới không hợp lệ.');
       }
-    } else if (!dto.newShootDate || !dto.newShootTimeSlot || dto.newShootDate < today) {
-      throw new BadRequestException('Yêu cầu ngày chụp và khung giờ mới hợp lệ.');
+    } else if (
+      !dto.newShootDate ||
+      !dto.newShootTimeSlot ||
+      dto.newShootDate < today
+    ) {
+      throw new BadRequestException(
+        'Yêu cầu ngày chụp và khung giờ mới hợp lệ.',
+      );
+    }
+
+    if (
+      item.itemType === BookingItemType.PhotographyPackage &&
+      dto.newShootDate &&
+      dto.newShootTimeSlot
+    ) {
+      const photographerId = item.providerId?.toString();
+      if (photographerId) {
+        const busySchedules =
+          await this.getBusySchedulesForProvider(photographerId);
+        const isConflict = busySchedules.bookedSlots.some(
+          (slot: any) =>
+            slot.date === dto.newShootDate &&
+            slot.timeSlot &&
+            this.isTimeSlotOverlap(slot.timeSlot, dto.newShootTimeSlot!) &&
+            slot.bookingItemId !== item._id.toString(),
+        );
+        if (isConflict) {
+          throw new BadRequestException(
+            `Khung giờ ${dto.newShootTimeSlot} ngày ${dto.newShootDate} đã có lịch khác hoặc đang được giữ chỗ.`,
+          );
+        }
+      }
+    }
+
+    if (booking.status === BookingStatus.DepositPaid) {
+      // Khi thợ chụp chưa xác nhận (DEPOSIT_PAID), Khách hàng có quyền tự do thay đổi lịch chụp trực tiếp!
+      await this.applyApprovedReschedule(bookingId, userId, dto);
+      await this.bookingItemModel.updateOne(
+        { _id: item._id },
+        {
+          $set: {
+            rescheduleRequest: {
+              status: 'APPROVED',
+              requestedBy: new Types.ObjectId(userId),
+              requestedAt: new Date(),
+              resolvedBy: null,
+              resolvedAt: new Date(),
+              newRentalFrom: dto.newRentalFrom
+                ? new Date(dto.newRentalFrom)
+                : null,
+              newRentalTo: dto.newRentalTo ? new Date(dto.newRentalTo) : null,
+              newShootDate: dto.newShootDate ?? null,
+              newShootTimeSlot: dto.newShootTimeSlot ?? null,
+              customerReason: dto.reason?.trim() || null,
+              providerNote:
+                'Tự động cập nhật lịch (Khách tự do đổi lịch khi đơn chưa được Thợ chụp xác nhận)',
+            },
+          },
+        },
+      );
+      return { status: 'APPROVED', directUpdate: true };
     }
 
     const request = {
@@ -607,27 +684,40 @@ export class BookingsService implements OnApplicationBootstrap {
       newRentalTo: dto.newRentalTo ? new Date(dto.newRentalTo) : null,
       newShootDate: dto.newShootDate ?? null,
       newShootTimeSlot: dto.newShootTimeSlot ?? null,
+      lockedExpiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000), // 12h TTL Lock
       customerReason: dto.reason?.trim() || null,
       providerNote: null,
     };
-    await this.bookingItemModel.updateOne({ _id: item._id }, { $set: { rescheduleRequest: request } });
+    await this.bookingItemModel.updateOne(
+      { _id: item._id },
+      { $set: { rescheduleRequest: request } },
+    );
 
-    const provider = await this.bookingModel.db.model('Provider')
+    const provider = (await this.bookingModel.db
+      .model('Provider')
       .findById(item.providerId)
       .select('userId')
-      .lean() as { userId?: Types.ObjectId } | null;
+      .lean()) as { userId?: Types.ObjectId } | null;
     try {
-      if (provider?.userId) await this.notificationsService.createNotification(
-        provider.userId.toString(),
-        'Yêu cầu đổi lịch mới',
-        `Khách hàng đã gửi yêu cầu đổi lịch cho đơn ${booking.bookingCode}. Vui lòng duyệt hoặc từ chối.`,
-        NotificationType.Booking,
-        { bookingId: booking._id, bookingItemId: item._id, action: 'RESCHEDULE_REQUEST' },
-      );
+      if (provider?.userId)
+        await this.notificationsService.createNotification(
+          provider.userId.toString(),
+          'Yêu cầu đổi lịch mới',
+          `Khách hàng đã gửi yêu cầu đổi lịch cho đơn ${booking.bookingCode}. Vui lòng duyệt hoặc từ chối.`,
+          NotificationType.Booking,
+          {
+            bookingId: booking._id,
+            bookingItemId: item._id,
+            action: 'RESCHEDULE_REQUEST',
+          },
+        );
     } catch {
       // The persisted request remains valid even when notification delivery is unavailable.
     }
-    return { message: 'Đã gửi yêu cầu đổi lịch. Vui lòng chờ provider xác nhận.', status: 'PENDING' };
+    return {
+      message: 'Đã gửi yêu cầu đổi lịch. Vui lòng chờ provider xác nhận.',
+      status: 'PENDING',
+    };
   }
 
   async resolveRescheduleRequest(
@@ -637,22 +727,51 @@ export class BookingsService implements OnApplicationBootstrap {
     approved: boolean,
     note?: string,
   ): Promise<Record<string, any>> {
-    if (!Types.ObjectId.isValid(itemId)) throw new BadRequestException('Mục đặt lịch không hợp lệ.');
-    const provider = await this.bookingModel.db.model('Provider')
+    if (!Types.ObjectId.isValid(itemId))
+      throw new BadRequestException('Mục đặt lịch không hợp lệ.');
+    const provider = (await this.bookingModel.db
+      .model('Provider')
       .findOne({ userId: new Types.ObjectId(providerUserId) })
       .select('_id')
-      .lean() as { _id: Types.ObjectId } | null;
-    if (!provider) throw new BadRequestException('Không tìm thấy provider hợp lệ.');
+      .lean()) as { _id: Types.ObjectId } | null;
+    if (!provider)
+      throw new BadRequestException('Không tìm thấy provider hợp lệ.');
 
-    const item = await this.bookingItemModel.findOne({
-      _id: new Types.ObjectId(itemId),
-      bookingId: new Types.ObjectId(bookingId),
-      providerId: provider._id,
-    }).lean() as any;
+    const item = (await this.bookingItemModel
+      .findOne({
+        _id: new Types.ObjectId(itemId),
+        bookingId: new Types.ObjectId(bookingId),
+        providerId: provider._id,
+      })
+      .lean()) as any;
     const request = item?.rescheduleRequest;
     if (!item || !request || request.status !== 'PENDING') {
-      throw new NotFoundException('Không tìm thấy yêu cầu đổi lịch đang chờ duyệt.');
+      throw new NotFoundException(
+        'Không tìm thấy yêu cầu đổi lịch đang chờ duyệt.',
+      );
     }
+
+    if (
+      request.lockedExpiresAt &&
+      new Date(request.lockedExpiresAt) < new Date()
+    ) {
+      await this.bookingItemModel.updateOne(
+        { _id: item._id, 'rescheduleRequest.status': 'PENDING' },
+        {
+          $set: {
+            'rescheduleRequest.status': 'REJECTED',
+            'rescheduleRequest.resolvedBy': provider._id,
+            'rescheduleRequest.resolvedAt': new Date(),
+            'rescheduleRequest.providerNote':
+              'Yêu cầu dời lịch đã hết thời hạn 12h giữ chỗ.',
+          },
+        },
+      );
+      throw new BadRequestException(
+        'Yêu cầu dời lịch này đã hết hạn 12h giữ chỗ.',
+      );
+    }
+
     const resolvedAt = new Date();
     if (!approved) {
       await this.bookingItemModel.updateOne(
@@ -663,18 +782,25 @@ export class BookingsService implements OnApplicationBootstrap {
             'rescheduleRequest.resolvedBy': provider._id,
             'rescheduleRequest.resolvedAt': resolvedAt,
             'rescheduleRequest.providerNote': note?.trim() || null,
-          }
+          },
         },
       );
-      const booking = await this.bookingModel.findById(bookingId).lean() as any;
+      const booking = (await this.bookingModel
+        .findById(bookingId)
+        .lean()) as any;
       try {
-        if (booking) await this.notificationsService.createNotification(
-          this.getCustomerIdStr(booking),
-          'Yêu cầu đổi lịch bị từ chối',
-          `Provider đã từ chối yêu cầu đổi lịch cho đơn ${booking.bookingCode}.${note?.trim() ? ` Lý do: ${note.trim()}` : ''}`,
-          NotificationType.Booking,
-          { bookingId, bookingItemId: item._id, action: 'RESCHEDULE_REJECTED' },
-        );
+        if (booking)
+          await this.notificationsService.createNotification(
+            this.getCustomerIdStr(booking),
+            'Yêu cầu đổi lịch bị từ chối',
+            `Provider đã từ chối yêu cầu đổi lịch cho đơn ${booking.bookingCode}.${note?.trim() ? ` Lý do: ${note.trim()}` : ''}`,
+            NotificationType.Booking,
+            {
+              bookingId,
+              bookingItemId: item._id,
+              action: 'RESCHEDULE_REJECTED',
+            },
+          );
       } catch {
         // A rejection must still be recorded if notification delivery fails.
       }
@@ -685,19 +811,32 @@ export class BookingsService implements OnApplicationBootstrap {
       { _id: item._id, 'rescheduleRequest.status': 'PENDING' },
       { $set: { 'rescheduleRequest.status': 'PROCESSING' } },
     );
-    if (!claimed.modifiedCount) throw new BadRequestException('Yêu cầu này đã được xử lý bởi thao tác khác.');
+    if (!claimed.modifiedCount)
+      throw new BadRequestException(
+        'Yêu cầu này đã được xử lý bởi thao tác khác.',
+      );
 
     try {
-      const booking = await this.bookingModel.findById(bookingId).lean() as any;
+      const booking = (await this.bookingModel
+        .findById(bookingId)
+        .lean()) as any;
       if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
-      await this.applyApprovedReschedule(bookingId, this.getCustomerIdStr(booking), {
-        itemId,
-        newRentalFrom: request.newRentalFrom ? new Date(request.newRentalFrom).toISOString().slice(0, 10) : undefined,
-        newRentalTo: request.newRentalTo ? new Date(request.newRentalTo).toISOString().slice(0, 10) : undefined,
-        newShootDate: request.newShootDate ?? undefined,
-        newShootTimeSlot: request.newShootTimeSlot ?? undefined,
-        reason: request.customerReason ?? undefined,
-      });
+      await this.applyApprovedReschedule(
+        bookingId,
+        this.getCustomerIdStr(booking),
+        {
+          itemId,
+          newRentalFrom: request.newRentalFrom
+            ? new Date(request.newRentalFrom).toISOString().slice(0, 10)
+            : undefined,
+          newRentalTo: request.newRentalTo
+            ? new Date(request.newRentalTo).toISOString().slice(0, 10)
+            : undefined,
+          newShootDate: request.newShootDate ?? undefined,
+          newShootTimeSlot: request.newShootTimeSlot ?? undefined,
+          reason: request.customerReason ?? undefined,
+        },
+      );
       await this.bookingItemModel.updateOne(
         { _id: item._id, 'rescheduleRequest.status': 'PROCESSING' },
         {
@@ -2257,7 +2396,7 @@ export class BookingsService implements OnApplicationBootstrap {
         .find({ bookingId: booking._id })
         .populate({
           path: 'productId',
-          populate: { path: 'providerId' }
+          populate: { path: 'providerId' },
         })
         .populate('photographyPackageId')
         .populate('providerId')
@@ -2281,9 +2420,13 @@ export class BookingsService implements OnApplicationBootstrap {
           if (matchedSchedule) {
             return {
               ...item,
-              shootDate: item.shootDate || matchedSchedule.startsAt || matchedSchedule.scheduledDate,
+              shootDate:
+                item.shootDate ||
+                matchedSchedule.startsAt ||
+                matchedSchedule.scheduledDate,
               shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
-              shootLocation: item.shootLocation || matchedSchedule.locationAddress,
+              shootLocation:
+                item.shootLocation || matchedSchedule.locationAddress,
             };
           }
         }
@@ -2346,9 +2489,13 @@ export class BookingsService implements OnApplicationBootstrap {
         if (matchedSchedule) {
           return {
             ...item,
-            shootDate: item.shootDate || matchedSchedule.startsAt || matchedSchedule.scheduledDate,
+            shootDate:
+              item.shootDate ||
+              matchedSchedule.startsAt ||
+              matchedSchedule.scheduledDate,
             shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
-            shootLocation: item.shootLocation || matchedSchedule.locationAddress,
+            shootLocation:
+              item.shootLocation || matchedSchedule.locationAddress,
           };
         }
       }
@@ -2434,9 +2581,13 @@ export class BookingsService implements OnApplicationBootstrap {
         if (matchedSchedule) {
           return {
             ...item,
-            shootDate: item.shootDate || matchedSchedule.startsAt || matchedSchedule.scheduledDate,
+            shootDate:
+              item.shootDate ||
+              matchedSchedule.startsAt ||
+              matchedSchedule.scheduledDate,
             shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
-            shootLocation: item.shootLocation || matchedSchedule.locationAddress,
+            shootLocation:
+              item.shootLocation || matchedSchedule.locationAddress,
           };
         }
       }
@@ -2593,6 +2744,7 @@ export class BookingsService implements OnApplicationBootstrap {
     roles?: string[],
     handoverPhotos?: string[],
     deliveredPhotos?: string[],
+    deliveryDriveUrl?: string,
   ): Promise<BookingDocument> {
     const booking = await this.bookingModel.findById(bookingIdStr);
     if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
@@ -2618,6 +2770,12 @@ export class BookingsService implements OnApplicationBootstrap {
       } else if (!isAdmin && !isProvider) {
         throw new ForbiddenException(
           'Chỉ nhà cung cấp hoặc Admin mới có quyền cập nhật trạng thái đơn hàng này.',
+        );
+      }
+
+      if (newStatus === BookingStatus.PickedUp && isProvider && !isAdmin) {
+        throw new BadRequestException(
+          'Trạng thái lấy đồ phải do Khách hàng bấm duyệt xác nhận nhận đồ trên ứng dụng.',
         );
       }
     }
@@ -2731,21 +2889,30 @@ export class BookingsService implements OnApplicationBootstrap {
         (booking as any).deliveredPhotos = deliveredPhotos;
         booking.handoverPhotos = deliveredPhotos;
       }
+      if (deliveryDriveUrl) {
+        (booking as any).deliveryDriveUrl = deliveryDriveUrl;
+      }
     }
     if (nextStatus === BookingStatus.Disputed) {
       try {
         const disputeModel = this.bookingModel.db.model('Dispute');
         const existing = await disputeModel.findOne({ bookingId: booking._id });
         if (!existing) {
-          const item = await this.bookingItemModel.findOne({ bookingId: booking._id });
+          const item = await this.bookingItemModel.findOne({
+            bookingId: booking._id,
+          });
           const providerId = booking.providerIds?.[0] || null;
           await disputeModel.create({
             bookingId: booking._id,
             bookingItemId: item?._id || new Types.ObjectId(),
-            openedBy: new Types.ObjectId(userId || booking.customerId.toString()),
+            openedBy: new Types.ObjectId(
+              userId || booking.customerId.toString(),
+            ),
             againstProviderId: providerId,
-            reason: note || 'Khách hàng gửi khiếu nại chất lượng dịch vụ/sản phẩm',
-            evidencePhotos: (booking as any).deliveredPhotos || booking.handoverPhotos || [],
+            reason:
+              note || 'Khách hàng gửi khiếu nại chất lượng dịch vụ/sản phẩm',
+            evidencePhotos:
+              (booking as any).deliveredPhotos || booking.handoverPhotos || [],
             status: 'OPEN',
           });
         }
@@ -2883,6 +3050,7 @@ export class BookingsService implements OnApplicationBootstrap {
     let isFreeCancel = true;
     let refundAmount = 0;
     let penaltyReason = '';
+    let diffInHours: number | undefined;
 
     if (isCustomer && booking.status !== BookingStatus.PendingPayment) {
       // Tìm booking items để lấy start date sớm nhất
@@ -2930,7 +3098,7 @@ export class BookingsService implements OnApplicationBootstrap {
 
       if (earliestStartTime) {
         const diffInMs = earliestStartTime.getTime() - now.getTime();
-        const diffInHours = diffInMs / (1000 * 60 * 60);
+        diffInHours = diffInMs / (1000 * 60 * 60);
 
         if (diffInHours >= cancellationPolicy.freeCancelBeforeHours) {
           isFreeCancel = true;
@@ -3013,10 +3181,34 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     let penaltyAmount = 0;
-    if (isFreeCancel) {
-      refundAmount = booking.pricingSummary?.grandTotal || 0;
+    const isNoShow = reason.includes('[KHÁCH VẮNG MẶT - NO SHOW]');
+    const depositAmt =
+      (booking as any).depositAmount ||
+      booking.pricingSummary?.depositTotal ||
+      0;
+    const grandTotal = booking.pricingSummary?.grandTotal || 0;
+
+    if (isFreeCancel && !isNoShow) {
+      refundAmount = grandTotal;
+    } else if (isNoShow || (diffInHours !== undefined && diffInHours < 12)) {
+      // < 12h or No-Show: 0% deposit refund (100% deposit compensation to provider), refund remaining balance
+      penaltyAmount = Math.min(
+        depositAmt > 0 ? depositAmt : grandTotal * 0.3,
+        grandTotal,
+      );
+      refundAmount = Math.max(0, grandTotal - penaltyAmount);
+    } else if (
+      diffInHours !== undefined &&
+      diffInHours >= 12 &&
+      diffInHours < 24
+    ) {
+      // 12h - 24h: 50% deposit refund, 50% deposit compensation to provider
+      penaltyAmount = Math.round(
+        (depositAmt > 0 ? depositAmt : grandTotal * 0.3) * 0.5,
+      );
+      refundAmount = Math.max(0, grandTotal - penaltyAmount);
     } else {
-      // Khách hủy trễ -> phạt cọc dịch vụ, hoàn cọc giữ đồ
+      // Fallback late cancel penalty
       const items = await this.bookingItemModel.find({
         bookingId: booking._id,
       });
@@ -3034,9 +3226,11 @@ export class BookingsService implements OnApplicationBootstrap {
             ) * item.quantity;
         }
       }
-
-      // Không cho phép tiền phạt vượt quá subTotal
-      penaltyAmount = Math.min(penaltyAmount, booking.pricingSummary.subTotal);
+      penaltyAmount = Math.min(
+        penaltyAmount,
+        booking.pricingSummary?.subTotal || grandTotal,
+      );
+      refundAmount = Math.max(0, grandTotal - penaltyAmount);
 
       // Chuyển khoản trực tiếp số tiền phạt này cho các Provider tương ứng
       const providerItems = new Map<string, any[]>();
@@ -3232,9 +3426,13 @@ export class BookingsService implements OnApplicationBootstrap {
           if (matchedSchedule) {
             return {
               ...item,
-              shootDate: item.shootDate || matchedSchedule.startsAt || matchedSchedule.scheduledDate,
+              shootDate:
+                item.shootDate ||
+                matchedSchedule.startsAt ||
+                matchedSchedule.scheduledDate,
               shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
-              shootLocation: item.shootLocation || matchedSchedule.locationAddress,
+              shootLocation:
+                item.shootLocation || matchedSchedule.locationAddress,
             };
           }
         }
@@ -3427,37 +3625,137 @@ export class BookingsService implements OnApplicationBootstrap {
     bookedDates: string[];
     bookedSlots: { date: string; timeSlot: string; bookingItemId: string }[];
   }> {
-    const activeBookings = await this.bookingModel
-      .find({
-        status: {
-          $nin: [
-            BookingStatus.Cancelled,
-            BookingStatus.Completed,
-            BookingStatus.Returned,
-            BookingStatus.Refunded,
-          ],
-        },
-      })
-      .select('_id');
-    const activeBookingIds = activeBookings.map((b) => b._id);
-
-    const items = await this.bookingItemModel.find({
-      bookingId: { $in: activeBookingIds },
-      providerId: new Types.ObjectId(providerId),
-      itemType: BookingItemType.PhotographyPackage,
-    });
-
     const bookedDates = new Set<string>();
-    const bookedSlots: { date: string; timeSlot: string; bookingItemId: string }[] = [];
+    const bookedSlots: {
+      date: string;
+      timeSlot: string;
+      bookingItemId: string;
+    }[] = [];
+    const now = new Date();
 
-    items.forEach((item) => {
-      if (item.shootDate && item.shootTimeSlot) {
-        const dateStr = new Date(item.shootDate).toLocaleDateString('en-CA', {
-          timeZone: 'Asia/Ho_Chi_Minh',
-        });
-        bookedSlots.push({ date: dateStr, timeSlot: item.shootTimeSlot, bookingItemId: item._id.toString() });
+    let providerObjId: Types.ObjectId | null = null;
+    if (Types.ObjectId.isValid(providerId)) {
+      providerObjId = new Types.ObjectId(providerId);
+    }
+
+    // 1. Query BookingSchedule (v2 schedules)
+    try {
+      const v2Schedules = await this.bookingScheduleModel
+        .find({
+          providerId: providerObjId || providerId,
+          scheduleType: BookingScheduleType.Photoshoot,
+          $or: [
+            { status: BookingScheduleStatus.Confirmed },
+            { status: BookingScheduleStatus.Scheduled },
+            { status: BookingScheduleStatus.Held, holdExpiresAt: { $gt: now } },
+          ],
+        })
+        .lean();
+
+      for (const schedule of v2Schedules) {
+        let dateKey = (schedule as any).providerLocalDate;
+        let slotStr = '';
+
+        if (schedule.startsAt && schedule.endsAt) {
+          const startD = new Date(schedule.startsAt);
+          const endD = new Date(schedule.endsAt);
+          if (!dateKey) {
+            dateKey = startD.toLocaleDateString('en-CA', {
+              timeZone: 'Asia/Ho_Chi_Minh',
+            });
+          }
+          const startH = String(startD.getHours()).padStart(2, '0');
+          const startM = String(startD.getMinutes()).padStart(2, '0');
+          const endH = String(endD.getHours()).padStart(2, '0');
+          const endM = String(endD.getMinutes()).padStart(2, '0');
+          slotStr = `${startH}:${startM}-${endH}:${endM}`;
+        }
+
+        if (dateKey && slotStr) {
+          bookedSlots.push({
+            date: dateKey,
+            timeSlot: slotStr,
+            bookingItemId: (
+              schedule.bookingItemId ||
+              schedule.bookingId ||
+              schedule._id
+            ).toString(),
+          });
+          bookedDates.add(dateKey);
+        }
       }
-    });
+    } catch (e) {
+      console.warn('Unable to query v2 BookingSchedules for provider:', e);
+    }
+
+    // 2. Query BookingItems (legacy / active bookings)
+    try {
+      const activeBookings = await this.bookingModel
+        .find({
+          status: {
+            $nin: [
+              BookingStatus.Cancelled,
+              BookingStatus.Completed,
+              BookingStatus.Returned,
+              BookingStatus.Refunded,
+            ],
+          },
+        })
+        .select('_id');
+      const activeBookingIds = activeBookings.map((b) => b._id);
+
+      const items = await this.bookingItemModel.find({
+        bookingId: { $in: activeBookingIds },
+        $or: [
+          ...(providerObjId ? [{ providerId: providerObjId }] : []),
+          { providerId },
+        ],
+      });
+
+      items.forEach((item) => {
+        let dateStr = '';
+        if (item.shootDate) {
+          const rawDate: any = item.shootDate;
+          if (typeof rawDate === 'string') {
+            dateStr = rawDate.slice(0, 10);
+          } else {
+            dateStr = new Date(rawDate).toLocaleDateString('en-CA', {
+              timeZone: 'Asia/Ho_Chi_Minh',
+            });
+          }
+        }
+
+        if (dateStr && item.shootTimeSlot) {
+          bookedSlots.push({
+            date: dateStr,
+            timeSlot: item.shootTimeSlot,
+            bookingItemId: item._id.toString(),
+          });
+          bookedDates.add(dateStr);
+        }
+        const req = (item as any).rescheduleRequest;
+        if (
+          req &&
+          ['PENDING', 'PROCESSING'].includes(req.status) &&
+          req.newShootDate &&
+          req.newShootTimeSlot &&
+          (!req.lockedExpiresAt || new Date(req.lockedExpiresAt) > new Date())
+        ) {
+          const reqDateStr =
+            typeof req.newShootDate === 'string'
+              ? req.newShootDate.slice(0, 10)
+              : req.newShootDate;
+          bookedSlots.push({
+            date: reqDateStr,
+            timeSlot: req.newShootTimeSlot,
+            bookingItemId: item._id.toString(),
+          });
+          bookedDates.add(reqDateStr);
+        }
+      });
+    } catch (e) {
+      console.warn('Unable to query BookingItems for provider:', e);
+    }
 
     return {
       bookedDates: Array.from(bookedDates),

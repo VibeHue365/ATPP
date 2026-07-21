@@ -13,6 +13,8 @@ export interface Dispute {
     pricingSummary?: {
       depositTotal?: number;
     };
+    deliveryDriveUrl?: string;
+    deliveredPhotos?: string[];
   };
   bookingItemId?: {
     name?: string;

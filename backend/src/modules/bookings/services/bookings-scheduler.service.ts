@@ -15,6 +15,11 @@ import {
   BookingScheduleType,
 } from '../schemas/booking-schedule.schema';
 import {
+  BookingItem,
+  BookingItemDocument,
+  BookingItemType,
+} from '../schemas/booking-item.schema';
+import {
   Booking,
   BookingDocument,
   BookingStatus,
@@ -37,6 +42,8 @@ export class BookingsSchedulerService {
     private readonly bookingScheduleModel: Model<BookingScheduleDocument>,
     @InjectModel(Booking.name)
     private readonly bookingModel: Model<BookingDocument>,
+    @InjectModel(BookingItem.name)
+    private readonly bookingItemModel: Model<BookingItemDocument>,
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
     private readonly notificationsService: NotificationsService,
@@ -338,6 +345,127 @@ export class BookingsSchedulerService {
     } catch (err) {
       this.logger.error(
         `Error sending schedule reminder for schedule ${schedule._id}:`,
+        err,
+      );
+    }
+  }
+
+  /**
+   * Auto-flag photography bookings that are overdue by > 2 hours in CONFIRMED or DEPOSIT_PAID
+   * where the photographer has NOT clicked "Bắt đầu buổi chụp".
+   * Transitions status to DISPUTED to prevent bookings from being stuck in CONFIRMED indefinitely.
+   */
+  @Cron('0 */15 * * * *')
+  async autoDisputeUnstartedPastBookings() {
+    this.logger.log(
+      'Running auto-dispute sweeper for unstarted past photography bookings...',
+    );
+    const now = new Date();
+
+    try {
+      const pendingBookings = await this.bookingModel
+        .find({
+          status: { $in: [BookingStatus.Confirmed, BookingStatus.DepositPaid] },
+        })
+        .select('_id bookingCode customerId providerIds status statusTimeline')
+        .lean();
+
+      for (const booking of pendingBookings) {
+        const photoItem = await this.bookingItemModel.findOne({
+          bookingId: booking._id,
+          itemType: BookingItemType.PhotographyPackage,
+        });
+
+        if (!photoItem || !photoItem.shootDate) continue;
+
+        let endHour = 23;
+        let endMin = 59;
+        if (photoItem.shootTimeSlot && photoItem.shootTimeSlot.includes('-')) {
+          const parts = photoItem.shootTimeSlot.split('-');
+          if (parts.length >= 2) {
+            const [h, m] = parts[1].trim().split(':').map(Number);
+            if (!isNaN(h)) {
+              endHour = h;
+              endMin = m || 0;
+            }
+          }
+        }
+
+        const shootEnd = new Date(photoItem.shootDate);
+        shootEnd.setHours(endHour, endMin, 0, 0);
+
+        // 2 hours past shootEnd time
+        const overdueDeadline = new Date(
+          shootEnd.getTime() + 2 * 60 * 60 * 1000,
+        );
+
+        if (now > overdueDeadline) {
+          const locked = await this.bookingModel.findOneAndUpdate(
+            { _id: booking._id, status: booking.status },
+            {
+              $set: {
+                status: BookingStatus.Disputed,
+              },
+              $push: {
+                statusTimeline: {
+                  status: BookingStatus.Disputed,
+                  changedAt: now,
+                  note: 'Hệ thống tự động chuyển đơn sang Tranh Chấp do Quá giờ chụp 2 tiếng mà Thợ ảnh chưa kích hoạt "Bắt đầu buổi chụp"',
+                },
+              },
+            },
+            { new: true },
+          );
+
+          if (locked) {
+            this.logger.log(
+              `Auto-flagged booking ${booking.bookingCode} as DISPUTED (2h overdue unstarted).`,
+            );
+
+            try {
+              const disputeModel = this.bookingModel.db.model('Dispute');
+              const existing = await disputeModel.findOne({
+                bookingId: booking._id,
+              });
+              if (!existing) {
+                await disputeModel.create({
+                  bookingId: booking._id,
+                  bookingItemId: photoItem._id,
+                  openedBy: booking.customerId,
+                  againstProviderId: booking.providerIds?.[0] || null,
+                  reason:
+                    'Hệ thống tự động ghi nhận khiếu nại do quá giờ chụp 2 tiếng mà Thợ ảnh chưa bắt đầu buổi chụp',
+                  evidencePhotos: [],
+                  status: 'OPEN',
+                });
+              }
+            } catch (disputeErr) {
+              this.logger.warn(
+                'Failed to create Dispute record for overdue booking:',
+                disputeErr,
+              );
+            }
+
+            try {
+              await this.notificationsService.createNotification(
+                booking.customerId.toString(),
+                'Tranh chấp tự động - Quá giờ chụp',
+                `Đơn hàng ${booking.bookingCode} đã tự động chuyển sang Tranh Chấp do quá thời gian chụp 2 tiếng. Admin sẽ hỗ trợ kiểm tra & hoàn tiền nếu có sự cố.`,
+                NotificationType.Booking,
+                { bookingId: booking._id },
+              );
+            } catch (e) {
+              this.logger.warn(
+                'Failed to send auto-dispute notification to customer',
+                e,
+              );
+            }
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.error(
+        'autoDisputeUnstartedPastBookings cron job failed:',
         err,
       );
     }

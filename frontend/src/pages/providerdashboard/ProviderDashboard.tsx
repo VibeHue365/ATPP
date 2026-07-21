@@ -3421,11 +3421,9 @@ export const ProviderDashboard: React.FC = () => {
                           <td style={{ padding: '16px 20px', textAlign: 'center', position: 'relative' }}>
                             <button onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
                             {actionMenuId === o._id && (() => {
-                              // Các bước tiếp theo hợp lệ cho từng trạng thái (khớp với backend allowedTransitions)
                               const isPhotoOrder = o.bookingType === 'PHOTOGRAPHY';
-                              const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string }[]> = isPhotoOrder
+                              const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }[]> = isPhotoOrder
                                 ? {
-                                    // ===== PHOTOGRAPHER FLOW =====
                                     PENDING_PAYMENT: [
                                       { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                     ],
@@ -3441,11 +3439,10 @@ export const ProviderDashboard: React.FC = () => {
                                       { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
                                     ],
                                     AWAITING_REVIEW: [
-                                      { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                      { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
                                     ],
                                   }
                                 : {
-                                    // ===== RENTAL FLOW (ÁO DÀI) =====
                                     PENDING_PAYMENT: [
                                       { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
                                       { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
@@ -3460,7 +3457,7 @@ export const ProviderDashboard: React.FC = () => {
                                       { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                     ],
                                     PICKUP_PENDING: [
-                                      { label: 'Xác nhận đã lấy đồ', apiStatus: 'PICKED_UP', icon: <CheckCheck size={14} />, color: '#2e7d32' },
+                                      { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
                                       { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                     ],
                                     PICKED_UP: [
@@ -3468,19 +3465,35 @@ export const ProviderDashboard: React.FC = () => {
                                       { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
                                     ],
                                     RETURN_PENDING: [
-                                      { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                      { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
                                     ],
                                     RETURNED: [
                                       { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
                                     ],
                                   };
                                const rawStatus = (o.rawStatus || '') as string;
-                               const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string }[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
+                               const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
                                const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
                                const pendingReschedule = o.items?.find((item: any) => item?.rescheduleRequest?.status === 'PENDING');
                                if (steps.length === 0 && !canReport && !pendingReschedule) return null;
                                return (
-                                 <div style={{ position: 'absolute', right: '20px', top: '40px', width: '210px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
+                                 <>
+                                   <div
+                                     onClick={(e) => { e.stopPropagation(); setActionMenuId(null); }}
+                                     style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 39, cursor: 'default' }}
+                                   />
+                                   <div style={{ position: 'absolute', right: '20px', top: '40px', width: '225px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
+                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid #EAEAE8', fontSize: '11px', fontWeight: 700, color: '#8C827A' }}>
+                                       <span>Chọn thao tác</span>
+                                       <button
+                                         type="button"
+                                         onClick={(e) => { e.stopPropagation(); setActionMenuId(null); }}
+                                         style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#8C827A', padding: '2px', display: 'flex', alignItems: 'center' }}
+                                         title="Đóng menu"
+                                       >
+                                         <X size={14} />
+                                       </button>
+                                     </div>
                                    {pendingReschedule && (
                                      <div style={{ padding: '8px 12px', borderBottom: steps.length > 0 || canReport ? '1px solid var(--color-light-border)' : 'none' }}>
                                        <div style={{ fontSize: '10px', fontWeight: 700, color: '#9A6700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Yêu cầu đổi lịch</div>
@@ -3500,9 +3513,9 @@ export const ProviderDashboard: React.FC = () => {
                                       Cập nhật trạng thái
                                     </div>
                                   )}
-                                  {steps.map((a: { label: string; apiStatus: string; icon: React.ReactNode; color: string }) => {
-                                    const isHandoverAction = a.apiStatus === 'PICKUP_PENDING' || a.apiStatus === 'PICKED_UP';
-                                    let isDisabled = false;
+                                  {steps.map((a: { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }) => {
+                                    const isHandoverAction = a.apiStatus === 'PICKUP_PENDING';
+                                    let isDisabled = !!a.disabled;
                                     if (isHandoverAction) {
                                       const firstItem = o.items?.[0];
                                       const startDateStr = firstItem?.startDate || firstItem?.rentalFrom;
@@ -3519,18 +3532,18 @@ export const ProviderDashboard: React.FC = () => {
                                     }
                                     return (
                                       <button
-                                        key={a.apiStatus}
+                                        key={a.apiStatus || a.label}
                                         disabled={isDisabled}
-                                        onClick={() => changeOrderStatus(o._id, a.apiStatus)}
+                                        onClick={() => !isDisabled && a.apiStatus && changeOrderStatus(o._id, a.apiStatus)}
                                         style={{
                                           width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
                                           fontSize: '12px', border: 'none', background: 'none',
                                           cursor: isDisabled ? 'not-allowed' : 'pointer',
-                                          color: isDisabled ? '#CCCCCC' : a.color,
-                                          opacity: isDisabled ? 0.6 : 1,
+                                          color: isDisabled ? (a.disabled ? a.color : '#CCCCCC') : a.color,
+                                          opacity: isDisabled ? 0.85 : 1,
                                           fontWeight: 600, textAlign: 'left',
                                         }}
-                                        title={isDisabled ? "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)" : ""}
+                                        title={isDisabled ? (a.disabled ? a.label : "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)") : ""}
                                       >
                                         {a.icon} {a.label}
                                       </button>
@@ -3552,7 +3565,8 @@ export const ProviderDashboard: React.FC = () => {
                                     }}><Flag size={14} /> Báo cáo hỏng đồ</button>
                                   )}
                                 </div>
-                              );
+                              </>
+                            );
                             })()}
                           </td>
                         </tr>
