@@ -2256,7 +2256,34 @@ export class BookingsService implements OnApplicationBootstrap {
         .populate('providerId')
         .lean()
         .exec();
-      results.push({ ...booking.toObject(), items });
+
+      const schedules = await this.bookingModel.db
+        .model('BookingSchedule')
+        .find({ bookingId: booking._id })
+        .lean()
+        .exec();
+
+      const updatedItems = items.map((item) => {
+        if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
+          const matchedSchedule = schedules.find(
+            (s: any) =>
+              s.scheduleType === 'PHOTOSHOOT' &&
+              s.status !== 'CANCELLED' &&
+              s.status !== 'EXPIRED',
+          ) as any;
+          if (matchedSchedule) {
+            return {
+              ...item,
+              shootDate: item.shootDate || matchedSchedule.startsAt || matchedSchedule.scheduledDate,
+              shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+              shootLocation: item.shootLocation || matchedSchedule.locationAddress,
+            };
+          }
+        }
+        return item;
+      });
+
+      results.push({ ...booking.toObject(), items: updatedItems, schedules });
     }
     return results;
   }
@@ -2291,8 +2318,38 @@ export class BookingsService implements OnApplicationBootstrap {
           .lean()
           .exec()
       : [];
-    const itemsByBooking = new Map<string, typeof items>();
-    for (const item of items) {
+
+    const schedules = bookingIds.length
+      ? await this.bookingModel.db
+          .model('BookingSchedule')
+          .find({ bookingId: { $in: bookingIds } })
+          .lean()
+          .exec()
+      : [];
+
+    const updatedItems = items.map((item) => {
+      if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
+        const matchedSchedule = schedules.find(
+          (s: any) =>
+            s.bookingId.toString() === item.bookingId.toString() &&
+            s.scheduleType === 'PHOTOSHOOT' &&
+            s.status !== 'CANCELLED' &&
+            s.status !== 'EXPIRED',
+        ) as any;
+        if (matchedSchedule) {
+          return {
+            ...item,
+            shootDate: item.shootDate || matchedSchedule.startsAt || matchedSchedule.scheduledDate,
+            shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+            shootLocation: item.shootLocation || matchedSchedule.locationAddress,
+          };
+        }
+      }
+      return item;
+    });
+
+    const itemsByBooking = new Map<string, typeof updatedItems>();
+    for (const item of updatedItems) {
       const key = item.bookingId.toString();
       const grouped = itemsByBooking.get(key) || [];
       grouped.push(item);
@@ -2340,12 +2397,34 @@ export class BookingsService implements OnApplicationBootstrap {
     const items = await this.bookingItemModel
       .find({ bookingId })
       .populate('productId')
-      .populate('photographyPackageId');
+      .populate('photographyPackageId')
+      .lean()
+      .exec();
     const schedules = await this.bookingScheduleModel
       .find({ bookingId, scheduleType: BookingScheduleType.Photoshoot })
       .sort({ startsAt: 1 })
       .lean()
       .exec();
+
+    const updatedItems = items.map((item) => {
+      if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
+        const matchedSchedule = schedules.find(
+          (s: any) =>
+            s.scheduleType === 'PHOTOSHOOT' &&
+            s.status !== 'CANCELLED' &&
+            s.status !== 'EXPIRED',
+        ) as any;
+        if (matchedSchedule) {
+          return {
+            ...item,
+            shootDate: item.shootDate || matchedSchedule.startsAt || matchedSchedule.scheduledDate,
+            shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+            shootLocation: item.shootLocation || matchedSchedule.locationAddress,
+          };
+        }
+      }
+      return item;
+    });
 
     const bookingObj = booking.toObject();
     const customerUser = booking.customerId as any;
@@ -2355,7 +2434,8 @@ export class BookingsService implements OnApplicationBootstrap {
       customerName: customerUser?.profile?.fullName || '',
       customerPhone: customerUser?.auth?.phone || '',
       customerEmail: customerUser?.auth?.email || '',
-      items,
+      items: updatedItems,
+      schedules,
     };
   }
 
@@ -3081,11 +3161,40 @@ export class BookingsService implements OnApplicationBootstrap {
           populate: { path: 'providerId' },
         })
         .populate('photographyPackageId')
-        .populate('providerId');
+        .populate('providerId')
+        .lean()
+        .exec();
+
+      const schedules = await this.bookingModel.db
+        .model('BookingSchedule')
+        .find({ bookingId: booking._id })
+        .lean()
+        .exec();
+
+      const updatedItems = items.map((item) => {
+        if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
+          const matchedSchedule = schedules.find(
+            (s: any) =>
+              s.scheduleType === 'PHOTOSHOOT' &&
+              s.status !== 'CANCELLED' &&
+              s.status !== 'EXPIRED',
+          ) as any;
+          if (matchedSchedule) {
+            return {
+              ...item,
+              shootDate: item.shootDate || matchedSchedule.startsAt || matchedSchedule.scheduledDate,
+              shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+              shootLocation: item.shootLocation || matchedSchedule.locationAddress,
+            };
+          }
+        }
+        return item;
+      });
 
       populatedBookings.push({
         ...booking.toObject(),
-        items: items.map((item) => item.toObject()),
+        items: updatedItems,
+        schedules,
       });
     }
 

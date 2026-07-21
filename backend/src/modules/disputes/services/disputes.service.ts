@@ -887,6 +887,7 @@ export class DisputesService {
           notes,
           adminUserId,
         );
+      } else {
         await this.settlementsService.releaseSettlementsForBooking(
           booking._id.toString(),
           notes,
