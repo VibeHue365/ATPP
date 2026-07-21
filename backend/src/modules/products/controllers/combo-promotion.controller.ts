@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Delete,
+  Patch,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -18,6 +20,7 @@ import {
   CreateComboPromotionDto,
   UpdateComboPromotionDto,
 } from '../services/combo-promotion.service';
+import { ComboPromotionStatus } from '../schemas/combo-promotion.schema';
 import {
   Provider,
   ProviderCapability,
@@ -64,6 +67,20 @@ export class ComboPromotionController {
   @Get('public')
   async getPublicCombos() {
     return this.comboService.findActivePublic();
+  }
+
+  @Get('admin/all')
+  @UseGuards(JwtAuthGuard)
+  async getAllForAdmin(@CurrentUser() user: AuthUser) {
+    if (!user.roles?.some((role) => role.toUpperCase() === 'ADMIN')) throw new ForbiddenException('Admin only');
+    return this.comboService.findAllForAdmin();
+  }
+
+  @Patch('admin/:id/moderation')
+  @UseGuards(JwtAuthGuard)
+  async moderate(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { status: 'ACTIVE' | 'REJECTED' }) {
+    if (!user.roles?.some((role) => role.toUpperCase() === 'ADMIN')) throw new ForbiddenException('Admin only');
+    return this.comboService.moderate(id, body.status === 'ACTIVE' ? ComboPromotionStatus.Active : ComboPromotionStatus.Rejected);
   }
 
   @Get(':id')

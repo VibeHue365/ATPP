@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
   HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, Trash2, Play, Pencil, Copy, Package, Eye,
-  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck, Clock, ShieldCheck, AlertTriangle
+  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck, Clock, ShieldCheck, AlertTriangle, Sparkles
 } from 'lucide-react';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 import Swal from 'sweetalert2';
@@ -36,6 +36,7 @@ interface Order {
   items?: any[];
   depositTotal?: number;
   rawStatus?: string;
+  bookingType?: 'AODAI_RENTAL' | 'PHOTOGRAPHY' | 'COMBO' | string;
   pickupDamageReport?: {
     reportedAt: string;
     description: string;
@@ -97,11 +98,12 @@ export const ProviderDashboard: React.FC = () => {
   }, [user, isAuthenticated, navigate, toast]);
 
   // Views navigation state
-  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'photography-packages' | 'calendar' | 'vouchers' | 'inventory' | 'reviews' | 'trust' | 'analytics' | 'payouts' | 'rental-operations'>('analytics');
+  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'photography-packages' | 'calendar' | 'vouchers' | 'inventory' | 'reviews' | 'trust' | 'analytics' | 'payouts' | 'rental-operations' | 'role-management'>('analytics');
   const [collectionTab, setCollectionTab] = useState<'products' | 'inventory'>('products');
 
   // Provider Specific States
   const [provider, setProvider] = useState<any>(null);
+  const providerDataLoadedRef = useRef(false);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
   const [isPortfolioFormOpen, setIsPortfolioFormOpen] = useState(false);
@@ -356,48 +358,32 @@ export const ProviderDashboard: React.FC = () => {
       setPickupLatitude(pRes.rentalSettings?.pickupLocation?.geo?.coordinates?.[1]?.toString() ?? '');
       setPickupLongitude(pRes.rentalSettings?.pickupLocation?.geo?.coordinates?.[0]?.toString() ?? '');
 
-      if (Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY')) {
-        const portfolioRes: any = await httpClient.get('/providers/me/portfolio-items');
-        setPortfolioItems(Array.isArray(portfolioRes) ? portfolioRes : []);
-
-        const packagesRes: any = await httpClient.get('/providers/me/photography-packages');
-        setPhotoPackages(Array.isArray(packagesRes) ? packagesRes : []);
-      } else {
-        setPortfolioItems([]);
-        setPhotoPackages([]);
-      }
-
+      const hasPhotography = Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY');
       const hasAodai = Array.isArray(pRes.capabilities) && (pRes.capabilities.includes('AODAI_RENTAL') || pRes.capabilities.includes('RENTAL'));
-      if (hasAodai) {
-        const productsRes: any = await httpClient.get('/products/my-listings?limit=999');
-        setMyProductsList(productsRes?.items || []);
+      const [portfolioRes, packagesRes, productsRes, summary, combosRes, schedulesRes, vouchersRes, reviewsRes, bookingsRes, analyticsRes] = await Promise.all([
+        hasPhotography ? httpClient.get('/providers/me/portfolio-items') : Promise.resolve([]),
+        hasPhotography ? httpClient.get('/providers/me/photography-packages') : Promise.resolve([]),
+        hasAodai ? httpClient.get('/products/my-listings?limit=200') : Promise.resolve({ items: [] }),
+        hasAodai ? httpClient.get('/inventory/summary') : Promise.resolve([]),
+        hasAodai && hasPhotography ? httpClient.get('/combo-promotions/my') : Promise.resolve([]),
+        httpClient.get('/providers/me/schedules'),
+        httpClient.get('/promotions/provider'),
+        httpClient.get('/reviews/stats'),
+        httpClient.get('/bookings/provider'),
+        httpClient.get('/providers/me/analytics'),
+      ]) as any[];
 
-        // Load inventory summary so combo form can show Ao Dai stock
-        const summary: any = await httpClient.get('/inventory/summary');
-        setInventorySummary(summary || []);
-      }
-
-      if (hasAodai && Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY')) {
-        const combosRes: any = await httpClient.get('/combo-promotions/my');
-        setCombos(Array.isArray(combosRes) ? combosRes : []);
-      } else {
-        setCombos([]);
-      }
-
-      const sRes: any = await httpClient.get('/providers/me/schedules');
-      setSchedules(sRes);
-
-      const vRes: any = await httpClient.get('/promotions/provider');
-      setVouchers(vRes);
-
-      const rRes: any = await httpClient.get('/reviews/stats');
-      setReviewsData(rRes);
-
-      const bRes: any = await httpClient.get('/bookings/provider');
-      setBookingsState(bRes);
-
-      const aRes: any = await httpClient.get('/providers/me/analytics');
-      setAnalyticsData(aRes);
+      setPortfolioItems(Array.isArray(portfolioRes) ? portfolioRes : []);
+      setPhotoPackages(Array.isArray(packagesRes) ? packagesRes : []);
+      setMyProductsList(productsRes?.items || []);
+      setInventorySummary(Array.isArray(summary) ? summary : []);
+      setCombos(Array.isArray(combosRes) ? combosRes : []);
+      setSchedules(Array.isArray(schedulesRes) ? schedulesRes : []);
+      setVouchers(Array.isArray(vouchersRes) ? vouchersRes : []);
+      setReviewsData(reviewsRes);
+      setBookingsState(Array.isArray(bookingsRes) ? bookingsRes : []);
+      setAnalyticsData(analyticsRes);
+      providerDataLoadedRef.current = true;
     } catch (err: any) {
       const msg = err.message || 'Không thể đồng bộ dữ liệu đối tác';
       toast.error(msg);
@@ -1130,6 +1116,7 @@ export const ProviderDashboard: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [orderTab, setOrderTab] = useState('Tất cả');
+  const [bookingTypeFilter, setBookingTypeFilter] = useState('Tất cả');
   const [activePage, setActivePage] = useState(1);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
 
@@ -1207,8 +1194,7 @@ export const ProviderDashboard: React.FC = () => {
         const custName = cust?.profile?.fullName || cust?.email?.split('@')[0] || 'Khách hàng';
         const custEmail = cust?.email || '';
         const initials = custName.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
-        const firstItem = b.items?.[0];
-        const productName = firstItem?.name || firstItem?.productId?.name || firstItem?.photographyPackageId?.name || 'Sản phẩm thuê';
+        const productName = (b.items || []).map((item: any) => item?.name || item?.productId?.name || item?.photographyPackageId?.name).filter(Boolean).join(' + ') || 'Sản phẩm thuê';
         const dateStr = b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : '';
 
         let totalAmt = 0;
@@ -1250,6 +1236,7 @@ export const ProviderDashboard: React.FC = () => {
           items: b.items,
           depositTotal: b.pricingSummary?.depositTotal || 0,
           rawStatus: b.status,
+          bookingType: b.bookingType,
         };
       });
       setOrders(mapped);
@@ -1395,7 +1382,7 @@ export const ProviderDashboard: React.FC = () => {
       fetchPayouts();
     } else if (currentView === 'inventory') {
       fetchInventoryData();
-    } else if (['profile', 'portfolio', 'calendar', 'vouchers', 'reviews', 'trust', 'analytics'].includes(currentView)) {
+    } else if (['profile', 'portfolio', 'calendar', 'vouchers', 'reviews', 'trust', 'analytics', 'role-management'].includes(currentView)) {
       fetchProviderData();
     }
   }, [currentView]);
@@ -1955,9 +1942,11 @@ export const ProviderDashboard: React.FC = () => {
     { label: 'Đã hủy', count: orders.filter(o => getOrderGroup(o.status) === 'Đã hủy').length },
   ], [orders]);
 
-  const filteredOrders = orderTab === 'Tất cả'
-    ? orders
-    : orders.filter(o => getOrderGroup(o.status) === orderTab);
+  const filteredOrders = orders.filter((order) => {
+    const matchesStatus = orderTab === 'Tất cả' || getOrderGroup(order.status) === orderTab;
+    const matchesType = bookingTypeFilter === 'Tất cả' || order.bookingType === bookingTypeFilter;
+    return matchesStatus && matchesType;
+  });
 
   const rentalOperationItems = React.useMemo(() => orders.flatMap((order) =>
     (order.items || [])
@@ -1997,7 +1986,6 @@ export const ProviderDashboard: React.FC = () => {
     display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', fontSize: '14px', fontWeight: 600,
     color: active ? 'var(--color-primary)' : 'rgba(255,255,255,0.5)', textDecoration: 'none', borderRadius: '8px',
     backgroundColor: active ? 'rgba(255,255,255,0.06)' : 'transparent', transition: 'var(--transition-smooth)', cursor: 'pointer',
-    borderRight: active ? '2px solid var(--color-primary)' : 'none',
     textAlign: 'left',
     width: '100%',
     border: 'none',
@@ -2176,6 +2164,35 @@ export const ProviderDashboard: React.FC = () => {
       toast.error(err.message || 'Cập nhật trạng thái thất bại');
     }
     setActionMenuId(null);
+  };
+
+  const resolveRescheduleRequest = async (order: Order, item: any, approved: boolean) => {
+    const result = await Swal.fire({
+      title: approved ? 'Duyệt yêu cầu đổi lịch?' : 'Từ chối yêu cầu đổi lịch?',
+      text: approved
+        ? 'Lịch chỉ được cập nhật nếu thời gian đề xuất vẫn còn trống tại thời điểm duyệt.'
+        : 'Bạn có thể ghi chú để khách hiểu lý do từ chối.',
+      input: 'textarea',
+      inputLabel: approved ? 'Ghi chú cho khách (không bắt buộc)' : 'Lý do từ chối (không bắt buộc)',
+      inputPlaceholder: 'Nhập ghi chú...',
+      showCancelButton: true,
+      confirmButtonText: approved ? 'Duyệt đổi lịch' : 'Từ chối yêu cầu',
+      cancelButtonText: 'Hủy',
+      confirmButtonColor: approved ? '#1E7A46' : '#C0392B',
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      await httpClient.patch(`/bookings/${order._id}/items/${item._id}/reschedule-requests/resolve`, {
+        approved,
+        note: typeof result.value === 'string' && result.value.trim() ? result.value.trim() : undefined,
+      });
+      toast.success(approved ? 'Đã duyệt yêu cầu đổi lịch.' : 'Đã từ chối yêu cầu đổi lịch.');
+      setActionMenuId(null);
+      await fetchOrders();
+    } catch (error: any) {
+      toast.error(error?.message || 'Không thể xử lý yêu cầu đổi lịch.');
+    }
   };
 
   const handleLogoutClick = async () => {
@@ -2805,6 +2822,8 @@ export const ProviderDashboard: React.FC = () => {
             <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi</button>
             <button onClick={() => setCurrentView('trust')} style={navItemStyle(currentView === 'trust')}><Users size={18} /> Đánh giá khách hàng</button>
             <button onClick={() => setCurrentView('payouts')} style={navItemStyle(currentView === 'payouts')}><DollarSign size={18} /> Lịch sử quyết toán</button>
+            <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
+            <button onClick={() => setCurrentView('role-management')} style={navItemStyle(currentView === 'role-management')}><ShieldCheck size={18} /> Quản lý vai trò</button>
           </nav>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
@@ -3027,6 +3046,17 @@ export const ProviderDashboard: React.FC = () => {
                     }}>{t.label} ({t.count})</button>
                   ))}
                 </div>
+<div style={{ borderTop: '1px dashed var(--color-light-border)', paddingTop: '16px', marginTop: '16px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '12px' }}>Loại đơn hàng:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {[
+                      { label: 'Tất cả', type: 'Tất cả', count: orders.length },
+                      { label: 'Áo dài', type: 'AODAI_RENTAL', count: orders.filter(o => o.bookingType === 'AODAI_RENTAL').length },
+                      { label: 'Thợ chụp', type: 'PHOTOGRAPHY', count: orders.filter(o => o.bookingType === 'PHOTOGRAPHY').length },
+                      { label: 'Combo', type: 'COMBO', count: orders.filter(o => o.bookingType === 'COMBO').length },
+                    ].map(t => <button key={t.type} onClick={() => setBookingTypeFilter(t.type)} style={{ padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: bookingTypeFilter === t.type ? 'var(--color-primary)' : 'var(--color-light-bg)', color: bookingTypeFilter === t.type ? 'white' : 'var(--color-text-secondary)' }}>{t.label} ({t.count})</button>)}
+                  </div>
+                </div>
               </div>
               <div style={{
                 backgroundColor: 'var(--color-primary-trans)', border: '1px solid rgba(161,30,34,0.12)', borderRadius: 'var(--radius-md)',
@@ -3126,13 +3156,28 @@ export const ProviderDashboard: React.FC = () => {
                                   { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
                                 ],
                               };
-                              const rawStatus = (o.rawStatus || '') as string;
-                              const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string }[] = nextStepsMap[rawStatus] || [];
-                              const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
-                              if (steps.length === 0 && !canReport) return null;
-                              return (
-                                <div style={{ position: 'absolute', right: '20px', top: '40px', width: '210px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
-                                  {steps.length > 0 && (
+                               const rawStatus = (o.rawStatus || '') as string;
+                               const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string }[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
+                               const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
+                               const pendingReschedule = o.items?.find((item: any) => item?.rescheduleRequest?.status === 'PENDING');
+                               if (steps.length === 0 && !canReport && !pendingReschedule) return null;
+                               return (
+                                 <div style={{ position: 'absolute', right: '20px', top: '40px', width: '210px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
+                                   {pendingReschedule && (
+                                     <div style={{ padding: '8px 12px', borderBottom: steps.length > 0 || canReport ? '1px solid var(--color-light-border)' : 'none' }}>
+                                       <div style={{ fontSize: '10px', fontWeight: 700, color: '#9A6700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Yêu cầu đổi lịch</div>
+                                       <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', lineHeight: 1.4, marginBottom: '7px' }}>
+                                         {pendingReschedule.rescheduleRequest.newShootDate
+                                           ? `${pendingReschedule.rescheduleRequest.newShootDate} • ${pendingReschedule.rescheduleRequest.newShootTimeSlot}`
+                                           : `${new Date(pendingReschedule.rescheduleRequest.newRentalFrom).toLocaleDateString('vi-VN')} - ${new Date(pendingReschedule.rescheduleRequest.newRentalTo).toLocaleDateString('vi-VN')}`}
+                                       </div>
+                                       <div style={{ display: 'flex', gap: '6px' }}>
+                                          <button type={'button'} onClick={() => void resolveRescheduleRequest(o, pendingReschedule, true)} style={{ flex: 1, border: 'none', borderRadius: '5px', padding: '6px', background: '#E8F5E9', color: '#1E7A46', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Duyệt</button>
+                                          <button type={'button'} onClick={() => void resolveRescheduleRequest(o, pendingReschedule, false)} style={{ flex: 1, border: 'none', borderRadius: '5px', padding: '6px', background: '#FDECEC', color: '#C0392B', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Từ chối</button>
+                                       </div>
+                                     </div>
+                                   )}
+                                   {steps.length > 0 && (
                                     <div style={{ padding: '6px 12px 2px', fontSize: '10px', fontWeight: 700, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                       Cập nhật trạng thái
                                     </div>
@@ -4612,10 +4657,10 @@ export const ProviderDashboard: React.FC = () => {
                         <div key={booking._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'white' }}>
                           <div>
                             <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>{booking.bookingCode}</strong>
-                            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>Mã khách hàng: {booking.customerId}</p>
+                            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>Mã khách hàng: {booking.customerId?._id || booking.customerId?.id || String(booking.customerId || '—')}</p>
                           </div>
                           <button
-                            onClick={() => setRatingBooking({ bookingId: booking._id, customerId: booking.customerId })}
+                            onClick={() => setRatingBooking({ bookingId: booking._id, customerId: booking.customerId?._id || booking.customerId?.id || String(booking.customerId || '') })}
                             style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
                           >
                             Đánh giá khách hàng
@@ -4709,7 +4754,7 @@ export const ProviderDashboard: React.FC = () => {
                         <tbody>
                           {payouts.map((p: any) => (
                             <tr
-                              key={p.id}
+                              key={p._id || p.settlementCode}
                               onClick={() => {
                                 const bId = p.bookingId?._id || p.bookingId;
                                 if (bId) {
@@ -4720,9 +4765,9 @@ export const ProviderDashboard: React.FC = () => {
                               style={{ borderBottom: '1px solid var(--color-light-border)', cursor: 'pointer' }}
                               className="hover:bg-stone-50 transition"
                             >
-                              <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.id}</td>
-                              <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingCode || '—'}</td>
-                              <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.amount || 0).toLocaleString('vi-VN')}đ</td>
+                              <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.settlementCode || p.id}</td>
+                              <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingId?.bookingCode || p.bookingCode || '—'}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.payableAmount ?? p.netAmount ?? p.amount ?? 0).toLocaleString('vi-VN')}đ</td>
                               <td style={{ padding: '16px 20px' }}>
                                 <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{p.bank}</span>
                                 <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{p.account} • {p.accountHolder}</span>
@@ -4736,7 +4781,7 @@ export const ProviderDashboard: React.FC = () => {
                                   {p.status === 'SUCCESS' ? 'Thành công' : p.status === 'PENDING' ? 'Đang xử lý' : 'Thất bại'}
                                 </span>
                               </td>
-                              <td style={{ padding: '16px 20px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>{p.date}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>{new Date(p.settledAt || p.createdAt || p.date).toLocaleDateString('vi-VN')}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -4750,6 +4795,168 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {/* Footer */}
+        {/* ==================== ROLE MANAGEMENT VIEW ==================== */}
+        {currentView === 'role-management' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý vai trò dịch vụ</h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Xem và quản lý các loại dịch vụ bạn đang cung cấp. Bạn có thể đăng ký thêm vai trò mới để mở rộng kinh doanh.</p>
+              </div>
+            </div>
+
+            {isLoadingProvider ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải dữ liệu...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Current Capabilities */}
+                <div style={{ background: 'var(--color-light-card)', borderRadius: '16px', border: '1px solid var(--color-light-border)', padding: '28px' }}>
+                  <h3 style={{ fontFamily: 'var(--font-header)', fontSize: '18px', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <ShieldCheck size={20} style={{ color: 'var(--color-primary)' }} />
+                    Vai trò hiện tại
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                    {/* AODAI_RENTAL capability card */}
+                    {(() => {
+                      const hasAodai = hasAodaiCapability;
+                      const hasPhoto = hasPhotographyCapability;
+                      const allCapabilities = [
+                        {
+                          key: 'AODAI_RENTAL',
+                          label: 'Cho thuê Áo dài',
+                          description: 'Quản lý cửa hàng áo dài, bộ sưu tập sản phẩm, tồn kho và đơn hàng cho thuê.',
+                          icon: <Layers size={24} />,
+                          active: hasAodai,
+                          gradient: 'linear-gradient(135deg, #FDF2F8 0%, #FCE7F3 100%)',
+                          borderColor: '#F9A8D4',
+                          iconBg: '#FBD5E8',
+                          iconColor: '#BE185D',
+                        },
+                        {
+                          key: 'PHOTOGRAPHY',
+                          label: 'Thợ chụp ảnh',
+                          description: 'Quản lý portfolio ảnh, tạo các gói chụp ảnh chuyên nghiệp và nhận đơn đặt lịch.',
+                          icon: <Camera size={24} />,
+                          active: hasPhoto,
+                          gradient: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+                          borderColor: '#93C5FD',
+                          iconBg: '#BFDBFE',
+                          iconColor: '#1D4ED8',
+                        },
+                      ];
+                      return allCapabilities.map((cap) => (
+                        <div key={cap.key} style={{
+                          background: cap.active ? cap.gradient : '#F9FAFB',
+                          borderRadius: '14px',
+                          border: `2px solid ${cap.active ? cap.borderColor : '#E5E7EB'}`,
+                          padding: '24px',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          opacity: cap.active ? 1 : 0.65,
+                          transition: 'all 0.3s ease',
+                        }}>
+                          {cap.active && (
+                            <div style={{
+                              position: 'absolute', top: '12px', right: '12px',
+                              background: '#10B981', color: 'white',
+                              borderRadius: '20px', padding: '3px 12px', fontSize: '11px', fontWeight: 700,
+                              display: 'flex', alignItems: 'center', gap: '4px',
+                            }}>
+                              <CheckCircle size={12} /> Đang hoạt động
+                            </div>
+                          )}
+                          <div style={{
+                            width: '48px', height: '48px', borderRadius: '12px',
+                            background: cap.active ? cap.iconBg : '#E5E7EB',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: cap.active ? cap.iconColor : '#9CA3AF',
+                            marginBottom: '16px',
+                          }}>
+                            {cap.icon}
+                          </div>
+                          <h4 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 6px 0', color: cap.active ? 'var(--color-text-primary)' : '#9CA3AF' }}>{cap.label}</h4>
+                          <p style={{ fontSize: '13px', color: cap.active ? 'var(--color-text-secondary)' : '#D1D5DB', margin: 0, lineHeight: '1.5' }}>{cap.description}</p>
+                          {!cap.active && (
+                            <button
+                              onClick={() => navigate(`/provider/register?upgrade=${cap.key}`)}
+                              style={{
+                                marginTop: '16px', width: '100%', padding: '10px 16px',
+                                background: 'var(--color-primary)', color: 'white',
+                                border: 'none', borderRadius: '10px', fontWeight: 700,
+                                fontSize: '13px', cursor: 'pointer', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', gap: '8px',
+                                transition: 'all 0.2s ease',
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(184,144,71,0.3)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                            >
+                              <Plus size={16} /> Đăng ký thêm vai trò này
+                            </button>
+                          )}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+
+                {/* Benefits info */}
+                <div style={{ background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)', borderRadius: '16px', border: '1px solid #FDE68A', padding: '24px' }}>
+                  <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Sparkles size={18} style={{ color: '#D97706' }} />
+                    Lợi ích khi kết hợp nhiều vai trò
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                    {[
+                      { icon: '📦', text: 'Tạo combo ưu đãi "Áo dài + Chụp ảnh" thu hút khách hàng' },
+                      { icon: '💰', text: 'Tăng doanh thu từ đa nguồn dịch vụ trên cùng một nền tảng' },
+                      { icon: '⭐', text: 'Nâng cao uy tín thương hiệu với portfolio đa dạng' },
+                      { icon: '🎯', text: 'Được đề xuất ưu tiên trong kết quả tìm kiếm' },
+                    ].map((item, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '13px', color: '#78350F', lineHeight: '1.5' }}>
+                        <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.icon}</span>
+                        <span>{item.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* How it works */}
+                <div style={{ background: 'var(--color-light-card)', borderRadius: '16px', border: '1px solid var(--color-light-border)', padding: '28px' }}>
+                  <h3 style={{ fontFamily: 'var(--font-header)', fontSize: '16px', fontWeight: 700, marginBottom: '16px', color: 'var(--color-text-primary)' }}>
+                    Quy trình đăng ký thêm vai trò
+                  </h3>
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    {[
+                      { step: '1', title: 'Chọn vai trò', desc: 'Bấm nút "Đăng ký thêm" ở vai trò bạn muốn' },
+                      { step: '2', title: 'Bổ sung hồ sơ', desc: 'Điền thông tin nghiệp vụ và tải tài liệu cần thiết' },
+                      { step: '3', title: 'Chờ phê duyệt', desc: 'Admin sẽ xét duyệt hồ sơ trong 1-3 ngày làm việc' },
+                      { step: '4', title: 'Bắt đầu hoạt động', desc: 'Vai trò mới được kích hoạt sau khi phê duyệt' },
+                    ].map((s, idx) => (
+                      <div key={idx} style={{
+                        flex: '1 1 200px', display: 'flex', gap: '12px', alignItems: 'flex-start',
+                        padding: '16px', borderRadius: '12px', background: '#F9FAFB',
+                      }}>
+                        <div style={{
+                          width: '28px', height: '28px', borderRadius: '50%',
+                          background: 'var(--color-primary)', color: 'white',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '13px', fontWeight: 800, flexShrink: 0,
+                        }}>
+                          {s.step}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '2px' }}>{s.title}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: '1.4' }}>{s.desc}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+        )}
+
         <footer style={{ borderTop: '1px solid var(--color-light-border)', padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
             <CheckCircle size={14} style={{ color: 'var(--color-primary)' }} />

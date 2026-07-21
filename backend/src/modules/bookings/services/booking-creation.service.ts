@@ -819,8 +819,8 @@ export class BookingCreationService {
       try {
         await this.notificationsService.createNotification(
           customerId.toString(),
-          `Đặt lịch thành công`,
-          `Đơn đặt lịch ${bookingCode} đã được khởi tạo thành công và đang chờ thanh toán cọc.`,
+          `Đơn đang chờ thanh toán`,
+          `Đơn đặt lịch ${bookingCode} đã được giữ tạm thời. Vui lòng hoàn tất thanh toán để xác nhận lịch.`,
           NotificationType.Booking,
           { bookingId: booking._id },
         );

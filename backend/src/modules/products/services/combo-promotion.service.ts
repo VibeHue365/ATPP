@@ -205,9 +205,19 @@ export class ComboPromotionService {
       aoDaiQuantity: dto.aoDaiQuantity || 1,
       shootPeopleCount: dto.shootPeopleCount || 1,
       usedCount: 0,
-      status: ComboPromotionStatus.Active,
+      status: ComboPromotionStatus.PendingReview,
       image: dto.image || null,
     });
+  }
+
+  async findAllForAdmin(): Promise<ComboPromotionDocument[]> {
+    return this.comboModel.find().populate('providerId', 'businessName').populate('productId', 'name images basePrice').populate('photographyPackageId', 'name price').sort({ createdAt: -1 });
+  }
+
+  async moderate(id: string, status: ComboPromotionStatus.Active | ComboPromotionStatus.Rejected): Promise<ComboPromotionDocument> {
+    const combo = await this.comboModel.findByIdAndUpdate(id, { status }, { new: true }).populate('providerId', 'businessName').populate('productId', 'name images basePrice').populate('photographyPackageId', 'name price');
+    if (!combo) throw new NotFoundException('Không tìm thấy combo');
+    return combo;
   }
 
   async findByProvider(providerIdStr: string): Promise<ComboPromotionDocument[]> {
@@ -225,7 +235,7 @@ export class ComboPromotionService {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     return this.comboModel
       .find({
-        status: ComboPromotionStatus.Active,
+        status: ComboPromotionStatus.PendingReview,
         validTo: { $gte: todayStart },
       })
       .populate('productId', 'name images basePrice slug depositAmount')
@@ -277,7 +287,8 @@ export class ComboPromotionService {
     if (dto.maxUsage !== undefined) updateData.maxUsage = dto.maxUsage;
     if (dto.aoDaiQuantity !== undefined) updateData.aoDaiQuantity = dto.aoDaiQuantity;
     if (dto.shootPeopleCount !== undefined) updateData.shootPeopleCount = dto.shootPeopleCount;
-    if (dto.status !== undefined) updateData.status = dto.status;
+    if (dto.status !== undefined && [ComboPromotionStatus.Inactive, ComboPromotionStatus.PendingReview].includes(dto.status)) updateData.status = dto.status;
+    if (Object.keys(updateData).some((key) => key !== 'status')) updateData.status = ComboPromotionStatus.PendingReview;
     if (dto.image !== undefined) updateData.image = dto.image;
 
     const updated = await this.comboModel

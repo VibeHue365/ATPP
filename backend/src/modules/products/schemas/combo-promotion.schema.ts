@@ -4,9 +4,11 @@ import { HydratedDocument, Types } from 'mongoose';
 export type ComboPromotionDocument = HydratedDocument<ComboPromotion>;
 
 export enum ComboPromotionStatus {
+  PendingReview = 'PENDING_REVIEW',
   Active = 'ACTIVE',
   Inactive = 'INACTIVE',
   Expired = 'EXPIRED',
+  Rejected = 'REJECTED',
 }
 
 @Schema({ collection: 'combo_promotions', timestamps: true })

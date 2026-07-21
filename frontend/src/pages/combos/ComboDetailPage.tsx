@@ -53,7 +53,11 @@ interface ComboDetail {
   providerId: {
     _id: string;
     businessName: string;
-    address?: { addressLine: string; city: string };
+    address?: {
+      addressLine: string;
+      city: string;
+      geo?: { type: 'Point'; coordinates: [number, number] } | null;
+    };
     rating?: { averageRating: number; totalReviews: number };
     contact?: { phone: string; email: string };
   };
@@ -240,6 +244,8 @@ export const ComboDetailPage: React.FC = () => {
       shootDate: shootDate,
       shootTimeSlot: comboTimeSlot,
       shootLocation: provider.address?.addressLine || '',
+      shootLocationLatitude: provider.address?.geo?.coordinates?.[1] ?? null,
+      shootLocationLongitude: provider.address?.geo?.coordinates?.[0] ?? null,
       shootConcept: 'Gói chụp ảnh trong Combo',
       photographerCity: provider.address?.city || '',
       comboDiscountPercent: combo.discountPercent,

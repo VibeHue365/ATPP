@@ -50,6 +50,7 @@ type AdminTab =
   | 'disputes'
   | 'behavior'
   | 'product-moderation'
+  | 'combo-moderation'
   | 'reported-reviews'
   | 'policies'
   | 'users-roles';
@@ -97,6 +98,7 @@ const DisputesPanel = lazy(() =>
 const BehaviorPanel = lazy(() =>
   import('../../features/admin-dashboard/components/BehaviorPanel').then((module) => ({ default: module.BehaviorPanel })),
 );
+const ComboModerationManagement = lazy(() => import('./components/ComboModerationManagement'));
 const ProductModerationManagement = lazy(() =>
   import('./components/ProductModerationManagement').then((module) => ({ default: module.ProductModerationManagement })),
 );
@@ -123,6 +125,7 @@ const tabs: TabDefinition[] = [
   { id: 'revenue', label: 'Báo cáo Doanh thu', title: 'Thống kê Doanh thu Hệ thống', icon: TrendingUp },
   { id: 'verifications', label: 'Phê duyệt hồ sơ đối tác', title: 'Phê duyệt hồ sơ đăng ký đối tác', icon: FileCheck },
   { id: 'disputes', label: 'Giải quyết tranh chấp', title: 'Giải quyết tranh chấp sự cố', icon: AlertTriangle },
+  { id: 'combo-moderation', label: 'Phê duyệt combo', title: 'Phê duyệt combo Áo dài + Chụp ảnh', icon: CheckSquare },
   { id: 'product-moderation', label: 'Kiểm duyệt sản phẩm', title: 'Kiểm duyệt nội dung sản phẩm', icon: CheckSquare },
   { id: 'reported-reviews', label: 'Báo cáo Đánh giá (Spam)', title: 'Báo cáo vi phạm & Spam Đánh giá', icon: Ban },
   { id: 'policies', label: 'Cấu hình Chính sách', title: 'Cấu hình Chính sách Hệ thống', icon: Settings },
@@ -191,6 +194,7 @@ function TabPanel({ tab }: { tab: AdminTab }) {
     case 'verifications': return <VerificationWorkspace />;
     case 'disputes': return <DisputesPanel />;
     case 'behavior': return <BehaviorPanel />;
+    case 'combo-moderation': return <ComboModerationManagement />;
     case 'product-moderation': return <><ProductModerationManagement /><PortfolioModerationManagement /></>;
     case 'reported-reviews': return <ReportedReviewsPanel />;
     case 'policies': return <PolicyManagement />;

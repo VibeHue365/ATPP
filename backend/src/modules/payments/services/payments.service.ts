@@ -4,6 +4,7 @@ import {
   Inject,
   forwardRef,
   NotFoundException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -88,15 +89,28 @@ export class PaymentsService {
   async createPaymentLink(
     bookingIdStr: string,
     purpose: PaymentPurpose,
+    userIdStr?: string,
   ): Promise<PaymentDocument> {
     const bookingId = new Types.ObjectId(bookingIdStr);
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
       throw new NotFoundException('Booking not found');
     }
+    if (userIdStr && booking.customerId.toString() !== userIdStr) {
+      throw new ForbiddenException('Bạn không có quyền thanh toán đơn này.');
+    }
+    if (
+      purpose !== PaymentPurpose.RemainingPayment &&
+      booking.status !== BookingStatus.PendingPayment
+    ) {
+      throw new BadRequestException(
+        'Đơn không còn ở trạng thái chờ thanh toán.',
+      );
+    }
 
     // Check for existing PENDING payment for the same booking — reuse if found
-    const existingPendingPayment = await this.paymentsRepository.findPendingPaymentByBooking(bookingId);
+    const existingPendingPayment =
+      await this.paymentsRepository.findPendingPaymentByBooking(bookingId);
     if (existingPendingPayment) {
       return existingPendingPayment;
     }
@@ -105,26 +119,49 @@ export class PaymentsService {
     if (purpose === PaymentPurpose.DepositPayment) {
       if (booking.bookingType === BookingType.Combo) {
         // Combo deposit = 100% Product rental + 100% Product deposit + 100% Photographer fee + serviceFee - comboDiscount
-        const items = await this.bookingModel.db.model('BookingItem').find({ bookingId: booking._id });
+        const items = await this.bookingModel.db
+          .model('BookingItem')
+          .find({ bookingId: booking._id });
         const prodItems = items.filter((i: any) => i.itemType === 'PRODUCT');
-        const photoItems = items.filter((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+        const photoItems = items.filter(
+          (i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE',
+        );
 
-        const prodRentalTotal = prodItems.reduce((sum: number, i: any) => sum + i.unitPrice * i.quantity, 0);
-        const prodDepositTotal = prodItems.reduce((sum: number, i: any) => sum + i.depositAmount * i.quantity, 0);
-        const photoDepositTotal = photoItems.reduce((sum: number, i: any) => sum + i.unitPrice * i.quantity, 0);
+        const prodRentalTotal = prodItems.reduce(
+          (sum: number, i: any) => sum + i.unitPrice * i.quantity,
+          0,
+        );
+        const prodDepositTotal = prodItems.reduce(
+          (sum: number, i: any) => sum + i.depositAmount * i.quantity,
+          0,
+        );
+        const photoDepositTotal = photoItems.reduce(
+          (sum: number, i: any) => sum + i.unitPrice * i.quantity,
+          0,
+        );
 
-        amount = prodRentalTotal + prodDepositTotal + photoDepositTotal - (booking.pricingSummary.comboDiscountTotal || 0);
+        amount =
+          prodRentalTotal +
+          prodDepositTotal +
+          photoDepositTotal -
+          (booking.pricingSummary.comboDiscountTotal || 0);
       } else if (booking.bookingType === BookingType.Photography) {
-        amount = booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
+        amount =
+          booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
       } else {
-        amount = booking.pricingSummary.depositTotal || booking.pricingSummary.grandTotal;
+        amount =
+          booking.pricingSummary.depositTotal ||
+          booking.pricingSummary.grandTotal;
       }
     } else if (purpose === PaymentPurpose.FullPayment) {
-      amount = booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
+      amount =
+        booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
     } else if (purpose === PaymentPurpose.RemainingPayment) {
-      amount = booking.pricingSummary.grandTotal - booking.paymentSummary.totalPaid;
+      amount =
+        booking.pricingSummary.grandTotal - booking.paymentSummary.totalPaid;
     } else {
-      amount = booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
+      amount =
+        booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
     }
 
     if (amount <= 0) {
@@ -152,6 +189,54 @@ export class PaymentsService {
     });
 
     return payment;
+  }
+
+  async getPaymentStatus(paymentCode: string, userIdStr: string) {
+    const payment =
+      await this.paymentsRepository.findPaymentWithBooking(paymentCode);
+    if (!payment) throw new NotFoundException('Payment not found');
+    const booking = payment.bookingId as unknown as Booking & {
+      _id: Types.ObjectId;
+    };
+    if (booking.customerId.toString() !== userIdStr) {
+      throw new ForbiddenException('Bạn không có quyền xem giao dịch này.');
+    }
+    return {
+      paymentCode: payment.paymentCode,
+      paymentStatus: payment.status,
+      bookingId: booking._id.toString(),
+      bookingStatus: booking.status,
+      bookingPaymentStatus: booking.paymentSummary.paymentStatus,
+      confirmed: booking.status === BookingStatus.Confirmed,
+      checkoutUrl:
+        payment.status === PaymentStatus.Pending
+          ? payment.payos?.checkoutUrl || null
+          : null,
+    };
+  }
+
+  async getPendingCheckouts(userIdStr: string) {
+    const bookings = await this.bookingModel
+      .find({
+        customerId: new Types.ObjectId(userIdStr),
+        status: BookingStatus.PendingPayment,
+      })
+      .select('_id bookingCode')
+      .lean()
+      .exec();
+    if (!bookings.length) return [];
+
+    const payments =
+      await this.paymentsRepository.findPendingPaymentsByBookingIds(
+        bookings.map((booking) => booking._id),
+      );
+    return payments
+      .filter((payment) => payment.payos?.checkoutUrl)
+      .map((payment) => ({
+        paymentCode: payment.paymentCode,
+        bookingId: payment.bookingId.toString(),
+        checkoutUrl: payment.payos?.checkoutUrl,
+      }));
   }
 
   async getTransactions(userIdStr: string, roles: string[]): Promise<any[]> {
@@ -187,45 +272,69 @@ export class PaymentsService {
       .exec();
     if (!providerDoc) return [];
 
-    const transfers = await this.transferRepository.findTransfersByProvider((providerDoc as any)._id);
+    const transfers = await this.transferRepository.findTransfersByProvider(
+      (providerDoc as any)._id,
+    );
     return this.transferMapper.toProviderResponseList(transfers);
   }
 
   async confirmPayment(paymentCode: string): Promise<PaymentDocument> {
-    const payment = await this.paymentsRepository.confirmPayment(paymentCode);
-
+    const candidate =
+      await this.paymentsRepository.findPaymentByCode(paymentCode);
+    if (!candidate) throw new NotFoundException('Payment not found');
+    if (
+      candidate.status !== PaymentStatus.Pending &&
+      candidate.status !== PaymentStatus.Success
+    ) {
+      throw new BadRequestException(
+        `Cannot confirm payment with status: ${candidate.status}`,
+      );
+    }
+    const booking = await this.bookingModel.findById(candidate.bookingId);
+    if (!booking) {
+      throw new NotFoundException(
+        'Không tìm thấy đơn đặt lịch tương ứng với giao dịch.',
+      );
+    }
+    if (booking.status === BookingStatus.Cancelled) {
+      throw new BadRequestException(
+        'Đơn đặt lịch đã bị hủy, không thể tiếp tục xác nhận thanh toán.',
+      );
+    }
+    const payment =
+      candidate.status === PaymentStatus.Success
+        ? candidate
+        : await this.paymentsRepository.confirmPayment(paymentCode);
     if (!payment) {
-      const existing = await this.paymentsRepository.findPaymentByCode(paymentCode);
-      if (!existing) {
-        throw new NotFoundException('Payment not found');
-      }
-      if (existing.status === PaymentStatus.Success) {
-        await this.photographyHoldService.confirmForBooking(existing.bookingId);
-        return existing;
+      const concurrent =
+        await this.paymentsRepository.findPaymentByCode(paymentCode);
+      if (concurrent?.status === PaymentStatus.Success) {
+        return this.confirmPayment(paymentCode);
       }
       throw new BadRequestException(
-        `Cannot confirm payment with status: ${existing.status}`,
+        'Trạng thái thanh toán đã thay đổi, vui lòng xác minh lại.',
       );
     }
 
-    const booking = await this.bookingModel.findById(payment.bookingId);
-    if (!booking) {
-      throw new NotFoundException('Không tìm thấy đơn đặt lịch tương ứng với giao dịch.');
-    }
-    if (booking.status === BookingStatus.Cancelled) {
-      throw new BadRequestException('Đơn đặt lịch đã bị hủy, không thể tiếp tục xác nhận thanh toán.');
-    }
-
+    const successfulPayments = (await this.bookingModel.db
+      .model('Payment')
+      .find({ bookingId: payment.bookingId, status: PaymentStatus.Success })
+      .select('amount')
+      .lean()
+      .exec()) as Array<{ amount?: number }>;
+    const totalPaid = successfulPayments.reduce(
+      (sum: number, item: { amount?: number }) => sum + (item.amount || 0),
+      0,
+    );
     const updatedBooking = await this.bookingModel.findOneAndUpdate(
       { _id: payment.bookingId },
-      { $inc: { 'paymentSummary.totalPaid': payment.amount } },
+      { $set: { 'paymentSummary.totalPaid': totalPaid } },
       { new: true },
     );
 
     if (updatedBooking) {
-      const holdConfirmation = await this.photographyHoldService.confirmForBooking(
-        payment.bookingId,
-      );
+      const holdConfirmation =
+        await this.photographyHoldService.confirmForBooking(payment.bookingId);
       const isPaid =
         updatedBooking.paymentSummary.totalPaid >=
         updatedBooking.pricingSummary.grandTotal;
@@ -236,13 +345,21 @@ export class PaymentsService {
           updatedBooking.paymentSummary.totalPaid >=
           updatedBooking.pricingSummary.depositTotal;
       } else if (updatedBooking.bookingType === BookingType.Combo) {
-        const items = await this.bookingModel.db.model('BookingItem').find({ bookingId: updatedBooking._id });
-        const photoItems = items.filter((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
-        const photoRemainingTotal = photoItems.reduce((sum: number, i: any) => sum + Math.round(i.unitPrice * 0.7) * i.quantity, 0);
+        const items = await this.bookingModel.db
+          .model('BookingItem')
+          .find({ bookingId: updatedBooking._id });
+        const photoItems = items.filter(
+          (i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE',
+        );
+        const photoRemainingTotal = photoItems.reduce(
+          (sum: number, i: any) =>
+            sum + Math.round(i.unitPrice * 0.7) * i.quantity,
+          0,
+        );
 
         isConfirmedEligible =
           updatedBooking.paymentSummary.totalPaid >=
-          (updatedBooking.pricingSummary.grandTotal - photoRemainingTotal);
+          updatedBooking.pricingSummary.grandTotal - photoRemainingTotal;
       } else {
         isConfirmedEligible = isPaid;
       }
@@ -275,14 +392,19 @@ export class PaymentsService {
         },
       );
 
-      if (newStatus === BookingStatus.Confirmed || newStatus === BookingStatus.DepositPaid) {
-        const reservationModel = this.bookingModel.db.model('InventoryReservation');
+      if (
+        newStatus === BookingStatus.Confirmed ||
+        newStatus === BookingStatus.DepositPaid
+      ) {
+        const reservationModel = this.bookingModel.db.model(
+          'InventoryReservation',
+        );
         await reservationModel.updateMany(
           { bookingId: payment.bookingId },
           {
             $set: { status: 'CONFIRMED' },
-            $unset: { expiresAt: 1 }
-          }
+            $unset: { expiresAt: 1 },
+          },
         );
 
         // Photography only: credit provider pendingBalance with estimated net amount.
@@ -292,9 +414,10 @@ export class PaymentsService {
           newStatus === BookingStatus.Confirmed &&
           updatedBooking.bookingType === BookingType.Photography
         ) {
-          const ESTIMATED_COMMISSION_RATE = 0.20;
+          const ESTIMATED_COMMISSION_RATE = 0.2;
           const estimatedNetAmt = Math.round(
-            updatedBooking.pricingSummary.grandTotal * (1 - ESTIMATED_COMMISSION_RATE),
+            updatedBooking.pricingSummary.grandTotal *
+              (1 - ESTIMATED_COMMISSION_RATE),
           );
           // Persist on booking for ghost-balance prevention
           await this.bookingModel.updateOne(
@@ -308,7 +431,7 @@ export class PaymentsService {
               { _id: { $in: updatedBooking.providerIds } },
               {
                 $inc: { 'wallet.pendingBalance': estimatedNetAmt },
-                $set:  { 'wallet.lastUpdatedAt': new Date() },
+                $set: { 'wallet.lastUpdatedAt': new Date() },
               },
             );
           }
@@ -363,18 +486,86 @@ export class PaymentsService {
         updatedBooking.pricingSummary.grandTotal,
         updatedBooking.pricingSummary.depositTotal,
       );
-
     }
 
     return payment;
   }
 
   async cancelPayment(paymentCode: string): Promise<PaymentDocument> {
-    const payment = await this.paymentsRepository.updateStatus(paymentCode, PaymentStatus.Cancelled);
-    if (!payment) {
-      throw new NotFoundException('Payment not found');
+    return this.failPayment(paymentCode, PaymentStatus.Cancelled);
+  }
+
+  async failPayment(
+    paymentCode: string,
+    status:
+      | PaymentStatus.Failed
+      | PaymentStatus.Cancelled = PaymentStatus.Failed,
+  ): Promise<PaymentDocument> {
+    const session = await this.bookingModel.db.startSession();
+    let result: PaymentDocument | null = null;
+    try {
+      await session.withTransaction(async () => {
+        const payment = await this.paymentsRepository.updatePendingStatus(
+          paymentCode,
+          status,
+          session,
+        );
+        if (!payment) {
+          const existing = await this.paymentsRepository.findPaymentByCode(
+            paymentCode,
+            session,
+          );
+          if (!existing) throw new NotFoundException('Payment not found');
+          if (existing.status === status) {
+            result = existing;
+            return;
+          }
+          throw new BadRequestException(
+            `Cannot fail payment with status: ${existing.status}`,
+          );
+        }
+
+        result = payment;
+        const bookingId = payment.bookingId;
+        const releasedStatus =
+          status === PaymentStatus.Cancelled ? 'CANCELLED' : 'EXPIRED';
+        await this.bookingModel.updateOne(
+          { _id: bookingId, status: BookingStatus.PendingPayment },
+          {
+            $set: { status: BookingStatus.Cancelled },
+            $push: {
+              statusTimeline: {
+                status: BookingStatus.Cancelled,
+                changedAt: new Date(),
+                note:
+                  status === PaymentStatus.Cancelled
+                    ? 'Thanh toán đã bị hủy'
+                    : 'Thanh toán thất bại hoặc hết hạn',
+              },
+            },
+          },
+          { session },
+        );
+        await this.bookingModel.db
+          .model('BookingSchedule')
+          .updateMany(
+            { bookingId, status: 'HELD' },
+            { $set: { status: releasedStatus } },
+            { session },
+          );
+        await this.bookingModel.db
+          .model('InventoryReservation')
+          .updateMany(
+            { bookingId, status: 'TEMP_RESERVED' },
+            { $set: { status: releasedStatus }, $unset: { expiresAt: 1 } },
+            { session },
+          );
+      });
+      if (!result) throw new NotFoundException('Payment not found');
+      return result;
+    } finally {
+      await session.endSession();
     }
-    return payment;
   }
 
   async createEscrowEntry(
@@ -405,9 +596,9 @@ export class PaymentsService {
     );
   }
 
-  async executeProfitSplit(
-    booking: { _id: Types.ObjectId | string },
-  ): Promise<void> {
+  async executeProfitSplit(booking: {
+    _id: Types.ObjectId | string;
+  }): Promise<void> {
     await this.settlementsService.createSettlementsForBooking(
       booking._id.toString(),
     );
@@ -423,11 +614,14 @@ export class PaymentsService {
     // Cập nhật trạng thái Escrow sang Settled một cách atomic để chặn các request song song (nếu có)
     const escrow = await this.escrowRepository.trySettleEscrow(bookingId);
     if (!escrow) {
-      const currentEscrow = await this.escrowRepository.findByBookingId(bookingId);
+      const currentEscrow =
+        await this.escrowRepository.findByBookingId(bookingId);
       if (currentEscrow && currentEscrow.status === EscrowStatus.Settled) {
         return { message: 'Booking already settled' };
       }
-      this.logger.warn(`Escrow record not found or not in Held status for booking ${bookingIdStr}, proceeding with settlement.`);
+      this.logger.warn(
+        `Escrow record not found or not in Held status for booking ${bookingIdStr}, proceeding with settlement.`,
+      );
     }
 
     try {
@@ -447,20 +641,21 @@ export class PaymentsService {
       //    credit available by actual netAmount (grandTotal - commission).
       //    For photography bookings only (ao dai uses a different escrow flow).
       if (booking.providerIds && booking.providerIds.length > 0) {
-        const COMMISSION_RATE = 0.20;
+        const COMMISSION_RATE = 0.2;
         const actualNetAmount = Math.round(
           booking.pricingSummary.grandTotal * (1 - COMMISSION_RATE),
         );
         // Use the stored estimate to deduct (prevents ghost-balance drift).
-        const estimatedDeduction = (booking as any).estimatedNetAmount ?? actualNetAmount;
+        const estimatedDeduction =
+          (booking as any).estimatedNetAmount ?? actualNetAmount;
         const providerModel = this.bookingModel.db.model('Provider');
         await providerModel.updateMany(
           { _id: { $in: booking.providerIds } },
           {
             $inc: {
-              'wallet.pendingBalance':   -estimatedDeduction, // deduct estimate
-              'wallet.availableBalance': +actualNetAmount,    // credit actual
-              'wallet.totalEarned':      +actualNetAmount,   // cumulative (only grows)
+              'wallet.pendingBalance': -estimatedDeduction, // deduct estimate
+              'wallet.availableBalance': +actualNetAmount, // credit actual
+              'wallet.totalEarned': +actualNetAmount, // cumulative (only grows)
             },
             $set: { 'wallet.lastUpdatedAt': new Date() },
           },
@@ -468,7 +663,10 @@ export class PaymentsService {
       }
     } catch (err) {
       // Revert lại trạng thái Held nếu gặp lỗi để có thể retry
-      await this.escrowRepository.updateEscrowStatus(bookingId, EscrowStatus.Held);
+      await this.escrowRepository.updateEscrowStatus(
+        bookingId,
+        EscrowStatus.Held,
+      );
       throw err;
     }
 
@@ -495,7 +693,8 @@ export class PaymentsService {
       return { message: 'No deposit to refund' };
     }
 
-    const payment = await this.paymentsRepository.findDepositPaymentByBooking(bookingId);
+    const payment =
+      await this.paymentsRepository.findDepositPaymentByBooking(bookingId);
 
     const orderCode =
       payment?.payos?.orderCode || Math.floor(100000 + Math.random() * 900000);
@@ -518,7 +717,10 @@ export class PaymentsService {
         paidAt: new Date(),
       });
     } catch (createRefundErr) {
-      this.logger.error(`Failed to create refund payment record for booking ${bookingIdStr}:`, createRefundErr);
+      this.logger.error(
+        `Failed to create refund payment record for booking ${bookingIdStr}:`,
+        createRefundErr,
+      );
     }
 
     const escrow = await this.escrowRepository.findByBookingId(bookingId);
@@ -639,7 +841,7 @@ export class PaymentsService {
     };
   }
 
-    async cancelSettlementsForBooking(bookingIdStr: string): Promise<void> {
+  async cancelSettlementsForBooking(bookingIdStr: string): Promise<void> {
     await this.settlementsService.cancelSettlementsForBooking(
       bookingIdStr,
       'PAYMENT_CANCELLED',

@@ -637,6 +637,8 @@ export const PhotographerDetailPage: React.FC = () => {
       shootDate: selectedDate,
       shootTimeSlot: selectedTimeSlot,
       shootLocation: finalLocation.address,
+      shootLocationLatitude: finalLocation.latitude,
+      shootLocationLongitude: finalLocation.longitude,
       shootConcept: selectedConcept,
       photographerCity: photographerCity,
       comboDiscountPercent: (photographer as any).comboDiscountPercent,
@@ -720,7 +722,7 @@ export const PhotographerDetailPage: React.FC = () => {
 
       const paymentRes: any = await httpClient.post('/payments/create-link', {
         bookingId: holdRes.bookingId,
-        purpose: 'FULL_PAYMENT',
+        purpose: 'DEPOSIT_PAYMENT',
       });
 
       if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
@@ -764,10 +766,10 @@ export const PhotographerDetailPage: React.FC = () => {
               <CheckCircle size={40} color="var(--color-primary)" />
             </div>
             <h2 className="font-header" style={{ fontSize: '26px', color: 'var(--color-primary-dark)', marginBottom: '8px' }}>
-              Đặt lịch thành công!
+              Lịch chụp đang chờ thanh toán
             </h2>
             <p style={{ fontSize: '14px', color: '#8C827A', marginBottom: '28px', lineHeight: 1.6 }}>
-              Chúng tôi đã nhận lịch đặt chụp của bạn. Thợ ảnh sẽ liên hệ xác nhận trong vòng 2 giờ.
+              Lịch chỉ được xác nhận sau khi hệ thống nhận được thanh toán thành công.
             </p>
             <div style={{
               backgroundColor: '#FCF9F2', borderRadius: '12px', padding: '20px',

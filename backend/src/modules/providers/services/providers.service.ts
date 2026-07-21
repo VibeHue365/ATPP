@@ -477,19 +477,16 @@ export class ProvidersService {
       },
     } as any);
 
-    let totalRevenue = 0;
-    for (const b of bookings) {
-      const items = await this.bookingItemModel.find({
-        bookingId: b._id,
-        providerId: providerId,
-      } as any);
-      const bRevenue = items.reduce(
-        (sum, item) => sum + item.unitPrice * (item.quantity || 1),
-        0,
-      );
-      totalRevenue += bRevenue;
+const bookingIds = bookings.map((booking) => booking._id);
+    const revenueItems = bookingIds.length
+      ? await this.bookingItemModel.find({ bookingId: { $in: bookingIds }, providerId } as any).lean()
+      : [];
+    const revenueByBooking = new Map<string, number>();
+    for (const item of revenueItems) {
+      const bookingKey = item.bookingId.toString();
+      revenueByBooking.set(bookingKey, (revenueByBooking.get(bookingKey) || 0) + item.unitPrice * (item.quantity || 1));
     }
-
+    const totalRevenue = Array.from(revenueByBooking.values()).reduce((sum, amount) => sum + amount, 0);
     const commissionFee = Math.round(totalRevenue * 0.15);
 
     // 2. UC-K13: Tỷ lệ đặt lịch thành công & hủy lịch
@@ -507,10 +504,10 @@ export class ProvidersService {
 
     const successRate = allBookingsCount
       ? Math.round((successBookingsCount / allBookingsCount) * 1000) / 10
-      : 94.2;
+      : 0;
     const cancelRate = allBookingsCount
       ? Math.round((cancelledBookingsCount / allBookingsCount) * 1000) / 10
-      : 1.8;
+      : 0;
 
     // 3. UC-K05: Sản phẩm phổ biến nhất (Top 3)
     const popularItems = await this.bookingItemModel.aggregate([
@@ -537,69 +534,37 @@ export class ProvidersService {
     const totalProducts = await this.productModel.countDocuments({
       providerId,
     } as any);
-    const inventoryStatus = [
-      {
-        name: 'Áo dài Tứ Thân Lụa Hà Đông',
-        status: 'ĐANG CHO THUÊ',
-        count: '02 Bộ',
-        detail: 'Lịch thuê tiếp theo: 02/07',
-        color: 'rental',
-      },
-      {
-        name: 'Áo dài Cách Tân Cấm Thượng Hải',
-        status: 'CẦN BẢO TRÌ',
-        count: '15 Bộ',
-        detail: 'Cần làm sạch',
-        color: 'maintenance',
-      },
-    ];
+    const inventoryStatus = await this.bookingModel.db
+      .model('InventoryItem')
+      .aggregate([
+        { $match: { providerId } },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ])
+      .then((rows: Array<{ _id: string; count: number }>) => rows.map((row) => ({
+        name: row._id,
+        status: row._id,
+        count: row.count,
+        detail: '',
+        color: row._id === 'AVAILABLE' ? 'available' : row._id === 'RENTED' ? 'rental' : 'maintenance',
+      })));
 
     // 5. UC-K08: Doanh thu theo thời gian (6 tháng gần đây)
     const revenueGrowth = [];
-    const labels = [
-      'Tháng 1',
-      'Tháng 2',
-      'Tháng 3',
-      'Tháng 4',
-      'Tháng 5',
-      'Tháng 6',
-    ];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const start = new Date(d.getFullYear(), d.getMonth(), 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-
-      const mBookings = await this.bookingModel.find({
-        providerIds: providerId,
-        status: {
-          $in: [
-            'COMPLETED',
-            'CONFIRMED',
-            'DEPOSIT_PAID',
-            'PICKED_UP',
-            'RETURNED',
-          ],
-        },
-        createdAt: { $gte: start, $lte: end },
-      } as any);
-
-      let mRevenue = 0;
-      for (const b of mBookings) {
-        const items = await this.bookingItemModel.find({
-          bookingId: b._id,
-          providerId: providerId,
-        } as any);
-        mRevenue += items.reduce(
-          (sum, item) => sum + item.unitPrice * (item.quantity || 1),
-          0,
-        );
-      }
-
-      revenueGrowth.push({
-        label: labels[5 - i],
-        value: mRevenue,
-      });
+      const month = new Date();
+      month.setDate(1);
+      month.setHours(0, 0, 0, 0);
+      month.setMonth(month.getMonth() - i);
+      const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
+      const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+      const value = bookings.reduce((sum, booking) => {
+        const createdAt = new Date((booking as any).createdAt);
+        return createdAt >= monthStart && createdAt < monthEnd
+          ? sum + (revenueByBooking.get(booking._id.toString()) || 0)
+          : sum;
+      }, 0);
+      revenueGrowth.push({ label: `Tháng ${month.getMonth() + 1}`, value });
     }
 
     // 6. UC-K10: Lịch booking (Lấy lịch chụp thật của photographer)
@@ -696,7 +661,7 @@ export class ProvidersService {
     }
 
     // 8. UC-K12: Theo dõi đánh giá
-    const avgRating = provider.rating?.averageRating || 4.9;
+    const avgRating = provider.rating?.averageRating ?? 0;
 
     return {
       capabilities: provider.capabilities,
@@ -704,8 +669,8 @@ export class ProvidersService {
       commissionFee,
       successRate,
       cancelRate,
-      totalProducts: totalProducts || 8,
-      averageRentalDuration: '4.2h',
+      totalProducts,
+      averageRentalDuration: null,
       popularProducts,
       inventoryStatus,
       revenueGrowth,

@@ -25,6 +25,8 @@ export interface CartItem {
   shootDate?: string | null; // YYYY-MM-DD
   shootTimeSlot?: string | null; // e.g. "10:30-12:30"
   shootLocation?: string | null;
+  shootLocationLatitude?: number | null;
+  shootLocationLongitude?: number | null;
   shootConcept?: string | null;
   referenceImage?: string | null;
   customRequests?: string | null;
@@ -43,6 +45,32 @@ export interface CartItem {
   comboDiscountPercent?: number;
   comboPromotionId?: string | null;
 }
+
+/** Keep carts created by older screens usable after the checkout schema changed. */
+const normalizeCartItem = (
+  item: CartItem & {
+    selectedSize?: unknown;
+    selectedColor?: unknown;
+    start_date?: unknown;
+    end_date?: unknown;
+  },
+): CartItem => ({
+  ...item,
+  size:
+    item.size ||
+    (typeof item.selectedSize === 'string' ? item.selectedSize : null),
+  color:
+    item.color ||
+    (typeof item.selectedColor === 'string' ? item.selectedColor : null),
+  rentalFrom:
+    item.rentalFrom ||
+    item.startDate ||
+    (typeof item.start_date === 'string' ? item.start_date : null),
+  rentalTo:
+    item.rentalTo ||
+    item.endDate ||
+    (typeof item.end_date === 'string' ? item.end_date : null),
+});
 
 interface CartContextType {
   cart: CartItem[];
@@ -76,7 +104,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const parsed = JSON.parse(savedCart);
         if (Array.isArray(parsed)) {
-          parsedCart = parsed;
+          parsedCart = parsed.map((item) => normalizeCartItem(item));
         }
       } catch (e) {
         console.error('Failed to parse cart', e);
@@ -148,6 +176,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(cartKey, JSON.stringify(cart));
     }
   }, [cart, cartKey, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      setCart((current) => current.map((item) => normalizeCartItem(item)));
+    }
+  }, [isLoaded]);
 
   const addToCart = (newItem: Omit<CartItem, 'id' | 'quantity'> & { quantity?: number }) => {
     setCart((prevCart) => {

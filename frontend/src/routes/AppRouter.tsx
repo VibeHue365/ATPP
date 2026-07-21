@@ -33,6 +33,7 @@ import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
 import AdminDashboardRefactored from '../pages/admin/AdminDashboardRefactored';
 import { ComboListingPage } from '../pages/combos/ComboListingPage';
 import ComboDetailPage from '../pages/combos/ComboDetailPage';
+import CheckoutResultPage from '../pages/checkout/CheckoutResultPage';
 
 export const AppRouter: React.FC = () => {
   return (
@@ -76,6 +77,7 @@ export const AppRouter: React.FC = () => {
           <Route path={ROUTES.DASHBOARD} element={<Navigate to={ROUTES.PROFILE} replace />} />
           <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+          <Route path={ROUTES.CHECKOUT_RESULT} element={<CheckoutResultPage />} />
           <Route path={ROUTES.PROVIDER_REGISTER} element={<BecomeProviderPage />} />
         </Route>
         {/* Admin Dashboard Page (No MainLayout header/footer) */}

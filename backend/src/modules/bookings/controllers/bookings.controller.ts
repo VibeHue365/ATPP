@@ -1,11 +1,24 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException, UnsupportedMediaTypeException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  UnsupportedMediaTypeException,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { BookingsService } from '../services/bookings.service';
-import { BookingDocument } from '../schemas/booking.schema';
+import { BookingDocument, BookingType } from '../schemas/booking.schema';
 import {
   CreateBookingDto,
   CreateProductBookingDto,
@@ -56,7 +69,6 @@ export class BookingsController {
     return { url: upload.url };
   }
 
-
   /** POST /bookings hoặc POST /api/bookings — Tạo booking tổng hợp hoặc booking đơn lẻ */
   @Post()
   async create(
@@ -64,9 +76,20 @@ export class BookingsController {
     @Body() body: any,
   ): Promise<BookingDocument> {
     if (body && Array.isArray(body.items)) {
-      return this.bookingsService.createBooking(user.sub, body as CreateBookingDto);
+      if (body.bookingType !== BookingType.AoDaiRental) {
+        throw new BadRequestException(
+          'Photography và combo phải được tạo qua API giữ lịch chuyên dụng.',
+        );
+      }
+      return this.bookingsService.createBooking(
+        user.sub,
+        body as CreateBookingDto,
+      );
     } else {
-      return this.bookingsService.createProductBooking(user.sub, body as CreateProductBookingDto);
+      return this.bookingsService.createProductBooking(
+        user.sub,
+        body as CreateProductBookingDto,
+      );
     }
   }
 
@@ -82,10 +105,12 @@ export class BookingsController {
   /** POST /bookings/photography hoặc POST /api/bookings/photography */
   @Post('photography')
   async createPhotography(
-    @CurrentUser() user: AuthUser,
-    @Body() dto: CreatePhotographyBookingDto,
+    @CurrentUser() _user: AuthUser,
+    @Body() _dto: CreatePhotographyBookingDto,
   ) {
-    return this.bookingsService.createPhotographyBooking(user.sub, dto);
+    throw new BadRequestException(
+      'Vui lòng dùng /bookings/photography/hold với địa chỉ và tọa độ bản đồ để giữ lịch trước khi thanh toán.',
+    );
   }
 
   /** GET /bookings/my hoặc GET /api/bookings/my */
@@ -108,35 +133,52 @@ export class BookingsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Param('scheduleId') scheduleId: string,
-    @Body() body: { address: string; latitude: number; longitude: number; note?: string },
+    @Body()
+    body: {
+      address: string;
+      latitude: number;
+      longitude: number;
+      note?: string;
+    },
   ) {
-    return this.bookingsService.requestPhotographyLocationChange(id, scheduleId, user.sub, body);
+    return this.bookingsService.requestPhotographyLocationChange(
+      id,
+      scheduleId,
+      user.sub,
+      body,
+    );
   }
 
-  @Patch(':id/photoshoot-schedules/:scheduleId/location-change-requests/resolve')
+  @Patch(
+    ':id/photoshoot-schedules/:scheduleId/location-change-requests/resolve',
+  )
   async resolvePhotographyLocationChange(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Param('scheduleId') scheduleId: string,
     @Body() body: { approved: boolean; note?: string },
   ) {
-    if (typeof body?.approved !== 'boolean') throw new BadRequestException('approved must be a boolean.');
-    return this.bookingsService.resolvePhotographyLocationChange(id, scheduleId, user.sub, body.approved, body.note);
+    if (typeof body?.approved !== 'boolean')
+      throw new BadRequestException('approved must be a boolean.');
+    return this.bookingsService.resolvePhotographyLocationChange(
+      id,
+      scheduleId,
+      user.sub,
+      body.approved,
+      body.note,
+    );
   }
   @Get(':id')
   async getById(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string
+    @Param('id') id: string,
   ): Promise<Record<string, any>> {
     return this.bookingsService.getBookingById(id, user.sub, user.roles);
   }
 
   /** POST /bookings/:id/complete */
   @Post(':id/complete')
-  async complete(
-    @CurrentUser() user: AuthUser,
-    @Param('id') id: string
-  ) {
+  async complete(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.bookingsService.completeBooking(id, user.sub, user.roles);
   }
 
@@ -161,7 +203,14 @@ export class BookingsController {
     @Body() body: { status: string; note?: string; handoverPhotos?: string[] },
   ) {
     if (!body?.status) throw new BadRequestException('Thiếu trường status');
-    return this.bookingsService.updateBookingStatus(id, body.status, body.note, user.sub, user.roles, body.handoverPhotos);
+    return this.bookingsService.updateBookingStatus(
+      id,
+      body.status,
+      body.note,
+      user.sub,
+      user.roles,
+      body.handoverPhotos,
+    );
   }
 
   /** POST /bookings/:id/cancel hoặc POST /api/bookings/:id/cancel */
@@ -171,16 +220,23 @@ export class BookingsController {
     @Param('id') id: string,
     @Body() body: any,
   ) {
-    const reason = body?.reason || (typeof body === 'string' ? body : undefined);
-    return this.bookingsService.cancelBooking(id, user.sub, user.roles || [], reason);
+    const reason =
+      body?.reason || (typeof body === 'string' ? body : undefined);
+    return this.bookingsService.cancelBooking(
+      id,
+      user.sub,
+      user.roles || [],
+      reason,
+    );
   }
 
-  /** PATCH /bookings/:id/reschedule — Khách hàng đổi lịch đơn hàng (UC-E06) */
+  /** PATCH /bookings/:id/reschedule — Khách hàng gửi yêu cầu đổi lịch; provider phải duyệt. */
   @Patch(':id/reschedule')
   async reschedule(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() body: {
+    @Body()
+    body: {
       itemId: string;
       newRentalFrom?: string;
       newRentalTo?: string;
@@ -193,6 +249,24 @@ export class BookingsController {
     return this.bookingsService.rescheduleBooking(id, user.sub, body);
   }
 
+  @Patch(':id/items/:itemId/reschedule-requests/resolve')
+  async resolveRescheduleRequest(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() body: { approved: boolean; note?: string },
+  ) {
+    if (typeof body?.approved !== 'boolean') {
+      throw new BadRequestException('approved must be a boolean.');
+    }
+    return this.bookingsService.resolveRescheduleRequest(
+      id,
+      itemId,
+      user.sub,
+      body.approved,
+      body.note,
+    );
+  }
 
   /** GET /bookings hoặc GET /api/bookings */
   @Get()

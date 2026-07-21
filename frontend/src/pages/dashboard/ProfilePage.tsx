@@ -25,6 +25,33 @@ import { PhotographyLocationPicker } from '../../features/photographers/componen
 import type { LocationSelection } from '../../features/photographers/types/photographer.types';
 import { RentalPickupReturnPanel } from '../../features/rentals/components/RentalPickupReturnPanel';
 
+type TimeRange = { start: string; end: string };
+type BusyTimeSlot = { date: string; timeSlot: string; bookingItemId?: string };
+
+const toMinutes = (value: string): number => {
+  const [hours, minutes] = value.trim().split(':').map(Number);
+  return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : NaN;
+};
+
+const toTime = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+const timeSlotsOverlap = (first: string, second: string): boolean => {
+  const [firstStart, firstEnd] = first.split('-').map(toMinutes);
+  const [secondStart, secondEnd] = second.split('-').map(toMinutes);
+  return [firstStart, firstEnd, secondStart, secondEnd].every(Number.isFinite)
+    && firstStart < secondEnd
+    && secondStart < firstEnd;
+};
+
+const getEntityId = (value: unknown): string | null => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object' && '_id' in value && typeof value._id === 'string') {
+    return value._id;
+  }
+  return null;
+};
+
 export const ProfilePage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -57,6 +84,9 @@ export const ProfilePage: React.FC = () => {
   const [rescheduleShootDate, setRescheduleShootDate] = useState('');
   const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
   const [rescheduleReason, setRescheduleReason] = useState('');
+  const [availableRescheduleSlots, setAvailableRescheduleSlots] = useState<string[]>([]);
+  const [isLoadingRescheduleSlots, setIsLoadingRescheduleSlots] = useState(false);
+  const [rescheduleSlotsError, setRescheduleSlotsError] = useState<string | null>(null);
 
   // Bookings list state
   const [bookings, setBookings] = useState<any[]>([]);
@@ -393,6 +423,78 @@ export const ProfilePage: React.FC = () => {
       setIsSubmittingLocationChange(false);
     }
   };
+
+  const rescheduleDurationMinutes = useMemo(() => {
+    const currentSlot = String(rescheduleItem?.shootTimeSlot || '');
+    const [start, end] = currentSlot.split('-').map(toMinutes);
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) return end - start;
+
+    const packageDuration = Number(
+      rescheduleItem?.photographyPackageId?.includedDurationMinutes
+      || rescheduleItem?.photographyPackageId?.durationMinutes,
+    );
+    if (Number.isFinite(packageDuration) && packageDuration > 0) return packageDuration;
+
+    const packageHours = Number(rescheduleItem?.photographyPackageId?.durationHours);
+    return Number.isFinite(packageHours) && packageHours > 0 ? packageHours * 60 : 120;
+  }, [rescheduleItem]);
+
+  useEffect(() => {
+    if (!isRescheduleOpen || !rescheduleItem || rescheduleItem.itemType === 'PRODUCT' || !rescheduleShootDate) {
+      setAvailableRescheduleSlots([]);
+      setRescheduleSlotsError(null);
+      return;
+    }
+
+    const photographerId = getEntityId(rescheduleItem.photographerId) || getEntityId(rescheduleItem.providerId);
+    if (!photographerId) {
+      setAvailableRescheduleSlots([]);
+      setRescheduleSlotsError('Không xác định được nhiếp ảnh gia của lịch này.');
+      return;
+    }
+
+    let isCurrent = true;
+    setIsLoadingRescheduleSlots(true);
+    setRescheduleSlotsError(null);
+    setRescheduleTimeSlot('');
+
+    Promise.all([
+      httpClient.get<{ timeRanges: TimeRange[] }>(`/api/photographers/${photographerId}/availability?date=${rescheduleShootDate}`),
+      httpClient.get<{ bookedSlots: BusyTimeSlot[] }>(`/api/bookings/busy-dates/provider/${photographerId}`),
+    ])
+      .then(([availability, busy]) => {
+        if (!isCurrent) return;
+        const slots = (availability.timeRanges || []).flatMap((range) => {
+          const rangeStart = toMinutes(range.start);
+          const rangeEnd = toMinutes(range.end);
+          if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd) || rangeEnd <= rangeStart) return [];
+
+          const candidates: string[] = [];
+          for (let start = rangeStart; start + rescheduleDurationMinutes <= rangeEnd; start += 30) {
+            const candidate = `${toTime(start)}-${toTime(start + rescheduleDurationMinutes)}`;
+            const conflicts = (busy.bookedSlots || []).some((booked) =>
+              booked.date === rescheduleShootDate
+              && String(booked.bookingItemId || '') !== String(rescheduleItem._id)
+              && timeSlotsOverlap(candidate, booked.timeSlot),
+            );
+            if (!conflicts) candidates.push(candidate);
+          }
+          return candidates;
+        });
+        setAvailableRescheduleSlots([...new Set(slots)]);
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setAvailableRescheduleSlots([]);
+        setRescheduleSlotsError('Không thể tải khung giờ trống. Vui lòng thử lại.');
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoadingRescheduleSlots(false);
+      });
+
+    return () => { isCurrent = false; };
+  }, [isRescheduleOpen, rescheduleItem, rescheduleShootDate, rescheduleDurationMinutes]);
+
   const handleReschedule = async () => {
     if (!rescheduleItem || !activeDetailBooking) return;
     const isProduct = rescheduleItem.itemType === 'PRODUCT';
@@ -400,8 +502,8 @@ export const ProfilePage: React.FC = () => {
       toast.error('Vui lòng chọn ngày nhận và ngày trả mới');
       return;
     }
-    if (!isProduct && !rescheduleShootDate) {
-      toast.error('Vui lòng chọn ngày chụp mới');
+    if (!isProduct && (!rescheduleShootDate || !rescheduleTimeSlot)) {
+      toast.error('Vui lòng chọn ngày chụp và khung giờ còn trống');
       return;
     }
     try {
@@ -409,11 +511,11 @@ export const ProfilePage: React.FC = () => {
         itemId: rescheduleItem._id,
         ...(isProduct ? { newRentalFrom: rescheduleFrom, newRentalTo: rescheduleTo } : {
           newShootDate: rescheduleShootDate,
-          newShootTimeSlot: rescheduleTimeSlot || undefined,
+          newShootTimeSlot: rescheduleTimeSlot,
         }),
         reason: rescheduleReason || undefined,
       });
-      toast.success('Đổi lịch thành công!');
+      toast.success('Đã gửi yêu cầu đổi lịch. Vui lòng chờ provider xác nhận.');
       setIsRescheduleOpen(false);
       setRescheduleItem(null);
       setRescheduleFrom('');
@@ -988,6 +1090,10 @@ export const ProfilePage: React.FC = () => {
                     if (activeDetailBooking.items && activeDetailBooking.items.length > 0) {
                       setRescheduleItem(activeDetailBooking.items[0]);
                       const item = activeDetailBooking.items[0];
+                      if (item.rescheduleRequest?.status === 'PENDING') {
+                        toast.info('Yêu cầu đổi lịch của đơn này đang chờ provider phản hồi.');
+                        return;
+                      }
                       if (item.itemType === 'PRODUCT') {
                         setRescheduleFrom(item.startDate || item.rentalFrom || '');
                         setRescheduleTo(item.endDate || item.rentalTo || '');
@@ -999,7 +1105,7 @@ export const ProfilePage: React.FC = () => {
                     }
                   }}
                 >
-                  <Calendar size={14} /> Đổi lịch hẹn
+                  <Calendar size={14} /> {activeDetailBooking.items?.[0]?.rescheduleRequest?.status === 'PENDING' ? 'Đang chờ duyệt đổi lịch' : 'Đổi lịch hẹn'}
                 </button>
               )}
 
@@ -1067,7 +1173,7 @@ export const ProfilePage: React.FC = () => {
         >
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
             <div style={{ backgroundColor: '#EBF5FB', borderRadius: '8px', padding: '12px 14px', fontSize: '13px', color: '#1A5276', lineHeight: 1.5 }}>
-              <strong>Lưu ý:</strong> Chỉ có thể đổi lịch trước giờ bắt đầu ít nhất <strong>24 tiếng</strong>. Lịch mới phải còn trống và không trùng với đơn khác.
+              <strong>Lưu ý:</strong> Chỉ có thể gửi yêu cầu đổi lịch trước giờ bắt đầu ít nhất <strong>24 tiếng</strong>. Lịch mới chỉ được áp dụng sau khi provider xác nhận.
             </div>
 
             {rescheduleItem.itemType === 'PRODUCT' ? (
@@ -1108,14 +1214,12 @@ export const ProfilePage: React.FC = () => {
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>KHUNG GIỜ MỚI (tùy chọn)</label>
-                  <input
-                    type="text"
-                    placeholder="VD: 09:00 - 11:00"
-                    value={rescheduleTimeSlot}
-                    onChange={e => setRescheduleTimeSlot(e.target.value)}
-                    style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
-                  />
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>KHUNG GIỜ MỚI</label>
+                  <select value={rescheduleTimeSlot} onChange={(event) => setRescheduleTimeSlot(event.target.value)} disabled={!rescheduleShootDate || isLoadingRescheduleSlots || availableRescheduleSlots.length === 0} style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}>
+                    <option value="">{!rescheduleShootDate ? 'Chọn ngày chụp trước' : isLoadingRescheduleSlots ? 'Đang tải khung giờ trống' : availableRescheduleSlots.length ? 'Chọn khung giờ' : 'Không còn khung giờ phù hợp'}</option>
+                    {availableRescheduleSlots.map((slot) => <option key={slot} value={slot}>{slot.replace('-', ' - ')}</option>)}
+                  </select>
+                  {rescheduleSlotsError ? <small style={{ color: '#C0392B' }}>{rescheduleSlotsError}</small> : rescheduleShootDate && !isLoadingRescheduleSlots && availableRescheduleSlots.length === 0 ? <small style={{ color: '#8C6D1F' }}>Ngày này không còn khung giờ phù hợp với thời lượng gói chụp.</small> : null}
                 </div>
               </>
             )}
@@ -1143,7 +1247,7 @@ export const ProfilePage: React.FC = () => {
                 style={{ padding: '8px 24px', borderRadius: '8px', fontSize: '13px', backgroundColor: '#2980B9', color: 'white', border: 'none', cursor: 'pointer' }}
                 onClick={handleReschedule}
               >
-                Xác nhận đổi lịch
+                Gửi yêu cầu đổi lịch
               </button>
             </div>
           </div>
