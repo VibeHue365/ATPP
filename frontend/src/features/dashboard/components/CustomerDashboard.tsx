@@ -6,6 +6,7 @@ import { useToast } from '../../../components/feedback/Toast';
 import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle, Check, XCircle, X } from 'lucide-react';
 import { BookingDetailModal } from '../../../components/common/BookingDetailModal';
 import { API_BASE_URL } from '../../../config/env';
+import { getFirstMediaUrl } from '../../../shared/media/mediaUrl';
 
 const HandoverCountdown = ({ initiatedAt, onTimeout }: { initiatedAt: string; onTimeout: () => void }) => {
   const [timeLeft, setTimeLeft] = React.useState<string>('');
@@ -195,8 +196,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       console.error('Failed to fetch products for dashboard favorites', e);
     }
     try {
-      const phs = await httpClient.get<any[]>('/photographers');
-      setRealPhotographersList(phs || []);
+      const phs = await httpClient.get<any>('/photographers');
+      setRealPhotographersList(phs?.data || []);
     } catch (e) {
       console.error('Failed to fetch photographers for dashboard favorites', e);
     }
@@ -552,7 +553,13 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             id: photo._id,
             itemType: 'PHOTOGRAPHY_PACKAGE',
             name: photo.businessName || photo.name,
-            image: photo.portfolio?.[0] || photo.image || '/avatar_hanna.png',
+            image: getFirstMediaUrl(
+              photo.packages?.[0]?.images?.[0],
+              photo.coverImage,
+              photo.media?.coverUrl,
+              photo.media?.images?.[0],
+              photo.portfolioItems?.[0]?.images?.[0]
+            ) || '/avatar_hanna.png',
             price: photo.packages && photo.packages.length > 0 ? Math.min(...photo.packages.map((p: any) => p.price)) : 1500000,
             material: photo.quote || 'Nhiếp ảnh gia chuyên nghiệp',
             link: `/photographers`
