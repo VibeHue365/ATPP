@@ -32,27 +32,27 @@ export const Footer: React.FC = () => {
         
         {/* Explore Links */}
         <div className="vh-footer-links">
-          <h4>EXPLORE</h4>
+          <h4>KHÁM PHÁ</h4>
           <ul>
-            <li><a href="#history">The History of Ao Dai</a></li>
-            <li><a href="#craftsmanship">Craftsmanship</a></li>
-            <li><a href="#artisans">Our Artisans</a></li>
+            <li><a href="#history">Lịch sử Áo dài</a></li>
+            <li><a href="#craftsmanship">Nghệ thuật chế tác</a></li>
+            <li><a href="#artisans">Nghệ nhân của chúng tôi</a></li>
           </ul>
         </div>
 
         {/* Support Links */}
         <div className="vh-footer-links">
-          <h4>SUPPORT</h4>
+          <h4>HỖ TRỢ</h4>
           <ul>
-            <li><a href="#privacy">Privacy Policy</a></li>
-            <li><a href="#terms">Terms of Service</a></li>
-            <li><a href="#contact">Contact Us</a></li>
+            <li><a href="#privacy">Chính sách bảo mật</a></li>
+            <li><a href="#terms">Điều khoản dịch vụ</a></li>
+            <li><a href="#contact">Liên hệ với chúng tôi</a></li>
           </ul>
         </div>
 
         {/* Newsletter Column */}
         <div className="vh-footer-links">
-          <h4>NEWSLETTER</h4>
+          <h4>BẢN TIN</h4>
           <form onSubmit={handleSubscribe} className="flex gap-2 mt-4 max-w-sm">
             <div className="vh-input-wrapper flex-1">
               <input

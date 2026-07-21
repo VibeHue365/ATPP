@@ -25,6 +25,7 @@ import { CustomerDashboard } from '../../features/dashboard/components/CustomerD
 import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
 import type { LocationSelection } from '../../features/photographers/types/photographer.types';
 import { RentalPickupReturnPanel } from '../../features/rentals/components/RentalPickupReturnPanel';
+import { ImageWithFallback } from '../../shared/media/ImageWithFallback';
 
 type TimeRange = { start: string; end: string };
 type BusyTimeSlot = { date: string; timeSlot: string; bookingItemId?: string };
@@ -814,6 +815,20 @@ export const ProfilePage: React.FC = () => {
 
               {activeDetailBooking.items?.map((item: any, idx: number) => {
                 const isProduct = item.itemType === 'PRODUCT';
+                const populatedProduct = isProduct && item.productId && typeof item.productId === 'object'
+                  ? item.productId
+                  : null;
+                const selectedColorImages = populatedProduct?.colorImages?.find(
+                  (entry: { color?: string; images?: string[] }) =>
+                    entry.color?.trim().toUpperCase() === item.color?.trim().toUpperCase(),
+                )?.images;
+                const itemImage = selectedColorImages?.[0]
+                  || populatedProduct?.images?.[0]
+                  || item.image
+                  || item.productImage;
+                const itemName = populatedProduct?.name
+                  || item.name
+                  || (isProduct ? 'Sản phẩm áo dài' : 'Gói chụp ảnh cổ phục');
                 const formattedDateStr = isProduct
                   ? (item.rentalType === 'DAILY'
                     ? `${formatDate(item.startDate || item.rentalFrom)} - ${formatDate(item.endDate || item.rentalTo)}`
@@ -832,9 +847,17 @@ export const ProfilePage: React.FC = () => {
                       backgroundColor: 'white'
                     }}
                   >
-                    <img
-                      src={item.image || item.productImage || (isProduct ? 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b' : '/avatar_hanna.png')}
-                      alt={item.name}
+                    <ImageWithFallback
+                      src={itemImage || (isProduct ? undefined : '/avatar_hanna.png')}
+                      alt={itemName}
+                      fallback={
+                        <div
+                          aria-label={'Chưa có ảnh cho ' + itemName}
+                          style={{ width: '80px', height: '100px', display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: '6px', border: '1px solid #EAEAE8', background: '#F7F3ED', color: '#9A8170', fontSize: '11px', textAlign: 'center', padding: '8px' }}
+                        >
+                          Chưa có ảnh
+                        </div>
+                      }
                       style={{ width: '80px', height: '100px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #EAEAE8' }}
                     />
 
@@ -842,7 +865,7 @@ export const ProfilePage: React.FC = () => {
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <h5 style={{ fontSize: '15px', fontWeight: 700, color: '#2D2926', margin: 0 }}>
-                            {item.name || (isProduct ? 'Sản phẩm áo dài' : 'Gói chụp ảnh cổ phục')}
+                            {itemName}
                           </h5>
                           {activeDetailBooking.status === 'COMPLETED' && (
                             item.isReviewed ? (

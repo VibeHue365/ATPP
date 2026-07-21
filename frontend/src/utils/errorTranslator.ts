@@ -67,5 +67,24 @@ export const translateError = (message?: string): string => {
     return "Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau ít phút.";
   }
 
-  return message;
+
+  const translations: Array<[string, string]> = [
+    ["shoot location is outside", "Địa điểm chụp nằm ngoài phạm vi phục vụ của nhiếp ảnh gia."],
+    ["service radius", "Địa điểm đã chọn nằm ngoài phạm vi phục vụ."],
+    ["photographer not found", "Không tìm thấy nhiếp ảnh gia."],
+    ["photography package not found", "Không tìm thấy gói chụp ảnh."],
+    ["package not found", "Không tìm thấy gói dịch vụ."],
+    ["product not found", "Không tìm thấy sản phẩm hoặc sản phẩm không còn hoạt động."],
+    ["booking not found", "Không tìm thấy đơn hàng."],
+    ["user not found", "Không tìm thấy người dùng."],
+    ["address not found", "Không tìm thấy địa chỉ."],
+    ["avatar file is required", "Vui lòng chọn ảnh đại diện."],
+    ["invalid availability query", "Thông tin kiểm tra lịch trống không hợp lệ."],
+    ["invalid rental period", "Khoảng thời gian thuê không hợp lệ."],
+    ["invalid hourly rental period", "Khung giờ thuê không hợp lệ."],
+    ["start and end time are required", "Vui lòng chọn đầy đủ giờ bắt đầu và giờ kết thúc."],
+    ["internal server error", "Hệ thống đang gặp sự cố. Vui lòng thử lại sau."],
+  ];
+  const matched = translations.find(([english]) => msgLower.includes(english));
+  return matched ? matched[1] : message;
 };

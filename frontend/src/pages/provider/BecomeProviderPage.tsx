@@ -871,7 +871,7 @@ export const BecomeProviderPage: React.FC = () => {
     <main className="vh-provider-shell animate-fade-in">
       <section className="vh-provider-header-band">
         <div>
-          <span className="vh-provider-kicker">VibeHue Partners</span>
+          <span className="vh-provider-kicker">ĐỐI TÁC VIBEHUE</span>
           <h1>Đăng ký tài khoản Đối tác</h1>
           <p>
             Đồng hành cùng VibeHue để kết nối với hàng ngàn khách hàng yêu thích cổ phục áo dài và nhiếp ảnh chuyên nghiệp.
@@ -1779,7 +1779,7 @@ function UploadDropZone({
     ocrNextAction === 'WAIT_FOR_OCR'
       ? 'OCR is queued or processing. This page refreshes automatically.'
       : ocrNextAction === 'UPLOAD_AGAIN'
-        ? 'OCR could not verify this document. Please upload a clearer image.'
+        ? 'Hệ thống không thể xác minh tài liệu này. Vui lòng tải lên hình ảnh rõ nét hơn.'
         : ocrNextAction === 'SUBMIT_WITH_MANUAL_REVIEW'
           ? 'OCR needs manual review. You can continue and submit the application.'
           : ocrNextAction === 'READY_TO_SUBMIT' ? 'OCR verification is complete.' : null;

@@ -1,69 +1,61 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, XCircle, Loader2, AlertTriangle, Home, ShoppingBag, ArrowRight } from 'lucide-react';
+import { ArrowRight, Check, CheckCircle2, Clock3, Home, LoaderCircle, RefreshCw, ShoppingBag, XCircle } from 'lucide-react';
 import { ROUTES } from '../../config/routes';
 import { useCart } from '../../context/CartContext';
 import { httpClient } from '../../services/httpClient';
+import './CheckoutResultPage.css';
 
 type State = 'PENDING' | 'SUCCESS' | 'FAILED' | 'ERROR';
-type Result = {
-  paymentStatus: 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
-  bookingStatus: string;
-  confirmed: boolean;
-};
-
+type Result = { paymentStatus: 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED'; bookingStatus: string; confirmed: boolean };
 const CheckoutResultPage: React.FC = () => {
-  const [params] = useSearchParams();
-  const code = params.get('paymentCode') || '';
+  const [params] = useSearchParams(), code = params.get('paymentCode') || '';
   const { removeFromCart } = useCart();
   const [state, setState] = useState<State>('PENDING');
-  const [message, setMessage] = useState('Đang xác minh giao dịch của bạn...');
+  const [message, setMessage] = useState('Hệ thống đang xác minh giao dịch của bạn.');
 
   const verify = useCallback(async () => {
     if (!code) {
       setState('ERROR');
-      setMessage('Không tìm thấy mã giao dịch để xác minh thanh toán.');
+      setMessage('Không tìm thấy mã giao dịch để xác minh.');
       return true;
     }
     try {
-      const data = await httpClient.get<Result>(`/payments/${encodeURIComponent(code)}/status`);
+      const data = await httpClient.get<Result>('/payments/' + encodeURIComponent(code) + '/status');
       if (data.paymentStatus === 'SUCCESS' && data.confirmed) {
-        const key = `vh_pending_checkout_${code}`;
+        const key = 'vh_pending_checkout_' + code;
         const raw = localStorage.getItem(key);
         if (raw) {
           try {
-            const pending = JSON.parse(raw) as { cartItemIds?: string[] };
-            pending.cartItemIds?.forEach(removeFromCart);
+            (JSON.parse(raw) as { cartItemIds?: string[] }).cartItemIds?.forEach(removeFromCart);
           } finally {
             localStorage.removeItem(key);
           }
         }
         setState('SUCCESS');
-        setMessage('Giao dịch đã được xác nhận. Đơn hàng của bạn đã sẵn sàng!');
+        setMessage('Đơn hàng đã được xác nhận và sẵn sàng trong tài khoản của bạn.');
         return true;
       }
       if (['FAILED', 'CANCELLED'].includes(data.paymentStatus) || data.bookingStatus === 'CANCELLED') {
         setState('FAILED');
-        setMessage('Thanh toán không thành công hoặc phiên giao dịch đã bị hủy bỏ.');
+        setMessage('Giao dịch chưa hoàn tất. Các sản phẩm vẫn được giữ nguyên trong giỏ hàng.');
         return true;
       }
       setState('PENDING');
-      setMessage('Hệ thống đang đối soát dữ liệu với ngân hàng PayOS...');
+      setMessage('Hệ thống đang xác minh giao dịch của bạn. Quá trình này chỉ mất ít phút.');
       return false;
     } catch (error) {
       setState('ERROR');
-      setMessage(error instanceof Error ? error.message : 'Lỗi kết nối đối soát cổng thanh toán.');
+      setMessage(error instanceof Error ? error.message : 'Chưa thể kiểm tra giao dịch lúc này.');
       return true;
     }
   }, [code, removeFromCart]);
 
   useEffect(() => {
-    let stopped = false;
-    let count = 0;
+    let stopped = false, count = 0;
     const poll = async () => {
       const done = await verify();
-      count += 1;
-      if (!stopped && !done && count < 30) {
+      if (!stopped && !done && ++count < 30) {
         window.setTimeout(poll, 2000);
       }
     };
@@ -73,274 +65,73 @@ const CheckoutResultPage: React.FC = () => {
     };
   }, [verify]);
 
-  const renderContent = () => {
-    switch (state) {
-      case 'PENDING':
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-            <div style={{ position: 'relative', width: '80px', height: '80px' }}>
-              <Loader2 size={80} style={{ color: '#D97706', animation: 'spin 1.5s linear infinite' }} />
-            </div>
-            <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '24px', fontWeight: 750, color: '#1F2937', margin: '10px 0 4px' }}>
-              Đang xác minh thanh toán
-            </h2>
-            <p style={{ fontSize: '15px', color: '#6B7280', lineHeight: 1.6, margin: 0 }}>
-              {message}
-            </p>
-            <p style={{ fontSize: '13px', color: '#9CA3AF', fontStyle: 'italic', margin: 0 }}>
-              Vui lòng không tắt trình duyệt hoặc tải lại trang lúc này.
-            </p>
-          </div>
-        );
-
-      case 'SUCCESS':
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-            <div style={{ 
-              width: '80px', 
-              height: '80px', 
-              borderRadius: '50%', 
-              backgroundColor: '#ECFDF5', 
-              display: 'grid', 
-              placeItems: 'center',
-              boxShadow: '0 0 20px rgba(16, 185, 129, 0.15)'
-            }}>
-              <CheckCircle2 size={48} style={{ color: '#10B981' }} />
-            </div>
-            <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '26px', fontWeight: 800, color: '#10B981', margin: '10px 0 4px' }}>
-              Thanh Toán Thành Công!
-            </h2>
-            <p style={{ fontSize: '15px', color: '#4B5563', lineHeight: 1.6, margin: 0 }}>
-              Cảm ơn bạn đã lựa chọn VibeHue. Đơn thuê áo dài và lịch hẹn chụp ảnh của bạn đã được ghi nhận trên hệ thống.
-            </p>
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: '12px', 
-              width: '100%', 
-              marginTop: '15px', 
-              padding: '16px', 
-              backgroundColor: '#F9FAFB', 
-              borderRadius: '12px', 
-              border: '1px solid #F3F4F6',
-              fontSize: '13px',
-              color: '#6B7280',
-              textAlign: 'left'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Mã giao dịch:</span>
-                <strong style={{ color: '#1F2937' }}>{code}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Trạng thái đơn:</span>
-                <strong style={{ color: '#10B981' }}>ĐÃ XÁC NHẬN (PAID)</strong>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '12px', width: '100%', marginTop: '20px' }}>
-              <Link 
-                to={ROUTES.PROFILE} 
-                style={{ 
-                  flex: 1,
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  gap: '8px', 
-                  padding: '12px 24px', 
-                  backgroundColor: '#8B1E22', 
-                  color: 'white', 
-                  textDecoration: 'none', 
-                  borderRadius: '8px', 
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  boxShadow: '0 4px 12px rgba(139, 30, 34, 0.2)',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                Xem đơn hàng <ArrowRight size={16} />
-              </Link>
-              <Link 
-                to="/" 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  gap: '8px', 
-                  padding: '12px 20px', 
-                  border: '1px solid #E5E7EB', 
-                  color: '#4B5563', 
-                  textDecoration: 'none', 
-                  borderRadius: '8px', 
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  backgroundColor: 'white',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <Home size={16} /> Trang chủ
-              </Link>
-            </div>
-          </div>
-        );
-
-      case 'FAILED':
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-            <div style={{ 
-              width: '80px', 
-              height: '80px', 
-              borderRadius: '50%', 
-              backgroundColor: '#FEF2F2', 
-              display: 'grid', 
-              placeItems: 'center',
-              boxShadow: '0 0 20px rgba(239, 68, 68, 0.15)'
-            }}>
-              <XCircle size={48} style={{ color: '#EF4444' }} />
-            </div>
-            <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '26px', fontWeight: 800, color: '#EF4444', margin: '10px 0 4px' }}>
-              Thanh Toán Thất Bại
-            </h2>
-            <p style={{ fontSize: '15px', color: '#4B5563', lineHeight: 1.6, margin: 0 }}>
-              Giao dịch thanh toán không thành công hoặc bạn đã hủy bỏ thanh toán. Đừng lo lắng, giỏ hàng của bạn vẫn được lưu giữ.
-            </p>
-            <div style={{ display: 'flex', gap: '12px', width: '100%', marginTop: '20px' }}>
-              <Link 
-                to={ROUTES.CART} 
-                style={{ 
-                  flex: 1,
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  gap: '8px', 
-                  padding: '12px 24px', 
-                  backgroundColor: '#8B1E22', 
-                  color: 'white', 
-                  textDecoration: 'none', 
-                  borderRadius: '8px', 
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  boxShadow: '0 4px 12px rgba(139, 30, 34, 0.2)'
-                }}
-              >
-                <ShoppingBag size={16} /> Quay lại giỏ hàng
-              </Link>
-              <Link 
-                to="/" 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  gap: '8px', 
-                  padding: '12px 20px', 
-                  border: '1px solid #E5E7EB', 
-                  color: '#4B5563', 
-                  textDecoration: 'none', 
-                  borderRadius: '8px', 
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  backgroundColor: 'white'
-                }}
-              >
-                <Home size={16} /> Trang chủ
-              </Link>
-            </div>
-          </div>
-        );
-
-      case 'ERROR':
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-            <div style={{ 
-              width: '80px', 
-              height: '80px', 
-              borderRadius: '50%', 
-              backgroundColor: '#FFFBEB', 
-              display: 'grid', 
-              placeItems: 'center',
-              boxShadow: '0 0 20px rgba(245, 158, 11, 0.15)'
-            }}>
-              <AlertTriangle size={48} style={{ color: '#F59E0B' }} />
-            </div>
-            <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '24px', fontWeight: 800, color: '#F59E0B', margin: '10px 0 4px' }}>
-              Lỗi Xác Minh Giao Dịch
-            </h2>
-            <p style={{ fontSize: '15px', color: '#4B5563', lineHeight: 1.6, margin: 0 }}>
-              {message}
-            </p>
-            <div style={{ display: 'flex', gap: '12px', width: '100%', marginTop: '20px' }}>
-              <button 
-                onClick={() => void verify()} 
-                style={{ 
-                  flex: 1,
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  gap: '8px', 
-                  padding: '12px 24px', 
-                  backgroundColor: '#8B1E22', 
-                  color: 'white', 
-                  border: 'none',
-                  borderRadius: '8px', 
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(139, 30, 34, 0.2)'
-                }}
-              >
-                Thử lại ngay
-              </button>
-              <Link 
-                to="/" 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  gap: '8px', 
-                  padding: '12px 20px', 
-                  border: '1px solid #E5E7EB', 
-                  color: '#4B5563', 
-                  textDecoration: 'none', 
-                  borderRadius: '8px', 
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  backgroundColor: 'white'
-                }}
-              >
-                <Home size={16} /> Trang chủ
-              </Link>
-            </div>
-          </div>
-        );
-    }
-  };
+  const success = state === 'SUCCESS';
+  const pending = state === 'PENDING';
+  const failed = state === 'FAILED' || state === 'ERROR';
 
   return (
-    <main style={{ 
-      minHeight: '80vh', 
-      display: 'grid', 
-      placeItems: 'center', 
-      padding: '40px 20px',
-      backgroundColor: '#FAF9F6'
-    }}>
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-      <section style={{ 
-        width: '100%',
-        maxWidth: '520px', 
-        padding: '48px 36px', 
-        textAlign: 'center',
-        backgroundColor: 'white',
-        borderRadius: '20px',
-        boxShadow: '0 10px 30px rgba(45, 41, 38, 0.05)',
-        border: '1px solid #EAEAE8'
-      }}>
-        {renderContent()}
+    <main className={'checkout-result-page checkout-result-page--' + state.toLowerCase()}>
+      <div className="checkout-result-glow" aria-hidden="true" />
+      <section className="checkout-result-card" aria-live="polite">
+        <div className="checkout-result-icon-wrap" aria-hidden="true">
+          {success && <CheckCircle2 size={46} />}
+          {pending && <LoaderCircle className="checkout-result-spinner" size={43} />}
+          {failed && <XCircle size={46} />}
+        </div>
+        <span className="checkout-result-eyebrow">
+          {success ? 'Giao dịch hoàn tất' : pending ? 'Đang xử lý giao dịch' : 'Giao dịch chưa hoàn tất'}
+        </span>
+        <h1>
+          {success ? 'Thanh toán thành công!' : pending ? 'Vui lòng chờ trong giây lát' : 'Có lỗi xảy ra'}
+        </h1>
+        <p className="checkout-result-message">{message}</p>
+        <div className="checkout-result-reference">
+          <span>Mã giao dịch</span>
+          <strong>{code ? code.slice(-12).toUpperCase() : 'CHƯA CÓ'}</strong>
+        </div>
+        {success && (
+          <div className="checkout-result-steps">
+            <div className="checkout-result-step done">
+              <span><Check size={14} /></span>
+              <small>Thanh toán</small>
+            </div>
+            <i />
+            <div className="checkout-result-step done">
+              <span><Check size={14} /></span>
+              <small>Xác nhận đơn</small>
+            </div>
+            <i />
+            <div className="checkout-result-step">
+              <span><Clock3 size={15} /></span>
+              <small>Chờ phục vụ</small>
+            </div>
+          </div>
+        )}
+        <div className="checkout-result-actions">
+          {(pending || state === 'ERROR') && (
+            <button className="checkout-result-button primary" onClick={() => void verify()}>
+              <RefreshCw size={18} /> Kiểm tra lại
+            </button>
+          )}
+          {success && (
+            <Link className="checkout-result-button primary" to={ROUTES.PROFILE}>
+              <ShoppingBag size={18} /> Xem đơn hàng <ArrowRight size={17} />
+            </Link>
+          )}
+          {state === 'FAILED' && (
+            <Link className="checkout-result-button primary" to={ROUTES.CART}>
+              <ShoppingBag size={18} /> Quay lại giỏ hàng
+            </Link>
+          )}
+          <Link className="checkout-result-button secondary" to={ROUTES.LANDING}>
+            <Home size={18} /> Về trang chủ
+          </Link>
+        </div>
+        <p className="checkout-result-help">
+          Cần hỗ trợ? <a href="mailto:support@disanaodai.vn">Liên hệ với chúng tôi</a>
+        </p>
       </section>
     </main>
   );
 };
-
 export default CheckoutResultPage;
