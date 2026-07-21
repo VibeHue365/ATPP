@@ -364,10 +364,16 @@ export class PaymentsService {
         isConfirmedEligible = isPaid;
       }
 
-      const newStatus =
-        isConfirmedEligible && holdConfirmation.confirmed
-          ? BookingStatus.Confirmed
-          : updatedBooking.status;
+      let newStatus = updatedBooking.status;
+      if (isConfirmedEligible && holdConfirmation.confirmed) {
+        // Photography bookings stay at DEPOSIT_PAID after deposit payment
+        // so the photographer can review and accept/reject the booking
+        if (updatedBooking.bookingType === BookingType.Photography) {
+          newStatus = BookingStatus.DepositPaid;
+        } else {
+          newStatus = BookingStatus.Confirmed;
+        }
+      }
 
       const newPaymentStatus = isPaid
         ? BookingPaymentStatus.Paid

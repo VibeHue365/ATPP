@@ -2069,6 +2069,251 @@ export const ProviderDashboard: React.FC = () => {
       }
     }
 
+    // ===== PHOTOGRAPHY: Bàn giao ảnh chụp → AWAITING_REVIEW =====
+    if (apiStatus === 'AWAITING_REVIEW' && order?.bookingType === 'PHOTOGRAPHY') {
+      const result = await Swal.fire({
+        title: 'Bàn giao ảnh chụp',
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0;">
+            <p style="font-size: 13px; color: #6B7280; margin-bottom: 18px; text-align: center; line-height: 1.5; max-width: 360px;">
+              Tải lên ảnh kết quả buổi chụp để gửi cho khách hàng xem và tải về. Khách hàng sẽ xác nhận hài lòng sau khi nhận ảnh.
+            </p>
+            <label for="delivered-photo-input" style="
+              width: 100%;
+              max-width: 320px;
+              height: 130px;
+              border: 2px dashed #BFDBFE;
+              border-radius: 12px;
+              background-color: #EFF6FF;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              cursor: pointer;
+              transition: all 0.2s ease-in-out;
+              gap: 8px;
+              padding: 16px;
+              box-sizing: border-box;
+            "
+            onmouseover="this.style.borderColor='#1D4ED8'; this.style.backgroundColor='#DBEAFE';"
+            onmouseout="this.style.borderColor='#BFDBFE'; this.style.backgroundColor='#EFF6FF';"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span style="font-size: 13px; font-weight: 700; color: #1D4ED8; margin-top: 4px;">Tải lên ảnh kết quả</span>
+              <span style="font-size: 11px; color: #6B7280;">Hỗ trợ nhiều hình ảnh JPG, PNG, WEBP</span>
+              <input type="file" id="delivered-photo-input" multiple accept="image/*" style="display: none;" />
+            </label>
+            <div id="delivered-photo-preview" style="
+              display: flex;
+              gap: 10px;
+              flex-wrap: wrap;
+              justify-content: center;
+              margin-top: 20px;
+              width: 100%;
+              max-width: 360px;
+            "></div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#1D4ED8',
+        cancelButtonColor: '#9CA3AF',
+        confirmButtonText: '📸 Gửi ảnh cho khách hàng',
+        cancelButtonText: 'Hủy',
+        background: 'white',
+        didOpen: () => {
+          const fileInput = document.getElementById('delivered-photo-input') as HTMLInputElement;
+          const previewContainer = document.getElementById('delivered-photo-preview') as HTMLDivElement;
+          if (fileInput && previewContainer) {
+            fileInput.addEventListener('change', async (e: any) => {
+              const files = e.target.files;
+              if (!files || files.length === 0) return;
+              previewContainer.innerHTML = '<span style="font-size: 12px; color: #1D4ED8; font-weight: 600;">⏳ Đang tải ảnh...</span>';
+              const uploadedUrls: string[] = [];
+              try {
+                for (let i = 0; i < files.length; i++) {
+                  const formData = new FormData();
+                  formData.append('file', files[i]);
+                  const res: any = await httpClient.post('/api/bookings/upload-reference', formData);
+                  if (res.url) uploadedUrls.push(res.url);
+                }
+                previewContainer.innerHTML = '';
+                uploadedUrls.forEach(url => {
+                  const wrapper = document.createElement('div');
+                  wrapper.style.cssText = 'position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);border:2px solid #BFDBFE;';
+                  const img = document.createElement('img');
+                  img.src = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+                  img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+                  img.className = 'delivered-uploaded-img';
+                  img.dataset.url = url;
+                  wrapper.appendChild(img);
+                  previewContainer.appendChild(wrapper);
+                });
+              } catch (_err) {
+                previewContainer.innerHTML = '<span style="font-size: 12px; color: #C0392B; font-weight: 600;">❌ Tải ảnh thất bại!</span>';
+              }
+            });
+          }
+        },
+        preConfirm: () => {
+          const imgs = document.querySelectorAll('.delivered-uploaded-img');
+          const urls: string[] = [];
+          imgs.forEach((img: any) => {
+            if (img.dataset.url) urls.push(img.dataset.url);
+          });
+          if (urls.length === 0) {
+            Swal.showValidationMessage('Vui lòng tải lên ít nhất 1 ảnh kết quả để gửi cho khách hàng!');
+            return false;
+          }
+          return urls;
+        }
+      });
+
+      if (!result.isConfirmed || !result.value) {
+        setActionMenuId(null);
+        return;
+      }
+
+      const deliveredPhotos = result.value;
+      try {
+        await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus, deliveredPhotos });
+        const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
+        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus } : o));
+        toast.success('Đã gửi ảnh kết quả cho khách hàng! Chờ khách xác nhận hài lòng.');
+      } catch (err: any) {
+        toast.error(err.message || 'Gửi ảnh thất bại');
+      }
+      setActionMenuId(null);
+      return;
+    }
+
+    // ===== PHOTOGRAPHY: Hủy/Từ chối lịch chụp → yêu cầu nhập lý do =====
+    if (apiStatus === 'CANCELLED' && order?.bookingType === 'PHOTOGRAPHY') {
+      const result = await Swal.fire({
+        title: 'Từ chối / Hủy lịch chụp',
+        html: `
+          <p style="font-size: 13px; color: #6B7280; margin-bottom: 14px; line-height: 1.5;">
+            Vui lòng cho khách hàng biết lý do bạn từ chối hoặc hủy lịch chụp này.
+            Lý do sẽ được gửi trực tiếp đến khách hàng.
+          </p>
+        `,
+        input: 'textarea',
+        inputLabel: 'Lý do hủy (bắt buộc)',
+        inputPlaceholder: 'VD: Tôi bận lịch vào ngày này / Thời tiết không phù hợp / ...',
+        inputAttributes: {
+          'aria-label': 'Lý do hủy',
+          style: 'font-size: 13px; min-height: 80px;',
+        },
+        showCancelButton: true,
+        confirmButtonColor: '#d32f2f',
+        cancelButtonColor: '#9CA3AF',
+        confirmButtonText: 'Xác nhận hủy đơn',
+        cancelButtonText: 'Quay lại',
+        background: 'white',
+        inputValidator: (value) => {
+          if (!value || !value.trim()) {
+            return 'Bạn phải nhập lý do hủy để khách hàng biết!';
+          }
+          return null;
+        },
+      });
+
+      if (!result.isConfirmed || !result.value) {
+        setActionMenuId(null);
+        return;
+      }
+
+      const reason = result.value.trim();
+      try {
+        await httpClient.post(`/bookings/${_id}/cancel`, { reason });
+        const displayStatus = statusDisplayMap['CANCELLED'] || 'Đã hủy';
+        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: 'CANCELLED' } : o));
+        toast.success('Đã hủy lịch chụp. Lý do đã được gửi cho khách hàng.');
+      } catch (err: any) {
+        toast.error(err.message || 'Hủy đơn thất bại');
+      }
+      setActionMenuId(null);
+      return;
+    }
+
+    // ===== PHOTOGRAPHY: Báo khách vắng mặt (No-Show) với Ảnh bằng chứng =====
+    if (apiStatus === 'NO_SHOW') {
+      let uploadedProofUrls: string[] = [];
+
+      const result = await Swal.fire({
+        title: '📸 Báo khách vắng mặt (No-Show)',
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 6px 0; text-align: left;">
+            <p style="font-size: 13px; color: #4B5563; margin-bottom: 14px; line-height: 1.5; width: 100%;">
+              Vui lòng nhập mô tả chi tiết và tải ảnh bằng chứng (ảnh cuộc gọi, tin nhắn, ảnh check-in điểm hẹn) để đối soát khi khách vắng mặt. Tiền cọc sẽ được chuyển bồi thường cho bạn.
+            </p>
+
+            <label style="font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 6px; width: 100%;">Lý do / Mô tả chi tiết (bắt buộc):</label>
+            <textarea id="noshow-reason-input" style="width: 100%; height: 80px; padding: 8px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 13px; margin-bottom: 14px; box-sizing: border-box;" placeholder="VD: Đã đứng chờ lúc 08:00 tại Chùa Linh Ứng đến 08:45 nhưng khách không tới, gọi 5 cuộc không nghe máy..."></textarea>
+
+            <label style="font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 6px; width: 100%;">Tải ảnh bằng chứng (ảnh màn hình cuộc gọi, tin nhắn, vị trí check-in):</label>
+            <input type="file" id="noshow-proof-files" multiple accept="image/*" style="width: 100%; font-size: 12px; margin-bottom: 6px;" />
+            <div id="noshow-upload-status" style="font-size: 11px; color: #059669; font-weight: 600; margin-top: 2px; width: 100%;"></div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#d32f2f',
+        cancelButtonColor: '#9CA3AF',
+        confirmButtonText: 'Gửi báo cáo & Thu cọc',
+        cancelButtonText: 'Quay lại',
+        didOpen: () => {
+          const fileInput = document.getElementById('noshow-proof-files') as HTMLInputElement;
+          const statusDiv = document.getElementById('noshow-upload-status') as HTMLDivElement;
+          if (fileInput) {
+            fileInput.onchange = async () => {
+              const files = fileInput.files;
+              if (!files || files.length === 0) return;
+              statusDiv.innerText = '⏳ Đang tải ảnh bằng chứng...';
+              uploadedProofUrls = [];
+              for (let i = 0; i < files.length; i++) {
+                const formData = new FormData();
+                formData.append('file', files[i]);
+                try {
+                  const res: any = await httpClient.post('/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                  if (res.data?.url) {
+                    uploadedProofUrls.push(res.data.url);
+                  }
+                } catch (e) { console.error('Upload proof err', e); }
+              }
+              statusDiv.innerText = `✓ Đã tải lên ${uploadedProofUrls.length} ảnh bằng chứng thành công!`;
+            };
+          }
+        },
+        preConfirm: () => {
+          const reasonInput = (document.getElementById('noshow-reason-input') as HTMLTextAreaElement)?.value || '';
+          if (!reasonInput.trim()) {
+            Swal.showValidationMessage('Vui lòng nhập mô tả / lý do báo cáo vắng mặt!');
+            return false;
+          }
+          return { reason: reasonInput.trim(), photos: uploadedProofUrls };
+        }
+      });
+
+      if (!result.isConfirmed || !result.value) {
+        setActionMenuId(null);
+        return;
+      }
+
+      const { reason, photos } = result.value;
+      try {
+        await httpClient.post(`/bookings/${_id}/cancel`, { 
+          reason: `[KHÁCH VẮNG MẶT - NO SHOW] ${reason}`,
+          reportPhotos: photos 
+        });
+        const displayStatus = statusDisplayMap['CANCELLED'] || 'Đã hủy';
+        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: 'CANCELLED' } : o));
+        toast.success('Đã gửi báo cáo Khách vắng mặt thành công kèm ảnh bằng chứng. Tiền cọc sẽ được bồi thường cho bạn!');
+      } catch (err: any) {
+        toast.error(err.message || 'Báo cáo thất bại');
+      }
+      setActionMenuId(null);
+      return;
+    }
+
     if (apiStatus === 'PICKUP_PENDING') {
       const result = await Swal.fire({
         title: 'Bàn giao trang phục',
@@ -3177,35 +3422,58 @@ export const ProviderDashboard: React.FC = () => {
                             <button onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
                             {actionMenuId === o._id && (() => {
                               // Các bước tiếp theo hợp lệ cho từng trạng thái (khớp với backend allowedTransitions)
-                              const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string }[]> = {
-                                PENDING_PAYMENT: [
-                                  { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
-                                  { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                ],
-                                DEPOSIT_PAID: [
-                                  { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
-                                  { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
-                                  { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                ],
-                                CONFIRMED: [
-                                  { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
-                                  { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                ],
-                                PICKUP_PENDING: [
-                                  { label: 'Xác nhận đã lấy đồ', apiStatus: 'PICKED_UP', icon: <CheckCheck size={14} />, color: '#2e7d32' },
-                                  { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                ],
-                                PICKED_UP: [
-                                  { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-                                  { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
-                                ],
-                                RETURN_PENDING: [
-                                  { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-                                ],
-                                RETURNED: [
-                                  { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
-                                ],
-                              };
+                              const isPhotoOrder = o.bookingType === 'PHOTOGRAPHY';
+                              const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string }[]> = isPhotoOrder
+                                ? {
+                                    // ===== PHOTOGRAPHER FLOW =====
+                                    PENDING_PAYMENT: [
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    DEPOSIT_PAID: [
+                                      { label: 'Chấp nhận lịch chụp', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                      { label: 'Từ chối lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    CONFIRMED: [
+                                      { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
+                                      { label: 'Hủy lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    IN_PROGRESS: [
+                                      { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                    ],
+                                    AWAITING_REVIEW: [
+                                      { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                    ],
+                                  }
+                                : {
+                                    // ===== RENTAL FLOW (ÁO DÀI) =====
+                                    PENDING_PAYMENT: [
+                                      { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    DEPOSIT_PAID: [
+                                      { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                      { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    CONFIRMED: [
+                                      { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    PICKUP_PENDING: [
+                                      { label: 'Xác nhận đã lấy đồ', apiStatus: 'PICKED_UP', icon: <CheckCheck size={14} />, color: '#2e7d32' },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    PICKED_UP: [
+                                      { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                      { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                    ],
+                                    RETURN_PENDING: [
+                                      { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                    ],
+                                    RETURNED: [
+                                      { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                    ],
+                                  };
                                const rawStatus = (o.rawStatus || '') as string;
                                const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string }[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
                                const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
@@ -4911,13 +5179,34 @@ export const ProviderDashboard: React.FC = () => {
                                 <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{p.account} • {p.accountHolder}</span>
                               </td>
                               <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                                <span style={{
-                                  padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
-                                  backgroundColor: p.status === 'SUCCESS' ? '#F0FDF4' : p.status === 'PENDING' ? '#FEF3C7' : '#FEE2E2',
-                                  color: p.status === 'SUCCESS' ? '#166534' : p.status === 'PENDING' ? '#92400E' : '#991B1B'
-                                }}>
-                                  {p.status === 'SUCCESS' ? 'Thành công' : p.status === 'PENDING' ? 'Đang xử lý' : 'Thất bại'}
-                                </span>
+                                {(() => {
+                                  let bg = '#FEE2E2';
+                                  let color = '#991B1B';
+                                  let text = 'Thất bại';
+                                  const status = String(p.status || '').toUpperCase();
+                                  if (status === 'SUCCESS' || status === 'SETTLED') {
+                                    bg = '#F0FDF4';
+                                    color = '#166534';
+                                    text = 'Thành công';
+                                  } else if (status === 'PENDING' || status === 'PROCESSING' || status === 'READY_TO_SETTLE') {
+                                    bg = '#FEF3C7';
+                                    color = '#92400E';
+                                    text = 'Đang xử lý';
+                                  } else if (status === 'ON_HOLD') {
+                                    bg = '#EFF6FF';
+                                    color = '#1E40AF';
+                                    text = 'Tạm giữ';
+                                  } else if (status === 'CANCELLED') {
+                                    bg = '#F3F4F6';
+                                    color = '#4B5563';
+                                    text = 'Đã hủy';
+                                  }
+                                  return (
+                                    <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: bg, color }}>
+                                      {text}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td style={{ padding: '16px 20px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>{new Date(p.settledAt || p.createdAt || p.date).toLocaleDateString('vi-VN')}</td>
                             </tr>

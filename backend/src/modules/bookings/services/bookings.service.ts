@@ -2575,12 +2575,14 @@ export class BookingsService implements OnApplicationBootstrap {
     userId?: string,
     roles?: string[],
     handoverPhotos?: string[],
+    deliveredPhotos?: string[],
   ): Promise<BookingDocument> {
     const booking = await this.bookingModel.findById(bookingIdStr);
     if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
 
     if (userId) {
       const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
+      const isCustomer = this.getCustomerIdStr(booking) === userId;
 
       const userProviders = await this.providerModel.find({
         userId: new Types.ObjectId(userId),
@@ -2590,7 +2592,13 @@ export class BookingsService implements OnApplicationBootstrap {
         userProviderIds.includes(id.toString()),
       );
 
-      if (!isAdmin && !isProvider) {
+      if (newStatus === BookingStatus.Disputed) {
+        if (!isAdmin && !isProvider && !isCustomer) {
+          throw new ForbiddenException(
+            'Bạn không có quyền gửi khiếu nại cho đơn hàng này.',
+          );
+        }
+      } else if (!isAdmin && !isProvider) {
         throw new ForbiddenException(
           'Chỉ nhà cung cấp hoặc Admin mới có quyền cập nhật trạng thái đơn hàng này.',
         );
@@ -2702,6 +2710,31 @@ export class BookingsService implements OnApplicationBootstrap {
     booking.status = nextStatus;
     if (nextStatus === BookingStatus.AwaitingReview) {
       booking.awaitingReviewSince = new Date();
+      if (deliveredPhotos && deliveredPhotos.length > 0) {
+        (booking as any).deliveredPhotos = deliveredPhotos;
+        booking.handoverPhotos = deliveredPhotos;
+      }
+    }
+    if (nextStatus === BookingStatus.Disputed) {
+      try {
+        const disputeModel = this.bookingModel.db.model('Dispute');
+        const existing = await disputeModel.findOne({ bookingId: booking._id });
+        if (!existing) {
+          const item = await this.bookingItemModel.findOne({ bookingId: booking._id });
+          const providerId = booking.providerIds?.[0] || null;
+          await disputeModel.create({
+            bookingId: booking._id,
+            bookingItemId: item?._id || new Types.ObjectId(),
+            openedBy: new Types.ObjectId(userId || booking.customerId.toString()),
+            againstProviderId: providerId,
+            reason: note || 'Khách hàng gửi khiếu nại chất lượng dịch vụ/sản phẩm',
+            evidencePhotos: (booking as any).deliveredPhotos || booking.handoverPhotos || [],
+            status: 'OPEN',
+          });
+        }
+      } catch (e) {
+        console.warn('Lỗi tự động khởi tạo Dispute document:', e);
+      }
     }
     if (nextStatus === BookingStatus.PickupPending) {
       booking.handoverInitiatedAt = new Date();

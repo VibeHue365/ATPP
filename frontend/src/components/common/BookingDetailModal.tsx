@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { PrivateEvidenceImage } from './PrivateEvidenceImage';
 import { httpClient } from '../../services/httpClient';
 import { Modal } from './Modal';
-import { ShieldAlert, User, Clock, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { ShieldAlert, User, Clock, FileText, CheckCircle, XCircle, Camera, Download, Scale } from 'lucide-react';
 import { CustomerRefundPanel } from './CustomerRefundPanel';
 import { RentalPickupReturnPanel } from '../../features/rentals/components/RentalPickupReturnPanel';
 import { RentalFulfillmentOperationsPanel } from '../../features/rentals/components/RentalFulfillmentOperationsPanel';
 import { API_BASE_URL } from '../../config/env';
+import { downloadPhotosAsZip, downloadSinglePhoto } from '../../utils/downloadUtils';
 
 interface BookingDetailModalProps {
   bookingId: string | null;
@@ -399,6 +400,207 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* Photography Delivered Photos */}
+          {(() => {
+            const isPhotography = booking.bookingType === 'PHOTOGRAPHY' || booking.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+            const photos = (booking.deliveredPhotos && booking.deliveredPhotos.length > 0)
+              ? booking.deliveredPhotos
+              : (isPhotography && booking.handoverPhotos && booking.handoverPhotos.length > 0)
+                ? booking.handoverPhotos
+                : [];
+
+            if (photos.length === 0) return null;
+
+            return (
+              <div style={{
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                borderRadius: '10px',
+                padding: '14px 18px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1D4ED8', fontWeight: 700, fontSize: '13px' }}>
+                    <Camera size={16} />
+                    <span>📸 ẢNH KẾT QUẢ TỪ THỢ CHỤP</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const fullPhotoUrls = photos.map((p: string) => getEvidenceUrl(p));
+                      const zipName = `anh_chup_${booking.bookingCode || 'ket_qua'}.zip`;
+                      void downloadPhotosAsZip(fullPhotoUrls, zipName);
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      background: '#1D4ED8', color: 'white', border: 'none',
+                      borderRadius: '6px', padding: '5px 10px', fontSize: '11px',
+                      fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.background = '#1E40AF')}
+                    onMouseOut={(e) => (e.currentTarget.style.background = '#1D4ED8')}
+                  >
+                    <Download size={12} /> Tải tất cả ({photos.length})
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {photos.map((photo: string, index: number) => (
+                    <div key={index} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #BFDBFE', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}>
+                      <a href={getEvidenceUrl(photo)} target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
+                        <img src={getEvidenceUrl(photo)} alt={`Ảnh kết quả ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => void downloadSinglePhoto(getEvidenceUrl(photo), `photo_${index + 1}.jpg`)}
+                        style={{
+                          position: 'absolute', bottom: '3px', right: '3px',
+                          background: 'rgba(29, 78, 216, 0.85)', color: 'white',
+                          border: 'none', borderRadius: '4px', padding: '3px', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          cursor: 'pointer', transition: 'all 0.2s',
+                        }}
+                        title="Tải xuống"
+                      >
+                        <Download size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: '11px', color: '#6B7280', margin: 0, lineHeight: 1.4 }}>
+                  Thợ chụp đã bàn giao {photos.length} ảnh. Bấm vào ảnh để xem hoặc nút ⬇ để tải về.
+                </p>
+              </div>
+            );
+          })()}
+
+          {/* Cancellation Reason Display */}
+          {booking.status === 'CANCELLED' && booking.cancellation?.reason && (
+            <div style={{
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              borderRadius: '10px',
+              padding: '14px 18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontWeight: 700, fontSize: '13px' }}>
+                <XCircle size={16} />
+                <span>LÝ DO HỦY ĐƠN</span>
+              </div>
+              <p style={{ fontSize: '13px', color: '#7F1D1D', margin: 0, lineHeight: 1.5, fontWeight: 500 }}>
+                {booking.cancellation.reason}
+              </p>
+              {booking.cancellation.cancelledAt && (
+                <p style={{ fontSize: '11px', color: '#9CA3AF', margin: 0 }}>
+                  Thời gian hủy: {new Date(booking.cancellation.cancelledAt).toLocaleString('vi-VN')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Admin Dispute Result Display */}
+          {(() => {
+            const resInput = booking.disputeResult || (() => {
+              const log = [...(booking.statusTimeline || [])].reverse().find((t: any) => t.note?.includes('Admin giải quyết tranh chấp'));
+              if (!log) return null;
+              return {
+                decisionLabel: log.note,
+                resolvedAt: log.changedAt,
+              };
+            })();
+
+            if (!resInput) return null;
+
+            let decisionText = resInput.decisionLabel || 'Admin đã phán quyết';
+            let adminNote = resInput.notes || '';
+            let refundAmt: any = resInput.refundAmount;
+            let compAmt: any = resInput.compensationAmount;
+
+            if (typeof decisionText === 'string' && decisionText.includes('Admin giải quyết tranh chấp.')) {
+              const raw = decisionText;
+              const decMatch = raw.match(/Quyết định:\s*([^.]+)/);
+              if (decMatch) decisionText = decMatch[1].trim();
+
+              const noteMatch = raw.match(/Ghi chú:\s*(.*)$/);
+              if (noteMatch && !adminNote) adminNote = noteMatch[1].trim();
+
+              const refMatch = raw.match(/Hoàn khách:\s*([\d.,\s]+đ)/);
+              if (refMatch && (refundAmt === undefined || refundAmt === null)) {
+                refundAmt = refMatch[1];
+              }
+              const compMatch = raw.match(/bồi thường provider:\s*([\d.,\s]+đ)/);
+              if (compMatch && (compAmt === undefined || compAmt === null)) {
+                compAmt = compMatch[1];
+              }
+            }
+
+            return (
+              <div style={{
+                backgroundColor: '#FFFBEB',
+                border: '1px solid #FCD34D',
+                borderRadius: '10px',
+                padding: '16px 18px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                boxShadow: '0 2px 8px rgba(217, 119, 6, 0.08)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#B45309', fontWeight: 750, fontSize: '14px' }}>
+                  <Scale size={18} />
+                  <span>⚖️ KẾT QUẢ GIẢI QUYẾT TRANH CHẤP TỪ ADMIN</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: '13px', borderTop: '1px solid #FDE68A', paddingTop: '10px' }}>
+                  <div>
+                    <span style={{ color: '#6B7280' }}>Quyết định: </span>
+                    <strong style={{ color: '#D97706', fontSize: '13.5px' }}>{decisionText}</strong>
+                  </div>
+                  {refundAmt !== undefined && refundAmt !== null && (
+                    <div>
+                      <span style={{ color: '#6B7280' }}>Hoàn tiền khách: </span>
+                      <strong style={{ color: '#059669' }}>
+                        {typeof refundAmt === 'number' ? `${refundAmt.toLocaleString('vi-VN')}đ` : refundAmt}
+                      </strong>
+                    </div>
+                  )}
+                  {compAmt !== undefined && compAmt !== null && (
+                    <div>
+                      <span style={{ color: '#6B7280' }}>Bồi thường shop/thợ: </span>
+                      <strong style={{ color: '#D97706' }}>
+                        {typeof compAmt === 'number' ? `${compAmt.toLocaleString('vi-VN')}đ` : compAmt}
+                      </strong>
+                    </div>
+                  )}
+                </div>
+
+                {adminNote && (
+                  <div style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #FDE68A',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    marginTop: '2px',
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#B45309', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      💬 Ghi chú phán quyết từ Admin:
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#1F2937', lineHeight: 1.5, whiteSpace: 'pre-wrap', fontWeight: 500 }}>
+                      "{adminNote}"
+                    </div>
+                  </div>
+                )}
+
+                {resInput.resolvedAt && (
+                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
+                    Thời gian phán quyết: {new Date(resInput.resolvedAt).toLocaleString('vi-VN')}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Customer / Service Provider info */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>

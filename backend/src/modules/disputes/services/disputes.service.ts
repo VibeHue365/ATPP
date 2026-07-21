@@ -705,16 +705,26 @@ export class DisputesService {
         status: { $in: [DisputeStatus.Open, DisputeStatus.UnderReview] },
       });
       if (!dispute) {
-        throw new NotFoundException(
-          'Không tìm thấy báo cáo sự cố hay hồ sơ tranh chấp cho đơn hàng này',
-        );
+        if (booking.status === BookingStatus.Disputed) {
+          isDirectDispute = true;
+          reportedBy = booking.providerIds?.[0] || null;
+          requestedAmount =
+            booking.pricingSummary?.grandTotal ||
+            booking.pricingSummary?.subTotal ||
+            0;
+        } else {
+          throw new NotFoundException(
+            'Không tìm thấy báo cáo sự cố hay hồ sơ tranh chấp cho đơn hàng này',
+          );
+        }
+      } else {
+        isDirectDispute = true;
+        reportedBy = dispute.againstProviderId;
+        requestedAmount =
+          booking.pricingSummary.grandTotal ||
+          booking.pricingSummary?.subTotal ||
+          0;
       }
-      isDirectDispute = true;
-      reportedBy = dispute.againstProviderId;
-      requestedAmount =
-        booking.pricingSummary.grandTotal ||
-        booking.pricingSummary?.subTotal ||
-        0;
     } else {
       if (incident.status !== IncidentStatus.Disputed) {
         throw new ConflictException('Sự cố này không ở trạng thái tranh chấp');
@@ -754,20 +764,14 @@ export class DisputesService {
       );
     }
 
-    // 1. Cập nhật trạng thái Escrow sang DisputedResolved một cách atomic trước để tránh double split
-    const escrow = await this.bookingModel.db
+    // 1. Cập nhật trạng thái Escrow sang DisputedResolved nếu có
+    await this.bookingModel.db
       .model('BookingEscrow')
       .findOneAndUpdate(
         { bookingId: booking._id, status: EscrowStatus.Held },
         { $set: { status: EscrowStatus.DisputedResolved } },
         { new: false },
       );
-
-    if (!escrow) {
-      throw new ConflictException(
-        'Đơn hàng đã được đối soát hoặc không tìm thấy thông tin ký quỹ hợp lệ',
-      );
-    }
 
     let transferResult = null;
     let refundResult = null;
@@ -778,40 +782,38 @@ export class DisputesService {
         const provider = await this.bookingModel.db
           .model('Provider')
           .findById(reportedBy);
-        if (!provider) {
-          throw new NotFoundException('Không tìm thấy thông tin shop');
-        }
+        if (provider) {
+          let bankName = 'VietinBank';
+          let accountNumber = '1029384756';
+          let accountHolder = 'PROVIDER STUDIO';
 
-        let bankName = 'VietinBank';
-        let accountNumber = '1029384756';
-        let accountHolder = 'PROVIDER STUDIO';
+          if (provider.paymentAccounts && provider.paymentAccounts.length > 0) {
+            const activeAccount =
+              provider.paymentAccounts.find((a: any) => a.isDefault) ||
+              provider.paymentAccounts[0];
+            bankName = activeAccount.bankName || bankName;
+            accountNumber = activeAccount.accountNumberMasked
+              ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
+              : accountNumber;
+            accountHolder = activeAccount.accountHolder || accountHolder;
+          }
 
-        if (provider.paymentAccounts && provider.paymentAccounts.length > 0) {
-          const activeAccount =
-            provider.paymentAccounts.find((a: any) => a.isDefault) ||
-            provider.paymentAccounts[0];
-          bankName = activeAccount.bankName || bankName;
-          accountNumber = activeAccount.accountNumberMasked
-            ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
-            : accountNumber;
-          accountHolder = activeAccount.accountHolder || accountHolder;
-        }
+          const transferRef = `COMPENSATION_RESOLVED_${booking.bookingCode}`;
+          transferResult = await this.executeCompensationTransfer({
+            bookingId: booking._id,
+            providerId: provider._id,
+            amount: compensationAmount,
+            bankName,
+            accountNumber,
+            accountHolder,
+            transferRef,
+          });
 
-        const transferRef = `COMPENSATION_RESOLVED_${booking.bookingCode}`;
-        transferResult = await this.executeCompensationTransfer({
-          bookingId: booking._id,
-          providerId: provider._id,
-          amount: compensationAmount,
-          bankName,
-          accountNumber,
-          accountHolder,
-          transferRef,
-        });
-
-        if (!transferResult.success) {
-          throw new BadRequestException(
-            `Chuyển khoản đền bù cho Shop thất bại: ${transferResult.error}`,
-          );
+          if (!transferResult.success) {
+            throw new BadRequestException(
+              `Chuyển khoản đền bù cho Shop thất bại: ${transferResult.error}`,
+            );
+          }
         }
       }
 
@@ -834,13 +836,17 @@ export class DisputesService {
         await incident.save();
       }
 
+      const item = await this.bookingItemModel.findOne({ bookingId: booking._id });
       const resolvedDispute = await this.disputeModel.findOneAndUpdate(
         {
           bookingId,
-          status: { $in: [DisputeStatus.Open, DisputeStatus.UnderReview] },
         },
         {
           $set: {
+            bookingItemId: item?._id || new Types.ObjectId(),
+            openedBy: (booking as any).customerId?._id || booking.customerId,
+            againstProviderId: reportedBy || (booking.providerIds?.[0] || new Types.ObjectId()),
+            reason: notes || 'Khách hàng khiếu nại',
             status: DisputeStatus.Resolved,
             adminDecision: {
               decision:
@@ -864,7 +870,7 @@ export class DisputesService {
             },
           },
         },
-        { new: true },
+        { new: true, upsert: true },
       );
       if (!resolvedDispute) {
         throw new ConflictException(
@@ -872,12 +878,25 @@ export class DisputesService {
         );
       }
 
-      // Chuyển đơn hàng sang Completed
+      // Chuyển đơn hàng sang Completed và lưu kết quả tranh chấp
+      let decisionLabel = 'Thỏa thuận chia tiền';
+      if (decision === 'CUSTOMER_RIGHT') decisionLabel = 'Khách hàng đúng (Hoàn 100% tiền)';
+      else if (decision === 'SHOP_RIGHT') decisionLabel = 'Thợ chụp / Shop đúng (Giải ngân cho Shop)';
+
+      (booking as any).disputeResult = {
+        decision,
+        decisionLabel,
+        refundAmount,
+        compensationAmount,
+        notes,
+        resolvedAt: new Date(),
+      };
+
       booking.status = BookingStatus.Completed;
       booking.statusTimeline.push({
         status: BookingStatus.Completed,
         changedAt: new Date(),
-        note: `Admin giải quyết tranh chấp. Quyết định: ${decision === 'SHOP_RIGHT' ? 'Provider đúng' : decision === 'CUSTOMER_RIGHT' ? 'Khách hàng đúng' : 'Chia tiền'}. Hoàn khách: ${refundAmount.toLocaleString('vi-VN')}đ, bồi thường provider: ${compensationAmount.toLocaleString('vi-VN')}đ. Ghi chú: ${notes}`,
+        note: `Admin giải quyết tranh chấp. Quyết định: ${decisionLabel}. Hoàn khách: ${refundAmount.toLocaleString('vi-VN')}đ, bồi thường provider: ${compensationAmount.toLocaleString('vi-VN')}đ. Ghi chú: ${notes}`,
       });
       await booking.save();
 
@@ -1000,7 +1019,62 @@ export class DisputesService {
       };
     });
 
-    return [...incidents, ...mappedDisputes];
+    // Thêm các Booking có trạng thái DISPUTED chưa có record trong dispute/incident
+    const existingBookingIds = [
+      ...incidents.map((i: any) => i.bookingId?._id?.toString() || i.bookingId?.toString()),
+      ...disputes.map((d: any) => d.bookingId?._id?.toString() || d.bookingId?.toString()),
+    ].filter(Boolean);
+
+    const bookingModel = this.incidentModel.db.model('Booking');
+    const bookingItemModel = this.incidentModel.db.model('BookingItem');
+    const providerModel = this.incidentModel.db.model('Provider');
+
+    const disputedBookings = await bookingModel
+      .find({
+        status: BookingStatus.Disputed,
+        _id: { $nin: existingBookingIds.map((id: string) => new Types.ObjectId(id)) },
+      })
+      .populate('customerId')
+      .exec();
+
+    const mappedDisputedBookings = await Promise.all(
+      disputedBookings.map(async (b: any) => {
+        const item = await bookingItemModel
+          .findOne({ bookingId: b._id })
+          .populate('productId')
+          .populate('photographyPackageId')
+          .exec();
+
+        const lastTimeline = [...(b.statusTimeline || [])]
+          .reverse()
+          .find((t: any) => t.status === BookingStatus.Disputed);
+        const reason = lastTimeline?.note || 'Khách hàng gửi khiếu nại đơn hàng';
+
+        const providerId = b.providerIds?.[0] || null;
+        let providerDoc = null;
+        if (providerId) {
+          providerDoc = await providerModel.findById(providerId).exec();
+        }
+
+        return {
+          _id: `bdispute_${b._id}`,
+          bookingId: b,
+          bookingItemId: item || null,
+          productId: item?.productId || item?.photographyPackageId || null,
+          reportedBy: providerDoc || null,
+          description: reason,
+          actionType: b.bookingType === 'PHOTOGRAPHY' ? 'PHOTOGRAPHY_DISPUTE' : 'CUSTOMER_DISPUTE',
+          evidencePhotos: b.deliveredPhotos || b.handoverPhotos || [],
+          requestedAmount: b.pricingSummary?.grandTotal || b.pricingSummary?.subTotal || 0,
+          status: IncidentStatus.Disputed,
+          isDirectDispute: true,
+          openedBy: b.customerId,
+          isBookingDisputeOnly: true,
+        };
+      })
+    );
+
+    return [...incidents, ...mappedDisputes, ...mappedDisputedBookings];
   }
 
   private async executeCompensationTransfer(input: {

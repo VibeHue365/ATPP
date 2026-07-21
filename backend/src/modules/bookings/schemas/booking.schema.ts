@@ -217,6 +217,31 @@ export class Booking {
   @Prop({ type: [String], default: [] })
   handoverPhotos?: string[];
 
+  /** Photography only: result photos delivered by photographer when moving to AWAITING_REVIEW */
+  @Prop({ type: [String], default: [] })
+  deliveredPhotos?: string[];
+
+  /** Kết quả phán quyết tranh chấp từ Admin */
+  @Prop({
+    type: {
+      decision: { type: String, default: null },
+      decisionLabel: { type: String, default: null },
+      refundAmount: { type: Number, default: 0 },
+      compensationAmount: { type: Number, default: 0 },
+      notes: { type: String, default: null },
+      resolvedAt: { type: Date, default: null },
+    },
+    default: null,
+  })
+  disputeResult?: {
+    decision?: string;
+    decisionLabel?: string;
+    refundAmount?: number;
+    compensationAmount?: number;
+    notes?: string;
+    resolvedAt?: Date;
+  } | null;
+
   /** Pre-existing damage report submitted by customer during pickup (within 30 minutes) */
   @Prop({
     type: {

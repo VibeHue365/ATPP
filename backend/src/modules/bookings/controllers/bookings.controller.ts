@@ -200,7 +200,7 @@ export class BookingsController {
   async updateStatus(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() body: { status: string; note?: string; handoverPhotos?: string[] },
+    @Body() body: { status: string; note?: string; handoverPhotos?: string[]; deliveredPhotos?: string[] },
   ) {
     if (!body?.status) throw new BadRequestException('Thiếu trường status');
     return this.bookingsService.updateBookingStatus(
@@ -210,6 +210,7 @@ export class BookingsController {
       user.sub,
       user.roles,
       body.handoverPhotos,
+      body.deliveredPhotos,
     );
   }
 

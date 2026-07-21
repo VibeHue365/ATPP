@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
 import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle, Check, XCircle, X } from 'lucide-react';
@@ -74,6 +75,15 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [payments, setPayments] = useState<any[]>([]);
   const [realProductList, setRealProductList] = useState<any[]>([]);
   const [realPhotographersList, setRealPhotographersList] = useState<any[]>([]);
+
+  const [currentPageAppointments, setCurrentPageAppointments] = useState(1);
+  const [currentPageRentals, setCurrentPageRentals] = useState(1);
+  const ITEMS_PER_PAGE = 9;
+
+  useEffect(() => {
+    setCurrentPageAppointments(1);
+    setCurrentPageRentals(1);
+  }, [activeTab]);
 
   const [reviewingItem, setReviewingItem] = useState<any>(null);
   const [rating, setRating] = useState(5);
@@ -233,10 +243,23 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   };
 
   const handleConfirmComplete = async (bookingId: string) => {
+    const confirm = await Swal.fire({
+      title: 'Xác nhận hài lòng?',
+      text: 'Bạn xác nhận đã nhận đủ sản phẩm ảnh chụp và hài lòng với dịch vụ? Đơn hàng sẽ được chuyển sang Hoàn thành.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#9CA3AF',
+      confirmButtonText: '✓ Xác nhận hoàn thành',
+      cancelButtonText: 'Quay lại',
+      background: 'white',
+    });
+    if (!confirm.isConfirmed) return;
+
     try {
       toast.info('Đang xử lý xác nhận hoàn thành...');
       await httpClient.post(`/bookings/${bookingId}/confirm-complete`);
-      toast.success('Đã xác nhận hoàn thành thành công! Tiền dịch vụ đã được giải ngân cho thợ chụp.');
+      toast.success('Đã xác nhận hoàn thành thành công! Tiền dịch vụ đã được tất toán.');
       onRefresh();
     } catch (err: any) {
       console.error(err);
@@ -245,15 +268,41 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   };
 
   const handleDisputeBooking = async (bookingId: string) => {
-    const reason = window.prompt('Nhập lý do khiếu nại (ví dụ: thợ đến trễ, chất lượng không đúng cam kết...):');
-    if (reason === null) return; // cancelled prompt
-    if (!reason.trim()) {
-      toast.error('Vui lòng nhập lý do khiếu nại.');
-      return;
-    }
+    const result = await Swal.fire({
+      title: 'Khiếu nại đơn chụp ảnh',
+      html: `
+        <p style="font-size: 13px; color: #6B7280; margin-bottom: 14px; line-height: 1.5;">
+          Vui lòng mô tả chi tiết lý do khiếu nại (ví dụ: thợ đến trễ, thái độ không tốt, chất lượng ảnh không đúng cam kết...). 
+          Bộ phận Chăm sóc khách hàng & Admin sẽ kiểm tra và hỗ trợ giải quyết trong 24 giờ.
+        </p>
+      `,
+      input: 'textarea',
+      inputLabel: 'Lý do khiếu nại (bắt buộc)',
+      inputPlaceholder: 'Nhập chi tiết lý do khiếu nại tại đây...',
+      inputAttributes: {
+        'aria-label': 'Lý do khiếu nại',
+        style: 'font-size: 13px; min-height: 90px;',
+      },
+      showCancelButton: true,
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#9CA3AF',
+      confirmButtonText: 'Gửi khiếu nại',
+      cancelButtonText: 'Hủy',
+      background: 'white',
+      inputValidator: (value) => {
+        if (!value || !value.trim()) {
+          return 'Vui lòng nhập chi tiết lý do khiếu nại!';
+        }
+        return null;
+      },
+    });
+
+    if (!result.isConfirmed || !result.value) return;
+
+    const reason = result.value.trim();
     try {
       await httpClient.patch(`/bookings/${bookingId}/status`, { status: 'DISPUTED', note: reason });
-      toast.success('Đã gửi khiếu nại thành công. Admin sẽ liên hệ xử lý trong 24h.');
+      toast.success('Đã gửi khiếu nại thành công. Admin sẽ liên hệ hỗ trợ bạn trong 24h!');
       onRefresh();
     } catch (err: any) {
       console.error(err);
@@ -267,20 +316,51 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   ).map(b => {
     const photoItem = b.items.find((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE');
     const isPast = ['COMPLETED', 'CANCELLED', 'REFUNDED'].includes(b.status);
+
+    const now = new Date();
+    const nowYMD = now.toLocaleDateString('sv-SE'); // 'YYYY-MM-DD'
+    const currentHourMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const shootYMD = photoItem?.shootDate ? new Date(photoItem.shootDate).toLocaleDateString('sv-SE') : '';
+    const timeStr = photoItem?.shootTimeSlot || '09:00 - 11:00';
+    
+    // Lấy giờ kết thúc ca chụp (ví dụ "08:00 - 09:00" -> "09:00")
+    let endTimeStr = '23:59';
+    if (timeStr.includes('-')) {
+      const parts = timeStr.split('-');
+      if (parts.length >= 2) endTimeStr = parts[1].trim();
+    }
+
+    const isPendingStartStatus = ['CONFIRMED', 'DEPOSIT_PAID'].includes(b.status);
+    const isPastDate = shootYMD !== '' && shootYMD < nowYMD;
+    const isPastTimeToday = shootYMD === nowYMD && currentHourMin > endTimeStr;
+
+    // Đơn CHỈ BỊ COI LÀ QUÁ GIỜ/QUÁ HẠN khi Thợ ảnh CHƯA bấm "Bắt đầu buổi chụp" (trạng thái vẫn là DEPOSIT_PAID/CONFIRMED)
+    const isOverdue = !isPast && isPendingStartStatus && (isPastDate || isPastTimeToday);
+
     let statusLabel = 'Sắp tới';
-    if (b.status === 'IN_PROGRESS') statusLabel = 'Đang chụp';
+    if (b.status === 'DEPOSIT_PAID') statusLabel = 'Chờ xác nhận';
+    else if (b.status === 'IN_PROGRESS') statusLabel = 'Đang chụp';
     else if (b.status === 'AWAITING_REVIEW') statusLabel = 'Chờ bạn duyệt';
     else if (b.status === 'COMPLETED') statusLabel = 'Hoàn thành';
     else if (b.status === 'CANCELLED') statusLabel = 'Đã hủy';
     else if (b.status === 'DISPUTED') statusLabel = 'Tranh chấp';
+
+    if (!isPast && isOverdue && ['CONFIRMED', 'DEPOSIT_PAID'].includes(b.status)) {
+      statusLabel = isPastTimeToday ? 'Quá giờ chụp' : 'Quá hạn chụp';
+    }
 
     return {
       id: b._id,
       isReal: true,
       booking: b,
       rawStatus: b.status,
+      isOverdue,
+      isPastTimeToday,
+      shootYMD,
+      endTimeStr,
       awaitingReviewSince: b.awaitingReviewSince,
-      statusType: isPast ? 'PAST' : (b.status === 'AWAITING_REVIEW' || b.status === 'IN_PROGRESS') ? 'ACTION' : 'UPCOMING',
+      statusType: isPast ? 'PAST' : isOverdue ? 'OVERDUE' : (b.status === 'AWAITING_REVIEW' || b.status === 'IN_PROGRESS') ? 'ACTION' : 'UPCOMING',
       dateStr: photoItem?.shootDate ? formatDate(photoItem.shootDate) : '',
       title: photoItem?.photographyPackageId?.name || photoItem?.name || 'Gói Chụp Ảnh Cổ Phong',
       photographerName: photoItem?.providerId?.businessName || photoItem?.providerId?.fullName || photoItem?.photographerName || 'Nhiếp ảnh gia',
@@ -290,7 +370,73 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     };
   });
 
-  const displayAppointments = realAppointments;
+  // --- Helper: Sorting function ---
+  // Nhóm 1: Sự kiện TƯƠNG LAI & HÔM NAY CHƯA QUÁ GIỜ (Xếp từ mốc gần nhất tới xa nhất)
+  // Nhóm 2: Sự kiện QUÁ HẠN / QUÁ GIỜ CHỤP chưa hoàn tất
+  // Nhóm 3: Sự kiện ĐÃ HOÀN THÀNH / ĐÃ TRẢ ĐỒ / ĐÃ HỦY (Luôn xếp dưới cùng)
+  const sortItemsByUrgencyDate = (a: any, b: any) => {
+    const isFinished = (item: any) => {
+      const st = item.rawStatus || item.status;
+      return ['COMPLETED', 'RETURNED', 'CANCELLED', 'REFUNDED'].includes(st);
+    };
+
+    const getItemYMD = (item: any) => {
+      if (item.shootYMD) return item.shootYMD;
+      if (item.startDate) {
+        try {
+          return new Date(item.startDate).toLocaleDateString('sv-SE');
+        } catch (e) { return ''; }
+      }
+      const photoItem = item.booking?.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+      if (photoItem?.shootDate) {
+        try {
+          return new Date(photoItem.shootDate).toLocaleDateString('sv-SE');
+        } catch (e) { return ''; }
+      }
+      return '';
+    };
+
+    const aFin = isFinished(a);
+    const bFin = isFinished(b);
+
+    const ymdA = getItemYMD(a);
+    const ymdB = getItemYMD(b);
+
+    const getGroup = (item: any, _ymd: string, fin: boolean) => {
+      if (fin) return 3; // Hoàn thành/Đã hủy -> Nhóm 3 (cuối cùng)
+      if (item.isOverdue) return 2; // Đã quá hạn (quá ngày hoặc quá giờ hôm nay) -> Nhóm 2
+      return 1; // Sắp tới / Hôm nay đúng giờ -> Nhóm 1 (đầu tiên)
+    };
+
+    const groupA = getGroup(a, ymdA, aFin);
+    const groupB = getGroup(b, ymdB, bFin);
+
+    if (groupA !== groupB) {
+      return groupA - groupB;
+    }
+
+    // Nếu cùng Group 1 (Sắp tới / Hôm nay): Ngày gần nhất lên đầu (21/07 -> 22/07 -> 23/07)
+    if (groupA === 1) {
+      if (ymdA && ymdB && ymdA !== ymdB) {
+        return ymdA.localeCompare(ymdB);
+      }
+      const dateA = a.booking?.createdAt ? new Date(a.booking.createdAt).getTime() : 0;
+      const dateB = b.booking?.createdAt ? new Date(b.booking.createdAt).getTime() : 0;
+      return dateA - dateB;
+    }
+
+    // Nếu cùng Group 2 (Quá hạn) hoặc Group 3 (Đã xong/Đã hủy): Ngày mới tạo gần đây lên đầu nhóm
+    const dateA = a.booking?.createdAt ? new Date(a.booking.createdAt).getTime() : 0;
+    const dateB = b.booking?.createdAt ? new Date(b.booking.createdAt).getTime() : 0;
+    return dateB - dateA;
+  };
+
+  const sortedAppointments = [...realAppointments].sort(sortItemsByUrgencyDate);
+  const totalAppointmentPages = Math.ceil(sortedAppointments.length / ITEMS_PER_PAGE) || 1;
+  const displayAppointments = sortedAppointments.slice(
+    (currentPageAppointments - 1) * ITEMS_PER_PAGE,
+    currentPageAppointments * ITEMS_PER_PAGE
+  );
 
   // --- 2. RENTED AO DAI (Áo dài đã thuê) ---
   const rentalItems: any[] = [];
@@ -368,7 +514,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     }
   });
 
-  const displayRentals = rentalItems;
+  const sortedRentals = [...rentalItems].sort(sortItemsByUrgencyDate);
+  const totalRentalPages = Math.ceil(sortedRentals.length / ITEMS_PER_PAGE) || 1;
+  const displayRentals = sortedRentals.slice(
+    (currentPageRentals - 1) * ITEMS_PER_PAGE,
+    currentPageRentals * ITEMS_PER_PAGE
+  );
 
   // --- 3. FAVORITES (Danh sách yêu thích) ---
   const realFavorites = React.useMemo(() => {
@@ -614,7 +765,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   className={`vh-profile-appointment-card ${app.statusType === 'UPCOMING' ? 'vh-appointment-upcoming' : 'vh-appointment-past'}`}
                 >
                   <div className="vh-appointment-card-header">
-                    {app.rawStatus === 'AWAITING_REVIEW' ? (
+                    {app.rawStatus === 'DEPOSIT_PAID' ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#EA580C', color: 'white' }}>
+                        <Clock size={13} style={{ marginRight: '6px' }} />
+                        CHỜ THỢ CHỤP XÁC NHẬN • {app.dateStr}
+                      </span>
+                    ) : app.rawStatus === 'AWAITING_REVIEW' ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#0284C7', color: 'white' }}>
                         <Clock size={13} style={{ marginRight: '6px' }} />
                         CHỜ XÁC NHẬN • {app.dateStr}
@@ -623,6 +779,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#059669', color: 'white' }}>
                         <Clock size={13} style={{ marginRight: '6px' }} />
                         ĐANG CHỤP • {app.dateStr}
+                      </span>
+                    ) : app.isOverdue ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#C2410C', color: 'white' }}>
+                        <Clock size={13} style={{ marginRight: '6px' }} />
+                        {app.isPastTimeToday ? 'QUÁ GIỜ CHỤP' : 'QUÁ HẠN CHỤP'} • {app.dateStr}
                       </span>
                     ) : app.statusType === 'UPCOMING' ? (
                       <span className="vh-appointment-status-label-upcoming">
@@ -668,6 +829,42 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         <p style={{ fontSize: '12px', color: '#0369A1', fontWeight: 600, margin: '0 0 10px 0', lineHeight: 1.4 }}>
                           📷 Thợ ảnh đã báo hoàn thành buổi chụp. Vui lòng kiểm tra & xác nhận trong 48h (hệ thống sẽ tự động xác nhận sau 48h).
                         </p>
+                        {(() => {
+                          const photos = (app.booking?.deliveredPhotos && app.booking.deliveredPhotos.length > 0)
+                            ? app.booking.deliveredPhotos
+                            : (app.booking?.handoverPhotos && app.booking.handoverPhotos.length > 0)
+                              ? app.booking.handoverPhotos
+                              : [];
+                          if (photos.length === 0) return null;
+                          return (
+                            <div style={{ marginBottom: '10px' }}>
+                              <p style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', margin: '0 0 6px 0' }}>
+                                📸 {photos.length} ảnh kết quả đã bàn giao:
+                              </p>
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                                {photos.slice(0, 4).map((photo: string, idx: number) => {
+                                  const photoUrl = photo.startsWith('http') ? photo : `${import.meta.env.VITE_API_URL || ''}${photo}`;
+                                  return (
+                                    <a key={idx} href={photoUrl} target="_blank" rel="noreferrer" style={{ width: '48px', height: '48px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #BFDBFE', display: 'block' }}>
+                                      <img src={photoUrl} alt={`Ảnh ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    </a>
+                                  );
+                                })}
+                                {photos.length > 4 && (
+                                  <div style={{ width: '48px', height: '48px', borderRadius: '6px', backgroundColor: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: '#1D4ED8' }}>
+                                    +{photos.length - 4}
+                                  </div>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => onViewDetails(app.booking)}
+                                style={{ background: 'none', border: 'none', color: '#1D4ED8', fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                              >
+                                Xem tất cả & Tải xuống →
+                              </button>
+                            </div>
+                          );
+                        })()}
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button
                             onClick={() => handleConfirmComplete(app.id)}
@@ -684,6 +881,51 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         </div>
                       </div>
                     )}
+
+                    {/* Customer Report / Dispute button during IN_PROGRESS or OVERDUE */}
+                    {(app.rawStatus === 'IN_PROGRESS' || app.isOverdue) && app.rawStatus !== 'AWAITING_REVIEW' && app.rawStatus !== 'DISPUTED' && (
+                      <div style={{ marginTop: '12px' }}>
+                        <button
+                          onClick={() => handleDisputeBooking(app.id)}
+                          style={{
+                            width: '100%',
+                            backgroundColor: '#FEF2F2',
+                            color: '#DC2626',
+                            border: '1px solid #FECACA',
+                            borderRadius: '6px',
+                            padding: '7px 12px',
+                            fontSize: '11.5px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <AlertTriangle size={13} />
+                          Báo thợ ảnh không đến / Khiếu nại
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Cancellation reason from provider */}
+                    {app.rawStatus === 'CANCELLED' && app.booking?.cancellation?.reason && (
+                      <div style={{ marginTop: '14px', padding: '12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px' }}>
+                        <p style={{ fontSize: '11px', fontWeight: 700, color: '#DC2626', margin: '0 0 4px 0', textTransform: 'uppercase' }}>
+                          Lý do hủy đơn
+                        </p>
+                        <p style={{ fontSize: '12px', color: '#7F1D1D', margin: 0, lineHeight: 1.5, fontWeight: 500 }}>
+                          {app.booking.cancellation.reason}
+                        </p>
+                        {app.booking.cancellation.cancelledAt && (
+                          <p style={{ fontSize: '10px', color: '#9CA3AF', margin: '4px 0 0 0' }}>
+                            {new Date(app.booking.cancellation.cancelledAt).toLocaleString('vi-VN')}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                   </div>
 
                   <div className="vh-appointment-card-footer">
@@ -722,6 +964,51 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               <h5 className="vh-appointment-dashed-title font-header">Đặt lịch hẹn mới</h5>
               <p className="vh-appointment-dashed-desc">Trải nghiệm dịch vụ cá nhân hóa</p>
             </button>
+
+            {/* Pagination Controls for Appointments */}
+            {totalAppointmentPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '24px', width: '100%', gridColumn: 'span 2' }}>
+                <button
+                  disabled={currentPageAppointments === 1}
+                  onClick={() => setCurrentPageAppointments(p => Math.max(p - 1, 1))}
+                  style={{
+                    padding: '8px 14px', borderRadius: '6px', border: '1px solid #E5E7EB',
+                    backgroundColor: currentPageAppointments === 1 ? '#F3F4F6' : 'white',
+                    color: currentPageAppointments === 1 ? '#9CA3AF' : '#374151',
+                    fontWeight: 600, cursor: currentPageAppointments === 1 ? 'not-allowed' : 'pointer', fontSize: '13px'
+                  }}
+                >
+                  &laquo; Trang trước
+                </button>
+                {Array.from({ length: totalAppointmentPages }).map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentPageAppointments(idx + 1)}
+                    style={{
+                      width: '36px', height: '36px', borderRadius: '6px', border: '1px solid',
+                      borderColor: currentPageAppointments === idx + 1 ? 'var(--color-primary-dark, #4A0E17)' : '#E5E7EB',
+                      backgroundColor: currentPageAppointments === idx + 1 ? 'var(--color-primary-dark, #4A0E17)' : 'white',
+                      color: currentPageAppointments === idx + 1 ? 'white' : '#374151',
+                      fontWeight: 700, cursor: 'pointer', fontSize: '13px'
+                    }}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+                <button
+                  disabled={currentPageAppointments === totalAppointmentPages}
+                  onClick={() => setCurrentPageAppointments(p => Math.min(p + 1, totalAppointmentPages))}
+                  style={{
+                    padding: '8px 14px', borderRadius: '6px', border: '1px solid #E5E7EB',
+                    backgroundColor: currentPageAppointments === totalAppointmentPages ? '#F3F4F6' : 'white',
+                    color: currentPageAppointments === totalAppointmentPages ? '#9CA3AF' : '#374151',
+                    fontWeight: 600, cursor: currentPageAppointments === totalAppointmentPages ? 'not-allowed' : 'pointer', fontSize: '13px'
+                  }}
+                >
+                  Trang sau &raquo;
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1046,6 +1333,50 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   </div>
                 );
               })
+            )}
+            {/* Pagination Controls for Rentals */}
+            {totalRentalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '24px', width: '100%', gridColumn: 'span 2' }}>
+                <button
+                  disabled={currentPageRentals === 1}
+                  onClick={() => setCurrentPageRentals(p => Math.max(p - 1, 1))}
+                  style={{
+                    padding: '8px 14px', borderRadius: '6px', border: '1px solid #E5E7EB',
+                    backgroundColor: currentPageRentals === 1 ? '#F3F4F6' : 'white',
+                    color: currentPageRentals === 1 ? '#9CA3AF' : '#374151',
+                    fontWeight: 600, cursor: currentPageRentals === 1 ? 'not-allowed' : 'pointer', fontSize: '13px'
+                  }}
+                >
+                  &laquo; Trang trước
+                </button>
+                {Array.from({ length: totalRentalPages }).map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentPageRentals(idx + 1)}
+                    style={{
+                      width: '36px', height: '36px', borderRadius: '6px', border: '1px solid',
+                      borderColor: currentPageRentals === idx + 1 ? 'var(--color-primary-dark, #4A0E17)' : '#E5E7EB',
+                      backgroundColor: currentPageRentals === idx + 1 ? 'var(--color-primary-dark, #4A0E17)' : 'white',
+                      color: currentPageRentals === idx + 1 ? 'white' : '#374151',
+                      fontWeight: 700, cursor: 'pointer', fontSize: '13px'
+                    }}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+                <button
+                  disabled={currentPageRentals === totalRentalPages}
+                  onClick={() => setCurrentPageRentals(p => Math.min(p + 1, totalRentalPages))}
+                  style={{
+                    padding: '8px 14px', borderRadius: '6px', border: '1px solid #E5E7EB',
+                    backgroundColor: currentPageRentals === totalRentalPages ? '#F3F4F6' : 'white',
+                    color: currentPageRentals === totalRentalPages ? '#9CA3AF' : '#374151',
+                    fontWeight: 600, cursor: currentPageRentals === totalRentalPages ? 'not-allowed' : 'pointer', fontSize: '13px'
+                  }}
+                >
+                  Trang sau &raquo;
+                </button>
+              </div>
             )}
           </div>
         )}
