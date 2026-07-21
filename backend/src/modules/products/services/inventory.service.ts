@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 import { InventoryItem, InventoryItemDocument } from '../schemas/inventory-item.schema';
-import { InventoryReservation } from '../schemas/inventory-reservation.schema';
+import { InventoryReservation, ReservationStatus } from '../schemas/inventory-reservation.schema';
 import { Product } from '../schemas/product.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
 import { UsersRepository } from '../../users/repositories/users.repository';
@@ -299,6 +299,26 @@ export class InventoryService {
       productId: { $in: productIds },
     });
 
+    const itemIds = items.map((i) => i._id);
+    const now = new Date();
+
+    // Lấy các hiện vật đang có lịch đặt/cho thuê hoạt động (TEMP_RESERVED hoặc CONFIRMED, đã/đang tới ngày thuê)
+    const activeReservations =
+      itemIds.length > 0
+        ? await this.inventoryReservationModel
+            .find({
+              inventoryItemId: { $in: itemIds },
+              status: { $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed] },
+              reservedFrom: { $lte: now },
+            })
+            .select({ inventoryItemId: 1 })
+            .exec()
+        : [];
+
+    const activeRentedItemIds = new Set(
+      activeReservations.map((r) => r.inventoryItemId.toString()),
+    );
+
     // Grouping by productId, size, color
     const summaryMap = new Map<string, {
       productId: string;
@@ -347,16 +367,19 @@ export class InventoryService {
 
       const summary = summaryMap.get(key)!;
       summary.total++;
-      if (item.status === InventoryItemStatus.Available && item.conditionStatus !== ConditionStatus.Locked) {
-        summary.available++;
-      } else if (item.status === InventoryItemStatus.Rented) {
-        summary.rented++;
-      } else if (
+      if (
         item.status === InventoryItemStatus.Maintenance ||
         item.status === InventoryItemStatus.Cleaning ||
         item.conditionStatus === ConditionStatus.Locked
       ) {
         summary.maintenance++;
+      } else if (
+        item.status === InventoryItemStatus.Rented ||
+        activeRentedItemIds.has(item._id.toString())
+      ) {
+        summary.rented++;
+      } else {
+        summary.available++;
       }
     });
 
