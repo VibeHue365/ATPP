@@ -418,6 +418,8 @@ export const BecomeProviderPage: React.FC = () => {
         }
       }
 
+      const upgradeCap = new URLSearchParams(window.location.search).get('upgrade') as ProviderCapability;
+
       if (current) {
         const normalized = normalizeVerificationDetail(current);
         
@@ -426,13 +428,13 @@ export const BecomeProviderPage: React.FC = () => {
             normalized.businessProfile.businessName = existingProvider.businessName || '';
           }
           if (!normalized.businessProfile?.ownerName) {
-            normalized.businessProfile.ownerName = user?.fullName || '';
+            normalized.businessProfile.ownerName = user?.fullName || existingProvider.ownerName || '';
           }
           if (!normalized.businessProfile?.phone) {
-            normalized.businessProfile.phone = existingProvider.contact?.phone || '';
+            normalized.businessProfile.phone = existingProvider.contact?.phone || user?.phone || '';
           }
           if (!normalized.businessProfile?.email) {
-            normalized.businessProfile.email = existingProvider.contact?.email || '';
+            normalized.businessProfile.email = existingProvider.contact?.email || user?.email || '';
           }
           if (!normalized.businessProfile?.address) {
             normalized.businessProfile.address = existingProvider.address?.addressLine || '';
@@ -441,21 +443,21 @@ export const BecomeProviderPage: React.FC = () => {
             normalized.businessProfile.province = existingProvider.address?.city || '';
           }
           
-          if (existingProvider.capabilities?.includes('PHOTOGRAPHY')) {
+          if (existingProvider.capabilities?.includes('PHOTOGRAPHY') || normalized.requestedCapabilities.includes('PHOTOGRAPHY')) {
             if (!normalized.photographyInfo?.studioName) {
-              normalized.photographyInfo.studioName = existingProvider.businessName || '';
+              normalized.photographyInfo.studioName = existingProvider.businessName || normalized.businessProfile?.businessName || '';
             }
             if (!normalized.photographyInfo?.workingArea) {
-              normalized.photographyInfo.workingArea = existingProvider.address?.addressLine || '';
+              normalized.photographyInfo.workingArea = existingProvider.address?.addressLine || normalized.businessProfile?.address || '';
             }
           }
           
-          if (existingProvider.capabilities?.includes('AODAI_RENTAL') || existingProvider.capabilities?.includes('RENTAL')) {
+          if (existingProvider.capabilities?.includes('AODAI_RENTAL') || existingProvider.capabilities?.includes('RENTAL') || normalized.requestedCapabilities.includes('AODAI_RENTAL')) {
             if (!normalized.aodaiInfo?.shopName) {
-              normalized.aodaiInfo.shopName = existingProvider.businessName || '';
+              normalized.aodaiInfo.shopName = existingProvider.businessName || normalized.businessProfile?.businessName || '';
             }
             if (!normalized.aodaiInfo?.pickupAddress) {
-              normalized.aodaiInfo.pickupAddress = existingProvider.address?.addressLine || '';
+              normalized.aodaiInfo.pickupAddress = existingProvider.address?.addressLine || normalized.businessProfile?.address || '';
             }
             if (!normalized.aodaiInfo?.rentalPolicy) {
               normalized.aodaiInfo.rentalPolicy = existingProvider.policies?.rentalPolicy || '';
@@ -465,8 +467,17 @@ export const BecomeProviderPage: React.FC = () => {
 
         hydrateFromVerification(normalized);
         setVerification(normalized);
-        setActiveStep(stepFromVerification(normalized));
-        setShowStatusDashboard(normalized.status !== 'DRAFT');
+
+        if (upgradeCap && ['AODAI_RENTAL', 'PHOTOGRAPHY'].includes(upgradeCap)) {
+          const currentCaps = existingProvider?.capabilities || normalized.requestedCapabilities || [];
+          const combined = Array.from(new Set([...currentCaps, upgradeCap])) as ProviderCapability[];
+          setSelectedCapabilities(combined);
+          setShowStatusDashboard(false);
+          setActiveStep(0);
+        } else {
+          setActiveStep(stepFromVerification(normalized));
+          setShowStatusDashboard(normalized.status !== 'DRAFT');
+        }
         
         if (normalized.businessProfile?.address) {
           setIsAddressEditing(false);
@@ -479,7 +490,6 @@ export const BecomeProviderPage: React.FC = () => {
           setIsPickupAddressEditing(true);
         }
       } else if (user) {
-        const upgradeCap = new URLSearchParams(window.location.search).get('upgrade') as ProviderCapability;
         if (upgradeCap && ['AODAI_RENTAL', 'PHOTOGRAPHY'].includes(upgradeCap)) {
           setSelectedCapabilities([upgradeCap]);
         }

@@ -235,7 +235,7 @@ export class ComboPromotionService {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     return this.comboModel
       .find({
-        status: ComboPromotionStatus.PendingReview,
+        status: ComboPromotionStatus.Active,
         validTo: { $gte: todayStart },
       })
       .populate('productId', 'name images basePrice slug depositAmount')
