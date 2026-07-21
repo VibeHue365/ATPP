@@ -73,7 +73,7 @@ export const PhotographyLocationPicker = ({
     const map = L.map(mapContainerRef.current, { scrollWheelZoom: false }).setView([initialLatitude, initialLongitude], value ? 14 : 11);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
     }).addTo(map);
     const marker = L.marker([initialLatitude, initialLongitude], {
       draggable: true,
@@ -191,7 +191,7 @@ export const PhotographyLocationPicker = ({
       await waitForNominatimSlot();
       const params = new URLSearchParams({ q: query, format: 'jsonv2', limit: '5', countrycodes: 'vn', 'accept-language': 'vi' });
       const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
-      if (!response.ok) throw new Error('Nominatim search failed');
+      if (!response.ok) throw new Error('Không thể tìm kiếm địa điểm');
       const matches = await response.json() as NominatimResult[];
       setResults(matches);
       if (!matches.length) setError('Không tìm thấy địa điểm phù hợp. Hãy thử tên hoặc địa chỉ chi tiết hơn.');

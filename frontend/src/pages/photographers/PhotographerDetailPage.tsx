@@ -494,6 +494,8 @@ export const PhotographerDetailPage: React.FC = () => {
   const canIncreaseDuration = bookingMode === 'SINGLE' && Boolean(nextDurationQuote?.valid) && !isNextDurationQuoteLoading;
   const increaseUnavailableReason = !selectedDate || !startTime
     ? 'Hãy chọn ngày và giờ bắt đầu trước.'
+    : !selectedLocation
+      ? 'Hãy chọn địa điểm chụp để kiểm tra lịch và chi phí tăng giờ.'
     : nextDurationMinutes > includedDurationMinutes + maxOvertimeMinutes
       ? 'Đã đạt thời lượng tăng giờ tối đa của gói.'
       : isNextDurationQuoteLoading

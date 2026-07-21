@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
-import { Check, X, Tag, RefreshCw, Clock, Layers, Camera, AlertCircle } from 'lucide-react';
+import { Check, X, RefreshCw, Clock, Layers, Camera, AlertCircle } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 interface Combo {
@@ -117,7 +117,7 @@ export const ComboModerationManagement: React.FC = () => {
           <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '24px', fontWeight: 800, color: '#4A0E17', margin: 0 }}>
             Phê duyệt Combo Khuyến Mãi
           </h2>
-          <p style={{ fontSize: '13.5px', color: '#7A7A7A', marginTop: '6px', marginBot: 0 }}>
+          <p style={{ fontSize: '13.5px', color: '#7A7A7A', marginTop: '6px', marginBottom: 0 }}>
             Xem xét và phê duyệt các gói combo kết hợp (Thuê Áo dài + Thợ chụp ảnh) từ các nhà cung cấp trước khi hiển thị cho khách hàng.
           </p>
         </div>

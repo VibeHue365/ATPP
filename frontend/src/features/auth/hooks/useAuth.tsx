@@ -107,7 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         throw new Error("Tokens missing in login response");
       }
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      setError(err.message || "Đăng nhập thất bại");
       throw err;
     }
   };
@@ -118,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const res = await authService.register(payload);
       return res;
     } catch (err: any) {
-      setError(err.message || "Registration failed");
+      setError(err.message || "Đăng ký thất bại");
       throw err;
     }
   };
@@ -128,7 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       await authService.verifyEmail(payload);
     } catch (err: any) {
-      setError(err.message || "Email verification failed");
+      setError(err.message || "Xác minh email thất bại");
       throw err;
     }
   };
@@ -138,7 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       return await authService.resendVerification(payload);
     } catch (err: any) {
-      setError(err.message || "Resending verification failed");
+      setError(err.message || "Gửi lại mã xác minh thất bại");
       throw err;
     }
   };
@@ -148,7 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       return await authService.forgotPassword(payload);
     } catch (err: any) {
-      setError(err.message || "Forgot password request failed");
+      setError(err.message || "Gửi yêu cầu quên mật khẩu thất bại");
       throw err;
     }
   };
@@ -158,7 +158,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       await authService.resetPassword(payload);
     } catch (err: any) {
-      setError(err.message || "Reset password failed");
+      setError(err.message || "Đặt lại mật khẩu thất bại");
       throw err;
     }
   };
@@ -178,7 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const updated = await userService.updateProfile(payload);
       setUser(updated);
     } catch (err: any) {
-      setError(err.message || "Updating profile failed");
+      setError(err.message || "Cập nhật hồ sơ thất bại");
       throw err;
     }
   };
@@ -189,7 +189,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const updated = await userService.updateAvatar(formData);
       setUser(updated);
     } catch (err: any) {
-      setError(err.message || "Uploading avatar failed");
+      setError(err.message || "Tải ảnh đại diện thất bại");
       throw err;
     }
   };
@@ -200,7 +200,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const updated = await userService.updatePreferences(payload);
       setUser(updated);
     } catch (err: any) {
-      setError(err.message || "Updating preferences failed");
+      setError(err.message || "Cập nhật tùy chọn thất bại");
       throw err;
     }
   };
@@ -211,7 +211,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const updated = await userService.toggleFavorite(targetType, targetId);
       setUser(updated);
     } catch (err: any) {
-      setError(err.message || "Toggling favorite failed");
+      setError(err.message || "Cập nhật mục yêu thích thất bại");
       throw err;
     }
   };

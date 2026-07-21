@@ -525,7 +525,7 @@ export const CategoryManagement: React.FC = () => {
                           onError={(e) => { e.currentTarget.style.display = 'none'; }}
                         />
                       ) : (
-                        <span style={{ fontSize: '10px', color: '#A0A0A0', fontStyle: 'italic' }}>No Cover</span>
+                        <span style={{ fontSize: '10px', color: '#A0A0A0', fontStyle: 'italic' }}>Chưa có ảnh bìa</span>
                       )}
                     </div>
                   </td>
@@ -718,7 +718,7 @@ export const CategoryManagement: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 {/* Icon URL */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A' }}>ICON URL / PATH</label>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A' }}>ĐƯỜNG DẪN BIỂU TƯỢNG</label>
                   <input
                     type="text"
                     value={iconUrl}
@@ -730,7 +730,7 @@ export const CategoryManagement: React.FC = () => {
 
                 {/* Cover Image URL */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A' }}>COVER IMAGE URL</label>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A' }}>ĐƯỜNG DẪN ẢNH BÌA</label>
                   <input
                     type="text"
                     value={coverImageUrl}

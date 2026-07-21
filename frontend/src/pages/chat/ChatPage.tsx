@@ -441,7 +441,7 @@ export const ChatPage: React.FC = () => {
               onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#6b0c22')}
             >
               <Plus size={16} />
-              <span>NEW CHAT</span>
+              <span>CUỘC TRÒ CHUYỆN MỚI</span>
             </button>
           </div>
         </div>
@@ -882,8 +882,8 @@ export const ChatPage: React.FC = () => {
                     letterSpacing: '0.05em',
                   }}
                 >
-                  <span>AI WRITING ASSISTANT AVAILABLE</span>
-                  <span>MAX 2000 CHARACTERS</span>
+                  <span>ĐÃ CÓ TRỢ LÝ SOẠN THẢO AI</span>
+                  <span>TỐI ĐA 2.000 KÝ TỰ</span>
                 </div>
               </div>
             </>

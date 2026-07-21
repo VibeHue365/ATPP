@@ -106,7 +106,7 @@ export const DashboardLayout: React.FC = () => {
         {/* Topbar - Desktop */}
         <header className="vh-db-topbar">
           <div className="vh-db-breadcrumbs">
-            <span className="vh-bread-parent">Dashboard</span>
+            <span className="vh-bread-parent">Bảng điều khiển</span>
             <span className="vh-bread-sep">/</span>
             <span className="vh-bread-child">Hồ sơ cá nhân</span>
           </div>

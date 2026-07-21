@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../config/env';
 import { tokenStorage } from './tokenStorage';
+import { translateError } from '../utils/errorTranslator';
 
 class HttpClient {
   private isRefreshing = false;
@@ -68,7 +69,7 @@ class HttpClient {
         data = {};
       }
     } else {
-      const text = await response.text().catch(() => 'Response parsing failed');
+      const text = await response.text().catch(() => 'Không thể đọc phản hồi từ máy chủ');
       data = { message: text };
     }
 
@@ -76,7 +77,7 @@ class HttpClient {
       const errorMessage =
         (data && typeof data === 'object' ? data.message : null) ||
         `Request failed with status ${response.status}`;
-      throw new Error(errorMessage);
+      throw new Error(translateError(errorMessage));
     }
 
     return data as T;
@@ -109,7 +110,7 @@ class HttpClient {
       });
 
       if (!response.ok) {
-        throw new Error('Refresh token invalid');
+        throw new Error('Phiên đăng nhập không hợp lệ');
       }
 
       const data = await response.json();
@@ -124,7 +125,7 @@ class HttpClient {
 
       throw new Error('Tokens missing in refresh response');
     } catch (error) {
-      console.error('Failed to refresh authentication session:', error);
+      console.error('Không thể làm mới phiên đăng nhập:', error);
       this.onRefreshFinished(null);
       this.clearSessionAndRedirect();
       return null;
