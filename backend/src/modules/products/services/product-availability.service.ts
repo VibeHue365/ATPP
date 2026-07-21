@@ -4,7 +4,7 @@ import { Model, Types } from 'mongoose';
 import { ProductsRepository } from '../repositories/products.repository';
 import { InventoryItem } from '../schemas/inventory-item.schema';
 import { InventoryReservation, ReservationStatus } from '../schemas/inventory-reservation.schema';
-import { ProviderSchedule, ScheduleType } from '../schemas/provider-schedule.schema';
+import { ProviderSchedule, ScheduleType, ScheduleCapability } from '../schemas/provider-schedule.schema';
 
 @Injectable()
 export class ProductAvailabilityService {
@@ -67,7 +67,10 @@ export class ProductAvailabilityService {
     const providerId = (product.providerId as any)?._id || product.providerId;
     if (providerId) {
       const schedules = await this.providerSchedule
-        .find({ providerId: new Types.ObjectId(providerId.toString()) })
+        .find({
+          providerId: new Types.ObjectId(providerId.toString()),
+          $or: [{ capability: null }, { capability: ScheduleCapability.AodaiRental }],
+        })
         .lean()
         .exec();
 

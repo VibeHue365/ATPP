@@ -8,6 +8,7 @@ import {
 } from '../../products/schemas/photography-package.schema';
 import {
   ProviderSchedule,
+  ScheduleCapability,
   ScheduleType,
 } from '../../products/schemas/provider-schedule.schema';
 import {
@@ -70,7 +71,11 @@ export class PhotographerMonthlyAvailabilityService {
     const nextMonthStart = new Date(Date.UTC(year, monthIndex, 1));
     const [recurringSchedules, specificSchedules, busySchedule] = await Promise.all([
       this.providerScheduleModel
-        .find({ providerId: providerObjectId, scheduleType: ScheduleType.Recurring })
+        .find({
+          providerId: providerObjectId,
+          scheduleType: ScheduleType.Recurring,
+          $or: [{ capability: null }, { capability: ScheduleCapability.Photography }],
+        })
         .lean()
         .exec(),
       this.providerScheduleModel
@@ -78,6 +83,7 @@ export class PhotographerMonthlyAvailabilityService {
           providerId: providerObjectId,
           scheduleType: ScheduleType.SpecificDate,
           specificDate: { $gte: monthStart, $lt: nextMonthStart },
+          $or: [{ capability: null }, { capability: ScheduleCapability.Photography }],
         })
         .lean()
         .exec(),

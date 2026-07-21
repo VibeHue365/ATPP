@@ -261,6 +261,8 @@ export const ProviderDashboard: React.FC = () => {
   ]);
   const [editingScheduleDay, setEditingScheduleDay] = useState<number | null>(null);
   const [blockedDate, setBlockedDate] = useState('');
+  // Which service capability the current schedule edit applies to (null = all)
+  const [scheduleCapability, setScheduleCapability] = useState<'AODAI_RENTAL' | 'PHOTOGRAPHY' | null>(null);
 
   // Reply states
   const [replyingReviewId, setReplyingReviewId] = useState<string | null>(null);
@@ -935,6 +937,7 @@ export const ProviderDashboard: React.FC = () => {
       await httpClient.post('/providers/me/schedules/recurring/bulk', {
         dayOfWeeks: selectedScheduleDays,
         workingHours: sortedRanges,
+        capability: scheduleCapability,
       });
       toast.success(`Đã lưu lịch cho ${selectedScheduleDays.length} ngày làm việc.`);
       setEditingScheduleDay(null);
@@ -961,6 +964,7 @@ export const ProviderDashboard: React.FC = () => {
         date: blockedDate,
         isOffDay: true,
         customSlots: [],
+        capability: scheduleCapability,
       });
       toast.success(`Đã chặn lịch bận ngày ${blockedDate}!`);
       setBlockedDate('');
@@ -3946,6 +3950,35 @@ export const ProviderDashboard: React.FC = () => {
                     {editingScheduleDay !== null && <span style={{ padding: '6px 10px', backgroundColor: '#FFF7ED', color: '#9A3412', borderRadius: '999px', fontWeight: 700, fontSize: '12px' }}>Đang sửa {daysOfWeekVn[editingScheduleDay]}</span>}
                   </div>
 
+                  {/* Capability selector — only shown when provider has BOTH roles */}
+                  {hasAodaiCapability && hasPhotographyCapability && (
+                    <div style={{ marginBottom: '18px', padding: '14px 16px', backgroundColor: '#FAF6F0', borderRadius: '10px', border: '1px solid #E8E2D5' }}>
+                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#4A0E17', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lịch này áp dụng cho dịch vụ nào?</p>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {[
+                          { key: null, label: '🔗 Cả hai dịch vụ', desc: 'Áo dài & Nhiếp ảnh' },
+                          { key: 'AODAI_RENTAL', label: '👘 Cho thuê Áo dài', desc: 'Chỉ áp dụng cho lịch thuê' },
+                          { key: 'PHOTOGRAPHY', label: '📷 Chụp ảnh', desc: 'Chỉ áp dụng cho lịch chụp' },
+                        ].map(({ key, label, desc }) => (
+                          <button
+                            key={String(key)}
+                            type="button"
+                            onClick={() => setScheduleCapability(key as any)}
+                            style={{
+                              padding: '8px 14px', borderRadius: '8px', border: scheduleCapability === key ? '2px solid #4A0E17' : '1px solid #E8E2D5',
+                              backgroundColor: scheduleCapability === key ? '#4A0E17' : 'white',
+                              color: scheduleCapability === key ? 'white' : '#4A0E17',
+                              fontWeight: 700, fontSize: '12px', cursor: 'pointer', textAlign: 'left',
+                            }}
+                          >
+                            <div>{label}</div>
+                            <div style={{ fontSize: '10px', opacity: 0.75, fontWeight: 500, marginTop: '2px' }}>{desc}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
                     <span style={{ fontSize: '12px', fontWeight: 750, color: 'var(--color-text-secondary)' }}>CHỌN NGÀY LÀM VIỆC</span>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -4018,18 +4051,42 @@ export const ProviderDashboard: React.FC = () => {
                     <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Chưa có thiết lập khung giờ nào.</p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {schedules.filter((schedule) => schedule.scheduleType === 'RECURRING').sort((a, b) => Number(a.dayOfWeek) - Number(b.dayOfWeek)).map((schedule) => (
+                       {schedules.filter((schedule) => schedule.scheduleType === 'RECURRING').sort((a, b) => Number(a.dayOfWeek) - Number(b.dayOfWeek)).map((schedule) => (
                         <div key={schedule._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', flexWrap: 'wrap', padding: '14px 16px', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px' }}>
                           <div>
-                            <strong style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-primary)' }}>{daysOfWeekVn[Number(schedule.dayOfWeek)]}</strong>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <strong style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-primary)' }}>{daysOfWeekVn[Number(schedule.dayOfWeek)]}</strong>
+                              {schedule.capability === 'AODAI_RENTAL' && (
+                                <span style={{ padding: '2px 8px', backgroundColor: '#FEF3C7', color: '#D97706', borderRadius: '4px', fontWeight: 700, fontSize: '10px' }}>👘 Áo dài</span>
+                              )}
+                              {schedule.capability === 'PHOTOGRAPHY' && (
+                                <span style={{ padding: '2px 8px', backgroundColor: '#E0F2FE', color: '#0369A1', borderRadius: '4px', fontWeight: 700, fontSize: '10px' }}>📷 Nhiếp ảnh</span>
+                              )}
+                              {!schedule.capability && hasAodaiCapability && hasPhotographyCapability && (
+                                <span style={{ padding: '2px 8px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '4px', fontWeight: 700, fontSize: '10px' }}>🔗 Cả hai</span>
+                              )}
+                            </div>
                             <span style={{ display: 'block', marginTop: '4px', fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>{schedule.workingHours?.map((range: any) => `${range.start} - ${range.end}`).join(' · ') || 'Chưa có ca làm việc'}</span>
                           </div>
                           <button type="button" onClick={() => handleEditRecurringSchedule(schedule)} style={{ padding: '8px 12px', border: '1px solid var(--color-primary)', borderRadius: '6px', backgroundColor: 'white', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Pencil size={14} /> Sửa</button>
                         </div>
                       ))}
                       {schedules.filter((schedule) => schedule.scheduleType !== 'RECURRING').map((schedule) => (
-                        <div key={schedule._id} style={{ padding: '14px 16px', backgroundColor: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '8px' }}>
-                          <strong style={{ fontSize: '14px', color: '#9A3412' }}>Đã chặn ngày {schedule.specificDate ? new Date(schedule.specificDate).toLocaleDateString('vi-VN') : 'không xác định'}</strong>
+                        <div key={schedule._id} style={{ padding: '14px 16px', backgroundColor: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <strong style={{ fontSize: '14px', color: '#9A3412' }}>Đã chặn ngày {schedule.specificDate ? new Date(schedule.specificDate).toLocaleDateString('vi-VN') : 'không xác định'}</strong>
+                            <div style={{ marginTop: '2px' }}>
+                              {schedule.capability === 'AODAI_RENTAL' && (
+                                <span style={{ padding: '2px 6px', backgroundColor: '#FEF3C7', color: '#D97706', borderRadius: '4px', fontWeight: 700, fontSize: '9px' }}>👘 Chỉ chặn Áo dài</span>
+                              )}
+                              {schedule.capability === 'PHOTOGRAPHY' && (
+                                <span style={{ padding: '2px 6px', backgroundColor: '#E0F2FE', color: '#0369A1', borderRadius: '4px', fontWeight: 700, fontSize: '9px' }}>📷 Chỉ chặn Nhiếp ảnh</span>
+                              )}
+                              {!schedule.capability && hasAodaiCapability && hasPhotographyCapability && (
+                                <span style={{ padding: '2px 6px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '4px', fontWeight: 700, fontSize: '9px' }}>🔗 Chặn cả hai</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>

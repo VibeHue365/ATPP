@@ -20,6 +20,7 @@ import {
 } from '../schemas/provider.schema';
 import type { ProviderDocument } from '../schemas/provider.schema';
 import type { ProviderScheduleDocument } from '../../products/schemas/provider-schedule.schema';
+import { ScheduleCapability } from '../../products/schemas/provider-schedule.schema';
 import { Product } from '../../products/schemas/product.schema';
 import { Booking } from '../../bookings/schemas/booking.schema';
 import { BookingItem } from '../../bookings/schemas/booking-item.schema';
@@ -357,11 +358,13 @@ export class ProvidersService {
     userIdStr: string,
     dayOfWeek: number,
     workingHours: Array<{ start: string; end: string }>,
+    capability: ScheduleCapability | null = null,
   ): Promise<ProviderScheduleDocument> {
     const schedules = await this.updateRecurringSchedules(
       userIdStr,
       [dayOfWeek],
       workingHours,
+      capability,
     );
     return schedules[0];
   }
@@ -370,6 +373,7 @@ export class ProvidersService {
     userIdStr: string,
     dayOfWeeks: number[],
     workingHours: Array<{ start: string; end: string }>,
+    capability: ScheduleCapability | null = null,
   ): Promise<ProviderScheduleDocument[]> {
     const normalizedDays = [...new Set(dayOfWeeks)]
       .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
@@ -391,6 +395,7 @@ export class ProvidersService {
           provider._id,
           dayOfWeek,
           normalizedHours,
+          capability,
         ),
       ),
     );
@@ -436,6 +441,7 @@ export class ProvidersService {
     dateStr: string,
     isOffDay: boolean,
     customSlots: Array<{ timeSlot: string; status: string }>,
+    capability: ScheduleCapability | null = null,
   ): Promise<ProviderScheduleDocument> {
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
@@ -451,6 +457,7 @@ export class ProvidersService {
       specificDate,
       offDays,
       customSlots,
+      capability,
     );
   }
 

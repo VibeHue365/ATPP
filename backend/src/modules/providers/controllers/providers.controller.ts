@@ -93,6 +93,7 @@ export class AddPortfolioImageDto {
   @IsNotEmpty()
   imageUrl: string;
 }
+import { ScheduleCapability } from '../../products/schemas/provider-schedule.schema';
 
 export class RecurringScheduleDto {
   @IsNumber()
@@ -102,6 +103,10 @@ export class RecurringScheduleDto {
 
   @IsArray()
   workingHours: Array<{ start: string; end: string }>;
+
+  @IsOptional()
+  @IsEnum(ScheduleCapability)
+  capability?: ScheduleCapability;
 }
 
 export class BulkRecurringScheduleDto {
@@ -116,6 +121,10 @@ export class BulkRecurringScheduleDto {
   @IsArray()
   @ArrayNotEmpty()
   workingHours: Array<{ start: string; end: string }>;
+
+  @IsOptional()
+  @IsEnum(ScheduleCapability)
+  capability?: ScheduleCapability;
 }
 export class SpecificDateScheduleDto {
   @IsString()
@@ -127,6 +136,10 @@ export class SpecificDateScheduleDto {
 
   @IsArray()
   customSlots: Array<{ timeSlot: string; status: string }>;
+
+  @IsOptional()
+  @IsEnum(ScheduleCapability)
+  capability?: ScheduleCapability;
 }
 
 @Controller('providers')
@@ -213,6 +226,7 @@ export class ProvidersController {
       user.sub,
       dto.dayOfWeek,
       dto.workingHours,
+      dto.capability,
     );
   }
 
@@ -225,6 +239,7 @@ export class ProvidersController {
       user.sub,
       dto.dayOfWeeks,
       dto.workingHours,
+      dto.capability,
     );
   }
   @Post('me/schedules/specific-date')
@@ -237,6 +252,7 @@ export class ProvidersController {
       dto.date,
       dto.isOffDay,
       dto.customSlots,
+      dto.capability,
     );
   }
 }

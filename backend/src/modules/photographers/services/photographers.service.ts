@@ -10,6 +10,7 @@ import {
 import { PackageStatus, PhotographyPackage } from '../../products/schemas/photography-package.schema';
 import {
   ProviderSchedule,
+  ScheduleCapability,
   ScheduleType,
 } from '../../products/schemas/provider-schedule.schema';
 import { PortfolioItem } from '../../providers/schemas/portfolio-item.schema';
@@ -188,6 +189,7 @@ export class PhotographersService {
       providerId: photographer._id,
       scheduleType: ScheduleType.SpecificDate,
       specificDate: selectedDate,
+      $or: [{ capability: null }, { capability: ScheduleCapability.Photography }],
     });
     const isOffDay = specificSchedule?.offDays.some(
       (offDay: Date) => offDay.toISOString().slice(0, 10) === date,
@@ -213,6 +215,7 @@ export class PhotographersService {
       providerId: photographer._id,
       scheduleType: ScheduleType.Recurring,
       dayOfWeek: selectedDate.getDay(),
+      $or: [{ capability: null }, { capability: ScheduleCapability.Photography }],
     });
 
     return {
