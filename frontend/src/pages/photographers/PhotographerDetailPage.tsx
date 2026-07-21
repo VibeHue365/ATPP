@@ -206,9 +206,10 @@ export const PhotographerDetailPage: React.FC = () => {
   // Load booking availability separately from the public photographer profile.
   useEffect(() => {
     const fetchBookingAvailability = async () => {
-      if (!id) return;
+      const targetId = photographer?.providerId || id;
+      if (!targetId) return;
       try {
-        const busyData = await httpClient.get<{ bookedDates: string[]; bookedSlots: { date: string; timeSlot: string }[] }>(`/api/bookings/busy-dates/provider/${id}`);
+        const busyData = await httpClient.get<{ bookedDates: string[]; bookedSlots: { date: string; timeSlot: string }[] }>(`/api/bookings/busy-dates/provider/${targetId}`);
         setBusyDates(busyData.bookedDates || []);
         setBusySlots(busyData.bookedSlots || []);
       } catch (bookingError) {
@@ -219,7 +220,7 @@ export const PhotographerDetailPage: React.FC = () => {
     };
 
     void fetchBookingAvailability();
-  }, [id]);
+  }, [id, photographer?.providerId]);
 
   useEffect(() => {
     if (!photographer?.packages.length) {
@@ -383,12 +384,20 @@ export const PhotographerDetailPage: React.FC = () => {
   }, [id, selectedDate]);
 
   const photographerSlots = useMemo(() => {
+    const stepMinutes = effectiveDurationMinutes >= 180 ? 60 : 30;
     return availableTimeRanges.flatMap((range) => {
       const start = toMinutes(range.start);
       const end = toMinutes(range.end);
       const slots: Array<{ start: string; end: string; label: string }> = [];
-      for (let current = start; current + effectiveDurationMinutes <= end; current += 30) {
+      const lunchStart = toMinutes('12:00');
+      const lunchEnd = toMinutes('13:00');
+
+      for (let current = start; current + effectiveDurationMinutes <= end; current += stepMinutes) {
         const slotEnd = current + effectiveDurationMinutes;
+        // For 3h+ packages, avoid slots starting between 09:30 and 12:30 that cut straight through 12:00-13:00 lunch hour
+        if (effectiveDurationMinutes >= 180 && current > toMinutes('09:30') && current < lunchEnd && slotEnd > lunchStart) {
+          continue;
+        }
         slots.push({ start: toTime(current), end: toTime(slotEnd), label: `${toTime(current)} - ${toTime(slotEnd)}` });
       }
       return slots;

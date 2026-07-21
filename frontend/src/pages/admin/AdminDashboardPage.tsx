@@ -2700,6 +2700,51 @@ export const AdminDashboardPage: React.FC = () => {
               </p>
             </div>
 
+            {d.bookingId?.deliveryDriveUrl && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '8px', padding: '10px 12px' }}>
+                <span style={{ color: '#1D4ED8', fontWeight: 700, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🔗 Link Kho Ảnh Gốc từ Thợ chụp (Google Drive):
+                </span>
+                <a
+                  href={d.bookingId.deliveryDriveUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    color: '#2563EB',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    wordBreak: 'break-all',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  {d.bookingId.deliveryDriveUrl}
+                </a>
+              </div>
+            )}
+
+            {d.bookingId?.deliveredPhotos && d.bookingId.deliveredPhotos.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+                <span style={{ color: '#7A7A7A', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                  <ImageIcon size={14} style={{ color: '#1D4ED8' }} /> Ảnh kết quả thợ chụp đã bàn giao ({d.bookingId.deliveredPhotos.length} ảnh):
+                </span>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {d.bookingId.deliveredPhotos.map((photo: string, idx: number) => (
+                    <PrivateEvidenceImage
+                      key={idx}
+                      reference={photo}
+                      legacyUrl={getImageUrl(photo)}
+                      alt={`Ảnh bàn giao kết quả ${idx + 1}`}
+                      linkStyle={{ display: 'block', borderRadius: '6px', overflow: 'hidden', border: '1px solid #BFDBFE' }}
+                      imageStyle={{ width: '65px', height: '65px', objectFit: 'cover' }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {d.bookingId?.handoverPhotos && d.bookingId.handoverPhotos.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
                 <span style={{ color: '#7A7A7A', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}><ImageIcon size={14} style={{ color: '#706E3B' }} /> Ảnh bàn giao chuẩn bị đồ từ Shop:</span>

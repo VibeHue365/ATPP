@@ -51,6 +51,7 @@ export const toPhotographerSummary = (response: PhotographerApiResponse): Photog
 export const toPhotographerDetails = (response: PhotographerApiResponse): PhotographerDetails => ({
   id: response._id,
   _id: response._id,
+  providerId: response._id,
   businessName: response.businessName?.trim() || 'Nhiếp ảnh gia',
   quote: response.quote?.trim() || '',
   rating: {

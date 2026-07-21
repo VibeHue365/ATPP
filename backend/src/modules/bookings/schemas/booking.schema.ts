@@ -221,6 +221,10 @@ export class Booking {
   @Prop({ type: [String], default: [] })
   deliveredPhotos?: string[];
 
+  /** Photography only: Google Drive / Dropbox album link delivered by photographer */
+  @Prop({ type: String, default: null, trim: true })
+  deliveryDriveUrl?: string | null;
+
   /** Kết quả phán quyết tranh chấp từ Admin */
   @Prop({
     type: {
@@ -260,14 +264,29 @@ export class Booking {
   /** One booking-level refund request for all finalized Ao Dai item deposits. */
   @Prop({
     type: {
-      status: { type: String, enum: ['PENDING', 'NO_REFUND', 'REQUESTED', 'REFUNDED', 'FAILED'], default: 'PENDING' },
+      status: {
+        type: String,
+        enum: ['PENDING', 'NO_REFUND', 'REQUESTED', 'REFUNDED', 'FAILED'],
+        default: 'PENDING',
+      },
       amount: { type: Number, min: 0, default: 0 },
-      refundRequestId: { type: Types.ObjectId, ref: 'RefundRequest', default: null },
+      refundRequestId: {
+        type: Types.ObjectId,
+        ref: 'RefundRequest',
+        default: null,
+      },
       requestedAt: { type: Date, default: null },
       completedAt: { type: Date, default: null },
       failureReason: { type: String, default: null },
     },
-    default: () => ({ status: 'PENDING', amount: 0, refundRequestId: null, requestedAt: null, completedAt: null, failureReason: null }),
+    default: () => ({
+      status: 'PENDING',
+      amount: 0,
+      refundRequestId: null,
+      requestedAt: null,
+      completedAt: null,
+      failureReason: null,
+    }),
   })
   rentalDepositRefund?: {
     status: 'PENDING' | 'NO_REFUND' | 'REQUESTED' | 'REFUNDED' | 'FAILED';

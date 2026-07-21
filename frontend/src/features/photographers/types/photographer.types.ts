@@ -142,6 +142,7 @@ export interface PhotographerSummary {
 export interface PhotographerDetails {
   id: string;
   _id: string;
+  providerId?: string;
   businessName: string;
   quote: string;
   rating: PhotographerRating;

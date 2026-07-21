@@ -409,8 +409,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               : (isPhotography && booking.handoverPhotos && booking.handoverPhotos.length > 0)
                 ? booking.handoverPhotos
                 : [];
+            const driveUrl = booking.deliveryDriveUrl;
 
-            if (photos.length === 0) return null;
+            if (photos.length === 0 && !driveUrl) return null;
 
             return (
               <div style={{
@@ -422,55 +423,79 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                 flexDirection: 'column',
                 gap: '10px',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1D4ED8', fontWeight: 700, fontSize: '13px' }}>
                     <Camera size={16} />
                     <span>📸 ẢNH KẾT QUẢ TỪ THỢ CHỤP</span>
                   </div>
-                  <button
-                    onClick={() => {
-                      const fullPhotoUrls = photos.map((p: string) => getEvidenceUrl(p));
-                      const zipName = `anh_chup_${booking.bookingCode || 'ket_qua'}.zip`;
-                      void downloadPhotosAsZip(fullPhotoUrls, zipName);
-                    }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '4px',
-                      background: '#1D4ED8', color: 'white', border: 'none',
-                      borderRadius: '6px', padding: '5px 10px', fontSize: '11px',
-                      fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
-                    }}
-                    onMouseOver={(e) => (e.currentTarget.style.background = '#1E40AF')}
-                    onMouseOut={(e) => (e.currentTarget.style.background = '#1D4ED8')}
-                  >
-                    <Download size={12} /> Tải tất cả ({photos.length})
-                  </button>
-                </div>
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  {photos.map((photo: string, index: number) => (
-                    <div key={index} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #BFDBFE', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}>
-                      <a href={getEvidenceUrl(photo)} target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
-                        <img src={getEvidenceUrl(photo)} alt={`Ảnh kết quả ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {driveUrl && (
+                      <a
+                        href={driveUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          background: '#2563EB', color: 'white', border: 'none',
+                          borderRadius: '6px', padding: '6px 12px', fontSize: '12px',
+                          fontWeight: 700, textDecoration: 'none', transition: 'all 0.2s',
+                          boxShadow: '0 2px 4px rgba(37,99,235,0.2)'
+                        }}
+                      >
+                        🔗 Mở Kho Ảnh Gốc (Google Drive)
                       </a>
+                    )}
+                    {photos.length > 0 && (
                       <button
                         type="button"
-                        onClick={() => void downloadSinglePhoto(getEvidenceUrl(photo), `photo_${index + 1}.jpg`)}
-                        style={{
-                          position: 'absolute', bottom: '3px', right: '3px',
-                          background: 'rgba(29, 78, 216, 0.85)', color: 'white',
-                          border: 'none', borderRadius: '4px', padding: '3px', display: 'flex',
-                          alignItems: 'center', justifyContent: 'center',
-                          cursor: 'pointer', transition: 'all 0.2s',
+                        onClick={() => {
+                          const fullPhotoUrls = photos.map((p: string) => getEvidenceUrl(p));
+                          const zipName = `anh_chup_${booking.bookingCode || 'ket_qua'}.zip`;
+                          void downloadPhotosAsZip(fullPhotoUrls, zipName);
                         }}
-                        title="Tải xuống"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          background: '#1D4ED8', color: 'white', border: 'none',
+                          borderRadius: '6px', padding: '5px 10px', fontSize: '11px',
+                          fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                        }}
                       >
-                        <Download size={12} />
+                        <Download size={12} /> Tải tất cả ({photos.length})
                       </button>
-                    </div>
-                  ))}
+                    )}
+                  </div>
                 </div>
-                <p style={{ fontSize: '11px', color: '#6B7280', margin: 0, lineHeight: 1.4 }}>
-                  Thợ chụp đã bàn giao {photos.length} ảnh. Bấm vào ảnh để xem hoặc nút ⬇ để tải về.
-                </p>
+
+                {photos.length > 0 && (
+                  <>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      {photos.map((photo: string, index: number) => (
+                        <div key={index} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #BFDBFE', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}>
+                          <a href={getEvidenceUrl(photo)} target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
+                            <img src={getEvidenceUrl(photo)} alt={`Ảnh kết quả ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => void downloadSinglePhoto(getEvidenceUrl(photo), `photo_${index + 1}.jpg`)}
+                            style={{
+                              position: 'absolute', bottom: '3px', right: '3px',
+                              background: 'rgba(29, 78, 216, 0.85)', color: 'white',
+                              border: 'none', borderRadius: '4px', padding: '3px', display: 'flex',
+                              alignItems: 'center', justifyContent: 'center',
+                              cursor: 'pointer', transition: 'all 0.2s',
+                            }}
+                            title="Tải xuống"
+                          >
+                            <Download size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <p style={{ fontSize: '11px', color: '#6B7280', margin: 0, lineHeight: 1.4 }}>
+                      Thợ chụp đã bàn giao {photos.length} ảnh. Bấm vào ảnh để xem hoặc nút ⬇ để tải về.
+                    </p>
+                  </>
+                )}
               </div>
             );
           })()}
@@ -814,20 +839,48 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             gap: '8px',
             fontSize: '13px'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#4B5563' }}>Tiền thuê dịch vụ:</span>
-              <span style={{ fontWeight: 600 }}>{formatCurrency(booking.paymentSummary?.subTotal || booking.pricingSummary?.subTotal)}</span>
-            </div>
+            {(() => {
+              const bType = booking.bookingType || 'PHOTOGRAPHY';
+              const grandTotal = booking.pricingSummary?.grandTotal || booking.paymentSummary?.totalPaid || 0;
+              const subTotal = booking.paymentSummary?.subTotal || booking.pricingSummary?.subTotal || grandTotal;
+              const depositTotal = booking.paymentSummary?.depositTotal || booking.pricingSummary?.depositTotal || 0;
+              const photoBasePrice = grandTotal || subTotal;
+              const photoDeposit = Math.round(photoBasePrice * 0.3);
+
+              if (bType === 'PHOTOGRAPHY') {
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#4B5563' }}>Tiền gói dịch vụ chụp ảnh:</span>
+                      <span style={{ fontWeight: 600 }}>{formatCurrency(photoBasePrice)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#D97706', paddingLeft: '8px' }}>
+                      <span>• Trong đó: Cọc giữ lịch chụp (30%):</span>
+                      <span style={{ fontWeight: 600 }}>{formatCurrency(photoDeposit)}</span>
+                    </div>
+                  </>
+                );
+              }
+
+              return (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#4B5563' }}>{bType === 'AODAI_RENTAL' ? 'Tiền thuê áo dài:' : 'Tiền dịch vụ:'}</span>
+                    <span style={{ fontWeight: 600 }}>{formatCurrency(subTotal)}</span>
+                  </div>
+                  {depositTotal > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#4B5563' }}>Tiền cọc giữ đồ trang phục (Sẽ hoàn lại khi trả đồ):</span>
+                      <span style={{ fontWeight: 600, color: '#D97706' }}>{formatCurrency(depositTotal)}</span>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             {booking.pricingSummary?.serviceFee > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#4B5563' }}>Phí dịch vụ Heritage:</span>
                 <span style={{ fontWeight: 600 }}>{formatCurrency(booking.pricingSummary.serviceFee)}</span>
-              </div>
-            )}
-            {booking.paymentSummary?.depositTotal > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#4B5563' }}>Tiền cọc giữ đồ (Sẽ hoàn lại khi trả đồ):</span>
-                <span style={{ fontWeight: 600, color: '#D97706' }}>{formatCurrency(booking.paymentSummary.depositTotal)}</span>
               </div>
             )}
             <div style={{ borderTop: '1px dashed #D1D5DB', margin: '6px 0' }} />

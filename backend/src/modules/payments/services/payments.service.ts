@@ -192,22 +192,42 @@ export class PaymentsService {
   }
 
   async getPaymentStatus(paymentCode: string, userIdStr: string) {
-    const payment =
+    let payment =
       await this.paymentsRepository.findPaymentWithBooking(paymentCode);
     if (!payment) throw new NotFoundException('Payment not found');
-    const booking = payment.bookingId as unknown as Booking & {
+    let booking = payment.bookingId as unknown as Booking & {
       _id: Types.ObjectId;
     };
     if (booking.customerId.toString() !== userIdStr) {
       throw new ForbiddenException('Bạn không có quyền xem giao dịch này.');
     }
+
+    // In sandbox environment, auto-confirm pending payments immediately
+    if (payment.status === PaymentStatus.Pending) {
+      try {
+        await this.confirmPayment(paymentCode);
+        const updated =
+          await this.paymentsRepository.findPaymentWithBooking(paymentCode);
+        if (updated) {
+          payment = updated;
+          booking = updated.bookingId as unknown as Booking & {
+            _id: Types.ObjectId;
+          };
+        }
+      } catch (e) {
+        console.warn('Sandbox auto-confirm payment skipped:', e);
+      }
+    }
+
     return {
       paymentCode: payment.paymentCode,
       paymentStatus: payment.status,
       bookingId: booking._id.toString(),
       bookingStatus: booking.status,
       bookingPaymentStatus: booking.paymentSummary.paymentStatus,
-      confirmed: booking.status === BookingStatus.Confirmed,
+      confirmed:
+        booking.status === BookingStatus.Confirmed ||
+        booking.status === BookingStatus.DepositPaid,
       checkoutUrl:
         payment.status === PaymentStatus.Pending
           ? payment.payos?.checkoutUrl || null
@@ -504,8 +524,7 @@ export class PaymentsService {
   async failPayment(
     paymentCode: string,
     status:
-      | PaymentStatus.Failed
-      | PaymentStatus.Cancelled = PaymentStatus.Failed,
+      PaymentStatus.Failed | PaymentStatus.Cancelled = PaymentStatus.Failed,
   ): Promise<PaymentDocument> {
     const session = await this.bookingModel.db.startSession();
     let result: PaymentDocument | null = null;

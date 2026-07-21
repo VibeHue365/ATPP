@@ -178,16 +178,26 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     }
   };
 
+  const [hasLoadedPayments, setHasLoadedPayments] = useState(false);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
+
+  const [hasLoadedFavorites, setHasLoadedFavorites] = useState(false);
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState(false);
+
   const fetchPayments = async () => {
+    setIsLoadingPayments(true);
     try {
       const pRes: any = await httpClient.get('/payments/history');
       setPayments(pRes || []);
     } catch (err: any) {
       console.error('Không thể tải lịch sử thanh toán:', err);
+    } finally {
+      setIsLoadingPayments(false);
     }
   };
 
   const fetchRealDataForFavorites = async () => {
+    setIsLoadingFavorites(true);
     try {
       const prods = await httpClient.get<any[]>('/products');
       setRealProductList(prods || []);
@@ -199,13 +209,21 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       setRealPhotographersList(phs || []);
     } catch (e) {
       console.error('Failed to fetch photographers for dashboard favorites', e);
+    } finally {
+      setIsLoadingFavorites(false);
     }
   };
 
+  // Lazy load data on tab switch instead of fetching all at once on mount
   useEffect(() => {
-    fetchPayments();
-    fetchRealDataForFavorites();
-  }, []);
+    if (activeTab === 'payments' && !hasLoadedPayments) {
+      setHasLoadedPayments(true);
+      fetchPayments();
+    } else if (activeTab === 'favorites' && !hasLoadedFavorites) {
+      setHasLoadedFavorites(true);
+      fetchRealDataForFavorites();
+    }
+  }, [activeTab, hasLoadedPayments, hasLoadedFavorites]);
 
   const handleCreateReview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -835,33 +853,65 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             : (app.booking?.handoverPhotos && app.booking.handoverPhotos.length > 0)
                               ? app.booking.handoverPhotos
                               : [];
-                          if (photos.length === 0) return null;
+                          const driveUrl = app.booking?.deliveryDriveUrl;
+                          if (photos.length === 0 && !driveUrl) return null;
+
                           return (
-                            <div style={{ marginBottom: '10px' }}>
-                              <p style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', margin: '0 0 6px 0' }}>
-                                📸 {photos.length} ảnh kết quả đã bàn giao:
-                              </p>
-                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                                {photos.slice(0, 4).map((photo: string, idx: number) => {
-                                  const photoUrl = photo.startsWith('http') ? photo : `${import.meta.env.VITE_API_URL || ''}${photo}`;
-                                  return (
-                                    <a key={idx} href={photoUrl} target="_blank" rel="noreferrer" style={{ width: '48px', height: '48px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #BFDBFE', display: 'block' }}>
-                                      <img src={photoUrl} alt={`Ảnh ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                    </a>
-                                  );
-                                })}
-                                {photos.length > 4 && (
-                                  <div style={{ width: '48px', height: '48px', borderRadius: '6px', backgroundColor: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: '#1D4ED8' }}>
-                                    +{photos.length - 4}
+                            <div style={{ marginBottom: '12px', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                              {photos.length > 0 && (
+                                <>
+                                  <p style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', margin: '0 0 6px 0' }}>
+                                    📸 {photos.length} ảnh kết quả đã bàn giao:
+                                  </p>
+                                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                                    {photos.slice(0, 4).map((photo: string, idx: number) => {
+                                      const photoUrl = photo.startsWith('http') ? photo : `${import.meta.env.VITE_API_URL || ''}${photo}`;
+                                      return (
+                                        <a key={idx} href={photoUrl} target="_blank" rel="noreferrer" style={{ width: '48px', height: '48px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #BFDBFE', display: 'block' }}>
+                                          <img src={photoUrl} alt={`Ảnh ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        </a>
+                                      );
+                                    })}
+                                    {photos.length > 4 && (
+                                      <div style={{ width: '48px', height: '48px', borderRadius: '6px', backgroundColor: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: '#1D4ED8' }}>
+                                        +{photos.length - 4}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                              <button
-                                onClick={() => onViewDetails(app.booking)}
-                                style={{ background: 'none', border: 'none', color: '#1D4ED8', fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
-                              >
-                                Xem tất cả & Tải xuống →
-                              </button>
+                                </>
+                              )}
+                              {driveUrl && (
+                                <div style={{ marginTop: photos.length > 0 ? '6px' : '0', marginBottom: '6px' }}>
+                                  <a
+                                    href={driveUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '6px',
+                                      backgroundColor: '#2563EB',
+                                      color: '#FFFFFF',
+                                      borderRadius: '6px',
+                                      padding: '8px 14px',
+                                      fontSize: '12px',
+                                      fontWeight: 700,
+                                      textDecoration: 'none',
+                                      boxShadow: '0 2px 4px rgba(37,99,235,0.2)',
+                                    }}
+                                  >
+                                    🔗 Mở Kho Ảnh Gốc (Google Drive)
+                                  </a>
+                                </div>
+                              )}
+                              {photos.length > 0 && (
+                                <button
+                                  onClick={() => onViewDetails(app.booking)}
+                                  style={{ background: 'none', border: 'none', color: '#1D4ED8', fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                >
+                                  Xem tất cả & Tải xuống →
+                                </button>
+                              )}
                             </div>
                           );
                         })()}
@@ -882,8 +932,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       </div>
                     )}
 
-                    {/* Customer Report / Dispute button during IN_PROGRESS or OVERDUE */}
-                    {(app.rawStatus === 'IN_PROGRESS' || app.isOverdue) && app.rawStatus !== 'AWAITING_REVIEW' && app.rawStatus !== 'DISPUTED' && (
+                    {/* Customer Report / Dispute button during CONFIRMED, IN_PROGRESS, AWAITING_REVIEW or OVERDUE */}
+                    {(app.rawStatus === 'CONFIRMED' || app.rawStatus === 'IN_PROGRESS' || app.rawStatus === 'AWAITING_REVIEW' || app.isOverdue) && app.rawStatus !== 'DISPUTED' && app.rawStatus !== 'COMPLETED' && app.rawStatus !== 'CANCELLED' && (
                       <div style={{ marginTop: '12px' }}>
                         <button
                           onClick={() => handleDisputeBooking(app.id)}
@@ -1383,6 +1433,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
         {/* PANEL 3: FAVORITES */}
         {activeTab === 'favorites' && (
+          isLoadingFavorites ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '220px', gap: '12px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', padding: '30px' }}>
+              <div style={{ width: '28px', height: '28px', border: '3px solid #F3F4F6', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <span style={{ fontSize: '13px', color: '#8C827A', fontWeight: 500 }}>Đang tải danh sách yêu thích...</span>
+            </div>
+          ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
             {/* Sub-tabs header */}
             <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid #EAEAE8', paddingBottom: '12px' }}>
@@ -1499,10 +1555,17 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               </div>
             )}
           </div>
+          )
         )}
 
         {/* PANEL 4: PAYMENTS */}
         {activeTab === 'payments' && (
+          isLoadingPayments ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '220px', gap: '12px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', padding: '30px' }}>
+              <div style={{ width: '28px', height: '28px', border: '3px solid #F3F4F6', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <span style={{ fontSize: '13px', color: '#8C827A', fontWeight: 500 }}>Đang tải lịch sử thanh toán...</span>
+            </div>
+          ) : (
           <div className="vh-profile-payments-table-wrapper">
             {payments.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', width: '100%' }}>
@@ -1616,6 +1679,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               </table>
             )}
           </div>
+          )
         )}
 
       </div>

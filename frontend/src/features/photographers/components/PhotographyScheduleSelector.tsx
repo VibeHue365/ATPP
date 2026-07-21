@@ -116,31 +116,107 @@ export const PhotographyScheduleSelector: React.FC<PhotographyScheduleSelectorPr
       {/* Cột phải: Khung giờ */}
       <div className="pd-time-slots-wrapper">
         <h3 className="pd-time-slots-title">Chọn giờ chụp</h3>
-        <div className="pd-time-slots-grid">
-          {slots.map((slot) => {
-            const isBusy = isSlotBusy(slot);
-            const now = new Date();
-            const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-            const [hour, minute] = slot.start.split(':').map(Number);
-            const isPast = selectedDate === today && (hour < now.getHours() || (hour === now.getHours() && minute <= now.getMinutes()));
-            const isSelected = selectedStartTime === slot.start && selectedEndTime === slot.end;
-            const disabled = isBusy || isPast;
-            return (
-              <button
-                key={slot.label}
-                type="button"
-                disabled={disabled}
-                onClick={() => onSelectSlot(slot)}
-                className={`pd-time-slot-btn ${isSelected ? 'selected' : ''}`}
-              >
-                <span>{slot.label}</span>
-                <span className="pd-time-slot-status">
-                  {isBusy ? 'Đã bận' : isPast ? 'Đã qua' : isSelected ? 'Đã chọn' : 'Trống'}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        {slots.length === 0 ? (
+          <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontStyle: 'italic', padding: '12px 0' }}>
+            Không có khung giờ phù hợp trong ngày đã chọn.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Ca Sáng */}
+            {slots.some((s) => Number(s.start.split(':')[0]) < 12) && (
+              <div>
+                <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🌅 Ca Sáng</span>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>(Bắt đầu trước 12:00)</span>
+                </div>
+                <div className="pd-time-slots-grid">
+                  {slots.filter((s) => Number(s.start.split(':')[0]) < 12).map((slot) => {
+                    const isBusy = isSlotBusy(slot);
+                    const now = new Date();
+                    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    const [hour, minute] = slot.start.split(':').map(Number);
+                    const isPast = selectedDate === today && (hour < now.getHours() || (hour === now.getHours() && minute <= now.getMinutes()));
+                    const isSelected = selectedStartTime === slot.start && selectedEndTime === slot.end;
+                    const disabled = isBusy || isPast;
+                    return (
+                      <button
+                        key={slot.label}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => !disabled && onSelectSlot(slot)}
+                        className={`pd-time-slot-btn ${isSelected ? 'selected' : ''} ${disabled ? 'disabled busy' : ''}`}
+                        style={
+                          disabled
+                            ? {
+                                backgroundColor: '#F3F4F6',
+                                color: '#9CA3AF',
+                                borderColor: '#E5E7EB',
+                                cursor: 'not-allowed',
+                                opacity: 0.55,
+                                pointerEvents: 'none',
+                              }
+                            : {}
+                        }
+                      >
+                        <span>{slot.label}</span>
+                        <span className="pd-time-slot-status">
+                          {isBusy ? 'Đã bận / giữ chỗ' : isPast ? 'Đã qua' : isSelected ? 'Đã chọn' : 'Trống'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Ca Chiều */}
+            {slots.some((s) => Number(s.start.split(':')[0]) >= 12) && (
+              <div>
+                <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🌇 Ca Chiều</span>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>(Bắt đầu từ 12:00)</span>
+                </div>
+                <div className="pd-time-slots-grid">
+                  {slots.filter((s) => Number(s.start.split(':')[0]) >= 12).map((slot) => {
+                    const isBusy = isSlotBusy(slot);
+                    const now = new Date();
+                    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    const [hour, minute] = slot.start.split(':').map(Number);
+                    const isPast = selectedDate === today && (hour < now.getHours() || (hour === now.getHours() && minute <= now.getMinutes()));
+                    const isSelected = selectedStartTime === slot.start && selectedEndTime === slot.end;
+                    const disabled = isBusy || isPast;
+                    return (
+                      <button
+                        key={slot.label}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => !disabled && onSelectSlot(slot)}
+                        className={`pd-time-slot-btn ${isSelected ? 'selected' : ''} ${disabled ? 'disabled busy' : ''}`}
+                        style={
+                          disabled
+                            ? {
+                                backgroundColor: '#F3F4F6',
+                                color: '#9CA3AF',
+                                borderColor: '#E5E7EB',
+                                cursor: 'not-allowed',
+                                opacity: 0.55,
+                                pointerEvents: 'none',
+                              }
+                            : {}
+                        }
+                      >
+                        <span>{slot.label}</span>
+                        <span className="pd-time-slot-status">
+                          {isBusy ? 'Đã bận / giữ chỗ' : isPast ? 'Đã qua' : isSelected ? 'Đã chọn' : 'Trống'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <span style={{ fontSize: '11.5px', fontStyle: 'italic', color: 'var(--color-text-secondary)', display: 'block', marginTop: '14px' }}>
           * Chọn một khung giờ phù hợp với thời lượng gói dịch vụ.
         </span>

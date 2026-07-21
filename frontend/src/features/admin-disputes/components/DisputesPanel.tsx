@@ -137,9 +137,41 @@ export function DisputesPanel() {
               <div><dt>Khoản yêu cầu</dt><dd>{formatCurrency(selected.requestedAmount)}</dd></div>
             </dl>
 
+            {selected.bookingId?.deliveryDriveUrl && (
+              <section className='admin-disputes__evidence' aria-label='Link Google Drive'>
+                <h4>🔗 Link Google Drive bộ ảnh gốc:</h4>
+                <a
+                  href={selected.bookingId.deliveryDriveUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: '#2563EB', fontWeight: 700, fontSize: '13px', wordBreak: 'break-all' }}
+                >
+                  {selected.bookingId.deliveryDriveUrl}
+                </a>
+              </section>
+            )}
+
+            {selected.bookingId?.deliveredPhotos?.length ? (
+              <section className='admin-disputes__evidence' aria-label='Ảnh kết quả bàn giao'>
+                <h4>📸 Ảnh kết quả thợ chụp bàn giao</h4>
+                <div>
+                  {selected.bookingId.deliveredPhotos.map((reference: string, index: number) => (
+                    <PrivateEvidenceImage
+                      key={index}
+                      reference={reference}
+                      legacyUrl={evidenceUrl(reference)}
+                      alt={`Ảnh bàn giao ${index + 1}`}
+                      linkStyle={{ display: 'block', borderRadius: '6px', overflow: 'hidden', border: '1px solid #BFDBFE' }}
+                      imageStyle={{ width: '72px', height: '72px', objectFit: 'cover' }}
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             {selected.evidencePhotos?.length ? (
               <section className='admin-disputes__evidence' aria-label='Bằng chứng sự cố'>
-                <h4>Bằng chứng sự cố</h4>
+                <h4>Bằng chứng sự cố (Khách gửi)</h4>
                 <div>
                   {selected.evidencePhotos.map((reference, index) => (
                     <PrivateEvidenceImage
