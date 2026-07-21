@@ -49,7 +49,7 @@ export class ComboPromotion {
   @Prop({
     type: String,
     enum: Object.values(ComboPromotionStatus),
-    default: ComboPromotionStatus.Active,
+    default: ComboPromotionStatus.PendingReview,
     index: true,
   })
   status: ComboPromotionStatus;

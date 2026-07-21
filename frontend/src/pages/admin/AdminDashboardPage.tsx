@@ -5,7 +5,7 @@ import {
   AlertTriangle,
   Image as ImageIcon, Calendar, Eye,
   LayoutDashboard, Users, Store, TrendingUp, FileCheck,
-  Search, Bell, Ban, Lock, CheckSquare, BarChart3,
+  Search, Bell, Ban, Lock, CheckSquare, BarChart3, Tag,
   LogOut, Home, Star, Layers, Settings, DollarSign, ShieldCheck
 } from 'lucide-react';
 import Swal from 'sweetalert2';
@@ -27,6 +27,7 @@ import { AccessControl } from './components/AccessControl';
 import { ProductModerationManagement } from './components/ProductModerationManagement';
 import { PortfolioModerationManagement } from './components/PortfolioModerationManagement';
 import { RefundManagement } from './components/RefundManagement';
+import { ComboModerationManagement } from './components/ComboModerationManagement';
 
 const getImageUrl = (url: string) => {
   if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
@@ -2370,7 +2371,7 @@ export const AdminDashboardPage: React.FC = () => {
                     <td style={{ padding: '16px 20px', fontWeight: 700, color: '#4A0E17' }}>{prod.name}</td>
                     <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{prod.basePrice.toLocaleString()}đ</td>
                     <td style={{ padding: '16px 20px', textAlign: 'center', color: '#7A7A7A' }}>{prod.viewCount || 0}</td>
-                    <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700, color: '#706E3B' }}>{prod.rentCount || 0} lượt</td>
+                    <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700, color: '#706E3B' }}>{prod.rentCount ?? prod.bookingCount ?? prod.rentedCount ?? prod.count ?? 0} lượt</td>
                     <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                       <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#F0FDF4', color: '#166534' }}>
                         Hoạt động
@@ -2831,6 +2832,7 @@ export const AdminDashboardPage: React.FC = () => {
               { id: 'verifications', label: 'Phê duyệt hồ sơ đối tác', icon: FileCheck },
               { id: 'disputes', label: 'Giải quyết tranh chấp', icon: AlertTriangle },
               { id: 'product-moderation', label: 'Kiểm duyệt sản phẩm', icon: CheckSquare },
+              { id: 'combo-moderation', label: 'Phê duyệt Combo', icon: Tag },
               { id: 'reported-reviews', label: 'Báo cáo Đánh giá (Spam)', icon: Ban },
               { id: 'policies', label: 'Cấu hình Chính sách', icon: Settings },
               { id: 'users-roles', label: 'Tài khoản & Phân quyền', icon: ShieldCheck },
@@ -2911,10 +2913,11 @@ export const AdminDashboardPage: React.FC = () => {
                             activeTab === 'verifications' ? 'Phê duyệt hồ sơ đăng ký đối tác' :
                               activeTab === 'behavior' ? 'Phân tích hành vi người dùng' :
                                 activeTab === 'product-moderation' ? 'Kiểm duyệt nội dung sản phẩm' :
-                                  activeTab === 'reported-reviews' ? 'Báo cáo vi phạm & Spam Đánh giá' :
-                                    activeTab === 'policies' ? 'Cấu hình Chính sách Hệ thống' :
-                                      activeTab === 'users-roles' ? 'Tài khoản & Quản trị Phân quyền' :
-                                        'Giải quyết tranh chấp sự cố'}
+                                    activeTab === 'reported-reviews' ? 'Báo cáo vi phạm & Spam Đánh giá' :
+                                      activeTab === 'combo-moderation' ? 'Phê duyệt Combo Khuyến mãi' :
+                                        activeTab === 'policies' ? 'Cấu hình Chính sách Hệ thống' :
+                                          activeTab === 'users-roles' ? 'Tài khoản & Quản trị Phân quyền' :
+                                            'Giải quyết tranh chấp sự cố'}
             </span>
           </div>
 
@@ -3051,6 +3054,7 @@ export const AdminDashboardPage: React.FC = () => {
                 {activeTab === 'behavior' && renderBehaviorTab()}
                 {activeTab === 'product-moderation' && <><ProductModerationManagement /><PortfolioModerationManagement /></>}
                 {activeTab === 'reported-reviews' && renderReportedReviewsTab()}
+                {activeTab === 'combo-moderation' && <ComboModerationManagement />}
                 {activeTab === 'policies' && <PolicyManagement />}
                 {activeTab === 'users-roles' && <AccessControl />}
               </>

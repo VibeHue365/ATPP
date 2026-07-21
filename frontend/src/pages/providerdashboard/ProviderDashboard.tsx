@@ -179,6 +179,17 @@ export const ProviderDashboard: React.FC = () => {
       }
     }
   }, [analyticsData]);
+
+  useEffect(() => {
+    if (provider) {
+      if (!hasAodaiCapability && (currentView === 'rental-operations' || currentView === 'collections')) {
+        setCurrentView('analytics');
+      }
+      if (!hasPhotographyCapability && (currentView === 'portfolio' || currentView === 'photography-packages')) {
+        setCurrentView('analytics');
+      }
+    }
+  }, [provider, hasAodaiCapability, hasPhotographyCapability, currentView]);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
@@ -1934,17 +1945,27 @@ export const ProviderDashboard: React.FC = () => {
     return 'Khác';
   };
 
-  const tabs = React.useMemo(() => [
-    { label: 'Tất cả', count: orders.length },
-    { label: 'Chờ xử lý', count: orders.filter(o => getOrderGroup(o.status) === 'Chờ xử lý').length },
-    { label: 'Đang thực hiện', count: orders.filter(o => getOrderGroup(o.status) === 'Đang thực hiện').length },
-    { label: 'Hoàn thành', count: orders.filter(o => getOrderGroup(o.status) === 'Hoàn thành').length },
-    { label: 'Đã hủy', count: orders.filter(o => getOrderGroup(o.status) === 'Đã hủy').length },
-  ], [orders]);
+  const roleFilteredOrders = React.useMemo(() => {
+    if (hasAodaiCapability && !hasPhotographyCapability) {
+      return orders.filter(o => o.bookingType === 'AODAI_RENTAL');
+    }
+    if (hasPhotographyCapability && !hasAodaiCapability) {
+      return orders.filter(o => o.bookingType === 'PHOTOGRAPHY');
+    }
+    return orders;
+  }, [orders, hasAodaiCapability, hasPhotographyCapability]);
 
-  const filteredOrders = orders.filter((order) => {
+  const tabs = React.useMemo(() => [
+    { label: 'Tất cả', count: roleFilteredOrders.length },
+    { label: 'Chờ xử lý', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Chờ xử lý').length },
+    { label: 'Đang thực hiện', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Đang thực hiện').length },
+    { label: 'Hoàn thành', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Hoàn thành').length },
+    { label: 'Đã hủy', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Đã hủy').length },
+  ], [roleFilteredOrders]);
+
+  const filteredOrders = roleFilteredOrders.filter((order) => {
     const matchesStatus = orderTab === 'Tất cả' || getOrderGroup(order.status) === orderTab;
-    const matchesType = bookingTypeFilter === 'Tất cả' || order.bookingType === bookingTypeFilter;
+    const matchesType = (!hasAodaiCapability || !hasPhotographyCapability) ? true : (bookingTypeFilter === 'Tất cả' || order.bookingType === bookingTypeFilter);
     return matchesStatus && matchesType;
   });
 
@@ -2808,8 +2829,12 @@ export const ProviderDashboard: React.FC = () => {
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <button onClick={() => setCurrentView('analytics')} style={navItemStyle(currentView === 'analytics')}><BarChart3 size={18} /> Thống kê & Hiệu suất</button>
             <button onClick={() => setCurrentView('orders')} style={navItemStyle(currentView === 'orders')}><ShoppingBag size={18} /> Đơn hàng</button>
-            <button onClick={() => setCurrentView('rental-operations')} style={navItemStyle(currentView === 'rental-operations')}><Package size={18} /> Giao & nhận áo dài</button>
-            <button onClick={() => { setCurrentView('collections'); setCollectionTab('products'); }} style={navItemStyle(currentView === 'collections' && collectionTab === 'products')}><Layers size={18} /> Bộ sưu tập</button>
+            {hasAodaiCapability && (
+              <button onClick={() => setCurrentView('rental-operations')} style={navItemStyle(currentView === 'rental-operations')}><Package size={18} /> Giao & nhận áo dài</button>
+            )}
+            {hasAodaiCapability && (
+              <button onClick={() => { setCurrentView('collections'); setCollectionTab('products'); }} style={navItemStyle(currentView === 'collections' && collectionTab === 'products')}><Layers size={18} /> Bộ sưu tập</button>
+            )}
             <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ</button>
             {hasPhotographyCapability && (
               <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio</button>
@@ -3046,17 +3071,19 @@ export const ProviderDashboard: React.FC = () => {
                     }}>{t.label} ({t.count})</button>
                   ))}
                 </div>
-<div style={{ borderTop: '1px dashed var(--color-light-border)', paddingTop: '16px', marginTop: '16px' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '12px' }}>Loại đơn hàng:</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {[
-                      { label: 'Tất cả', type: 'Tất cả', count: orders.length },
-                      { label: 'Áo dài', type: 'AODAI_RENTAL', count: orders.filter(o => o.bookingType === 'AODAI_RENTAL').length },
-                      { label: 'Thợ chụp', type: 'PHOTOGRAPHY', count: orders.filter(o => o.bookingType === 'PHOTOGRAPHY').length },
-                      { label: 'Combo', type: 'COMBO', count: orders.filter(o => o.bookingType === 'COMBO').length },
-                    ].map(t => <button key={t.type} onClick={() => setBookingTypeFilter(t.type)} style={{ padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: bookingTypeFilter === t.type ? 'var(--color-primary)' : 'var(--color-light-bg)', color: bookingTypeFilter === t.type ? 'white' : 'var(--color-text-secondary)' }}>{t.label} ({t.count})</button>)}
-                  </div>
-                </div>
+                  {hasAodaiCapability && hasPhotographyCapability && (
+                    <div style={{ borderTop: '1px dashed var(--color-light-border)', paddingTop: '16px', marginTop: '16px' }}>
+                      <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '12px' }}>Loại đơn hàng:</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {[
+                          { label: 'Tất cả', type: 'Tất cả', count: orders.length },
+                          { label: 'Áo dài', type: 'AODAI_RENTAL', count: orders.filter(o => o.bookingType === 'AODAI_RENTAL').length },
+                          { label: 'Thợ chụp', type: 'PHOTOGRAPHY', count: orders.filter(o => o.bookingType === 'PHOTOGRAPHY').length },
+                          { label: 'Combo', type: 'COMBO', count: orders.filter(o => o.bookingType === 'COMBO').length },
+                        ].map(t => <button key={t.type} onClick={() => setBookingTypeFilter(t.type)} style={{ padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: bookingTypeFilter === t.type ? 'var(--color-primary)' : 'var(--color-light-bg)', color: bookingTypeFilter === t.type ? 'white' : 'var(--color-text-secondary)' }}>{t.label} ({t.count})</button>)}
+                      </div>
+                    </div>
+                  )}
               </div>
               <div style={{
                 backgroundColor: 'var(--color-primary-trans)', border: '1px solid rgba(161,30,34,0.12)', borderRadius: 'var(--radius-md)',
@@ -3315,20 +3342,11 @@ export const ProviderDashboard: React.FC = () => {
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
                 {collectionTab === 'products' ? (
-                  <>
-                    <button onClick={openCampaignModal} style={{
-                      display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: activeCampaign ? '#B91C1C' : '#EF4444',
-                      padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                      color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
-                    }}>
-                      <Tag size={14} /> {activeCampaign ? `Khuyến mãi (-${activeCampaign.discountPercent}%)` : 'Khuyến mãi'}
-                    </button>
-                    <button onClick={openAddModal} style={{
-                      display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--color-primary)',
-                      padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                      color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
-                    }}><Plus size={14} /> Thêm Áo Dài mới</button>
-                  </>
+                  <button onClick={openAddModal} style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--color-primary)',
+                    padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                    color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
+                  }}><Plus size={14} /> Thêm Áo Dài mới</button>
                 ) : null}
               </div>
             </div>
@@ -4035,6 +4053,50 @@ export const ProviderDashboard: React.FC = () => {
               <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải danh sách voucher...</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                {/* CHIẾN DỊCH GIẢM GIÁ ÁO DÀI */}
+                {hasAodaiCapability && (
+                  <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '12px' }}>
+                      <div>
+                        <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0 }}>CHIẾN DỊCH GIẢM GIÁ SẢN PHẨM ÁO DÀI</h3>
+                        <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>Tạo chương trình giảm giá toàn bộ sản phẩm theo % cho dịp lễ/sự kiện đặc biệt.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={openCampaignModal}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: activeCampaign ? '#B91C1C' : 'var(--color-primary)',
+                          padding: '10px 18px', borderRadius: '6px', fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                          color: 'white', border: 'none', transition: 'var(--transition-smooth)',
+                        }}
+                      >
+                        <Tag size={16} /> {activeCampaign ? `Đang chạy: ${activeCampaign.occasion} (-${activeCampaign.discountPercent}%)` : 'Tạo chiến dịch giảm giá'}
+                      </button>
+                    </div>
+
+                    {activeCampaign ? (
+                      <div style={{ padding: '14px 18px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ fontWeight: 800, fontSize: '14px', color: '#B91C1C' }}>🎉 {activeCampaign.occasion} (-{activeCampaign.discountPercent}%)</span>
+                          <div style={{ fontSize: '12px', color: '#991B1B', marginTop: '4px' }}>
+                            Áp dụng từ: {new Date(activeCampaign.startDate).toLocaleDateString('vi-VN')} đến {new Date(activeCampaign.endDate).toLocaleDateString('vi-VN')}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleDeactivateCampaign}
+                          disabled={submittingCampaign}
+                          style={{ padding: '8px 14px', backgroundColor: '#EF4444', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+                        >
+                          Hủy chiến dịch (Về giá gốc)
+                        </button>
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: 0 }}>Chưa có chiến dịch giảm giá sản phẩm nào đang diễn ra.</p>
+                    )}
+                  </div>
+                )}
+
                 <form onSubmit={handleAddVoucher} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>TẠO MÃ KHUYẾN MÃI MỚI</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>

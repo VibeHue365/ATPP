@@ -63,9 +63,10 @@ export class AdminStatsService {
     // Top products by how often they appear in booking_items
     const topProductsByBookings = await this.bookingModel.aggregate([
       { $unwind: '$items' },
-      { $group: { _id: '$items.productId', count: { $sum: 1 } } },
+      { $match: { 'items.productId': { $ne: null } } },
+      { $group: { _id: '$items.productId', count: { $sum: { $ifNull: ['$items.quantity', 1] } } } },
       { $sort: { count: -1 } },
-      { $limit: 5 },
+      { $limit: 10 },
       {
         $lookup: {
           from: 'products',
