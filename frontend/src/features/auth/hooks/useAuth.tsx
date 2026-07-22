@@ -11,6 +11,7 @@ interface AuthContextType {
   error: string | null;
   permissions: string[];
   hasPermission: (permission: string) => boolean;
+  refreshProfile: () => Promise<UserProfile>;
   refreshPermissions: () => Promise<string[]>;
   login: (payload: any) => Promise<UserProfile>;
   register: (payload: any) => Promise<any>;
@@ -241,6 +242,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         error,
         permissions,
         hasPermission,
+        refreshProfile: fetchProfile,
         refreshPermissions,
         login,
         register,

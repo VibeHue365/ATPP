@@ -19,7 +19,43 @@ import './verificationWorkspace.css';
 
 import type { AdminVerificationStatus } from '../types';
 
-const reviewPayload = (reason: string): AdminReviewDecisionPayload => ({ reason, note: reason });
+type ReviewReason = { value: string; label: string; instruction: string };
+
+const changeReasons: ReviewReason[] = [
+  { value: 'identity_front', label: 'CCCD mặt trước không đạt yêu cầu', instruction: 'Vui lòng tải lại CCCD mặt trước rõ nét, đủ 4 góc, không lóa hoặc mờ.' },
+  { value: 'identity_back', label: 'CCCD mặt sau không đạt yêu cầu', instruction: 'Vui lòng tải lại CCCD mặt sau rõ nét, đủ 4 góc, không lóa hoặc mờ.' },
+  { value: 'identity_mismatch', label: 'Thông tin CCCD cần đối chiếu lại', instruction: 'Vui lòng tải lại cả hai mặt CCCD của cùng một giấy tờ, rõ nét và không bị che khuất.' },
+  { value: 'business_profile', label: 'Thông tin hồ sơ kinh doanh cần bổ sung', instruction: 'Vui lòng kiểm tra và cập nhật lại thương hiệu, người đại diện, số điện thoại hoặc địa chỉ.' },
+  { value: 'portfolio', label: 'Hồ sơ năng lực/portfolio cần bổ sung', instruction: 'Vui lòng bổ sung hoặc tải lại portfolio để Admin có đủ thông tin đánh giá.' },
+  { value: 'other', label: 'Yêu cầu khác', instruction: '' },
+];
+
+const rejectReasons: ReviewReason[] = [
+  { value: 'identity_invalid', label: 'Giấy tờ định danh không hợp lệ', instruction: 'Giấy tờ không hợp lệ, không thể xác minh hoặc không thuộc người đại diện đã khai báo.' },
+  { value: 'identity_inconsistent', label: 'Thông tin định danh không nhất quán', instruction: 'Thông tin trên giấy tờ và hồ sơ đăng ký không đủ điều kiện để xác thực.' },
+  { value: 'business_ineligible', label: 'Chưa đáp ứng điều kiện trở thành đối tác', instruction: 'Hồ sơ hoặc năng lực cung cấp dịch vụ hiện chưa đáp ứng điều kiện tham gia nền tảng.' },
+  { value: 'misleading_information', label: 'Thông tin khai báo không chính xác', instruction: 'Thông tin trong hồ sơ có dấu hiệu thiếu chính xác hoặc gây nhầm lẫn.' },
+  { value: 'policy_violation', label: 'Không phù hợp chính sách nền tảng', instruction: 'Hồ sơ hoặc dịch vụ đăng ký không phù hợp với chính sách hoạt động của VibeHue.' },
+  { value: 'other', label: 'Lý do khác', instruction: '' },
+];
+
+const changeRequestsFor = (value: string, note?: string): NonNullable<AdminReviewDecisionPayload['changeRequests']> => {
+  const mappings: Record<string, { target: 'IDENTITY_CARD_FRONT' | 'IDENTITY_CARD_BACK' | 'BUSINESS_PROFILE' | 'PORTFOLIO' | 'OTHER'; action: 'REUPLOAD' | 'UPDATE_PROFILE' | 'PROVIDE_MORE_INFO'; reasonCode: string }> = {
+    identity_front: { target: 'IDENTITY_CARD_FRONT', action: 'REUPLOAD', reasonCode: 'IMAGE_QUALITY' },
+    identity_back: { target: 'IDENTITY_CARD_BACK', action: 'REUPLOAD', reasonCode: 'IMAGE_QUALITY' },
+    identity_mismatch: { target: 'IDENTITY_CARD_FRONT', action: 'REUPLOAD', reasonCode: 'IDENTITY_MISMATCH' },
+    business_profile: { target: 'BUSINESS_PROFILE', action: 'UPDATE_PROFILE', reasonCode: 'PROFILE_INCOMPLETE' },
+    portfolio: { target: 'PORTFOLIO', action: 'PROVIDE_MORE_INFO', reasonCode: 'PORTFOLIO_INSUFFICIENT' },
+    other: { target: 'OTHER', action: 'PROVIDE_MORE_INFO', reasonCode: 'OTHER' },
+  };
+  if (value === 'identity_mismatch') {
+    return [
+      { ...mappings.identity_mismatch, note },
+      { target: 'IDENTITY_CARD_BACK', action: 'REUPLOAD', reasonCode: 'IDENTITY_MISMATCH', note },
+    ];
+  }
+  return [{ ...(mappings[value] ?? mappings.other), note }];
+};
 
 const statusClass = (status: string) =>
   `admin-verification-status admin-verification-status--${status.toLowerCase()}`;
@@ -198,28 +234,97 @@ function VerificationDetail({
     if (!result.ok) setActionError(result.message);
   };
 
-  const askReason = async (title: string, fallback: string) => {
-    const result = await Swal.fire({
-      title,
-      input: 'textarea',
-      inputLabel: 'Lý do / nội dung phản hồi',
-      inputValue: fallback,
-      inputValidator: (value) => value.trim() ? undefined : 'Vui lòng nhập nội dung phản hồi.',
-      showCancelButton: true,
-      confirmButtonText: 'Xác nhận',
-      cancelButtonText: 'Hủy',
-    });
-
-    return result.isConfirmed ? result.value.trim() : null;
+  const preferredChangeReason = () => {
+    const versionFor = (type: ProviderDocumentType) => currentDocumentVersion(
+      (detail.documents ?? []).find((document) => document.documentType === type) ?? { documentType: type, required: true },
+    );
+    const front = versionFor('IDENTITY_CARD_FRONT');
+    const back = versionFor('IDENTITY_CARD_BACK');
+    if (front?.ocrStatus === 'OCR_FAILED' || front?.mismatchFlags?.length) return 'identity_front';
+    if (back?.ocrStatus === 'OCR_FAILED' || back?.ocrStatus === 'NOT_STARTED') return 'identity_back';
+    return 'business_profile';
   };
 
-  const handleReviewAction = async (
-    title: string,
-    fallback: string,
-    action: VerificationReviewAction,
-  ) => {
-    const reason = await askReason(title, fallback);
-    if (reason) await execute(() => action(detail.verificationId, reviewPayload(reason)));
+  const askChangeRequest = async (): Promise<AdminReviewDecisionPayload | null> => {
+    const defaultReason = preferredChangeReason();
+    const options = changeReasons.map((reason) => `
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #F1EFEA;cursor:pointer">
+        <input class="verification-change-option" type="checkbox" value="${reason.value}" ${reason.value === defaultReason ? 'checked' : ''} style="margin-top:3px" />
+        <span><strong style="display:block;color:#2A2A2A">${reason.label}</strong><small style="display:block;margin-top:3px;color:#667085;line-height:1.45">${reason.instruction || 'Nhập nội dung cụ thể ở ô bên dưới.'}</small></span>
+      </label>`).join('');
+    const result = await Swal.fire({
+      title: 'Yêu cầu chỉnh sửa',
+      html: `<div style="text-align:left">
+        <p style="margin:0 0 12px;color:#667085;font-size:13px;line-height:1.45">Chọn một hoặc nhiều hạng mục cần bổ sung. Đối tác sẽ nhận được hướng dẫn tương ứng.</p>
+        <div style="border:1px solid #E8E2D5;border-radius:8px;padding:0 12px;max-height:310px;overflow:auto">${options}</div>
+        <div id="verification-change-other-wrap" style="display:none"><label for="verification-change-other" style="display:block;margin:14px 0 6px;font-weight:700">Nội dung yêu cầu khác *</label><textarea id="verification-change-other" class="swal2-textarea" style="display:block;width:100%;margin:0;min-height:84px" placeholder="Mô tả rõ thông tin hoặc tài liệu cần bổ sung..."></textarea></div>
+        <label for="verification-change-note" style="display:block;margin:14px 0 6px;font-weight:700">Ghi chú thêm <span style="font-weight:400;color:#667085">(không bắt buộc)</span></label><textarea id="verification-change-note" class="swal2-textarea" style="display:block;width:100%;margin:0;min-height:72px" placeholder="Thêm hướng dẫn nếu cần..."></textarea>
+      </div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Gửi yêu cầu',
+      cancelButtonText: 'Hủy',
+      didOpen: () => {
+        const toggleOther = () => {
+          const checked = (document.querySelector('.verification-change-option[value="other"]') as HTMLInputElement | null)?.checked;
+          const wrapper = document.getElementById('verification-change-other-wrap');
+          if (wrapper) wrapper.style.display = checked ? 'block' : 'none';
+        };
+        document.querySelectorAll('.verification-change-option').forEach((option) => option.addEventListener('change', toggleOther));
+        toggleOther();
+      },
+      preConfirm: () => {
+        const values = Array.from(document.querySelectorAll('.verification-change-option:checked')).map((option) => (option as HTMLInputElement).value);
+        const otherNote = (document.getElementById('verification-change-other') as HTMLTextAreaElement | null)?.value.trim() ?? '';
+        const extraNote = (document.getElementById('verification-change-note') as HTMLTextAreaElement | null)?.value.trim() ?? '';
+        const selected = changeReasons.filter((reason) => values.includes(reason.value));
+        if (!selected.length || (values.includes('other') && !otherNote)) {
+          Swal.showValidationMessage(values.includes('other') ? 'Vui lòng mô tả yêu cầu khác.' : 'Vui lòng chọn ít nhất một hạng mục.');
+          return false;
+        }
+        return {
+          reason: [...selected.map((reason) => reason.instruction || otherNote), extraNote].filter(Boolean).join('\n\n'),
+          note: [...selected.map((reason) => reason.instruction || otherNote), extraNote].filter(Boolean).join('\n\n'),
+          changeRequests: values.flatMap((value) => changeRequestsFor(value, value === 'other' ? otherNote : extraNote)),
+        } satisfies AdminReviewDecisionPayload;
+      },
+    });
+    return result.isConfirmed && result.value ? result.value : null;
+  };
+
+  const askRejectReason = async (): Promise<AdminReviewDecisionPayload | null> => {
+    const options = rejectReasons.map((reason) => `<option value="${reason.value}">${reason.label}</option>`).join('');
+    const result = await Swal.fire({
+      title: 'Từ chối hồ sơ',
+      html: `<div style="text-align:left"><label for="verification-reject-reason" style="display:block;margin-bottom:6px;font-weight:700">Lý do từ chối *</label><select id="verification-reject-reason" class="swal2-select" style="display:block;width:100%;margin:0">${options}</select><p id="verification-reject-hint" style="margin:8px 0 0;color:#667085;font-size:13px;line-height:1.45"></p><div id="verification-reject-other-wrap" style="display:none"><label for="verification-reject-other" style="display:block;margin:14px 0 6px;font-weight:700">Mô tả lý do khác *</label><textarea id="verification-reject-other" class="swal2-textarea" style="display:block;width:100%;margin:0;min-height:88px" placeholder="Nêu rõ lý do từ chối để đối tác có thể hiểu và cải thiện..."></textarea></div></div>`,
+      showCancelButton: true,
+      confirmButtonColor: '#8B1E2D',
+      confirmButtonText: 'Từ chối hồ sơ',
+      cancelButtonText: 'Hủy',
+      didOpen: () => {
+        const select = document.getElementById('verification-reject-reason') as HTMLSelectElement | null;
+        const updateHint = () => {
+          const selected = rejectReasons.find((reason) => reason.value === select?.value);
+          const hint = document.getElementById('verification-reject-hint');
+          const wrapper = document.getElementById('verification-reject-other-wrap');
+          if (hint) hint.textContent = selected?.instruction ?? '';
+          if (wrapper) wrapper.style.display = selected?.value === 'other' ? 'block' : 'none';
+        };
+        select?.addEventListener('change', updateHint);
+        updateHint();
+      },
+      preConfirm: () => {
+        const value = (document.getElementById('verification-reject-reason') as HTMLSelectElement | null)?.value;
+        const selected = rejectReasons.find((reason) => reason.value === value);
+        const otherNote = (document.getElementById('verification-reject-other') as HTMLTextAreaElement | null)?.value.trim() ?? '';
+        if (!selected || (selected.value === 'other' && !otherNote)) {
+          Swal.showValidationMessage(selected?.value === 'other' ? 'Vui lòng mô tả lý do khác.' : 'Vui lòng chọn lý do từ chối.');
+          return false;
+        }
+        const reason = selected.value === 'other' ? otherNote : `${selected.label}. ${selected.instruction}`;
+        return { reason, note: reason } satisfies AdminReviewDecisionPayload;
+      },
+    });
+    return result.isConfirmed && result.value ? result.value : null;
   };
 
   const handleApprove = async () => {
@@ -296,12 +401,12 @@ function VerificationDetail({
           </button>
         )}
         {isReviewable && (
-          <button type="button" disabled={isSaving} onClick={() => void handleReviewAction('Yêu cầu chỉnh sửa', 'Vui lòng bổ sung thông tin.', onRequestChanges)}>
+          <button type="button" disabled={isSaving} onClick={() => void askChangeRequest().then((payload) => payload && execute(() => onRequestChanges(detail.verificationId, payload)))}>
             Yêu cầu sửa
           </button>
         )}
         {isReviewable && (
-          <button className="admin-verification-actions__danger" type="button" disabled={isSaving} onClick={() => void handleReviewAction('Từ chối hồ sơ', 'Hồ sơ không đạt yêu cầu.', onReject)}>
+          <button className="admin-verification-actions__danger" type="button" disabled={isSaving} onClick={() => void askRejectReason().then((payload) => payload && execute(() => onReject(detail.verificationId, payload)))}>
             Từ chối
           </button>
         )}

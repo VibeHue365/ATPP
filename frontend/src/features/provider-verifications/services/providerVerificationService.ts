@@ -23,6 +23,12 @@ export const providerVerificationService = {
     );
   },
 
+  getLatest() {
+    return httpClient.get<ProviderVerificationDetail | null>(
+      "/provider-verifications/me/latest",
+    );
+  },
+
   getById(id: string) {
     return httpClient.get<ProviderVerificationDetail>(
       `/provider-verifications/${id}`,

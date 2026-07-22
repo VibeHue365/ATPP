@@ -10,8 +10,6 @@ import {
   Send,
   Paperclip,
   Image as ImageIcon,
-  Phone,
-  MoreVertical,
   Plus,
   X
 } from 'lucide-react';

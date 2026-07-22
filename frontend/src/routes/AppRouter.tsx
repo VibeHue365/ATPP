@@ -29,7 +29,6 @@ import NotFoundPage from '../pages/errors/NotFoundPage';
 import OnboardingPage from '../pages/onboarding/OnboardingPage';
 import ProviderDashboard from '../pages/providerdashboard/ProviderDashboard';
 import BecomeProviderPage from '../pages/provider/BecomeProviderPage';
-import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
 import AdminDashboardRefactored from '../pages/admin/AdminDashboardRefactored';
 import { ComboListingPage } from '../pages/combos/ComboListingPage';
 import ComboDetailPage from '../pages/combos/ComboDetailPage';

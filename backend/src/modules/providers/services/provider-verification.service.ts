@@ -242,6 +242,24 @@ export class ProviderVerificationService {
     return verification ? this.toDetailResponse(verification, false) : null;
   }
 
+  async getLatestVerification(
+    actor: AuthUser,
+  ): Promise<Record<string, unknown> | null> {
+    if (!actor.roles?.includes('CUSTOMER') && !actor.roles?.includes('PROVIDER')) {
+      throw new ForbiddenException('CUSTOMER or PROVIDER role is required');
+    }
+    const verification = await this.verificationModel
+      .findOne({
+        userId: this.toObjectId(actor.sub),
+        verificationType: {
+          $in: [VerificationType.NewProvider, VerificationType.AddCapability],
+        },
+      })
+      .sort({ createdAt: -1 });
+
+    return verification ? this.toDetailResponse(verification, false) : null;
+  }
+
   async getVerification(
     actor: AuthUser,
     id: string,

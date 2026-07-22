@@ -16,7 +16,6 @@ import {
   Star,
   Pencil,
   AlertTriangle,
-  Loader2,
   Download,
   XCircle,
   Scale

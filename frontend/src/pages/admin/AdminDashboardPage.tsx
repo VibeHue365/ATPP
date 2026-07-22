@@ -203,6 +203,12 @@ type ProviderChangeReason = {
   instruction: string;
 };
 
+type ProviderRejectReason = {
+  value: string;
+  label: string;
+  instruction: string;
+};
+
 const PROVIDER_CHANGE_REASONS: ProviderChangeReason[] = [
   {
     value: 'identity_front',
@@ -236,7 +242,40 @@ const PROVIDER_CHANGE_REASONS: ProviderChangeReason[] = [
   },
 ];
 
-function toProviderChangeRequest(value: string, note?: string) {
+const PROVIDER_REJECT_REASONS: ProviderRejectReason[] = [
+  {
+    value: 'identity_invalid',
+    label: 'Giấy tờ định danh không hợp lệ',
+    instruction: 'Giấy tờ không hợp lệ, không thể xác minh hoặc không thuộc người đại diện đã khai báo.',
+  },
+  {
+    value: 'identity_inconsistent',
+    label: 'Thông tin định danh không nhất quán',
+    instruction: 'Thông tin trên giấy tờ và hồ sơ đăng ký không đủ điều kiện để xác thực tính chính xác.',
+  },
+  {
+    value: 'business_ineligible',
+    label: 'Chưa đáp ứng điều kiện trở thành đối tác',
+    instruction: 'Hồ sơ hoặc năng lực cung cấp dịch vụ hiện chưa đáp ứng điều kiện tham gia nền tảng.',
+  },
+  {
+    value: 'misleading_information',
+    label: 'Thông tin khai báo không chính xác',
+    instruction: 'Thông tin cung cấp trong hồ sơ có dấu hiệu thiếu chính xác hoặc gây nhầm lẫn.',
+  },
+  {
+    value: 'policy_violation',
+    label: 'Không phù hợp chính sách nền tảng',
+    instruction: 'Hồ sơ hoặc dịch vụ đăng ký không phù hợp với chính sách hoạt động của VibeHue.',
+  },
+  {
+    value: 'other',
+    label: 'Lý do khác',
+    instruction: '',
+  },
+];
+
+function toProviderChangeRequests(value: string, note?: string) {
   const mappings: Record<string, { target: string; action: string; reasonCode: string }> = {
     identity_front: { target: 'IDENTITY_CARD_FRONT', action: 'REUPLOAD', reasonCode: 'IMAGE_QUALITY' },
     identity_back: { target: 'IDENTITY_CARD_BACK', action: 'REUPLOAD', reasonCode: 'IMAGE_QUALITY' },
@@ -245,8 +284,14 @@ function toProviderChangeRequest(value: string, note?: string) {
     portfolio: { target: 'PORTFOLIO', action: 'PROVIDE_MORE_INFO', reasonCode: 'PORTFOLIO_INSUFFICIENT' },
     other: { target: 'OTHER', action: 'PROVIDE_MORE_INFO', reasonCode: 'OTHER' },
   };
+  if (value === 'identity_mismatch') {
+    return [
+      { ...mappings.identity_mismatch, note: note || undefined },
+      { target: 'IDENTITY_CARD_BACK', action: 'REUPLOAD', reasonCode: 'IDENTITY_MISMATCH', note: note || undefined },
+    ];
+  }
   const request = mappings[value] ?? mappings.other;
-  return { ...request, note: note || undefined };
+  return [{ ...request, note: note || undefined }];
 }
 function preferredProviderChangeReason(detail: any): string {
   const documents = Array.isArray(detail?.documents) ? detail.documents : [];
@@ -751,34 +796,56 @@ export const AdminDashboardPage: React.FC = () => {
     if (decision === 'request-changes') {
       const defaultReason = preferredProviderChangeReason(selectedDetailItem);
       const options = PROVIDER_CHANGE_REASONS
-        .map((reason) => `<option value="${reason.value}" ${reason.value === defaultReason ? 'selected' : ''}>${reason.label}</option>`)
+        .map((reason) => `
+          <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #F1EFEA;cursor:pointer">
+            <input class="provider-change-option" type="checkbox" value="${reason.value}" ${reason.value === defaultReason ? 'checked' : ''} style="margin-top:3px" />
+            <span><strong style="display:block;color:#2A2A2A">${reason.label}</strong><small style="display:block;margin-top:3px;color:#667085;line-height:1.45">${reason.instruction || 'Nhập nội dung cụ thể ở ô bên dưới.'}</small></span>
+          </label>`)
         .join('');
       const result = await Swal.fire({
         title: 'Yêu cầu chỉnh sửa hồ sơ',
         html: `
           <div style="text-align:left">
-            <label for="provider-change-reason" style="display:block;margin-bottom:6px;font-weight:700">Hạng mục cần chỉnh sửa *</label>
-            <select id="provider-change-reason" class="swal2-select" multiple size="5" style="display:block;width:100%;margin:0">${options}</select>
-            <label for="provider-change-note" style="display:block;margin:14px 0 6px;font-weight:700">Ghi chú cho đối tác</label>
-            <textarea id="provider-change-note" class="swal2-textarea" style="display:block;width:100%;margin:0;min-height:96px" placeholder="Nêu rõ phần cần sửa nếu cần..."></textarea>
+            <p style="margin:0 0 12px;color:#667085;font-size:13px;line-height:1.45">Chọn một hoặc nhiều hạng mục cần bổ sung. Đối tác sẽ nhìn thấy từng yêu cầu này.</p>
+            <div style="border:1px solid #E8E2D5;border-radius:8px;padding:0 12px;max-height:310px;overflow:auto">${options}</div>
+            <div id="provider-change-other-wrap" style="display:none">
+              <label for="provider-change-other" style="display:block;margin:14px 0 6px;font-weight:700">Nội dung yêu cầu khác *</label>
+              <textarea id="provider-change-other" class="swal2-textarea" style="display:block;width:100%;margin:0;min-height:84px" placeholder="Mô tả rõ thông tin hoặc tài liệu cần bổ sung..."></textarea>
+            </div>
+            <label for="provider-change-note" style="display:block;margin:14px 0 6px;font-weight:700">Ghi chú thêm <span style="font-weight:400;color:#667085">(không bắt buộc)</span></label>
+            <textarea id="provider-change-note" class="swal2-textarea" style="display:block;width:100%;margin:0;min-height:72px" placeholder="Thêm hướng dẫn nếu cần..."></textarea>
           </div>
         `,
         showCancelButton: true,
         confirmButtonColor: '#B89047',
         confirmButtonText: 'Gửi yêu cầu chỉnh sửa',
         cancelButtonText: 'Quay lại',
+        didOpen: () => {
+          const updateOtherField = () => {
+            const otherChecked = (document.querySelector('.provider-change-option[value="other"]') as HTMLInputElement | null)?.checked;
+            const otherWrap = document.getElementById('provider-change-other-wrap');
+            if (otherWrap) otherWrap.style.display = otherChecked ? 'block' : 'none';
+          };
+          document.querySelectorAll('.provider-change-option').forEach((option) => option.addEventListener('change', updateOtherField));
+          updateOtherField();
+        },
         preConfirm: () => {
-          const select = document.getElementById('provider-change-reason') as HTMLSelectElement | null;
-          const selectedValues = Array.from(select?.selectedOptions ?? []).map((option) => option.value);
+          const selectedValues = Array.from(document.querySelectorAll('.provider-change-option:checked'))
+            .map((option) => (option as HTMLInputElement).value);
+          const otherNote = (document.getElementById('provider-change-other') as HTMLTextAreaElement | null)?.value.trim() ?? '';
           const extraNote = (document.getElementById('provider-change-note') as HTMLTextAreaElement | null)?.value.trim() ?? '';
           const selected = PROVIDER_CHANGE_REASONS.filter((reason) => selectedValues.includes(reason.value));
-          if (!selected.length || (selected.some((reason) => reason.value === 'other') && !extraNote)) {
+          if (!selected.length || (selected.some((reason) => reason.value === 'other') && !otherNote)) {
             Swal.showValidationMessage(selected.length ? 'Vui lòng mô tả yêu cầu khác.' : 'Vui lòng chọn ít nhất một hạng mục.');
             return false;
           }
           return {
-            message: selected.map((reason) => reason.instruction || extraNote).filter(Boolean).join('\n\n'),
+            message: [
+              ...selected.map((reason) => reason.instruction || otherNote).filter(Boolean),
+              extraNote,
+            ].filter(Boolean).join('\n\n'),
             selectedValues,
+            otherNote,
             extraNote,
           };
         },
@@ -787,7 +854,9 @@ export const AdminDashboardPage: React.FC = () => {
       payload = {
         reason: result.value.message,
         note: result.value.message,
-        changeRequests: result.value.selectedValues.map((value: string) => toProviderChangeRequest(value, result.value.extraNote)),
+        changeRequests: result.value.selectedValues.flatMap((value: string) =>
+          toProviderChangeRequests(value, value === 'other' ? result.value.otherNote : result.value.extraNote),
+        ),
       };
     } else if (decision === 'approve') {
       const result = await Swal.fire({
@@ -802,16 +871,48 @@ export const AdminDashboardPage: React.FC = () => {
       if (!result.isConfirmed) return;
       payload = {};
     } else {
+      const options = PROVIDER_REJECT_REASONS
+        .map((reason) => `<option value="${reason.value}">${reason.label}</option>`)
+        .join('');
       const result = await Swal.fire({
         title: 'Từ chối hồ sơ đối tác?',
-        input: 'textarea',
-        inputLabel: 'Lý do từ chối gửi cho đối tác *',
-        inputPlaceholder: 'Nêu rõ lý do để đối tác có thể hiểu kết quả xét duyệt...',
-        inputValidator: (value) => value.trim() ? undefined : 'Vui lòng nhập lý do từ chối.',
+        html: `
+          <div style="text-align:left">
+            <label for="provider-reject-reason" style="display:block;margin-bottom:6px;font-weight:700">Lý do từ chối *</label>
+            <select id="provider-reject-reason" class="swal2-select" style="display:block;width:100%;margin:0">${options}</select>
+            <p id="provider-reject-hint" style="margin:8px 0 0;color:#667085;font-size:13px;line-height:1.45"></p>
+            <div id="provider-reject-other-wrap" style="display:none">
+              <label for="provider-reject-other" style="display:block;margin:14px 0 6px;font-weight:700">Mô tả lý do khác *</label>
+              <textarea id="provider-reject-other" class="swal2-textarea" style="display:block;width:100%;margin:0;min-height:88px" placeholder="Nêu rõ lý do từ chối để đối tác có thể hiểu và cải thiện..."></textarea>
+            </div>
+          </div>
+        `,
         showCancelButton: true,
         confirmButtonColor: '#4A0E17',
         confirmButtonText: 'Từ chối hồ sơ',
         cancelButtonText: 'Quay lại',
+        didOpen: () => {
+          const select = document.getElementById('provider-reject-reason') as HTMLSelectElement | null;
+          const updateReasonHint = () => {
+            const reason = PROVIDER_REJECT_REASONS.find((item) => item.value === select?.value);
+            const hint = document.getElementById('provider-reject-hint');
+            const otherWrap = document.getElementById('provider-reject-other-wrap');
+            if (hint) hint.textContent = reason?.instruction ?? '';
+            if (otherWrap) otherWrap.style.display = reason?.value === 'other' ? 'block' : 'none';
+          };
+          select?.addEventListener('change', updateReasonHint);
+          updateReasonHint();
+        },
+        preConfirm: () => {
+          const selectedValue = (document.getElementById('provider-reject-reason') as HTMLSelectElement | null)?.value;
+          const selected = PROVIDER_REJECT_REASONS.find((reason) => reason.value === selectedValue);
+          const otherNote = (document.getElementById('provider-reject-other') as HTMLTextAreaElement | null)?.value.trim() ?? '';
+          if (!selected || (selected.value === 'other' && !otherNote)) {
+            Swal.showValidationMessage(selected?.value === 'other' ? 'Vui lòng mô tả lý do khác.' : 'Vui lòng chọn lý do từ chối.');
+            return false;
+          }
+          return selected.value === 'other' ? otherNote : `${selected.label}. ${selected.instruction}`;
+        },
       });
       const note = typeof result.value === 'string' ? result.value.trim() : '';
       if (!result.isConfirmed || !note) return;

@@ -215,7 +215,7 @@ function formatDate(dateStr?: string | Date | null) {
 // }
 
 export const BecomeProviderPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const [activeStep, setActiveStep] = useState(0);
   const [selectedCapabilities, setSelectedCapabilities] = useState<
     ProviderCapability[]
@@ -468,16 +468,8 @@ export const BecomeProviderPage: React.FC = () => {
         hydrateFromVerification(normalized);
         setVerification(normalized);
 
-        if (upgradeCap && ['AODAI_RENTAL', 'PHOTOGRAPHY'].includes(upgradeCap)) {
-          const currentCaps = existingProvider?.capabilities || normalized.requestedCapabilities || [];
-          const combined = Array.from(new Set([...currentCaps, upgradeCap])) as ProviderCapability[];
-          setSelectedCapabilities(combined);
-          setShowStatusDashboard(false);
-          setActiveStep(0);
-        } else {
-          setActiveStep(stepFromVerification(normalized));
-          setShowStatusDashboard(normalized.status !== 'DRAFT');
-        }
+        setActiveStep(stepFromVerification(normalized));
+        setShowStatusDashboard(normalized.status !== 'DRAFT');
         
         if (normalized.businessProfile?.address) {
           setIsAddressEditing(false);
@@ -490,6 +482,22 @@ export const BecomeProviderPage: React.FC = () => {
           setIsPickupAddressEditing(true);
         }
       } else if (user) {
+        const latest = await providerVerificationService.getLatest();
+
+        if (latest && !upgradeCap) {
+          const normalized = normalizeVerificationDetail(latest);
+          hydrateFromVerification(normalized);
+          setVerification(normalized);
+          setActiveStep(4);
+          setShowStatusDashboard(true);
+          setIsAddressEditing(!normalized.businessProfile?.address);
+          setIsPickupAddressEditing(!normalized.aodaiInfo?.pickupAddress);
+          if (normalized.status === 'APPROVED') {
+            await refreshProfile();
+          }
+          return;
+        }
+
         if (upgradeCap && ['AODAI_RENTAL', 'PHOTOGRAPHY'].includes(upgradeCap)) {
           setSelectedCapabilities([upgradeCap]);
         }
@@ -562,6 +570,9 @@ export const BecomeProviderPage: React.FC = () => {
     const normalized = normalizeVerificationDetail(detail);
     hydrateFromVerification(normalized);
     setVerification(normalized);
+    if (normalized.status === 'APPROVED') {
+      await refreshProfile();
+    }
   };
 
   useEffect(() => {
@@ -577,6 +588,18 @@ export const BecomeProviderPage: React.FC = () => {
 
     return () => window.clearInterval(intervalId);
   }, [verification, verificationId]);
+
+  useEffect(() => {
+    if (!verificationId || !['SUBMITTED', 'UNDER_REVIEW'].includes(verification?.status ?? '')) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshVerification(verificationId).catch((err) => setError(messageFromError(err)));
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, [verification?.status, verificationId]);
   const stepFromVerification = (detail: ProviderVerificationDetail) => {
     if (!['DRAFT', 'NEEDS_CHANGES'].includes(detail.status)) return 4;
     if (detail.requestedCapabilities.length === 0) return 0;
@@ -663,12 +686,24 @@ export const BecomeProviderPage: React.FC = () => {
     
     if (!businessProfile.address?.trim()) errors.address = 'Địa chỉ không được để trống';
     if (!businessProfile.province?.trim()) errors.province = 'Tỉnh/Thành phố không được để trống';
+    if (isApiSupported && isAddressEditing) {
+      if (!selectedProvinceCode) errors.province = 'Vui lòng chọn Tỉnh/Thành phố';
+      if (!selectedDistrictCode) errors.district = 'Vui lòng chọn Quận/Huyện';
+      if (!selectedWardCode) errors.ward = 'Vui lòng chọn Phường/Xã';
+      if (!streetAddress.trim()) errors.address = 'Vui lòng nhập số nhà, tên đường';
+    }
 
     if (requiresAodai) {
       if (!currentAodai.pickupAddress?.trim()) errors.pickupAddress = 'Địa chỉ nhận trả không được để trống';
       if (!currentAodai.rentalPolicy?.trim()) errors.rentalPolicy = 'Chính sách thuê không được để trống';
       if (!currentAodai.depositPolicy?.trim()) errors.depositPolicy = 'Chính sách đặt cọc không được để trống';
       if (!currentAodai.sizeSupport?.trim()) errors.sizeSupport = 'Thông tin size không được để trống';
+      if (isApiSupported && !useBusinessAddressForPickup && isPickupAddressEditing) {
+        if (!selectedPickupProvinceCode) errors.pickupProvince = 'Vui lòng chọn Tỉnh/Thành phố nhận trả';
+        if (!selectedPickupDistrictCode) errors.pickupDistrict = 'Vui lòng chọn Quận/Huyện nhận trả';
+        if (!selectedPickupWardCode) errors.pickupWard = 'Vui lòng chọn Phường/Xã nhận trả';
+        if (!pickupStreetAddress.trim()) errors.pickupAddress = 'Vui lòng nhập số nhà, tên đường nhận trả';
+      }
     }
 
     if (requiresPhotography) {
@@ -822,6 +857,16 @@ export const BecomeProviderPage: React.FC = () => {
     }
   };
 
+  const resetForNewApplication = () => {
+    setVerification(null);
+    setConsentAccepted(false);
+    setValidationErrors({});
+    setError(null);
+    setSuccess(null);
+    setShowStatusDashboard(false);
+    setActiveStep(0);
+  };
+
   const canSubmit = useMemo(() => {
     if (!verification) return false;
     return (
@@ -856,10 +901,7 @@ export const BecomeProviderPage: React.FC = () => {
               setActiveStep(1);
             }
           }}
-          onReset={async () => {
-            setShowStatusDashboard(false);
-            setActiveStep(0);
-          }}
+          onReset={resetForNewApplication}
           actionLoading={actionLoading}
           onViewDocument={viewDocument}
         />
@@ -978,10 +1020,22 @@ export const BecomeProviderPage: React.FC = () => {
               selectedDistrictCode={selectedDistrictCode}
               selectedWardCode={selectedWardCode}
               streetAddress={streetAddress}
-              setStreetAddress={setStreetAddress}
-              onProvinceChange={handleProvinceChange}
-              onDistrictChange={handleDistrictChange}
-              onWardChange={setSelectedWardCode}
+              setStreetAddress={(value) => {
+                setValidationErrors((prev) => ({ ...prev, address: '' }));
+                setStreetAddress(value);
+              }}
+              onProvinceChange={(code) => {
+                setValidationErrors((prev) => ({ ...prev, province: '', district: '', ward: '', address: '' }));
+                void handleProvinceChange(code);
+              }}
+              onDistrictChange={(code) => {
+                setValidationErrors((prev) => ({ ...prev, district: '', ward: '', address: '' }));
+                void handleDistrictChange(code);
+              }}
+              onWardChange={(code) => {
+                setValidationErrors((prev) => ({ ...prev, ward: '', address: '' }));
+                setSelectedWardCode(code);
+              }}
               // Ao Dai Pickup Selector props
               pickupDistricts={pickupDistricts}
               pickupWards={pickupWards}
@@ -991,10 +1045,22 @@ export const BecomeProviderPage: React.FC = () => {
               selectedPickupDistrictCode={selectedPickupDistrictCode}
               selectedPickupWardCode={selectedPickupWardCode}
               pickupStreetAddress={pickupStreetAddress}
-              setPickupStreetAddress={setPickupStreetAddress}
-              onPickupProvinceChange={handlePickupProvinceChange}
-              onPickupDistrictChange={handlePickupDistrictChange}
-              onPickupWardChange={setSelectedPickupWardCode}
+              setPickupStreetAddress={(value) => {
+                setValidationErrors((prev) => ({ ...prev, pickupAddress: '' }));
+                setPickupStreetAddress(value);
+              }}
+              onPickupProvinceChange={(code) => {
+                setValidationErrors((prev) => ({ ...prev, pickupProvince: '', pickupDistrict: '', pickupWard: '', pickupAddress: '' }));
+                void handlePickupProvinceChange(code);
+              }}
+              onPickupDistrictChange={(code) => {
+                setValidationErrors((prev) => ({ ...prev, pickupDistrict: '', pickupWard: '', pickupAddress: '' }));
+                void handlePickupDistrictChange(code);
+              }}
+              onPickupWardChange={(code) => {
+                setValidationErrors((prev) => ({ ...prev, pickupWard: '', pickupAddress: '' }));
+                setSelectedPickupWardCode(code);
+              }}
               useBusinessAddressForPickup={useBusinessAddressForPickup}
               setUseBusinessAddressForPickup={setUseBusinessAddressForPickup}
             />
@@ -1286,6 +1352,7 @@ function ProfileStep({
                       </option>
                     ))}
                   </select>
+                  {errors.district && <span className="vh-field-error-msg">{errors.district}</span>}
                 </div>
 
                 <div className="vh-provider-field">
@@ -1303,6 +1370,7 @@ function ProfileStep({
                       </option>
                     ))}
                   </select>
+                  {errors.ward && <span className="vh-field-error-msg">{errors.ward}</span>}
                 </div>
 
                 <div className="vh-provider-field">
@@ -1422,7 +1490,7 @@ function ProfileStep({
                               </option>
                             ))}
                           </select>
-                          {errors.pickupAddress && <span className="vh-field-error-msg">{errors.pickupAddress}</span>}
+                          {errors.pickupProvince && <span className="vh-field-error-msg">{errors.pickupProvince}</span>}
                         </div>
 
                         <div className="vh-provider-field">
@@ -1440,6 +1508,7 @@ function ProfileStep({
                               </option>
                             ))}
                           </select>
+                          {errors.pickupDistrict && <span className="vh-field-error-msg">{errors.pickupDistrict}</span>}
                         </div>
 
                         <div className="vh-provider-field">
@@ -1457,6 +1526,7 @@ function ProfileStep({
                               </option>
                             ))}
                           </select>
+                          {errors.pickupWard && <span className="vh-field-error-msg">{errors.pickupWard}</span>}
                         </div>
 
                         <div className="vh-provider-field">
@@ -1468,6 +1538,7 @@ function ProfileStep({
                             placeholder="Ví dụ: 123 Nguyễn Huệ"
                             onChange={(e) => setPickupStreetAddress(e.target.value)}
                           />
+                          {errors.pickupAddress && <span className="vh-field-error-msg">{errors.pickupAddress}</span>}
                         </div>
                       </div>
                     )}

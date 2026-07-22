@@ -1,6 +1,5 @@
 import {
   Component,
-  lazy,
   Suspense,
   useCallback,
   useEffect,
@@ -87,7 +86,6 @@ type AttentionItem = {
 
 import { OverviewPanel } from '../../features/admin-dashboard/components/OverviewPanel';
 import { DirectoryPanel } from '../../features/admin-directory/components/DirectoryPanel';
-import { CombinedDirectoryPanel } from '../../features/admin-directory/components/CombinedDirectoryPanel';
 import { CategoryManagement } from './components/CategoryManagement';
 import { SettlementManagement } from './components/SettlementManagement';
 import { RefundManagement } from './components/RefundManagement';

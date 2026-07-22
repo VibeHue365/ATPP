@@ -58,6 +58,11 @@ export class ProviderVerificationsController {
     return this.providerVerificationService.getCurrentVerification(user);
   }
 
+  @Get('me/latest')
+  getLatest(@CurrentUser() user: AuthUser) {
+    return this.providerVerificationService.getLatestVerification(user);
+  }
+
   @Get(':id')
   getById(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.providerVerificationService.getVerification(user, id);

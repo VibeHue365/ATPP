@@ -115,7 +115,7 @@ export function GroupedBarChart({
                   flexDirection: 'column',
                   alignItems: 'center',
                   height: '100%',
-                  justify: 'flex-end',
+                  justifyContent: 'flex-end',
                   width: '60px',
                   position: 'relative',
                   cursor: 'pointer',
@@ -348,7 +348,7 @@ export function RevenueLineChart({
   );
 }
 
-export function TrendChart({ title, points, legend }: {
+export function TrendChart({ title, points, legend: _legend }: {
   title: string;
   points: AdminTrendPoint[];
   legend: string;
