@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import { useAdminTransactions } from '../hooks/useAdminTransactions';
 import { useAdminStats } from '../hooks/useAdminStats';
-import { MetricCard, TransactionTable, TrendChart } from './AdminAnalyticsShared';
+import { MetricCard, TransactionTable, RevenueLineChart } from './AdminAnalyticsShared';
 import { formatCurrency } from '../utils/adminAnalyticsUtils';
 
+import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';
+
 export function RevenuePanel() {
-  const stats = useAdminStats();
+  const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month');
+  const stats = useAdminStats(period);
   const transactions = useAdminTransactions();
   const total = stats.data?.revenue?.total ?? 0;
   const commission = stats.data?.revenue?.commission ?? 0;
@@ -12,7 +16,10 @@ export function RevenuePanel() {
   return (
     <section className="admin-dashboard-panel">
       <div className="admin-dashboard-panel__toolbar">
-        <button type="button" onClick={() => { void stats.refresh(); void transactions.refresh(); }} disabled={stats.isLoading || transactions.loading}>Tải lại</button>
+        <AdminReloadButton
+          onClick={() => { void stats.refresh(); void transactions.refresh(); }}
+          isLoading={stats.isLoading || transactions.loading}
+        />
       </div>
       {(stats.error || transactions.error) && <p className="admin-dashboard-panel__error" role="alert">{stats.error || transactions.error}</p>}
 
@@ -24,7 +31,12 @@ export function RevenuePanel() {
         <MetricCard label="Đối tác thực nhận (90%)" value={formatCurrency(Math.max(0, total - commission))} detail="Doanh thu chi trả đối tác" tone="olive" />
       </div>
 
-      <TrendChart title="Biểu đồ tăng trưởng doanh thu hệ thống" legend="Đơn vị: VNĐ" points={stats.data?.revenue?.growth ?? []} />
+      <RevenueLineChart
+        title="BIỂU ĐỒ TĂNG TRƯỞNG DOANH THU HỆ THỐNG (TRIỆU ĐỒNG)"
+        period={period}
+        onPeriodChange={setPeriod}
+        growth={stats.data?.revenue?.growth ?? []}
+      />
       <TransactionTable
         title="Lịch sử giao dịch thanh toán"
         items={transactions.data?.items ?? []}

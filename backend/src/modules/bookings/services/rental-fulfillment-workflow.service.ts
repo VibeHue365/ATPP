@@ -81,6 +81,18 @@ export class RentalFulfillmentWorkflowService {
       note: input.note,
       conditionNote: input.conditionNote,
     });
+    // Mặc định chuyển hiện vật sang trạng thái CLEANING (Đang giặt ủi) khi trả đồ thành công
+    const inventoryModel = this.bookingItemModel.db.model('InventoryItem');
+    const reservationModel = this.bookingItemModel.db.model('InventoryReservation');
+    const reservations = await reservationModel.find({ bookingItemId: access.itemId }).select({ inventoryItemId: 1 }).lean().exec();
+    for (const res of reservations as any[]) {
+      if (res.inventoryItemId) {
+        await inventoryModel.updateOne(
+          { _id: res.inventoryItemId, conditionStatus: { $ne: 'RETIRED' } },
+          { $set: { status: 'CLEANING' } },
+        ).exec();
+      }
+    }
     await this.syncBookingProgress(access.bookingId, access.actor);
     await this.rentalDepositRefundCoordinator.coordinate(access.bookingId.toString());
     return updated;
@@ -228,7 +240,7 @@ export class RentalFulfillmentWorkflowService {
     const inventoryModel = this.bookingItemModel.db.model('InventoryItem');
     const reservationModel = this.bookingItemModel.db.model('InventoryReservation');
     const finalUpdate: Record<string, unknown> = finalStatus === RentalInventoryStatus.Available
-      ? { status: 'AVAILABLE' }
+      ? { status: 'CLEANING' }
       : finalStatus === RentalInventoryStatus.Lost
         ? { status: 'MAINTENANCE', conditionStatus: 'RETIRED' }
         : finalStatus === RentalInventoryStatus.Damaged

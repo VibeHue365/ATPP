@@ -28,6 +28,7 @@ import { ProductModerationManagement } from './components/ProductModerationManag
 import { PortfolioModerationManagement } from './components/PortfolioModerationManagement';
 import { RefundManagement } from './components/RefundManagement';
 import { ComboModerationManagement } from './components/ComboModerationManagement';
+import { NotificationsPage } from '../notifications/NotificationsPage';
 
 const getImageUrl = (url: string) => {
   if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
@@ -3057,6 +3058,25 @@ export const AdminDashboardPage: React.FC = () => {
                       ))
                     )}
                   </div>
+
+                  <div style={{
+                    padding: '10px 16px', borderTop: '1px solid #FAF6F0',
+                    textAlign: 'center', backgroundColor: '#FAF6F0'
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => { setIsNotiOpen(false); setActiveTab('notifications'); }}
+                      style={{
+                        background: 'none', border: 'none', color: '#4A0E17',
+                        fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                        padding: '4px 12px', borderRadius: '4px', transition: 'all 0.15s'
+                      }}
+                      onMouseOver={e => { e.currentTarget.style.color = '#B89047'; }}
+                      onMouseOut={e => { e.currentTarget.style.color = '#4A0E17'; }}
+                    >
+                      Xem tất cả thông báo hệ thống →
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -3102,6 +3122,7 @@ export const AdminDashboardPage: React.FC = () => {
                 {activeTab === 'combo-moderation' && <ComboModerationManagement />}
                 {activeTab === 'policies' && <PolicyManagement />}
                 {activeTab === 'users-roles' && <AccessControl />}
+                {activeTab === 'notifications' && <NotificationsPage hideBreadcrumb variant="admin" />}
               </>
             )}
           </div>

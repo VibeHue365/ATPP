@@ -422,11 +422,16 @@ export class BookingsService implements OnApplicationBootstrap {
     const sizeVal = size.trim().toUpperCase();
     const colorVal = this.normalizeColor(color);
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isTodayOrPast = reservedFrom <= today;
+
     const inventoryItems = await this.inventoryItemModel
       .find({
         productId,
         size: sizeVal,
         color: colorVal,
+        status: isTodayOrPast ? 'AVAILABLE' : { $ne: 'MAINTENANCE' },
         conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
       } as any)
       .session(session);
@@ -2969,6 +2974,20 @@ export class BookingsService implements OnApplicationBootstrap {
           $unset: { expiresAt: 1 },
         },
       );
+    } else if (nextStatus === BookingStatus.Returned) {
+      const reservations = await this.inventoryReservationModel
+        .find({ bookingId: booking._id })
+        .select({ inventoryItemId: 1 })
+        .lean()
+        .exec();
+      const itemIds = reservations.map((r) => r.inventoryItemId).filter(Boolean);
+      if (itemIds.length > 0) {
+        const inventoryModel = this.bookingItemModel.db.model('InventoryItem');
+        await inventoryModel.updateMany(
+          { _id: { $in: itemIds }, conditionStatus: { $ne: 'RETIRED' } },
+          { $set: { status: 'CLEANING' } },
+        ).exec();
+      }
     }
 
     try {

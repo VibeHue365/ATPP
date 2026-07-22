@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { AdminReloadButton } from "./AdminReloadButton";
 import {
   Check,
   Eye,
@@ -319,44 +320,7 @@ export const ProductModerationManagement: React.FC = () => {
             );
           })}
 
-          <button
-            onClick={() => void fetchQueue()}
-            disabled={loading}
-            title="Tải lại danh sách"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              border: "1px solid #E8E2D5",
-              borderRadius: "10px",
-              padding: "10px 14px",
-              background: "white",
-              cursor: "pointer",
-              fontWeight: 700,
-              color: "#7A7A7A",
-              transition: "all 0.2s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "#B89047";
-              e.currentTarget.style.color = "#4A0E17";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "#E8E2D5";
-              e.currentTarget.style.color = "#7A7A7A";
-            }}
-          >
-            <RefreshCw size={15} className={loading ? "spin-anim" : ""} />
-            <style>{`
-              @keyframes spin {
-                from { transform: rotate(0deg); }
-                to { transform: rotate(360deg); }
-              }
-              .spin-anim {
-                animation: spin 1s linear infinite;
-              }
-            `}</style>
-          </button>
+          <AdminReloadButton onClick={() => void fetchQueue()} isLoading={loading} label="Tải lại" />
         </div>
       </div>
 

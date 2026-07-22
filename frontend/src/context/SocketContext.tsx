@@ -29,10 +29,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (isAuthenticated) {
       const token = tokenStorage.getAccessToken();
       if (token) {
-        const socketUrl =
+        const rawUrl =
           import.meta.env.VITE_SOCKET_URL ||
           import.meta.env.VITE_API_BASE_URL ||
           'http://localhost:3000';
+        const socketUrl = rawUrl.replace(/\/api\/?$/, '');
 
         console.log(`[Socket] Initiating connection to ${socketUrl}...`);
 

@@ -19,6 +19,7 @@ import { PhotographyPackageManager } from '../../features/photography-packages/c
 import { categoryService } from '../../features/categories/services/categoryService';
 import type { Category } from '../../features/categories/types';
 import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
+import { NotificationsPage } from '../notifications/NotificationsPage';
 
 interface Order {
   _id: string;
@@ -98,13 +99,27 @@ export const ProviderDashboard: React.FC = () => {
   }, [user, isAuthenticated, navigate, toast]);
 
   // Views navigation state
-  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'photography-packages' | 'calendar' | 'vouchers' | 'inventory' | 'reviews' | 'trust' | 'analytics' | 'payouts' | 'rental-operations' | 'role-management'>('analytics');
+  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'photography-packages' | 'calendar' | 'vouchers' | 'inventory' | 'reviews' | 'trust' | 'analytics' | 'payouts' | 'rental-operations' | 'role-management' | 'notifications'>('analytics');
   const [collectionTab, setCollectionTab] = useState<'products' | 'inventory'>('products');
 
   // Provider Specific States
   const [provider, setProvider] = useState<any>(null);
   const providerDataLoadedRef = useRef(false);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [chartTimeRange, setChartTimeRange] = useState<'week' | 'month' | 'year'>('month');
+  const [hoveredPointIdx, setHoveredPointIdx] = useState<number | null>(null);
+
+  const handlePeriodChange = async (period: 'week' | 'month' | 'year') => {
+    setChartTimeRange(period);
+    try {
+      const res: any = await httpClient.get(`/providers/me/analytics?period=${period}`);
+      if (res && res.revenueGrowth) {
+        setAnalyticsData((prev: any) => (prev ? { ...prev, revenueGrowth: res.revenueGrowth } : res));
+      }
+    } catch (err) {
+      console.error('Lỗi khi tải biểu đồ theo thời gian:', err);
+    }
+  };
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
   const [isPortfolioFormOpen, setIsPortfolioFormOpen] = useState(false);
   const [isPortfolioSaving, setIsPortfolioSaving] = useState(false);
@@ -2520,14 +2535,169 @@ export const ProviderDashboard: React.FC = () => {
     const isShop = analyticsData.capabilities?.includes('AODAI_RENTAL') || analyticsData.capabilities?.includes('RENTAL');
     const isPhoto = analyticsData.capabilities?.includes('PHOTOGRAPHY');
 
-    const renderShopAnalytics = () => {
-      const maxRev = Math.max(...analyticsData.revenueGrowth.map((r: any) => r.value), 1000000);
-      const points = analyticsData.revenueGrowth.map((r: any, idx: number) => {
-        const x = 50 + idx * 80;
-        const y = 260 - (r.value / maxRev) * 200;
-        return `${x},${y}`;
-      }).join(' ');
+    const renderProviderRevenueChart = (chartTitle: string) => {
+      const series = analyticsData?.revenueGrowth || [];
+      const maxVal = Math.max(...series.map((s: any) => s.value || 0), 1000000);
+      const step = Math.ceil(maxVal / 4);
+      const ticks = [step * 4, step * 3, step * 2, step * 1, 0];
 
+      const chartWidth = 520;
+      const chartHeight = 220;
+      const topMargin = 28;
+      const bottomMargin = 175;
+      const drawHeight = bottomMargin - topMargin;
+      const leftMargin = 55;
+      const rightMargin = 25;
+
+      const getX = (idx: number) => {
+        if (series.length <= 1) return (leftMargin + chartWidth - rightMargin) / 2;
+        return leftMargin + idx * ((chartWidth - leftMargin - rightMargin) / (series.length - 1));
+      };
+
+      const getY = (val: number) => topMargin + drawHeight * (1 - val / maxVal);
+
+      const points = series.map((s: any, idx: number) => {
+        const x = getX(idx);
+        const y = getY(s.value || 0);
+        return { ...s, x, y };
+      });
+
+      const pointsString = points.map((p: any) => `${p.x},${p.y}`).join(' ');
+      const areaPathD = points.length > 1
+        ? `M ${points[0].x} ${bottomMargin} L ${pointsString} L ${points[points.length - 1].x} ${bottomMargin} Z`
+        : '';
+
+      const gradientId = `grad-${chartTitle.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+      return (
+        <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', position: 'relative' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>{chartTitle}</h3>
+            
+            {/* Filter buttons matching Admin dashboard style */}
+            <div style={{ display: 'flex', gap: '4px', backgroundColor: '#FAF6F0', padding: '3px', borderRadius: '6px', border: '1px solid #E8E2D5' }}>
+              {(['week', 'month', 'year'] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => handlePeriodChange(r)}
+                  style={{
+                    padding: '4px 12px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    backgroundColor: chartTimeRange === r ? 'var(--color-primary)' : 'transparent',
+                    color: chartTimeRange === r ? 'white' : '#7A7A7A',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {r === 'week' ? 'Tuần' : r === 'month' ? 'Tháng' : 'Năm'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ width: '100%', position: 'relative' }}>
+            <svg viewBox={`0 0 ${chartWidth} ${chartHeight + 15}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+              <defs>
+                <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+
+              {/* Grid lines and Y-axis tick values */}
+              {ticks.map((tVal) => {
+                const y = getY(tVal);
+                return (
+                  <g key={tVal}>
+                    <line x1={leftMargin} y1={y} x2={chartWidth - rightMargin} y2={y} stroke="#E8E2D5" strokeDasharray="4 4" />
+                    <text x={leftMargin - 8} y={y + 4} fontSize="10" fill="#7A7A7A" fontWeight="600" textAnchor="end">
+                      {(tVal / 1000000).toFixed(tVal % 1000000 === 0 ? 0 : 1)}M
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* Axis vertical line */}
+              <line x1={leftMargin} y1={topMargin} x2={leftMargin} y2={bottomMargin} stroke="#E8E2D5" strokeWidth="1.2" />
+
+              {/* Area Fill */}
+              {areaPathD && (
+                <path d={areaPathD} fill={`url(#${gradientId})`} />
+              )}
+
+              {/* Line Curve */}
+              {points.length > 1 && (
+                <polyline fill="none" stroke="var(--color-primary)" strokeWidth="3" points={pointsString} strokeLinecap="round" strokeLinejoin="round" />
+              )}
+
+              {/* Nodes and Labels */}
+              {points.map((p: any, idx: number) => {
+                const displayLabel = p.shortLabel || (p.label ? p.label.replace('Tháng ', 'T') : '');
+                const isHovered = hoveredPointIdx === idx;
+                return (
+                  <g
+                    key={idx}
+                    onMouseEnter={() => setHoveredPointIdx(idx)}
+                    onMouseLeave={() => setHoveredPointIdx(null)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {/* Hit target circle */}
+                    <circle cx={p.x} cy={p.y} r="14" fill="transparent" />
+
+                    {/* Main node circle */}
+                    <circle cx={p.x} cy={p.y} r={isHovered ? 7 : 5} fill="var(--color-primary)" stroke="white" strokeWidth="2" style={{ transition: 'all 0.15s ease' }} />
+
+                    {/* Point Value label above dot */}
+                    <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fill="#2A2A2A" fontWeight="700">
+                      {((p.value || 0) / 1000000).toFixed(1)}M
+                    </text>
+
+                    {/* X-axis Label */}
+                    <text x={p.x} y={bottomMargin + 20} textAnchor="middle" fontSize="11" fill="#7A7A7A" fontWeight="600">
+                      {displayLabel}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+
+            {/* Sleek Tooltip on hover */}
+            {hoveredPointIdx !== null && points[hoveredPointIdx] && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${(points[hoveredPointIdx].x / chartWidth) * 100}%`,
+                  top: `${(points[hoveredPointIdx].y / (chartHeight + 15)) * 100}%`,
+                  transform: 'translate(-50%, -120%)',
+                  backgroundColor: 'rgba(74, 14, 23, 0.95)',
+                  color: '#FFF',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none',
+                  zIndex: 20,
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '3px',
+                  alignItems: 'center',
+                }}
+              >
+                <span style={{ fontWeight: 800, color: '#FFE699' }}>{points[hoveredPointIdx].label}</span>
+                <span>Doanh thu: <strong>{(points[hoveredPointIdx].value || 0).toLocaleString('vi-VN')} đ</strong></span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const renderShopAnalytics = () => {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2545,54 +2715,21 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
             {[
-              { label: 'Doanh thu cửa hàng', val: `${(analyticsData.totalRevenue || 0).toLocaleString('vi-VN')} đ`, desc: 'Tổng doanh thu thực', color: 'var(--color-primary)', bg: '#FAF6F0' },
-              { label: 'Tỷ lệ thành công', val: `${analyticsData.successRate}%`, desc: 'Booking hoàn thành', color: '#166534', bg: '#F0FDF4' },
-              { label: 'Tỷ lệ hủy lịch', val: `${analyticsData.cancelRate}%`, desc: 'Lịch khách hủy', color: '#991B1B', bg: '#FEE2E2' },
-              { label: 'Tổng sản phẩm', val: `${String(analyticsData.totalProducts).padStart(2, '0')} Item`, desc: 'Đồ đang hoạt động', color: 'var(--color-gold-dark)', bg: '#FAF6F0' },
-              { label: 'Thời gian thuê tb', val: analyticsData.averageRentalDuration, desc: 'Thời gian mỗi đơn', color: '#15803D', bg: '#F0FDF4' }
+              { label: 'Doanh thu cửa hàng', val: `${(analyticsData.totalRevenue || 0).toLocaleString('vi-VN')} đ` },
+              { label: 'Tỷ lệ thành công', val: `${analyticsData.successRate || 0}%` },
+              { label: 'Tỷ lệ hủy lịch', val: `${analyticsData.cancelRate || 0}%` },
+              { label: 'Tổng sản phẩm', val: `${String(analyticsData.totalProducts || 0).padStart(2, '0')} Item` },
+              { label: 'Thời gian thuê tb', val: analyticsData.averageRentalDuration || '2.0 ngày' }
             ].map((m, idx) => (
-              <div key={idx} style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '120px' }}>
-                <div>
-                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</span>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: idx === 0 ? 'var(--color-primary)' : 'var(--color-text-primary)', marginTop: '6px', wordBreak: 'break-all' }}>{m.val}</div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #F0ECE4', paddingTop: '8px' }}>
-                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{m.desc}</span>
-                  <div style={{ width: '20px', height: '20px', borderRadius: '50%', backgroundColor: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: m.color, fontWeight: 700, fontSize: '10px' }}>
-                    {idx === 0 ? '💰' : idx === 1 ? '✓' : idx === 2 ? '✕' : idx === 3 ? '📦' : '⏱'}
-                  </div>
-                </div>
+              <div key={idx} style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</span>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: idx === 0 ? 'var(--color-primary)' : 'var(--color-text-primary)', marginTop: '8px', wordBreak: 'break-all' }}>{m.val}</div>
               </div>
             ))}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Doanh thu Áo dài</h3>
-              <div style={{ height: '300px', width: '100%' }}>
-                <svg viewBox="0 0 500 300" style={{ width: '100%', height: '100%' }}>
-                  {[0, 0.25, 0.5, 0.75, 1].map((p, idx) => {
-                    const y = 40 + p * 200;
-                    return (
-                      <line key={idx} x1="40" y1={y} x2="480" y2={y} stroke="#F0ECE4" strokeDasharray="3 3" />
-                    );
-                  })}
-                  <polyline fill="none" stroke="var(--color-primary)" strokeWidth="3" points={points} />
-                  {analyticsData.revenueGrowth.map((r: any, idx: number) => {
-                    const x = 50 + idx * 80;
-                    const y = 260 - (r.value / maxRev) * 200;
-                    return (
-                      <g key={idx}>
-                        <circle cx={x} cy={y} r="5" fill="var(--color-primary)" />
-                        <circle cx={x} cy={y} r="2" fill="white" />
-                        <text x={x} y={y - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--color-text-primary)">{(r.value / 1000000).toFixed(1)}M</text>
-                        <text x={x} y="285" textAnchor="middle" fontSize="10" fontWeight="600" fill="var(--color-text-secondary)">{r.label.replace('Tháng ', 'T')}</text>
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
-            </div>
+            {renderProviderRevenueChart('Doanh thu Áo dài')}
 
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
               <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Top Phổ biến</h3>
@@ -2619,46 +2756,11 @@ export const ProviderDashboard: React.FC = () => {
               </div>
             </div>
           </div>
-
-          <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', overflow: 'hidden' }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-light-border)' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Báo cáo hàng tồn kho & Bảo trì</h3>
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TÊN SẢN PHẨM</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TRẠNG THÁI</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>SỐ LƯỢNG</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>CHI TIẾT</th>
-                </tr>
-              </thead>
-              <tbody>
-                {analyticsData.inventoryStatus.map((item: any, idx: number) => (
-                  <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
-                    <td style={{ padding: '16px 24px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.name}</td>
-                    <td style={{ padding: '16px 24px', textAlign: 'center' }}>
-                      <span style={{
-                        padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
-                        backgroundColor: item.color === 'rental' ? '#EBF8FF' : '#FEF3C7',
-                        color: item.color === 'rental' ? '#2B6CB0' : '#D69E2E'
-                      }}>
-                        {item.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '16px 24px', textAlign: 'center', fontWeight: 600 }}>{item.count}</td>
-                    <td style={{ padding: '16px 24px', color: 'var(--color-text-secondary)' }}>{item.detail}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       );
     };
 
     const renderPhotoAnalytics = () => {
-      const maxVal = Math.max(...analyticsData.revenueGrowth.map((r: any) => r.value), 1000000);
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2698,21 +2800,7 @@ export const ProviderDashboard: React.FC = () => {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Doanh thu theo thời gian</h3>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '280px', paddingTop: '20px' }}>
-                {analyticsData.revenueGrowth.map((r: any, idx: number) => {
-                  const barHeight = (r.value / maxVal) * 220;
-                  return (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
-                      <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{(r.value / 1000000).toFixed(1)}M</span>
-                      <div style={{ width: '32px', height: `${barHeight}px`, backgroundColor: 'var(--color-primary)', borderRadius: '4px 4px 0 0', transition: 'height 0.3s ease' }} />
-                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)' }}>{r.label.replace('Tháng ', 'T')}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            {renderProviderRevenueChart('Doanh thu theo thời gian')}
 
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
               <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Lịch chụp sắp tới</h3>
@@ -3115,6 +3203,8 @@ export const ProviderDashboard: React.FC = () => {
             <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi</button>
             <button onClick={() => setCurrentView('trust')} style={navItemStyle(currentView === 'trust')}><Users size={18} /> Đánh giá khách hàng</button>
             <button onClick={() => setCurrentView('payouts')} style={navItemStyle(currentView === 'payouts')}><DollarSign size={18} /> Lịch sử quyết toán</button>
+            <button onClick={() => setCurrentView('notifications')} style={navItemStyle(currentView === 'notifications')}><Bell size={18} /> Tất cả thông báo</button>
+            <button onClick={() => navigate('/chat')} style={navItemStyle(false)}><MessageSquare size={18} /> Tin nhắn & Chat</button>
             <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
             <button onClick={() => setCurrentView('role-management')} style={navItemStyle(currentView === 'role-management')}><ShieldCheck size={18} /> Quản lý vai trò</button>
           </nav>
@@ -3278,6 +3368,28 @@ export const ProviderDashboard: React.FC = () => {
                     )}
                   </div>
 
+                  {/* Footer */}
+                  {notifications.length > 0 && (
+                    <div style={{
+                      padding: '10px 18px', borderTop: '1px solid var(--color-light-border)',
+                      textAlign: 'center', backgroundColor: '#FAF6F0'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => { setIsNotiOpen(false); setCurrentView('notifications'); }}
+                        style={{
+                          background: 'none', border: 'none', color: 'var(--color-primary)',
+                          fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                          padding: '4px 12px', borderRadius: '4px', transition: 'all 0.15s'
+                        }}
+                        onMouseOver={e => { e.currentTarget.style.color = '#380B12'; }}
+                        onMouseOut={e => { e.currentTarget.style.color = 'var(--color-primary)'; }}
+                      >
+                        Xem tất cả thông báo →
+                      </button>
+                    </div>
+                  )}
+
                   <style>{`
                     @keyframes noti-slide-in {
                       from { opacity: 0; transform: translateY(-6px); }
@@ -3306,6 +3418,12 @@ export const ProviderDashboard: React.FC = () => {
         </header>
 
         {/* CONTENT SWITCH PANEL */}
+        {currentView === 'notifications' && (
+          <main style={{ flex: 1, padding: '24px 32px', overflowY: 'auto' }}>
+            <NotificationsPage hideBreadcrumb variant="provider" />
+          </main>
+        )}
+
         {currentView === 'analytics' && (
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             {renderAnalyticsView()}

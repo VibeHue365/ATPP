@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { ROUTES } from '../config/routes';
-import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X, ShieldCheck, Check, CheckCheck } from 'lucide-react';
+import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X, ShieldCheck, Check, CheckCheck, MessageSquare } from 'lucide-react';
 import { API_BASE_URL } from '../config/env';
 import { AIChatBot } from '../features/dashboard/components/AIChatBot';
 import { useCart } from '../context/CartContext';
@@ -372,7 +372,7 @@ export const MainLayout: React.FC = () => {
                       textAlign: 'center', background: '#FDFCFA'
                     }}>
                       <button
-                        onClick={() => { setIsNotiOpen(false); navigate('/dashboard/profile?tab=notifications'); }}
+                        onClick={() => { setIsNotiOpen(false); navigate(ROUTES.NOTIFICATIONS); }}
                         style={{
                           background: 'none', border: 'none', color: '#B89047',
                           fontSize: '12px', fontWeight: 700, cursor: 'pointer',
@@ -404,6 +404,10 @@ export const MainLayout: React.FC = () => {
                 </div>
               )}
             </div>
+            <Link to={ROUTES.CHAT} className="vh-header-action-icon-custom" title="Tin nhắn & Chat" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <MessageSquare size={20} />
+            </Link>
+
             <Link to={ROUTES.CART} className="vh-header-action-icon-custom" title="Giỏ hàng" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ShoppingBag size={20} />
               {cart.length > 0 && (
@@ -530,6 +534,15 @@ export const MainLayout: React.FC = () => {
                       >
                         <Settings size={16} />
                         <span>Cài đặt</span>
+                      </Link>
+
+                      <Link 
+                        to={ROUTES.NOTIFICATIONS} 
+                        className="vh-header-dropdown-item-link" 
+                        onClick={() => setIsDropdownOpen(false)}
+                      >
+                        <Bell size={16} />
+                        <span>Thông báo</span>
                       </Link>
 
                       <div className="vh-header-dropdown-divider-line"></div>

@@ -126,10 +126,15 @@ export class ProductAvailabilityService {
     const size = sizeValue.trim().toUpperCase();
     const normalizedColor = color.trim().toUpperCase();
     const requestedQuantity = Math.max(1, Math.floor(quantityValue || 1));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isTodayOrPast = from <= today;
+
     const items = await this.inventory.find({
       productId,
       size,
       color: normalizedColor,
+      status: isTodayOrPast ? 'AVAILABLE' : { $ne: 'MAINTENANCE' },
       conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
     } as any);
 

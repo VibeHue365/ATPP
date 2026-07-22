@@ -22,6 +22,8 @@ const evidenceUrl = (reference: string) =>
     ? reference
     : `${API_BASE_URL}${reference}`;
 
+import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';
+
 export function DisputesPanel() {
   const { error, items, loading, refresh, setError } = useDisputes();
   const [selected, setSelected] = useState<Dispute | null>(null);
@@ -102,7 +104,9 @@ export function DisputesPanel() {
 
   return (
     <section className="admin-disputes">
-      <div className="admin-disputes__toolbar"><button type="button" onClick={() => void refresh()} disabled={loading}>Tải lại</button></div>
+      <div className="admin-disputes__toolbar">
+        <AdminReloadButton onClick={() => void refresh()} isLoading={loading} />
+      </div>
 
       {error && <p className="admin-disputes__error" role="alert">{error}</p>}
 
