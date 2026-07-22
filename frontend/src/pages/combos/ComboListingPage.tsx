@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Sparkles, Scissors, Camera, Calendar, ArrowRight,
-  Package, Users
+  Package, Users, Flame
 } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
 import { API_BASE_URL } from '../../config/env';
@@ -206,7 +206,13 @@ export const ComboListingPage: React.FC = () => {
 
               const aoDaiImg = getImageUrl(combo.productId.images?.[0] || '');
               const packageImg = getImageUrl(combo.photographyPackageId.images?.[0] || '');
-              const remaining = combo.maxUsage - (combo.usedCount || 0);
+
+              // The text, percentage and bar must all come from the same API values.
+              // Never fabricate a "sold" number for a newly created combo.
+              const maxUsage = Math.max(1, Number(combo.maxUsage) || 1);
+              const usedCount = Math.min(maxUsage, Math.max(0, Number(combo.usedCount) || 0));
+              const percentSold = Math.round((usedCount / maxUsage) * 100);
+              const remaining = maxUsage - usedCount;
 
               return (
                 <div
@@ -261,14 +267,11 @@ export const ComboListingPage: React.FC = () => {
                           Áp dụng: {new Date(combo.validFrom || '').toLocaleDateString('vi-VN')} — {new Date(combo.validTo || '').toLocaleDateString('vi-VN')}
                         </span>
                       </div>
-                      {remaining > 0 && (
-                        <div className="vh-combo-item-row" style={{ color: '#059669', fontWeight: 600 }}>
-                          <Users size={14} />
-                          <span className="vh-combo-item-text" style={{ fontSize: '11px' }}>
-                            Còn {remaining}/{combo.maxUsage} suất
-                          </span>
-                        </div>
-                      )}
+                    </div>
+                    <div className="vh-combo-usage" aria-label={`Đã bán ${usedCount} trên ${maxUsage} suất`}>
+                      <div className="vh-combo-usage-info"><span><Flame size={13} fill="currentColor" /> Đã bán {usedCount}/{maxUsage} suất</span><span>{percentSold}%</span></div>
+                      <div className="vh-combo-usage-bar"><span style={{ width: `${percentSold}%` }} /></div>
+                      {remaining > 0 && <span className="vh-combo-usage-remaining"><Users size={13} /> Còn {remaining} suất</span>}
                     </div>
 
                     {/* Footer */}

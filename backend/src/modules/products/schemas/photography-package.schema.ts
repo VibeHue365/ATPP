@@ -24,6 +24,15 @@ export class PhotographyPackage {
   @Prop({ type: Types.ObjectId, ref: 'Provider', required: true, index: true })
   providerId: Types.ObjectId;
 
+  @Prop({ type: String, default: null, trim: true, index: true })
+  serviceGroupId?: string | null;
+
+  @Prop({ type: String, default: null, trim: true })
+  serviceName?: string | null;
+
+  @Prop({ type: String, default: null, trim: true })
+  planName?: string | null;
+
   @Prop({ type: Types.ObjectId, ref: 'Category', default: null, index: true })
   categoryId?: Types.ObjectId | null;
 
@@ -127,3 +136,11 @@ export class PhotographyPackage {
 
 export const PhotographyPackageSchema =
   SchemaFactory.createForClass(PhotographyPackage);
+
+PhotographyPackageSchema.index(
+  { providerId: 1, serviceGroupId: 1, pricingUnit: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { serviceGroupId: { $type: 'string' } },
+  },
+);

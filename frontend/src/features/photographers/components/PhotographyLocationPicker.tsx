@@ -11,6 +11,9 @@ interface PhotographyLocationPickerProps {
   title?: string;
   hint?: string;
   radiusKm?: number | null;
+  radiusCenter?: { latitude: number; longitude: number } | null;
+  onConfirmationChange?: (confirmed: boolean) => void;
+  compact?: boolean;
 }
 
 interface NominatimResult {
@@ -39,6 +42,9 @@ export const PhotographyLocationPicker = ({
   title = 'Pin chính xác địa điểm chụp',
   hint = 'Địa điểm này được kiểm tra theo bán kính phục vụ trước khi giữ lịch.',
   radiusKm,
+  radiusCenter,
+  onConfirmationChange,
+  compact = false,
 }: PhotographyLocationPickerProps) => {
   const [address, setAddress] = useState(value?.address ?? '');
   const [latitude, setLatitude] = useState(value?.latitude?.toString() ?? '');
@@ -62,7 +68,7 @@ export const PhotographyLocationPicker = ({
     if (!mapRef.current || !markerRef.current) return;
     const point: [number, number] = [nextLatitude, nextLongitude];
     markerRef.current.setLatLng(point);
-    radiusCircleRef.current?.setLatLng(point);
+    if (!radiusCenter) radiusCircleRef.current?.setLatLng(point);
     if (shouldFly) mapRef.current.flyTo(point, Math.max(mapRef.current.getZoom(), 14), { duration: 0.35 });
   };
 
@@ -79,12 +85,13 @@ export const PhotographyLocationPicker = ({
       draggable: true,
       icon: L.divIcon({ className: 'pd-osm-marker', html: '<span></span>', iconSize: [28, 36], iconAnchor: [14, 36] }),
     }).addTo(map);
-    const updatePinFromMap = (latitude: number, longitude: number) => {
-      marker.setLatLng([latitude, longitude]);
-      radiusCircleRef.current?.setLatLng([latitude, longitude]);
-      setLatitude(latitude.toFixed(6));
-      setLongitude(longitude.toFixed(6));
-      setError(null);
+      const updatePinFromMap = (latitude: number, longitude: number) => {
+        marker.setLatLng([latitude, longitude]);
+        if (!radiusCenter) radiusCircleRef.current?.setLatLng([latitude, longitude]);
+        setLatitude(latitude.toFixed(6));
+        setLongitude(longitude.toFixed(6));
+        setError(null);
+        onConfirmationChange?.(false);
     };
     marker.on('dragend', () => {
       const { lat, lng } = marker.getLatLng();
@@ -126,7 +133,9 @@ export const PhotographyLocationPicker = ({
       radiusCircleRef.current = null;
       return;
     }
-    const point = markerRef.current.getLatLng();
+    const point = radiusCenter && isValidLatitude(radiusCenter.latitude) && isValidLongitude(radiusCenter.longitude)
+      ? L.latLng(radiusCenter.latitude, radiusCenter.longitude)
+      : markerRef.current.getLatLng();
     if (!radiusCircleRef.current) {
       radiusCircleRef.current = L.circle(point, {
         radius: radius * 1_000,
@@ -139,7 +148,7 @@ export const PhotographyLocationPicker = ({
     } else {
       radiusCircleRef.current.setLatLng(point).setRadius(radius * 1_000);
     }
-  }, [radiusKm]);
+  }, [radiusKm, radiusCenter?.latitude, radiusCenter?.longitude]);
   const publish = (nextAddress = address, nextLatitude = Number(latitude), nextLongitude = Number(longitude)) => {
     if (!nextAddress.trim()) {
       setError('Vui lòng nhập địa chỉ hoặc tên địa điểm chụp.');
@@ -151,6 +160,7 @@ export const PhotographyLocationPicker = ({
     }
     setError(null);
     onSelect({ address: nextAddress.trim(), latitude: nextLatitude, longitude: nextLongitude });
+    onConfirmationChange?.(true);
   };
 
   const useCurrentLocation = () => {
@@ -216,6 +226,7 @@ export const PhotographyLocationPicker = ({
 
   const updateLatitude = (nextValue: string) => {
     setLatitude(nextValue);
+    onConfirmationChange?.(false);
     const nextLatitude = Number(nextValue);
     const nextLongitude = Number(longitude);
     if (isValidLatitude(nextLatitude) && isValidLongitude(nextLongitude)) setMapPin(nextLatitude, nextLongitude, false);
@@ -223,33 +234,43 @@ export const PhotographyLocationPicker = ({
 
   const updateLongitude = (nextValue: string) => {
     setLongitude(nextValue);
+    onConfirmationChange?.(false);
     const nextLatitude = Number(latitude);
     const nextLongitude = Number(nextValue);
     if (isValidLatitude(nextLatitude) && isValidLongitude(nextLongitude)) setMapPin(nextLatitude, nextLongitude, false);
   };
 
   return (
-    <div className="pd-location-picker">
+    <div className={`pd-location-picker${compact ? ' pd-location-picker-compact' : ''}`}>
       <div className="pd-location-picker-heading"><MapPin size={17} /><span>{title}</span></div>
       <p className="pd-location-picker-hint">{hint}</p>
       <div className="pd-location-picker-fields">
         <label>
           Địa chỉ / tên địa điểm
           <div className="pd-location-search">
-            <input value={address} onChange={(event) => { setAddress(event.target.value); setResults([]); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void searchAddress(); } }} placeholder="Ví dụ: Lăng Khải Định, Huế" maxLength={500} />
+            <input value={address} onChange={(event) => { setAddress(event.target.value); setResults([]); onConfirmationChange?.(false); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void searchAddress(); } }} placeholder="Ví dụ: Lăng Khải Định, Huế" maxLength={500} />
             <button type="button" className="vh-btn vh-btn-sm" onClick={() => void searchAddress()} disabled={isSearching}><Search size={15} />{isSearching ? 'Đang tìm...' : 'Tìm'}</button>
           </div>
           {results.length > 0 && <div className="pd-location-search-results">{results.map((result) => <button type="button" key={result.place_id} onClick={() => chooseResult(result)}>{result.display_name}</button>)}</div>}
         </label>
-        <label>
-          Vĩ độ
-          <input value={latitude} onChange={(event) => updateLatitude(event.target.value)} inputMode="decimal" placeholder="16.4520" />
-        </label>
-        <label>
-          Kinh độ
-          <input value={longitude} onChange={(event) => updateLongitude(event.target.value)} inputMode="decimal" placeholder="107.5610" />
-        </label>
+        {!compact && <>
+          <label>
+            Vĩ độ
+            <input value={latitude} onChange={(event) => updateLatitude(event.target.value)} inputMode="decimal" placeholder="16.4520" />
+          </label>
+          <label>
+            Kinh độ
+            <input value={longitude} onChange={(event) => updateLongitude(event.target.value)} inputMode="decimal" placeholder="107.5610" />
+          </label>
+        </>}
       </div>
+      {compact && <details className="pd-location-picker-advanced">
+        <summary>Chỉnh tọa độ nâng cao</summary>
+        <div className="pd-location-picker-coordinate-fields">
+          <label>Vĩ độ<input value={latitude} onChange={(event) => updateLatitude(event.target.value)} inputMode="decimal" placeholder="16.4520" /></label>
+          <label>Kinh độ<input value={longitude} onChange={(event) => updateLongitude(event.target.value)} inputMode="decimal" placeholder="107.5610" /></label>
+        </div>
+      </details>}
       <div ref={mapContainerRef} className="pd-location-map" aria-label="Bản đồ chọn địa điểm" />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
         <button type="button" className="vh-btn vh-btn-sm" onClick={useCurrentLocation} disabled={isLocating}>

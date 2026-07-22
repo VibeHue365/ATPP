@@ -20,6 +20,20 @@ import {
 
 export class CreatePhotographyPackageDto {
   @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  serviceGroupId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  serviceName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  planName?: string;
+  @IsOptional()
   @IsMongoId()
   categoryId?: string | null;
 
@@ -140,6 +154,20 @@ export class CreatePhotographyPackageDto {
 }
 
 export class UpdatePhotographyPackageDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  serviceGroupId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  serviceName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  planName?: string;
   @IsOptional()
   @IsMongoId()
   categoryId?: string | null;

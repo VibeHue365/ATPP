@@ -22,6 +22,7 @@ import { categoryService } from "../../features/categories/services/categoryServ
 import type { Category } from "../../features/categories/types";
 import { SmartTagList } from "../../features/smart-tagging/components/SmartTagList";
 import type { PublicSmartTagBadge } from "../../features/smart-tagging/types/smartTag.types";
+import { CardSkeleton, EmptyState, ErrorState } from "../../components/feedback/AsyncState";
 
 const getImageUrl = (url: string) => {
   if (!url)
@@ -1537,47 +1538,11 @@ export const AoDaiListingPage: React.FC = () => {
 
           {/* Dynamic Listing Grid */}
           {loading && filteredProducts.length === 0 ? (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                padding: "120px 0",
-                fontSize: "14px",
-                color: "var(--color-text-secondary)",
-                fontWeight: 600,
-              }}
-            >
-              Đang tải danh sách áo dài...
-            </div>
+            <CardSkeleton count={6} />
           ) : error ? (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                padding: "120px 0",
-                fontSize: "14px",
-                color: "var(--color-primary)",
-                fontWeight: 600,
-              }}
-            >
-              {error}
-            </div>
+            <ErrorState message={error} action={{ label: 'Thử lại', onClick: () => window.location.reload() }} />
           ) : filteredProducts.length === 0 ? (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                padding: "120px 0",
-                fontSize: "14px",
-                color: "var(--color-text-secondary)",
-                fontWeight: 600,
-              }}
-            >
-              Không có sản phẩm nào phù hợp với bộ lọc đã chọn.
-            </div>
+            <EmptyState title="Không có áo dài phù hợp" message="Hãy thử thay đổi từ khóa hoặc bộ lọc đang chọn." />
           ) : (
             <div
               className="vh-rentals-grid-3"

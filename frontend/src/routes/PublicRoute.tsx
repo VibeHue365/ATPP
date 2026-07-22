@@ -18,7 +18,9 @@ export const PublicRoute: React.FC = () => {
     if (user?.roles?.includes('PROVIDER')) {
       return <Navigate to={ROUTES.PROVIDER_DASHBOARD} replace />;
     }
-    return <Navigate to={ROUTES.PROFILE} replace />;
+    // A customer returning to an auth page should land on the storefront.
+    // Redirecting to Profile here races the LoginForm's post-login navigation.
+    return <Navigate to={ROUTES.LANDING} replace />;
   }
 
   return <Outlet />;

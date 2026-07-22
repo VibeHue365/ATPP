@@ -59,6 +59,10 @@ export class UpdateProviderProfileDto {
   @IsOptional()
   policies?: {
     cancellationPolicy?: string | null;
+    cancellationPolicyConfig?: {
+      refundRules: Array<{ noticeDays: number; refundPercent: number }>;
+      additionalNotes?: string | null;
+    } | null;
     rentalPolicy?: string | null;
   };
 

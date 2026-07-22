@@ -13,6 +13,7 @@ import { useAuth } from "../../features/auth/hooks/useAuth";
 import { API_BASE_URL } from "../../config/env";
 import { SmartTagList } from "../../features/smart-tagging/components/SmartTagList";
 import type { PublicSmartTagBadge } from "../../features/smart-tagging/types/smartTag.types";
+import { ErrorState, PageLoading } from "../../components/feedback/AsyncState";
 
 const getImageUrl = (url: string) => {
   if (!url)
@@ -1096,34 +1097,24 @@ export const ProductDetailPage: React.FC = () => {
 
         const mapped = listToMap.slice(0, 3).map((prov: any) => {
           const rawName = prov.businessName || "Nhiếp ảnh gia";
-          let displayName = rawName;
-          let quote = "Chuyên chụp cổ phục ngoại cảnh Đại Nội Huế";
-          let avatar = "/hoang_minh.png";
-
-          if (rawName.includes("Minh Trí") || rawName.includes("Hoàng Minh")) {
-            displayName = "Hoàng Minh";
-            quote =
-              "Phong cách nghệ thuật hoài cổ. Concept Mộng Thơ sẽ phù hợp với thiết kế này.";
-            avatar = "/hoang_minh.png";
-          } else if (
-            rawName.includes("Hoàng Lê") ||
-            rawName.includes("Lê Thảo")
-          ) {
-            displayName = "Lê Thảo";
-            quote =
-              "Phong cách thơ mộng, ánh sáng tự nhiên, tôn nét dịu dàng của tà áo dài truyền thống.";
-            avatar = "/le_thao.png";
-          } else if (
-            rawName.includes("Thanh Thủy") ||
-            rawName.includes("Trần Bảo")
-          ) {
-            displayName = "Trần Bảo";
-            quote =
-              "Kể chuyện cổ phục bằng ngôn ngữ điện ảnh, tạo góc máy thần thái đạt chất lượng cao.";
-            avatar = "/tran_bao.png";
-          } else {
-            avatar = prov.portfolio?.[0] || "/hoang_minh.png";
-          }
+          const packageImage = prov.packages
+            ?.flatMap((item: any) => item.images || [])
+            .find(Boolean);
+          const portfolioImage = prov.portfolioItems
+            ?.flatMap((item: any) => item.images || [])
+            .find(Boolean);
+          // Portfolio is the most representative work for a photographer card.
+          // Fall back to a package/cover image only when no approved portfolio image exists.
+          const imageSource = portfolioImage
+            || packageImage
+            || prov.coverImage
+            || prov.media?.coverUrl
+            || prov.media?.images?.[0];
+          const avatar = imageSource ? getImageUrl(imageSource) : "/hoang_minh.png";
+          const quote = prov.description
+            || prov.bio
+            || prov.packages?.[0]?.description
+            || "Xem các gói chụp và portfolio của nhiếp ảnh gia.";
 
           const minPrice =
             prov.packages && prov.packages.length > 0
@@ -1132,7 +1123,7 @@ export const ProductDetailPage: React.FC = () => {
 
           return {
             id: prov._id,
-            name: displayName,
+            name: rawName,
             rating: prov.rating?.averageRating || 5.0,
             count: prov.rating?.totalReviews || 12,
             desc: quote,
@@ -1387,45 +1378,11 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          minHeight: "80vh",
-          gap: "16px",
-        }}
-      >
-        <div className="vh-loading-spinner">
-          <div className="vh-loading-double-bounce1"></div>
-          <div className="vh-loading-double-bounce2"></div>
-        </div>
-        <span className="font-header text-stone-600">
-          Đang tải chi tiết áo dài...
-        </span>
-      </div>
-    );
+    return <PageLoading message="Đang tải chi tiết áo dài…" />;
   }
 
   if (error || !product) {
-    return (
-      <div className="max-w-[1200px] mx-auto px-6 py-20 text-center">
-        <h3 className="text-2xl font-bold font-header text-stone-800">
-          Đã xảy ra lỗi
-        </h3>
-        <p className="text-stone-500 mt-2">
-          {error || "Không tìm thấy sản phẩm."}
-        </p>
-        <button
-          className="vh-btn vh-btn-primary mt-6"
-          onClick={() => navigate(ROUTES.RENTALS)}
-        >
-          QUAY LẠI TRANG CHỦ
-        </button>
-      </div>
-    );
+    return <ErrorState title="Không thể mở sản phẩm" message={error || "Không tìm thấy sản phẩm."} action={{ label: 'Quay lại danh sách', onClick: () => navigate(ROUTES.RENTALS) }} />;
   }
 
   return (
@@ -2803,6 +2760,7 @@ export const ProductDetailPage: React.FC = () => {
                   padding: "20px",
                   backgroundColor: "white",
                   border: "1px solid var(--color-light-border)",
+                  justifyContent: "flex-start",
                 }}
               >
                 <div
@@ -2860,6 +2818,11 @@ export const ProductDetailPage: React.FC = () => {
                       color: "var(--color-text-secondary)",
                       marginTop: "8px",
                       lineHeight: 1.6,
+                      minHeight: "62px",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical" as any,
+                      overflow: "hidden",
                     }}
                   >
                     {photographer.desc}

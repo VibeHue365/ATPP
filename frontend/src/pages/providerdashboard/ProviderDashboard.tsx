@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
   HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, Trash2, Play, Pencil, Copy, Package, Eye, Shirt,
-  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck, Clock, ShieldCheck, AlertTriangle, Sparkles
+  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck, Clock, ShieldCheck, AlertTriangle, Sparkles, Store, MapPinned, FileText
 } from 'lucide-react';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 import Swal from 'sweetalert2';
@@ -20,6 +20,8 @@ import { categoryService } from '../../features/categories/services/categoryServ
 import type { Category } from '../../features/categories/types';
 import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
 import { NotificationsPage } from '../notifications/NotificationsPage';
+import { SectionLoading } from '../../components/feedback/AsyncState';
+import './providerServiceProfile.css';
 
 interface Order {
   _id: string;
@@ -35,6 +37,7 @@ interface Order {
   createdAt?: string;
   customerId?: any;
   items?: any[];
+  schedules?: Array<{ status?: string; [key: string]: any }>;
   depositTotal?: number;
   rawStatus?: string;
   bookingType?: 'AODAI_RENTAL' | 'PHOTOGRAPHY' | 'COMBO' | string;
@@ -77,6 +80,35 @@ interface PortfolioItem {
   moderationStatus: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'HIDDEN';
   moderationReason?: string | null;
 }
+
+type CancellationRefundRule = {
+  noticeDays: number;
+  refundPercent: number;
+};
+
+const normalizeCancellationRefundRules = (rules: CancellationRefundRule[]) => rules
+  .filter((rule) => Number.isFinite(rule.noticeDays) && Number.isFinite(rule.refundPercent))
+  .map((rule) => ({
+    noticeDays: Math.max(0, Math.min(365, Number(rule.noticeDays))),
+    refundPercent: Math.max(0, Math.min(100, Number(rule.refundPercent))),
+  }))
+  .sort((left, right) => right.noticeDays - left.noticeDays);
+
+const buildCancellationPolicySummary = (rules: CancellationRefundRule[], additionalNotes: string) => {
+  const normalizedRules = normalizeCancellationRefundRules(rules);
+  const ruleLines = normalizedRules.map((rule, index) => {
+    const previousRule = normalizedRules[index - 1];
+    if (rule.noticeDays === 0 && previousRule) {
+      return `Hủy dưới ${previousRule.noticeDays} ngày: hoàn ${rule.refundPercent}% tiền cọc.`;
+    }
+    if (previousRule) {
+      return `Hủy từ ${rule.noticeDays} đến dưới ${previousRule.noticeDays} ngày: hoàn ${rule.refundPercent}% tiền cọc.`;
+    }
+    return `Hủy trước ít nhất ${rule.noticeDays} ngày: hoàn ${rule.refundPercent}% tiền cọc.`;
+  });
+  return [...ruleLines, additionalNotes.trim()].filter(Boolean).join(' ');
+};
+
 export const ProviderDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { logout, user, isAuthenticated } = useAuth();
@@ -251,7 +283,8 @@ export const ProviderDashboard: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [addressLine, setAddressLine] = useState('');
   const [city, setCity] = useState('');
-  const [cancellationPolicy, setCancellationPolicy] = useState('');
+  const [cancellationRefundRules, setCancellationRefundRules] = useState<CancellationRefundRule[]>([]);
+  const [cancellationAdditionalNotes, setCancellationAdditionalNotes] = useState('');
   const [comboDiscountPercent, setComboDiscountPercent] = useState(0);
   const [baseLatitude, setBaseLatitude] = useState('');
   const [baseLongitude, setBaseLongitude] = useState('');
@@ -260,6 +293,8 @@ export const ProviderDashboard: React.FC = () => {
   const [pickupAddressLine, setPickupAddressLine] = useState('');
   const [pickupLatitude, setPickupLatitude] = useState('');
   const [pickupLongitude, setPickupLongitude] = useState('');
+  const [profileSection, setProfileSection] = useState<'business' | 'location' | 'policy'>('business');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Form states - Voucher
   const [vCode, setVCode] = useState('');
@@ -375,7 +410,14 @@ export const ProviderDashboard: React.FC = () => {
       setPhone(pRes.contact?.phone || '');
       setAddressLine(pRes.address?.addressLine || '');
       setCity(pRes.address?.city || '');
-      setCancellationPolicy(pRes.policies?.cancellationPolicy || '');
+      const persistedCancellationConfig = pRes.policies?.cancellationPolicyConfig;
+      const legacyCancellationPolicy = pRes.policies?.cancellationPolicy || '';
+      setCancellationRefundRules(Array.isArray(persistedCancellationConfig?.refundRules)
+        ? normalizeCancellationRefundRules(persistedCancellationConfig.refundRules)
+        : []);
+      setCancellationAdditionalNotes(persistedCancellationConfig
+        ? (persistedCancellationConfig.additionalNotes || '')
+        : legacyCancellationPolicy);
       setComboDiscountPercent(pRes.comboDiscountPercent ?? 0);
       setBaseLatitude(pRes.address?.geo?.coordinates?.[1]?.toString() ?? '');
       setBaseLongitude(pRes.address?.geo?.coordinates?.[0]?.toString() ?? '');
@@ -736,6 +778,22 @@ export const ProviderDashboard: React.FC = () => {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!businessName.trim() || !phone.trim() || !addressLine.trim() || !city.trim()) {
+      toast.error('Vui lòng hoàn thiện tên cửa hàng, số điện thoại, thành phố và địa chỉ trên bản đồ.');
+      return;
+    }
+    const normalizedCancellationRules = normalizeCancellationRefundRules(cancellationRefundRules);
+    const hasInvalidCancellationRule = cancellationRefundRules.some((rule) =>
+      !Number.isInteger(rule.noticeDays) || rule.noticeDays < 0 || rule.noticeDays > 365 ||
+      !Number.isFinite(rule.refundPercent) || rule.refundPercent < 0 || rule.refundPercent > 100,
+    );
+    const hasDuplicateNoticeDays = new Set(cancellationRefundRules.map((rule) => rule.noticeDays)).size !== cancellationRefundRules.length;
+    if (hasInvalidCancellationRule || hasDuplicateNoticeDays) {
+      toast.error('Mỗi mốc hủy cần có số ngày và tỷ lệ hoàn từ 0 đến 100%; không được trùng mốc ngày.');
+      return;
+    }
+    const cancellationPolicySummary = buildCancellationPolicySummary(normalizedCancellationRules, cancellationAdditionalNotes);
+    setIsSavingProfile(true);
     try {
       await httpClient.patch('/providers/me', {
         businessName,
@@ -743,15 +801,51 @@ export const ProviderDashboard: React.FC = () => {
         address: { ...provider?.address, addressLine, city, geo: baseLatitude && baseLongitude ? { type: 'Point', coordinates: [Number(baseLongitude), Number(baseLatitude)] } : null },
         rentalSettings: { useBusinessAddressForPickup, pickupLocation: useBusinessAddressForPickup ? null : { addressLine: pickupAddressLine, geo: pickupLatitude && pickupLongitude ? { type: 'Point', coordinates: [Number(pickupLongitude), Number(pickupLatitude)] } : null } },
         photographySettings: { serviceRadiusKm: serviceRadiusKm === '' ? null : Number(serviceRadiusKm) },
-        policies: { ...provider?.policies, cancellationPolicy },
+        policies: {
+          ...provider?.policies,
+          cancellationPolicy: cancellationPolicySummary || null,
+          cancellationPolicyConfig: {
+            refundRules: normalizedCancellationRules,
+            additionalNotes: cancellationAdditionalNotes.trim() || null,
+          },
+        },
         comboDiscountPercent: Number(comboDiscountPercent),
       });
       toast.success('Cập nhật thông tin dịch vụ thành công!');
       fetchProviderData();
     } catch (err: any) {
       toast.error('Cập nhật thất bại');
+    } finally {
+      setIsSavingProfile(false);
     }
   };
+
+  const normalizedCancellationRules = normalizeCancellationRefundRules(cancellationRefundRules);
+  const cancellationPolicySummary = buildCancellationPolicySummary(normalizedCancellationRules, cancellationAdditionalNotes);
+  const persistedCancellationConfig = provider?.policies?.cancellationPolicyConfig;
+  const persistedCancellationRules = Array.isArray(persistedCancellationConfig?.refundRules)
+    ? normalizeCancellationRefundRules(persistedCancellationConfig.refundRules)
+    : [];
+  const persistedCancellationNotes = persistedCancellationConfig
+    ? (persistedCancellationConfig.additionalNotes || '')
+    : (provider?.policies?.cancellationPolicy ?? '');
+
+  const profileHasUnsavedChanges = Boolean(provider) && (
+    businessName !== (provider?.businessName ?? '') ||
+    phone !== (provider?.contact?.phone ?? '') ||
+    addressLine !== (provider?.address?.addressLine ?? '') ||
+    city !== (provider?.address?.city ?? '') ||
+    cancellationPolicySummary !== (provider?.policies?.cancellationPolicy ?? '') ||
+    JSON.stringify(normalizedCancellationRules) !== JSON.stringify(persistedCancellationRules) ||
+    cancellationAdditionalNotes !== persistedCancellationNotes ||
+    baseLatitude !== (provider?.address?.geo?.coordinates?.[1]?.toString() ?? '') ||
+    baseLongitude !== (provider?.address?.geo?.coordinates?.[0]?.toString() ?? '') ||
+    serviceRadiusKm !== (provider?.photographySettings?.serviceRadiusKm?.toString() ?? '') ||
+    useBusinessAddressForPickup !== (provider?.rentalSettings?.useBusinessAddressForPickup !== false) ||
+    pickupAddressLine !== (provider?.rentalSettings?.pickupLocation?.addressLine ?? '') ||
+    pickupLatitude !== (provider?.rentalSettings?.pickupLocation?.geo?.coordinates?.[1]?.toString() ?? '') ||
+    pickupLongitude !== (provider?.rentalSettings?.pickupLocation?.geo?.coordinates?.[0]?.toString() ?? '')
+  );
 
   const handleAddVoucher = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1221,7 +1315,16 @@ export const ProviderDashboard: React.FC = () => {
         const custEmail = cust?.email || '';
         const initials = custName.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
         const productName = (b.items || []).map((item: any) => item?.name || item?.productId?.name || item?.photographyPackageId?.name).filter(Boolean).join(' + ') || 'Sản phẩm thuê';
-        const dateStr = b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : '';
+        const dateStr = b.createdAt
+          ? new Date(b.createdAt).toLocaleString('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          })
+          : '';
 
         let totalAmt = 0;
         if (b.items && b.items.length > 0) {
@@ -3725,11 +3828,15 @@ export const ProviderDashboard: React.FC = () => {
                                     { label: 'Từ chối lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   CONFIRMED: [
-                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
+                                    { label: 'Bắt đầu buổi chụp kế tiếp', apiStatus: 'SESSION_START', icon: <Play size={14} />, color: '#2e7d32' },
                                     { label: 'Hủy lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   IN_PROGRESS: [
-                                    { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                    ...(o.schedules?.some((schedule: any) => schedule.status === 'IN_PROGRESS')
+                                      ? [{ label: 'Hoàn tất buổi chụp đang diễn ra', apiStatus: 'SESSION_COMPLETE', icon: <CheckCircle size={14} />, color: '#2e7d32' }]
+                                      : o.schedules?.some((schedule: any) => schedule.status === 'CONFIRMED')
+                                        ? [{ label: 'Bắt đầu buổi chụp kế tiếp', apiStatus: 'SESSION_START', icon: <Play size={14} />, color: '#2e7d32' }]
+                                        : [{ label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' }]),
                                   ],
                                   AWAITING_REVIEW: [
                                     { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
@@ -4210,120 +4317,142 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {currentView === 'profile' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+          <main className="provider-service-page">
+            <div className="provider-service-header">
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Thông tin dịch vụ</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Thiết lập thông tin thương hiệu, showroom nhận đồ và chính sách hủy dịch vụ.</p>
+                <p className="provider-service-eyebrow">THIẾT LẬP NHÀ CUNG CẤP</p>
+                <h2>Thông tin dịch vụ</h2>
+                <p>Hoàn thiện từng phần thay vì điền một biểu mẫu dài. Địa chỉ chính xác chỉ dùng nội bộ để phục vụ đặt lịch và giao nhận.</p>
               </div>
+              <span className={`provider-service-status${profileHasUnsavedChanges ? ' is-dirty' : ''}`}>
+                <CheckCircle size={16} /> {profileHasUnsavedChanges ? 'Có thay đổi chưa lưu' : 'Đã lưu'}
+              </span>
             </div>
 
-            {isLoadingProvider ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải thông tin dịch vụ...</div>
-            ) : (
-              <form onSubmit={handleUpdateProfile} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '32px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TÊN THƯƠNG HIỆU / CỬA HÀNG</label>
-                    <input
-                      type="text"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
+            {isLoadingProvider ? <SectionLoading message="Đang tải thông tin dịch vụ…" /> : (
+              <form onSubmit={handleUpdateProfile} className="provider-service-form">
+                <div className="provider-service-tabs" role="tablist" aria-label="Các phần thông tin dịch vụ">
+                  <button type="button" role="tab" aria-selected={profileSection === 'business'} className={`provider-service-tab${profileSection === 'business' ? ' is-active' : ''}`} onClick={() => setProfileSection('business')}>
+                    <Store size={20} /><span>Cửa hàng<small>Thương hiệu & liên hệ</small></span>
+                  </button>
+                  <button type="button" role="tab" aria-selected={profileSection === 'location'} className={`provider-service-tab${profileSection === 'location' ? ' is-active' : ''}`} onClick={() => setProfileSection('location')}>
+                    <MapPinned size={20} /><span>Địa điểm & phạm vi<small>Pin bản đồ, bán kính, giao nhận</small></span>
+                  </button>
+                  <button type="button" role="tab" aria-selected={profileSection === 'policy'} className={`provider-service-tab${profileSection === 'policy' ? ' is-active' : ''}`} onClick={() => setProfileSection('policy')}>
+                    <FileText size={20} /><span>Chính sách<small>Hủy dịch vụ & hoàn cọc</small></span>
+                  </button>
+                </div>
+
+                {profileSection === 'business' && <section className="provider-service-panel" role="tabpanel">
+                  <div className="provider-service-panel-heading">
+                    <h3>Thông tin cửa hàng</h3>
+                    <p>Đây là thông tin khách hàng nhìn thấy khi tìm đến dịch vụ của bạn.</p>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>SỐ ĐIỆN THOẠI LIÊN HỆ</label>
-                    <input
-                      type="text"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
+                  <div className="provider-service-field-grid">
+                    <div className="provider-service-field">
+                      <label htmlFor="provider-business-name">Tên thương hiệu / cửa hàng</label>
+                      <input id="provider-business-name" type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Ví dụ: Áo Dài Cổ Phong Vibe" required />
+                      <p className="provider-service-field-note">Dùng tên nhất quán trên trang sản phẩm và đơn đặt.</p>
+                    </div>
+                    <div className="provider-service-field">
+                      <label htmlFor="provider-phone">Số điện thoại liên hệ</label>
+                      <input id="provider-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ví dụ: 0901 234 567" required />
+                      <p className="provider-service-field-note">Dùng để hỗ trợ khách khi phát sinh đơn đặt.</p>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>ĐỊA CHỈ SHOWROOM / ĐỊA ĐIỂM NHẬN ĐỒ</label>
-                    <input
-                      type="text"
-                      value={addressLine}
-                      onChange={(e) => setAddressLine(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
+                </section>}
+
+                {profileSection === 'location' && <section className="provider-service-panel" role="tabpanel">
+                  <div className="provider-service-panel-heading">
+                    <h3>Địa điểm và phạm vi phục vụ</h3>
+                    <p>Tìm địa chỉ, chọn pin trên bản đồ rồi thiết lập phạm vi phù hợp. Tọa độ được ẩn trong phần nâng cao để biểu mẫu dễ dùng hơn.</p>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>THÀNH PHỐ</label>
-                    <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TỶ LỆ GIẢM GIÁ COMBO (%)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={comboDiscountPercent}
-                      onChange={(e) => setComboDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>CHÍNH SÁCH HỦY DỊCH VỤ / HOÀN CỌC</label>
-                    <textarea
-                      value={cancellationPolicy}
-                      onChange={(e) => setCancellationPolicy(e.target.value)}
-                      rows={3}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'none', fontFamily: 'inherit' }}
-                    />
-                  </div>
-                  <div style={{ gridColumn: 'span 2', borderTop: '1px solid var(--color-light-border)', paddingTop: '20px', marginTop: '4px' }}>
-                    <h3 style={{ margin: '0 0 8px', fontSize: '16px', color: 'var(--color-text-primary)' }}>Địa điểm và phạm vi phục vụ</h3>
-                    <p style={{ margin: '0 0 14px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Pin nội bộ này dùng để kiểm tra bán kính. Tọa độ chính xác không hiển thị công khai cho khách.</p>
+                  <div className="provider-service-location-stack">
+                    <div className="provider-service-field" style={{ maxWidth: 420 }}>
+                      <label htmlFor="provider-city">Thành phố</label>
+                      <input id="provider-city" type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ví dụ: Thành phố Huế" required />
+                    </div>
                     <PhotographyLocationPicker
+                      compact
                       value={baseLatitude !== '' && baseLongitude !== '' ? { address: addressLine, latitude: Number(baseLatitude), longitude: Number(baseLongitude) } : null}
                       onSelect={(location) => {
                         setAddressLine(location.address);
                         setBaseLatitude(location.latitude.toString());
                         setBaseLongitude(location.longitude.toString());
                       }}
-                      title="Pin địa chỉ kinh doanh / điểm xuất phát"
-                      hint="Kéo pin để chọn vị trí chính xác. Đây là tâm để kiểm tra bán kính phục vụ chụp ảnh."
+                      title="Địa chỉ kinh doanh / điểm xuất phát"
+                      hint="Tìm địa chỉ hoặc kéo pin. Đây là vị trí nội bộ dùng để kiểm tra lịch và bán kính phục vụ."
                       radiusKm={hasPhotographyCapability && serviceRadiusKm !== '' ? Number(serviceRadiusKm) : null}
                     />
-                    {hasPhotographyCapability && <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '14px', maxWidth: '280px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>BÁN KÍNH PHỤC VỤ CHỤP (KM)</label>
-                      <input type="number" min={0} max={500} step="0.1" value={serviceRadiusKm} onChange={(e) => setServiceRadiusKm(e.target.value)} placeholder="Ví dụ: 15" style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }} />
+
+                    {hasPhotographyCapability && <div className="provider-service-radius">
+                      <div className="provider-service-radius-header"><strong>Bán kính phục vụ chụp ảnh</strong><span className="provider-service-radius-value">{serviceRadiusKm || 0} km</span></div>
+                      <div className="provider-service-radius-presets">
+                        {[5, 10, 20, 50].map((radius) => <button type="button" key={radius} className={Number(serviceRadiusKm) === radius ? 'is-selected' : ''} onClick={() => setServiceRadiusKm(String(radius))}>{radius} km</button>)}
+                      </div>
+                      <div className="provider-service-radius-controls">
+                        <input type="range" min="1" max="100" value={Math.min(100, Math.max(1, Number(serviceRadiusKm) || 1))} onChange={(e) => setServiceRadiusKm(e.target.value)} aria-label="Bán kính phục vụ chụp ảnh" />
+                        <input type="number" min="1" max="500" step="1" value={serviceRadiusKm} onChange={(e) => setServiceRadiusKm(e.target.value)} placeholder="Số km" aria-label="Nhập bán kính phục vụ" />
+                      </div>
+                    </div>}
+
+                    {hasAodaiCapability && <div className="provider-service-pickup">
+                      <label className="provider-service-pickup-toggle">
+                        <input type="checkbox" checked={useBusinessAddressForPickup} onChange={(e) => setUseBusinessAddressForPickup(e.target.checked)} />
+                        <span><strong>Dùng địa chỉ kinh doanh cho nhận và trả áo dài</strong><span>Chỉ tắt lựa chọn này nếu điểm giao nhận khác với cửa hàng.</span></span>
+                      </label>
+                      {!useBusinessAddressForPickup && <PhotographyLocationPicker
+                        compact
+                        value={pickupLatitude !== '' && pickupLongitude !== '' ? { address: pickupAddressLine, latitude: Number(pickupLatitude), longitude: Number(pickupLongitude) } : null}
+                        onSelect={(location) => {
+                          setPickupAddressLine(location.address);
+                          setPickupLatitude(location.latitude.toString());
+                          setPickupLongitude(location.longitude.toString());
+                        }}
+                        title="Điểm nhận và trả áo dài"
+                        hint="MVP hiện dùng một điểm chung cho cả nhận và trả."
+                      />}
                     </div>}
                   </div>
-                  <div style={{ gridColumn: 'span 2', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: useBusinessAddressForPickup ? 0 : '14px' }}><input type="checkbox" checked={useBusinessAddressForPickup} onChange={(e) => setUseBusinessAddressForPickup(e.target.checked)} /> Dùng địa chỉ kinh doanh cho cả nhận và trả áo dài</label>
-                    {!useBusinessAddressForPickup && <PhotographyLocationPicker
-                      value={pickupLatitude !== '' && pickupLongitude !== '' ? { address: pickupAddressLine, latitude: Number(pickupLatitude), longitude: Number(pickupLongitude) } : null}
-                      onSelect={(location) => {
-                        setPickupAddressLine(location.address);
-                        setPickupLatitude(location.latitude.toString());
-                        setPickupLongitude(location.longitude.toString());
-                      }}
-                      title="Pin điểm nhận và trả áo dài"
-                      hint="MVP dùng cùng một điểm cho cả nhận và trả áo dài."
-                    />}
+                </section>}
+
+                {profileSection === 'policy' && <section className="provider-service-panel" role="tabpanel">
+                  <div className="provider-service-panel-heading">
+                    <h3>Chính sách hủy dịch vụ và hoàn cọc</h3>
+                    <p>Thiết lập từng mốc hủy và tỷ lệ hoàn cọc. Hệ thống sẽ tự viết thành chính sách rõ ràng cho khách.</p>
                   </div>
+                  <div className="provider-policy-builder">
+                    <div className="provider-policy-builder-header">
+                      <div><strong>Mốc hoàn cọc</strong><span>Nhập số ngày trước lịch hẹn và phần trăm hoàn tiền cọc tương ứng.</span></div>
+                      <div className="provider-policy-builder-actions">
+                        <button type="button" className="provider-policy-secondary-action" onClick={() => setCancellationRefundRules([{ noticeDays: 7, refundPercent: 100 }, { noticeDays: 3, refundPercent: 50 }, { noticeDays: 0, refundPercent: 0 }])}>Dùng mẫu phổ biến</button>
+                        <button type="button" className="provider-policy-primary-action" onClick={() => setCancellationRefundRules((rules) => [...rules, { noticeDays: 0, refundPercent: 0 }])}><Plus size={15} /> Thêm mốc</button>
+                      </div>
+                    </div>
+                    {cancellationRefundRules.length === 0 ? <div className="provider-policy-empty"><strong>Chưa có mốc hoàn cọc.</strong><span>Chọn “Dùng mẫu phổ biến” hoặc thêm mốc theo chính sách của cửa hàng.</span></div> : <div className="provider-policy-rules">
+                      <div className="provider-policy-rule-labels"><span>Hủy trước lịch</span><span>Tỷ lệ hoàn cọc</span><span /></div>
+                      {cancellationRefundRules.map((rule, index) => <div className="provider-policy-rule" key={index}>
+                        <label><input type="number" min="0" max="365" step="1" value={rule.noticeDays} onChange={(event) => setCancellationRefundRules((rules) => rules.map((item, itemIndex) => itemIndex === index ? { ...item, noticeDays: Number(event.target.value) } : item))} /><span>ngày</span></label>
+                        <label><input type="number" min="0" max="100" step="1" value={rule.refundPercent} onChange={(event) => setCancellationRefundRules((rules) => rules.map((item, itemIndex) => itemIndex === index ? { ...item, refundPercent: Number(event.target.value) } : item))} /><span>% hoàn</span></label>
+                        <button type="button" className="provider-policy-remove" onClick={() => setCancellationRefundRules((rules) => rules.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Xóa mốc hủy ${rule.noticeDays} ngày`}><Trash2 size={16} /></button>
+                      </div>)}
+                    </div>}
+                  </div>
+                  <div className="provider-service-field provider-policy-notes">
+                    <label htmlFor="provider-cancellation-notes">Ghi chú thêm (không bắt buộc)</label>
+                    <textarea id="provider-cancellation-notes" value={cancellationAdditionalNotes} onChange={(e) => setCancellationAdditionalNotes(e.target.value)} placeholder="Ví dụ: Phí chuyển khoản không được hoàn; khách cần liên hệ shop để xác nhận yêu cầu hủy." />
+                  </div>
+                  <div className="provider-service-policy-preview"><strong>Xem trước hiển thị với khách:</strong><p>{cancellationPolicySummary || 'Chưa thiết lập chính sách hủy và hoàn cọc.'}</p></div>
+                </section>}
+
+                <div className="provider-service-savebar">
+                  <div className={`provider-service-savebar-copy${profileHasUnsavedChanges ? ' is-dirty' : ''}`}>
+                    <CheckCircle size={17} /> {profileHasUnsavedChanges ? 'Bạn có thay đổi chưa được lưu.' : 'Thông tin đang được đồng bộ.'}
+                  </div>
+                  <button type="submit" disabled={isSavingProfile}>
+                    <Save size={16} /> {isSavingProfile ? 'Đang lưu…' : 'Lưu thay đổi'}
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  style={{ alignSelf: 'flex-start', padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-sm)' }}
-                >
-                  <Save size={14} />
-                  Lưu thay đổi
-                </button>
               </form>
             )}
           </main>

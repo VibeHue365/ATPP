@@ -5,6 +5,7 @@ import { httpClient } from '../../../services/httpClient';
 import { ROUTES } from '../../../config/routes';
 import { SmartTagList } from '../../smart-tagging/components/SmartTagList';
 import type { PublicSmartTagBadge } from '../../smart-tagging/types/smartTag.types';
+import { CardSkeleton, EmptyState, ErrorState } from '../../../components/feedback/AsyncState';
 
 interface AoDaiItem {
   id: string;
@@ -92,17 +93,11 @@ export const AoDaiProductGrid: React.FC = () => {
         </div>
 
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px 0', color: 'var(--color-text-secondary)', fontSize: '14px', fontWeight: 600 }}>
-            Đang tải sản phẩm từ cơ sở dữ liệu...
-          </div>
+          <CardSkeleton count={4} />
         ) : error ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px 0', color: 'var(--color-primary)', fontSize: '14px', fontWeight: 600 }}>
-            {error}
-          </div>
+          <ErrorState message={error} action={{ label: 'Thử lại', onClick: () => window.location.reload() }} />
         ) : items.length === 0 ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px 0', color: 'var(--color-text-secondary)', fontSize: '14px', fontWeight: 600 }}>
-            Không tìm thấy sản phẩm nào trong cơ sở dữ liệu.
-          </div>
+          <EmptyState title="Chưa có sản phẩm nổi bật" message="Sản phẩm áo dài sẽ xuất hiện tại đây khi có dữ liệu phù hợp." />
         ) : (
           /* Product Grid */
           <div className="vh-rentals-grid">

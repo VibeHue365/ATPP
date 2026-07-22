@@ -23,6 +23,9 @@ export function PhotographyPackageCard({
 }: PhotographyPackageCardProps) {
   const isActive = photographyPackage.status === 'ACTIVE';
   const coverImage = photographyPackage.images[0];
+  const pricingUnit = photographyPackage.pricingUnit || 'PER_SESSION';
+  const pricingSuffix = pricingUnit === 'PER_DAY' ? '/ ngày' : pricingUnit === 'PER_BOOKING' ? '/ booking' : '/ buổi';
+  const includedHours = (photographyPackage.includedDurationMinutes ?? Math.round(photographyPackage.durationHours * 60)) / 60;
 
   return (
     <article className="photography-package-card">
@@ -45,14 +48,15 @@ export function PhotographyPackageCard({
 
       <div className="photography-package-card__body">
         <div>
-          <h3>{photographyPackage.name}</h3>
+          <h3>{photographyPackage.planName || photographyPackage.name}</h3>
           <p>{photographyPackage.description || 'Chưa có mô tả cho gói chụp này.'}</p>
         </div>
         <strong className="photography-package-card__price">
-          {photographyPackage.price.toLocaleString('vi-VN')}đ
+          {photographyPackage.price.toLocaleString('vi-VN')}đ <small>{pricingSuffix}</small>
         </strong>
         <div className="photography-package-card__facts">
-          <span><Clock3 size={15} /> {photographyPackage.durationHours} giờ</span>
+          <span><Clock3 size={15} /> Bao gồm {includedHours.toLocaleString('vi-VN')} giờ {pricingUnit === 'PER_DAY' ? 'mỗi ngày' : pricingUnit === 'PER_SESSION' ? 'mỗi buổi' : 'toàn booking'}</span>
+          {pricingUnit === 'PER_BOOKING' && <span><CalendarClock size={15} /> {photographyPackage.includedSessionCount || 1} buổi / {photographyPackage.includedDayCount || 1} ngày</span>}
           <span><WandSparkles size={15} /> {photographyPackage.editedPhotosCount} ảnh chỉnh sửa</span>
           <span><CalendarClock size={15} /> Trả ảnh {photographyPackage.deliveryDays} ngày</span>
         </div>

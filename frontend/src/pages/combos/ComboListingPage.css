@@ -227,6 +227,12 @@
   max-width: 400px;
   line-height: 1.6;
 }
+.vh-combo-usage { display: grid; gap: 7px; margin-top: 13px; padding-top: 12px; border-top: 1px solid #eee6df; color: #756860; font-size: 11px; }
+.vh-combo-usage-info { display: flex; justify-content: space-between; gap: 10px; font-weight: 800; }
+.vh-combo-usage-info span:first-child { display: inline-flex; align-items: center; gap: 5px; color: #b42318; }
+.vh-combo-usage-bar { height: 7px; overflow: hidden; border-radius: 999px; background: #f7dede; }
+.vh-combo-usage-bar span { display: block; height: 100%; border-radius: inherit; background: #c92c32; transition: width .2s ease; }
+.vh-combo-usage-remaining { display: inline-flex; align-items: center; gap: 5px; color: #27804a; font-weight: 700; }
 
 /* Combo Detail Modal */
 .vh-combo-detail-overlay {

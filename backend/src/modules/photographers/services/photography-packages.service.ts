@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -47,6 +48,12 @@ export class PhotographyPackagesService {
   ): Promise<PhotographyPackageDocument> {
     const provider = await this.getProvider(userId);
     await this.validateCategoryInputs(dto);
+    const serviceGroupId = dto.serviceGroupId?.trim() || randomUUID();
+    const pricingUnit = dto.pricingUnit ?? PhotographyPricingUnit.PerSession;
+    await this.assertUniquePricingUnit(provider._id, serviceGroupId, pricingUnit);
+    const serviceAnchor = await this.findServiceAnchor(provider._id, serviceGroupId);
+    const serviceName = String(serviceAnchor?.serviceName || serviceAnchor?.name || dto.serviceName || dto.name).trim();
+    const planName = dto.planName?.trim() || this.defaultPlanName(pricingUnit);
     this.assertSchedulingPolicy(dto);
     if (dto.status === PackageStatus.Active) {
       this.assertCanPublish(provider);
@@ -55,16 +62,22 @@ export class PhotographyPackagesService {
 
     return this.packageModel.create({
       ...dto,
-      categoryId: dto.categoryId ? new Types.ObjectId(dto.categoryId) : null,
-      conceptCategoryIds: this.toObjectIds(dto.conceptCategoryIds),
-      styleCategoryIds: this.toObjectIds(dto.styleCategoryIds),
-      eventCategoryIds: this.toObjectIds(dto.eventCategoryIds),
+      serviceGroupId,
+      serviceName,
+      planName,
+      name: `${serviceName} · ${planName}`,
+      description: serviceAnchor?.description ?? dto.description,
+      categoryId: serviceAnchor?.categoryId ?? (dto.categoryId ? new Types.ObjectId(dto.categoryId) : null),
+      conceptCategoryIds: serviceAnchor?.conceptCategoryIds ?? this.toObjectIds(dto.conceptCategoryIds),
+      styleCategoryIds: serviceAnchor?.styleCategoryIds ?? this.toObjectIds(dto.styleCategoryIds),
+      eventCategoryIds: serviceAnchor?.eventCategoryIds ?? this.toObjectIds(dto.eventCategoryIds),
       providerId: provider._id,
-      slug: await this.createUniqueSlug(dto.name),
+      slug: await this.createUniqueSlug(`${serviceName}-${planName}`),
       status: dto.status ?? PackageStatus.Draft,
-      images: dto.images ?? [],
+      images: serviceAnchor?.images ?? dto.images ?? [],
+      travelFeeNotes: serviceAnchor?.travelFeeNotes ?? dto.travelFeeNotes,
       rawPhotosCount: dto.rawPhotosCount ?? 0,
-      pricingUnit: dto.pricingUnit ?? PhotographyPricingUnit.PerSession,
+      pricingUnit,
       includedDurationMinutes:
         dto.includedDurationMinutes ?? Math.round(dto.durationHours * 60),
       includedSessionCount: dto.includedSessionCount ?? null,
@@ -112,6 +125,12 @@ export class PhotographyPackagesService {
       ...photographyPackage.toObject(),
       ...update,
     };
+    const nextServiceGroupId = String(nextSchedulingPolicy.serviceGroupId || photographyPackage._id).trim();
+    const nextPricingUnit = nextSchedulingPolicy.pricingUnit ?? PhotographyPricingUnit.PerSession;
+    update.serviceGroupId = nextServiceGroupId;
+    update.serviceName = String(nextSchedulingPolicy.serviceName || nextSchedulingPolicy.name).trim();
+    update.planName = String(nextSchedulingPolicy.planName || this.defaultPlanName(nextPricingUnit)).trim();
+    await this.assertUniquePricingUnit(provider._id, nextServiceGroupId, nextPricingUnit, photographyPackage._id);
     this.assertSchedulingPolicy(nextSchedulingPolicy);
     const nextStatus = (update.status as PackageStatus | undefined) ?? photographyPackage.status;
     if (nextStatus === PackageStatus.Active) {
@@ -133,6 +152,23 @@ export class PhotographyPackagesService {
     );
     if (!updated) {
       throw new NotFoundException('Không tìm thấy gói chụp ảnh');
+    }
+    if (updated.serviceGroupId) {
+      await this.packageModel.updateMany(
+        { providerId: provider._id, serviceGroupId: updated.serviceGroupId, _id: { $ne: updated._id } },
+        {
+          $set: {
+            serviceName: updated.serviceName,
+            description: updated.description,
+            categoryId: updated.categoryId,
+            conceptCategoryIds: updated.conceptCategoryIds,
+            styleCategoryIds: updated.styleCategoryIds,
+            eventCategoryIds: updated.eventCategoryIds,
+            images: updated.images,
+            travelFeeNotes: updated.travelFeeNotes,
+          },
+        },
+      );
     }
     return updated;
   }
@@ -163,6 +199,9 @@ export class PhotographyPackagesService {
     if (!Number.isInteger(overtimeIncrementMinutes) || overtimeIncrementMinutes < 30) {
       throw new BadRequestException('Bước tăng giờ phải là số phút nguyên, từ 30 phút trở lên.');
     }
+    if (includedDurationMinutes % overtimeIncrementMinutes !== 0) {
+      throw new BadRequestException('Thời lượng bao gồm phải chia hết cho bước tăng giờ.');
+    }
     if (!Number.isInteger(maxOvertimeMinutes) || maxOvertimeMinutes < 0) {
       throw new BadRequestException('Giới hạn tăng giờ không hợp lệ.');
     }
@@ -170,6 +209,44 @@ export class PhotographyPackagesService {
       throw new BadRequestException('Giới hạn tăng giờ phải chia hết cho bước tăng giờ.');
     }
   }
+  private async findServiceAnchor(
+    providerId: Types.ObjectId,
+    serviceGroupId: string,
+  ): Promise<PhotographyPackageDocument | null> {
+    const groupConditions: Record<string, unknown>[] = [{ serviceGroupId }];
+    if (Types.ObjectId.isValid(serviceGroupId)) {
+      groupConditions.push({ _id: new Types.ObjectId(serviceGroupId) });
+    }
+    return this.packageModel.findOne({ providerId, $or: groupConditions });
+  }
+
+  private async assertUniquePricingUnit(
+    providerId: Types.ObjectId,
+    serviceGroupId: string,
+    pricingUnit: PhotographyPricingUnit,
+    excludeId?: Types.ObjectId,
+  ): Promise<void> {
+    const groupConditions: Record<string, unknown>[] = [{ serviceGroupId }];
+    if (Types.ObjectId.isValid(serviceGroupId)) {
+      groupConditions.push({ _id: new Types.ObjectId(serviceGroupId) });
+    }
+    const existing = await this.packageModel.exists({
+      providerId,
+      pricingUnit,
+      $or: groupConditions,
+      ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+    });
+    if (existing) {
+      throw new BadRequestException('Dịch vụ này đã có một gói với cùng cách tính giá.');
+    }
+  }
+
+  private defaultPlanName(pricingUnit: PhotographyPricingUnit): string {
+    if (pricingUnit === PhotographyPricingUnit.PerDay) return 'Gói theo ngày';
+    if (pricingUnit === PhotographyPricingUnit.PerBooking) return 'Gói trọn booking';
+    return 'Gói theo buổi';
+  }
+
   private async validateCategoryInputs(input: {
     categoryId?: string | null;
     conceptCategoryIds?: string[];
@@ -229,11 +306,43 @@ export class PhotographyPackagesService {
     return photographyPackage;
   }
 
-  private assertPackageReady(photographyPackage: { images?: string[] }): void {
+  private assertPackageReady(photographyPackage: {
+    images?: string[];
+    price?: number;
+    pricingUnit?: PhotographyPricingUnit;
+    includedSessionCount?: number | null;
+    includedDayCount?: number | null;
+  }): void {
     if (!photographyPackage.images?.length) {
       throw new BadRequestException(
         'Thêm ít nhất một ảnh minh họa trước khi đăng bán gói chụp ảnh',
       );
+    }
+    if (!Number.isFinite(photographyPackage.price) || Number(photographyPackage.price) <= 0) {
+      throw new BadRequestException('Giá gói phải lớn hơn 0 trước khi đăng bán.');
+    }
+
+    const pricingUnit =
+      photographyPackage.pricingUnit ?? PhotographyPricingUnit.PerSession;
+    if (pricingUnit === PhotographyPricingUnit.PerBooking) {
+      if (
+        !Number.isInteger(photographyPackage.includedSessionCount) ||
+        Number(photographyPackage.includedSessionCount) < 1
+      ) {
+        throw new BadRequestException('Gói trọn booking phải bao gồm ít nhất 1 buổi chụp.');
+      }
+      if (
+        !Number.isInteger(photographyPackage.includedDayCount) ||
+        Number(photographyPackage.includedDayCount) < 1
+      ) {
+        throw new BadRequestException('Gói trọn booking phải bao gồm ít nhất 1 ngày chụp.');
+      }
+      if (
+        Number(photographyPackage.includedSessionCount) <
+        Number(photographyPackage.includedDayCount)
+      ) {
+        throw new BadRequestException('Số buổi bao gồm không thể ít hơn số ngày bao gồm.');
+      }
     }
   }
   private assertCanPublish(provider: Provider): void {

@@ -11,6 +11,8 @@ export interface CategoryMetadata {
   color?: string;
   occasion?: string;
   season?: string;
+  /** IDs of photography service categories this tag should be suggested for. */
+  photographyCategoryIds?: string[];
 }
 
 export interface Category {

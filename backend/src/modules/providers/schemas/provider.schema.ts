@@ -62,6 +62,10 @@ export interface ProviderMedia {
 
 export interface ProviderPolicies {
   cancellationPolicy?: string | null;
+  cancellationPolicyConfig?: {
+    refundRules: Array<{ noticeDays: number; refundPercent: number }>;
+    additionalNotes?: string | null;
+  } | null;
   rentalPolicy?: string | null;
 }
 
@@ -141,6 +145,22 @@ export class Provider {
   @Prop({
     type: {
       cancellationPolicy: { type: String, default: null },
+      cancellationPolicyConfig: {
+        type: {
+          refundRules: {
+            type: [
+              {
+                _id: false,
+                noticeDays: { type: Number, required: true, min: 0, max: 365 },
+                refundPercent: { type: Number, required: true, min: 0, max: 100 },
+              },
+            ],
+            default: [],
+          },
+          additionalNotes: { type: String, default: null, trim: true, maxlength: 2000 },
+        },
+        default: null,
+      },
       rentalPolicy: { type: String, default: null },
     },
     default: {},

@@ -60,9 +60,20 @@ export const MainLayout: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
+  // Notification data belongs to the signed-in account. Never retain it after logout
+  // or an expired session, even while this layout remains mounted.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setNotifications([]);
+      setIsNotiOpen(false);
+      setLoadingNoti(false);
+    }
+  }, [isAuthenticated]);
+
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const handleMarkAsRead = async (id: string) => {
+    if (!isAuthenticated) return;
     try {
       await httpClient.request(`/notifications/${id}/read`, { method: 'PATCH' });
       setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n));
@@ -72,6 +83,7 @@ export const MainLayout: React.FC = () => {
   };
 
   const handleMarkAllAsRead = async () => {
+    if (!isAuthenticated) return;
     try {
       await httpClient.request('/notifications/read-all', { method: 'POST' });
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true, readAt: new Date().toISOString() })));
@@ -200,7 +212,7 @@ export const MainLayout: React.FC = () => {
           {/* Right Action Icons & User section */}
           <div className="vh-header-actions-redesigned">
             
-            <div style={{ position: 'relative' }} ref={notiRef}>
+            {isAuthenticated && <div style={{ position: 'relative' }} ref={notiRef}>
               <button 
                 className="vh-header-action-icon-custom" 
                 title="Thông báo"
@@ -403,7 +415,7 @@ export const MainLayout: React.FC = () => {
                   `}</style>
                 </div>
               )}
-            </div>
+            </div>}
             <Link to={ROUTES.CHAT} className="vh-header-action-icon-custom" title="Tin nhắn & Chat" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <MessageSquare size={20} />
             </Link>

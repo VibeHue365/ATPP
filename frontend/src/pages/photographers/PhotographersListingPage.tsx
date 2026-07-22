@@ -11,6 +11,7 @@ import type { Category } from '../../features/categories/types';
 import { PhotographerCard } from '../../features/photographers/components/PhotographerCard';
 import { usePhotographers } from '../../features/photographers/hooks/usePhotographers';
 import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
+import { CardSkeleton, EmptyState, ErrorState } from '../../components/feedback/AsyncState';
 import type { LocationSelection, PhotographerConcept, PhotographerDiscoverySort } from '../../features/photographers/types/photographer.types';
 import './PhotographersListingPage.css';
 
@@ -517,31 +518,11 @@ export const PhotographersListingPage: React.FC = () => {
           )}
 
           {isLoading ? (
-            <div className="pl-loading-container">
-              <div className="vh-loading-spinner">
-                <div className="vh-loading-double-bounce1" />
-                <div className="vh-loading-double-bounce2" />
-              </div>
-              <span className="pl-loading-text">Đang tìm nhiếp ảnh gia...</span>
-            </div>
+            <CardSkeleton count={3} />
           ) : error ? (
-            <div className="pl-error-container">
-              <h3 className="font-header">Không thể tải dữ liệu</h3>
-              <p>{error}</p>
-            </div>
+            <ErrorState message={error} action={{ label: 'Thử lại', onClick: () => window.location.reload() }} />
           ) : photographers.length === 0 ? (
-            <div className="pl-empty-container">
-              <Search size={48} className="pl-empty-icon" />
-              <h3 className="pl-empty-title">Không tìm thấy nhiếp ảnh gia phù hợp</h3>
-              <p className="pl-empty-subtitle">Hãy thử thay đổi từ khóa hoặc bộ lọc.</p>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="vh-btn vh-btn-outline"
-              >
-                Xóa bộ lọc
-              </button>
-            </div>
+            <EmptyState title="Không tìm thấy nhiếp ảnh gia phù hợp" message="Hãy thử thay đổi từ khóa hoặc bộ lọc." action={{ label: 'Xóa bộ lọc', onClick: clearFilters }} />
           ) : (
             <>
               <div className="pl-grid">
