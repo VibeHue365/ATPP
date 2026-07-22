@@ -130,6 +130,7 @@ export class ProductAvailabilityService {
       productId,
       size,
       color: normalizedColor,
+      status: 'AVAILABLE',
       conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
     } as any);
 
