@@ -74,6 +74,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'appointments' | 'rentals' | 'favorites' | 'payments'>('appointments');
   const [favoriteSubTab, setFavoriteSubTab] = useState<'aodai' | 'photographer'>('aodai');
   const [payments, setPayments] = useState<any[]>([]);
+  const [paymentCategoryTab, setPaymentCategoryTab] = useState<'all' | 'aodai' | 'photography'>('all');
   const [realProductList, setRealProductList] = useState<any[]>([]);
   const [realPhotographersList, setRealPhotographersList] = useState<any[]>([]);
 
@@ -1574,117 +1575,233 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             </div>
           ) : (
           <div className="vh-profile-payments-table-wrapper">
-            {payments.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', width: '100%' }}>
-                <ShieldCheck size={32} style={{ color: '#8C827A', margin: '0 auto 12px' }} />
-                <h5 className="font-header" style={{ fontSize: '16px', color: '#2D2926', marginBottom: '4px' }}>Chưa có lịch sử giao dịch</h5>
-                <p style={{ fontSize: '13px', color: '#8C827A' }}>Bạn chưa thực hiện bất kỳ giao dịch thanh toán nào.</p>
-              </div>
-            ) : (
-              <table className="vh-profile-payments-table">
-                <thead>
-                  <tr>
-                    <th>Mã giao dịch</th>
-                    <th>Dịch vụ</th>
-                    <th>Số tiền</th>
-                    <th>Phương thức</th>
-                    <th>Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map((p) => (
-                    <tr
-                      key={p._id || p.paymentCode}
-                      onClick={() => {
-                        let bId = p.bookingId;
-                        if (bId && typeof bId === 'object') {
-                          bId = bId.id || bId._id;
-                        }
-                        if (bId) {
-                          setSelectedBookingId(bId);
-                          setIsDetailModalOpen(true);
-                        }
-                      }}
-                      style={{ cursor: 'pointer' }}
-                      className="hover:bg-stone-50 transition"
-                    >
-                      <td style={{ fontWeight: 700 }}>{p.paymentCode}</td>
-                      <td style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                        {p.purpose === 'DEPOSIT_PAYMENT'
-                          ? 'Đặt cọc giữ chỗ'
-                          : p.purpose === 'DEPOSIT_REFUND'
-                            ? 'Hoàn trả tiền cọc'
-                            : 'Thanh toán hoàn tất'}
-                      </td>
-                      <td style={{
-                        fontWeight: 800,
-                        color: p.purpose === 'DEPOSIT_REFUND' ? '#2e7d32' : 'var(--color-primary-dark)'
-                      }}>
-                        {p.purpose === 'DEPOSIT_REFUND' ? '+' : ''}{p.amount?.toLocaleString('vi-VN')}đ
-                      </td>
-                      <td>
-                        {p.paymentMethod === 'PAYOS_REFUND'
-                          ? 'Hoàn tiền (PayOS)'
-                          : p.paymentMethod || 'PayOS (VietQR)'}
-                      </td>
-                      <td>
-                        {p.status === 'SUCCESS' ? (
-                          <span className="vh-profile-payment-status-success-badge" style={{
-                            backgroundColor: p.purpose === 'DEPOSIT_REFUND' ? '#e8f5e9' : undefined,
-                            color: p.purpose === 'DEPOSIT_REFUND' ? '#2e7d32' : undefined,
-                          }}>
-                            <ShieldCheck size={12} style={{ marginRight: '4px' }} />
-                            <span>Thành công</span>
-                          </span>
-                        ) : p.status === 'PENDING' ? (
-                          <span className="vh-profile-payment-status-pending-badge" style={{
-                            backgroundColor: '#FEF3C7',
-                            color: '#D97706',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                          }}>
-                            <Clock size={12} style={{ marginRight: '4px' }} />
-                            <span>Chờ thanh toán</span>
-                          </span>
-                        ) : p.status === 'CANCELLED' ? (
-                          <span className="vh-profile-payment-status-cancelled-badge" style={{
-                            backgroundColor: '#FEE2E2',
-                            color: '#DC2626',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                          }}>
-                            <X size={12} style={{ marginRight: '4px' }} />
-                            <span>Đã hủy</span>
-                          </span>
-                        ) : (
-                          <span className="vh-profile-payment-status-failed-badge" style={{
-                            backgroundColor: '#FEE2E2',
-                            color: '#DC2626',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                          }}>
-                            <X size={12} style={{ marginRight: '4px' }} />
-                            <span>Thất bại</span>
-                          </span>
-                        )}
-                      </td>
+            {/* Payment Category Sub-Tabs */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setPaymentCategoryTab('all')}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '20px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  border: '1px solid',
+                  borderColor: paymentCategoryTab === 'all' ? '#2D2926' : '#EAEAE8',
+                  backgroundColor: paymentCategoryTab === 'all' ? '#2D2926' : '#FFFFFF',
+                  color: paymentCategoryTab === 'all' ? '#FFFFFF' : '#6B7280',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: paymentCategoryTab === 'all' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
+                }}
+              >
+                Tất cả ({payments.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentCategoryTab('aodai')}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '20px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  border: '1px solid',
+                  borderColor: paymentCategoryTab === 'aodai' ? '#2D2926' : '#EAEAE8',
+                  backgroundColor: paymentCategoryTab === 'aodai' ? '#2D2926' : '#FFFFFF',
+                  color: paymentCategoryTab === 'aodai' ? '#FFFFFF' : '#6B7280',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: paymentCategoryTab === 'aodai' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
+                }}
+              >
+                👘 Đơn thuê áo dài
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentCategoryTab('photography')}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '20px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  border: '1px solid',
+                  borderColor: paymentCategoryTab === 'photography' ? '#2D2926' : '#EAEAE8',
+                  backgroundColor: paymentCategoryTab === 'photography' ? '#2D2926' : '#FFFFFF',
+                  color: paymentCategoryTab === 'photography' ? '#FFFFFF' : '#6B7280',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: paymentCategoryTab === 'photography' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
+                }}
+              >
+                📷 Đơn photographer
+              </button>
+            </div>
+
+            {(() => {
+              const filteredList = payments.filter((p) => {
+                if (paymentCategoryTab === 'all') return true;
+
+                let bType: string | undefined = undefined;
+                if (p.bookingId && typeof p.bookingId === 'object') {
+                  bType = p.bookingId.bookingType;
+                }
+                if (!bType) {
+                  const bIdStr = typeof p.bookingId === 'object' ? (p.bookingId._id || p.bookingId.id) : p.bookingId;
+                  const matchedBooking = bookings.find((b) => (b._id || b.id) === bIdStr);
+                  if (matchedBooking) {
+                    bType = matchedBooking.bookingType;
+                  }
+                }
+
+                if (paymentCategoryTab === 'aodai') {
+                  return bType === 'AODAI_RENTAL' || bType === 'COMBO' || !bType;
+                }
+                if (paymentCategoryTab === 'photography') {
+                  return bType === 'PHOTOGRAPHY' || bType === 'COMBO';
+                }
+                return true;
+              });
+
+              if (filteredList.length === 0) {
+                return (
+                  <div style={{ textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', width: '100%' }}>
+                    <ShieldCheck size={32} style={{ color: '#8C827A', margin: '0 auto 12px' }} />
+                    <h5 className="font-header" style={{ fontSize: '16px', color: '#2D2926', marginBottom: '4px' }}>Chưa có lịch sử giao dịch</h5>
+                    <p style={{ fontSize: '13px', color: '#8C827A' }}>
+                      {paymentCategoryTab === 'aodai'
+                        ? 'Chưa có giao dịch nào thuộc đơn thuê áo dài.'
+                        : paymentCategoryTab === 'photography'
+                          ? 'Chưa có giao dịch nào thuộc đơn photographer.'
+                          : 'Bạn chưa thực hiện bất kỳ giao dịch thanh toán nào.'}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <table className="vh-profile-payments-table">
+                  <thead>
+                    <tr>
+                      <th>Mã giao dịch</th>
+                      <th>Dịch vụ</th>
+                      <th>Số tiền</th>
+                      <th>Phương thức</th>
+                      <th>Trạng thái</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  </thead>
+                  <tbody>
+                    {filteredList.map((p) => {
+                      let bType: string | undefined = undefined;
+                      if (p.bookingId && typeof p.bookingId === 'object') {
+                        bType = p.bookingId.bookingType;
+                      }
+                      if (!bType) {
+                        const bIdStr = typeof p.bookingId === 'object' ? (p.bookingId._id || p.bookingId.id) : p.bookingId;
+                        const matchedBooking = bookings.find((b) => (b._id || b.id) === bIdStr);
+                        if (matchedBooking) bType = matchedBooking.bookingType;
+                      }
+
+                      return (
+                        <tr
+                          key={p._id || p.paymentCode}
+                          onClick={() => {
+                            let bId = p.bookingId;
+                            if (bId && typeof bId === 'object') {
+                              bId = bId.id || bId._id;
+                            }
+                            if (bId) {
+                              setSelectedBookingId(bId);
+                              setIsDetailModalOpen(true);
+                            }
+                          }}
+                          style={{ cursor: 'pointer' }}
+                          className="hover:bg-stone-50 transition"
+                        >
+                          <td style={{ fontWeight: 700 }}>{p.paymentCode}</td>
+                          <td style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                            <div style={{ fontWeight: 600, color: '#2D2926' }}>
+                              {p.purpose === 'DEPOSIT_PAYMENT'
+                                ? 'Đặt cọc giữ chỗ'
+                                : p.purpose === 'DEPOSIT_REFUND'
+                                  ? 'Hoàn trả tiền cọc'
+                                  : 'Thanh toán hoàn tất'}
+                            </div>
+                            {bType && (
+                              <div style={{ fontSize: '11px', color: '#8C827A', marginTop: '2px' }}>
+                                {bType === 'PHOTOGRAPHY' ? '📷 Gói chụp ảnh' : bType === 'COMBO' ? '✨ Combo Thuê & Chụp' : '👘 Thuê áo dài'}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{
+                            fontWeight: 800,
+                            color: p.purpose === 'DEPOSIT_REFUND' ? '#2e7d32' : 'var(--color-primary-dark)'
+                          }}>
+                            {p.purpose === 'DEPOSIT_REFUND' ? '+' : ''}{p.amount?.toLocaleString('vi-VN')}đ
+                          </td>
+                          <td>
+                            {p.paymentMethod === 'PAYOS_REFUND'
+                              ? 'Hoàn tiền (PayOS)'
+                              : p.paymentMethod || 'PayOS (VietQR)'}
+                          </td>
+                          <td>
+                            {p.status === 'SUCCESS' ? (
+                              <span className="vh-profile-payment-status-success-badge" style={{
+                                backgroundColor: p.purpose === 'DEPOSIT_REFUND' ? '#e8f5e9' : undefined,
+                                color: p.purpose === 'DEPOSIT_REFUND' ? '#2e7d32' : undefined,
+                              }}>
+                                <ShieldCheck size={12} style={{ marginRight: '4px' }} />
+                                <span>Thành công</span>
+                              </span>
+                            ) : p.status === 'PENDING' ? (
+                              <span className="vh-profile-payment-status-pending-badge" style={{
+                                backgroundColor: '#FEF3C7',
+                                color: '#D97706',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                              }}>
+                                <Clock size={12} style={{ marginRight: '4px' }} />
+                                <span>Chờ thanh toán</span>
+                              </span>
+                            ) : p.status === 'CANCELLED' ? (
+                              <span className="vh-profile-payment-status-cancelled-badge" style={{
+                                backgroundColor: '#FEE2E2',
+                                color: '#DC2626',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                              }}>
+                                <X size={12} style={{ marginRight: '4px' }} />
+                                <span>Đã hủy</span>
+                              </span>
+                            ) : (
+                              <span className="vh-profile-payment-status-failed-badge" style={{
+                                backgroundColor: '#FEE2E2',
+                                color: '#DC2626',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                              }}>
+                                <X size={12} style={{ marginRight: '4px' }} />
+                                <span>Thất bại</span>
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              );
+            })()}
           </div>
           )
         )}

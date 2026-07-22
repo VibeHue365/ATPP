@@ -46,6 +46,17 @@ export class PaymentsRepository {
       .exec();
   }
 
+  async deleteRefundPaymentsByBookingIds(
+    bookingIds: Types.ObjectId[],
+  ): Promise<void> {
+    await this.paymentModel
+      .deleteMany({
+        bookingId: { $in: bookingIds },
+        purpose: PaymentPurpose.DepositRefund,
+      })
+      .exec();
+  }
+
   async findPaymentByCode(
     paymentCode: string,
     session?: ClientSession,
