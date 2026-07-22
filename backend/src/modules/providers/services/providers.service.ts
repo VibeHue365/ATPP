@@ -461,7 +461,7 @@ export class ProvidersService {
     );
   }
 
-  async getProviderAnalytics(userIdStr: string) {
+  async getProviderAnalytics(userIdStr: string, period = 'month') {
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
     if (!provider) {
@@ -556,22 +556,58 @@ const bookingIds = bookings.map((booking) => booking._id);
         color: row._id === 'AVAILABLE' ? 'available' : row._id === 'RENTED' ? 'rental' : 'maintenance',
       })));
 
-    // 5. UC-K08: Doanh thu theo thời gian (6 tháng gần đây)
+    // 5. UC-K08: Doanh thu theo thời gian (Tuần, Tháng, Năm)
     const revenueGrowth = [];
-    for (let i = 5; i >= 0; i--) {
-      const month = new Date();
-      month.setDate(1);
-      month.setHours(0, 0, 0, 0);
-      month.setMonth(month.getMonth() - i);
-      const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
-      const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
-      const value = bookings.reduce((sum, booking) => {
-        const createdAt = new Date((booking as any).createdAt);
-        return createdAt >= monthStart && createdAt < monthEnd
-          ? sum + (revenueByBooking.get(booking._id.toString()) || 0)
-          : sum;
-      }, 0);
-      revenueGrowth.push({ label: `Tháng ${month.getMonth() + 1}`, value });
+    const now = new Date();
+
+    if (period === 'week') {
+      const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+        const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+        const value = bookings.reduce((sum, booking) => {
+          const createdAt = new Date((booking as any).createdAt);
+          return createdAt >= dayStart && createdAt <= dayEnd
+            ? sum + (revenueByBooking.get(booking._id.toString()) || 0)
+            : sum;
+        }, 0);
+        const shortLabel = dayNames[d.getDay()];
+        const label = `${shortLabel} (${d.getDate()}/${d.getMonth() + 1})`;
+        revenueGrowth.push({ label, shortLabel, value });
+      }
+    } else if (period === 'year') {
+      const currentYear = now.getFullYear();
+      for (let i = 4; i >= 0; i--) {
+        const year = currentYear - i;
+        const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
+        const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+        const value = bookings.reduce((sum, booking) => {
+          const createdAt = new Date((booking as any).createdAt);
+          return createdAt >= yearStart && createdAt <= yearEnd
+            ? sum + (revenueByBooking.get(booking._id.toString()) || 0)
+            : sum;
+        }, 0);
+        revenueGrowth.push({ label: `${year}`, shortLabel: `${year}`, value });
+      }
+    } else {
+      // 'month'
+      for (let i = 5; i >= 0; i--) {
+        const month = new Date(now);
+        month.setDate(1);
+        month.setHours(0, 0, 0, 0);
+        month.setMonth(month.getMonth() - i);
+        const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
+        const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+        const value = bookings.reduce((sum, booking) => {
+          const createdAt = new Date((booking as any).createdAt);
+          return createdAt >= monthStart && createdAt < monthEnd
+            ? sum + (revenueByBooking.get(booking._id.toString()) || 0)
+            : sum;
+        }, 0);
+        revenueGrowth.push({ label: `Tháng ${month.getMonth() + 1}`, shortLabel: `T${month.getMonth() + 1}`, value });
+      }
     }
 
     // 6. UC-K10: Lịch booking (Lấy lịch chụp thật của photographer)

@@ -168,20 +168,33 @@ export const ChatPage: React.FC = () => {
     setAttachmentUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     const hasText = !!inputText.trim();
     const hasAttachments = attachmentUrls.length > 0;
-    if ((!hasText && !hasAttachments) || !activeRoom || !socket) return;
+    if ((!hasText && !hasAttachments) || !activeRoom) return;
 
-    const payload = {
-      roomId: activeRoom.id,
-      messageText: inputText.trim(),
-      attachments: attachmentUrls,
-    };
+    const textToSend = inputText.trim();
+    const attachmentsToSend = [...attachmentUrls];
 
-    socket.emit('send_message', payload);
     setInputText('');
     setAttachmentUrls([]);
+
+    try {
+      if (socket && isConnected) {
+        socket.emit('send_message', {
+          roomId: activeRoom.id,
+          messageText: textToSend,
+          attachments: attachmentsToSend,
+        });
+      } else {
+        const newMsg = await chatService.sendMessage(activeRoom.id, textToSend, attachmentsToSend);
+        setMessages((prev) => [...prev, newMsg]);
+        fetchRooms(activeRoom.id);
+      }
+    } catch (err: any) {
+      console.error('Failed to send message:', err);
+      toast.error('Không thể gửi tin nhắn. Vui lòng thử lại.');
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -511,33 +524,7 @@ export const ChatPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#78716c',
-                      cursor: 'pointer',
-                      padding: '8px',
-                      borderRadius: '50%',
-                    }}
-                    title="Gọi thoại"
-                  >
-                    <Phone size={18} />
-                  </button>
-                  <button
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#78716c',
-                      cursor: 'pointer',
-                      padding: '8px',
-                      borderRadius: '50%',
-                    }}
-                  >
-                    <MoreVertical size={18} />
-                  </button>
-                </div>
+                {/* Actions container removed */}
               </div>
 
               {/* Message Stream */}

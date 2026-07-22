@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { AdminReloadButton } from './AdminReloadButton';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../services/httpClient';
 import { RefreshCw, CheckCircle2, XCircle, Clock, Search, AlertTriangle } from 'lucide-react';
@@ -153,19 +154,7 @@ export const RefundManagement: React.FC = () => {
             Theo dõi, phê duyệt và thực thi yêu cầu hoàn tiền cọc & hủy đơn hàng cho khách hàng qua cổng PayOS.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px',
-            backgroundColor: 'white', border: '1px solid #E8E2D5', borderRadius: '8px',
-            fontSize: '13px', fontWeight: 700, color: '#4A0E17', cursor: 'pointer',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.04)', transition: 'all 0.2s',
-          }}
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Tải lại danh sách
-        </button>
+        <AdminReloadButton onClick={() => void load()} isLoading={loading} label="Tải lại danh sách" />
       </div>
 
       {/* Summary Cards */}

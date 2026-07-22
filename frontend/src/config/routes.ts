@@ -23,5 +23,7 @@ export const ROUTES = {
   COMBOS: '/combos',
   COMBO_DETAIL: '/combos/:id',
   PROVIDER_STORE: '/stores/:id',
+  NOTIFICATIONS: '/notifications',
+  CHAT: '/chat',
 } as const;
 // Touch to reload.

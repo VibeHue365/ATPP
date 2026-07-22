@@ -14,6 +14,10 @@ export const chatService = {
     return httpClient.post<ChatRoom>('/chat/rooms', { otherUserId });
   },
 
+  async sendMessage(roomId: string, messageText: string, attachments: string[] = []): Promise<ChatMessage> {
+    return httpClient.post<ChatMessage>(`/chat/rooms/${roomId}/messages`, { messageText, attachments });
+  },
+
   async uploadChatImage(file: File): Promise<string> {
     const formData = new FormData();
     formData.append('file', file);

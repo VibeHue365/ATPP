@@ -157,8 +157,11 @@ export class ProvidersController {
   }
 
   @Get('me/analytics')
-  async getAnalytics(@CurrentUser() user: AuthUser) {
-    return this.providersService.getProviderAnalytics(user.sub);
+  async getAnalytics(
+    @CurrentUser() user: AuthUser,
+    @Query('period') period?: string,
+  ) {
+    return this.providersService.getProviderAnalytics(user.sub, period);
   }
 
   /** GET /providers/me/wallet — Xem số dư ví thợ ảnh */

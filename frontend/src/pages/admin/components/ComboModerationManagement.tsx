@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { AdminReloadButton } from './AdminReloadButton';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
 import { Check, X, RefreshCw, Clock, Layers, Camera, AlertCircle } from 'lucide-react';
@@ -121,19 +122,7 @@ export const ComboModerationManagement: React.FC = () => {
             Xem xét và phê duyệt các gói combo kết hợp (Thuê Áo dài + Thợ chụp ảnh) từ các nhà cung cấp trước khi hiển thị cho khách hàng.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void loadCombos()}
-          disabled={loading}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px',
-            backgroundColor: 'white', border: '1px solid #E8E2D5', borderRadius: '8px',
-            fontSize: '13px', fontWeight: 700, color: '#4A0E17', cursor: 'pointer',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.04)', transition: 'all 0.2s',
-          }}
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Tải lại dữ liệu
-        </button>
+        <AdminReloadButton onClick={() => void loadCombos()} isLoading={loading} label="Tải lại dữ liệu" />
       </div>
 
       {/* Summary Stat Cards */}

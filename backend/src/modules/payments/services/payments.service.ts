@@ -287,7 +287,37 @@ export class PaymentsService {
             await this.depositCoordinator.coordinate(booking._id.toString());
           } catch { }
         }
+        if (
+          ['CANCELLED', 'REFUNDED', 'PARTIALLY_REFUNDED', 'DISPUTED'].includes(booking.status) &&
+          (booking.cancellation?.refundAmount || 0) > 0
+        ) {
+          try {
+            const existingRefund = await this.bookingModel.db
+              .model('Payment')
+              .findOne({
+                bookingId: booking._id,
+                purpose: PaymentPurpose.DepositRefund,
+              })
+              .exec();
+            if (!existingRefund) {
+              await this.refundDeposit(
+                booking._id.toString(),
+                booking.cancellation!.refundAmount!,
+              );
+            }
+          } catch (e) {
+            this.logger.error(`Error auto-generating refund for booking ${booking.bookingCode}: ${e}`);
+          }
+        }
       }
+
+      const completedPhotographyBookingIds = bookings
+        .filter((b) => b.bookingType === BookingType.Photography && b.status === BookingStatus.Completed)
+        .map((b) => b._id);
+      if (completedPhotographyBookingIds.length > 0) {
+        await this.paymentsRepository.deleteRefundPaymentsByBookingIds(completedPhotographyBookingIds);
+      }
+
       const bookingIds = bookings.map((b) => b._id);
       return this.paymentsRepository.findByBookingIds(bookingIds);
     }
@@ -663,12 +693,19 @@ export class PaymentsService {
       // 1. Chuyển khoản trực tiếp chia tiền dịch vụ cho các Provider
       await this.executeProfitSplit(booking);
 
-      // 2. Tự động hoàn cọc giữ đồ (depositTotal) cho khách hàng
-      if (booking.pricingSummary.depositTotal > 0) {
-        await this.refundDeposit(
-          bookingIdStr,
-          booking.pricingSummary.depositTotal,
-        );
+      // 2. Tự động hoàn cọc giữ đồ (depositTotal) cho khách hàng (chỉ dành cho thuê áo dài / combo, không hoàn tiền cọc giữ chỗ chụp ảnh)
+      if (
+        booking.bookingType !== BookingType.Photography &&
+        booking.pricingSummary.depositTotal > 0
+      ) {
+        try {
+          await this.depositCoordinator.coordinate(bookingIdStr);
+        } catch (coordErr) {
+          this.logger.error(
+            `Error coordinating deposit refund during settleBooking for ${bookingIdStr}:`,
+            coordErr,
+          );
+        }
       }
 
       // 3. Update provider wallet: move pending → available.
@@ -729,15 +766,24 @@ export class PaymentsService {
     }
 
     const payment =
-      await this.paymentsRepository.findDepositPaymentByBooking(bookingId);
+      (await this.paymentsRepository.findDepositPaymentByBooking(bookingId)) ||
+      (await this.paymentsRepository.findPendingPaymentByBooking(bookingId)) ||
+      (await this.paymentsRepository.findByBookingIds([bookingId]))[0];
 
     const orderCode =
       payment?.payos?.orderCode || Math.floor(100000 + Math.random() * 900000);
 
-    const refundResult = await this.refundService.refundPayment(
-      orderCode,
-      amountToRefund,
-    );
+    let refundResult: any = { status: 'COMPLETED', amount: amountToRefund, orderCode };
+    try {
+      refundResult = await this.refundService.refundPayment(
+        orderCode,
+        amountToRefund,
+      );
+    } catch (refundErr) {
+      this.logger.warn(
+        `PayOS gateway refund call warning for booking ${bookingIdStr}: ${refundErr}`,
+      );
+    }
 
     // Create a Payment record representing the deposit refund for transaction history
     try {

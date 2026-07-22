@@ -262,7 +262,7 @@ export class BookingsService implements OnApplicationBootstrap {
     private readonly policyResolverService: PolicyResolverService,
     @Inject(forwardRef(() => RentalDepositRefundCoordinatorService))
     private readonly rentalDepositRefundCoordinator: RentalDepositRefundCoordinatorService,
-  ) { }
+  ) {}
 
   async onApplicationBootstrap() {
     try {
@@ -850,7 +850,7 @@ export class BookingsService implements OnApplicationBootstrap {
             'rescheduleRequest.resolvedBy': provider._id,
             'rescheduleRequest.resolvedAt': resolvedAt,
             'rescheduleRequest.providerNote': note?.trim() || null,
-          }
+          },
         },
       );
       return { status: 'APPROVED' };
@@ -1423,12 +1423,12 @@ export class BookingsService implements OnApplicationBootstrap {
           rentalFulfillment:
             itemType === BookingItemType.Product
               ? this.createRentalFulfillmentForDates(
-                item.rentalType,
-                item.rentalFrom,
-                item.rentalTo,
-                item.shootDate,
-                item.shootTimeSlot,
-              )
+                  item.rentalType,
+                  item.rentalFrom,
+                  item.rentalTo,
+                  item.shootDate,
+                  item.shootTimeSlot,
+                )
               : null,
           rentalType: item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY',
           comboDiscountPercent,
@@ -2467,19 +2467,19 @@ export class BookingsService implements OnApplicationBootstrap {
     const bookingIds = bookings.map((booking) => booking._id);
     const items = bookingIds.length
       ? await this.bookingItemModel
-        .find({ bookingId: { $in: bookingIds }, providerId: provider._id })
-        .populate('productId')
-        .populate('photographyPackageId')
-        .lean()
-        .exec()
+          .find({ bookingId: { $in: bookingIds }, providerId: provider._id })
+          .populate('productId')
+          .populate('photographyPackageId')
+          .lean()
+          .exec()
       : [];
 
     const schedules = bookingIds.length
       ? await this.bookingModel.db
-        .model('BookingSchedule')
-        .find({ bookingId: { $in: bookingIds } })
-        .lean()
-        .exec()
+          .model('BookingSchedule')
+          .find({ bookingId: { $in: bookingIds } })
+          .lean()
+          .exec()
       : [];
 
     const updatedItems = items.map((item) => {
@@ -2532,8 +2532,11 @@ export class BookingsService implements OnApplicationBootstrap {
     if (!booking) throw new NotFoundException('Booking not found');
 
     if (
-      [BookingStatus.Returned, BookingStatus.Completed].includes(booking.status as BookingStatus) &&
-      (!booking.rentalDepositRefund?.status || booking.rentalDepositRefund.status === 'PENDING')
+      [BookingStatus.Returned, BookingStatus.Completed].includes(
+        booking.status,
+      ) &&
+      (!booking.rentalDepositRefund?.status ||
+        booking.rentalDepositRefund.status === 'PENDING')
     ) {
       await this.rentalDepositRefundCoordinator.coordinate(bookingIdStr);
       booking = (await this.bookingModel
@@ -3177,22 +3180,22 @@ export class BookingsService implements OnApplicationBootstrap {
               },
               status: violationPolicy.autoSuspendEnabled
                 ? {
-                  $cond: [
-                    {
-                      $gte: [
-                        {
-                          $add: [
-                            { $ifNull: ['$violationCount', 0] },
-                            violationPoint,
-                          ],
-                        },
-                        violationPolicy.maxWarningsBeforeSuspend,
-                      ],
-                    },
-                    ProviderStatus.Suspended,
-                    '$status',
-                  ],
-                }
+                    $cond: [
+                      {
+                        $gte: [
+                          {
+                            $add: [
+                              { $ifNull: ['$violationCount', 0] },
+                              violationPoint,
+                            ],
+                          },
+                          violationPolicy.maxWarningsBeforeSuspend,
+                        ],
+                      },
+                      ProviderStatus.Suspended,
+                      '$status',
+                    ],
+                  }
                 : '$status',
             },
           },
@@ -3241,7 +3244,7 @@ export class BookingsService implements OnApplicationBootstrap {
           penaltyAmount +=
             Math.round(
               item.unitPrice *
-              cancellationPolicy.photographyLateCancelPenaltyRate,
+                cancellationPolicy.photographyLateCancelPenaltyRate,
             ) * item.quantity;
         }
       }
@@ -3266,13 +3269,13 @@ export class BookingsService implements OnApplicationBootstrap {
             providerPenalty +=
               Math.round(
                 item.unitPrice *
-                cancellationPolicy.productLateCancelPenaltyRate,
+                  cancellationPolicy.productLateCancelPenaltyRate,
               ) * item.quantity;
           } else {
             providerPenalty +=
               Math.round(
                 item.unitPrice *
-                cancellationPolicy.photographyLateCancelPenaltyRate,
+                  cancellationPolicy.photographyLateCancelPenaltyRate,
               ) * item.quantity;
           }
         }
@@ -3396,12 +3399,12 @@ export class BookingsService implements OnApplicationBootstrap {
     // Trả về định dạng phù hợp cho cả 2 luồng gọi
     return Array.isArray(rolesOrCancelledByUserId)
       ? {
-        success: true,
-        booking: savedBooking,
-        isFreeCancel,
-        refundAmount,
-        penaltyReason,
-      }
+          success: true,
+          booking: savedBooking,
+          isFreeCancel,
+          refundAmount,
+          penaltyReason,
+        }
       : savedBooking;
   }
 
@@ -3628,7 +3631,7 @@ export class BookingsService implements OnApplicationBootstrap {
           });
         }
       }
-    } catch (_) { }
+    } catch (_) {}
 
     return {
       bookedDates,
