@@ -704,6 +704,7 @@ export class BookingStatusService {
           BookingStatus.Confirmed,
           BookingStatus.PickupPending,
           BookingStatus.Cancelled,
+          BookingStatus.Disputed,
         ],
         [BookingStatus.Confirmed]: [
           // Ao Dai rental path
@@ -711,11 +712,13 @@ export class BookingStatusService {
           // Photography path
           BookingStatus.InProgress,
           BookingStatus.Cancelled,
+          BookingStatus.Disputed,
         ],
         [BookingStatus.PickupPending]: [
           BookingStatus.PickedUp,
           BookingStatus.Cancelled,
           BookingStatus.InProgress,
+          BookingStatus.Disputed,
         ],
         [BookingStatus.PickedUp]: [
           BookingStatus.Returned,
@@ -737,6 +740,7 @@ export class BookingStatusService {
           BookingStatus.Cancelled,
           BookingStatus.Returned,
           BookingStatus.ReturnPending,
+          BookingStatus.Disputed,
         ],
         // Photography only: customer confirms or 48h auto-complete
         [BookingStatus.AwaitingReview]: [

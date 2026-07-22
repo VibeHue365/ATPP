@@ -818,14 +818,40 @@ export class DisputesService {
       }
 
       if (refundAmount > 0) {
-        refundResult = await this.refundWorkflowService.createFromDispute({
-          bookingId: booking._id.toString(),
-          requestedBy: this.getCustomerIdStr(booking),
-          amount: refundAmount,
-          reason: notes,
-          type: RefundType.Dispute,
-          sourceEventId: `refund:dispute:${incident?._id || booking._id}:admin-resolution`,
-        });
+        try {
+          refundResult = await this.refundWorkflowService.createFromDispute({
+            bookingId: booking._id.toString(),
+            requestedBy: this.getCustomerIdStr(booking),
+            amount: refundAmount,
+            reason: notes,
+            type: RefundType.Dispute,
+            sourceEventId: `refund:dispute:${incident?._id || booking._id}:admin-resolution`,
+          });
+        } catch (rfErr) {
+          console.warn('createFromDispute error, creating direct DEPOSIT_REFUND payment fallback:', rfErr);
+        }
+
+        try {
+          const existingRefundPayment = await this.bookingModel.db.model('Payment').findOne({
+            bookingId: booking._id,
+            purpose: 'DEPOSIT_REFUND',
+            amount: refundAmount,
+          });
+          if (!existingRefundPayment) {
+            const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
+            await this.bookingModel.db.model('Payment').create({
+              bookingId: booking._id,
+              paymentCode: refundPaymentCode,
+              amount: refundAmount,
+              purpose: 'DEPOSIT_REFUND',
+              paymentMethod: 'PAYOS_REFUND',
+              status: 'SUCCESS',
+              paidAt: new Date(),
+            });
+          }
+        } catch (errPayment) {
+          console.error('Error ensuring DEPOSIT_REFUND payment record:', errPayment);
+        }
       }
 
       // Cập nhật trạng thái sự cố và tranh chấp

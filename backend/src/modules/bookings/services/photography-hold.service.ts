@@ -483,6 +483,24 @@ export class PhotographyHoldService {
       }
     }
 
+    // Increment usedCount on ComboPromotion
+    const firstProductRes = aodaiReservations[0];
+    if (firstProductRes?.product?._id) {
+      try {
+        await this.bookingModel.db.model('ComboPromotion').updateOne(
+          {
+            providerId: photographyPackage.providerId,
+            productId: firstProductRes.product._id,
+            photographyPackageId: photographyPackage._id,
+            status: 'ACTIVE',
+          },
+          { $inc: { usedCount: 1 } },
+        ).session(session).exec();
+      } catch (e) {
+        console.warn('Failed to increment ComboPromotion usedCount:', e);
+      }
+    }
+
     return this.toComboHoldResponse(booking, session);
   }
 

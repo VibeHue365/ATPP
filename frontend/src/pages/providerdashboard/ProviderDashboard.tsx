@@ -242,7 +242,6 @@ export const ProviderDashboard: React.FC = () => {
   const [reviewsData, setReviewsData] = useState<any>(null);
   const [bookingsState, setBookingsState] = useState<any[]>([]);
   const [payouts, setPayouts] = useState<any[]>([]);
-  const [walletData, setWalletData] = useState<{ pendingBalance: number; availableBalance: number; totalEarned: number } | null>(null);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isLoadingProvider, setIsLoadingProvider] = useState(false);
@@ -578,10 +577,7 @@ export const ProviderDashboard: React.FC = () => {
 
   const fetchWalletData = async () => {
     try {
-      const res: any = await httpClient.get('/providers/me/wallet');
-      if (res && res.wallet) {
-        setWalletData(res.wallet);
-      }
+      await httpClient.get('/providers/me/wallet');
     } catch (err: any) {
       console.error('Không thể tải thông tin ví:', err);
     }
@@ -1156,7 +1152,7 @@ export const ProviderDashboard: React.FC = () => {
   const [incidentDesc, setIncidentDesc] = useState<string>('');
   const [incidentPhotos, setIncidentPhotos] = useState<string[]>([]);
   const [incidentAmount, setIncidentAmount] = useState<number>(0);
-  const [incidentActionType, setIncidentActionType] = useState<'CLEANING' | 'MAINTENANCE'>('CLEANING');
+  const [incidentActionType, setIncidentActionType] = useState<'CLEANING' | 'MAINTENANCE' | 'NO_SHOW' | 'VIOLATION'>('CLEANING');
 
   const handleIncidentPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -2315,9 +2311,9 @@ export const ProviderDashboard: React.FC = () => {
 
       const { reason, photos } = result.value;
       try {
-        await httpClient.post(`/bookings/${_id}/cancel`, { 
+        await httpClient.post(`/bookings/${_id}/cancel`, {
           reason: `[KHÁCH VẮNG MẶT - NO SHOW] ${reason}`,
-          reportPhotos: photos 
+          reportPhotos: photos
         });
         const displayStatus = statusDisplayMap['CANCELLED'] || 'Đã hủy';
         setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: 'CANCELLED' } : o));
@@ -2573,7 +2569,7 @@ export const ProviderDashboard: React.FC = () => {
         <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', position: 'relative' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
             <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>{chartTitle}</h3>
-            
+
             {/* Filter buttons matching Admin dashboard style */}
             <div style={{ display: 'flex', gap: '4px', backgroundColor: '#FAF6F0', padding: '3px', borderRadius: '6px', border: '1px solid #E8E2D5' }}>
               {(['week', 'month', 'year'] as const).map((r) => (
@@ -3457,19 +3453,19 @@ export const ProviderDashboard: React.FC = () => {
                     }}>{t.label} ({t.count})</button>
                   ))}
                 </div>
-                  {hasAodaiCapability && hasPhotographyCapability && (
-                    <div style={{ borderTop: '1px dashed var(--color-light-border)', paddingTop: '16px', marginTop: '16px' }}>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '12px' }}>Loại đơn hàng:</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {[
-                          { label: 'Tất cả', type: 'Tất cả', count: orders.length },
-                          { label: 'Áo dài', type: 'AODAI_RENTAL', count: orders.filter(o => o.bookingType === 'AODAI_RENTAL').length },
-                          { label: 'Thợ chụp', type: 'PHOTOGRAPHY', count: orders.filter(o => o.bookingType === 'PHOTOGRAPHY').length },
-                          { label: 'Combo', type: 'COMBO', count: orders.filter(o => o.bookingType === 'COMBO').length },
-                        ].map(t => <button key={t.type} onClick={() => setBookingTypeFilter(t.type)} style={{ padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: bookingTypeFilter === t.type ? 'var(--color-primary)' : 'var(--color-light-bg)', color: bookingTypeFilter === t.type ? 'white' : 'var(--color-text-secondary)' }}>{t.label} ({t.count})</button>)}
-                      </div>
+                {hasAodaiCapability && hasPhotographyCapability && (
+                  <div style={{ borderTop: '1px dashed var(--color-light-border)', paddingTop: '16px', marginTop: '16px' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '12px' }}>Loại đơn hàng:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {[
+                        { label: 'Tất cả', type: 'Tất cả', count: orders.length },
+                        { label: 'Áo dài', type: 'AODAI_RENTAL', count: orders.filter(o => o.bookingType === 'AODAI_RENTAL').length },
+                        { label: 'Thợ chụp', type: 'PHOTOGRAPHY', count: orders.filter(o => o.bookingType === 'PHOTOGRAPHY').length },
+                        { label: 'Combo', type: 'COMBO', count: orders.filter(o => o.bookingType === 'COMBO').length },
+                      ].map(t => <button key={t.type} onClick={() => setBookingTypeFilter(t.type)} style={{ padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: bookingTypeFilter === t.type ? 'var(--color-primary)' : 'var(--color-light-bg)', color: bookingTypeFilter === t.type ? 'white' : 'var(--color-text-secondary)' }}>{t.label} ({t.count})</button>)}
                     </div>
-                  )}
+                  </div>
+                )}
               </div>
               <div style={{
                 backgroundColor: 'var(--color-primary-trans)', border: '1px solid rgba(161,30,34,0.12)', borderRadius: 'var(--radius-md)',
@@ -3676,181 +3672,251 @@ export const ProviderDashboard: React.FC = () => {
                               </button>
                             </div>
                             {actionMenuId === o._id && (() => {
+                              const isComboOrder = o.bookingType === 'COMBO' || (o.items?.some((i: any) => i.itemType === 'PRODUCT') && o.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE'));
                               const isPhotoOrder = o.bookingType === 'PHOTOGRAPHY';
-                              const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }[]> = isPhotoOrder
+                              const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }[]> = isComboOrder
                                 ? {
-                                    PENDING_PAYMENT: [
-                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                    ],
-                                    DEPOSIT_PAID: [
-                                      { label: 'Chấp nhận lịch chụp', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
-                                      { label: 'Từ chối lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                    ],
-                                    CONFIRMED: [
-                                      { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
-                                      { label: 'Hủy lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                    ],
-                                    IN_PROGRESS: [
-                                      { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
-                                    ],
-                                    AWAITING_REVIEW: [
-                                      { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                    ],
-                                  }
+                                  PENDING_PAYMENT: [
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  DEPOSIT_PAID: [
+                                    { label: 'Xác nhận đơn & Lịch chụp', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                    { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  CONFIRMED: [
+                                    { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
+                                    { label: 'Hủy lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  PICKUP_PENDING: [
+                                    { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  PICKED_UP: [
+                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
+                                    { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                  ],
+                                  IN_PROGRESS: [
+                                    { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                    { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                  ],
+                                  AWAITING_REVIEW: [
+                                    { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                    { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                  ],
+                                  RETURN_PENDING: [
+                                    { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                  ],
+                                  RETURNED: [
+                                    { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                  ],
+                                }
+                                : isPhotoOrder
+                                ? {
+                                  PENDING_PAYMENT: [
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  DEPOSIT_PAID: [
+                                    { label: 'Chấp nhận lịch chụp', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                    { label: 'Từ chối lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  CONFIRMED: [
+                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
+                                    { label: 'Hủy lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  IN_PROGRESS: [
+                                    { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                  ],
+                                  AWAITING_REVIEW: [
+                                    { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                  ],
+                                }
                                 : {
-                                    PENDING_PAYMENT: [
-                                      { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
-                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                    ],
-                                    DEPOSIT_PAID: [
-                                      { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
-                                      { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
-                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                    ],
-                                    CONFIRMED: [
-                                      { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
-                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                    ],
-                                    PICKUP_PENDING: [
-                                      { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                    ],
-                                    PICKED_UP: [
-                                      { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-                                      { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
-                                    ],
-                                    RETURN_PENDING: [
-                                      { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                    ],
-                                    RETURNED: [
-                                      { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
-                                    ],
-                                  };
-                               const rawStatus = (o.rawStatus || '') as string;
-                               const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
-                               const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
-                               const pendingReschedule = o.items?.find((item: any) => item?.rescheduleRequest?.status === 'PENDING');
-                               if (steps.length === 0 && !canReport && !pendingReschedule) return null;
-                               return (
-                                 <>
-                                   <div
-                                     onClick={(e) => { e.stopPropagation(); setActionMenuId(null); }}
-                                     style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 39, cursor: 'default' }}
-                                   />
-                                   <div style={{ position: 'absolute', right: '20px', top: '40px', width: '225px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
-                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid #EAEAE8', fontSize: '11px', fontWeight: 700, color: '#8C827A' }}>
-                                       <span>Chọn thao tác</span>
-                                       <button
-                                         type="button"
-                                         onClick={(e) => { e.stopPropagation(); setActionMenuId(null); }}
-                                         style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#8C827A', padding: '2px', display: 'flex', alignItems: 'center' }}
-                                         title="Đóng menu"
-                                       >
-                                         <X size={14} />
-                                       </button>
-                                     </div>
-                                     <button
-                                       type="button"
-                                       onClick={(e) => {
-                                         e.stopPropagation();
-                                         setActionMenuId(null);
-                                         setSelectedBookingId(o._id);
-                                         setIsDetailModalOpen(true);
-                                       }}
-                                       style={{
-                                         width: '100%',
-                                         display: 'flex',
-                                         alignItems: 'center',
-                                         gap: '8px',
-                                         padding: '8px 12px',
-                                         fontSize: '12px',
-                                         fontWeight: 600,
-                                         color: '#1E293B',
-                                         border: 'none',
-                                         background: 'none',
-                                         cursor: 'pointer',
-                                         textAlign: 'left',
-                                         borderBottom: '1px solid #F1F5F9'
-                                       }}
-                                       onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-                                       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                                     >
-                                       <Eye size={14} color="#2563EB" />
-                                       <span>Xem chi tiết đơn</span>
-                                     </button>
-                                   {pendingReschedule && (
-                                     <div style={{ padding: '8px 12px', borderBottom: steps.length > 0 || canReport ? '1px solid var(--color-light-border)' : 'none' }}>
-                                       <div style={{ fontSize: '10px', fontWeight: 700, color: '#9A6700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Yêu cầu đổi lịch</div>
-                                       <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', lineHeight: 1.4, marginBottom: '7px' }}>
-                                         {pendingReschedule.rescheduleRequest.newShootDate
-                                           ? `${pendingReschedule.rescheduleRequest.newShootDate} • ${pendingReschedule.rescheduleRequest.newShootTimeSlot}`
-                                           : `${new Date(pendingReschedule.rescheduleRequest.newRentalFrom).toLocaleDateString('vi-VN')} - ${new Date(pendingReschedule.rescheduleRequest.newRentalTo).toLocaleDateString('vi-VN')}`}
-                                       </div>
-                                       <div style={{ display: 'flex', gap: '6px' }}>
-                                          <button type={'button'} onClick={() => void resolveRescheduleRequest(o, pendingReschedule, true)} style={{ flex: 1, border: 'none', borderRadius: '5px', padding: '6px', background: '#E8F5E9', color: '#1E7A46', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Duyệt</button>
-                                          <button type={'button'} onClick={() => void resolveRescheduleRequest(o, pendingReschedule, false)} style={{ flex: 1, border: 'none', borderRadius: '5px', padding: '6px', background: '#FDECEC', color: '#C0392B', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Từ chối</button>
-                                       </div>
-                                     </div>
-                                   )}
-                                   {steps.length > 0 && (
-                                    <div style={{ padding: '6px 12px 2px', fontSize: '10px', fontWeight: 700, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                      Cập nhật trạng thái
+                                  PENDING_PAYMENT: [
+                                    { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  DEPOSIT_PAID: [
+                                    { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                    { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  CONFIRMED: [
+                                    { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  PICKUP_PENDING: [
+                                    { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  PICKED_UP: [
+                                    { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                  ],
+                                  RETURN_PENDING: [
+                                    { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                  ],
+                                  RETURNED: [
+                                    { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                  ],
+                                };
+                              const rawStatus = (o.rawStatus || '') as string;
+                              const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
+                              const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
+                              const pendingReschedule = o.items?.find((item: any) => item?.rescheduleRequest?.status === 'PENDING');
+                              if (steps.length === 0 && !canReport && !pendingReschedule) return null;
+                              return (
+                                <>
+                                  <div
+                                    onClick={(e) => { e.stopPropagation(); setActionMenuId(null); }}
+                                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 39, cursor: 'default' }}
+                                  />
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ position: 'absolute', right: '20px', top: '40px', width: '225px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}
+                                  >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid #EAEAE8', fontSize: '11px', fontWeight: 700, color: '#8C827A' }}>
+                                      <span>Chọn thao tác</span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setActionMenuId(null); }}
+                                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#8C827A', padding: '2px', display: 'flex', alignItems: 'center' }}
+                                        title="Đóng menu"
+                                      >
+                                        <X size={14} />
+                                      </button>
                                     </div>
-                                  )}
-                                  {steps.map((a: { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }) => {
-                                    const isHandoverAction = a.apiStatus === 'PICKUP_PENDING';
-                                    let isDisabled = !!a.disabled;
-                                    if (isHandoverAction) {
-                                      const firstItem = o.items?.[0];
-                                      const startDateStr = firstItem?.startDate || firstItem?.rentalFrom;
-                                      if (startDateStr) {
-                                        const today = new Date();
-                                        const start = new Date(startDateStr);
-                                        const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                                        const startZero = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                                        const diffDays = (startZero.getTime() - todayZero.getTime()) / (1000 * 60 * 60 * 24);
-                                        if (diffDays > 1) {
-                                          isDisabled = true;
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActionMenuId(null);
+                                        setSelectedBookingId(o._id);
+                                        setIsDetailModalOpen(true);
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        padding: '8px 12px',
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                        color: '#1E293B',
+                                        border: 'none',
+                                        background: 'none',
+                                        cursor: 'pointer',
+                                        textAlign: 'left',
+                                        borderBottom: '1px solid #F1F5F9'
+                                      }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                    >
+                                      <Eye size={14} color="#2563EB" />
+                                      <span>Xem chi tiết đơn</span>
+                                    </button>
+                                    {pendingReschedule && (
+                                      <div style={{ padding: '8px 12px', borderBottom: steps.length > 0 || canReport ? '1px solid var(--color-light-border)' : 'none' }}>
+                                        <div style={{ fontSize: '10px', fontWeight: 700, color: '#9A6700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Yêu cầu đổi lịch</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', lineHeight: 1.4, marginBottom: '7px' }}>
+                                          {pendingReschedule.rescheduleRequest.newShootDate
+                                            ? `${pendingReschedule.rescheduleRequest.newShootDate} • ${pendingReschedule.rescheduleRequest.newShootTimeSlot}`
+                                            : `${new Date(pendingReschedule.rescheduleRequest.newRentalFrom).toLocaleDateString('vi-VN')} - ${new Date(pendingReschedule.rescheduleRequest.newRentalTo).toLocaleDateString('vi-VN')}`}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                          <button type={'button'} onClick={(e) => { e.stopPropagation(); setActionMenuId(null); void resolveRescheduleRequest(o, pendingReschedule, true); }} style={{ flex: 1, border: 'none', borderRadius: '5px', padding: '6px', background: '#E8F5E9', color: '#1E7A46', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Duyệt</button>
+                                          <button type={'button'} onClick={(e) => { e.stopPropagation(); setActionMenuId(null); void resolveRescheduleRequest(o, pendingReschedule, false); }} style={{ flex: 1, border: 'none', borderRadius: '5px', padding: '6px', background: '#FDECEC', color: '#C0392B', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Từ chối</button>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {steps.length > 0 && (
+                                      <div style={{ padding: '6px 12px 2px', fontSize: '10px', fontWeight: 700, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        Cập nhật trạng thái
+                                      </div>
+                                    )}
+                                    {steps.map((a: { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }) => {
+                                      const isHandoverAction = a.apiStatus === 'PICKUP_PENDING';
+                                      let isDisabled = !!a.disabled;
+                                      if (isHandoverAction) {
+                                        const firstItem = o.items?.[0];
+                                        const startDateStr = firstItem?.startDate || firstItem?.rentalFrom;
+                                        if (startDateStr) {
+                                          const today = new Date();
+                                          const start = new Date(startDateStr);
+                                          const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                                          const startZero = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                                          const diffDays = (startZero.getTime() - todayZero.getTime()) / (1000 * 60 * 60 * 24);
+                                          if (diffDays > 1) {
+                                            isDisabled = true;
+                                          }
                                         }
                                       }
-                                    }
-                                    return (
-                                      <button
-                                        key={a.apiStatus || a.label}
-                                        disabled={isDisabled}
-                                        onClick={() => !isDisabled && a.apiStatus && changeOrderStatus(o._id, a.apiStatus)}
-                                        style={{
-                                          width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                          fontSize: '12px', border: 'none', background: 'none',
-                                          cursor: isDisabled ? 'not-allowed' : 'pointer',
-                                          color: isDisabled ? (a.disabled ? a.color : '#CCCCCC') : a.color,
-                                          opacity: isDisabled ? 0.85 : 1,
-                                          fontWeight: 600, textAlign: 'left',
-                                        }}
-                                        title={isDisabled ? (a.disabled ? a.label : "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)") : ""}
-                                      >
-                                        {a.icon} {a.label}
-                                      </button>
-                                    );
-                                  })}
-                                  {canReport && (
-                                    <button onClick={() => {
-                                      setReportingOrder(o);
-                                      setSelectedItemId(o.items?.[0]?._id || '');
-                                      setIncidentDesc('');
-                                      setIncidentPhotos([]);
-                                      setIncidentAmount(o.depositTotal || 0);
-                                      setIncidentActionType('CLEANING');
-                                      setActionMenuId(null);
-                                    }} style={{
-                                      width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                      fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
-                                      fontWeight: 700, textAlign: 'left', borderTop: steps.length > 0 ? '1px solid var(--color-light-border)' : 'none'
-                                    }}><Flag size={14} /> Báo cáo hỏng đồ</button>
-                                  )}
-                                </div>
-                              </>
-                            );
+                                      return (
+                                        <button
+                                          key={a.apiStatus || a.label}
+                                          disabled={isDisabled}
+                                          onClick={() => !isDisabled && a.apiStatus && changeOrderStatus(o._id, a.apiStatus)}
+                                          style={{
+                                            width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                            fontSize: '12px', border: 'none', background: 'none',
+                                            cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                            color: isDisabled ? (a.disabled ? a.color : '#CCCCCC') : a.color,
+                                            opacity: isDisabled ? 0.85 : 1,
+                                            fontWeight: 600, textAlign: 'left',
+                                          }}
+                                          title={isDisabled ? (a.disabled ? a.label : "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)") : ""}
+                                        >
+                                          {a.icon} {a.label}
+                                        </button>
+                                      );
+                                    })}
+                                    {canReport && (() => {
+                                      const isCombo = isComboOrder;
+                                      const isPhoto = isPhotoOrder;
+                                      return (
+                                        <>
+                                          {(isCombo || !isPhoto) && (
+                                            <button onClick={() => {
+                                              setReportingOrder(o);
+                                              const productItem = o.items?.find((i: any) => i.itemType === 'PRODUCT') || o.items?.[0];
+                                              setSelectedItemId(productItem?._id || '');
+                                              setIncidentDesc('');
+                                              setIncidentPhotos([]);
+                                              setIncidentAmount(o.depositTotal || 0);
+                                              setIncidentActionType('CLEANING');
+                                              setActionMenuId(null);
+                                            }} style={{
+                                              width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                              fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
+                                              fontWeight: 700, textAlign: 'left', borderTop: steps.length > 0 ? '1px solid var(--color-light-border)' : 'none'
+                                            }}><Flag size={14} /> Báo cáo hỏng đồ (Áo dài)</button>
+                                          )}
+                                          {(isCombo || isPhoto) && (
+                                            <button onClick={() => {
+                                              setReportingOrder(o);
+                                              const photoItem = o.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE') || o.items?.[0];
+                                              setSelectedItemId(photoItem?._id || '');
+                                              setIncidentDesc('');
+                                              setIncidentPhotos([]);
+                                              setIncidentAmount(o.depositTotal || 0);
+                                              setIncidentActionType('NO_SHOW');
+                                              setActionMenuId(null);
+                                            }} style={{
+                                              width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                              fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: '#D97706',
+                                              fontWeight: 700, textAlign: 'left', borderTop: (steps.length > 0 || !isPhoto) ? '1px solid var(--color-light-border)' : 'none'
+                                            }}><Flag size={14} /> Báo cáo khách hàng (Thợ chụp)</button>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
+                                </>
+                              );
                             })()}
                           </td>
                         </tr>
@@ -4636,7 +4702,7 @@ export const ProviderDashboard: React.FC = () => {
                     <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px 0' }}>Chưa có thiết lập khung giờ nào.</p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                       {schedules.filter((schedule) => schedule.scheduleType === 'RECURRING').sort((a, b) => Number(a.dayOfWeek) - Number(b.dayOfWeek)).map((schedule) => (
+                      {schedules.filter((schedule) => schedule.scheduleType === 'RECURRING').sort((a, b) => Number(a.dayOfWeek) - Number(b.dayOfWeek)).map((schedule) => (
                         <div key={schedule._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', flexWrap: 'wrap', padding: '14px 16px', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px' }}>
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -5392,47 +5458,7 @@ export const ProviderDashboard: React.FC = () => {
               <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải dữ liệu quyết toán...</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                {/* WALLET SUMMARY CARDS */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
-                  <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#D97706', letterSpacing: '0.05em' }}>ĐANG GIỮ (PENDING)</span>
-                      <Clock size={20} style={{ color: '#D97706' }} />
-                    </div>
-                    <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--color-text-main)' }}>
-                      {(walletData?.pendingBalance || 0).toLocaleString('vi-VN')}đ
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-                      Tiền đơn đang thực hiện & chờ khách xác nhận
-                    </div>
-                  </div>
 
-                  <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#059669', letterSpacing: '0.05em' }}>KHẢ DỤNG (AVAILABLE)</span>
-                      <DollarSign size={20} style={{ color: '#059669' }} />
-                    </div>
-                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#059669' }}>
-                      {(walletData?.availableBalance || 0).toLocaleString('vi-VN')}đ
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-                      Tiền đã hoàn thành, sẵn sàng đối soát
-                    </div>
-                  </div>
-
-                  <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#0284C7', letterSpacing: '0.05em' }}>TỔNG THU NHẬP</span>
-                      <ShieldCheck size={20} style={{ color: '#0284C7' }} />
-                    </div>
-                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#0284C7' }}>
-                      {(walletData?.totalEarned || 0).toLocaleString('vi-VN')}đ
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-                      Doanh thu tích lũy toàn thời gian
-                    </div>
-                  </div>
-                </div>
 
                 <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 20px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>DANH SÁCH CÁC KHOẢN QUYẾT TOÁN</h3>
@@ -5450,8 +5476,8 @@ export const ProviderDashboard: React.FC = () => {
                             <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ QUYẾT TOÁN</th>
                             <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ BOOKING</th>
                             <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>SỐ TIỀN THỰC NHẬN</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TÀI KHOẢN NHẬN</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TRẠNG THÁI</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>DOANH THU GỐC</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>PHÍ NỀN TẢNG</th>
                             <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>NGÀY THỰC HIỆN</th>
                           </tr>
                         </thead>
@@ -5472,36 +5498,17 @@ export const ProviderDashboard: React.FC = () => {
                               <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.settlementCode || p.id}</td>
                               <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingId?.bookingCode || p.bookingCode || '—'}</td>
                               <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.payableAmount ?? p.netAmount ?? p.amount ?? 0).toLocaleString('vi-VN')}đ</td>
-                              <td style={{ padding: '16px 20px' }}>
-                                <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{p.bank}</span>
-                                <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{p.account} • {p.accountHolder}</span>
+                              <td style={{ padding: '16px 20px', textAlign: 'right', color: 'var(--color-text-secondary)' }}>
+                                {(p.grossAmount ?? 0).toLocaleString('vi-VN')}đ
                               </td>
-                              <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                              <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                                 {(() => {
-                                  let bg = '#FEE2E2';
-                                  let color = '#991B1B';
-                                  let text = 'Thất bại';
-                                  const status = String(p.status || '').toUpperCase();
-                                  if (status === 'SUCCESS' || status === 'SETTLED') {
-                                    bg = '#F0FDF4';
-                                    color = '#166534';
-                                    text = 'Thành công';
-                                  } else if (status === 'PENDING' || status === 'PROCESSING' || status === 'READY_TO_SETTLE') {
-                                    bg = '#FEF3C7';
-                                    color = '#92400E';
-                                    text = 'Đang xử lý';
-                                  } else if (status === 'ON_HOLD') {
-                                    bg = '#EFF6FF';
-                                    color = '#1E40AF';
-                                    text = 'Tạm giữ';
-                                  } else if (status === 'CANCELLED') {
-                                    bg = '#F3F4F6';
-                                    color = '#4B5563';
-                                    text = 'Đã hủy';
-                                  }
+                                  const fee = (p.commissionAmount ?? 0) + (p.allocatedPlatformFee ?? p.fixedPlatformFee ?? 0);
+                                  const rate = p.commissionRate ? `${(p.commissionRate * 100).toFixed(0)}%` : null;
                                   return (
-                                    <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: bg, color }}>
-                                      {text}
+                                    <span>
+                                      <span style={{ fontWeight: 700, color: '#DC2626' }}>-{fee.toLocaleString('vi-VN')}đ</span>
+                                      {rate && <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)' }}>HH: {rate}</span>}
                                     </span>
                                   );
                                 })()}
@@ -6266,217 +6273,247 @@ export const ProviderDashboard: React.FC = () => {
       )}
 
       {/* Report incident modal popup */}
-      {reportingOrder && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-          <form onSubmit={handleSendIncidentReport} style={{ width: '100%', maxWidth: '500px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
-            <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>BÁO CÁO SỰ CỐ / HỎNG ĐỒ</h4>
-              <button type="button" onClick={() => setReportingOrder(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
-            </div>
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '80vh', overflowY: 'auto' }}>
+      {reportingOrder && (() => {
+        const isReportingPhotoOrder = reportingOrder.bookingType === 'PHOTOGRAPHY' || reportingOrder.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+            <form onSubmit={handleSendIncidentReport} style={{ width: '100%', maxWidth: '500px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
+              <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>{isReportingPhotoOrder ? 'BÁO CÁO KHÁCH HÀNG' : 'BÁO CÁO SỰ CỐ / HỎNG ĐỒ'}</h4>
+                <button type="button" onClick={() => setReportingOrder(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+              </div>
+              <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '80vh', overflowY: 'auto' }}>
 
-              {/* Pickup Damage Report Warning */}
-              {reportingOrder.pickupDamageReport && (
-                <div style={{
-                  backgroundColor: '#FEF9E7',
-                  border: '1px solid #F5CBA7',
-                  borderRadius: '10px',
-                  padding: '12px 16px',
-                  fontSize: '13px',
-                  color: '#7E5109',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
-                    <AlertTriangle size={15} style={{ color: '#D35400' }} />
-                    <span>Chú ý: Khách hàng đã báo lỗi khi nhận đồ!</span>
-                  </div>
-                  <div style={{ fontSize: '12px' }}>
-                    <strong>Mô tả của khách:</strong> {reportingOrder.pickupDamageReport.description}
-                  </div>
-                  {reportingOrder.pickupDamageReport.evidencePhotos && reportingOrder.pickupDamageReport.evidencePhotos.length > 0 && (
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                      {reportingOrder.pickupDamageReport.evidencePhotos.map((photo: string, index: number) => (
-                        <a key={index} href={photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`} target="_blank" rel="noreferrer" style={{ width: '45px', height: '45px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #F5CBA7' }}>
-                          <img src={photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`} alt="Evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        </a>
-                      ))}
+                {/* Pickup Damage Report Warning */}
+                {!isReportingPhotoOrder && reportingOrder.pickupDamageReport && (
+                  <div style={{
+                    backgroundColor: '#FEF9E7',
+                    border: '1px solid #F5CBA7',
+                    borderRadius: '10px',
+                    padding: '12px 16px',
+                    fontSize: '13px',
+                    color: '#7E5109',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                      <AlertTriangle size={15} style={{ color: '#D35400' }} />
+                      <span>Chú ý: Khách hàng đã báo lỗi khi nhận đồ!</span>
                     </div>
-                  )}
-                  <strong style={{ fontSize: '11px', color: '#C0392B', marginTop: '4px' }}>
-                    * Vui lòng đối soát kỹ và không phạt tiền đối với các vết bẩn/hỏng hóc khách hàng đã khai báo ở trên.
-                  </strong>
-                </div>
-              )}
-
-              {/* Chọn sản phẩm bị hỏng */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SẢN PHẨM GẶP SỰ CỐ *</span>
-                <select
-                  value={selectedItemId}
-                  onChange={(e) => setSelectedItemId(e.target.value)}
-                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none' }}
-                  required
-                >
-                  <option value="">-- Chọn sản phẩm trong đơn hàng --</option>
-                  {(reportingOrder.items || []).map((item: any) => (
-                    <option key={item._id} value={item._id}>
-                      {item.name || 'Sản phẩm'} ({item.quantity}x - {item.unitPrice?.toLocaleString()}đ)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Loại xử lý */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>HÌNH THỨC XỬ LÝ *</span>
-                <div style={{ display: 'flex', gap: '16px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                    <input
-                      type="radio"
-                      name="actionType"
-                      value="CLEANING"
-                      checked={incidentActionType === 'CLEANING'}
-                      onChange={() => setIncidentActionType('CLEANING')}
-                    />
-                    Giặt là vết bẩn (CLEANING)
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                    <input
-                      type="radio"
-                      name="actionType"
-                      value="MAINTENANCE"
-                      checked={incidentActionType === 'MAINTENANCE'}
-                      onChange={() => setIncidentActionType('MAINTENANCE')}
-                    />
-                    Sửa chữa / Đền bù rách, hỏng (MAINTENANCE)
-                  </label>
-                </div>
-              </div>
-
-              {/* Mô tả chi tiết */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÔ TẢ CHI TIẾT SỰ CỐ *</span>
-                <textarea
-                  style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none', resize: 'none', height: '80px', fontFamily: 'inherit' }}
-                  placeholder="Nhập chi tiết vết bẩn hoặc vị trí rách hỏng của sản phẩm..."
-                  value={incidentDesc}
-                  onChange={(e) => setIncidentDesc(e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* Ảnh bằng chứng */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ẢNH CHỤP BẰNG CHỨNG HỎNG HÓC *</span>
-
-                <label htmlFor="incident-photo-file" style={{
-                  border: '2px dashed #D1D5DB',
-                  borderRadius: '12px',
-                  backgroundColor: '#F9FAFB',
-                  padding: '20px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  gap: '8px',
-                  transition: 'all 0.2s ease-in-out'
-                }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--color-primary-dark)';
-                    e.currentTarget.style.backgroundColor = '#FFFDF9';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.borderColor = '#D1D5DB';
-                    e.currentTarget.style.backgroundColor = '#F9FAFB';
-                  }}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8C827A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#4B5563' }}>Tải ảnh bằng chứng lên</span>
-                  <span style={{ fontSize: '11px', color: '#9CA3AF' }}>Chọn một hoặc nhiều hình ảnh vết bẩn, rách</span>
-                  <input
-                    id="incident-photo-file"
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handleIncidentPhotoUpload}
-                    style={{ display: 'none' }}
-                  />
-                </label>
-
-                {incidentPhotos.length > 0 && (
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px', padding: '8px', backgroundColor: '#F3F4F6', borderRadius: '8px' }}>
-                    {incidentPhotos.map((photo, index) => {
-                      const url = photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`;
-                      return (
-                        <div key={index} style={{ position: 'relative', width: '56px', height: '56px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #D1D5DB' }}>
-                          <PrivateEvidenceImage
-                            reference={photo}
-                            legacyUrl={url}
-                            alt="Incident preview"
-                            linkStyle={{ display: 'block', width: '100%', height: '100%' }}
-                            imageStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setIncidentPhotos(prev => prev.filter((_, i) => i !== index))}
-                            style={{
-                              position: 'absolute',
-                              top: '2px',
-                              right: '2px',
-                              width: '16px',
-                              height: '16px',
-                              borderRadius: '50%',
-                              backgroundColor: 'rgba(0,0,0,0.6)',
-                              color: 'white',
-                              border: 'none',
-                              fontSize: '10px',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: 0
-                            }}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      );
-                    })}
+                    <div style={{ fontSize: '12px' }}>
+                      <strong>Mô tả của khách:</strong> {reportingOrder.pickupDamageReport.description}
+                    </div>
+                    {reportingOrder.pickupDamageReport.evidencePhotos && reportingOrder.pickupDamageReport.evidencePhotos.length > 0 && (
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                        {reportingOrder.pickupDamageReport.evidencePhotos.map((photo: string, index: number) => (
+                          <a key={index} href={photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`} target="_blank" rel="noreferrer" style={{ width: '45px', height: '45px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #F5CBA7' }}>
+                            <img src={photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`} alt="Evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    <strong style={{ fontSize: '11px', color: '#C0392B', marginTop: '4px' }}>
+                      * Vui lòng đối soát kỹ và không phạt tiền đối với các vết bẩn/hỏng hóc khách hàng đã khai báo ở trên.
+                    </strong>
                   </div>
                 )}
-              </div>
 
-              {/* Số tiền yêu cầu đền bù */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TIỀN ĐỀN BÙ YÊU CẦU *</span>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)' }}>Tối đa cọc giữ đồ: {reportingOrder.depositTotal?.toLocaleString()}đ</span>
+                {/* Chọn sản phẩm / Gói chụp */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{isReportingPhotoOrder ? 'GÓI CHỤP GẶP SỰ CỐ *' : 'SẢN PHẨM GẶP SỰ CỐ *'}</span>
+                  <select
+                    value={selectedItemId}
+                    onChange={(e) => setSelectedItemId(e.target.value)}
+                    style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none' }}
+                    required
+                  >
+                    <option value="">{isReportingPhotoOrder ? '-- Chọn gói chụp trong đơn hàng --' : '-- Chọn sản phẩm trong đơn hàng --'}</option>
+                    {(reportingOrder.items || []).map((item: any) => (
+                      <option key={item._id} value={item._id}>
+                        {item.name || 'Gói chụp / Sản phẩm'} ({item.quantity}x - {item.unitPrice?.toLocaleString()}đ)
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <input
-                  type="number"
-                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none' }}
-                  placeholder="Nhập số tiền yêu cầu đền bù..."
-                  value={incidentAmount}
-                  onChange={(e) => setIncidentAmount(Number(e.target.value))}
-                  min={0}
-                  max={reportingOrder.depositTotal}
-                  required
-                />
-              </div>
 
-              <button
-                type="submit"
-                style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em', marginTop: '8px' }}
-              >
-                GỬI BÁO CÁO SỰ CỐ
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+                {/* Loại xử lý */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>HÌNH THỨC XỬ LÝ *</span>
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    {isReportingPhotoOrder ? (
+                      <>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                          <input
+                            type="radio"
+                            name="actionType"
+                            value="NO_SHOW"
+                            checked={incidentActionType === 'NO_SHOW'}
+                            onChange={() => setIncidentActionType('NO_SHOW')}
+                          />
+                          Khách vắng mặt / Không đến (NO_SHOW)
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                          <input
+                            type="radio"
+                            name="actionType"
+                            value="VIOLATION"
+                            checked={incidentActionType === 'VIOLATION'}
+                            onChange={() => setIncidentActionType('VIOLATION')}
+                          />
+                          Vi phạm quy định / Tranh chấp (VIOLATION)
+                        </label>
+                      </>
+                    ) : (
+                      <>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                          <input
+                            type="radio"
+                            name="actionType"
+                            value="CLEANING"
+                            checked={incidentActionType === 'CLEANING'}
+                            onChange={() => setIncidentActionType('CLEANING')}
+                          />
+                          Giặt là vết bẩn (CLEANING)
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                          <input
+                            type="radio"
+                            name="actionType"
+                            value="MAINTENANCE"
+                            checked={incidentActionType === 'MAINTENANCE'}
+                            onChange={() => setIncidentActionType('MAINTENANCE')}
+                          />
+                          Sửa chữa / Đền bù rách, hỏng (MAINTENANCE)
+                        </label>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Mô tả chi tiết */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{isReportingPhotoOrder ? 'MÔ TẢ CHI TIẾT SỰ CỐ TỪ KHÁCH HÀNG *' : 'MÔ TẢ CHI TIẾT SỰ CỐ *'}</span>
+                  <textarea
+                    style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none', resize: 'none', height: '80px', fontFamily: 'inherit' }}
+                    placeholder={isReportingPhotoOrder ? 'Nhập chi tiết sự cố từ phía khách hàng (không xuất hiện, trễ giờ quá quy định, hủy ngang...)...' : 'Nhập chi tiết vết bẩn hoặc vị trí rách hỏng của sản phẩm...'}
+                    value={incidentDesc}
+                    onChange={(e) => setIncidentDesc(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {/* Ảnh bằng chứng */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{isReportingPhotoOrder ? 'ẢNH CHỤP BẰNG CHỨNG (NẾU CÓ)' : 'ẢNH CHỤP BẰNG CHỨNG HỎNG HÓC *'}</span>
+
+                  <label htmlFor="incident-photo-file" style={{
+                    border: '2px dashed #D1D5DB',
+                    borderRadius: '12px',
+                    backgroundColor: '#F9FAFB',
+                    padding: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    gap: '8px',
+                    transition: 'all 0.2s ease-in-out'
+                  }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--color-primary-dark)';
+                      e.currentTarget.style.backgroundColor = '#FFFDF9';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.borderColor = '#D1D5DB';
+                      e.currentTarget.style.backgroundColor = '#F9FAFB';
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8C827A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#4B5563' }}>Tải ảnh bằng chứng lên</span>
+                    <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{isReportingPhotoOrder ? 'Chọn ảnh bằng chứng (tin nhắn, lịch sử gọi...)' : 'Chọn một hoặc nhiều hình ảnh vết bẩn, rách'}</span>
+                    <input
+                      id="incident-photo-file"
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleIncidentPhotoUpload}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+
+                  {incidentPhotos.length > 0 && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px', padding: '8px', backgroundColor: '#F3F4F6', borderRadius: '8px' }}>
+                      {incidentPhotos.map((photo, index) => {
+                        const url = photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`;
+                        return (
+                          <div key={index} style={{ position: 'relative', width: '56px', height: '56px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #D1D5DB' }}>
+                            <PrivateEvidenceImage
+                              reference={photo}
+                              legacyUrl={url}
+                              alt="Incident preview"
+                              linkStyle={{ display: 'block', width: '100%', height: '100%' }}
+                              imageStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setIncidentPhotos(prev => prev.filter((_, i) => i !== index))}
+                              style={{
+                                position: 'absolute',
+                                top: '2px',
+                                right: '2px',
+                                width: '16px',
+                                height: '16px',
+                                borderRadius: '50%',
+                                backgroundColor: 'rgba(0,0,0,0.6)',
+                                color: 'white',
+                                border: 'none',
+                                fontSize: '10px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: 0
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Số tiền yêu cầu đền bù */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{isReportingPhotoOrder ? 'SỐ TIỀN YÊU CẦU BỒI THƯỜNG (NẾU CÓ)' : 'TIỀN ĐỀN BÙ YÊU CẦU *'}</span>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)' }}>Tối đa cọc: {reportingOrder.depositTotal?.toLocaleString()}đ</span>
+                  </div>
+                  <input
+                    type="number"
+                    style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none' }}
+                    placeholder="Nhập số tiền yêu cầu đền bù..."
+                    value={incidentAmount}
+                    onChange={(e) => setIncidentAmount(Number(e.target.value))}
+                    min={0}
+                    max={reportingOrder.depositTotal}
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em', marginTop: '8px' }}
+                >
+                  {isReportingPhotoOrder ? 'GỬI BÁO CÁO KHÁCH HÀNG' : 'GỬI BÁO CÁO SỰ CỐ'}
+                </button>
+              </div>
+            </form>
+          </div>
+        );
+      })()}
 
       {/* Rate customer modal popup */}
       {ratingBooking && (

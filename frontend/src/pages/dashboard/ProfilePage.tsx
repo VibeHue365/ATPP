@@ -682,19 +682,13 @@ export const ProfilePage: React.FC = () => {
           </div>
         )}
 
-        {isLoadingBookings ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '16px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', margin: '20px 0' }}>
-            <Loader2 size={36} style={{ color: '#8B1E22', animation: 'spin 1.5s linear infinite' }} />
-            <span style={{ fontSize: '13px', color: '#8C827A', fontWeight: 500 }}>Đang đồng bộ dữ liệu đơn hàng...</span>
-          </div>
-        ) : (
-          <CustomerDashboard
-            user={user}
-            bookings={bookings}
-            onViewDetails={(b) => setActiveDetailBooking(b)}
-            onRefresh={fetchBookings}
-          />
-        )}
+        <CustomerDashboard
+          user={user}
+          bookings={bookings}
+          isLoadingBookings={isLoadingBookings}
+          onViewDetails={(b) => setActiveDetailBooking(b)}
+          onRefresh={fetchBookings}
+        />
       </section>
 
       {/* AI Recommendation Showcase Section */}
@@ -833,14 +827,11 @@ export const ProfilePage: React.FC = () => {
               </div>
             </div>
 
-            {/* Photography Delivered Photos / Handover Photos */}
+            {/* Photography Delivered Photos */}
             {(() => {
-              const isPhotography = activeDetailBooking.bookingType === 'PHOTOGRAPHY' || activeDetailBooking.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
               const photos = (activeDetailBooking.deliveredPhotos && activeDetailBooking.deliveredPhotos.length > 0)
                 ? activeDetailBooking.deliveredPhotos
-                : (isPhotography && activeDetailBooking.handoverPhotos && activeDetailBooking.handoverPhotos.length > 0)
-                  ? activeDetailBooking.handoverPhotos
-                  : [];
+                : [];
               const driveUrl = activeDetailBooking.deliveryDriveUrl;
 
               if (photos.length === 0 && !driveUrl) return null;

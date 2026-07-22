@@ -1598,6 +1598,25 @@ export class BookingsService implements OnApplicationBootstrap {
 
       booking = savedBookingDoc;
 
+      if (dto.bookingType === BookingType.Combo) {
+        const prodItem = itemDetails.find((i) => i.productId);
+        const pkgItem = itemDetails.find((i) => i.photographyPackageId);
+        if (prodItem?.productId && pkgItem?.photographyPackageId) {
+          try {
+            await this.bookingModel.db.model('ComboPromotion').updateOne(
+              {
+                productId: prodItem.productId,
+                photographyPackageId: pkgItem.photographyPackageId,
+                status: 'ACTIVE',
+              },
+              { $inc: { usedCount: 1 } },
+            ).session(session).exec();
+          } catch (e) {
+            console.warn('Failed to increment ComboPromotion usedCount in createBooking:', e);
+          }
+        }
+      }
+
       const bookingItemDetails = this.expandRentalUnits(itemDetails);
       for (const detail of bookingItemDetails) {
         const [savedItem] = await this.bookingItemModel.create(
@@ -2835,16 +2854,19 @@ export class BookingsService implements OnApplicationBootstrap {
         BookingStatus.Confirmed,
         BookingStatus.PickupPending,
         BookingStatus.Cancelled,
+        BookingStatus.Disputed,
       ],
       [BookingStatus.Confirmed]: [
         BookingStatus.PickupPending,
         BookingStatus.InProgress,
         BookingStatus.Cancelled,
+        BookingStatus.Disputed,
       ],
       [BookingStatus.PickupPending]: [
         BookingStatus.PickedUp,
         BookingStatus.Cancelled,
         BookingStatus.InProgress,
+        BookingStatus.Disputed,
       ],
       [BookingStatus.PickedUp]: [
         BookingStatus.ReturnPending,
@@ -2865,6 +2887,7 @@ export class BookingsService implements OnApplicationBootstrap {
         BookingStatus.Cancelled,
         BookingStatus.Returned,
         BookingStatus.ReturnPending,
+        BookingStatus.Disputed,
       ],
       [BookingStatus.AwaitingReview]: [
         BookingStatus.Completed,
@@ -2895,7 +2918,6 @@ export class BookingsService implements OnApplicationBootstrap {
       booking.awaitingReviewSince = new Date();
       if (deliveredPhotos && deliveredPhotos.length > 0) {
         (booking as any).deliveredPhotos = deliveredPhotos;
-        booking.handoverPhotos = deliveredPhotos;
       }
       if (deliveryDriveUrl) {
         (booking as any).deliveryDriveUrl = deliveryDriveUrl;

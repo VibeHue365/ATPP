@@ -3,10 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
-import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle, Check, XCircle, X } from 'lucide-react';
+import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle, Check, XCircle, X, Sparkles } from 'lucide-react';
 import { BookingDetailModal } from '../../../components/common/BookingDetailModal';
 import { API_BASE_URL } from '../../../config/env';
 import { getFirstMediaUrl } from '../../../shared/media/mediaUrl';
+
+const formatDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+};
+
 
 const HandoverCountdown = ({ initiatedAt, onTimeout }: { initiatedAt: string; onTimeout: () => void }) => {
   const [timeLeft, setTimeLeft] = React.useState<string>('');
@@ -57,6 +68,7 @@ const HandoverCountdown = ({ initiatedAt, onTimeout }: { initiatedAt: string; on
 interface CustomerDashboardProps {
   user: any;
   bookings: any[];
+  isLoadingBookings?: boolean;
   onViewDetails: (booking: any) => void;
   onRefresh: () => void;
 }
@@ -64,6 +76,7 @@ interface CustomerDashboardProps {
 export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   user,
   bookings,
+  isLoadingBookings = false,
   onViewDetails,
   onRefresh
 }) => {
@@ -74,6 +87,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'appointments' | 'rentals' | 'favorites' | 'payments'>('appointments');
   const [favoriteSubTab, setFavoriteSubTab] = useState<'aodai' | 'photographer'>('aodai');
   const [payments, setPayments] = useState<any[]>([]);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState(false);
   const [paymentCategoryTab, setPaymentCategoryTab] = useState<'all' | 'aodai' | 'photography'>('all');
   const [realProductList, setRealProductList] = useState<any[]>([]);
   const [realPhotographersList, setRealPhotographersList] = useState<any[]>([]);
@@ -85,6 +100,30 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   useEffect(() => {
     setCurrentPageAppointments(1);
     setCurrentPageRentals(1);
+
+    if (activeTab === 'payments') {
+      setIsLoadingPayments(true);
+      httpClient.get<any[]>('/payments/history')
+        .then((res: any) => {
+          setPayments(Array.isArray(res) ? res : (res?.data || []));
+        })
+        .catch((err: any) => {
+          console.error('Failed to fetch payment history:', err);
+        })
+        .finally(() => {
+          setIsLoadingPayments(false);
+        });
+    }
+
+    if (activeTab === 'favorites') {
+      setIsLoadingFavorites(true);
+      Promise.allSettled([
+        httpClient.get<any[]>('/products').then((res: any) => setRealProductList(Array.isArray(res) ? res : (res?.data || []))),
+        httpClient.get<any[]>('/providers/photographers').then((res: any) => setRealPhotographersList(Array.isArray(res) ? res : (res?.data || []))),
+      ]).finally(() => {
+        setIsLoadingFavorites(false);
+      });
+    }
   }, [activeTab]);
 
   const [reviewingItem, setReviewingItem] = useState<any>(null);
@@ -95,6 +134,46 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [reportModalType, setReportModalType] = useState<'DAMAGE' | 'REJECT'>('DAMAGE');
   const [reportDesc, setReportDesc] = useState('');
   const [reportPhotos, setReportPhotos] = useState<string[]>([]);
+
+  const [isPhotoDisputeModalOpen, setIsPhotoDisputeModalOpen] = useState(false);
+  const [photoDisputeBookingId, setPhotoDisputeBookingId] = useState<string | null>(null);
+  const [selectedDisputeReason, setSelectedDisputeReason] = useState<string>('Thợ chụp ảnh không đến / Vắng mặt tại buổi chụp');
+  const [photoDisputeNote, setPhotoDisputeNote] = useState<string>('');
+  const [photoDisputePhotos, setPhotoDisputePhotos] = useState<string[]>([]);
+
+  const handleContinuePayment = async (bookingId: string) => {
+    try {
+      const res = await httpClient.get<{ checkoutUrl?: string }>(`/payments/booking/${bookingId}/status`);
+      if (res.checkoutUrl) {
+        window.location.href = res.checkoutUrl;
+      } else {
+        const b = bookings.find((item) => item._id === bookingId);
+        if (b) onViewDetails(b);
+      }
+    } catch {
+      const b = bookings.find((item) => item._id === bookingId);
+      if (b) onViewDetails(b);
+    }
+  };
+
+  const handleCreateReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewingItem) return;
+    try {
+      toast.info('Đang gửi đánh giá...');
+      await httpClient.post('/reviews', {
+        bookingId: reviewingItem.bookingId || reviewingItem._id,
+        productId: reviewingItem.productId,
+        rating,
+        comment,
+      });
+      toast.success('Cảm ơn bạn đã gửi đánh giá thành công!');
+      setReviewingItem(null);
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Gửi đánh giá thất bại');
+    }
+  };
 
   const handleConfirmPickup = async (bookingId: string) => {
     try {
@@ -122,6 +201,26 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       }
       setReportPhotos(prev => [...prev, ...urls]);
       toast.success('Tải ảnh thành công!');
+    } catch (err: any) {
+      toast.error('Tải ảnh thất bại: ' + (err.message || ''));
+    }
+  };
+
+  const handlePhotoDisputeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    toast.info('Đang tải ảnh bằng chứng...');
+    
+    try {
+      const urls: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append('file', files[i]);
+        const res: any = await httpClient.post('/bookings/upload-reference', formData);
+        if (res.url) urls.push(res.url);
+      }
+      setPhotoDisputePhotos(prev => [...prev, ...urls]);
+      toast.success('Tải ảnh bằng chứng thành công!');
     } catch (err: any) {
       toast.error('Tải ảnh thất bại: ' + (err.message || ''));
     }
@@ -159,170 +258,62 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     }
   };
 
-  const handleContinuePayment = async (bookingId: string) => {
-    try {
-      toast.info('Đang tải liên kết thanh toán...');
-      const paymentRes: any = await httpClient.post('/payments/create-link', {
-        bookingId,
-        purpose: 'FULL_PAYMENT',
-      });
-      if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
-        toast.success('Đang chuyển hướng tới cổng thanh toán PayOS Simulator...');
-        setTimeout(() => {
-          window.location.href = paymentRes.payos.checkoutUrl;
-        }, 1200);
-      } else {
-        toast.error('Không tìm thấy liên kết thanh toán cho đơn hàng này.');
-      }
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || 'Lỗi khi kết nối đến cổng thanh toán.');
-    }
-  };
-
-  const [hasLoadedPayments, setHasLoadedPayments] = useState(false);
-  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
-
-  const [hasLoadedFavorites, setHasLoadedFavorites] = useState(false);
-  const [isLoadingFavorites, setIsLoadingFavorites] = useState(false);
-
-  const fetchPayments = async () => {
-    setIsLoadingPayments(true);
-    try {
-      const pRes: any = await httpClient.get('/payments/history');
-      setPayments(pRes || []);
-    } catch (err: any) {
-      console.error('Không thể tải lịch sử thanh toán:', err);
-    } finally {
-      setIsLoadingPayments(false);
-    }
-  };
-
-  const fetchRealDataForFavorites = async () => {
-    setIsLoadingFavorites(true);
-    try {
-      const prods = await httpClient.get<any[]>('/products');
-      setRealProductList(prods || []);
-    } catch (e) {
-      console.error('Failed to fetch products for dashboard favorites', e);
-    }
-    try {
-      const phs = await httpClient.get<any>('/photographers');
-      setRealPhotographersList(phs?.data || []);
-    } catch (e) {
-      console.error('Failed to fetch photographers for dashboard favorites', e);
-    } finally {
-      setIsLoadingFavorites(false);
-    }
-  };
-
-  // Lazy load data on tab switch instead of fetching all at once on mount
-  useEffect(() => {
-    if (activeTab === 'payments' && !hasLoadedPayments) {
-      setHasLoadedPayments(true);
-      fetchPayments();
-    } else if (activeTab === 'favorites' && !hasLoadedFavorites) {
-      setHasLoadedFavorites(true);
-      fetchRealDataForFavorites();
-    }
-  }, [activeTab, hasLoadedPayments, hasLoadedFavorites]);
-
-  const handleCreateReview = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reviewingItem) return;
-
-    try {
-      await httpClient.post('/reviews', {
-        bookingId: reviewingItem.bookingId,
-        bookingItemId: reviewingItem.itemId,
-        rating,
-        comment,
-        productId: reviewingItem.productId || undefined,
-        photographyPackageId: reviewingItem.photographyPackageId || undefined,
-      });
-
-      toast.success('Gửi đánh giá dịch vụ thành công!');
-      setReviewingItem(null);
-      setComment('');
-      setRating(5);
-      onRefresh();
-    } catch (err: any) {
-      toast.error(err.message || 'Gửi đánh giá thất bại');
-    }
-  };
-
-  const formatDate = (dateStr?: string | null) => {
-    if (!dateStr) return 'Chưa xác định';
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr;
-    return date.toLocaleDateString('vi-VN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
+  const handleDisputeBooking = (bookingId: string) => {
+    setPhotoDisputeBookingId(bookingId);
+    setSelectedDisputeReason('Thợ chụp ảnh không đến / Vắng mặt tại buổi chụp');
+    setPhotoDisputeNote('');
+    setPhotoDisputePhotos([]);
+    setIsPhotoDisputeModalOpen(true);
   };
 
   const handleConfirmComplete = async (bookingId: string) => {
-    const confirm = await Swal.fire({
+    const result = await Swal.fire({
       title: 'Xác nhận hài lòng?',
-      text: 'Bạn xác nhận đã nhận đủ sản phẩm ảnh chụp và hài lòng với dịch vụ? Đơn hàng sẽ được chuyển sang Hoàn thành.',
+      text: 'Bạn xác nhận đã hài lòng với buổi chụp ảnh này. Hành động này không thể hoàn tác.',
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#059669',
-      cancelButtonColor: '#9CA3AF',
-      confirmButtonText: '✓ Xác nhận hoàn thành',
-      cancelButtonText: 'Quay lại',
-      background: 'white',
+      cancelButtonColor: '#6B7280',
+      confirmButtonText: '✓ Xác nhận hài lòng',
+      cancelButtonText: 'Huỷ',
     });
-    if (!confirm.isConfirmed) return;
+    if (!result.isConfirmed) return;
 
     try {
-      toast.info('Đang xử lý xác nhận hoàn thành...');
-      await httpClient.post(`/bookings/${bookingId}/confirm-complete`);
-      toast.success('Đã xác nhận hoàn thành thành công! Tiền dịch vụ đã được tất toán.');
+      toast.info('Đang xác nhận...');
+      await httpClient.post(`/bookings/${bookingId}/confirm-complete`, {});
+      toast.success('Cảm ơn bạn đã xác nhận! Đơn hàng đã hoàn thành.');
       onRefresh();
     } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || 'Lỗi khi xác nhận hoàn thành.');
+      toast.error(err.message || 'Xác nhận thất bại, vui lòng thử lại.');
     }
   };
 
-  const handleDisputeBooking = async (bookingId: string) => {
-    const result = await Swal.fire({
-      title: 'Khiếu nại đơn chụp ảnh',
-      html: `
-        <p style="font-size: 13px; color: #6B7280; margin-bottom: 14px; line-height: 1.5;">
-          Vui lòng mô tả chi tiết lý do khiếu nại (ví dụ: thợ đến trễ, thái độ không tốt, chất lượng ảnh không đúng cam kết...). 
-          Bộ phận Chăm sóc khách hàng & Admin sẽ kiểm tra và hỗ trợ giải quyết trong 24 giờ.
-        </p>
-      `,
-      input: 'textarea',
-      inputLabel: 'Lý do khiếu nại (bắt buộc)',
-      inputPlaceholder: 'Nhập chi tiết lý do khiếu nại tại đây...',
-      inputAttributes: {
-        'aria-label': 'Lý do khiếu nại',
-        style: 'font-size: 13px; min-height: 90px;',
-      },
-      showCancelButton: true,
-      confirmButtonColor: '#DC2626',
-      cancelButtonColor: '#9CA3AF',
-      confirmButtonText: 'Gửi khiếu nại',
-      cancelButtonText: 'Hủy',
-      background: 'white',
-      inputValidator: (value) => {
-        if (!value || !value.trim()) {
-          return 'Vui lòng nhập chi tiết lý do khiếu nại!';
-        }
-        return null;
-      },
-    });
+  const handleSubmitPhotoDispute = async () => {
+    if (!photoDisputeBookingId) return;
 
-    if (!result.isConfirmed || !result.value) return;
+    let finalReason = selectedDisputeReason;
+    const isOther = selectedDisputeReason.startsWith('Khác');
 
-    const reason = result.value.trim();
+    if (isOther) {
+      if (!photoDisputeNote.trim()) {
+        toast.error('Vui lòng nhập chi tiết lý do khiếu nại.');
+        return;
+      }
+      finalReason = photoDisputeNote.trim();
+    } else if (photoDisputeNote.trim()) {
+      finalReason = `${selectedDisputeReason}: ${photoDisputeNote.trim()}`;
+    }
+
     try {
-      await httpClient.patch(`/bookings/${bookingId}/status`, { status: 'DISPUTED', note: reason });
+      toast.info('Đang gửi khiếu nại...');
+      await httpClient.patch(`/bookings/${photoDisputeBookingId}/status`, {
+        status: 'DISPUTED',
+        note: finalReason,
+        evidencePhotos: photoDisputePhotos.length > 0 ? photoDisputePhotos : undefined,
+      });
       toast.success('Đã gửi khiếu nại thành công. Admin sẽ liên hệ hỗ trợ bạn trong 24h!');
+      setIsPhotoDisputeModalOpen(false);
       onRefresh();
     } catch (err: any) {
       console.error(err);
@@ -461,6 +452,9 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   // --- 2. RENTED AO DAI (Áo dài đã thuê) ---
   const rentalItems: any[] = [];
   bookings.forEach(b => {
+    // Exclude Combo bookings or Photography bookings from Ao Dai rental tab (Combo will only appear under My Appointments)
+    if (b.bookingType === 'COMBO' || b.items?.some((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE')) return;
+
     if (b.items) {
       const productItems = b.items.filter((item: any) => item.itemType === 'PRODUCT');
       if (productItems.length > 0) {
@@ -777,6 +771,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
         {/* PANEL 1: APPOINTMENTS */}
         {activeTab === 'appointments' && (
+          isLoadingBookings ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '220px', gap: '12px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', padding: '30px' }}>
+              <div style={{ width: '28px', height: '28px', border: '3px solid #F3F4F6', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <span style={{ fontSize: '13px', color: '#8C827A', fontWeight: 500 }}>Đang tải lịch hẹn...</span>
+            </div>
+          ) : (
           <div className="vh-profile-appointments-grid">
             {displayAppointments.length === 0 ? (
               <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8' }}>
@@ -790,38 +790,57 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   key={app.id}
                   className={`vh-profile-appointment-card ${app.statusType === 'UPCOMING' ? 'vh-appointment-upcoming' : 'vh-appointment-past'}`}
                 >
-                  <div className="vh-appointment-card-header">
-                    {app.rawStatus === 'DEPOSIT_PAID' ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#EA580C', color: 'white' }}>
-                        <Clock size={13} style={{ marginRight: '6px' }} />
-                        CHỜ THỢ CHỤP XÁC NHẬN • {app.dateStr}
-                      </span>
-                    ) : app.rawStatus === 'AWAITING_REVIEW' ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#0284C7', color: 'white' }}>
-                        <Clock size={13} style={{ marginRight: '6px' }} />
-                        CHỜ XÁC NHẬN • {app.dateStr}
-                      </span>
-                    ) : app.rawStatus === 'IN_PROGRESS' ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#059669', color: 'white' }}>
-                        <Clock size={13} style={{ marginRight: '6px' }} />
-                        ĐANG CHỤP • {app.dateStr}
-                      </span>
-                    ) : app.isOverdue ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#C2410C', color: 'white' }}>
-                        <Clock size={13} style={{ marginRight: '6px' }} />
-                        {app.isPastTimeToday ? 'QUÁ GIỜ CHỤP' : 'QUÁ HẠN CHỤP'} • {app.dateStr}
-                      </span>
-                    ) : app.statusType === 'UPCOMING' ? (
-                      <span className="vh-appointment-status-label-upcoming">
-                        <Calendar size={13} style={{ marginRight: '6px' }} />
-                        SẮP TỚI • {app.dateStr}
-                      </span>
-                    ) : (
-                      <span className="vh-appointment-status-label-past">
-                        <History size={13} style={{ marginRight: '6px' }} />
-                        {app.statusLabel.toUpperCase()} • {app.dateStr}
-                      </span>
-                    )}
+                  <div className="vh-appointment-card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {(app.booking?.bookingType === 'COMBO' || app.booking?.items?.some((i: any) => i.itemType === 'PRODUCT')) && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          background: 'linear-gradient(135deg, #8B1E22 0%, #DC2626 100%)',
+                          color: '#FFFFFF',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          letterSpacing: '0.04em',
+                          boxShadow: '0 2px 5px rgba(139, 30, 34, 0.3)',
+                        }}>
+                          <Sparkles size={12} fill="#FFF" /> GÓI COMBO TRỌN GÓI
+                        </span>
+                      )}
+                      {app.rawStatus === 'DEPOSIT_PAID' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#EA580C', color: 'white' }}>
+                          <Clock size={13} style={{ marginRight: '6px' }} />
+                          CHỜ THỢ CHỤP XÁC NHẬN • {app.dateStr}
+                        </span>
+                      ) : app.rawStatus === 'AWAITING_REVIEW' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#0284C7', color: 'white' }}>
+                          <Clock size={13} style={{ marginRight: '6px' }} />
+                          CHỜ XÁC NHẬN • {app.dateStr}
+                        </span>
+                      ) : app.rawStatus === 'IN_PROGRESS' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#059669', color: 'white' }}>
+                          <Clock size={13} style={{ marginRight: '6px' }} />
+                          ĐANG CHỤP • {app.dateStr}
+                        </span>
+                      ) : app.isOverdue ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#C2410C', color: 'white' }}>
+                          <Clock size={13} style={{ marginRight: '6px' }} />
+                          {app.isPastTimeToday ? 'QUÁ GIỜ CHỤP' : 'QUÁ HẠN CHỤP'} • {app.dateStr}
+                        </span>
+                      ) : app.statusType === 'UPCOMING' ? (
+                        <span className="vh-appointment-status-label-upcoming">
+                          <Calendar size={13} style={{ marginRight: '6px' }} />
+                          SẮP TỚI • {app.dateStr}
+                        </span>
+                      ) : (
+                        <span className="vh-appointment-status-label-past">
+                          <History size={13} style={{ marginRight: '6px' }} />
+                          {app.statusLabel.toUpperCase()} • {app.dateStr}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -858,9 +877,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         {(() => {
                           const photos = (app.booking?.deliveredPhotos && app.booking.deliveredPhotos.length > 0)
                             ? app.booking.deliveredPhotos
-                            : (app.booking?.handoverPhotos && app.booking.handoverPhotos.length > 0)
-                              ? app.booking.handoverPhotos
-                              : [];
+                            : [];
                           const driveUrl = app.booking?.deliveryDriveUrl;
                           if (photos.length === 0 && !driveUrl) return null;
 
@@ -1068,10 +1085,17 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               </div>
             )}
           </div>
+          )
         )}
 
         {/* PANEL 2: RENTALS */}
         {activeTab === 'rentals' && (
+          isLoadingBookings ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '220px', gap: '12px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8', padding: '30px' }}>
+              <div style={{ width: '28px', height: '28px', border: '3px solid #F3F4F6', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <span style={{ fontSize: '13px', color: '#8C827A', fontWeight: 500 }}>Đang tải trang phục đã thuê...</span>
+            </div>
+          ) : (
           <div className="vh-profile-appointments-grid">
             {displayRentals.length === 0 ? (
               <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #EAEAE8' }}>
@@ -1437,6 +1461,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               </div>
             )}
           </div>
+          )
         )}
 
         {/* PANEL 3: FAVORITES */}
@@ -1953,6 +1978,142 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 }}
               >
                 Gửi báo cáo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Photography Booking Complaint Modal popup */}
+      {isPhotoDisputeModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(3px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '480px',
+            padding: '24px', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', position: 'relative'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0, fontFamily: 'var(--font-header)', color: '#991B1B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={20} color="#DC2626" />
+                Khiếu nại đơn chụp ảnh
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsPhotoDisputeModalOpen(false)}
+                style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#6B7280' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: '12.5px', color: '#6B7280', marginBottom: '16px', lineHeight: 1.5 }}>
+              Bộ phận Chăm sóc khách hàng & Admin sẽ kiểm tra thông tin và hỗ trợ giải quyết tranh chấp trong vòng 24 giờ.
+            </p>
+
+            {/* Dropdown Select Reason */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1F2937' }}>
+                Lý do khiếu nại (chọn từ danh sách):
+              </label>
+              <select
+                value={selectedDisputeReason}
+                onChange={(e) => setSelectedDisputeReason(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #D1D5DB',
+                  fontSize: '13px', outline: 'none', color: '#1F2937', backgroundColor: '#F9FAFB', fontWeight: 500
+                }}
+              >
+                <option value="Thợ chụp ảnh không đến / Vắng mặt tại buổi chụp">Thợ chụp ảnh không đến / Vắng mặt tại buổi chụp</option>
+                <option value="Thợ chụp ảnh đến trễ so với lịch hẹn">Thợ chụp ảnh đến trễ so với lịch hẹn</option>
+                <option value="Thái độ thợ chụp không chuyên nghiệp / không hợp tác">Thái độ thợ chụp không chuyên nghiệp / không hợp tác</option>
+                <option value="Sản phẩm ảnh giao không đạt chất lượng / Giao ảnh trễ">Sản phẩm ảnh giao không đạt chất lượng / Giao ảnh trễ</option>
+                <option value="Khác (Vui lòng nhập chi tiết bên dưới)">Khác (Vui lòng nhập chi tiết bên dưới)</option>
+              </select>
+            </div>
+
+            {/* Description / Additional Detail Textarea */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1F2937' }}>
+                {selectedDisputeReason.startsWith('Khác') ? 'Mô tả chi tiết lý do khiếu nại (bắt buộc):' : 'Bổ sung ghi chú chi tiết (nếu có):'}
+              </label>
+              <textarea
+                value={photoDisputeNote}
+                onChange={(e) => setPhotoDisputeNote(e.target.value)}
+                placeholder={selectedDisputeReason.startsWith('Khác') ? 'Nhập chi tiết cụ thể lý do khiếu nại...' : 'Mô tả thêm thời gian, địa điểm hoặc chi tiết sự việc...'}
+                style={{
+                  width: '100%', height: '85px', borderRadius: '8px', border: '1px solid #D1D5DB',
+                  padding: '10px 12px', fontSize: '13px', outline: 'none', resize: 'none', color: '#1F2937'
+                }}
+              />
+            </div>
+
+            {/* Upload evidence photos */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#1F2937' }}>
+                Hình ảnh bằng chứng (ảnh tin nhắn, lịch sử cuộc gọi... - tùy chọn):
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
+                {photoDisputePhotos.map((url, idx) => (
+                  <div key={idx} style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
+                    <img src={url} alt="Evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button
+                      type="button"
+                      onClick={() => setPhotoDisputePhotos(prev => prev.filter((_, i) => i !== idx))}
+                      style={{
+                        position: 'absolute', top: '2px', right: '2px', backgroundColor: 'rgba(0,0,0,0.6)',
+                        color: 'white', border: 'none', borderRadius: '50%', width: '16px', height: '16px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '10px'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {photoDisputePhotos.length < 5 && (
+                  <label style={{
+                    width: '64px', height: '64px', borderRadius: '6px', border: '2px dashed #D1D5DB',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', color: '#6B7280', backgroundColor: '#F9FAFB'
+                  }}>
+                    <Plus size={18} />
+                    <span style={{ fontSize: '10px' }}>Tải ảnh</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handlePhotoDisputeUpload}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setIsPhotoDisputeModalOpen(false)}
+                style={{
+                  flex: 1, backgroundColor: 'white', color: '#374151', border: '1px solid #D1D5DB',
+                  padding: '10px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitPhotoDispute}
+                style={{
+                  flex: 1, backgroundColor: '#DC2626', color: 'white', border: 'none',
+                  padding: '10px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(220,38,38,0.2)'
+                }}
+              >
+                Gửi khiếu nại
               </button>
             </div>
           </div>

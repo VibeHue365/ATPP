@@ -86,7 +86,7 @@ export class RentalDepositRefundCoordinatorService {
         const productItemsDepositSum = updatedProductItems.reduce((sum, item) => sum + ((item.depositAmount || 0) * (item.quantity || 1)), 0);
         if (productItemsDepositSum > 0) {
           amount = productItemsDepositSum;
-        } else if (booking.bookingType === 'AODAI_RENTAL') {
+        } else if (['AODAI_RENTAL', 'COMBO'].includes(booking.bookingType)) {
           amount = booking.pricingSummary?.depositTotal || 0;
         }
       }

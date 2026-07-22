@@ -459,16 +459,51 @@ export const CartPage: React.FC = () => {
     return item;
   });
 
+const getImageUrl = (url?: string | null) => {
+  if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600';
+  if (url.startsWith('http') || url.startsWith('blob:')) return url;
+  return `http://localhost:3000${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
+  // Group enrichedCart items into Combos vs Normal Items
+  const comboGroupsMap = new Map<string, CartItem[]>();
+  const normalCartItems: CartItem[] = [];
+
+  enrichedCart.forEach((item) => {
+    if (item.comboPromotionId) {
+      const list = comboGroupsMap.get(item.comboPromotionId) || [];
+      list.push(item);
+      comboGroupsMap.set(item.comboPromotionId, list);
+    } else {
+      normalCartItems.push(item);
+    }
+  });
+
+  const comboGroupEntries = Array.from(comboGroupsMap.entries()).map(([comboId, items]) => {
+    const origTotal = items.reduce((sum, i) => sum + (i.basePrice || 0) * (i.quantity || 1), 0);
+    const discountPct = items[0]?.comboDiscountPercent || 50;
+    const comboPrice = Math.round(origTotal * (1 - discountPct / 100));
+    const depositAmt = items.filter(i => i.itemType === 'PRODUCT').reduce((sum, i) => sum + (i.depositAmount || 0) * (i.quantity || 1), 0);
+
+    return {
+      comboId,
+      items,
+      origTotal,
+      discountPct,
+      comboPrice,
+      depositAmt,
+    };
+  });
+
   const checkedGroups: any[] = [];
 
-
-  // Combine groups: flat list of all items in the cart, no combos
-  const groups: any[] = enrichedCart.length > 0 ? [
+  // Combine groups for normal items (non-combo)
+  const groups: any[] = normalCartItems.length > 0 ? [
     {
-      id: 'all-items',
-      title: 'DANH SÁCH SẢN PHẨM',
+      id: 'normal-items',
+      title: 'SẢN PHẨM & DỊCH VỤ THUÊ LẺ',
       type: 'OTHERS',
-      items: enrichedCart
+      items: normalCartItems
     }
   ] : [];
 
@@ -509,53 +544,50 @@ export const CartPage: React.FC = () => {
   // Calculations for checkout (only selected items)
   const selectedItems = enrichedCart.filter(item => selectedItemIds.includes(item.id));
   
-  const totalProductRental = selectedItems
-    .filter(item => item.itemType === 'PRODUCT' && (item.rentalFrom || item.startDate))
-    .reduce((sum, item) => sum + (item.basePrice || 0) * item.quantity, 0);
+  const selectedComboIds = new Set(
+    selectedItems.filter(i => i.comboPromotionId).map(i => i.comboPromotionId!)
+  );
 
-  const totalProductDeposit = selectedItems
-    .filter(item => item.itemType === 'PRODUCT' && (item.rentalFrom || item.startDate))
-    .reduce((sum, item) => sum + (item.depositAmount || 0) * item.quantity, 0);
+  let totalComboPrice = 0;
+  let totalComboDeposit = 0;
 
-  const totalPhotographerFee = selectedItems
+  selectedComboIds.forEach(cId => {
+    const cItems = enrichedCart.filter(i => i.comboPromotionId === cId);
+    const origTotal = cItems.reduce((sum, i) => sum + (i.basePrice || 0) * (i.quantity || 1), 0);
+    const pct = cItems[0]?.comboDiscountPercent || 50;
+    const cPrice = Math.round(origTotal * (1 - pct / 100));
+    const cDeposit = cItems.filter(i => i.itemType === 'PRODUCT').reduce((sum, i) => sum + (i.depositAmount || 0) * (i.quantity || 1), 0);
+
+    totalComboPrice += cPrice;
+    totalComboDeposit += cDeposit;
+  });
+
+  const nonComboSelected = selectedItems.filter(i => !i.comboPromotionId);
+  const totalNonComboRental = nonComboSelected
+    .filter(item => item.itemType === 'PRODUCT')
+    .reduce((sum, item) => sum + (item.basePrice || 0) * (item.quantity || 1), 0);
+  const totalNonComboDeposit = nonComboSelected
+    .filter(item => item.itemType === 'PRODUCT')
+    .reduce((sum, item) => sum + (item.depositAmount || 0) * (item.quantity || 1), 0);
+  const totalNonComboPhoto = nonComboSelected
     .filter(item => item.itemType === 'PHOTOGRAPHY_PACKAGE')
-    .reduce((sum, item) => sum + (item.basePrice || 0) * item.quantity, 0);
+    .reduce((sum, item) => sum + (item.basePrice || 0) * (item.quantity || 1), 0);
 
-  const totalOthersFee = selectedItems
-    .filter(item => item.itemType === 'PRODUCT' && !(item.rentalFrom || item.startDate))
-    .reduce((sum, item) => sum + (item.basePrice || 0) * item.quantity, 0);
+  const totalProductRental = totalNonComboRental;
+  const totalProductDeposit = totalComboDeposit + totalNonComboDeposit;
+  const totalPhotographerFee = totalNonComboPhoto;
+  const comboDiscountTotal = Array.from(selectedComboIds).reduce((sum, cId) => {
+    const cItems = enrichedCart.filter(i => i.comboPromotionId === cId);
+    const origTotal = cItems.reduce((s, i) => s + (i.basePrice || 0) * (i.quantity || 1), 0);
+    const pct = cItems[0]?.comboDiscountPercent || 50;
+    return sum + Math.round(origTotal * (pct / 100));
+  }, 0);
 
-  // Removed platform service fee per user request
   const serviceFee = 0;
 
-  // Tính giảm giá Combo của các nhóm combo thành công trong selectedItems
-  const comboDiscountTotal = checkedGroups
-    .filter(group => group.type === 'SUCCESS')
-    .reduce((sum, group) => {
-      const prodItem = group.items.find((i: any) => i.itemType === 'PRODUCT');
-      const photoItem = group.items.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
-      
-      let prodDiscount = 0;
-      let photoDiscount = 0;
-
-      if (prodItem) {
-        const pct = prodItem.comboDiscountPercent !== undefined ? prodItem.comboDiscountPercent : 10;
-        prodDiscount = (prodItem.basePrice || 0) * prodItem.quantity * (pct / 100);
-      }
-      if (photoItem) {
-        const pct = photoItem.comboDiscountPercent !== undefined ? photoItem.comboDiscountPercent : 10;
-        photoDiscount = (photoItem.basePrice || 0) * photoItem.quantity * (pct / 100);
-      }
-
-      return sum + prodDiscount + photoDiscount;
-    }, 0);
-
-  const totalPhotographerDeposit = totalPhotographerFee; // 100% thanh toán trước cho thợ chụp
-  const totalPhotographerRemaining = 0;
-
-  const grandTotal = Math.max(totalProductRental + totalPhotographerFee + totalOthersFee - comboDiscountTotal, 0);
-  const depositToPayNow = Math.max(totalProductRental + totalPhotographerDeposit + totalOthersFee + serviceFee + totalProductDeposit - comboDiscountTotal, 0);
-  const remainingToPayLater = totalPhotographerRemaining;
+  const grandTotal = totalComboPrice + totalNonComboRental + totalNonComboPhoto;
+  const depositToPayNow = totalComboPrice + totalComboDeposit + totalNonComboRental + totalNonComboDeposit + totalNonComboPhoto;
+  const remainingToPayLater = 0;
 
   const resumePendingCheckout = async (): Promise<boolean> => {
     const selectedIds = selectedItems.map((item) => item.id).sort().join('|');
@@ -811,6 +843,107 @@ export const CartPage: React.FC = () => {
             
             {/* Left Column: Cart groups and items */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              {comboGroupEntries.map(entry => {
+                const isComboSelected = entry.items.every(i => selectedItemIds.includes(i.id));
+
+                return (
+                  <div
+                    key={entry.comboId}
+                    style={{
+                      backgroundColor: '#FFFDF9',
+                      borderRadius: '12px',
+                      border: '2px solid #D97706',
+                      boxShadow: '0 4px 12px rgba(217, 119, 6, 0.12)',
+                      padding: '20px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '16px',
+                    }}
+                  >
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed #FDE68A', paddingBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <CustomCheckbox
+                          checked={isComboSelected}
+                          onChange={() => {
+                            if (isComboSelected) {
+                              setSelectedItemIds(prev => prev.filter(id => !entry.items.some(i => i.id === id)));
+                            } else {
+                              setSelectedItemIds(prev => Array.from(new Set([...prev, ...entry.items.map(i => i.id)])));
+                            }
+                          }}
+                        />
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          backgroundColor: '#8B1E22',
+                          color: 'white',
+                          padding: '5px 12px',
+                          borderRadius: '16px',
+                          fontSize: '12px',
+                          fontWeight: 800,
+                          letterSpacing: '0.05em'
+                        }}>
+                          <Sparkles size={13} fill="#FFF" /> GÓI COMBO TRỌN GÓI (GIẢM {entry.discountPct}%)
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => entry.items.forEach(i => removeFromCart(i.id))}
+                        style={{ border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 700 }}
+                      >
+                        <Trash2 size={16} /> Xóa Combo
+                      </button>
+                    </div>
+
+                    {/* Items list inside Combo */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {entry.items.map((item) => {
+                        const itemImage = item.itemType === 'PRODUCT'
+                          ? (item.productImage || item.image)
+                          : (item.packageImage || item.photographerAvatar || item.image);
+
+                        return (
+                          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'white', padding: '14px 16px', borderRadius: '8px', border: '1px solid #FEF3C7' }}>
+                            <img
+                              src={getImageUrl(itemImage)}
+                              alt={item.productName || item.packageName || ''}
+                              style={{ width: '70px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1px solid rgba(0,0,0,0.06)' }}
+                            />
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ fontSize: '15px', fontWeight: 700, color: '#1E293B' }}>
+                                {item.itemType === 'PRODUCT' ? `Áo dài: ${item.productName || item.name}` : `Gói chụp: ${item.photographerName} | ${item.packageName}`}
+                              </div>
+                              {item.itemType === 'PRODUCT' ? (
+                                <div style={{ fontSize: '12.5px', color: '#64748B' }}>
+                                  Kích cỡ: <strong style={{ color: '#8B1E22' }}>{item.size}</strong> • Màu: <strong style={{ color: '#8B1E22' }}>{item.color}</strong> • Ngày thuê: <strong>{formatSingleDate(item.rentalFrom || item.startDate)}</strong>
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: '12.5px', color: '#64748B' }}>
+                                  Lịch chụp: <strong style={{ color: '#8B1E22' }}>{formatSingleDate(item.shootDate)} ({item.shootTimeSlot})</strong>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Footer combo summary */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #FDE68A', paddingTop: '12px' }}>
+                      <div style={{ fontSize: '12.5px', color: '#64748B' }}>
+                        Giá gốc 2 món: <span style={{ textDecoration: 'line-through' }}>{entry.origTotal.toLocaleString('vi-VN')}đ</span>
+                        {entry.depositAmt > 0 && <span style={{ marginLeft: '10px', color: '#D97706', fontWeight: 600 }}>(Cọc áo dài: +{entry.depositAmt.toLocaleString('vi-VN')}đ)</span>}
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '12px', color: '#8B1E22', fontWeight: 600 }}>Giá Combo ưu đãi: </span>
+                        <strong style={{ fontSize: '20px', color: '#8B1E22', fontWeight: 800 }}>{entry.comboPrice.toLocaleString('vi-VN')}đ</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
               {groups.map(group => (
                 <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   

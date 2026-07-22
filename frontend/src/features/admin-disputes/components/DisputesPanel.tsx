@@ -93,6 +93,12 @@ export function DisputesPanel() {
       await adminDisputesApi.resolve(selected.bookingId._id, payload);
       setSelected(null);
       await refresh();
+      await Swal.fire({
+        title: 'Thành công!',
+        text: 'Đã giải quyết tranh chấp và cập nhật trạng thái đơn hàng.',
+        icon: 'success',
+        confirmButtonColor: '#27AE60',
+      });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Không thể xử lý tranh chấp.');
     } finally {

@@ -58,9 +58,14 @@ export class SettlementQueryService {
 
     // Self-healing: auto-create settlement for any COMPLETED bookings of this provider that don't have one yet
     try {
+      const itemsForProvider = await this.bookingModel.db.model('BookingItem').find({ providerId }).distinct('bookingId');
       const completedBookings = await this.bookingModel
         .find({
-          $or: [{ providerIds: providerId }, { providerId: providerId as any }],
+          $or: [
+            { providerIds: providerId },
+            { providerId: providerId as any },
+            { _id: { $in: itemsForProvider } },
+          ],
           status: BookingStatus.Completed,
         })
         .lean();

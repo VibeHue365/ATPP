@@ -775,12 +775,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
 
           {/* Photography Delivered Photos */}
           {(() => {
-            const isPhotography = booking.bookingType === 'PHOTOGRAPHY' || booking.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
             const photos = (booking.deliveredPhotos && booking.deliveredPhotos.length > 0)
               ? booking.deliveredPhotos
-              : (isPhotography && booking.handoverPhotos && booking.handoverPhotos.length > 0)
-                ? booking.handoverPhotos
-                : [];
+              : [];
             const driveUrl = booking.deliveryDriveUrl;
 
             if (photos.length === 0 && !driveUrl) return null;

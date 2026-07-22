@@ -287,9 +287,10 @@ export class PaymentsService {
             await this.depositCoordinator.coordinate(booking._id.toString());
           } catch { }
         }
+        const disputeRefundAmount = (booking as any).disputeResult?.refundAmount || 0;
         if (
-          ['CANCELLED', 'REFUNDED', 'PARTIALLY_REFUNDED', 'DISPUTED'].includes(booking.status) &&
-          (booking.cancellation?.refundAmount || 0) > 0
+          (['CANCELLED', 'REFUNDED', 'PARTIALLY_REFUNDED', 'DISPUTED', 'COMPLETED'].includes(booking.status)) &&
+          ((booking.cancellation?.refundAmount || 0) > 0 || disputeRefundAmount > 0)
         ) {
           try {
             const existingRefund = await this.bookingModel.db
@@ -300,22 +301,16 @@ export class PaymentsService {
               })
               .exec();
             if (!existingRefund) {
+              const amountToRefund = (booking.cancellation?.refundAmount || 0) > 0 ? booking.cancellation!.refundAmount! : disputeRefundAmount;
               await this.refundDeposit(
                 booking._id.toString(),
-                booking.cancellation!.refundAmount!,
+                amountToRefund,
               );
             }
           } catch (e) {
             this.logger.error(`Error auto-generating refund for booking ${booking.bookingCode}: ${e}`);
           }
         }
-      }
-
-      const completedPhotographyBookingIds = bookings
-        .filter((b) => b.bookingType === BookingType.Photography && b.status === BookingStatus.Completed)
-        .map((b) => b._id);
-      if (completedPhotographyBookingIds.length > 0) {
-        await this.paymentsRepository.deleteRefundPaymentsByBookingIds(completedPhotographyBookingIds);
       }
 
       const bookingIds = bookings.map((b) => b._id);
