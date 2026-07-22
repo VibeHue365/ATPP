@@ -311,13 +311,52 @@ export class InventoryService {
               status: { $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed] },
               reservedFrom: { $lte: now },
             })
-            .select({ inventoryItemId: 1 })
+            .select({ inventoryItemId: 1, bookingId: 1, bookingItemId: 1 })
+            .lean()
             .exec()
         : [];
 
-    const activeRentedItemIds = new Set(
-      activeReservations.map((r) => r.inventoryItemId.toString()),
-    );
+    let activeRentedItemIds = new Set<string>();
+
+    if (activeReservations.length > 0) {
+      const bookingModel = this.connection.model('Booking');
+      const bookingItemModel = this.connection.model('BookingItem');
+
+      const bookingIds = Array.from(new Set(activeReservations.map((r) => r.bookingId?.toString()).filter(Boolean)));
+      const bookingItemIds = Array.from(new Set(activeReservations.map((r) => r.bookingItemId?.toString()).filter(Boolean)));
+
+      const inactiveBookings = bookingIds.length > 0
+        ? await bookingModel
+            .find({
+              _id: { $in: bookingIds.map((id) => new Types.ObjectId(id)) },
+              status: { $in: ['RETURNED', 'COMPLETED', 'CANCELLED', 'REFUNDED'] },
+            })
+            .select({ _id: 1 })
+            .lean()
+            .exec()
+        : [];
+      const inactiveBookingIds = new Set(inactiveBookings.map((b: any) => b._id.toString()));
+
+      const inactiveBookingItems = bookingItemIds.length > 0
+        ? await bookingItemModel
+            .find({
+              _id: { $in: bookingItemIds.map((id) => new Types.ObjectId(id)) },
+              'rentalFulfillment.status': { $in: ['Returned', 'Completed'] },
+            })
+            .select({ _id: 1 })
+            .lean()
+            .exec()
+        : [];
+      const inactiveBookingItemIds = new Set(inactiveBookingItems.map((bi: any) => bi._id.toString()));
+
+      activeReservations.forEach((r) => {
+        const isBookingInactive = r.bookingId && inactiveBookingIds.has(r.bookingId.toString());
+        const isItemInactive = r.bookingItemId && inactiveBookingItemIds.has(r.bookingItemId.toString());
+        if (!isBookingInactive && !isItemInactive) {
+          activeRentedItemIds.add(r.inventoryItemId.toString());
+        }
+      });
+    }
 
     // Grouping by productId, size, color
     const summaryMap = new Map<string, {
