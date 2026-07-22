@@ -3395,7 +3395,100 @@ export const ProviderDashboard: React.FC = () => {
                               </div>
                             </div>
                           </td>
-                          <td style={{ padding: '16px 20px', fontWeight: 600 }}>{o.productName}</td>
+                          <td style={{ padding: '16px 20px' }}>
+                            <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text-primary)' }}>{o.productName}</div>
+                            {(() => {
+                              const photoItem = o.items?.find((it: any) => it.itemType === 'PHOTOGRAPHY_PACKAGE' || it.shootDate);
+                              if (photoItem) {
+                                const shootDateStr = photoItem.shootDate ? new Date(photoItem.shootDate).toLocaleDateString('vi-VN') : '';
+                                const timeSlotStr = photoItem.shootTimeSlot || '';
+                                const durationStr = photoItem.durationHours ? `${photoItem.durationHours} giờ` : '';
+                                const locationStr = photoItem.location || photoItem.address || (o as any).location || '';
+                                const conceptVal = photoItem.conceptNotes || photoItem.notes || '';
+                                const pendingReschedule = photoItem.rescheduleRequest?.status === 'PENDING' ? photoItem.rescheduleRequest : null;
+
+                                return (
+                                  <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {shootDateStr && (
+                                      <div style={{ fontSize: '12px', color: '#1565C0', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span>📅 Ngày chụp:</span>
+                                        <span>{shootDateStr} {timeSlotStr ? `(${timeSlotStr.replace('-', ' - ')})` : ''}</span>
+                                        {durationStr && <span style={{ color: '#64748B', fontWeight: 500 }}>• {durationStr}</span>}
+                                      </div>
+                                    )}
+
+                                    {locationStr && (
+                                      <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span>📍 Địa điểm:</span>
+                                        <span style={{ fontWeight: 600 }}>{locationStr}</span>
+                                      </div>
+                                    )}
+
+                                    <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span>🎨 Concept:</span>
+                                      <span style={{ fontWeight: 600, fontStyle: 'italic' }}>
+                                        {conceptVal || 'Chụp theo phong cách tiêu chuẩn của gói'}
+                                      </span>
+                                    </div>
+
+                                    {pendingReschedule && (
+                                      <div style={{
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        backgroundColor: '#FEF9E7',
+                                        color: '#D35400',
+                                        border: '1px solid #F5CBA7',
+                                        borderRadius: '6px',
+                                        padding: '5px 9px',
+                                        marginTop: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: '8px',
+                                        maxWidth: '340px'
+                                      }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <span>🔄 ĐỔI LỊCH MỚI:</span>
+                                          <span style={{ color: '#C0392B' }}>
+                                            {new Date(pendingReschedule.newShootDate || pendingReschedule.newRentalFrom).toLocaleDateString('vi-VN')} {pendingReschedule.newShootTimeSlot ? `(${pendingReschedule.newShootTimeSlot.replace('-', ' - ')})` : ''}
+                                          </span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '4px' }}>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); void resolveRescheduleRequest(o, photoItem, true); }}
+                                            style={{ border: 'none', borderRadius: '4px', padding: '3px 8px', backgroundColor: '#27AE60', color: '#FFF', fontSize: '10.5px', fontWeight: 700, cursor: 'pointer' }}
+                                          >
+                                            Duyệt
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); void resolveRescheduleRequest(o, photoItem, false); }}
+                                            style={{ border: 'none', borderRadius: '4px', padding: '3px 8px', backgroundColor: '#C0392B', color: '#FFF', fontSize: '10.5px', fontWeight: 700, cursor: 'pointer' }}
+                                          >
+                                            Từ chối
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+
+                              const rentalItem = o.items?.find((it: any) => it.itemType === 'PRODUCT' || it.startDate || it.rentalFrom);
+                              if (rentalItem) {
+                                const fromStr = rentalItem.startDate || rentalItem.rentalFrom ? new Date(rentalItem.startDate || rentalItem.rentalFrom).toLocaleDateString('vi-VN') : '';
+                                const toStr = rentalItem.endDate || rentalItem.rentalTo ? new Date(rentalItem.endDate || rentalItem.rentalTo).toLocaleDateString('vi-VN') : '';
+                                return (
+                                  <div style={{ fontSize: '11.5px', color: '#16A085', fontWeight: 700, marginTop: '2px' }}>
+                                    📅 Thời gian thuê: {fromStr} {toStr ? `- ${toStr}` : ''}
+                                  </div>
+                                );
+                              }
+
+                              return null;
+                            })()}
+                          </td>
                           <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)' }}>{o.orderDate}</td>
                           <td style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'right' }}>{o.total}</td>
                           <td style={{ padding: '16px 20px', textAlign: 'center' }}>
