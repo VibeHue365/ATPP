@@ -19,6 +19,97 @@ interface BookingDetailModalProps {
   onWriteReview?: (itemDetails: { bookingId: string, itemId: string, productId?: string, photographyPackageId?: string }) => void;
 }
 
+function getPhotoshootStartTarget(rawShootDate?: any, timeSlotStr?: string): Date | null {
+  if (!rawShootDate) return null;
+  const d = new Date(rawShootDate);
+  if (isNaN(d.getTime())) return null;
+
+  let hours = 8;
+  let minutes = 0;
+  if (timeSlotStr) {
+    const startTimePart = timeSlotStr.split('-')[0]?.trim();
+    if (startTimePart) {
+      const match = startTimePart.match(/(\d{1,2}):(\d{2})/);
+      if (match) {
+        hours = parseInt(match[1], 10);
+        minutes = parseInt(match[2], 10);
+      }
+    }
+  }
+
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hours, minutes, 0, 0);
+}
+
+function getCountdownDisplay(targetDate: Date | null, bookingStatus?: string, currentTime: Date = new Date()) {
+  if (!targetDate) return null;
+  if (['COMPLETED', 'CANCELLED', 'RETURNED', 'REFUNDED'].includes(bookingStatus || '')) {
+    return null;
+  }
+
+  if (bookingStatus === 'IN_PROGRESS') {
+    return {
+      text: '⚡ ĐANG TÁC NGHIỆP TRỰC TIẾP',
+      subText: 'Buổi chụp ảnh đang diễn ra',
+      bgColor: '#ECFDF5',
+      borderColor: '#10B981',
+      textColor: '#047857',
+      icon: '📸',
+      badgeColor: '#10B981',
+      isUrgent: false,
+      isOverdue: false
+    };
+  }
+
+  const diffMs = targetDate.getTime() - currentTime.getTime();
+
+  if (diffMs > 0) {
+    const totalMinutes = Math.floor(diffMs / (1000 * 60));
+    const days = Math.floor(totalMinutes / (60 * 24));
+    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+    const mins = totalMinutes % 60;
+
+    let timeText = '';
+    if (days > 0) {
+      timeText = `${days} ngày ${hours}h ${mins}m`;
+    } else if (hours > 0) {
+      timeText = `${hours}h ${mins}m`;
+    } else {
+      timeText = `${mins} phút`;
+    }
+
+    const isUrgent = diffMs < 2 * 60 * 60 * 1000;
+
+    return {
+      text: `⏳ CÒN ${timeText.toUpperCase()} NỮA ĐẾN GIỜ CHỤP`,
+      subText: `Giờ bấm máy: ${targetDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} • ${targetDate.toLocaleDateString('vi-VN')}`,
+      bgColor: isUrgent ? '#FEF2F2' : '#FFFBEB',
+      borderColor: isUrgent ? '#FCA5A5' : '#FCD34D',
+      textColor: isUrgent ? '#DC2626' : '#B45309',
+      icon: isUrgent ? '🚨' : '⏳',
+      badgeColor: isUrgent ? '#EF4444' : '#F59E0B',
+      isUrgent,
+      isOverdue: false
+    };
+  } else {
+    const overdueMinutes = Math.floor(Math.abs(diffMs) / (1000 * 60));
+    const overdueHours = Math.floor(overdueMinutes / 60);
+    const mins = overdueMinutes % 60;
+    const overdueText = overdueHours > 0 ? `${overdueHours}h ${mins}m` : `${mins} phút`;
+
+    return {
+      text: `⚠️ ĐÃ ĐẾN GIỜ CHỤP (Quá ${overdueText})`,
+      subText: `Vui lòng khởi hành hoặc bấm "Bắt đầu buổi chụp" trong thao tác`,
+      bgColor: '#FEF2F2',
+      borderColor: '#F87171',
+      textColor: '#991B1B',
+      icon: '⏰',
+      badgeColor: '#DC2626',
+      isUrgent: true,
+      isOverdue: true
+    };
+  }
+}
+
 export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   bookingId,
   isOpen,
@@ -36,6 +127,15 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   const [resolvingLocationChangeId, setResolvingLocationChangeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [incident, setIncident] = useState<any>(null);
+  const [now, setNow] = useState<Date>(new Date());
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && bookingId) {
@@ -342,6 +442,278 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             </div>
             <div>{getStatusBadge(booking.status)}</div>
           </div>
+
+          {/* Critical Service Details Summary (Photography vs Rental) */}
+          {(() => {
+            const isRental = booking.bookingType === 'AODAI_RENTAL' || booking.items?.some((i: any) => i.itemType === 'PRODUCT' || i.rentalFrom || i.startDate) || booking.productName?.includes('Áo Dài') || booking.productName?.includes('Áo dài');
+            const isPhoto = !isRental && (booking.bookingType === 'PHOTOGRAPHY' || booking.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE'));
+            const photoItem = booking.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.shootDate) || booking.items?.[0] || {};
+
+            if (isPhoto) {
+              const matchedSchedule = booking.schedules?.find((s: any) => s.scheduleType === 'PHOTOSHOOT' || s.scheduleType === 'RENTAL_PERIOD');
+              const rawShootDate = photoItem.shootDate || matchedSchedule?.scheduledDate || matchedSchedule?.startsAt || booking.shootDate;
+              const shootDateStr = rawShootDate ? new Date(rawShootDate).toLocaleDateString('vi-VN') : (booking.createdAt ? new Date(booking.createdAt).toLocaleDateString('vi-VN') : '');
+              const timeSlotStr = photoItem.shootTimeSlot || photoItem.timeSlot || matchedSchedule?.timeSlot || booking.shootTimeSlot || '';
+              const durationStr = photoItem.durationHours ? `${photoItem.durationHours} giờ` : (photoItem.photographyPackageSnapshot?.includedDurationMinutes ? `${photoItem.photographyPackageSnapshot.includedDurationMinutes / 60} giờ` : (photoItem.photographyPackageId?.includedDurationMinutes ? `${photoItem.photographyPackageId.includedDurationMinutes / 60} giờ` : (booking.durationHours ? `${booking.durationHours} giờ` : '')));
+              const locationStr = photoItem.shootLocation || photoItem.shootLocationSnapshot?.address || photoItem.location || photoItem.address || matchedSchedule?.locationAddress || booking.shootLocation || booking.location || booking.address || booking.deliveryAddress || booking.shippingAddress || '';
+              const conceptTheme = photoItem.shootConcept || photoItem.concept || booking.shootConcept || '';
+              const customNotes = photoItem.customRequests || photoItem.conceptNotes || photoItem.notes || photoItem.specialRequests || matchedSchedule?.customNotes || booking.customRequests || booking.notes || booking.customerNotes || booking.specialRequests || '';
+              const refImage = photoItem.referenceImage || photoItem.referencePhoto || photoItem.conceptImage || booking.referenceImage || booking.referencePhoto || null;
+              const refImageArray = Array.isArray(photoItem.referenceImages) ? photoItem.referenceImages : (refImage ? [refImage] : []);
+              const rescheduleReq = photoItem.rescheduleRequest || booking.rescheduleRequest;
+
+              const targetDate = getPhotoshootStartTarget(rawShootDate, timeSlotStr);
+              const countdown = getCountdownDisplay(targetDate, booking.status, now);
+
+              return (
+                <div style={{
+                  backgroundColor: '#F8FAFC',
+                  border: '2px solid #3B82F6',
+                  borderRadius: '12px',
+                  padding: '16px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.08)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E2E8F0', paddingBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '15px', color: '#1E40AF' }}>
+                      <span>📸 THÔNG TIN CHI TIẾT BUỔI CHỤP ẢNH</span>
+                    </div>
+                    <span style={{ fontSize: '12px', backgroundColor: '#DBEAFE', color: '#1E40AF', padding: '3px 10px', borderRadius: '20px', fontWeight: 700 }}>
+                      {photoItem.photographyPackageId?.name || photoItem.productName || booking.productName || 'Gói Nhiếp Ảnh'}
+                    </span>
+                  </div>
+
+                  {/* 0. Bộ đếm ngược thời gian đếm lùi */}
+                  {countdown && (
+                    <div style={{
+                      backgroundColor: countdown.bgColor,
+                      border: `1.5px solid ${countdown.borderColor}`,
+                      borderRadius: '10px',
+                      padding: '10px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '20px' }}>{countdown.icon}</span>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 800, color: countdown.textColor, letterSpacing: '0.01em' }}>
+                            {countdown.text}
+                          </div>
+                          <div style={{ fontSize: '11px', fontWeight: 600, color: countdown.textColor, opacity: 0.85, marginTop: '2px' }}>
+                            {countdown.subText}
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{
+                        backgroundColor: countdown.badgeColor,
+                        color: 'white',
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        fontSize: '10.5px',
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {countdown.isUrgent ? 'CẤP BÁCH' : countdown.isOverdue ? 'ĐÃ ĐẾN GIỜ' : 'ĐẾM NGƯỢC'}
+                      </span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', fontSize: '13px' }}>
+                    {/* 1. Ngày chụp */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#EFF6FF', padding: '8px 12px', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
+                      <span style={{ fontSize: '16px' }}>📅</span>
+                      <div>
+                        <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#1D4ED8', textTransform: 'uppercase' }}>NGÀY CHỤP</div>
+                        <div style={{ fontWeight: 800, color: '#1E3A8A', fontSize: '14px' }}>{shootDateStr || 'Chưa xếp ngày'}</div>
+                      </div>
+                    </div>
+
+                    {/* 2. Khung giờ & Thời lượng */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#EFF6FF', padding: '8px 12px', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
+                      <span style={{ fontSize: '16px' }}>⏰</span>
+                      <div>
+                        <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#1D4ED8', textTransform: 'uppercase' }}>KHUNG GIỜ & THỜI LƯỢNG</div>
+                        <div style={{ fontWeight: 800, color: '#1E3A8A', fontSize: '13.5px' }}>
+                          {timeSlotStr ? timeSlotStr.replace('-', ' - ') : 'Thỏa thuận'} {durationStr ? `(${durationStr})` : ''}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Địa điểm chụp */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', backgroundColor: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #CBD5E1' }}>
+                    <span style={{ fontSize: '16px', color: '#E11D48', flexShrink: 0, marginTop: '2px' }}>📍</span>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>ĐỊA ĐIỂM TÁC NGHIỆP:</div>
+                      <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '13.5px', marginTop: '2px', lineHeight: 1.4 }}>
+                        {locationStr || 'Studio của Provider / Thỏa thuận trực tiếp với khách'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Yêu cầu Concept, Ghi chú & Ảnh mẫu đính kèm */}
+                  <div style={{ backgroundColor: '#FAF5FF', border: '1px solid #E9D5FF', borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#7E22CE', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>🎨 YÊU CẦU CONCEPT & GHI CHÚ CHUẨN BỊ:</span>
+                    </div>
+
+                    {/* Chủ đề Concept */}
+                    {conceptTheme && (
+                      <div style={{ fontSize: '13px', color: '#581C87', fontWeight: 700 }}>
+                        📌 Phong cách concept: <span style={{ color: '#7E22CE', fontWeight: 800 }}>{conceptTheme}</span>
+                      </div>
+                    )}
+
+                    {/* Ghi chú chi tiết */}
+                    {customNotes && (
+                      <div style={{ fontSize: '12.5px', color: '#4C1D95', backgroundColor: '#F3E8FF', padding: '8px 12px', borderRadius: '6px', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                        💬 <strong>Ghi chú từ khách hàng:</strong> "{customNotes}"
+                      </div>
+                    )}
+
+                    {!conceptTheme && !customNotes && (
+                      <div style={{ fontSize: '12.5px', color: '#6B21A8', fontStyle: 'italic' }}>
+                        Chụp theo phong cách tiêu chuẩn của gói dịch vụ.
+                      </div>
+                    )}
+
+                    {/* Ảnh mẫu concept đính kèm từ khách */}
+                    {refImageArray.length > 0 && (
+                      <div style={{ marginTop: '6px', borderTop: '1px dashed #E9D5FF', paddingTop: '8px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#7E22CE', textTransform: 'uppercase', marginBottom: '6px' }}>
+                          🖼️ ẢNH CONCEPT THAM KHẢO KHÁCH ĐẢM BẢO ĐÃ TẢI LÊN ({refImageArray.length}):
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                          {refImageArray.map((imgUrl: string, idx: number) => (
+                            <a
+                              key={idx}
+                              href={getEvidenceUrl(imgUrl)}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ display: 'inline-block', position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '2px solid #D8B4FE', boxShadow: '0 2px 8px rgba(126, 34, 206, 0.15)' }}
+                              title="Bấm để mở xem ảnh kích thước gốc"
+                            >
+                              <img
+                                src={getEvidenceUrl(imgUrl)}
+                                alt={`Ảnh concept ${idx + 1}`}
+                                style={{ width: '100px', height: '100px', objectFit: 'cover', display: 'block' }}
+                              />
+                              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(126,34,206,0.85)', color: 'white', fontSize: '9.5px', textAlign: 'center', padding: '2px 0', fontWeight: 700 }}>
+                                🔍 Xem ảnh gốc
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 5. Yêu cầu đổi lịch nếu có */}
+                  {rescheduleReq && (
+                    <div style={{
+                      backgroundColor: '#FFFBEB',
+                      border: '1px solid #FCD34D',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#B45309', textTransform: 'uppercase' }}>🔄 YÊU CẦU ĐỔI LỊCH MỚI ({rescheduleReq.status}):</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#DC2626', marginTop: '2px' }}>
+                          Ngày mới: {new Date(rescheduleReq.newShootDate || rescheduleReq.newRentalFrom).toLocaleDateString('vi-VN')} {rescheduleReq.newShootTimeSlot ? `(${rescheduleReq.newShootTimeSlot.replace('-', ' - ')})` : ''}
+                        </div>
+                        {rescheduleReq.customerReason && (
+                          <div style={{ fontSize: '12px', color: '#78350F', marginTop: '2px', fontStyle: 'italic' }}>
+                            Lý do: "{rescheduleReq.customerReason}"
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Nếu là đơn thuê Áo dài (Rental)
+            const rentalItem = booking.items?.find((i: any) => i.itemType === 'PRODUCT' || i.startDate || i.rentalFrom) || booking.items?.[0] || {};
+            const productName = booking.productName || rentalItem.productId?.name || rentalItem.productName || rentalItem.name || 'Áo dài cho thuê';
+            const sizeVal = rentalItem.selectedSize || rentalItem.size || rentalItem.variant?.size || rentalItem.variantAttributes?.size || '';
+            const colorVal = rentalItem.selectedColor || rentalItem.color || rentalItem.variant?.color || rentalItem.variantAttributes?.color || '';
+            const materialVal = rentalItem.selectedMaterial || rentalItem.material || rentalItem.variant?.material || rentalItem.variantAttributes?.material || '';
+
+            const fromDate = rentalItem.startDate || rentalItem.rentalFrom ? new Date(rentalItem.startDate || rentalItem.rentalFrom) : null;
+            const toDate = rentalItem.endDate || rentalItem.rentalTo ? new Date(rentalItem.endDate || rentalItem.rentalTo) : null;
+            const fromStr = fromDate ? fromDate.toLocaleDateString('vi-VN') : (formatDate(booking.createdAt));
+            const toStr = toDate ? toDate.toLocaleDateString('vi-VN') : '';
+
+            let rentalDays = rentalItem.rentalDays || 0;
+            if (fromDate && toDate) {
+              const fromDay = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+              const toDay = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+              const diffTime = Math.abs(toDay.getTime() - fromDay.getTime());
+              rentalDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            }
+
+            return (
+              <div style={{
+                backgroundColor: '#F0FDF4',
+                border: '2px solid #16A34A',
+                borderRadius: '12px',
+                padding: '16px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                boxShadow: '0 4px 12px rgba(22, 163, 74, 0.08)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #DCFCE7', paddingBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '15px', color: '#15803D' }}>
+                    <span>👘 THÔNG TIN CHI TIẾT THUÊ ÁO DÀI</span>
+                  </div>
+                  <span style={{ fontSize: '12px', backgroundColor: '#DCFCE7', color: '#166534', padding: '3px 10px', borderRadius: '20px', fontWeight: 700 }}>
+                    {productName}
+                  </span>
+                </div>
+
+                {/* Thuộc tính nhặt đồ trong kho */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {sizeVal && (
+                    <span style={{ backgroundColor: '#FFFFFF', color: '#334155', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '5px 12px', fontSize: '12.5px', fontWeight: 700 }}>
+                      Kích cỡ (Size): {sizeVal}
+                    </span>
+                  )}
+                  {colorVal && (
+                    <span style={{ backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', borderRadius: '6px', padding: '5px 12px', fontSize: '12.5px', fontWeight: 700 }}>
+                      Màu sắc: {colorVal}
+                    </span>
+                  )}
+                  {materialVal && (
+                    <span style={{ backgroundColor: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0', borderRadius: '6px', padding: '5px 12px', fontSize: '12.5px', fontWeight: 700 }}>
+                      Chất liệu: {materialVal}
+                    </span>
+                  )}
+                </div>
+
+                {/* Thời gian thuê */}
+                <div style={{ backgroundColor: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #BBF7D0', color: '#15803D', fontWeight: 700, fontSize: '13.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📅 Thời gian thuê:</span>
+                  <span>{fromStr} {toStr ? `-> ${toStr}` : ''}</span>
+                  {rentalDays > 0 && (
+                    <span style={{ backgroundColor: '#DCFCE7', color: '#166534', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 800 }}>
+                      ({rentalDays} ngày)
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Pickup Damage Report */}
           {booking.pickupDamageReport && (

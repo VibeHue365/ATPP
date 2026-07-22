@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
-  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, Trash2, Play, Pencil, Copy, Package, Eye,
+  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, Trash2, Play, Pencil, Copy, Package, Eye, Shirt,
   Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck, Clock, ShieldCheck, AlertTriangle, Sparkles
 } from 'lucide-react';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
@@ -3383,10 +3383,68 @@ export const ProviderDashboard: React.FC = () => {
                     filteredOrders.map(o => {
                       const hasRentalLifecycle = Array.isArray(o.items) && o.items.some((item: any) => Boolean(item.rentalFulfillment));
                       void hasRentalLifecycle;
+
+                      // Compute countdown badge for Photography bookings
+                      const photoItem = o.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.shootDate) || o.items?.[0] || {};
+                      const rawShootDate = photoItem.shootDate || (o as any).shootDate;
+                      const timeSlotStr = photoItem.shootTimeSlot || photoItem.timeSlot || (o as any).shootTimeSlot || '';
+
+                      let countdownBadge: { text: string; bg: string; textCol: string; border: string } | null = null;
+                      if (o.bookingType === 'PHOTOGRAPHY' && rawShootDate) {
+                        const d = new Date(rawShootDate);
+                        if (!isNaN(d.getTime())) {
+                          let hours = 8;
+                          let minutes = 0;
+                          if (timeSlotStr) {
+                            const match = timeSlotStr.split('-')[0]?.match(/(\d{1,2}):(\d{2})/);
+                            if (match) {
+                              hours = parseInt(match[1], 10);
+                              minutes = parseInt(match[2], 10);
+                            }
+                          }
+                          const target = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hours, minutes);
+                          const diffMs = target.getTime() - Date.now();
+
+                          if (o.rawStatus === 'IN_PROGRESS') {
+                            countdownBadge = { text: '⚡ Đang tác nghiệp', bg: '#ECFDF5', textCol: '#047857', border: '#A7F3D0' };
+                          } else if (['CONFIRMED', 'DEPOSIT_PAID'].includes(o.rawStatus || '')) {
+                            if (diffMs > 0) {
+                              const totalMins = Math.floor(diffMs / 60000);
+                              const hoursLeft = Math.floor(totalMins / 60);
+                              const minsLeft = totalMins % 60;
+                              const timeText = hoursLeft > 24 ? `${Math.floor(hoursLeft / 24)}d ${hoursLeft % 24}h` : (hoursLeft > 0 ? `${hoursLeft}h ${minsLeft}m` : `${minsLeft}m`);
+                              const isUrgent = diffMs < 2 * 3600000;
+                              countdownBadge = {
+                                text: `⏳ Còn ${timeText}`,
+                                bg: isUrgent ? '#FEF2F2' : '#FFFBEB',
+                                textCol: isUrgent ? '#DC2626' : '#B45309',
+                                border: isUrgent ? '#FCA5A5' : '#FCD34D'
+                              };
+                            } else {
+                              const overdueMins = Math.floor(Math.abs(diffMs) / 60000);
+                              const overdueText = overdueMins > 60 ? `${Math.floor(overdueMins / 60)}h ${overdueMins % 60}m` : `${overdueMins}m`;
+                              countdownBadge = {
+                                text: `⚠️ Đến giờ (Quá ${overdueText})`,
+                                bg: '#FEF2F2',
+                                textCol: '#991B1B',
+                                border: '#F87171'
+                              };
+                            }
+                          }
+                        }
+                      }
+
                       return (
-                        <tr key={o._id} style={{ borderBottom: '1px solid var(--color-light-border)', transition: 'var(--transition-smooth)' }}>
-                          <td style={{ padding: '16px 20px', fontWeight: 700 }}>{o.id}</td>
-                          <td style={{ padding: '16px 20px' }}>
+                        <tr
+                          key={o._id}
+                          onClick={() => {
+                            setSelectedBookingId(o._id);
+                            setIsDetailModalOpen(true);
+                          }}
+                          style={{ borderBottom: '1px solid var(--color-light-border)', transition: 'var(--transition-smooth)', cursor: 'pointer' }}
+                        >
+                          <td style={{ padding: '12px 20px', fontWeight: 700 }}>{o.id}</td>
+                          <td style={{ padding: '12px 20px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                               <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--color-light-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '11px', color: 'var(--color-text-secondary)', border: '1px solid var(--color-light-border)' }}>{o.customerInitials}</div>
                               <div>
@@ -3395,103 +3453,50 @@ export const ProviderDashboard: React.FC = () => {
                               </div>
                             </div>
                           </td>
-                          <td style={{ padding: '16px 20px' }}>
-                            <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text-primary)' }}>{o.productName}</div>
-                            {(() => {
-                              const photoItem = o.items?.find((it: any) => it.itemType === 'PHOTOGRAPHY_PACKAGE' || it.shootDate);
-                              if (photoItem) {
-                                const shootDateStr = photoItem.shootDate ? new Date(photoItem.shootDate).toLocaleDateString('vi-VN') : '';
-                                const timeSlotStr = photoItem.shootTimeSlot || '';
-                                const durationStr = photoItem.durationHours ? `${photoItem.durationHours} giờ` : '';
-                                const locationStr = photoItem.location || photoItem.address || (o as any).location || '';
-                                const conceptVal = photoItem.conceptNotes || photoItem.notes || '';
-                                const pendingReschedule = photoItem.rescheduleRequest?.status === 'PENDING' ? photoItem.rescheduleRequest : null;
-
-                                return (
-                                  <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    {shootDateStr && (
-                                      <div style={{ fontSize: '12px', color: '#1565C0', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <span>📅 Ngày chụp:</span>
-                                        <span>{shootDateStr} {timeSlotStr ? `(${timeSlotStr.replace('-', ' - ')})` : ''}</span>
-                                        {durationStr && <span style={{ color: '#64748B', fontWeight: 500 }}>• {durationStr}</span>}
-                                      </div>
-                                    )}
-
-                                    {locationStr && (
-                                      <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <span>📍 Địa điểm:</span>
-                                        <span style={{ fontWeight: 600 }}>{locationStr}</span>
-                                      </div>
-                                    )}
-
-                                    <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      <span>🎨 Concept:</span>
-                                      <span style={{ fontWeight: 600, fontStyle: 'italic' }}>
-                                        {conceptVal || 'Chụp theo phong cách tiêu chuẩn của gói'}
-                                      </span>
-                                    </div>
-
-                                    {pendingReschedule && (
-                                      <div style={{
-                                        fontSize: '11px',
-                                        fontWeight: 700,
-                                        backgroundColor: '#FEF9E7',
-                                        color: '#D35400',
-                                        border: '1px solid #F5CBA7',
-                                        borderRadius: '6px',
-                                        padding: '5px 9px',
-                                        marginTop: '4px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        gap: '8px',
-                                        maxWidth: '340px'
-                                      }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                          <span>🔄 ĐỔI LỊCH MỚI:</span>
-                                          <span style={{ color: '#C0392B' }}>
-                                            {new Date(pendingReschedule.newShootDate || pendingReschedule.newRentalFrom).toLocaleDateString('vi-VN')} {pendingReschedule.newShootTimeSlot ? `(${pendingReschedule.newShootTimeSlot.replace('-', ' - ')})` : ''}
-                                          </span>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '4px' }}>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); void resolveRescheduleRequest(o, photoItem, true); }}
-                                            style={{ border: 'none', borderRadius: '4px', padding: '3px 8px', backgroundColor: '#27AE60', color: '#FFF', fontSize: '10.5px', fontWeight: 700, cursor: 'pointer' }}
-                                          >
-                                            Duyệt
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); void resolveRescheduleRequest(o, photoItem, false); }}
-                                            style={{ border: 'none', borderRadius: '4px', padding: '3px 8px', backgroundColor: '#C0392B', color: '#FFF', fontSize: '10.5px', fontWeight: 700, cursor: 'pointer' }}
-                                          >
-                                            Từ chối
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              }
-
-                              const rentalItem = o.items?.find((it: any) => it.itemType === 'PRODUCT' || it.startDate || it.rentalFrom);
-                              if (rentalItem) {
-                                const fromStr = rentalItem.startDate || rentalItem.rentalFrom ? new Date(rentalItem.startDate || rentalItem.rentalFrom).toLocaleDateString('vi-VN') : '';
-                                const toStr = rentalItem.endDate || rentalItem.rentalTo ? new Date(rentalItem.endDate || rentalItem.rentalTo).toLocaleDateString('vi-VN') : '';
-                                return (
-                                  <div style={{ fontSize: '11.5px', color: '#16A085', fontWeight: 700, marginTop: '2px' }}>
-                                    📅 Thời gian thuê: {fromStr} {toStr ? `- ${toStr}` : ''}
-                                  </div>
-                                );
-                              }
-
-                              return null;
-                            })()}
+                          <td style={{ padding: '12px 20px', minWidth: '220px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{
+                                  width: '28px',
+                                  height: '28px',
+                                  borderRadius: '6px',
+                                  backgroundColor: o.bookingType === 'PHOTOGRAPHY' ? '#EFF6FF' : '#F0FDF4',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                  border: o.bookingType === 'PHOTOGRAPHY' ? '1px solid #BFDBFE' : '1px solid #BBF7D0'
+                                }}>
+                                  {o.bookingType === 'PHOTOGRAPHY' ? (
+                                    <Camera size={14} color="#2563EB" />
+                                  ) : (
+                                    <Shirt size={14} color="#16A34A" />
+                                  )}
+                                </div>
+                                <span style={{ fontWeight: 700, fontSize: '13.5px', color: '#0F172A' }}>
+                                  {o.productName}
+                                </span>
+                              </div>
+                              {countdownBadge && (
+                                <div style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: 700,
+                                  backgroundColor: countdownBadge.bg,
+                                  color: countdownBadge.textCol,
+                                  border: `1px solid ${countdownBadge.border}`,
+                                  borderRadius: '4px',
+                                  padding: '2px 7px',
+                                  width: 'fit-content',
+                                  marginLeft: '36px'
+                                }}>
+                                  {countdownBadge.text}
+                                </div>
+                              )}
+                            </div>
                           </td>
-                          <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)' }}>{o.orderDate}</td>
-                          <td style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'right' }}>{o.total}</td>
-                          <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                          <td style={{ padding: '12px 20px', color: 'var(--color-text-secondary)' }}>{o.orderDate}</td>
+                          <td style={{ padding: '12px 20px', fontWeight: 700, textAlign: 'right' }}>{o.total}</td>
+                          <td style={{ padding: '12px 20px', textAlign: 'center' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                               <span style={statusBadgeStyle(o.status)}>{o.status}</span>
                               {o.pickupDamageReport && (
@@ -3511,8 +3516,47 @@ export const ProviderDashboard: React.FC = () => {
                               )}
                             </div>
                           </td>
-                          <td style={{ padding: '16px 20px', textAlign: 'center', position: 'relative' }}>
-                            <button onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
+                          <td style={{ padding: '12px 20px', textAlign: 'center', position: 'relative' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedBookingId(o._id);
+                                  setIsDetailModalOpen(true);
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '5px 9px',
+                                  borderRadius: '6px',
+                                  fontSize: '11.5px',
+                                  fontWeight: 600,
+                                  backgroundColor: '#F8FAFC',
+                                  color: '#334155',
+                                  border: '1px solid #CBD5E1',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EFF6FF'; e.currentTarget.style.borderColor = '#93C5FD'; e.currentTarget.style.color = '#1D4ED8'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.color = '#334155'; }}
+                                title="Xem chi tiết đơn hàng"
+                              >
+                                <Eye size={13} />
+                                <span>Chi tiết</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionMenuId(actionMenuId === o._id ? null : o._id);
+                                }}
+                                style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}
+                                title="Thao tác khác"
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+                            </div>
                             {actionMenuId === o._id && (() => {
                               const isPhotoOrder = o.bookingType === 'PHOTOGRAPHY';
                               const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }[]> = isPhotoOrder
@@ -3587,6 +3631,35 @@ export const ProviderDashboard: React.FC = () => {
                                          <X size={14} />
                                        </button>
                                      </div>
+                                     <button
+                                       type="button"
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         setActionMenuId(null);
+                                         setSelectedBookingId(o._id);
+                                         setIsDetailModalOpen(true);
+                                       }}
+                                       style={{
+                                         width: '100%',
+                                         display: 'flex',
+                                         alignItems: 'center',
+                                         gap: '8px',
+                                         padding: '8px 12px',
+                                         fontSize: '12px',
+                                         fontWeight: 600,
+                                         color: '#1E293B',
+                                         border: 'none',
+                                         background: 'none',
+                                         cursor: 'pointer',
+                                         textAlign: 'left',
+                                         borderBottom: '1px solid #F1F5F9'
+                                       }}
+                                       onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                                       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                     >
+                                       <Eye size={14} color="#2563EB" />
+                                       <span>Xem chi tiết đơn</span>
+                                     </button>
                                    {pendingReschedule && (
                                      <div style={{ padding: '8px 12px', borderBottom: steps.length > 0 || canReport ? '1px solid var(--color-light-border)' : 'none' }}>
                                        <div style={{ fontSize: '10px', fontWeight: 700, color: '#9A6700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Yêu cầu đổi lịch</div>
