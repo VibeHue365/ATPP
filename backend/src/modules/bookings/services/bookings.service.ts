@@ -422,11 +422,16 @@ export class BookingsService implements OnApplicationBootstrap {
     const sizeVal = size.trim().toUpperCase();
     const colorVal = this.normalizeColor(color);
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isTodayOrPast = reservedFrom <= today;
+
     const inventoryItems = await this.inventoryItemModel
       .find({
         productId,
         size: sizeVal,
         color: colorVal,
+        status: isTodayOrPast ? 'AVAILABLE' : { $ne: 'MAINTENANCE' },
         conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
       } as any)
       .session(session);

@@ -342,12 +342,18 @@ export class BookingCreationService {
               }
             }
 
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const isTodayOrPast = reservedFrom <= today;
+
             const inventoryItems = await this.inventoryItemModel
               .find({
                 productId: new Types.ObjectId(item.productId),
                 size: sizeVal,
                 color: colorVal,
-                status: InventoryItemStatus.Available,
+                status: isTodayOrPast
+                  ? InventoryItemStatus.Available
+                  : { $ne: InventoryItemStatus.Maintenance },
                 conditionStatus: {
                   $nin: [ConditionStatus.Locked, ConditionStatus.Retired],
                 },
@@ -1041,12 +1047,18 @@ export class BookingCreationService {
         }
       }
 
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const isTodayOrPast = reservedFrom <= today;
+
       const inventoryItems = await this.inventoryItemModel
         .find({
           productId: product._id,
           size: sizeVal,
           color: colorVal,
-          status: InventoryItemStatus.Available,
+          status: isTodayOrPast
+            ? InventoryItemStatus.Available
+            : { $ne: InventoryItemStatus.Maintenance },
           conditionStatus: {
             $nin: [ConditionStatus.Locked, ConditionStatus.Retired],
           },
