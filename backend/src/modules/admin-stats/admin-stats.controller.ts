@@ -16,9 +16,12 @@ export class AdminStatsController {
   constructor(private readonly adminStatsService: AdminStatsService) {}
 
   @Get()
-  async getStats(@CurrentUser() user: AuthUser) {
+  async getStats(
+    @CurrentUser() user: AuthUser,
+    @Query('period') period = 'month',
+  ) {
     this.checkAdminRole(user);
-    return this.adminStatsService.getAdminStats();
+    return this.adminStatsService.getAdminStats(period);
   }
 
   @Get('customers')

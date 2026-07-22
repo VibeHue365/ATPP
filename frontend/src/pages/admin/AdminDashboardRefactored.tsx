@@ -11,19 +11,25 @@ import {
 } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-AlertTriangle,
+  Activity,
+  AlertTriangle,
   Ban,
   BarChart3,
   Bell,
   Calendar,
   CheckSquare,
+  ChevronDown,
+  ChevronUp,
   DollarSign,
   FileCheck,
+  Folder,
   Home,
   Layers,
   LayoutDashboard,
   LogOut,
+  RotateCcw,
   Settings,
+  ShieldAlert,
   ShieldCheck,
   Store,
   TrendingUp,
@@ -49,17 +55,25 @@ type AdminTab =
   | 'verifications'
   | 'disputes'
   | 'behavior'
-  | 'product-moderation'
   | 'combo-moderation'
+  | 'product-moderation'
   | 'reported-reviews'
   | 'policies'
-  | 'users-roles';
+  | 'users-roles'
+  | 'notifications';
 
 type TabDefinition = {
   id: AdminTab;
   label: string;
   title: string;
   icon: ComponentType<{ size?: number; color?: string }>;
+};
+
+type MenuGroup = {
+  id: string;
+  label: string;
+  icon: ComponentType<{ size?: number; color?: string }>;
+  items: AdminTab[];
 };
 
 type AttentionItem = {
@@ -71,55 +85,29 @@ type AttentionItem = {
   type: 'verification' | 'dispute' | 'review';
 };
 
-const OverviewPanel = lazy(() =>
-  import('../../features/admin-dashboard/components/OverviewPanel').then((module) => ({ default: module.OverviewPanel })),
-);
-const DirectoryPanel = lazy(() =>
-  import('../../features/admin-directory/components/DirectoryPanel').then((module) => ({ default: module.DirectoryPanel })),
-);
-const CategoryManagement = lazy(() =>
-  import('./components/CategoryManagement').then((module) => ({ default: module.CategoryManagement })),
-);
-const SettlementManagement = lazy(() =>
-  import('./components/SettlementManagement').then((module) => ({ default: module.SettlementManagement })),
-);
-const RefundManagement = lazy(() =>
-  import('./components/RefundManagement').then((module) => ({ default: module.RefundManagement })),
-);
-const RevenuePanel = lazy(() =>
-  import('../../features/admin-dashboard/components/RevenuePanel').then((module) => ({ default: module.RevenuePanel })),
-);
-const VerificationWorkspace = lazy(() =>
-  import('../../features/admin-verifications/components/VerificationWorkspace').then((module) => ({ default: module.VerificationWorkspace })),
-);
-const DisputesPanel = lazy(() =>
-  import('../../features/admin-disputes/components/DisputesPanel').then((module) => ({ default: module.DisputesPanel })),
-);
-const BehaviorPanel = lazy(() =>
-  import('../../features/admin-dashboard/components/BehaviorPanel').then((module) => ({ default: module.BehaviorPanel })),
-);
-const ComboModerationManagement = lazy(() => import('./components/ComboModerationManagement'));
-const ProductModerationManagement = lazy(() =>
-  import('./components/ProductModerationManagement').then((module) => ({ default: module.ProductModerationManagement })),
-);
-const PortfolioModerationManagement = lazy(() =>
-  import('./components/PortfolioModerationManagement').then((module) => ({ default: module.PortfolioModerationManagement })),
-);
-const ReportedReviewsPanel = lazy(() =>
-  import('../../features/admin-reviews/components/ReportedReviewsPanel').then((module) => ({ default: module.ReportedReviewsPanel })),
-);
-const PolicyManagement = lazy(() =>
-  import('./components/PolicyManagement').then((module) => ({ default: module.PolicyManagement })),
-);
-const AccessControl = lazy(() =>
-  import('./components/AccessControl').then((module) => ({ default: module.AccessControl })),
-);
+import { OverviewPanel } from '../../features/admin-dashboard/components/OverviewPanel';
+import { DirectoryPanel } from '../../features/admin-directory/components/DirectoryPanel';
+import { CombinedDirectoryPanel } from '../../features/admin-directory/components/CombinedDirectoryPanel';
+import { CategoryManagement } from './components/CategoryManagement';
+import { SettlementManagement } from './components/SettlementManagement';
+import { RefundManagement } from './components/RefundManagement';
+import { RevenuePanel } from '../../features/admin-dashboard/components/RevenuePanel';
+import { VerificationWorkspace } from '../../features/admin-verifications/components/VerificationWorkspace';
+import { DisputesPanel } from '../../features/admin-disputes/components/DisputesPanel';
+import { BehaviorPanel } from '../../features/admin-dashboard/components/BehaviorPanel';
+import { ProductModerationManagement } from './components/ProductModerationManagement';
+import { PortfolioModerationManagement } from './components/PortfolioModerationManagement';
+import { ComboModerationManagement } from './components/ComboModerationManagement';
+import { ReportedReviewsPanel } from '../../features/admin-reviews/components/ReportedReviewsPanel';
+import { PolicyManagement } from './components/PolicyManagement';
+import { AccessControl } from './components/AccessControl';
+import { NotificationsPage } from '../notifications/NotificationsPage';
 
 const tabs: TabDefinition[] = [
   { id: 'overview', label: 'Tổng quan hệ thống', title: 'Tổng quan hệ thống', icon: LayoutDashboard },
-  { id: 'customers', label: 'Quản lý Khách hàng', title: 'Quản lý Khách hàng', icon: Users },
-  { id: 'providers', label: 'Quản lý Đối tác', title: 'Quản lý Đối tác & Nhà cung cấp', icon: Store },
-  { id: 'categories', label: 'Quản lý Danh mục', title: 'Quản lý Danh mục Dịch vụ', icon: Layers },
+  { id: 'customers', label: 'Khách hàng', title: 'Quản lý Khách hàng', icon: Users },
+  { id: 'providers', label: 'Đối tác', title: 'Quản lý Đối tác & Nhà cung cấp', icon: Store },
+  { id: 'categories', label: 'Danh mục', title: 'Quản lý Danh mục Dịch vụ', icon: Layers },
   { id: 'bookings', label: 'Lịch trình & Đặt lịch', title: 'Quản lý Lịch trình & Booking', icon: Calendar },
   { id: 'settlements', label: 'Đối soát & Quyết toán', title: 'Đối soát & Quyết toán Tài chính', icon: DollarSign },
   { id: 'revenue', label: 'Báo cáo Doanh thu', title: 'Thống kê Doanh thu Hệ thống', icon: TrendingUp },
@@ -131,7 +119,41 @@ const tabs: TabDefinition[] = [
   { id: 'policies', label: 'Cấu hình Chính sách', title: 'Cấu hình Chính sách Hệ thống', icon: Settings },
   { id: 'users-roles', label: 'Tài khoản & Phân quyền', title: 'Tài khoản & Quản trị Phân quyền', icon: ShieldCheck },
   { id: 'behavior', label: 'Phân tích hành vi', title: 'Phân tích hành vi người dùng', icon: BarChart3 },
-  { id: 'refunds', label: 'Quản lý hoàn tiền', title: 'Quản lý hoàn tiền', icon: DollarSign },
+  { id: 'refunds', label: 'Quản lý hoàn tiền', title: 'Quản lý hoàn tiền', icon: RotateCcw },
+  { id: 'notifications', label: 'Thông báo hệ thống', title: 'Tất cả thông báo hệ thống', icon: Bell },
+];
+
+const menuGroups: MenuGroup[] = [
+  {
+    id: 'group-objects',
+    label: 'Quản lý đối tượng',
+    icon: Folder,
+    items: ['customers', 'providers', 'categories'],
+  },
+  {
+    id: 'group-operations',
+    label: 'Vận hành & Giao dịch',
+    icon: Activity,
+    items: ['bookings', 'product-moderation', 'combo-moderation'],
+  },
+  {
+    id: 'group-finance',
+    label: 'Tài chính & Doanh thu',
+    icon: DollarSign,
+    items: ['settlements', 'refunds', 'revenue'],
+  },
+  {
+    id: 'group-moderation',
+    label: 'Kiểm duyệt & Trợ giúp',
+    icon: ShieldAlert,
+    items: ['verifications', 'disputes', 'reported-reviews'],
+  },
+  {
+    id: 'group-system',
+    label: 'Hệ thống & Cấu hình',
+    icon: Settings,
+    items: ['policies', 'users-roles', 'behavior', 'notifications'],
+  },
 ];
 
 const adminTabIds = new Set<AdminTab>(tabs.map((tab) => tab.id));
@@ -199,6 +221,7 @@ function TabPanel({ tab }: { tab: AdminTab }) {
     case 'reported-reviews': return <ReportedReviewsPanel />;
     case 'policies': return <PolicyManagement />;
     case 'users-roles': return <AccessControl />;
+    case 'notifications': return <NotificationsPage hideBreadcrumb variant="admin" />;
   }
 }
 
@@ -209,7 +232,22 @@ export default function AdminDashboardRefactored() {
   const { logout, user } = useAuth();
   const requestedTab = searchParams.get('tab');
   const activeTab: AdminTab = isAdminTab(requestedTab) ? requestedTab : 'overview';
+  const [isOverviewExpanded, setIsOverviewExpanded] = useState<boolean>(activeTab !== 'overview');
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {
+      'group-objects': false,
+      'group-operations': false,
+      'group-finance': false,
+      'group-moderation': false,
+      'group-system': false,
+    };
+    const activeGroup = menuGroups.find((g) => g.items.includes(activeTab));
+    if (activeGroup) {
+      initial[activeGroup.id] = true;
+    }
+    return initial;
+  });
   const [isLoadingAttention, setIsLoadingAttention] = useState(false);
   const [attentionError, setAttentionError] = useState<string | null>(null);
   const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
@@ -217,11 +255,25 @@ export default function AdminDashboardRefactored() {
   const avatar = user?.avatar || user?.avatarUrl || '/avatar_hanna.png';
   const isAdmin = user?.roles?.some((role) => role.toUpperCase() === 'ADMIN') ?? false;
 
+  const toggleGroup = (groupId: string) => {
+    setOpenGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  };
+
   const setActiveTab = useCallback((tab: AdminTab, options?: { replace?: boolean }) => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('tab', tab);
     setSearchParams(nextParams, { replace: options?.replace ?? false });
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (activeTab !== 'overview') {
+      setIsOverviewExpanded(true);
+      const matchingGroup = menuGroups.find((g) => g.items.includes(activeTab));
+      if (matchingGroup) {
+        setOpenGroups((prev) => ({ ...prev, [matchingGroup.id]: true }));
+      }
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (requestedTab !== null && !isAdminTab(requestedTab)) {
@@ -316,25 +368,95 @@ export default function AdminDashboardRefactored() {
           </div>
 
           <nav className="admin-refactor-nav" aria-label="Điều hướng quản trị">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = tab.id === activeTab;
+            {/* 🏠 TOP STANDALONE: Tổng quan hệ thống */}
+            <button
+              type="button"
+              className={activeTab === 'overview' ? 'is-active' : ''}
+              aria-current={activeTab === 'overview' ? 'page' : undefined}
+              onClick={() => {
+                setActiveTab('overview');
+                setIsOverviewExpanded((prev) => !prev);
+              }}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <LayoutDashboard size={16} color={activeTab === 'overview' ? '#4A0E17' : '#B89047'} />
+                <span>Tổng quan hệ thống</span>
+              </div>
+              {isOverviewExpanded ? (
+                <ChevronUp size={14} color={activeTab === 'overview' ? '#4A0E17' : '#B89047'} />
+              ) : (
+                <ChevronDown size={14} color={activeTab === 'overview' ? '#4A0E17' : '#B89047'} />
+              )}
+            </button>
 
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={isActive ? 'is-active' : ''}
-                  aria-current={isActive ? 'page' : undefined}
-                  aria-label={tab.label}
-                  title={tab.label}
-                  onClick={() => setActiveTab(tab.id)}
-                >
-                  <Icon size={16} color={isActive ? '#4A0E17' : '#B89047'} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
+            {/* 📁 5 MENU GROUPS - Shown when Overview is expanded */}
+            {isOverviewExpanded && (
+              <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: '6px', marginTop: '4px' }}>
+                {menuGroups.map((group) => {
+                  const GroupIcon = group.icon;
+                  const isGroupActive = group.items.includes(activeTab);
+                  const isOpen = openGroups[group.id] ?? false;
+
+                  return (
+                    <div key={group.id} style={{ display: 'flex', flexDirection: 'column', marginTop: '4px' }}>
+                      <button
+                        type="button"
+                        className={isGroupActive ? 'is-active' : ''}
+                        onClick={() => toggleGroup(group.id)}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <GroupIcon size={16} color={isGroupActive ? '#4A0E17' : '#B89047'} />
+                          <span>{group.label}</span>
+                        </div>
+                        {isOpen ? (
+                          <ChevronUp size={14} color={isGroupActive ? '#4A0E17' : '#B89047'} />
+                        ) : (
+                          <ChevronDown size={14} color={isGroupActive ? '#4A0E17' : '#B89047'} />
+                        )}
+                      </button>
+
+                      {isOpen && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '2px',
+                            paddingLeft: '16px',
+                            marginTop: '2px',
+                            marginBottom: '4px',
+                            borderLeft: '2px solid rgba(255, 255, 255, 0.15)',
+                            marginLeft: '12px',
+                          }}
+                        >
+                          {group.items.map((subId) => {
+                            const subTab = tabs.find((t) => t.id === subId);
+                            if (!subTab) return null;
+                            const SubIcon = subTab.icon;
+                            const isSubActive = activeTab === subId;
+
+                            return (
+                              <button
+                                key={subId}
+                                type="button"
+                                className={isSubActive ? 'is-active' : ''}
+                                aria-current={isSubActive ? 'page' : undefined}
+                                onClick={() => setActiveTab(subId)}
+                                style={{ padding: '8px 12px', fontSize: '12.5px' }}
+                              >
+                                <SubIcon size={14} color={isSubActive ? '#4A0E17' : '#B89047'} />
+                                <span>{subTab.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </nav>
         </div>
 
@@ -397,6 +519,24 @@ export default function AdminDashboardRefactored() {
                         </button>
                       );
                     })}
+                  </div>
+                  <div style={{
+                    padding: '10px 16px', borderTop: '1px solid var(--color-light-border, #E8E2D5)',
+                    textAlign: 'center', backgroundColor: '#FAF6F0'
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => { setIsNotificationOpen(false); setActiveTab('notifications'); }}
+                      style={{
+                        background: 'none', border: 'none', color: '#4A0E17',
+                        fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                        padding: '4px 12px', borderRadius: '4px', transition: 'all 0.15s'
+                      }}
+                      onMouseOver={e => { e.currentTarget.style.color = '#B89047'; }}
+                      onMouseOut={e => { e.currentTarget.style.color = '#4A0E17'; }}
+                    >
+                      Xem tất cả thông báo hệ thống →
+                    </button>
                   </div>
                 </div>
               )}

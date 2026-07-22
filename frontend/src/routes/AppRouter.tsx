@@ -34,6 +34,8 @@ import AdminDashboardRefactored from '../pages/admin/AdminDashboardRefactored';
 import { ComboListingPage } from '../pages/combos/ComboListingPage';
 import ComboDetailPage from '../pages/combos/ComboDetailPage';
 import CheckoutResultPage from '../pages/checkout/CheckoutResultPage';
+import NotificationsPage from '../pages/notifications/NotificationsPage';
+import ChatPage from '../pages/chat/ChatPage';
 
 export const AppRouter: React.FC = () => {
   return (
@@ -77,11 +79,13 @@ export const AppRouter: React.FC = () => {
           <Route path={ROUTES.DASHBOARD} element={<Navigate to={ROUTES.PROFILE} replace />} />
           <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+          <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
+          <Route path={ROUTES.CHAT} element={<ChatPage />} />
           <Route path={ROUTES.CHECKOUT_RESULT} element={<CheckoutResultPage />} />
           <Route path={ROUTES.PROVIDER_REGISTER} element={<BecomeProviderPage />} />
         </Route>
         {/* Admin Dashboard Page (No MainLayout header/footer) */}
-        <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardPage />} />
+        <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardRefactored />} />
         {/* Parallel preview route: legacy dashboard remains the production route during refactor. */}
         <Route path={ROUTES.ADMIN_DASHBOARD_REFACTORED} element={<AdminDashboardRefactored />} />
       </Route>

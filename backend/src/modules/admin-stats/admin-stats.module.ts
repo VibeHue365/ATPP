@@ -6,6 +6,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { Provider, ProviderSchema } from '../providers/schemas/provider.schema';
 import { Product, ProductSchema } from '../products/schemas/product.schema';
 import { Booking, BookingSchema } from '../bookings/schemas/booking.schema';
+import { BookingItem, BookingItemSchema } from '../bookings/schemas/booking-item.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { RefreshToken, RefreshTokenSchema } from '../auth/schemas/refresh-token.schema';
 import { AnalyticsModule } from '../analytics/analytics.module';
@@ -17,6 +18,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
       { name: Provider.name, schema: ProviderSchema },
       { name: Product.name, schema: ProductSchema },
       { name: Booking.name, schema: BookingSchema },
+      { name: BookingItem.name, schema: BookingItemSchema },
       { name: Payment.name, schema: PaymentSchema },
       { name: RefreshToken.name, schema: RefreshTokenSchema },
     ]),
