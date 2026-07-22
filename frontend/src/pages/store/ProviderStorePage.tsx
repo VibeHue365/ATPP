@@ -16,12 +16,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  MessageSquare,
 } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
 import { API_BASE_URL } from '../../config/env';
 import { ROUTES } from '../../config/routes';
 import { SmartTagList } from '../../features/smart-tagging/components/SmartTagList';
 import type { PublicSmartTagBadge } from '../../features/smart-tagging/types/smartTag.types';
+import { useAuth } from '../../features/auth/hooks/useAuth';
+import { useToast } from '../../components/feedback/Toast';
+import { chatService } from '../../services/chatService';
 
 const getImageUrl = (url?: string | null) => {
   if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
@@ -59,6 +63,7 @@ interface ProductFromDb {
 
 interface StoreInfo {
   _id: string;
+  userId?: string;
   businessName: string;
   capabilities?: string[];
   contact?: {
@@ -106,12 +111,38 @@ export const ProviderStorePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const productsGridRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
+  const toast = useToast();
 
   const [store, setStore] = useState<StoreInfo | null>(null);
   const [products, setProducts] = useState<ProductFromDb[]>([]);
   const [loadingStore, setLoadingStore] = useState<boolean>(true);
   const [loadingProducts, setLoadingProducts] = useState<boolean>(true);
+  const [startingChat, setStartingChat] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleOpenChat = async () => {
+    if (!user) {
+      toast.error('Vui lòng đăng nhập để trò chuyện với Shop.');
+      navigate(ROUTES.LOGIN);
+      return;
+    }
+    const targetUserId = store?.userId || store?._id;
+    if (!targetUserId) {
+      toast.error('Không tìm thấy thông tin liên hệ của Shop.');
+      return;
+    }
+    try {
+      setStartingChat(true);
+      const room = await chatService.getOrCreateRoom(targetUserId);
+      navigate(ROUTES.CHAT, { state: { activeRoomId: room.id } });
+    } catch (err: any) {
+      console.error('Lỗi khởi tạo chat:', err);
+      toast.error(err?.message || 'Không thể kết nối trò chuyện với Shop.');
+    } finally {
+      setStartingChat(false);
+    }
+  };
 
   // Filters & Pagination state
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -395,29 +426,66 @@ export const ProviderStorePage: React.FC = () => {
               </div>
             </div>
 
-            {/* Campaign Badge if active */}
-            {store.activeCampaign && (
-              <div
+            {/* Header Right Actions (Chat Button & Campaign Badge) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-end', flexShrink: 0 }}>
+              <button
+                onClick={handleOpenChat}
+                disabled={startingChat}
                 style={{
-                  background: 'linear-gradient(135deg, #E52E71 0%, #FF8A00 100%)',
-                  padding: '12px 18px',
-                  borderRadius: 14,
-                  color: '#fff',
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 10,
-                  boxShadow: '0 6px 16px rgba(229,46,113,0.3)',
+                  gap: 8,
+                  padding: '12px 22px',
+                  borderRadius: 14,
+                  background: 'linear-gradient(135deg, #8B263E 0%, #6A1B2D 100%)',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  border: 'none',
+                  cursor: startingChat ? 'wait' : 'pointer',
+                  boxShadow: '0 6px 16px rgba(139, 38, 62, 0.25)',
+                  transition: 'all 0.2s',
+                  opacity: startingChat ? 0.7 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!startingChat) {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 20px rgba(139, 38, 62, 0.35)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(139, 38, 62, 0.25)';
                 }}
               >
-                <Tag style={{ width: 22, height: 22 }} />
-                <div>
-                  <div style={{ fontSize: 12, opacity: 0.9, textTransform: 'uppercase', fontWeight: 600 }}>
-                    {store.activeCampaign.occasion || 'Khuyến mãi đặc biệt'}
+                <MessageSquare style={{ width: 18, height: 18 }} />
+                {startingChat ? 'Đang kết nối...' : 'Chat với Shop'}
+              </button>
+
+              {/* Campaign Badge if active */}
+              {store.activeCampaign && (
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, #E52E71 0%, #FF8A00 100%)',
+                    padding: '12px 18px',
+                    borderRadius: 14,
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    boxShadow: '0 6px 16px rgba(229,46,113,0.3)',
+                  }}
+                >
+                  <Tag style={{ width: 22, height: 22 }} />
+                  <div>
+                    <div style={{ fontSize: 12, opacity: 0.9, textTransform: 'uppercase', fontWeight: 600 }}>
+                      {store.activeCampaign.occasion || 'Khuyến mãi đặc biệt'}
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 800 }}>Giảm {store.activeCampaign.discountPercent}% toàn gian hàng</div>
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 800 }}>Giảm {store.activeCampaign.discountPercent}% toàn gian hàng</div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

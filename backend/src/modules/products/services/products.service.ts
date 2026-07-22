@@ -111,6 +111,7 @@ export class ProductsService implements OnModuleInit {
     const campaign = await this.campaignService.getActiveCampaign(new Types.ObjectId(providerId));
     return {
       _id: provider._id,
+      userId: provider.userId,
       businessName: provider.businessName,
       capabilities: provider.capabilities,
       contact: provider.contact,
