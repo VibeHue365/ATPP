@@ -34,6 +34,7 @@ import AdminDashboardRefactored from '../pages/admin/AdminDashboardRefactored';
 import { ComboListingPage } from '../pages/combos/ComboListingPage';
 import ComboDetailPage from '../pages/combos/ComboDetailPage';
 import CheckoutResultPage from '../pages/checkout/CheckoutResultPage';
+import ProviderStorePage from '../pages/store/ProviderStorePage';
 
 export const AppRouter: React.FC = () => {
   return (
@@ -53,6 +54,7 @@ export const AppRouter: React.FC = () => {
         <Route path={ROUTES.PHOTOGRAPHER_DETAIL} element={<PhotographerDetailPage />} />
         <Route path={ROUTES.COMBOS} element={<ComboListingPage />} />
         <Route path={ROUTES.COMBO_DETAIL} element={<ComboDetailPage />} />
+        <Route path={ROUTES.PROVIDER_STORE} element={<ProviderStorePage />} />
         <Route path={ROUTES.CART} element={<CartPage />} />
       </Route>
 

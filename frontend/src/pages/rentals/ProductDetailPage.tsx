@@ -1638,9 +1638,18 @@ export const ProductDetailPage: React.FC = () => {
                   fontSize: "14px",
                   letterSpacing: "0.05em",
                   textTransform: "uppercase",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
                 }}
+                onClick={() => {
+                  const pId = typeof product.providerId === 'object' && product.providerId ? (product.providerId as any)._id : product.providerId;
+                  if (pId) navigate(`/stores/${pId}`);
+                }}
+                title="Xem gian hàng của Shop"
               >
-                Hãng: {product.providerId?.businessName || "Huế Cổ Phục Studio"}
+                Hãng: {product.providerId?.businessName || "Huế Cổ Phục Studio"} ↗
               </span>
               <h1 className="font-header text-4xl text-stone-900 font-bold mt-1 leading-tight">
                 {product.name}

@@ -25,12 +25,17 @@ export class ProductsRepository {
     categoryId?: string;
     styleCategoryIds?: string[];
     eventCategoryIds?: string[];
+    providerId?: string;
     limit?: number;
   }): Promise<ProductDocument[]> {
     const query: any = {
       status: ProductStatus.Active,
       moderationStatus: ProductModerationStatus.Approved,
     };
+
+    if (options?.providerId && Types.ObjectId.isValid(options.providerId)) {
+      query.providerId = new Types.ObjectId(options.providerId);
+    }
 
     if (options?.categoryId && Types.ObjectId.isValid(options.categoryId)) {
       query.categoryId = new Types.ObjectId(options.categoryId);

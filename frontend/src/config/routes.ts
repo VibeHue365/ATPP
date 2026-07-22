@@ -22,5 +22,6 @@ export const ROUTES = {
   ADMIN_DASHBOARD_REFACTORED: '/admin/dashboard-refactored',
   COMBOS: '/combos',
   COMBO_DETAIL: '/combos/:id',
+  PROVIDER_STORE: '/stores/:id',
 } as const;
 // Touch to reload.

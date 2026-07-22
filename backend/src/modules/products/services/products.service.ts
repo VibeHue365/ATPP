@@ -59,6 +59,7 @@ export class ProductsService implements OnModuleInit {
     categoryId?: string;
     styleCategoryIds?: string[];
     eventCategoryIds?: string[];
+    providerId?: string;
     limit?: number;
   }): Promise<any[]> {
     const products = await this.productsRepository.findAllActive(options);
@@ -96,6 +97,37 @@ export class ProductsService implements OnModuleInit {
 
   async getCategories(): Promise<any[]> {
     return this.categoriesService.listActiveCategoriesForProducts();
+  }
+
+  async getPublicProviderProfile(providerId: string): Promise<any> {
+    if (!Types.ObjectId.isValid(providerId)) {
+      throw new NotFoundException('ID nhà cung cấp không hợp lệ');
+    }
+    const providerModel = this.connection.model('Provider');
+    const provider: any = await providerModel.findById(providerId).lean().exec();
+    if (!provider) {
+      throw new NotFoundException('Không tìm thấy nhà cung cấp');
+    }
+    const campaign = await this.campaignService.getActiveCampaign(new Types.ObjectId(providerId));
+    return {
+      _id: provider._id,
+      businessName: provider.businessName,
+      capabilities: provider.capabilities,
+      contact: provider.contact,
+      address: provider.address,
+      media: provider.media,
+      rating: provider.rating,
+      policies: provider.policies,
+      rentalSettings: provider.rentalSettings,
+      comboDiscountPercent: provider.comboDiscountPercent,
+      activeCampaign: campaign
+        ? {
+            occasion: campaign.occasion,
+            discountPercent: campaign.discountPercent,
+            endDate: campaign.endDate,
+          }
+        : null,
+    };
   }
 
   async getProductById(productId: string): Promise<any | null> {
