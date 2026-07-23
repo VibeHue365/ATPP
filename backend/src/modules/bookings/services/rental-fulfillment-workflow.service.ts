@@ -13,6 +13,8 @@ import {
 } from '../schemas/rental-fulfillment.types';
 import { Provider } from '../../providers/schemas/provider.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/schemas/notification.schema';
 import { RentalFulfillmentService } from './rental-fulfillment.service';
 import { RentalDepositRefundCoordinatorService } from './rental-deposit-refund-coordinator.service';
 
@@ -35,6 +37,7 @@ export class RentalFulfillmentWorkflowService {
     private readonly rentalFulfillment: RentalFulfillmentService,
     private readonly rentalDepositRefundCoordinator: RentalDepositRefundCoordinatorService,
     private readonly paymentsService: PaymentsService,
+    private readonly notificationsService: NotificationsService,
   ) { }
 
   async markReady(bookingId: string, itemId: string, user: AuthUser, note?: string) {
@@ -252,10 +255,14 @@ export class RentalFulfillmentWorkflowService {
       { $set: { status: 'COMPLETED' } },
     ).exec();
   }
-  /** Booking status is a derived aggregate for rental-only bookings; item history remains the source of truth. */
+  /** Booking status is a derived aggregate for rental & combo bookings; item history remains the source of truth. */
   private async syncBookingProgress(bookingId: Types.ObjectId, actor: RentalActorSnapshot): Promise<void> {
     const booking = await this.bookingModel.findById(bookingId).lean().exec();
-    if (!booking || booking.bookingType !== BookingType.AoDaiRental || [BookingStatus.Cancelled, BookingStatus.Refunded, BookingStatus.Disputed].includes(booking.status)) return;
+    if (
+      !booking ||
+      ![BookingType.AoDaiRental, BookingType.Combo].includes(booking.bookingType as any) ||
+      [BookingStatus.Cancelled, BookingStatus.Refunded, BookingStatus.Disputed].includes(booking.status)
+    ) return;
 
     const items = await this.bookingItemModel.find({
       bookingId,
@@ -267,25 +274,70 @@ export class RentalFulfillmentWorkflowService {
     const statuses = items.map((item) => item.rentalFulfillment?.status);
     let nextStatus: BookingStatus | null = null;
     if (statuses.every((status) => status === RentalFulfillmentStatus.Completed)) {
-      nextStatus = BookingStatus.Completed;
+      if (booking.bookingType === BookingType.AoDaiRental || (booking as any).photosApproved || booking.status === BookingStatus.ComboPhotosApproved) {
+        nextStatus = BookingStatus.Completed;
+      }
     } else if (statuses.every((status) => [RentalFulfillmentStatus.Returned, RentalFulfillmentStatus.Completed].includes(status as RentalFulfillmentStatus))) {
-      nextStatus = BookingStatus.Returned;
+      if (booking.bookingType === BookingType.AoDaiRental || (booking as any).photosApproved || booking.status === BookingStatus.ComboPhotosApproved) {
+        nextStatus = BookingStatus.Completed;
+      } else {
+        nextStatus = BookingStatus.Returned;
+      }
     } else if (statuses.some((status) => [RentalFulfillmentStatus.PickedUp, RentalFulfillmentStatus.Returned].includes(status as RentalFulfillmentStatus))) {
-      nextStatus = BookingStatus.PickedUp;
+      if (booking.status !== BookingStatus.ComboPhotosApproved) {
+        nextStatus = BookingStatus.PickedUp;
+      }
     } else if (statuses.some((status) => status === RentalFulfillmentStatus.ReadyForPickup)) {
-      nextStatus = BookingStatus.PickupPending;
+      if (booking.status !== BookingStatus.ComboPhotosApproved) {
+        nextStatus = BookingStatus.PickupPending;
+      }
     }
     if (!nextStatus || booking.status === nextStatus) return;
+
+    const updateSet: Record<string, any> = { status: nextStatus };
+    if (nextStatus === BookingStatus.PickupPending) {
+      updateSet.handoverInitiatedAt = new Date();
+      const handoverPhotos: string[] = [];
+      for (const item of items) {
+        const files = item.rentalFulfillment?.pickupEvidence?.files || [];
+        for (const file of files) {
+          if (file.fileId) {
+            handoverPhotos.push(`/api/bookings/${bookingId.toString()}/items/${item._id.toString()}/rental/evidence/${file.fileId}`);
+          }
+        }
+      }
+      if (handoverPhotos.length > 0) {
+        updateSet.handoverPhotos = handoverPhotos;
+      }
+    }
 
     const changed = await this.bookingModel.findOneAndUpdate(
       { _id: bookingId, status: { $nin: [BookingStatus.Cancelled, BookingStatus.Refunded, BookingStatus.Disputed] } },
       {
-        $set: { status: nextStatus },
+        $set: updateSet,
         $push: { statusTimeline: { status: nextStatus, changedAt: new Date(), note: `Đồng bộ từ lifecycle áo dài (${actor.role}).` } },
       },
       { new: true },
     ).lean().exec();
-    if (changed && nextStatus === BookingStatus.Completed) await this.paymentsService.settleBooking(bookingId.toString());
+
+    if (changed) {
+      if (nextStatus === BookingStatus.Completed && booking.bookingType === BookingType.AoDaiRental) {
+        await this.paymentsService.settleBooking(bookingId.toString());
+      }
+      if (nextStatus === BookingStatus.PickupPending) {
+        try {
+          await this.notificationsService.createNotification(
+            booking.customerId.toString(),
+            'Áo dài đã sẵn sàng nhận',
+            `Cửa hàng đã chuẩn bị xong áo dài cho đơn ${booking.bookingCode}. Vui lòng bấm xác nhận nhận đồ trên hệ thống.`,
+            NotificationType.Booking,
+            { bookingId: booking._id },
+          );
+        } catch (e) {
+          console.warn('Failed to send notification in syncBookingProgress:', e);
+        }
+      }
+    }
   }
 
   private requireOperationalBooking(status: BookingStatus, action: string): void {

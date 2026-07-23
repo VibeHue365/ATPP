@@ -262,7 +262,7 @@ export class BookingsService implements OnApplicationBootstrap {
     private readonly policyResolverService: PolicyResolverService,
     @Inject(forwardRef(() => RentalDepositRefundCoordinatorService))
     private readonly rentalDepositRefundCoordinator: RentalDepositRefundCoordinatorService,
-  ) {}
+  ) { }
 
   async onApplicationBootstrap() {
     try {
@@ -332,6 +332,29 @@ export class BookingsService implements OnApplicationBootstrap {
     if (expiredBookings.length === 0) return;
 
     const bookingIds = expiredBookings.map((b) => b._id);
+
+    // Decrement usedCount on ComboPromotion for auto-cancelled bookings
+    try {
+      const bookingsWithCombo = await this.bookingModel
+        .find({
+          _id: { $in: bookingIds },
+          comboPromotionId: { $ne: null },
+        })
+        .select('_id comboPromotionId')
+        .lean()
+        .exec();
+
+      for (const b of bookingsWithCombo) {
+        if (b.comboPromotionId) {
+          await this.bookingModel.db.model('ComboPromotion').updateOne(
+            { _id: b.comboPromotionId },
+            { $inc: { usedCount: -1 } }
+          ).exec();
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to decrement ComboPromotion usedCount on auto-cancel:', e);
+    }
 
     await this.bookingModel.updateMany(
       { _id: { $in: bookingIds } },
@@ -1423,12 +1446,12 @@ export class BookingsService implements OnApplicationBootstrap {
           rentalFulfillment:
             itemType === BookingItemType.Product
               ? this.createRentalFulfillmentForDates(
-                  item.rentalType,
-                  item.rentalFrom,
-                  item.rentalTo,
-                  item.shootDate,
-                  item.shootTimeSlot,
-                )
+                item.rentalType,
+                item.rentalFrom,
+                item.rentalTo,
+                item.shootDate,
+                item.shootTimeSlot,
+              )
               : null,
           rentalType: item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY',
           comboDiscountPercent,
@@ -2486,19 +2509,19 @@ export class BookingsService implements OnApplicationBootstrap {
     const bookingIds = bookings.map((booking) => booking._id);
     const items = bookingIds.length
       ? await this.bookingItemModel
-          .find({ bookingId: { $in: bookingIds }, providerId: provider._id })
-          .populate('productId')
-          .populate('photographyPackageId')
-          .lean()
-          .exec()
+        .find({ bookingId: { $in: bookingIds }, providerId: provider._id })
+        .populate('productId')
+        .populate('photographyPackageId')
+        .lean()
+        .exec()
       : [];
 
     const schedules = bookingIds.length
       ? await this.bookingModel.db
-          .model('BookingSchedule')
-          .find({ bookingId: { $in: bookingIds } })
-          .lean()
-          .exec()
+        .model('BookingSchedule')
+        .find({ bookingId: { $in: bookingIds } })
+        .lean()
+        .exec()
       : [];
 
     const updatedItems = items.map((item) => {
@@ -2745,6 +2768,54 @@ export class BookingsService implements OnApplicationBootstrap {
       );
     }
 
+    // Check if there are active rental items that are not completed yet
+    const rentalLifecycleItems = await this.bookingItemModel
+      .find({
+        bookingId: booking._id,
+        itemType: BookingItemType.Product,
+        'rentalFulfillment.status': { $exists: true },
+      })
+      .lean()
+      .exec();
+
+    const hasIncompleteRentals =
+      rentalLifecycleItems.length > 0 &&
+      rentalLifecycleItems.some(
+        (item) =>
+          item.rentalFulfillment?.status !== RentalFulfillmentStatus.Completed,
+      );
+
+    if (hasIncompleteRentals) {
+      const targetStatus = BookingStatus.ComboPhotosApproved;
+      const locked = await this.bookingModel.findOneAndUpdate(
+        { _id: booking._id, status: BookingStatus.AwaitingReview },
+        {
+          $set: { status: targetStatus, photosApproved: true },
+          $push: {
+            statusTimeline: {
+              status: targetStatus,
+              changedAt: new Date(),
+              note: 'Khách hàng xác nhận hài lòng về bộ ảnh chụp.',
+            },
+          },
+        },
+        { new: true },
+      );
+      if (!locked) return (await this.bookingModel.findById(bookingIdStr))!;
+      try {
+        await this.notificationsService.createNotification(
+          this.getCustomerIdStr(locked),
+          'Đã xác nhận bộ ảnh chụp',
+          `Cảm ơn bạn đã xác nhận hài lòng bộ ảnh chụp của đơn ${locked.bookingCode}. Đơn hàng sẽ hoàn tất sau khi trả và tất toán cọc áo dài.`,
+          NotificationType.Booking,
+          { bookingId: locked._id },
+        );
+      } catch (e) {
+        console.warn('Failed to send notification in confirmCompleteByCustomer:', e);
+      }
+      return locked;
+    }
+
     // Atomic lock: prevents double-processing if cron job runs simultaneously
     const locked = await this.bookingModel.findOneAndUpdate(
       { _id: booking._id, status: BookingStatus.AwaitingReview },
@@ -2894,6 +2965,13 @@ export class BookingsService implements OnApplicationBootstrap {
         BookingStatus.Disputed,
         BookingStatus.Returned,
         BookingStatus.ReturnPending,
+        BookingStatus.ComboPhotosApproved,
+      ],
+      [BookingStatus.ComboPhotosApproved]: [
+        BookingStatus.Returned,
+        BookingStatus.ReturnPending,
+        BookingStatus.Completed,
+        BookingStatus.Disputed,
       ],
       [BookingStatus.Disputed]: [
         BookingStatus.Completed,
@@ -3202,22 +3280,22 @@ export class BookingsService implements OnApplicationBootstrap {
               },
               status: violationPolicy.autoSuspendEnabled
                 ? {
-                    $cond: [
-                      {
-                        $gte: [
-                          {
-                            $add: [
-                              { $ifNull: ['$violationCount', 0] },
-                              violationPoint,
-                            ],
-                          },
-                          violationPolicy.maxWarningsBeforeSuspend,
-                        ],
-                      },
-                      ProviderStatus.Suspended,
-                      '$status',
-                    ],
-                  }
+                  $cond: [
+                    {
+                      $gte: [
+                        {
+                          $add: [
+                            { $ifNull: ['$violationCount', 0] },
+                            violationPoint,
+                          ],
+                        },
+                        violationPolicy.maxWarningsBeforeSuspend,
+                      ],
+                    },
+                    ProviderStatus.Suspended,
+                    '$status',
+                  ],
+                }
                 : '$status',
             },
           },
@@ -3266,7 +3344,7 @@ export class BookingsService implements OnApplicationBootstrap {
           penaltyAmount +=
             Math.round(
               item.unitPrice *
-                cancellationPolicy.photographyLateCancelPenaltyRate,
+              cancellationPolicy.photographyLateCancelPenaltyRate,
             ) * item.quantity;
         }
       }
@@ -3291,13 +3369,13 @@ export class BookingsService implements OnApplicationBootstrap {
             providerPenalty +=
               Math.round(
                 item.unitPrice *
-                  cancellationPolicy.productLateCancelPenaltyRate,
+                cancellationPolicy.productLateCancelPenaltyRate,
               ) * item.quantity;
           } else {
             providerPenalty +=
               Math.round(
                 item.unitPrice *
-                  cancellationPolicy.photographyLateCancelPenaltyRate,
+                cancellationPolicy.photographyLateCancelPenaltyRate,
               ) * item.quantity;
           }
         }
@@ -3365,6 +3443,17 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const savedBooking = await booking.save();
 
+    if (booking.comboPromotionId) {
+      try {
+        await this.bookingModel.db.model('ComboPromotion').updateOne(
+          { _id: booking.comboPromotionId },
+          { $inc: { usedCount: -1 } }
+        ).exec();
+      } catch (e) {
+        console.warn('Failed to decrement ComboPromotion usedCount on manual cancel:', e);
+      }
+    }
+
     try {
       await this.notificationsService.createNotification(
         this.getCustomerIdStr(booking),
@@ -3421,12 +3510,12 @@ export class BookingsService implements OnApplicationBootstrap {
     // Trả về định dạng phù hợp cho cả 2 luồng gọi
     return Array.isArray(rolesOrCancelledByUserId)
       ? {
-          success: true,
-          booking: savedBooking,
-          isFreeCancel,
-          refundAmount,
-          penaltyReason,
-        }
+        success: true,
+        booking: savedBooking,
+        isFreeCancel,
+        refundAmount,
+        penaltyReason,
+      }
       : savedBooking;
   }
 
@@ -3653,7 +3742,7 @@ export class BookingsService implements OnApplicationBootstrap {
           });
         }
       }
-    } catch (_) {}
+    } catch (_) { }
 
     return {
       bookedDates,
@@ -3900,6 +3989,21 @@ export class BookingsService implements OnApplicationBootstrap {
       changedAt: new Date(),
       note: 'Khách hàng xác nhận nhận đồ hoàn hảo tại quầy.',
     });
+
+    // Update BookingItem rentalFulfillment status as well
+    await this.bookingModel.db.model('BookingItem').updateMany(
+      {
+        bookingId: booking._id,
+        itemType: 'PRODUCT',
+        'rentalFulfillment.status': 'READY_FOR_PICKUP',
+      },
+      {
+        $set: {
+          'rentalFulfillment.status': 'PICKED_UP',
+          'rentalFulfillment.pickedUpAt': new Date(),
+        },
+      },
+    );
 
     await booking.save();
     return { success: true, booking };

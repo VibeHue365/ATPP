@@ -50,7 +50,7 @@ export class BookingStatusService {
     private readonly notificationsService: NotificationsService,
     @Inject(forwardRef(() => PaymentsService))
     private readonly paymentsService: PaymentsService,
-  ) {}
+  ) { }
 
   async cleanupExpiredPendingBookings(
     externalSession?: ClientSession,
@@ -241,12 +241,12 @@ export class BookingStatusService {
   ): Promise<
     | BookingDocument
     | {
-        success: boolean;
-        booking: BookingDocument;
-        isFreeCancel: boolean;
-        refundAmount: number;
-        penaltyReason: string;
-      }
+      success: boolean;
+      booking: BookingDocument;
+      isFreeCancel: boolean;
+      refundAmount: number;
+      penaltyReason: string;
+    }
   > {
     const session =
       externalSession || (await this.bookingsRepository.startSession());
@@ -282,8 +282,8 @@ export class BookingStatusService {
       const isCustomer = this.getCustomerIdStr(booking) === userId;
       const userProviders = userId
         ? await this.providerModel
-            .find({ userId: new Types.ObjectId(userId) })
-            .session(session)
+          .find({ userId: new Types.ObjectId(userId) })
+          .session(session)
         : [];
       const userProviderIds = userProviders.map((p) => p._id.toString());
       const isProvider = booking.providerIds.some((id) =>
@@ -372,7 +372,7 @@ export class BookingStatusService {
           } else {
             const createdAtDate = new Date(
               (booking as BookingDocument & { createdAt: Date }).createdAt ||
-                now,
+              now,
             );
             const startMinusCreatedHours =
               (earliestStartTime.getTime() - createdAtDate.getTime()) /
@@ -439,7 +439,7 @@ export class BookingStatusService {
             penaltyAmount +=
               Math.round(
                 item.unitPrice *
-                  SYSTEM_POLICIES.PHOTOGRAPHY_CANCEL_PENALTY_RATE,
+                SYSTEM_POLICIES.PHOTOGRAPHY_CANCEL_PENALTY_RATE,
               ) * item.quantity;
           }
         }
@@ -468,7 +468,7 @@ export class BookingStatusService {
               providerPenalty +=
                 Math.round(
                   item.unitPrice *
-                    SYSTEM_POLICIES.PHOTOGRAPHY_CANCEL_PENALTY_RATE,
+                  SYSTEM_POLICIES.PHOTOGRAPHY_CANCEL_PENALTY_RATE,
                 ) * item.quantity;
             }
           }
@@ -583,12 +583,12 @@ export class BookingStatusService {
 
       return Array.isArray(rolesOrCancelledByUserId)
         ? {
-            success: true,
-            booking: savedBooking,
-            isFreeCancel,
-            refundAmount,
-            penaltyReason,
-          }
+          success: true,
+          booking: savedBooking,
+          isFreeCancel,
+          refundAmount,
+          penaltyReason,
+        }
         : savedBooking;
     } catch (error) {
       if (isInternalSession) {
@@ -748,6 +748,13 @@ export class BookingStatusService {
           BookingStatus.Disputed,
           BookingStatus.Returned,
           BookingStatus.ReturnPending,
+          BookingStatus.ComboPhotosApproved,
+        ],
+        [BookingStatus.ComboPhotosApproved]: [
+          BookingStatus.Returned,
+          BookingStatus.ReturnPending,
+          BookingStatus.Completed,
+          BookingStatus.Disputed,
         ],
         [BookingStatus.Disputed]: [
           BookingStatus.Completed,

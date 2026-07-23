@@ -44,6 +44,7 @@ describe('RentalFulfillmentWorkflowService', () => {
         fulfillment as any,
         { coordinate: jest.fn() } as any,
         { settleBooking: jest.fn() } as any,
+        { createNotification: jest.fn() } as any,
       ),
       fulfillment,
       evidenceModel,

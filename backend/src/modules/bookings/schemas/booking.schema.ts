@@ -22,6 +22,8 @@ export enum BookingStatus {
   InProgress = 'IN_PROGRESS',
   /** Photography only: shoot done, waiting for customer confirmation (48h window) */
   AwaitingReview = 'AWAITING_REVIEW',
+  /** Dedicated Combo status: photos delivered & customer approved, awaiting Ao Dai return */
+  ComboPhotosApproved = 'COMBO_PHOTOS_APPROVED',
   Completed = 'COMPLETED',
   Cancelled = 'CANCELLED',
   Disputed = 'DISPUTED',
@@ -200,6 +202,9 @@ export class Booking {
    */
   @Prop({ type: Date, default: null, index: true })
   awaitingReviewSince?: Date | null;
+
+  @Prop({ type: Types.ObjectId, ref: 'ComboPromotion', default: null, index: true })
+  comboPromotionId?: Types.ObjectId | null;
 
   /**
    * Photography only: estimated net amount credited to provider's pendingBalance

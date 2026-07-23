@@ -121,33 +121,8 @@ export class PaymentsService {
     let amount = 0;
     if (purpose === PaymentPurpose.DepositPayment) {
       if (booking.bookingType === BookingType.Combo) {
-        // Combo deposit = 100% Product rental + 100% Product deposit + 100% Photographer fee + serviceFee - comboDiscount
-        const items = await this.bookingModel.db
-          .model('BookingItem')
-          .find({ bookingId: booking._id });
-        const prodItems = items.filter((i: any) => i.itemType === 'PRODUCT');
-        const photoItems = items.filter(
-          (i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE',
-        );
-
-        const prodRentalTotal = prodItems.reduce(
-          (sum: number, i: any) => sum + i.unitPrice * i.quantity,
-          0,
-        );
-        const prodDepositTotal = prodItems.reduce(
-          (sum: number, i: any) => sum + i.depositAmount * i.quantity,
-          0,
-        );
-        const photoDepositTotal = photoItems.reduce(
-          (sum: number, i: any) => sum + i.unitPrice * i.quantity,
-          0,
-        );
-
         amount =
-          prodRentalTotal +
-          prodDepositTotal +
-          photoDepositTotal -
-          (booking.pricingSummary.comboDiscountTotal || 0);
+          booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
       } else if (booking.bookingType === BookingType.Photography) {
         amount =
           booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;

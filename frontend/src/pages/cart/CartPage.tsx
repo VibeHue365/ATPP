@@ -3,14 +3,14 @@ import { checkProductAvailability } from '../../features/rentals/services/produc
 import { useCart } from '../../context/CartContext';
 import type { CartItem } from '../../context/CartContext';
 import { httpClient } from '../../services/httpClient';
-import { 
-  Trash2, 
-  ArrowRight, 
-  Sparkles, 
-  ShieldCheck, 
-  Calendar, 
-  QrCode, 
-  Building, 
+import {
+  Trash2,
+  ArrowRight,
+  Sparkles,
+  ShieldCheck,
+  Calendar,
+  QrCode,
+  Building,
   CreditCard,
   Pencil,
   ChevronLeft,
@@ -44,7 +44,7 @@ const CustomCheckbox: React.FC<{ checked: boolean; onChange: () => void }> = ({ 
     >
       {checked && (
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M10 3L4.5 8.5L2 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M10 3L4.5 8.5L2 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )}
     </div>
@@ -105,7 +105,7 @@ export const CartPage: React.FC = () => {
     const fetchStocks = async () => {
       const productItems = cart.filter(item => item.itemType === 'PRODUCT' && item.productId);
       const stockMap: Record<string, number> = {};
-      
+
       await Promise.all(
         productItems.map(async (item) => {
           try {
@@ -119,10 +119,10 @@ export const CartPage: React.FC = () => {
           }
         })
       );
-      
+
       setItemStocks(prev => ({ ...prev, ...stockMap }));
     };
-    
+
     if (cart.length > 0) {
       fetchStocks();
     }
@@ -158,7 +158,7 @@ export const CartPage: React.FC = () => {
     }
     const item = cart.find(i => i.id === editingItemId);
     if (!item || item.itemType !== 'PRODUCT') return;
-    
+
     const pId = item.productId || item.id;
     if (!pId) return;
 
@@ -188,7 +188,7 @@ export const CartPage: React.FC = () => {
     for (let i = 1; i <= daysInMonth; i++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
       const dayOfWeek = new Date(dateStr).getDay();
-      
+
       let isAvailable = !busyDates.includes(dateStr) && dateStr >= todayStr;
       if (editingItemType === 'HOURLY' && dateStr === todayStr) {
         const currentHour = today.getHours();
@@ -199,7 +199,7 @@ export const CartPage: React.FC = () => {
         });
         isAvailable = isAvailable && hasTimeSlotsLeft;
       }
-      
+
       days.push({
         day: i,
         dateStr,
@@ -222,14 +222,14 @@ export const CartPage: React.FC = () => {
       }
       const currentFrom = editingItem.rentalFrom || editingItem.startDate || '';
       const currentTo = editingItem.rentalTo || editingItem.endDate || '';
-      
+
       if (!currentFrom || (currentFrom && currentTo)) {
         updateCartItemDates(editingItem.id, dateStr, '');
       } else {
         if (dateStr < currentFrom) {
           updateCartItemDates(editingItem.id, dateStr, '');
         } else {
-          const hasUnavailable = calendarDays.some(d => 
+          const hasUnavailable = calendarDays.some(d =>
             !d.isEmpty && !d.isAvailable && d.dateStr >= currentFrom && d.dateStr <= dateStr
           );
           if (hasUnavailable) {
@@ -262,8 +262,8 @@ export const CartPage: React.FC = () => {
     if (!editingItem) return;
     const block = productSlots[i];
     const singleDate = editingItem.rentalFrom || editingItem.startDate || '';
-    
-    const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+
+    const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot =>
       isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
     );
     const today = new Date();
@@ -272,7 +272,7 @@ export const CartPage: React.FC = () => {
       const [sh, sm] = block.start.split(':').map(Number);
       return sh < today.getHours() || (sh === today.getHours() && sm <= today.getMinutes());
     })();
-    
+
     if (isBusy || isPast) return;
 
     const currentStartTime = editingItem.startTime || '07:00';
@@ -286,7 +286,7 @@ export const CartPage: React.FC = () => {
       let hasBusyOrPastInRange = false;
       for (let idx = currentStartIdx; idx <= i; idx++) {
         const checkBlock = productSlots[idx];
-        const checkBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+        const checkBusy = bookedSlotsOnSelectedDate.some(bookedSlot =>
           isTimeSlotOverlap(`${checkBlock.start}-${checkBlock.end}`, bookedSlot)
         );
         const checkPast = singleDate === todayStr && (() => {
@@ -315,13 +315,13 @@ export const CartPage: React.FC = () => {
     if (!editingItem || editingItemType !== 'HOURLY') return;
     const singleDate = editingItem.rentalFrom || editingItem.startDate || '';
     if (!singleDate) return;
-    
+
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    
+
     const currentStartTime = editingItem.startTime || '07:00';
     const currentEndTime = editingItem.endTime || '09:00';
-    const isCurrentBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+    const isCurrentBusy = bookedSlotsOnSelectedDate.some(bookedSlot =>
       isTimeSlotOverlap(`${currentStartTime}-${currentEndTime}`, bookedSlot)
     );
     const isCurrentPast = singleDate === todayStr && (() => {
@@ -331,7 +331,7 @@ export const CartPage: React.FC = () => {
 
     if (isCurrentBusy || isCurrentPast) {
       const firstAvailableIndex = productSlots.findIndex((block) => {
-        const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+        const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot =>
           isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
         );
         const isPast = singleDate === todayStr && (() => {
@@ -380,7 +380,7 @@ export const CartPage: React.FC = () => {
       }
       return str;
     };
-    
+
     const formattedFrom = formatSingle(fromStr);
     if (!toStr) return formattedFrom;
     const formattedTo = formatSingle(toStr);
@@ -410,9 +410,9 @@ export const CartPage: React.FC = () => {
   // Enrich cart items with up-to-date product database values
   const enrichedCart = cart.map(item => {
     if (item.itemType === 'PRODUCT') {
-      const dbProduct = realProductList.find(p => 
-        p._id === item.productId || 
-        p._id === item.id || 
+      const dbProduct = realProductList.find(p =>
+        p._id === item.productId ||
+        p._id === item.id ||
         p.slug === item.productId ||
         p.slug === item.id ||
         (item.productId && p._id.toString() === item.productId.toString())
@@ -429,7 +429,7 @@ export const CartPage: React.FC = () => {
             days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
           }
         }
-        
+
         let hours = 2;
         if (item.startTime && item.endTime) {
           const [sh, sm] = item.startTime.split(':').map(Number);
@@ -440,7 +440,7 @@ export const CartPage: React.FC = () => {
           eDate.setHours(eh, em, 0, 0);
           hours = Math.max((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60), 2);
         }
-        
+
         const discountedBasePrice = dbProduct.discountedPrice || dbProduct.basePrice;
         const hourlyRate = dbProduct.hourlyPrice || Math.round(discountedBasePrice * 0.3) || 80000;
         const basePrice = item.rentalType === 'HOURLY' ? hourlyRate * hours : discountedBasePrice * days;
@@ -459,11 +459,11 @@ export const CartPage: React.FC = () => {
     return item;
   });
 
-const getImageUrl = (url?: string | null) => {
-  if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600';
-  if (url.startsWith('http') || url.startsWith('blob:')) return url;
-  return `http://localhost:3000${url.startsWith('/') ? '' : '/'}${url}`;
-};
+  const getImageUrl = (url?: string | null) => {
+    if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600';
+    if (url.startsWith('http') || url.startsWith('blob:')) return url;
+    return `http://localhost:3000${url.startsWith('/') ? '' : '/'}${url}`;
+  };
 
   // Group enrichedCart items into Combos vs Normal Items
   const comboGroupsMap = new Map<string, CartItem[]>();
@@ -519,7 +519,7 @@ const getImageUrl = (url?: string | null) => {
   };
 
   const toggleSelectItem = (id: string) => {
-    setSelectedItemIds(prev => 
+    setSelectedItemIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
@@ -533,7 +533,7 @@ const getImageUrl = (url?: string | null) => {
       if (targetDate) {
         updateCartItemDate(photo.id, targetDate);
       }
-      
+
       // If product has time slot, sync the photographer time slot as well!
       if (product.startTime && product.endTime) {
         updateCartItemTimeSlot(photo.id, `${product.startTime} - ${product.endTime}`);
@@ -543,7 +543,7 @@ const getImageUrl = (url?: string | null) => {
 
   // Calculations for checkout (only selected items)
   const selectedItems = enrichedCart.filter(item => selectedItemIds.includes(item.id));
-  
+
   const selectedComboIds = new Set(
     selectedItems.filter(i => i.comboPromotionId).map(i => i.comboPromotionId!)
   );
@@ -640,9 +640,9 @@ const getImageUrl = (url?: string | null) => {
   const handleCheckout = async () => {
     if (selectedItems.length === 0) return;
     if (await resumePendingCheckout()) return;
-    
 
-    
+
+
     const invalidProduct = selectedItems.find(
       (item) =>
         item.itemType === 'PRODUCT' && getProductValidationIssues(item).length > 0,
@@ -651,8 +651,8 @@ const getImageUrl = (url?: string | null) => {
       const issues = getProductValidationIssues(invalidProduct).join(', ');
       toast.error(
         'Áo dài "' +
-          (invalidProduct.name || invalidProduct.productName || 'trong giỏ hàng') +
-          '" đang thiếu: ' + issues + '. Vui lòng chỉnh lại sản phẩm này trước khi thanh toán.',
+        (invalidProduct.name || invalidProduct.productName || 'trong giỏ hàng') +
+        '" đang thiếu: ' + issues + '. Vui lòng chỉnh lại sản phẩm này trước khi thanh toán.',
       );
       return;
     }
@@ -673,38 +673,38 @@ const getImageUrl = (url?: string | null) => {
       }
 
       const rentalItemsPayload = productItems.map(item => {
-          let pId = item.productId || item.id;
-          if (pId && !/^[0-9a-fA-F]{24}$/.test(pId)) {
-            // Find a matching real product ID from database
-            let matchedProd = null;
-            if (pId === 'product_gam_do' || pId === 'prod_gam_do') {
-              matchedProd = realProductList.find(p => p.name?.toLowerCase().includes('đỏ') || p.name?.toLowerCase().includes('red'));
-            } else if (pId === 'product_to_tam' || pId === 'prod_to_tam') {
-              matchedProd = realProductList.find(p => p.name?.toLowerCase().includes('trắng') || p.name?.toLowerCase().includes('white'));
-            }
-            if (!matchedProd && realProductList.length > 0) {
-              matchedProd = realProductList[0];
-            }
-            if (matchedProd) {
-              pId = matchedProd._id;
-            }
+        let pId = item.productId || item.id;
+        if (pId && !/^[0-9a-fA-F]{24}$/.test(pId)) {
+          // Find a matching real product ID from database
+          let matchedProd = null;
+          if (pId === 'product_gam_do' || pId === 'prod_gam_do') {
+            matchedProd = realProductList.find(p => p.name?.toLowerCase().includes('đỏ') || p.name?.toLowerCase().includes('red'));
+          } else if (pId === 'product_to_tam' || pId === 'prod_to_tam') {
+            matchedProd = realProductList.find(p => p.name?.toLowerCase().includes('trắng') || p.name?.toLowerCase().includes('white'));
           }
+          if (!matchedProd && realProductList.length > 0) {
+            matchedProd = realProductList[0];
+          }
+          if (matchedProd) {
+            pId = matchedProd._id;
+          }
+        }
 
-          // Ensure dates are parsed correctly
-          const rentalFrom = item.rentalFrom || item.startDate || new Date(Date.now() + 24 * 3600 * 1000).toISOString().split('T')[0];
-          const rentalTo = item.rentalTo || item.endDate || new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString().split('T')[0];
+        // Ensure dates are parsed correctly
+        const rentalFrom = item.rentalFrom || item.startDate || new Date(Date.now() + 24 * 3600 * 1000).toISOString().split('T')[0];
+        const rentalTo = item.rentalTo || item.endDate || new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString().split('T')[0];
 
-          return {
-            productId: pId,
-            quantity: item.quantity || 1,
-            rentalFrom,
-            rentalTo,
-            selectedSize: item.size || null,
-            selectedColor: item.color || null,
-            rentalType: item.rentalType || 'DAILY',
-            shootDate: item.startDate || item.rentalFrom || null,
-            shootTimeSlot: item.shootTimeSlot || (item.startTime && item.endTime ? `${item.startTime}-${item.endTime}` : null),
-          };
+        return {
+          productId: pId,
+          quantity: item.quantity || 1,
+          rentalFrom,
+          rentalTo,
+          selectedSize: item.size || null,
+          selectedColor: item.color || null,
+          rentalType: item.rentalType || 'DAILY',
+          shootDate: item.startDate || item.rentalFrom || null,
+          shootTimeSlot: item.shootTimeSlot || (item.startTime && item.endTime ? `${item.startTime}-${item.endTime}` : null),
+        };
       });
 
       let bookingId: string;
@@ -738,6 +738,8 @@ const getImageUrl = (url?: string | null) => {
           concept: photo.shootConcept || undefined,
           customRequests: photo.customRequests || undefined,
           referenceImage: photo.referenceImage || undefined,
+          comboDiscountPercent: photo.comboDiscountPercent ?? (productItems.length > 0 ? (productItems[0]?.comboDiscountPercent ?? 50) : 50),
+          comboPromotionId: photo.comboPromotionId || (productItems.length > 0 ? productItems[0]?.comboPromotionId : undefined) || undefined,
           ...(productItems.length > 0 ? {
             aodaiItems: rentalItemsPayload.map(item => ({
               productId: item.productId,
@@ -794,7 +796,7 @@ const getImageUrl = (url?: string | null) => {
   return (
     <div style={{ backgroundColor: '#FCF9F2', minHeight: '90vh', padding: '40px 0 80px 0', fontFamily: 'var(--font-body)' }}>
       <div style={{ maxWidth: '1280px', width: '100%', margin: '0 auto', padding: '0 24px' }}>
-        
+
         {/* Cart Header: Title on Left, Select All Button on Right */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', borderBottom: '1px solid rgba(45, 41, 38, 0.05)', paddingBottom: '20px' }}>
           <h1 className="font-header" style={{ fontSize: '36px', fontWeight: 700, color: '#8B1E22', margin: 0 }}>
@@ -802,7 +804,7 @@ const getImageUrl = (url?: string | null) => {
           </h1>
 
           {cart.length > 0 && (
-            <div 
+            <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -817,7 +819,7 @@ const getImageUrl = (url?: string | null) => {
                 letterSpacing: '0.05em',
                 color: '#5D4037',
                 textTransform: 'uppercase'
-              }} 
+              }}
               onClick={toggleSelectAll}
             >
               <input
@@ -840,7 +842,7 @@ const getImageUrl = (url?: string | null) => {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '40px', alignItems: 'start' }}>
-            
+
             {/* Left Column: Cart groups and items */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
               {comboGroupEntries.map(entry => {
@@ -946,7 +948,7 @@ const getImageUrl = (url?: string | null) => {
 
               {groups.map(group => (
                 <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  
+
                   {/* Group Title */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
                     {group.type === 'SUCCESS' && (
@@ -966,9 +968,9 @@ const getImageUrl = (url?: string | null) => {
                         </svg>
                       </div>
                     )}
-                    <span style={{ 
-                      fontSize: '13px', 
-                      fontWeight: 700, 
+                    <span style={{
+                      fontSize: '13px',
+                      fontWeight: 700,
                       letterSpacing: '0.05em',
                       color: group.type === 'SUCCESS' ? '#27AE60' : group.type === 'MISMATCH' ? '#D35400' : '#5D4037',
                       textTransform: 'uppercase'
@@ -1026,19 +1028,19 @@ const getImageUrl = (url?: string | null) => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {group.items.map((item: CartItem) => {
                       const isSelected = selectedItemIds.includes(item.id);
-                      const itemName = item.itemType === 'PRODUCT' 
+                      const itemName = item.itemType === 'PRODUCT'
                         ? (item.productName || item.name)
                         : `${item.photographerName} | ${item.packageName}`;
-                        
+
                       const itemImage = item.itemType === 'PRODUCT'
                         ? (item.productImage || item.image)
                         : item.photographerAvatar;
-                        
+
                       const isRentalProduct = item.itemType === 'PRODUCT' && (item.rentalFrom || item.startDate);
 
                       return (
-                        <div 
-                          key={item.id} 
+                        <div
+                          key={item.id}
                           style={{
                             display: 'flex',
                             backgroundColor: 'white',
@@ -1050,9 +1052,9 @@ const getImageUrl = (url?: string | null) => {
                           }}
                         >
                           {/* Checkbox */}
-                          <CustomCheckbox 
-                            checked={isSelected} 
-                            onChange={() => toggleSelectItem(item.id)} 
+                          <CustomCheckbox
+                            checked={isSelected}
+                            onChange={() => toggleSelectItem(item.id)}
                           />
 
                           {/* Item Thumbnail */}
@@ -1070,14 +1072,14 @@ const getImageUrl = (url?: string | null) => {
                             />
                           ) : (
                             // Magic Wand icon for AI editing package
-                            <div style={{ 
-                              width: '90px', 
-                              height: '90px', 
-                              backgroundColor: '#FCEBEB', 
-                              borderRadius: '8px', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'center', 
+                            <div style={{
+                              width: '90px',
+                              height: '90px',
+                              backgroundColor: '#FCEBEB',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
                               color: '#8B1E22',
                               marginRight: '24px'
                             }}>
@@ -1091,14 +1093,14 @@ const getImageUrl = (url?: string | null) => {
                               <h3 className="font-header" style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#2D2926' }}>
                                 {itemName}
                               </h3>
-                              
+
                               <button
                                 onClick={() => removeFromCart(item.id)}
-                                style={{ 
-                                  background: 'none', 
-                                  border: 'none', 
-                                  color: '#C5B39E', 
-                                  cursor: 'pointer', 
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#C5B39E',
+                                  cursor: 'pointer',
                                   padding: '4px',
                                   position: 'absolute',
                                   top: '24px',
@@ -1262,16 +1264,16 @@ const getImageUrl = (url?: string | null) => {
                                               ))}
                                               {calendarDays.map((d, idx) => {
                                                 if (d.isEmpty) return <div key={`e-${idx}`} />;
-                                                
+
                                                 const startDateVal = item.rentalFrom || item.startDate || '';
                                                 const endDateVal = item.rentalTo || item.endDate || '';
-                                                
+
                                                 const isDaySelected = editingItemType === 'HOURLY'
                                                   ? startDateVal === d.dateStr
                                                   : (startDateVal === d.dateStr || endDateVal === d.dateStr);
-                                                  
+
                                                 const isDayInRange = editingItemType === 'DAILY' && startDateVal && endDateVal && d.dateStr > startDateVal && d.dateStr < endDateVal;
-                                                
+
                                                 return (
                                                   <button
                                                     key={d.day}
@@ -1323,7 +1325,7 @@ const getImageUrl = (url?: string | null) => {
                                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
                                                   {productSlots.map((block, idx) => {
                                                     const singleDate = item.rentalFrom || item.startDate || '';
-                                                    const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot => 
+                                                    const isBusy = bookedSlotsOnSelectedDate.some(bookedSlot =>
                                                       isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot)
                                                     );
                                                     const today = new Date();
@@ -1601,7 +1603,7 @@ const getImageUrl = (url?: string | null) => {
 
             {/* Right Column: Sticky Summary Panel */}
             <aside style={{ position: 'sticky', top: '100px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
+
               {/* Tóm tắt đơn hàng box */}
               <div style={{ backgroundColor: '#FAF5EE', padding: '32px', borderRadius: '16px', border: 'none' }}>
                 <h3 className="font-header" style={{ fontSize: '20px', fontWeight: 700, color: '#8B1E22', margin: '0 0 24px 0' }}>
@@ -1686,6 +1688,11 @@ const getImageUrl = (url?: string | null) => {
                   <div className="font-header" style={{ fontSize: '32px', fontWeight: 700, color: '#8B1E22' }}>
                     {depositToPayNow.toLocaleString('vi-VN')}đ
                   </div>
+                  {totalProductDeposit > 0 && (
+                    <div style={{ fontSize: '12px', color: '#8C7355', marginTop: '4px', fontWeight: 600 }}>
+                      Gồm: {grandTotal.toLocaleString('vi-VN')}đ (dịch vụ) + {totalProductDeposit.toLocaleString('vi-VN')}đ (tiền cọc áo dài, sẽ hoàn lại)
+                    </div>
+                  )}
                 </div>
 
                 {/* Nested box for pay later */}
@@ -1727,48 +1734,48 @@ const getImageUrl = (url?: string | null) => {
                   </div>
                 )}
 
-                 {/* Checkout button */}
-                 <button
-                   onClick={handleCheckout}
-                   disabled={selectedItems.length === 0 || isLoading}
-                   className="font-body"
-                   style={{
-                     width: '100%',
-                     backgroundColor: (selectedItems.length > 0 && !isLoading) ? '#8B1E22' : '#C5B39E',
-                     color: 'white',
-                     border: 'none',
-                     padding: '16px',
-                     fontSize: '15px',
-                     fontWeight: '700',
-                     borderRadius: '4px',
-                     marginTop: '24px',
-                     cursor: (selectedItems.length > 0 && !isLoading) ? 'pointer' : 'not-allowed',
-                     letterSpacing: '0.05em',
-                     transition: 'all 0.2s ease',
-                     display: 'flex',
-                     alignItems: 'center',
-                     justifyContent: 'center',
-                     gap: '8px'
-                   }}
-                   onMouseOver={(e) => {
-                     if (selectedItems.length > 0 && !isLoading) e.currentTarget.style.backgroundColor = '#72181B';
-                   }}
-                   onMouseOut={(e) => {
-                     if (selectedItems.length > 0 && !isLoading) e.currentTarget.style.backgroundColor = '#8B1E22';
-                   }}
-                 >
-                   {isLoading ? (
-                     <>
-                       <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                       <span>ĐANG XỬ LÝ...</span>
-                     </>
-                   ) : (
-                     <>
-                       <span>TIẾN HÀNH THANH TOÁN</span>
-                       <ArrowRight size={16} />
-                     </>
-                   )}
-                 </button>
+                {/* Checkout button */}
+                <button
+                  onClick={handleCheckout}
+                  disabled={selectedItems.length === 0 || isLoading}
+                  className="font-body"
+                  style={{
+                    width: '100%',
+                    backgroundColor: (selectedItems.length > 0 && !isLoading) ? '#8B1E22' : '#C5B39E',
+                    color: 'white',
+                    border: 'none',
+                    padding: '16px',
+                    fontSize: '15px',
+                    fontWeight: '700',
+                    borderRadius: '4px',
+                    marginTop: '24px',
+                    cursor: (selectedItems.length > 0 && !isLoading) ? 'pointer' : 'not-allowed',
+                    letterSpacing: '0.05em',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                  onMouseOver={(e) => {
+                    if (selectedItems.length > 0 && !isLoading) e.currentTarget.style.backgroundColor = '#72181B';
+                  }}
+                  onMouseOut={(e) => {
+                    if (selectedItems.length > 0 && !isLoading) e.currentTarget.style.backgroundColor = '#8B1E22';
+                  }}
+                >
+                  {isLoading ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                      <span>ĐANG XỬ LÝ...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>TIẾN HÀNH THANH TOÁN</span>
+                      <ArrowRight size={16} />
+                    </>
+                  )}
+                </button>
 
 
                 {/* Secure Payment details */}

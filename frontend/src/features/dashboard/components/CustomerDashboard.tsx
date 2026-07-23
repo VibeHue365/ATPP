@@ -353,6 +353,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     if (b.status === 'DEPOSIT_PAID') statusLabel = 'Chờ xác nhận';
     else if (b.status === 'IN_PROGRESS') statusLabel = 'Đang chụp';
     else if (b.status === 'AWAITING_REVIEW') statusLabel = 'Chờ bạn duyệt';
+    else if (b.status === 'COMBO_PHOTOS_APPROVED') statusLabel = 'Đã duyệt ảnh • Đang thuê áo';
     else if (b.status === 'COMPLETED') statusLabel = 'Hoàn thành';
     else if (b.status === 'CANCELLED') statusLabel = 'Đã hủy';
     else if (b.status === 'DISPUTED') statusLabel = 'Tranh chấp';
@@ -819,6 +820,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           <Clock size={13} style={{ marginRight: '6px' }} />
                           CHỜ XÁC NHẬN • {app.dateStr}
                         </span>
+                      ) : app.rawStatus === 'COMBO_PHOTOS_APPROVED' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#059669', color: 'white' }}>
+                          <CheckCircle size={13} style={{ marginRight: '6px' }} />
+                          ĐÃ DUYỆT ẢNH • {app.dateStr}
+                        </span>
                       ) : app.rawStatus === 'IN_PROGRESS' ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#059669', color: 'white' }}>
                           <Clock size={13} style={{ marginRight: '6px' }} />
@@ -865,11 +871,42 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         }} 
                         title={app.shootLocation}
                       >
-                        {app.shootLocation}
                       </span>
                     </div>
 
-                    {app.rawStatus === 'AWAITING_REVIEW' && (
+                    {(app.rawStatus === 'PICKUP_PENDING' || app.booking?.status === 'PICKUP_PENDING') && (
+                      <div style={{ marginTop: '14px', padding: '12px', backgroundColor: '#EDF9F2', border: '1px solid #C2F0D7', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <p style={{ fontSize: '12px', color: '#27AE60', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Check size={14} /> Cửa hàng đã chuẩn bị xong áo dài. Vui lòng kiểm tra & xác nhận nhận đồ:
+                        </p>
+                        {app.booking?.handoverPhotos && app.booking.handoverPhotos.length > 0 && (
+                          <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+                            {app.booking.handoverPhotos.map((photo: string, index: number) => {
+                              const url = photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`;
+                              return (
+                                <a key={index} href={url} target="_blank" rel="noreferrer" style={{ width: '48px', height: '48px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #C2F0D7', flexShrink: 0 }}>
+                                  <img src={url} alt="Handover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                </a>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '4px' }}>
+                          <button 
+                            onClick={() => handleConfirmPickup(app.id)}
+                            style={{
+                              flex: 1, backgroundColor: '#27AE60', color: 'white', border: 'none',
+                              padding: '8px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700,
+                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
+                            }}
+                          >
+                            <Check size={14} /> Xác nhận đã nhận áo dài
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {(app.rawStatus === 'AWAITING_REVIEW' || app.rawStatus === 'COMBO_PHOTOS_APPROVED') && (
                       <div style={{ marginTop: '14px', padding: '12px', backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: '8px' }}>
                         <p style={{ fontSize: '12px', color: '#0369A1', fontWeight: 600, margin: '0 0 10px 0', lineHeight: 1.4 }}>
                           📷 Thợ ảnh đã báo hoàn thành buổi chụp. Vui lòng kiểm tra & xác nhận trong 48h (hệ thống sẽ tự động xác nhận sau 48h).
@@ -940,20 +977,26 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             </div>
                           );
                         })()}
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            onClick={() => handleConfirmComplete(app.id)}
-                            style={{ flex: 1, backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
-                          >
-                            ✓ Xác nhận hài lòng
-                          </button>
-                          <button
-                            onClick={() => handleDisputeBooking(app.id)}
-                            style={{ backgroundColor: 'white', color: '#DC2626', border: '1px solid #FCA5A5', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
-                          >
-                            Khiếu nại
-                          </button>
-                        </div>
+                        {app.booking?.photosApproved ? (
+                          <div style={{ padding: '8px 12px', backgroundColor: '#EDF9F2', border: '1px solid #C2F0D7', borderRadius: '6px', fontSize: '12px', fontWeight: 700, color: '#27AE60', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Check size={14} /> Bạn đã xác nhận hài lòng với bộ ảnh chụp này.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={() => handleConfirmComplete(app.id)}
+                              style={{ flex: 1, backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                            >
+                              ✓ Xác nhận hài lòng
+                            </button>
+                            <button
+                              onClick={() => handleDisputeBooking(app.id)}
+                              style={{ backgroundColor: 'white', color: '#DC2626', border: '1px solid #FCA5A5', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              Khiếu nại
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
 

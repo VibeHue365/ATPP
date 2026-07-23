@@ -241,6 +241,9 @@ export class PaymentsController {
       const memo = `VIBEHUE PAY ${payment.paymentCode}`;
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
+      const depositTotal = booking?.pricingSummary?.depositTotal || 0;
+      const serviceAmount = Math.max(0, amount - depositTotal);
+
       const html = `
         <!DOCTYPE html>
         <html>
@@ -276,7 +279,7 @@ export class PaymentsController {
                 <h1 class="text-2xl font-bold text-stone-900 mb-6">Thanh toán đơn hàng</h1>
                 
                 <!-- Pricing detail -->
-                <div class="bg-white p-6 rounded-xl border vh-border-gold shadow-sm mb-6 flex justify-between items-center">
+                <div class="bg-white p-6 rounded-xl border vh-border-gold shadow-sm mb-4 flex justify-between items-center">
                   <div>
                     <span class="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">SỐ TIỀN CẦN THANH TOÁN</span>
                     <span class="text-3xl font-extrabold vh-text-red mt-1 block">${amount.toLocaleString('vi-VN')}đ</span>
@@ -286,6 +289,27 @@ export class PaymentsController {
                     <span class="text-base font-bold text-stone-800 mt-1 block">${bookingCode}</span>
                   </div>
                 </div>
+
+                ${depositTotal > 0 ? `
+                <!-- Price Breakdown Box -->
+                <div class="bg-amber-50/80 p-4 rounded-xl border border-amber-200 mb-6 space-y-2 text-xs">
+                  <div class="font-bold text-amber-900 mb-1.5 flex items-center gap-1">
+                    <span>💡 Chi tiết tổng tiền thanh toán:</span>
+                  </div>
+                  <div class="flex justify-between text-stone-700">
+                    <span>• Tiền gói dịch vụ (Combo / Thuê):</span>
+                    <span class="font-bold text-stone-900">${serviceAmount.toLocaleString('vi-VN')}đ</span>
+                  </div>
+                  <div class="flex justify-between text-amber-800">
+                    <span>• Tiền cọc áo dài (hoàn lại sau khi trả đồ):</span>
+                    <span class="font-bold">+${depositTotal.toLocaleString('vi-VN')}đ</span>
+                  </div>
+                  <div class="flex justify-between pt-1.5 border-t border-amber-200 font-bold text-stone-900">
+                    <span>= Cần thanh toán ngay:</span>
+                    <span class="text-red-700 font-extrabold text-sm">${amount.toLocaleString('vi-VN')}đ</span>
+                  </div>
+                </div>
+                ` : ''}
 
                 <!-- Txn Info -->
                 <div class="space-y-4">

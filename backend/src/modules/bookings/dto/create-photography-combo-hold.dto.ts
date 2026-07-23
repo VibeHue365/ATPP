@@ -6,6 +6,7 @@ import {
   IsDateString,
   IsInt,
   IsMongoId,
+  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -48,4 +49,12 @@ export class CreatePhotographyComboHoldDto extends CreatePhotographyHoldDto {
   @ValidateNested({ each: true })
   @Type(() => ComboAoDaiHoldItemDto)
   aodaiItems: ComboAoDaiHoldItemDto[];
+
+  @IsOptional()
+  @IsNumber()
+  comboDiscountPercent?: number;
+
+  @IsOptional()
+  @IsMongoId()
+  comboPromotionId?: string;
 }

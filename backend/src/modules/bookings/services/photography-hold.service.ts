@@ -112,7 +112,7 @@ export class PhotographyHoldService {
     private readonly inventoryReservationModel: Model<InventoryReservation>,
     @Inject(forwardRef(() => PhotographyQuoteService))
     private readonly quoteService: PhotographyQuoteService,
-  ) {}
+  ) { }
 
   async createHold(
     customerIdValue: string,
@@ -289,8 +289,41 @@ export class PhotographyHoldService {
       );
     }
 
+    let discountPct = dto.comboDiscountPercent ?? 50;
+    let comboPromo: any = null;
+    if (dto.comboPromotionId) {
+      try {
+        comboPromo = await this.bookingModel.db.model('ComboPromotion').findById(dto.comboPromotionId).session(session).exec();
+      } catch (e) {
+        console.warn('Failed to fetch ComboPromotion by ID:', e);
+      }
+    } else {
+      const firstProductRes = aodaiReservations[0];
+      if (firstProductRes?.product?._id) {
+        try {
+          comboPromo = await this.bookingModel.db.model('ComboPromotion').findOne({
+            providerId: photographyPackage.providerId,
+            productId: firstProductRes.product._id,
+            photographyPackageId: photographyPackage._id,
+            status: 'ACTIVE',
+          }).session(session).exec();
+        } catch (e) {
+          console.warn('Failed to fetch ComboPromotion by matching:', e);
+        }
+      }
+    }
+
+    if (comboPromo) {
+      if (comboPromo.usedCount >= comboPromo.maxUsage) {
+        throw new BadRequestException('Combo này đã hết lượt sử dụng.');
+      }
+      if (dto.comboDiscountPercent === undefined && comboPromo.comboDiscountPercent !== undefined && comboPromo.comboDiscountPercent !== null) {
+        discountPct = comboPromo.comboDiscountPercent;
+      }
+    }
+
     const photoDeposit = quote.totalAmount; // 100% thanh toán trước cho thợ chụp
-    const photoDiscount = Math.round(quote.totalAmount * 0.1);
+    const photoDiscount = Math.round(quote.totalAmount * (discountPct / 100));
     const productRentalTotal = aodaiReservations.reduce(
       (sum, item) => sum + item.unitPrice * item.quantity,
       0,
@@ -300,7 +333,7 @@ export class PhotographyHoldService {
       0,
     );
     const productDiscountTotal = aodaiReservations.reduce(
-      (sum, item) => sum + Math.round(item.unitPrice * item.quantity * 0.1),
+      (sum, item) => sum + Math.round(item.unitPrice * item.quantity * (discountPct / 100)),
       0,
     );
     const comboDiscountTotal = photoDiscount + productDiscountTotal;
@@ -323,9 +356,10 @@ export class PhotographyHoldService {
       status: BookingStatus.PendingPayment,
       holdIdempotencyKey: idempotencyKey,
       holdExpiresAt,
+      comboPromotionId: comboPromo ? comboPromo._id : undefined,
       pricingSummary: {
         subTotal,
-        depositTotal: photoDeposit + productDepositTotal,
+        depositTotal: productDepositTotal,
         discountAmount: comboDiscountTotal,
         comboDiscountTotal,
         voucherDiscountTotal: 0,
@@ -344,7 +378,7 @@ export class PhotographyHoldService {
         {
           status: BookingStatus.PendingPayment,
           changedAt: new Date(),
-          note: 'ÄÃ£ giá»¯ lá»‹ch chá»¥p vÃ  Ã¡o dÃ i, chá» thanh toÃ¡n.',
+          note: 'Đã giữ lịch chụp và áo dài, chờ thanh toán.',
         },
       ],
     });
@@ -389,7 +423,7 @@ export class PhotographyHoldService {
       },
       priceBreakdown: quote.breakdown,
       scheduleSchemaVersion: 2,
-      comboDiscountPercent: 10,
+      comboDiscountPercent: discountPct,
       comboDiscountAmount: photoDiscount,
     });
     await photographyItem.save({ session });
@@ -427,7 +461,7 @@ export class PhotographyHoldService {
         session,
       );
       const totalDiscount = Math.round(
-        reservation.unitPrice * reservation.quantity * 0.1,
+        reservation.unitPrice * reservation.quantity * (discountPct / 100),
       );
       let distributedDiscount = 0;
       for (const [
@@ -462,7 +496,7 @@ export class PhotographyHoldService {
           ),
           customRequests: null,
           priceBreakdown: [],
-          comboDiscountPercent: 10,
+          comboDiscountPercent: discountPct,
           comboDiscountAmount: itemDiscount,
         });
         await bookingItem.save({ session });
@@ -484,20 +518,31 @@ export class PhotographyHoldService {
     }
 
     // Increment usedCount on ComboPromotion
-    const firstProductRes = aodaiReservations[0];
-    if (firstProductRes?.product?._id) {
+    if (comboPromo) {
       try {
         await this.bookingModel.db.model('ComboPromotion').updateOne(
-          {
-            providerId: photographyPackage.providerId,
-            productId: firstProductRes.product._id,
-            photographyPackageId: photographyPackage._id,
-            status: 'ACTIVE',
-          },
+          { _id: comboPromo._id },
           { $inc: { usedCount: 1 } },
         ).session(session).exec();
       } catch (e) {
         console.warn('Failed to increment ComboPromotion usedCount:', e);
+      }
+    } else {
+      const promoProductRes = aodaiReservations[0];
+      if (promoProductRes?.product?._id) {
+        try {
+          await this.bookingModel.db.model('ComboPromotion').updateOne(
+            {
+              providerId: photographyPackage.providerId,
+              productId: promoProductRes.product._id,
+              photographyPackageId: photographyPackage._id,
+              status: 'ACTIVE',
+            },
+            { $inc: { usedCount: 1 } },
+          ).session(session).exec();
+        } catch (e) {
+          console.warn('Failed to increment ComboPromotion usedCount fallback:', e);
+        }
       }
     }
 
@@ -999,6 +1044,30 @@ export class PhotographyHoldService {
       { _id: { $in: bookingIds } },
       { $set: { holdExpiresAt: null } },
     );
+
+    // Decrement usedCount on ComboPromotion for expired holds
+    try {
+      const bookingsWithCombo = await this.bookingModel
+        .find({
+          _id: { $in: bookingIds },
+          comboPromotionId: { $ne: null },
+        })
+        .select('_id comboPromotionId')
+        .lean()
+        .exec();
+
+      for (const b of bookingsWithCombo) {
+        if (b.comboPromotionId) {
+          await this.bookingModel.db.model('ComboPromotion').updateOne(
+            { _id: b.comboPromotionId },
+            { $inc: { usedCount: -1 } }
+          ).exec();
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to decrement ComboPromotion usedCount on hold expiry:', e);
+    }
+
     return result.modifiedCount;
   }
 
@@ -1343,8 +1412,8 @@ export class PhotographyHoldService {
       )
         ? BookingScheduleStatus.Held
         : schedules.every(
-              (schedule) => schedule.status === BookingScheduleStatus.Confirmed,
-            )
+          (schedule) => schedule.status === BookingScheduleStatus.Confirmed,
+        )
           ? BookingScheduleStatus.Confirmed
           : BookingScheduleStatus.Expired,
       holdExpiresAt: booking.holdExpiresAt?.toISOString() ?? null,
@@ -1464,12 +1533,12 @@ export class PhotographyHoldService {
       address: item.locationAddress?.trim() || null,
       geo: hasCoordinates
         ? {
-            type: 'Point',
-            coordinates: [
-              item.locationLongitude as number,
-              item.locationLatitude as number,
-            ],
-          }
+          type: 'Point',
+          coordinates: [
+            item.locationLongitude as number,
+            item.locationLatitude as number,
+          ],
+        }
         : null,
     };
   }
@@ -1518,8 +1587,8 @@ export class PhotographyHoldService {
     const a =
       Math.sin(latitudeDelta / 2) ** 2 +
       Math.cos(toRadians(latitudeA)) *
-        Math.cos(toRadians(latitudeB)) *
-        Math.sin(longitudeDelta / 2) ** 2;
+      Math.cos(toRadians(latitudeB)) *
+      Math.sin(longitudeDelta / 2) ** 2;
     return 2 * 6371 * Math.asin(Math.sqrt(a));
   }
   private toRentalRange(

@@ -1,4 +1,4 @@
-﻿import { Types } from 'mongoose';
+import { Types } from 'mongoose';
 import { ProductAvailabilityService } from './product-availability.service';
 
 describe('ProductAvailabilityService', () => {

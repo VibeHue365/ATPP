@@ -1331,10 +1331,13 @@ export const ProviderDashboard: React.FC = () => {
           totalAmt = b.items.reduce((sum: number, item: any) => {
             const price = item.unitPrice ?? 0;
             const qty = item.quantity ?? 1;
-            return sum + (price * qty);
+            const discount = item.comboDiscountAmount ?? item.discountAmount ?? 0;
+            return sum + Math.max(0, (price * qty) - discount);
           }, 0);
         }
-        if (totalAmt === 0 && b.pricingSummary?.grandTotal) {
+        if (b.bookingType === 'COMBO' && b.pricingSummary?.grandTotal) {
+          totalAmt = b.pricingSummary.grandTotal;
+        } else if (totalAmt === 0 && b.pricingSummary?.grandTotal) {
           totalAmt = b.pricingSummary.grandTotal;
         }
 
@@ -1345,6 +1348,7 @@ export const ProviderDashboard: React.FC = () => {
           CONFIRMED: 'ĐANG THỰC HIỆN',
           PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
           PICKED_UP: 'ĐANG THUÊ',
+          COMBO_PHOTOS_APPROVED: 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ',
           RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
           RETURNED: 'ĐÃ TRẢ ĐỒ',
           COMPLETED: 'HOÀN THÀNH',
@@ -1359,6 +1363,7 @@ export const ProviderDashboard: React.FC = () => {
           customerInitials: initials,
           productName,
           orderDate: dateStr,
+          rawOrderDate: b.createdAt,
           total: `${totalAmt.toLocaleString('vi-VN')}đ`,
           status: statusMap[b.status] || b.status,
           totalAmount: totalAmt,
@@ -1366,6 +1371,7 @@ export const ProviderDashboard: React.FC = () => {
           depositTotal: b.pricingSummary?.depositTotal || 0,
           rawStatus: b.status,
           bookingType: b.bookingType,
+          photosApproved: Boolean(b.photosApproved),
         };
       });
 
@@ -1375,6 +1381,7 @@ export const ProviderDashboard: React.FC = () => {
           if (prev[i]._id !== next[i]._id) return true;
           if (prev[i].rawStatus !== next[i].rawStatus) return true;
           if (prev[i].status !== next[i].status) return true;
+          if (prev[i].photosApproved !== next[i].photosApproved) return true;
         }
         return false;
       };
@@ -2114,8 +2121,19 @@ export const ProviderDashboard: React.FC = () => {
     const now = new Date();
     return orders
       .filter(o => {
-        const d = o.orderDate ? new Date(o.orderDate.split('/').reverse().join('-')) : null;
-        return o.status === 'HOÀN THÀNH' && d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        let d: Date | null = o.rawOrderDate ? new Date(o.rawOrderDate) : null;
+        if (!d || isNaN(d.getTime())) {
+          const parts = (o.orderDate || '').split(' ');
+          const datePart = parts[parts.length - 1];
+          if (datePart && datePart.includes('/')) {
+            const [day, month, year] = datePart.split('/').map(Number);
+            if (day && month && year) {
+              d = new Date(year, month - 1, day);
+            }
+          }
+        }
+        const isCompleted = o.rawStatus === 'COMPLETED' || o.status === 'HOÀN THÀNH';
+        return isCompleted && d && !isNaN(d.getTime()) && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
       })
       .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
   }, [orders]);
@@ -2134,6 +2152,7 @@ export const ProviderDashboard: React.FC = () => {
     if (status === 'CHỜ KHÁCH XÁC NHẬN') return { ...base, backgroundColor: '#0284C7' };
     if (status === 'CHỜ NHẬN ĐỒ') return { ...base, backgroundColor: '#E67E22' };
     if (status === 'ĐANG THUÊ') return { ...base, backgroundColor: '#27AE60' };
+    if (status === 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ') return { ...base, backgroundColor: '#15803D' };
     if (status === 'ĐÃ TRẢ ĐỒ') return { ...base, backgroundColor: '#558B2F' };
     return { ...base, backgroundColor: '#ccc', color: '#555' };
   };
@@ -2183,8 +2202,8 @@ export const ProviderDashboard: React.FC = () => {
       }
     }
 
-    // ===== PHOTOGRAPHY: Bàn giao ảnh chụp → AWAITING_REVIEW =====
-    if (apiStatus === 'AWAITING_REVIEW' && order?.bookingType === 'PHOTOGRAPHY') {
+    // ===== PHOTOGRAPHY / COMBO: Bàn giao ảnh chụp → AWAITING_REVIEW =====
+    if (apiStatus === 'AWAITING_REVIEW' && (order?.bookingType === 'PHOTOGRAPHY' || order?.bookingType === 'COMBO')) {
       const result = await Swal.fire({
         title: 'Bàn giao ảnh chụp',
         html: `
@@ -3576,7 +3595,7 @@ export const ProviderDashboard: React.FC = () => {
               }}>
                 <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Doanh thu tháng này</div>
                 <div style={{ fontFamily: 'var(--font-header)', fontSize: '28px', fontWeight: 700, color: 'var(--color-primary)' }}>
-                  {monthlyRevenue > 0 ? `${monthlyRevenue.toLocaleString('vi-VN')}đ` : '—'}
+                  {`${(monthlyRevenue || 0).toLocaleString('vi-VN')}đ`}
                 </div>
                 <div style={{ position: 'absolute', right: '16px', bottom: '8px', opacity: 0.06, pointerEvents: 'none', color: 'var(--color-primary)' }}><ShoppingBag size={80} /></div>
               </div>
@@ -3783,33 +3802,37 @@ export const ProviderDashboard: React.FC = () => {
                                     { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   DEPOSIT_PAID: [
-                                    { label: 'Xác nhận đơn & Lịch chụp', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
                                     { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
                                     { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   CONFIRMED: [
                                     { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
-                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
-                                    { label: 'Hủy lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   PICKUP_PENDING: [
                                     { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  PICKED_UP: o.photosApproved ? [
+                                    { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                  ] : [
                                     { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
                                     { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
-                                  PICKED_UP: [
-                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
-                                    { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
-                                  ],
-                                  IN_PROGRESS: [
+                                  IN_PROGRESS: o.photosApproved ? [
+                                    { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                  ] : [
                                     { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
-                                    { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
                                   ],
-                                  AWAITING_REVIEW: [
+                                  AWAITING_REVIEW: o.photosApproved ? [
+                                    { label: '✓ Khách đã duyệt ảnh • Chờ trả áo dài', apiStatus: '', icon: <CheckCircle size={14} />, color: '#059669', disabled: true },
+                                  ] : [
                                     { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                    { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                  ],
+                                  COMBO_PHOTOS_APPROVED: [
+                                    { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
                                   ],
                                   RETURN_PENDING: [
                                     { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },

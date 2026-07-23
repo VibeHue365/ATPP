@@ -109,11 +109,13 @@ describe('RentalFulfillmentService', () => {
       expect.objectContaining({
         'rentalFulfillment.status': RentalFulfillmentStatus.Returned,
         'rentalFulfillment.issueStatus': expect.objectContaining({ $in: expect.any(Array) }),
-        'rentalFulfillment.depositSettlementStatus': expect.objectContaining({ $in: [
-          DepositSettlementStatus.FullyReleased,
-          DepositSettlementStatus.PartiallyDeducted,
-          DepositSettlementStatus.FullyDeducted,
-        ] }),
+        'rentalFulfillment.depositSettlementStatus': expect.objectContaining({
+          $in: [
+            DepositSettlementStatus.FullyReleased,
+            DepositSettlementStatus.PartiallyDeducted,
+            DepositSettlementStatus.FullyDeducted,
+          ]
+        }),
       }),
       expect.anything(),
       { new: true },

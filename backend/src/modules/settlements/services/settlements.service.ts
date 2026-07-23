@@ -39,7 +39,7 @@ export class SettlementsService {
     private readonly calculationService: SettlementCalculationService,
     private readonly codeService: SettlementCodeService,
     private readonly securityLogService: SecurityLogService,
-  ) {}
+  ) { }
 
   async createSettlementsForBooking(bookingId: string): Promise<Settlement[]> {
     const bookingObjectId = this.toObjectId(bookingId);
@@ -98,11 +98,11 @@ export class SettlementsService {
       items,
       latestPayment
         ? {
-            _id: latestPayment._id,
-            amount: latestPayment.amount,
-            status: latestPayment.status,
-            paidAt: latestPayment.paidAt,
-          }
+          _id: latestPayment._id,
+          amount: latestPayment.amount,
+          status: latestPayment.status,
+          paidAt: latestPayment.paidAt,
+        }
         : null,
       false,
     );
