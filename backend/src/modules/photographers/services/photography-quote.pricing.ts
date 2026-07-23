@@ -79,6 +79,9 @@ export function calculatePhotographyQuote(
     configuredOvertimeFee > 0 ? configuredOvertimeFee : derivedHourlyRate;
   const breakdown: PhotographyQuoteBreakdownItem[] = [];
   const overtimeMinutesByClientId: Record<string, number> = {};
+  const durationByClientId = new Map(
+    sessions.map((session) => [session.clientId, session.durationMinutes]),
+  );
 
   const addBreakdown = (
     type: PhotographyQuoteBreakdownItem['type'],
@@ -109,6 +112,26 @@ export function calculatePhotographyQuote(
     const overtimeAmount = Math.round(
       (overtimeMinutes * overtimeFeePerHour) / 60,
     );
+
+    // The included duration is a pool scoped by pricing unit: one session,
+    // one calendar day, or the whole booking. Allocate that pool in the
+    // submitted session order so every persisted schedule gets its real
+    // overtime minutes instead of only the booking total being correct.
+    let includedMinutesRemaining = includedDurationMinutes;
+    for (const clientId of group.clientIds) {
+      const sessionDuration = durationByClientId.get(clientId) ?? 0;
+      const includedForSession = Math.min(
+        sessionDuration,
+        includedMinutesRemaining,
+      );
+      overtimeMinutesByClientId[clientId] =
+        sessionDuration - includedForSession;
+      includedMinutesRemaining = Math.max(
+        0,
+        includedMinutesRemaining - includedForSession,
+      );
+    }
+
     addBreakdown('BASE_PACKAGE', group.label, baseAmount, group.clientIds);
     addBreakdown(
       'OVERTIME',
@@ -140,7 +163,6 @@ export function calculatePhotographyQuote(
       );
       baseAmount += charged.baseAmount;
       overtimeAmount += charged.overtimeAmount;
-      overtimeMinutesByClientId[session.clientId] = charged.overtimeMinutes;
     }
   } else if (pricingUnit === 'PER_DAY') {
     for (const [date, sessionsOnDate] of groupByDate(sessions)) {

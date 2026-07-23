@@ -648,12 +648,13 @@ export class PaymentsService {
 
     // Cập nhật trạng thái Escrow sang Settled một cách atomic để chặn các request song song (nếu có)
     const escrow = await this.escrowRepository.trySettleEscrow(bookingId);
-    if (!escrow) {
-      const currentEscrow =
-        await this.escrowRepository.findByBookingId(bookingId);
-      if (currentEscrow && currentEscrow.status === EscrowStatus.Settled) {
-        return { message: 'Booking already settled' };
-      }
+    const currentEscrow = escrow
+      ? null
+      : await this.escrowRepository.findByBookingId(bookingId);
+    const wasAlreadySettled = Boolean(
+      !escrow && currentEscrow?.status === EscrowStatus.Settled,
+    );
+    if (!escrow && !wasAlreadySettled) {
       this.logger.warn(
         `Escrow record not found or not in Held status for booking ${bookingIdStr}, proceeding with settlement.`,
       );
@@ -665,6 +666,7 @@ export class PaymentsService {
 
       // 2. Tự động hoàn cọc giữ đồ (depositTotal) cho khách hàng (chỉ dành cho thuê áo dài / combo, không hoàn tiền cọc giữ chỗ chụp ảnh)
       if (
+        !wasAlreadySettled &&
         booking.bookingType !== BookingType.Photography &&
         booking.pricingSummary.depositTotal > 0
       ) {
@@ -682,7 +684,7 @@ export class PaymentsService {
       //    deduct by estimatedNetAmount (stored at CONFIRMED time) to prevent ghost-balance,
       //    credit available by actual netAmount (grandTotal - commission).
       //    For photography bookings only (ao dai uses a different escrow flow).
-      if (booking.providerIds && booking.providerIds.length > 0) {
+      if (!wasAlreadySettled && booking.providerIds && booking.providerIds.length > 0) {
         const COMMISSION_RATE = 0.2;
         const actualNetAmount = Math.round(
           booking.pricingSummary.grandTotal * (1 - COMMISSION_RATE),
@@ -705,10 +707,12 @@ export class PaymentsService {
       }
     } catch (err) {
       // Revert lại trạng thái Held nếu gặp lỗi để có thể retry
-      await this.escrowRepository.updateEscrowStatus(
-        bookingId,
-        EscrowStatus.Held,
-      );
+      if (!wasAlreadySettled) {
+        await this.escrowRepository.updateEscrowStatus(
+          bookingId,
+          EscrowStatus.Held,
+        );
+      }
       throw err;
     }
 

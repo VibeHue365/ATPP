@@ -229,6 +229,54 @@ export class CreatePhotographyBookingDto {
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
+const PHOTO_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+
+const formatPhotoTime = (value: Date | string): string =>
+  new Intl.DateTimeFormat('en-GB', {
+    timeZone: PHOTO_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(value));
+
+const getPhotoScheduleTimeSlot = (schedule: any): string | null => {
+  if (schedule?.timeSlot) return schedule.timeSlot;
+  if (!schedule?.startsAt || !schedule?.endsAt) return null;
+  return `${formatPhotoTime(schedule.startsAt)}-${formatPhotoTime(schedule.endsAt)}`;
+};
+
+const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+
+const toBusinessDateKey = (value: Date | string = new Date()): string => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(value));
+  const part = (type: string) => parts.find((item) => item.type === type)?.value || '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+};
+
+const getPhotoScheduleStartsAt = (schedule: any): Date | null => {
+  if (schedule?.startsAt) {
+    const startsAt = new Date(schedule.startsAt);
+    if (!Number.isNaN(startsAt.getTime())) return startsAt;
+  }
+
+  const dateKey = schedule?.providerLocalDate
+    ?? (schedule?.scheduledDate ? toBusinessDateKey(schedule.scheduledDate) : null);
+  const startTime = String(schedule?.timeSlot ?? '')
+    .match(/^(\d{1,2}):(\d{2})/)?.slice(1);
+  if (!dateKey || !startTime) return null;
+
+  const [hour, minute] = startTime;
+  const legacyStartsAt = new Date(
+    `${dateKey}T${hour.padStart(2, '0')}:${minute}:00+07:00`,
+  );
+  return Number.isNaN(legacyStartsAt.getTime()) ? null : legacyStartsAt;
+};
+
 @Injectable()
 export class BookingsService implements OnApplicationBootstrap {
   constructor(
@@ -947,7 +995,7 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     // Validate new dates
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = toBusinessDateKey();
 
     if (itemType === 'PRODUCT') {
       if (!dto.newRentalFrom || !dto.newRentalTo) {
@@ -1166,6 +1214,11 @@ export class BookingsService implements OnApplicationBootstrap {
     userIdStr: string,
     dto: CreateBookingDto,
   ): Promise<BookingDocument> {
+    if (dto.items.some((item) => Boolean(item.photographyPackageId))) {
+      throw new BadRequestException(
+        'Photography và combo phải được tạo qua API giữ lịch chuyên dụng.',
+      );
+    }
     return this.runInTransaction(async (session) => {
       const customerId = new Types.ObjectId(userIdStr);
       const bookingCode = `B${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
@@ -1177,12 +1230,10 @@ export class BookingsService implements OnApplicationBootstrap {
       const providerIdsSet = new Set<string>();
       let booking: any = null;
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = toBusinessDateKey();
       for (const item of dto.items) {
         if (item.rentalFrom) {
-          const itemDateStr = new Date(item.rentalFrom)
-            .toISOString()
-            .split('T')[0];
+          const itemDateStr = toBusinessDateKey(item.rentalFrom);
           if (itemDateStr < todayStr) {
             throw new BadRequestException(
               'Ngày bắt đầu thuê áo dài không thể nằm trong quá khứ.',
@@ -1190,9 +1241,7 @@ export class BookingsService implements OnApplicationBootstrap {
           }
         }
         if (item.shootDate) {
-          const itemDateStr = new Date(item.shootDate)
-            .toISOString()
-            .split('T')[0];
+          const itemDateStr = toBusinessDateKey(item.shootDate);
           if (itemDateStr < todayStr) {
             throw new BadRequestException(
               'Ngày đặt lịch chụp ảnh không thể nằm trong quá khứ.',
@@ -1475,7 +1524,7 @@ export class BookingsService implements OnApplicationBootstrap {
             const end = new Date(detail.rentalTo);
             const current = new Date(start);
             while (current <= end) {
-              const dateStr = current.toISOString().split('T')[0];
+              const dateStr = toBusinessDateKey(current);
               if (busyDatesSet.has(dateStr)) {
                 throw new BadRequestException(
                   `Sản phẩm đã được đặt lịch thuê vào ngày ${dateStr}. Vui lòng chọn thời gian khác.`,
@@ -1487,9 +1536,7 @@ export class BookingsService implements OnApplicationBootstrap {
             const busySchedules = await this.getBusySchedulesForProduct(
               detail.productId.toString(),
             );
-            const dateStr = new Date(detail.shootDate)
-              .toISOString()
-              .split('T')[0];
+            const dateStr = toBusinessDateKey(detail.shootDate);
             const isSlotConflict =
               detail.shootTimeSlot != null &&
               busySchedules.bookedSlots.some(
@@ -1512,9 +1559,7 @@ export class BookingsService implements OnApplicationBootstrap {
             const busySchedules = await this.getBusySchedulesForProvider(
               detail.providerId.toString(),
             );
-            const dateStr = new Date(detail.shootDate)
-              .toISOString()
-              .split('T')[0];
+            const dateStr = toBusinessDateKey(detail.shootDate);
             const isSlotConflict =
               detail.shootTimeSlot != null &&
               busySchedules.bookedSlots.some(
@@ -1799,8 +1844,8 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     // Chặn đặt lịch trong quá khứ ở backend
-    const todayStr = new Date().toISOString().split('T')[0];
-    const startDateStr = start.toISOString().split('T')[0];
+    const todayStr = toBusinessDateKey();
+    const startDateStr = toBusinessDateKey(start);
     if (startDateStr < todayStr) {
       throw new BadRequestException(
         'Ngày bắt đầu đặt lịch thuê không thể nằm trong quá khứ.',
@@ -2143,8 +2188,8 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     // Chặn đặt lịch chụp ảnh trong quá khứ ở backend
-    const todayStr = new Date().toISOString().split('T')[0];
-    const shootDateStr = date.toISOString().split('T')[0];
+    const todayStr = toBusinessDateKey();
+    const shootDateStr = toBusinessDateKey(date);
     if (shootDateStr < todayStr) {
       throw new BadRequestException(
         'Ngày đặt lịch chụp ảnh không thể nằm trong quá khứ.',
@@ -2471,7 +2516,7 @@ export class BookingsService implements OnApplicationBootstrap {
                 item.shootDate ||
                 matchedSchedule.startsAt ||
                 matchedSchedule.scheduledDate,
-              shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+              shootTimeSlot: item.shootTimeSlot || getPhotoScheduleTimeSlot(matchedSchedule),
               shootLocation:
                 item.shootLocation || matchedSchedule.locationAddress,
             };
@@ -2540,7 +2585,7 @@ export class BookingsService implements OnApplicationBootstrap {
               item.shootDate ||
               matchedSchedule.startsAt ||
               matchedSchedule.scheduledDate,
-            shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+            shootTimeSlot: item.shootTimeSlot || getPhotoScheduleTimeSlot(matchedSchedule),
             shootLocation:
               item.shootLocation || matchedSchedule.locationAddress,
           };
@@ -2559,6 +2604,16 @@ export class BookingsService implements OnApplicationBootstrap {
     return bookings.map((booking) => ({
       ...booking,
       items: itemsByBooking.get(booking._id.toString()) || [],
+      schedules: schedules
+        .filter(
+          (schedule: any) =>
+            schedule.bookingId.toString() === booking._id.toString(),
+        )
+        .sort(
+          (left: any, right: any) =>
+            new Date(left.startsAt ?? left.scheduledDate ?? 0).getTime() -
+            new Date(right.startsAt ?? right.scheduledDate ?? 0).getTime(),
+        ),
     }));
   }
 
@@ -2635,7 +2690,7 @@ export class BookingsService implements OnApplicationBootstrap {
               item.shootDate ||
               matchedSchedule.startsAt ||
               matchedSchedule.scheduledDate,
-            shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+            shootTimeSlot: item.shootTimeSlot || getPhotoScheduleTimeSlot(matchedSchedule),
             shootLocation:
               item.shootLocation || matchedSchedule.locationAddress,
           };
@@ -2709,7 +2764,14 @@ export class BookingsService implements OnApplicationBootstrap {
         'Không thể hoàn tất booking áo dài trước khi tất cả physical item đã được trả, chốt cọc và hoàn tất theo lifecycle.',
       );
     }
-    if (booking.status === BookingStatus.Completed) return booking;
+    // Some idempotent completion paths (notably customer photo confirmation)
+    // atomically set COMPLETED before entering this method. Still run the
+    // idempotent settlement step so completion cannot leave a booking without
+    // a provider settlement.
+    if (booking.status === BookingStatus.Completed) {
+      await this.paymentsService.settleBooking(bookingIdStr);
+      return booking;
+    }
 
     booking.status = BookingStatus.Completed;
     booking.statusTimeline.push({
@@ -2760,7 +2822,10 @@ export class BookingsService implements OnApplicationBootstrap {
       throw new ForbiddenException('Bạn không có quyền xác nhận đơn hàng này.');
     }
 
-    if (booking.status === BookingStatus.Completed) return booking;
+    if (booking.status === BookingStatus.Completed) {
+      await this.paymentsService.settleBooking(bookingIdStr);
+      return booking;
+    }
 
     if (booking.status !== BookingStatus.AwaitingReview) {
       throw new BadRequestException(
@@ -2834,6 +2899,141 @@ export class BookingsService implements OnApplicationBootstrap {
   }
 
   /** Provider cập nhật trạng thái đơn hàng (CONFIRMED, PICKUP_PENDING, PICKED_UP, v.v.) */
+  /** Advances one photography session without changing other sessions. */
+  private async updatePhotographySessionStatus(
+    booking: BookingDocument,
+    action: 'SESSION_START' | 'SESSION_COMPLETE',
+  ): Promise<BookingDocument> {
+    if (
+      ![BookingType.Photography, BookingType.Combo].includes(
+        booking.bookingType,
+      )
+    ) {
+      throw new BadRequestException(
+        'Thao tác theo buổi chỉ áp dụng cho đơn chụp ảnh hoặc combo có chụp ảnh.',
+      );
+    }
+
+    const session = await this.bookingModel.db.startSession();
+    session.startTransaction();
+    try {
+      const now = new Date();
+      const activeSchedule = await this.bookingScheduleModel
+        .findOne({
+          bookingId: booking._id,
+          scheduleType: BookingScheduleType.Photoshoot,
+          status: BookingScheduleStatus.InProgress,
+        })
+        .session(session);
+
+      if (action === 'SESSION_START') {
+        if (
+          ![
+            BookingStatus.Confirmed,
+            BookingStatus.PickupPending,
+            BookingStatus.PickedUp,
+            BookingStatus.InProgress,
+          ].includes(booking.status)
+        ) {
+          throw new BadRequestException(
+            `Không thể bắt đầu buổi chụp từ trạng thái ${booking.status}.`,
+          );
+        }
+        if (activeSchedule) {
+          throw new BadRequestException(
+            'Đang có một buổi chụp diễn ra. Hãy hoàn tất buổi đó trước.',
+          );
+        }
+
+        const nextSchedule = await this.bookingScheduleModel
+          .findOne({
+            bookingId: booking._id,
+            scheduleType: BookingScheduleType.Photoshoot,
+            status: BookingScheduleStatus.Confirmed,
+          })
+          .sort({ startsAt: 1 })
+          .session(session);
+        if (!nextSchedule) {
+          throw new BadRequestException(
+            'Không còn buổi chụp nào chờ bắt đầu cho đơn này.',
+          );
+        }
+
+        const startsAt = getPhotoScheduleStartsAt(nextSchedule);
+        if (!startsAt || Number.isNaN(startsAt.getTime())) {
+          throw new BadRequestException(
+            'Lịch chụp chưa có thời gian bắt đầu hợp lệ. Vui lòng cập nhật lịch trước.',
+          );
+        }
+
+        const providerDayStartsAt = new Date(
+          `${toBusinessDateKey(startsAt)}T00:00:00+07:00`,
+        );
+        const earliestStartAt = new Date(
+          Math.max(
+            providerDayStartsAt.getTime(),
+            startsAt.getTime() - 30 * 60 * 1000,
+          ),
+        );
+        if (now < earliestStartAt) {
+          throw new BadRequestException(
+            `Chưa đến giờ bắt đầu buổi chụp. Bạn chỉ có thể bắt đầu từ ${earliestStartAt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.`,
+          );
+        }
+
+        const startedSchedule =
+          await this.bookingScheduleModel.findOneAndUpdate(
+            {
+              _id: nextSchedule._id,
+              status: BookingScheduleStatus.Confirmed,
+            },
+            {
+              $set: {
+                status: BookingScheduleStatus.InProgress,
+                actualTime: now,
+              },
+            },
+            { new: true, session },
+          );
+        if (!startedSchedule) {
+          throw new BadRequestException(
+            'Buổi chụp vừa được cập nhật ở nơi khác. Vui lòng tải lại đơn.',
+          );
+        }
+        booking.status = BookingStatus.InProgress;
+        booking.statusTimeline.push({
+          status: BookingStatus.InProgress,
+          changedAt: now,
+          note: 'Bắt đầu một buổi chụp.',
+        });
+      } else {
+        if (!activeSchedule) {
+          throw new BadRequestException(
+            'Không có buổi chụp nào đang diễn ra để hoàn tất.',
+          );
+        }
+        activeSchedule.status = BookingScheduleStatus.Completed;
+        activeSchedule.actualTime = now;
+        await activeSchedule.save({ session });
+        booking.statusTimeline.push({
+          status: BookingStatus.InProgress,
+          changedAt: now,
+          note: 'Hoàn tất một buổi chụp.',
+        });
+      }
+
+      // Touch the booking in every action so concurrent actions serialize.
+      await booking.save({ session });
+      await session.commitTransaction();
+      return booking;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  }
+
   async updateBookingStatus(
     bookingIdStr: string,
     newStatus: string,
@@ -2879,6 +3079,40 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     // Nếu chuyển sang COMPLETED → dùng completeBooking để trigger settlement
+    const isPhotographyWorkflow = [
+      BookingType.Photography,
+      BookingType.Combo,
+    ].includes(booking.bookingType);
+    if (newStatus === 'SESSION_START' || newStatus === 'SESSION_COMPLETE') {
+      return this.updatePhotographySessionStatus(booking, newStatus);
+    }
+    // Backward compatibility for clients that still send the booking-level
+    // IN_PROGRESS state. Do not let that bypass per-session tracking.
+    if (
+      newStatus === BookingStatus.InProgress &&
+      isPhotographyWorkflow &&
+      booking.status !== BookingStatus.InProgress
+    ) {
+      return this.updatePhotographySessionStatus(booking, 'SESSION_START');
+    }
+    if (newStatus === BookingStatus.AwaitingReview && isPhotographyWorkflow) {
+      const unfinishedSession = await this.bookingScheduleModel.exists({
+        bookingId: booking._id,
+        scheduleType: BookingScheduleType.Photoshoot,
+        status: {
+          $in: [
+            BookingScheduleStatus.Confirmed,
+            BookingScheduleStatus.InProgress,
+          ],
+        },
+      });
+      if (unfinishedSession) {
+        throw new BadRequestException(
+          'Hãy hoàn tất tất cả buổi chụp trước khi bàn giao ảnh.',
+        );
+      }
+    }
+
     if (newStatus === BookingStatus.Completed) {
       return this.completeBooking(bookingIdStr, userId, roles);
     }
@@ -3100,6 +3334,20 @@ export class BookingsService implements OnApplicationBootstrap {
       );
     } catch (e) {
       console.error('Failed to create updateBookingStatus notification:', e);
+    }
+
+    // The provider dashboard completes Ao Dai rentals with RETURNED. That is
+    // eligible for provider settlement; a combo must also have approved photos.
+    const isReturnedRentalCompletion =
+      nextStatus === BookingStatus.Returned &&
+      (booking.bookingType === BookingType.AoDaiRental ||
+        (booking.bookingType === BookingType.Combo &&
+          Boolean((booking as any).photosApproved)));
+    if (
+      nextStatus === BookingStatus.Completed ||
+      isReturnedRentalCompletion
+    ) {
+      await this.paymentsService.settleBooking(bookingIdStr);
     }
 
     return booking;
@@ -3563,7 +3811,7 @@ export class BookingsService implements OnApplicationBootstrap {
                 item.shootDate ||
                 matchedSchedule.startsAt ||
                 matchedSchedule.scheduledDate,
-              shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+              shootTimeSlot: item.shootTimeSlot || getPhotoScheduleTimeSlot(matchedSchedule),
               shootLocation:
                 item.shootLocation || matchedSchedule.locationAddress,
             };
@@ -3797,11 +4045,7 @@ export class BookingsService implements OnApplicationBootstrap {
               timeZone: 'Asia/Ho_Chi_Minh',
             });
           }
-          const startH = String(startD.getHours()).padStart(2, '0');
-          const startM = String(startD.getMinutes()).padStart(2, '0');
-          const endH = String(endD.getHours()).padStart(2, '0');
-          const endM = String(endD.getMinutes()).padStart(2, '0');
-          slotStr = `${startH}:${startM}-${endH}:${endM}`;
+          slotStr = `${formatPhotoTime(startD)}-${formatPhotoTime(endD)}`;
         }
 
         if (dateKey && slotStr) {

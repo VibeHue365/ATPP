@@ -56,6 +56,10 @@ describe('calculatePhotographyQuote', () => {
     expect(quote.baseAmount).toBe(1_000_000);
     expect(quote.overtimeAmount).toBe(200_000);
     expect(quote.totalAmount).toBe(1_200_000);
+    expect(quote.overtimeMinutesByClientId).toEqual({
+      morning: 0,
+      afternoon: 60,
+    });
   });
 
   it('requires explicit session and day entitlements for PER_BOOKING', () => {
@@ -68,6 +72,61 @@ describe('calculatePhotographyQuote', () => {
             providerLocalDate: '2026-07-20',
             durationMinutes: 120,
           },
+        ],
+      ),
+    ).toThrow(PhotographyPricingPolicyError);
+  });
+  it('shares one duration pool and charges extra sessions for PER_BOOKING', () => {
+    const quote = calculatePhotographyQuote(
+      {
+        ...basePolicy,
+        pricingUnit: 'PER_BOOKING',
+        includedSessionCount: 2,
+        includedDayCount: 2,
+        additionalSessionFee: 100_000,
+      },
+      [
+        {
+          clientId: 'day-1-morning',
+          providerLocalDate: '2026-07-20',
+          durationMinutes: 60,
+        },
+        {
+          clientId: 'day-1-afternoon',
+          providerLocalDate: '2026-07-20',
+          durationMinutes: 60,
+        },
+        {
+          clientId: 'day-2',
+          providerLocalDate: '2026-07-21',
+          durationMinutes: 30,
+        },
+      ],
+    );
+
+    expect(quote.baseAmount).toBe(1_000_000);
+    expect(quote.overtimeAmount).toBe(100_000);
+    expect(quote.surchargeAmount).toBe(100_000);
+    expect(quote.totalAmount).toBe(1_200_000);
+    expect(quote.overtimeMinutesByClientId).toEqual({
+      'day-1-morning': 0,
+      'day-1-afternoon': 0,
+      'day-2': 30,
+    });
+  });
+
+  it('rejects a PER_BOOKING schedule that exceeds the included day count', () => {
+    expect(() =>
+      calculatePhotographyQuote(
+        {
+          ...basePolicy,
+          pricingUnit: 'PER_BOOKING',
+          includedSessionCount: 2,
+          includedDayCount: 1,
+        },
+        [
+          { clientId: 's1', providerLocalDate: '2026-07-20', durationMinutes: 60 },
+          { clientId: 's2', providerLocalDate: '2026-07-21', durationMinutes: 60 },
         ],
       ),
     ).toThrow(PhotographyPricingPolicyError);

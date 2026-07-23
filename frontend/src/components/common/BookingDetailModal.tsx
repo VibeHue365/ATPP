@@ -206,15 +206,22 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { text: string; bg: string; color: string }> = {
+      PENDING: { text: 'Chờ xử lý', bg: '#F3F4F6', color: '#6B7280' },
       PENDING_PAYMENT: { text: 'Chờ thanh toán', bg: '#FEF3C7', color: '#D97706' },
       CONFIRMED: { text: 'Đã xác nhận', bg: '#E0F2FE', color: '#0284C7' },
+      DEPOSIT_PAID: { text: 'Đã đặt cọc', bg: '#DBEAFE', color: '#1D4ED8' },
+      IN_PROGRESS: { text: 'Đang chụp', bg: '#DCFCE7', color: '#15803D' },
+      AWAITING_REVIEW: { text: 'Chờ khách xác nhận ảnh', bg: '#FEF3C7', color: '#B45309' },
       PICKUP_PENDING: { text: 'Chờ nhận đồ', bg: '#EEF2F6', color: '#4B5563' },
       PICKED_UP: { text: 'Đang thuê', bg: '#F5F3FF', color: '#7C3AED' },
+      COMBO_PHOTOS_APPROVED: { text: 'Đã duyệt ảnh • Chờ trả đồ', bg: '#ECFEFF', color: '#0E7490' },
       RETURN_PENDING: { text: 'Chờ duyệt sự cố', bg: '#FFF1F2', color: '#E11D48' },
       RETURNED: { text: 'Đã trả đồ', bg: '#ECFDF5', color: '#059669' },
       COMPLETED: { text: 'Đã hoàn thành', bg: '#D1FAE5', color: '#065F46' },
       CANCELLED: { text: 'Đã hủy', bg: '#FEE2E2', color: '#B91C1C' },
-      DISPUTED: { text: 'Tranh chấp', bg: '#FEE2E2', color: '#991B1B' }
+      DISPUTED: { text: 'Tranh chấp', bg: '#FEE2E2', color: '#991B1B' },
+      PARTIALLY_REFUNDED: { text: 'Đã hoàn tiền một phần', bg: '#FFF7ED', color: '#C2410C' },
+      REFUNDED: { text: 'Đã hoàn tiền', bg: '#F0FDF4', color: '#166534' }
     };
 
     const config = statusMap[status] || { text: status, bg: '#F3F4F6', color: '#374151' };

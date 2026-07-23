@@ -76,7 +76,10 @@ export class BookingsController {
     @Body() body: any,
   ): Promise<BookingDocument> {
     if (body && Array.isArray(body.items)) {
-      if (body.bookingType !== BookingType.AoDaiRental) {
+      const hasPhotographyItem = body.items.some(
+        (item: any) => Boolean(item?.photographyPackageId),
+      );
+      if (hasPhotographyItem || body.bookingType !== BookingType.AoDaiRental) {
         throw new BadRequestException(
           'Photography và combo phải được tạo qua API giữ lịch chuyên dụng.',
         );

@@ -321,7 +321,15 @@ export class RentalFulfillmentWorkflowService {
     ).lean().exec();
 
     if (changed) {
-      if (nextStatus === BookingStatus.Completed && booking.bookingType === BookingType.AoDaiRental) {
+      // Ao Dai rentals and combos can both reach COMPLETED from this lifecycle.
+      // Settlement creation is idempotent, so it is safe to trigger it after
+      // the completed status has been persisted for either booking type.
+      if (
+        nextStatus === BookingStatus.Completed &&
+        [BookingType.AoDaiRental, BookingType.Combo].includes(
+          booking.bookingType as BookingType,
+        )
+      ) {
         await this.paymentsService.settleBooking(bookingId.toString());
       }
       if (nextStatus === BookingStatus.PickupPending) {

@@ -491,7 +491,10 @@ const bookingIds = bookings.map((booking) => booking._id);
     const revenueByBooking = new Map<string, number>();
     for (const item of revenueItems) {
       const bookingKey = item.bookingId.toString();
-      revenueByBooking.set(bookingKey, (revenueByBooking.get(bookingKey) || 0) + item.unitPrice * (item.quantity || 1));
+      const legacyItem = item as any;
+      const lineTotal = Number(legacyItem.subtotal ?? legacyItem.totalPrice ?? 0);
+      const unitPrice = Number(item.unitPrice ?? legacyItem.price ?? 0);
+      revenueByBooking.set(bookingKey, (revenueByBooking.get(bookingKey) || 0) + (lineTotal > 0 ? lineTotal : unitPrice * (item.quantity || 1)));
     }
     const totalRevenue = Array.from(revenueByBooking.values()).reduce((sum, amount) => sum + amount, 0);
     const commissionFee = Math.round(totalRevenue * 0.15);

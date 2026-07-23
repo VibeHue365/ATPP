@@ -376,23 +376,38 @@ export class BookingsSchedulerService {
           itemType: BookingItemType.PhotographyPackage,
         });
 
-        if (!photoItem || !photoItem.shootDate) continue;
+        if (!photoItem) continue;
 
-        let endHour = 23;
-        let endMin = 59;
-        if (photoItem.shootTimeSlot && photoItem.shootTimeSlot.includes('-')) {
-          const parts = photoItem.shootTimeSlot.split('-');
-          if (parts.length >= 2) {
-            const [h, m] = parts[1].trim().split(':').map(Number);
-            if (!isNaN(h)) {
-              endHour = h;
-              endMin = m || 0;
-            }
+        const photoSchedule = await this.bookingScheduleModel
+          .findOne({
+            bookingId: booking._id,
+            scheduleType: BookingScheduleType.Photoshoot,
+            status: {
+              $in: [
+                BookingScheduleStatus.Scheduled,
+                BookingScheduleStatus.Confirmed,
+              ],
+            },
+          })
+          .sort({ startsAt: 1 })
+          .lean();
+
+        let shootEnd: Date | null = photoSchedule?.endsAt
+          ? new Date(photoSchedule.endsAt)
+          : null;
+
+        if (!shootEnd && photoItem.shootDate) {
+          let endTime = '23:59';
+          if (photoItem.shootTimeSlot?.includes('-')) {
+            endTime = photoItem.shootTimeSlot.split('-')[1]?.trim() || endTime;
           }
+          const dateKey = new Date(photoItem.shootDate).toLocaleDateString('en-CA', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+          });
+          shootEnd = new Date(`${dateKey}T${endTime}:00+07:00`);
         }
 
-        const shootEnd = new Date(photoItem.shootDate);
-        shootEnd.setHours(endHour, endMin, 0, 0);
+        if (!shootEnd || Number.isNaN(shootEnd.getTime())) continue;
 
         // 2 hours past shootEnd time
         const overdueDeadline = new Date(

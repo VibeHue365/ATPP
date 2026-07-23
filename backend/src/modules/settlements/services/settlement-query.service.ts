@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Booking, BookingStatus } from '../../bookings/schemas/booking.schema';
+import { Booking, BookingStatus, BookingType } from '../../bookings/schemas/booking.schema';
 import { SETTLEMENT_ERROR_CODES } from '../constants/settlement-error-codes';
 import {
   QueryProviderSettlementsDto,
@@ -56,33 +56,64 @@ export class SettlementQueryService {
   ) {
     this.assertValidDateRange(query.fromDate, query.toDate);
 
-    // Self-healing: auto-create settlement for any COMPLETED bookings of this provider that don't have one yet
+    // Self-healing also covers the RETURNED terminal state used by the Ao Dai
+    // dashboard. A combo is eligible only after its photos are approved.
     try {
-      const itemsForProvider = await this.bookingModel.db.model('BookingItem').find({ providerId }).distinct('bookingId');
+      const itemsForProvider = await this.bookingModel.db
+        .model('BookingItem')
+        .find({ providerId })
+        .distinct('bookingId');
       const completedBookings = await this.bookingModel
         .find({
-          $or: [
-            { providerIds: providerId },
-            { providerId: providerId as any },
-            { _id: { $in: itemsForProvider } },
+          $and: [
+            {
+              $or: [
+                { providerIds: providerId },
+                { providerId: providerId as any },
+                { _id: { $in: itemsForProvider } },
+              ],
+            },
+            {
+              $or: [
+                { status: BookingStatus.Completed },
+                {
+                  status: BookingStatus.Returned,
+                  bookingType: BookingType.AoDaiRental,
+                },
+                {
+                  status: BookingStatus.Returned,
+                  bookingType: BookingType.Combo,
+                  photosApproved: true,
+                },
+              ],
+            },
           ],
-          status: BookingStatus.Completed,
         })
         .lean();
 
       for (const b of completedBookings) {
-        const exists = await this.settlementModel.exists({
-          bookingId: b._id,
-          providerId,
-        });
-        if (!exists) {
-          await this.settlementsService.createSettlementsForBooking(
-            b._id.toString(),
+        try {
+          const exists = await this.settlementModel.exists({
+            bookingId: b._id,
+            providerId,
+          });
+          if (!exists) {
+            await this.settlementsService.createSettlementsForBooking(
+              b._id.toString(),
+            );
+          }
+        } catch (error) {
+          console.warn(
+            `Failed to backfill settlement for eligible booking ${b.bookingCode} (${b._id.toString()}):`,
+            error,
           );
         }
       }
-    } catch (_e) {
-      // Ignore background sync errors
+    } catch (error) {
+      console.error(
+        `Failed to load eligible bookings for provider settlement backfill ${providerId.toString()}:`,
+        error,
+      );
     }
 
     const filter = this.buildFilter({

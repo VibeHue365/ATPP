@@ -7,7 +7,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { SecurityRequestContext, SecurityLogService } from '../../auth/services/security-log.service';
 import { AdminAuditAction } from '../../auth/schemas/admin-audit-log.schema';
-import { Booking, BookingStatus, PaymentStatus as BookingPaymentStatus } from '../../bookings/schemas/booking.schema';
+import { Booking, BookingStatus, BookingType, PaymentStatus as BookingPaymentStatus } from '../../bookings/schemas/booking.schema';
 import { BookingItem } from '../../bookings/schemas/booking-item.schema';
 import { Payment, PaymentStatus } from '../../payments/schemas/payment.schema';
 import { SETTLEMENT_ERROR_CODES } from '../constants/settlement-error-codes';
@@ -49,18 +49,22 @@ export class SettlementsService {
       throw new NotFoundException(SETTLEMENT_ERROR_CODES.BookingNotFound);
     }
 
-    if (booking.status !== BookingStatus.Completed) {
+    if (!this.isEligibleForSettlement(booking)) {
       throw new BadRequestException(
         SETTLEMENT_ERROR_CODES.BookingNotCompleted,
       );
     }
 
+    // A rental deposit refund is separate from the service amount payable to
+    // the provider. Keep a completed/returned paid booking eligible even when
+    // the customer transaction history includes that deposit refund.
     const validPaymentStatuses = [
       BookingPaymentStatus.Paid,
       BookingPaymentStatus.PartiallyPaid,
     ];
+    const hasCapturedPayment = (booking.paymentSummary?.totalPaid ?? 0) > 0;
     if (
-      booking.status !== BookingStatus.Completed &&
+      !hasCapturedPayment &&
       !validPaymentStatuses.includes(booking.paymentSummary?.paymentStatus as any)
     ) {
       throw new BadRequestException(SETTLEMENT_ERROR_CODES.BookingNotPaid);
@@ -156,10 +160,25 @@ export class SettlementsService {
       throw new NotFoundException(SETTLEMENT_ERROR_CODES.BookingNotFound);
     }
 
-    if (booking.status !== BookingStatus.Completed) {
+    if (!this.isEligibleForSettlement(booking)) {
       throw new BadRequestException(
         SETTLEMENT_ERROR_CODES.BookingNotCompleted,
       );
+    }
+
+    // A rental deposit refund is separate from the service amount payable to
+    // the provider. Keep a completed/returned paid booking eligible even when
+    // the customer transaction history includes that deposit refund.
+    const validPaymentStatuses = [
+      BookingPaymentStatus.Paid,
+      BookingPaymentStatus.PartiallyPaid,
+    ];
+    const hasCapturedPayment = (booking.paymentSummary?.totalPaid ?? 0) > 0;
+    if (
+      !hasCapturedPayment &&
+      !validPaymentStatuses.includes(booking.paymentSummary?.paymentStatus as any)
+    ) {
+      throw new BadRequestException(SETTLEMENT_ERROR_CODES.BookingNotPaid);
     }
 
     const items = await this.loadBookingItems(bookingObjectId);
@@ -428,6 +447,20 @@ export class SettlementsService {
       .find({ bookingId })
       .populate('productId')
       .populate('photographyPackageId');
+  }
+
+  /**
+   * RETURNED is the business completion state used by the Ao Dai dashboard.
+   * A combo additionally needs the customer to approve the photography part.
+   */
+  private isEligibleForSettlement(booking: Booking): boolean {
+    if (booking.status === BookingStatus.Completed) return true;
+    if (booking.status !== BookingStatus.Returned) return false;
+    if (booking.bookingType === BookingType.AoDaiRental) return true;
+    return (
+      booking.bookingType === BookingType.Combo &&
+      Boolean((booking as any).photosApproved)
+    );
   }
 
   private countDistinctProviders(items: Array<{ providerId: Types.ObjectId }>): number {

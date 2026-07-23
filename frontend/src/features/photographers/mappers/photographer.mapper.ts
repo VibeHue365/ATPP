@@ -76,6 +76,7 @@ export const toPhotographerDetails = (response: PhotographerApiResponse): Photog
     images: getMediaUrls(item.images),
   })),
   packages: response.packages ?? [],
+  serviceRadiusKm: response.serviceRadiusKm ?? null,
   coverImage: getFirstMediaUrl(
     response.coverImage,
     response.media?.coverUrl,

@@ -175,7 +175,15 @@ export class RefundWorkflowService {
     }
     const updated = await this.refundModel.findOneAndUpdate({ _id: refund._id, status: RefundStatus.Processing }, { $set: { status: RefundStatus.Completed, processedAmount: amount, reservedAmount: 0 }, $inc: { version: 1 } }, { new: true });
     await this.bookingModel.updateOne({ _id: refund.bookingId }, { $inc: { 'paymentSummary.totalRefunded': amount }, $set: { 'paymentSummary.paymentStatus': BookingPaymentStatus.Refunded } });
-    await this.applySettlementImpact(refund, amount);
+    // A rental-deposit refund returns the customer's security deposit only. It
+    // must remain visible in customer payment history, but it is never a
+    // discount/refund of the provider's completed rental service.
+    const isRentalDepositRefund = String(refund.sourceEventId || '').startsWith(
+      'rental-deposit-refund:',
+    );
+    if (!isRentalDepositRefund) {
+      await this.applySettlementImpact(refund, amount);
+    }
 
     try {
       const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;

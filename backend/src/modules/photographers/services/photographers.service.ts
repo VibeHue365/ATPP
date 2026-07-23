@@ -534,6 +534,7 @@ export class PhotographersService {
           ward: providerAddress.ward ?? null,
           district: providerAddress.district ?? null,
           city: providerAddress.city ?? null,
+          geo: providerAddress.geo ?? null,
         }
       : null;
     const media = { ...provider.media, images: provider.media?.images || [] };

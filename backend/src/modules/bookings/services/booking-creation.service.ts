@@ -49,6 +49,19 @@ import { CreateProductBookingDto } from '../dto/create-product-booking.dto';
 import { CreatePhotographyBookingDto } from '../dto/create-photography-booking.dto';
 import { BookingsRepository } from '../repositories/bookings.repository';
 
+const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+
+const toBusinessDateKey = (value: Date | string = new Date()): string => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(value));
+  const part = (type: string) => parts.find((item) => item.type === type)?.value || '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+};
+
 @Injectable()
 export class BookingCreationService {
   constructor(
@@ -210,12 +223,10 @@ export class BookingCreationService {
     let booking: BookingDocument | null = null;
     let promotionId: Types.ObjectId | null = null;
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = toBusinessDateKey();
     for (const item of dto.items) {
       if (item.rentalFrom) {
-        const itemDateStr = new Date(item.rentalFrom)
-          .toISOString()
-          .split('T')[0];
+        const itemDateStr = toBusinessDateKey(item.rentalFrom);
         if (itemDateStr < todayStr) {
           throw new BadRequestException(
             'Ngày bắt đầu thuê áo dài không thể nằm trong quá khứ.',
@@ -223,9 +234,7 @@ export class BookingCreationService {
         }
       }
       if (item.shootDate) {
-        const itemDateStr = new Date(item.shootDate)
-          .toISOString()
-          .split('T')[0];
+        const itemDateStr = toBusinessDateKey(item.shootDate);
         if (itemDateStr < todayStr) {
           throw new BadRequestException(
             'Ngày đặt lịch chụp ảnh không thể nằm trong quá khứ.',
@@ -594,7 +603,7 @@ export class BookingCreationService {
             const end = new Date(detail.rentalTo);
             const current = new Date(start);
             while (current <= end) {
-              const dateStr = current.toISOString().split('T')[0];
+              const dateStr = toBusinessDateKey(current);
               if (busyDatesSet.has(dateStr)) {
                 throw new BadRequestException(
                   `Sản phẩm đã được đặt lịch thuê vào ngày ${dateStr}. Vui lòng chọn thời gian khác.`,
@@ -606,9 +615,7 @@ export class BookingCreationService {
             const busySchedules = await this.getBusySchedulesForProduct(
               detail.productId.toString(),
             );
-            const dateStr = new Date(detail.shootDate)
-              .toISOString()
-              .split('T')[0];
+            const dateStr = toBusinessDateKey(detail.shootDate);
             const isSlotConflict =
               detail.shootTimeSlot != null &&
               busySchedules.bookedSlots.some(
@@ -631,9 +638,7 @@ export class BookingCreationService {
             const busySchedules = await this.getBusySchedulesForProvider(
               detail.providerId.toString(),
             );
-            const dateStr = new Date(detail.shootDate)
-              .toISOString()
-              .split('T')[0];
+            const dateStr = toBusinessDateKey(detail.shootDate);
             const isSlotConflict =
               detail.shootTimeSlot != null &&
               busySchedules.bookedSlots.some(
@@ -888,8 +893,8 @@ export class BookingCreationService {
         throw new BadRequestException('Định dạng ngày bắt đầu không hợp lệ');
       }
 
-      const todayStr = new Date().toISOString().split('T')[0];
-      const startDateStr = start.toISOString().split('T')[0];
+      const todayStr = toBusinessDateKey();
+      const startDateStr = toBusinessDateKey(start);
       if (startDateStr < todayStr) {
         throw new BadRequestException(
           'Ngày bắt đầu đặt lịch thuê không thể nằm trong quá khứ.',
@@ -964,7 +969,7 @@ export class BookingCreationService {
         const end = new Date(rentalTo);
         const current = new Date(start);
         while (current <= end) {
-          const dateStr = current.toISOString().split('T')[0];
+          const dateStr = toBusinessDateKey(current);
           if (busyDatesSet.has(dateStr)) {
             throw new BadRequestException(
               `Sản phẩm đã được đặt lịch thuê vào ngày ${dateStr}. Vui lòng chọn thời gian khác.`,
@@ -974,7 +979,7 @@ export class BookingCreationService {
         }
       } else if (rentalType === 'HOURLY' && shootDate) {
         const busySchedules = await this.getBusySchedulesForProduct(productId);
-        const dateStr = new Date(shootDate).toISOString().split('T')[0];
+        const dateStr = toBusinessDateKey(shootDate);
         const isSlotConflict =
           shootTimeSlot != null &&
           busySchedules.bookedSlots.some(
@@ -1316,8 +1321,8 @@ export class BookingCreationService {
         throw new BadRequestException('Định dạng ngày chụp không hợp lệ');
       }
 
-      const todayStr = new Date().toISOString().split('T')[0];
-      const shootDateStr = date.toISOString().split('T')[0];
+      const todayStr = toBusinessDateKey();
+      const shootDateStr = toBusinessDateKey(date);
       if (shootDateStr < todayStr) {
         throw new BadRequestException(
           'Ngày đặt lịch chụp ảnh không thể nằm trong quá khứ.',

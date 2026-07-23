@@ -481,7 +481,7 @@ export const CartPage: React.FC = () => {
 
   const comboGroupEntries = Array.from(comboGroupsMap.entries()).map(([comboId, items]) => {
     const origTotal = items.reduce((sum, i) => sum + (i.basePrice || 0) * (i.quantity || 1), 0);
-    const discountPct = items[0]?.comboDiscountPercent || 50;
+    const discountPct = items[0]?.comboDiscountPercent ?? 0;
     const comboPrice = Math.round(origTotal * (1 - discountPct / 100));
     const depositAmt = items.filter(i => i.itemType === 'PRODUCT').reduce((sum, i) => sum + (i.depositAmount || 0) * (i.quantity || 1), 0);
 
@@ -545,16 +545,23 @@ export const CartPage: React.FC = () => {
   const selectedItems = enrichedCart.filter(item => selectedItemIds.includes(item.id));
 
   const selectedComboIds = new Set(
-    selectedItems.filter(i => i.comboPromotionId).map(i => i.comboPromotionId!)
+    selectedItems
+      .filter(i => i.comboPromotionId)
+      .map(i => i.comboPromotionId!)
+      .filter((comboId) => {
+        const groupItems = selectedItems.filter((item) => item.comboPromotionId === comboId);
+        return groupItems.some((item) => item.itemType === 'PRODUCT')
+          && groupItems.some((item) => item.itemType === 'PHOTOGRAPHY_PACKAGE');
+      }),
   );
 
   let totalComboPrice = 0;
   let totalComboDeposit = 0;
 
   selectedComboIds.forEach(cId => {
-    const cItems = enrichedCart.filter(i => i.comboPromotionId === cId);
+    const cItems = selectedItems.filter(i => i.comboPromotionId === cId);
     const origTotal = cItems.reduce((sum, i) => sum + (i.basePrice || 0) * (i.quantity || 1), 0);
-    const pct = cItems[0]?.comboDiscountPercent || 50;
+    const pct = cItems[0]?.comboDiscountPercent ?? 0;
     const cPrice = Math.round(origTotal * (1 - pct / 100));
     const cDeposit = cItems.filter(i => i.itemType === 'PRODUCT').reduce((sum, i) => sum + (i.depositAmount || 0) * (i.quantity || 1), 0);
 
@@ -562,7 +569,7 @@ export const CartPage: React.FC = () => {
     totalComboDeposit += cDeposit;
   });
 
-  const nonComboSelected = selectedItems.filter(i => !i.comboPromotionId);
+  const nonComboSelected = selectedItems.filter(i => !i.comboPromotionId || !selectedComboIds.has(i.comboPromotionId));
   const totalNonComboRental = nonComboSelected
     .filter(item => item.itemType === 'PRODUCT')
     .reduce((sum, item) => sum + (item.basePrice || 0) * (item.quantity || 1), 0);
@@ -577,9 +584,9 @@ export const CartPage: React.FC = () => {
   const totalProductDeposit = totalComboDeposit + totalNonComboDeposit;
   const totalPhotographerFee = totalNonComboPhoto;
   const comboDiscountTotal = Array.from(selectedComboIds).reduce((sum, cId) => {
-    const cItems = enrichedCart.filter(i => i.comboPromotionId === cId);
+    const cItems = selectedItems.filter(i => i.comboPromotionId === cId);
     const origTotal = cItems.reduce((s, i) => s + (i.basePrice || 0) * (i.quantity || 1), 0);
-    const pct = cItems[0]?.comboDiscountPercent || 50;
+    const pct = cItems[0]?.comboDiscountPercent ?? 0;
     return sum + Math.round(origTotal * (pct / 100));
   }, 0);
 
@@ -709,8 +716,17 @@ export const CartPage: React.FC = () => {
 
       let bookingId: string;
       let paymentPurpose: 'FULL_PAYMENT' | 'DEPOSIT_PAYMENT' = 'FULL_PAYMENT';
-      if (photoItems.length === 1) {
-        const photo = photoItems[0];
+      const photo = photoItems.length === 1 ? photoItems[0] : null;
+      const isComboCheckout = Boolean(
+        photo
+        && productItems.length > 0
+        && photo.comboPromotionId
+        && productItems.every((item) => item.comboPromotionId === photo.comboPromotionId),
+      );
+      if (photo && productItems.length > 0 && !isComboCheckout) {
+        throw new Error('Photo và áo dài đang chọn không thuộc cùng một Combo. Vui lòng tách thành hai lần thanh toán.');
+      }
+      if (photo) {
         if (
           !isMongoObjectId(photo.photographyPackageId) ||
           !photo.shootDate ||
@@ -738,9 +754,9 @@ export const CartPage: React.FC = () => {
           concept: photo.shootConcept || undefined,
           customRequests: photo.customRequests || undefined,
           referenceImage: photo.referenceImage || undefined,
-          comboDiscountPercent: photo.comboDiscountPercent ?? (productItems.length > 0 ? (productItems[0]?.comboDiscountPercent ?? 50) : 50),
-          comboPromotionId: photo.comboPromotionId || (productItems.length > 0 ? productItems[0]?.comboPromotionId : undefined) || undefined,
-          ...(productItems.length > 0 ? {
+          ...(isComboCheckout ? {
+            comboDiscountPercent: photo.comboDiscountPercent,
+            comboPromotionId: photo.comboPromotionId,
             aodaiItems: rentalItemsPayload.map(item => ({
               productId: item.productId,
               selectedSize: item.selectedSize,
@@ -751,7 +767,7 @@ export const CartPage: React.FC = () => {
             })),
           } : {}),
         };
-        const holdEndpoint = productItems.length > 0
+        const holdEndpoint = isComboCheckout
           ? '/api/bookings/combo/photography-hold'
           : '/api/bookings/photography/hold';
         const idempotencyKey = `cart-hold-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -1661,11 +1677,11 @@ export const CartPage: React.FC = () => {
                             const photo = group.items.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
                             return (
                               <div key={gIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                {prod && (prod.comboDiscountPercent !== 0) && (
-                                  <div>• Cửa hàng giảm {(prod.comboDiscountPercent ?? 10)}% áo dài (-{((prod.basePrice || 0) * (prod.comboDiscountPercent ?? 10) / 100).toLocaleString('vi-VN')}đ)</div>
+                                {prod && (prod.comboDiscountPercent ?? 0) > 0 && (
+                                  <div>• Cửa hàng giảm {(prod.comboDiscountPercent ?? 0)}% áo dài (-{((prod.basePrice || 0) * (prod.comboDiscountPercent ?? 0) / 100).toLocaleString('vi-VN')}đ)</div>
                                 )}
-                                {photo && (photo.comboDiscountPercent !== 0) && (
-                                  <div>• Thợ ảnh giảm {(photo.comboDiscountPercent ?? 10)}% gói chụp (-{((photo.basePrice || 0) * (photo.comboDiscountPercent ?? 10) / 100).toLocaleString('vi-VN')}đ)</div>
+                                {photo && (photo.comboDiscountPercent ?? 0) > 0 && (
+                                  <div>• Thợ ảnh giảm {(photo.comboDiscountPercent ?? 0)}% gói chụp (-{((photo.basePrice || 0) * (photo.comboDiscountPercent ?? 0) / 100).toLocaleString('vi-VN')}đ)</div>
                                 )}
                                 {photo && (photo.comboDiscountPercent === 0) && (
                                   <div style={{ color: '#7F8C8D' }}>• Thợ ảnh {photo.photographerName} không áp dụng giảm giá Combo</div>

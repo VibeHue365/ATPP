@@ -35,6 +35,8 @@ interface Order {
   status: string;
   totalAmount?: number;
   createdAt?: string;
+  rawOrderDate?: string;
+  photosApproved?: boolean;
   customerId?: any;
   items?: any[];
   schedules?: Array<{ status?: string; [key: string]: any }>;
@@ -47,6 +49,43 @@ interface Order {
     evidencePhotos: string[];
   } | null;
 }
+
+const PHOTO_START_EARLY_MINUTES = 30;
+
+const getPhotoScheduleStartsAt = (schedule?: Record<string, any>): Date | null => {
+  if (schedule?.startsAt) {
+    const startsAt = new Date(schedule.startsAt);
+    if (!Number.isNaN(startsAt.getTime())) return startsAt;
+  }
+
+  const scheduledDate = schedule?.providerLocalDate
+    || (schedule?.scheduledDate
+      ? new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Ho_Chi_Minh',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(new Date(schedule.scheduledDate))
+      : null);
+  const startTime = String(schedule?.timeSlot || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!scheduledDate || !startTime) return null;
+
+  const legacyStartsAt = new Date(
+    `${scheduledDate}T${startTime[1].padStart(2, '0')}:${startTime[2]}:00+07:00`,
+  );
+  return Number.isNaN(legacyStartsAt.getTime()) ? null : legacyStartsAt;
+};
+
+const formatPhotoStartTime = (value: Date): string =>
+  new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour12: false,
+  }).format(value);
 
 interface Product {
   _id: string;
@@ -84,6 +123,13 @@ interface PortfolioItem {
 type CancellationRefundRule = {
   noticeDays: number;
   refundPercent: number;
+};
+
+const toLocalDateKey = (date: Date = new Date()): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const normalizeCancellationRefundRules = (rules: CancellationRefundRule[]) => rules
@@ -969,10 +1015,10 @@ export const ProviderDashboard: React.FC = () => {
     setCShootPeopleCount(combo.shootPeopleCount || 1);
 
     if (combo.validFrom) {
-      setCValidFrom(new Date(combo.validFrom).toISOString().split('T')[0]);
+      setCValidFrom(toLocalDateKey(new Date(combo.validFrom)));
     }
     if (combo.validTo) {
-      setCValidTo(new Date(combo.validTo).toISOString().split('T')[0]);
+      setCValidTo(toLocalDateKey(new Date(combo.validTo)));
     }
   };
 
@@ -1305,7 +1351,7 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
-  const fetchOrders = async (silent = false) => {
+  const fetchOrders = async (silent = false, force = false) => {
     if (!silent) setLoadingOrders(true);
     try {
       const bRes: any = await httpClient.get('/bookings/provider');
@@ -1329,16 +1375,17 @@ export const ProviderDashboard: React.FC = () => {
         let totalAmt = 0;
         if (b.items && b.items.length > 0) {
           totalAmt = b.items.reduce((sum: number, item: any) => {
-            const price = item.unitPrice ?? 0;
+            const price = Number(item.unitPrice ?? item.price ?? 0);
             const qty = item.quantity ?? 1;
             const discount = item.comboDiscountAmount ?? item.discountAmount ?? 0;
-            return sum + Math.max(0, (price * qty) - discount);
+            const lineTotal = Number(item.subtotal ?? item.totalPrice ?? 0);
+            return sum + Math.max(0, (lineTotal > 0 ? lineTotal : price * qty) - discount);
           }, 0);
         }
         if (b.bookingType === 'COMBO' && b.pricingSummary?.grandTotal) {
           totalAmt = b.pricingSummary.grandTotal;
-        } else if (totalAmt === 0 && b.pricingSummary?.grandTotal) {
-          totalAmt = b.pricingSummary.grandTotal;
+        } else if (totalAmt === 0) {
+          totalAmt = Number(b.pricingSummary?.grandTotal ?? b.paymentSummary?.totalPaid ?? b.totalAmount ?? b.total ?? 0);
         }
 
         const statusMap: Record<string, string> = {
@@ -1346,6 +1393,8 @@ export const ProviderDashboard: React.FC = () => {
           PENDING_PAYMENT: 'CHỜ THANH TOÁN',
           DEPOSIT_PAID: 'ĐÃ ĐẶT CỌC',
           CONFIRMED: 'ĐANG THỰC HIỆN',
+          IN_PROGRESS: 'ĐANG CHỤP',
+          AWAITING_REVIEW: 'CHỜ KHÁCH XÁC NHẬN ẢNH',
           PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
           PICKED_UP: 'ĐANG THUÊ',
           COMBO_PHOTOS_APPROVED: 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ',
@@ -1353,7 +1402,9 @@ export const ProviderDashboard: React.FC = () => {
           RETURNED: 'ĐÃ TRẢ ĐỒ',
           COMPLETED: 'HOÀN THÀNH',
           CANCELLED: 'ĐÃ HỦY',
-          DISPUTED: 'TRANH CHẤP',
+          DISPUTED: 'ĐANG TRANH CHẤP',
+          PARTIALLY_REFUNDED: 'ĐÃ HOÀN TIỀN MỘT PHẦN',
+          REFUNDED: 'ĐÃ HOÀN TIỀN',
         };
         return {
           _id: b._id,
@@ -1368,6 +1419,7 @@ export const ProviderDashboard: React.FC = () => {
           status: statusMap[b.status] || b.status,
           totalAmount: totalAmt,
           items: b.items,
+          schedules: b.schedules,
           depositTotal: b.pricingSummary?.depositTotal || 0,
           rawStatus: b.status,
           bookingType: b.bookingType,
@@ -1382,12 +1434,19 @@ export const ProviderDashboard: React.FC = () => {
           if (prev[i].rawStatus !== next[i].rawStatus) return true;
           if (prev[i].status !== next[i].status) return true;
           if (prev[i].photosApproved !== next[i].photosApproved) return true;
+          const previousScheduleState = (prev[i].schedules || [])
+            .map((schedule) => `${schedule._id || ''}:${schedule.status || ''}:${schedule.startsAt || schedule.scheduledDate || ''}`)
+            .join('|');
+          const nextScheduleState = (next[i].schedules || [])
+            .map((schedule) => `${schedule._id || ''}:${schedule.status || ''}:${schedule.startsAt || schedule.scheduledDate || ''}`)
+            .join('|');
+          if (previousScheduleState !== nextScheduleState) return true;
         }
         return false;
       };
 
       setOrders(prevOrders => {
-        if (actionMenuId !== null) return prevOrders;
+        if (actionMenuId !== null && !force) return prevOrders;
         const changed = isOrdersChanged(prevOrders, mapped);
         return changed ? mapped : prevOrders;
       });
@@ -1513,8 +1572,8 @@ export const ProviderDashboard: React.FC = () => {
         const today = new Date();
         const nextWeek = new Date();
         nextWeek.setDate(today.getDate() + 7);
-        setCampaignStart(today.toISOString().split('T')[0]);
-        setCampaignEnd(nextWeek.toISOString().split('T')[0]);
+        setCampaignStart(toLocalDateKey(today));
+        setCampaignEnd(toLocalDateKey(nextWeek));
       }
     } catch (err) {
       console.error('Error fetching campaign:', err);
@@ -1735,8 +1794,8 @@ export const ProviderDashboard: React.FC = () => {
       const today = new Date();
       const nextWeek = new Date();
       nextWeek.setDate(today.getDate() + 7);
-      setCampaignStart(today.toISOString().split('T')[0]);
-      setCampaignEnd(nextWeek.toISOString().split('T')[0]);
+      setCampaignStart(toLocalDateKey(today));
+      setCampaignEnd(toLocalDateKey(nextWeek));
       setIsCampaignModalOpen(false);
       fetchProducts();
     } catch (err: any) {
@@ -2173,14 +2232,17 @@ export const ProviderDashboard: React.FC = () => {
     DEPOSIT_PAID: 'ĐÃ ĐẶT CỌC',
     CONFIRMED: 'ĐANG THỰC HIỆN',
     IN_PROGRESS: 'ĐANG CHỤP',
-    AWAITING_REVIEW: 'CHỜ KHÁCH XÁC NHẬN',
+    AWAITING_REVIEW: 'CHỜ KHÁCH XÁC NHẬN ẢNH',
     PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
     PICKED_UP: 'ĐANG THUÊ',
+    COMBO_PHOTOS_APPROVED: 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ',
     RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
     RETURNED: 'ĐÃ TRẢ ĐỒ',
     COMPLETED: 'HOÀN THÀNH',
     CANCELLED: 'ĐÃ HỦY',
-    DISPUTED: 'TRANH CHẤP',
+    DISPUTED: 'ĐANG TRANH CHẤP',
+    PARTIALLY_REFUNDED: 'ĐÃ HOÀN TIỀN MỘT PHẦN',
+    REFUNDED: 'ĐÃ HOÀN TIỀN',
   };
 
   const changeOrderStatus = async (_id: string, apiStatus: string) => {
@@ -2322,7 +2384,7 @@ export const ProviderDashboard: React.FC = () => {
     // ===== PHOTOGRAPHY: Hủy/Từ chối lịch chụp → yêu cầu nhập lý do =====
     if (apiStatus === 'CANCELLED' && order?.bookingType === 'PHOTOGRAPHY') {
       const result = await Swal.fire({
-        title: 'Từ chối / Hủy lịch chụp',
+        title: 'Từ chối / Hủy toàn bộ booking',
         html: `
           <p style="font-size: 13px; color: #6B7280; margin-bottom: 14px; line-height: 1.5;">
             Vui lòng cho khách hàng biết lý do bạn từ chối hoặc hủy lịch chụp này.
@@ -2575,6 +2637,21 @@ export const ProviderDashboard: React.FC = () => {
       return;
     }
 
+    if (apiStatus === 'SESSION_START' || apiStatus === 'SESSION_COMPLETE') {
+      try {
+        await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus });
+        await fetchOrders(true, true);
+        toast.success(
+          apiStatus === 'SESSION_START'
+            ? 'Đã bắt đầu buổi chụp.'
+            : 'Đã hoàn tất buổi chụp. Bạn có thể bắt đầu buổi kế tiếp.',
+        );
+      } catch (err: any) {
+        toast.error(err.message || 'Cập nhật buổi chụp thất bại');
+      }
+      setActionMenuId(null);
+      return;
+    }
     try {
       await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus });
       const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
@@ -2897,12 +2974,12 @@ export const ProviderDashboard: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
               <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Doanh thu nhiếp ảnh</span>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-primary)', marginTop: '8px' }}>{(analyticsData.totalRevenue || 84250000).toLocaleString('vi-VN')} VND</div>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-primary)', marginTop: '8px' }}>{(analyticsData.totalRevenue ?? 0).toLocaleString('vi-VN')} VND</div>
               <span style={{ fontSize: '12px', color: '#166534', marginTop: '6px', display: 'block', fontWeight: 600 }}>↑ Tăng trưởng tốt trong mùa lễ</span>
             </div>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
               <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Phí hoa hồng hệ thống (15%)</span>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: '#B89047', marginTop: '8px' }}>{(analyticsData.commissionFee || 12800000).toLocaleString('vi-VN')} VND</div>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: '#B89047', marginTop: '8px' }}>{(analyticsData.commissionFee ?? 0).toLocaleString('vi-VN')} VND</div>
               <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '6px', display: 'block' }}>Thu phí tự động hàng tuần</span>
             </div>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3629,17 +3706,27 @@ export const ProviderDashboard: React.FC = () => {
                       if (o.bookingType === 'PHOTOGRAPHY' && rawShootDate) {
                         const d = new Date(rawShootDate);
                         if (!isNaN(d.getTime())) {
-                          let hours = 8;
-                          let minutes = 0;
+                          let startHours = 8;
+                          let startMinutes = 0;
+                          let endHours = 23;
+                          let endMinutes = 59;
                           if (timeSlotStr) {
-                            const match = timeSlotStr.split('-')[0]?.match(/(\d{1,2}):(\d{2})/);
-                            if (match) {
-                              hours = parseInt(match[1], 10);
-                              minutes = parseInt(match[2], 10);
+                            const [startPart, endPart] = timeSlotStr.split('-');
+                            const startMatch = startPart?.match(/(\d{1,2}):(\d{2})/);
+                            const endMatch = endPart?.match(/(\d{1,2}):(\d{2})/);
+                            if (startMatch) {
+                              startHours = parseInt(startMatch[1], 10);
+                              startMinutes = parseInt(startMatch[2], 10);
+                            }
+                            if (endMatch) {
+                              endHours = parseInt(endMatch[1], 10);
+                              endMinutes = parseInt(endMatch[2], 10);
                             }
                           }
-                          const target = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hours, minutes);
-                          const diffMs = target.getTime() - Date.now();
+                          const targetStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), startHours, startMinutes);
+                          const targetEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), endHours, endMinutes);
+                          const nowMs = Date.now();
+                          const diffMs = targetStart.getTime() - nowMs;
 
                           if (o.rawStatus === 'IN_PROGRESS') {
                             countdownBadge = { text: '⚡ Đang tác nghiệp', bg: '#ECFDF5', textCol: '#047857', border: '#A7F3D0' };
@@ -3656,8 +3743,15 @@ export const ProviderDashboard: React.FC = () => {
                                 textCol: isUrgent ? '#DC2626' : '#B45309',
                                 border: isUrgent ? '#FCA5A5' : '#FCD34D'
                               };
+                            } else if (nowMs <= targetEnd.getTime()) {
+                              countdownBadge = {
+                                text: '📷 Đang trong giờ chụp',
+                                bg: '#ECFDF5',
+                                textCol: '#047857',
+                                border: '#A7F3D0'
+                              };
                             } else {
-                              const overdueMins = Math.floor(Math.abs(diffMs) / 60000);
+                              const overdueMins = Math.floor((nowMs - targetEnd.getTime()) / 60000);
                               const overdueText = overdueMins > 60 ? `${Math.floor(overdueMins / 60)}h ${overdueMins % 60}m` : `${overdueMins}m`;
                               countdownBadge = {
                                 text: `⚠️ Đến giờ (Quá ${overdueText})`,
@@ -3796,7 +3890,42 @@ export const ProviderDashboard: React.FC = () => {
                             {actionMenuId === o._id && (() => {
                               const isComboOrder = o.bookingType === 'COMBO' || (o.items?.some((i: any) => i.itemType === 'PRODUCT') && o.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE'));
                               const isPhotoOrder = o.bookingType === 'PHOTOGRAPHY';
-                              const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }[]> = isComboOrder
+                              type OrderAction = { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean; title?: string };
+                              const photoSchedules = Array.isArray(o.schedules) ? o.schedules : [];
+                              const activePhotoSchedule = photoSchedules.find((schedule) => schedule.status === 'IN_PROGRESS');
+                              const nextPhotoSchedule = photoSchedules.find((schedule) => schedule.status === 'CONFIRMED');
+                              const nextPhotoStartsAt = getPhotoScheduleStartsAt(nextPhotoSchedule);
+                              const nextPhotoDateKey = nextPhotoStartsAt
+                                ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(nextPhotoStartsAt)
+                                : null;
+                              const photoDayStartsAt = nextPhotoDateKey
+                                ? new Date(`${nextPhotoDateKey}T00:00:00+07:00`)
+                                : null;
+                              const photoCanStartAt = nextPhotoStartsAt && photoDayStartsAt
+                                ? new Date(Math.max(
+                                    photoDayStartsAt.getTime(),
+                                    nextPhotoStartsAt.getTime() - PHOTO_START_EARLY_MINUTES * 60 * 1000,
+                                  ))
+                                : null;
+                              const isPhotoStartLocked = Boolean(photoCanStartAt && Date.now() < photoCanStartAt.getTime());
+                              const photoStartAction: OrderAction = !nextPhotoSchedule
+                                ? { label: 'Không tìm thấy buổi chụp đã xác nhận', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true, title: 'Hãy kiểm tra lại lịch chụp trong chi tiết đơn.' }
+                                : !nextPhotoStartsAt || !photoCanStartAt
+                                  ? { label: 'Lịch chụp thiếu giờ bắt đầu', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true, title: 'Hãy cập nhật ngày và khung giờ chụp trước.' }
+                                  : isPhotoStartLocked
+                                    ? { label: `Có thể bắt đầu từ ${formatPhotoStartTime(photoCanStartAt)}`, apiStatus: 'SESSION_START', icon: <Clock size={14} />, color: '#D97706', disabled: true, title: `Lịch chụp bắt đầu lúc ${formatPhotoStartTime(nextPhotoStartsAt)}. Chỉ được bắt đầu sớm tối đa ${PHOTO_START_EARLY_MINUTES} phút.` }
+                                    : { label: 'Bắt đầu buổi chụp', apiStatus: 'SESSION_START', icon: <Play size={14} />, color: '#2e7d32' };
+                              const hasUnconfirmedPhotoSchedule = photoSchedules.some((schedule) => ['HELD', 'SCHEDULED'].includes(String(schedule.status)));
+                              const photoSessionSteps: OrderAction[] = activePhotoSchedule
+                                ? [{ label: 'Hoàn tất buổi chụp đang diễn ra', apiStatus: 'SESSION_COMPLETE', icon: <CheckCircle size={14} />, color: '#2e7d32' }]
+                                : nextPhotoSchedule
+                                  ? [photoStartAction]
+                                  : hasUnconfirmedPhotoSchedule
+                                    ? [{ label: 'Lịch chụp chưa được xác nhận', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }]
+                                    : photoSchedules.length > 0
+                                      ? [{ label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' }]
+                                      : [{ label: 'Đang tải dữ liệu lịch chụp...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }];
+                              const nextStepsMap: Record<string, OrderAction[]> = isComboOrder
                                 ? {
                                   PENDING_PAYMENT: [
                                     { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
@@ -3817,13 +3946,13 @@ export const ProviderDashboard: React.FC = () => {
                                     { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
                                     { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
                                   ] : [
-                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
+                                    photoStartAction,
                                     { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   IN_PROGRESS: o.photosApproved ? [
                                     { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
                                   ] : [
-                                    { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                    ...photoSessionSteps,
                                   ],
                                   AWAITING_REVIEW: o.photosApproved ? [
                                     { label: '✓ Khách đã duyệt ảnh • Chờ trả áo dài', apiStatus: '', icon: <CheckCircle size={14} />, color: '#059669', disabled: true },
@@ -3851,15 +3980,11 @@ export const ProviderDashboard: React.FC = () => {
                                     { label: 'Từ chối lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   CONFIRMED: [
-                                    { label: 'Bắt đầu buổi chụp kế tiếp', apiStatus: 'SESSION_START', icon: <Play size={14} />, color: '#2e7d32' },
-                                    { label: 'Hủy lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    photoStartAction,
+                                    { label: 'Hủy toàn bộ booking', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   IN_PROGRESS: [
-                                    ...(o.schedules?.some((schedule: any) => schedule.status === 'IN_PROGRESS')
-                                      ? [{ label: 'Hoàn tất buổi chụp đang diễn ra', apiStatus: 'SESSION_COMPLETE', icon: <CheckCircle size={14} />, color: '#2e7d32' }]
-                                      : o.schedules?.some((schedule: any) => schedule.status === 'CONFIRMED')
-                                        ? [{ label: 'Bắt đầu buổi chụp kế tiếp', apiStatus: 'SESSION_START', icon: <Play size={14} />, color: '#2e7d32' }]
-                                        : [{ label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' }]),
+                                    ...photoSessionSteps,
                                   ],
                                   AWAITING_REVIEW: [
                                     { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
@@ -3895,7 +4020,7 @@ export const ProviderDashboard: React.FC = () => {
                                   ],
                                 };
                               const rawStatus = (o.rawStatus || '') as string;
-                              const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
+                              const steps: OrderAction[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
                               const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
                               const pendingReschedule = o.items?.find((item: any) => item?.rescheduleRequest?.status === 'PENDING');
                               if (steps.length === 0 && !canReport && !pendingReschedule) return null;
@@ -3968,7 +4093,7 @@ export const ProviderDashboard: React.FC = () => {
                                         Cập nhật trạng thái
                                       </div>
                                     )}
-                                    {steps.map((a: { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }) => {
+                                    {steps.map((a: OrderAction) => {
                                       const isHandoverAction = a.apiStatus === 'PICKUP_PENDING';
                                       let isDisabled = !!a.disabled;
                                       if (isHandoverAction) {
@@ -3998,7 +4123,7 @@ export const ProviderDashboard: React.FC = () => {
                                             opacity: isDisabled ? 0.85 : 1,
                                             fontWeight: 600, textAlign: 'left',
                                           }}
-                                          title={isDisabled ? (a.disabled ? a.label : "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)") : ""}
+                                          title={isDisabled ? (a.title || (a.disabled ? a.label : "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)")) : ""}
                                         >
                                           {a.icon} {a.label}
                                         </button>
@@ -4039,7 +4164,7 @@ export const ProviderDashboard: React.FC = () => {
                                               width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
                                               fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: '#D97706',
                                               fontWeight: 700, textAlign: 'left', borderTop: (steps.length > 0 || !isPhoto) ? '1px solid var(--color-light-border)' : 'none'
-                                            }}><Flag size={14} /> Báo cáo khách hàng (Thợ chụp)</button>
+                                            }}><Flag size={14} /> Báo khách không đến / sự cố</button>
                                           )}
                                         </>
                                       );
@@ -4832,7 +4957,7 @@ export const ProviderDashboard: React.FC = () => {
                         type="date"
                         value={blockedDate}
                         onChange={(e) => setBlockedDate(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]}
+                        min={toLocalDateKey()}
                         style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
                       />
                     </div>

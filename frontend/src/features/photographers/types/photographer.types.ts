@@ -1,6 +1,9 @@
 export interface PhotographerPackage {
   _id: string;
   name: string;
+  serviceGroupId?: string | null;
+  serviceName?: string | null;
+  planName?: string | null;
   price: number;
   durationHours: number;
   editedPhotosCount: number;
@@ -14,6 +17,9 @@ export interface PhotographerPackage {
   eventCategoryIds?: string[];
   pricingUnit?: 'PER_SESSION' | 'PER_DAY' | 'PER_BOOKING';
   includedDurationMinutes?: number | null;
+  includedSessionCount?: number | null;
+  includedDayCount?: number | null;
+  additionalSessionFee?: number;
   overtimeFeePerHour?: number;
   overtimeIncrementMinutes?: number;
   maxOvertimeMinutes?: number;
@@ -46,6 +52,9 @@ export interface PhotographyQuote {
     name: string;
     pricingUnit?: 'PER_SESSION' | 'PER_DAY' | 'PER_BOOKING';
     includedDurationMinutes?: number;
+    includedSessionCount?: number | null;
+    includedDayCount?: number | null;
+    additionalSessionFee?: number;
     overtimeIncrementMinutes?: number;
     maxOvertimeMinutes?: number;
   };
@@ -92,6 +101,7 @@ export interface PhotographerAddress {
   ward?: string | null;
   district?: string | null;
   city?: string | null;
+  geo?: { coordinates?: number[] } | null;
 }
 
 /** The public response contract returned by `/api/photographers`. */
@@ -113,6 +123,7 @@ export interface PhotographerApiResponse {
   portfolio?: string[];
   portfolioItems?: PhotographerPortfolioItem[];
   packages?: PhotographerPackage[];
+  serviceRadiusKm?: number | null;
   defaultPackage?: PhotographerPackage | null;
   activePackageCount?: number;
   isBookable?: boolean;
@@ -135,6 +146,7 @@ export interface PhotographerSummary {
   editedPhotosCount: number;
   rawPhotosCount: number;
   packages: PhotographerPackage[];
+  serviceRadiusKm?: number | null;
   isBookable: boolean;
   equipment: string[];
 }
@@ -153,6 +165,7 @@ export interface PhotographerDetails {
   portfolio: string[];
   portfolioItems: PhotographerPortfolioItem[];
   packages: PhotographerPackage[];
+  serviceRadiusKm?: number | null;
   coverImage?: string;
 }
 

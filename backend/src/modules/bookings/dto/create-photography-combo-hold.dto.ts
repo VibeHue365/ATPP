@@ -52,6 +52,8 @@ export class CreatePhotographyComboHoldDto extends CreatePhotographyHoldDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(80)
   comboDiscountPercent?: number;
 
   @IsOptional()

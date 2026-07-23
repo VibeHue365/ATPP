@@ -731,8 +731,8 @@
 
 .pl-map-floating-btn {
   position: fixed;
-  bottom: 30px;
-  right: 30px;
+  bottom: 24px;
+  right: 92px;
   background-color: var(--color-primary-dark);
   color: #ffffff;
   border: none;
@@ -768,4 +768,4 @@
 .pl-discovery-map-clear { flex: 0 0 auto; align-self: flex-start; border: 0; background: transparent; color: var(--color-primary); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .pl-discovery-map-result-note { margin: 12px 0 0; color: var(--color-text-secondary); font-size: 13px; }
 .pl-map-floating-btn.active { background: var(--color-primary-dark); color: #fff; }
-@media (max-width: 640px) { .pl-discovery-map-panel { padding: 12px; } .pl-discovery-map-panel-header { flex-direction: column; gap: 8px; } }
+@media (max-width: 640px) { .pl-map-floating-btn { right: 84px; bottom: 20px; padding: 11px 15px; font-size: 12px; } .pl-discovery-map-panel { padding: 12px; } .pl-discovery-map-panel-header { flex-direction: column; gap: 8px; } }

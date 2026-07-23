@@ -28,6 +28,7 @@ import {
   PhotographyPackage,
 } from '../../products/schemas/photography-package.schema';
 import { Product, ProductStatus } from '../../products/schemas/product.schema';
+import { ComboPromotionStatus } from '../../products/schemas/combo-promotion.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
 import {
   ConditionStatus,
@@ -289,38 +290,54 @@ export class PhotographyHoldService {
       );
     }
 
-    let discountPct = dto.comboDiscountPercent ?? 50;
-    let comboPromo: any = null;
-    if (dto.comboPromotionId) {
-      try {
-        comboPromo = await this.bookingModel.db.model('ComboPromotion').findById(dto.comboPromotionId).session(session).exec();
-      } catch (e) {
-        console.warn('Failed to fetch ComboPromotion by ID:', e);
+    const comboPromotionModel = this.bookingModel.db.model('ComboPromotion');
+    const firstProductRes = aodaiReservations[0];
+    const comboPromo = dto.comboPromotionId
+      ? await comboPromotionModel.findById(dto.comboPromotionId).session(session).exec()
+      : firstProductRes?.product?._id
+        ? await comboPromotionModel.findOne({
+          providerId: photographyPackage.providerId,
+          productId: firstProductRes.product._id,
+          photographyPackageId: photographyPackage._id,
+          status: ComboPromotionStatus.Active,
+        }).session(session).exec()
+        : null;
+
+    if (!comboPromo) {
+      throw new BadRequestException('Không tìm thấy Combo Photo hợp lệ cho gói và áo dài đã chọn.');
+    }
+    const now = new Date();
+    if (comboPromo.status !== ComboPromotionStatus.Active
+      || (comboPromo.validFrom && comboPromo.validFrom > now)
+      || (comboPromo.validTo && comboPromo.validTo < now)) {
+      throw new BadRequestException('Combo Photo đã hết hạn hoặc chưa được kích hoạt.');
+    }
+    if (comboPromo.usedCount >= comboPromo.maxUsage) {
+      throw new BadRequestException('Combo này đã hết lượt sử dụng.');
+    }
+    if (comboPromo.providerId.toString() !== photographyPackage.providerId.toString()) {
+      throw new BadRequestException('Combo Photo không thuộc cùng provider với gói chụp.');
+    }
+    if (comboPromo.photographyPackageId.toString() !== photographyPackage._id.toString()) {
+      throw new BadRequestException('Combo không áp dụng cho gói chụp đã chọn.');
+    }
+    const totalAoDaiQuantity = aodaiReservations.reduce((sum, item) => sum + item.quantity, 0);
+    for (const reservation of aodaiReservations) {
+      if (reservation.product._id.toString() !== comboPromo.productId.toString()) {
+        throw new BadRequestException('Combo không áp dụng cho áo dài đã chọn.');
       }
-    } else {
-      const firstProductRes = aodaiReservations[0];
-      if (firstProductRes?.product?._id) {
-        try {
-          comboPromo = await this.bookingModel.db.model('ComboPromotion').findOne({
-            providerId: photographyPackage.providerId,
-            productId: firstProductRes.product._id,
-            photographyPackageId: photographyPackage._id,
-            status: 'ACTIVE',
-          }).session(session).exec();
-        } catch (e) {
-          console.warn('Failed to fetch ComboPromotion by matching:', e);
-        }
+      if (reservation.product.providerId.toString() !== comboPromo.providerId.toString()) {
+        throw new BadRequestException('Áo dài và Combo không thuộc cùng provider.');
       }
+    }
+    if (totalAoDaiQuantity !== comboPromo.aoDaiQuantity) {
+      throw new BadRequestException(`Combo yêu cầu ${comboPromo.aoDaiQuantity} bộ áo dài.`);
     }
 
-    if (comboPromo) {
-      if (comboPromo.usedCount >= comboPromo.maxUsage) {
-        throw new BadRequestException('Combo này đã hết lượt sử dụng.');
-      }
-      if (dto.comboDiscountPercent === undefined && comboPromo.comboDiscountPercent !== undefined && comboPromo.comboDiscountPercent !== null) {
-        discountPct = comboPromo.comboDiscountPercent;
-      }
-    }
+    // The promotion record is the pricing authority. Never trust a discount
+    // percentage supplied by the browser and never fall back to an arbitrary
+    // discount when no valid promotion exists.
+    const discountPct = comboPromo.discountPercent;
 
     const photoDeposit = quote.totalAmount; // 100% thanh toán trước cho thợ chụp
     const photoDiscount = Math.round(quote.totalAmount * (discountPct / 100));

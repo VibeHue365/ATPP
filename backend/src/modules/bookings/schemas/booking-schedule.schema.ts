@@ -13,6 +13,7 @@ export enum BookingScheduleType {
 export enum BookingScheduleStatus {
   Held = 'HELD',
   Confirmed = 'CONFIRMED',
+  InProgress = 'IN_PROGRESS',
   Completed = 'COMPLETED',
   Cancelled = 'CANCELLED',
   Expired = 'EXPIRED',

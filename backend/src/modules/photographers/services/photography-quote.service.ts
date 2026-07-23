@@ -172,6 +172,9 @@ export class PhotographyQuoteService {
           includedDurationMinutes:
             photographyPackage.includedDurationMinutes ??
             Math.round(photographyPackage.durationHours * 60),
+          includedSessionCount: photographyPackage.includedSessionCount ?? null,
+          includedDayCount: photographyPackage.includedDayCount ?? null,
+          additionalSessionFee: photographyPackage.additionalSessionFee ?? 0,
           overtimeIncrementMinutes:
             photographyPackage.overtimeIncrementMinutes ?? 30,
           maxOvertimeMinutes: photographyPackage.maxOvertimeMinutes ?? 240,

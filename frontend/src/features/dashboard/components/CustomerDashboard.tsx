@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
-import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle, Check, XCircle, X, Sparkles } from 'lucide-react';
+import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle, Check, CheckCircle, XCircle, X, Sparkles } from 'lucide-react';
 import { BookingDetailModal } from '../../../components/common/BookingDetailModal';
 import { API_BASE_URL } from '../../../config/env';
 import { getFirstMediaUrl } from '../../../shared/media/mediaUrl';

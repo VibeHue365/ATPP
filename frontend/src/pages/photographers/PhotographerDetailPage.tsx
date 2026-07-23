@@ -4,7 +4,7 @@ import { useCart } from '../../context/CartContext';
 import { useToast } from '../../components/feedback/Toast';
 import { httpClient } from '../../services/httpClient';
 import { ROUTES } from '../../config/routes';
-import { CheckCircle, AlertCircle, Camera } from 'lucide-react';
+import { CheckCircle, AlertCircle, Camera, Plus } from 'lucide-react';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import './PhotographerDetailPage.css';
 import Swal from 'sweetalert2';
@@ -35,8 +35,23 @@ const toMinutes = (time: string): number => {
   return hours * 60 + minutes;
 };
 
+const distanceKm = (aLat: number, aLon: number, bLat: number, bLon: number): number => {
+  const radians = (value: number) => value * Math.PI / 180;
+  const dLat = radians(bLat - aLat);
+  const dLon = radians(bLon - aLon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(radians(aLat)) * Math.cos(radians(bLat)) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+};
+
 const toTime = (minutes: number): string =>
   `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
+const formatDuration = (minutes: number): string => {
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (!hours) return `${remainingMinutes} phút`;
+  return `${hours} giờ${remainingMinutes ? ` ${remainingMinutes} phút` : ''}`;
+};
 
 export const PhotographerDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -155,6 +170,8 @@ export const PhotographerDetailPage: React.FC = () => {
   const includedDurationMinutes = Math.max(selectedPkg?.includedDurationMinutes ?? Math.round((selectedPkg?.durationHours ?? 2) * 60), 30);
   const overtimeIncrementMinutes = Math.max(selectedPkg?.overtimeIncrementMinutes ?? 30, 30);
   const maxOvertimeMinutes = Math.max(selectedPkg?.maxOvertimeMinutes ?? 240, 0);
+  const selectedPricingUnit = selectedPkg?.pricingUnit ?? 'PER_SESSION';
+  const minimumMultiSessionMinutes = selectedPricingUnit === 'PER_SESSION' ? includedDurationMinutes : 30;
   const effectiveDurationMinutes = Math.max(durationMinutes || includedDurationMinutes, includedDurationMinutes);
   const endTime = startTime ? toTime(toMinutes(startTime) + effectiveDurationMinutes) : '';
   const selectedTimeSlot = startTime && endTime ? `${startTime} - ${endTime}` : '';
@@ -164,6 +181,7 @@ export const PhotographerDetailPage: React.FC = () => {
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [isNextDurationQuoteLoading, setIsNextDurationQuoteLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<LocationSelection | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [selectedConcept, setSelectedConcept] = useState<string>('');
   const [customRequest, setCustomRequest] = useState<string>('');
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
@@ -185,7 +203,6 @@ export const PhotographerDetailPage: React.FC = () => {
   const aoDaiInCart = cart.find((item) => item.itemType === 'PRODUCT');
 
   const rentalFrom = aoDaiInCart?.rentalFrom || aoDaiInCart?.startDate;
-  const rentalTo = aoDaiInCart?.rentalTo || aoDaiInCart?.endDate;
 
   const photographerCity = photographer?.address?.city || "";
 
@@ -242,7 +259,8 @@ export const PhotographerDetailPage: React.FC = () => {
     }
     const packageDuration = Math.max(selectedPkg.includedDurationMinutes ?? Math.round(selectedPkg.durationHours * 60), 30);
     setDurationMinutes(packageDuration);
-    setMultiSessions((current) => current.map((session) => ({ ...session, durationMinutes: packageDuration })));
+    setBookingMode('SINGLE');
+    setMultiSessions([]);
   }, [selectedPkg?._id]);
   // Load Photographer reviews
   useEffect(() => {
@@ -431,7 +449,22 @@ export const PhotographerDetailPage: React.FC = () => {
       ? [{ clientId: 'main-session', date: selectedDate, startTime, durationMinutes: effectiveDurationMinutes }]
       : multiSessions
   ), [bookingMode, selectedDate, startTime, effectiveDurationMinutes, multiSessions]);
-  const isQuoteable = Boolean(selectedLocation) && quoteSessions.length > 0 && quoteSessions.every((session) => Boolean(session.date && session.startTime));
+  const providerGeo = photographer?.address?.geo?.coordinates;
+  const providerCenter = providerGeo && providerGeo.length >= 2 ? { latitude: Number(providerGeo[1]), longitude: Number(providerGeo[0]) } : null;
+  const handleLocationChange = (nextLocation: LocationSelection) => {
+    const radius = Number(photographer?.serviceRadiusKm);
+    const distance = providerCenter ? distanceKm(providerCenter.latitude, providerCenter.longitude, nextLocation.latitude, nextLocation.longitude) : null;
+    if (Number.isFinite(radius) && radius > 0 && distance !== null && distance > radius) {
+      setSelectedLocation(null);
+      setLocationError(`Địa điểm cách provider khoảng ${distance.toFixed(1)} km, vượt bán kính phục vụ ${radius} km.`);
+      toast.error(`Địa điểm vượt quá bán kính phục vụ ${radius} km của provider.`);
+      return;
+    }
+    setLocationError(null);
+    setSelectedLocation(nextLocation);
+  };
+
+  const isQuoteable = Boolean(selectedLocation) && !locationError && quoteSessions.length > 0 && quoteSessions.every((session) => Boolean(session.date && session.startTime));
   const nextDurationMinutes = effectiveDurationMinutes + overtimeIncrementMinutes;
   const canRequestNextDurationQuote = Boolean(
     bookingMode === 'SINGLE' && id && selectedPkg && selectedDate && startTime && nextDurationMinutes <= includedDurationMinutes + maxOvertimeMinutes,
@@ -550,11 +583,15 @@ export const PhotographerDetailPage: React.FC = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   };
 
-  const createSessionDraft = (date = selectedDate || rentalFrom || localToday()): PhotographySessionDraft => ({
+  const createSessionDraft = (
+    date = selectedDate || rentalFrom || localToday(),
+    sessionDurationMinutes = includedDurationMinutes,
+    sessionStartTime = startTime || '09:00',
+  ): PhotographySessionDraft => ({
     clientId: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     date,
-    startTime: startTime || '09:00',
-    durationMinutes: effectiveDurationMinutes,
+    startTime: sessionStartTime,
+    durationMinutes: sessionDurationMinutes,
   });
 
   const generateSessionsForRange = (from: string, to: string) => {
@@ -565,26 +602,38 @@ export const PhotographerDetailPage: React.FC = () => {
     const sessions: PhotographySessionDraft[] = [];
     const cursor = new Date(`${from}T12:00:00+07:00`);
     const last = new Date(`${to}T12:00:00+07:00`);
-    while (cursor <= last && sessions.length < 31) {
+    while (cursor <= last && sessions.length < 20) {
       const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
-      sessions.push(createSessionDraft(date));
+      sessions.push(createSessionDraft(date, selectedPricingUnit === 'PER_BOOKING' ? minimumMultiSessionMinutes : includedDurationMinutes));
       cursor.setDate(cursor.getDate() + 1);
     }
     if (cursor <= last) {
-      toast.error('Mỗi lần chỉ có thể tạo tối đa 31 buổi. Hãy chia nhỏ khoảng ngày.');
+      toast.error('Mỗi lần chỉ có thể tạo tối đa 20 buổi. Hãy chia nhỏ khoảng ngày.');
       return;
     }
     setMultiSessions(sessions);
   };
 
-  const changeBookingMode = (mode: 'SINGLE' | 'MULTI') => {
-    if (mode === bookingMode) return;
-    if (mode === 'MULTI' && multiSessions.length === 0) {
-      const from = rentalFrom || selectedDate || localToday();
-      const to = rentalTo || from;
-      generateSessionsForRange(from, to);
+  const startMultiSessionBooking = () => {
+    if (!selectedDate || !startTime) {
+      toast.error('Hãy hoàn tất ngày và giờ của buổi đầu tiên trước khi thêm buổi.');
+      return;
     }
-    setBookingMode(mode);
+    const firstSession = createSessionDraft(selectedDate, effectiveDurationMinutes, startTime);
+    const nextSession = createSessionDraft(selectedDate, minimumMultiSessionMinutes, '');
+    setMultiSessions([firstSession, nextSession]);
+    setBookingMode('MULTI');
+  };
+
+  const backToSingleSession = () => {
+    const firstSession = multiSessions[0];
+    if (firstSession) {
+      setSelectedDate(firstSession.date);
+      setStartTime(firstSession.startTime);
+      setDurationMinutes(Math.max(firstSession.durationMinutes, includedDurationMinutes));
+    }
+    setMultiSessions([]);
+    setBookingMode('SINGLE');
   };
 
   const updateMultiSession = (clientId: string, patch: Partial<Omit<PhotographySessionDraft, 'clientId'>>) => {
@@ -922,13 +971,19 @@ export const PhotographerDetailPage: React.FC = () => {
               onSelect={setSelectedPkg}
             />
 
-            <section className="pd-booking-mode" aria-label="Chế độ đặt lịch">
-                <span>Hình thức đặt lịch</span>
-                <div>
-                  <button type="button" className={bookingMode === 'SINGLE' ? 'active' : ''} onClick={() => changeBookingMode('SINGLE')}>Một buổi</button>
-                  <button type="button" className={bookingMode === 'MULTI' ? 'active' : ''} onClick={() => changeBookingMode('MULTI')}>Nhiều buổi / nhiều ngày</button>
-                </div>
-              </section>
+            <section className="pd-booking-policy" aria-label="Cách tính giá đã chọn">
+              <span>Cách tính giá</span>
+              <div>
+                <strong>{selectedPricingUnit === 'PER_SESSION' ? 'Theo buổi' : selectedPricingUnit === 'PER_DAY' ? 'Theo ngày' : 'Trọn booking'}</strong>
+                <small>
+                  {selectedPricingUnit === 'PER_SESSION'
+                    ? `Mỗi buổi bao gồm ${formatDuration(includedDurationMinutes)} và được tính giá riêng.`
+                    : selectedPricingUnit === 'PER_DAY'
+                      ? `Các buổi cùng ngày dùng chung tổng ${formatDuration(includedDurationMinutes)}.`
+                      : `Toàn booking dùng chung tổng ${formatDuration(includedDurationMinutes)}, tối đa ${selectedPkg?.includedSessionCount ?? 1} buổi trong ${selectedPkg?.includedDayCount ?? 1} ngày.`}
+                </small>
+              </div>
+            </section>
 
               {bookingMode === 'SINGLE' ? <>
                 <PhotographyScheduleSelector
@@ -959,18 +1014,29 @@ export const PhotographerDetailPage: React.FC = () => {
                     if (canIncreaseDuration) setDurationMinutes(nextDurationMinutes);
                   }}
                 />
+                <button
+                  type="button"
+                  className="pd-add-session-cta"
+                  onClick={startMultiSessionBooking}
+                  disabled={!selectedDate || !startTime}
+                >
+                  <Plus size={16} /> Thêm buổi chụp
+                </button>
               </> : (
                 <PhotographyMultiSessionEditor
                   sessions={multiSessions}
+                  pricingUnit={selectedPricingUnit}
                   minDate={localToday()}
                   includedDurationMinutes={includedDurationMinutes}
+                  minimumSessionMinutes={minimumMultiSessionMinutes}
                   overtimeIncrementMinutes={overtimeIncrementMinutes}
                   maxOvertimeMinutes={maxOvertimeMinutes}
                   errors={quote?.valid === false ? quote.errors : []}
-                  onAdd={() => setMultiSessions((current) => [...current, createSessionDraft()])}
+                  onAdd={() => setMultiSessions((current) => [...current, createSessionDraft(selectedDate || localToday(), minimumMultiSessionMinutes, '')])}
                   onGenerateRange={generateSessionsForRange}
                   onUpdate={updateMultiSession}
                   onRemove={(clientId) => setMultiSessions((current) => current.filter((session) => session.clientId !== clientId))}
+                  onBackToSingle={backToSingleSession}
                 />
               )}
 
@@ -979,7 +1045,9 @@ export const PhotographerDetailPage: React.FC = () => {
               concept={selectedConcept}
               request={customRequest}
               referenceFile={referenceFile}
-              onLocationChange={setSelectedLocation}
+              onLocationChange={handleLocationChange}
+               radiusKm={photographer?.serviceRadiusKm ?? null}
+               radiusCenter={providerCenter}
               onConceptChange={setSelectedConcept}
               onRequestChange={setCustomRequest}
               onReferenceFileChange={handleFileChange}

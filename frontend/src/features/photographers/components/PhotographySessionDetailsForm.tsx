@@ -12,6 +12,8 @@ interface PhotographySessionDetailsFormProps {
   onConceptChange: (value: string) => void;
   onRequestChange: (value: string) => void;
   onReferenceFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  radiusKm?: number | null;
+  radiusCenter?: { latitude: number; longitude: number } | null;
 }
 
 export const PhotographySessionDetailsForm: React.FC<PhotographySessionDetailsFormProps> = ({
@@ -23,6 +25,8 @@ export const PhotographySessionDetailsForm: React.FC<PhotographySessionDetailsFo
   onConceptChange,
   onRequestChange,
   onReferenceFileChange,
+  radiusKm,
+  radiusCenter,
 }) => (
   <>
     {/* BƯỚC 3: Địa điểm */}
@@ -33,7 +37,7 @@ export const PhotographySessionDetailsForm: React.FC<PhotographySessionDetailsFo
       </h2>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
-        <PhotographyLocationPicker value={selectedLocation} onSelect={onLocationChange} />
+        <PhotographyLocationPicker value={selectedLocation} onSelect={onLocationChange} radiusKm={radiusKm} radiusCenter={radiusCenter} />
       </div>
     </section>
     {/* BƯỚC 4: Concept & Ý tưởng */}

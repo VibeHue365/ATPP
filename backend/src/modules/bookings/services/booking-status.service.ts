@@ -21,7 +21,12 @@ import {
   BookingItemDocument,
 } from '../schemas/booking-item.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
-import { BookingScheduleStatus } from '../schemas/booking-schedule.schema';
+import {
+  BookingSchedule,
+  BookingScheduleDocument,
+  BookingScheduleStatus,
+  BookingScheduleType,
+} from '../schemas/booking-schedule.schema';
 import {
   InventoryReservation,
   ReservationStatus,
@@ -43,6 +48,8 @@ import { BookingsRepository } from '../repositories/bookings.repository';
 export class BookingStatusService {
   constructor(
     private readonly bookingsRepository: BookingsRepository,
+    @InjectModel(BookingSchedule.name)
+    private readonly bookingScheduleModel: Model<BookingScheduleDocument>,
     @InjectModel(InventoryReservation.name)
     private readonly inventoryReservationModel: Model<InventoryReservation>,
     @InjectModel(Provider.name)
@@ -168,6 +175,14 @@ export class BookingStatusService {
       if (currentStatus === BookingStatus.Completed) {
         if (isInternalSession) {
           await session.commitTransaction();
+          try {
+            await this.paymentsService.settleBooking(bookingIdStr);
+          } catch (settlementError) {
+            console.error(
+              `Failed to settle already-completed booking ${bookingIdStr}:`,
+              settlementError,
+            );
+          }
         }
         return booking;
       }
@@ -214,10 +229,13 @@ export class BookingStatusService {
         console.error('Failed to create completeBooking notification:', e);
       }
 
-      await this.paymentsService.settleBooking(bookingIdStr);
-
       if (isInternalSession) {
         await session.commitTransaction();
+        try {
+          await this.paymentsService.settleBooking(bookingIdStr);
+        } catch (settlementError) {
+          console.error(`Failed to settle completed booking ${bookingIdStr}:`, settlementError);
+        }
       }
       return booking;
     } catch (error) {
@@ -325,7 +343,24 @@ export class BookingStatusService {
           undefined,
           session,
         );
-        let earliestStartTime: Date | null = null;
+        const firstPhotoSchedule = await this.bookingScheduleModel
+          .findOne({
+            bookingId: booking._id,
+            scheduleType: BookingScheduleType.Photoshoot,
+            status: {
+              $in: [
+                BookingScheduleStatus.Scheduled,
+                BookingScheduleStatus.Confirmed,
+              ],
+            },
+            startsAt: { $ne: null },
+          })
+          .sort({ startsAt: 1 })
+          .session(session)
+          .lean();
+        let earliestStartTime: Date | null = firstPhotoSchedule?.startsAt
+          ? new Date(firstPhotoSchedule.startsAt)
+          : null;
 
         for (const item of items) {
           let itemStart: Date | null = null;
@@ -651,6 +686,11 @@ export class BookingStatusService {
         );
         if (isInternalSession) {
           await session.commitTransaction();
+          try {
+            await this.paymentsService.settleBooking(bookingIdStr);
+          } catch (settlementError) {
+            console.error(`Failed to settle completed booking ${bookingIdStr}:`, settlementError);
+          }
         }
         return result;
       }
@@ -842,6 +882,16 @@ export class BookingStatusService {
 
       if (isInternalSession) {
         await session.commitTransaction();
+        if (nextStatus === BookingStatus.Completed) {
+          try {
+            await this.paymentsService.settleBooking(bookingIdStr);
+          } catch (settlementError) {
+            console.error(
+              `Failed to settle completed booking ${bookingIdStr}:`,
+              settlementError,
+            );
+          }
+        }
       }
 
       return booking;
