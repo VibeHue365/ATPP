@@ -55,18 +55,9 @@ export class SettlementsService {
       );
     }
 
-    // A rental deposit refund is separate from the service amount payable to
-    // the provider. Keep a completed/returned paid booking eligible even when
-    // the customer transaction history includes that deposit refund.
-    const validPaymentStatuses = [
-      BookingPaymentStatus.Paid,
-      BookingPaymentStatus.PartiallyPaid,
-    ];
-    const hasCapturedPayment = (booking.paymentSummary?.totalPaid ?? 0) > 0;
-    if (
-      !hasCapturedPayment &&
-      !validPaymentStatuses.includes(booking.paymentSummary?.paymentStatus as any)
-    ) {
+    // A settlement pays the provider in full. A non-zero totalPaid can still
+    // belong to a pending or partial payment, so it is not sufficient here.
+    if (booking.paymentSummary?.paymentStatus !== BookingPaymentStatus.Paid) {
       throw new BadRequestException(SETTLEMENT_ERROR_CODES.BookingNotPaid);
     }
 
@@ -166,18 +157,7 @@ export class SettlementsService {
       );
     }
 
-    // A rental deposit refund is separate from the service amount payable to
-    // the provider. Keep a completed/returned paid booking eligible even when
-    // the customer transaction history includes that deposit refund.
-    const validPaymentStatuses = [
-      BookingPaymentStatus.Paid,
-      BookingPaymentStatus.PartiallyPaid,
-    ];
-    const hasCapturedPayment = (booking.paymentSummary?.totalPaid ?? 0) > 0;
-    if (
-      !hasCapturedPayment &&
-      !validPaymentStatuses.includes(booking.paymentSummary?.paymentStatus as any)
-    ) {
+    if (booking.paymentSummary?.paymentStatus !== BookingPaymentStatus.Paid) {
       throw new BadRequestException(SETTLEMENT_ERROR_CODES.BookingNotPaid);
     }
 

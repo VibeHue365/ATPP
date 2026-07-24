@@ -534,33 +534,18 @@ export class PhotographyHoldService {
       }
     }
 
-    // Increment usedCount on ComboPromotion
-    if (comboPromo) {
-      try {
-        await this.bookingModel.db.model('ComboPromotion').updateOne(
-          { _id: comboPromo._id },
-          { $inc: { usedCount: 1 } },
-        ).session(session).exec();
-      } catch (e) {
-        console.warn('Failed to increment ComboPromotion usedCount:', e);
-      }
-    } else {
-      const promoProductRes = aodaiReservations[0];
-      if (promoProductRes?.product?._id) {
-        try {
-          await this.bookingModel.db.model('ComboPromotion').updateOne(
-            {
-              providerId: photographyPackage.providerId,
-              productId: promoProductRes.product._id,
-              photographyPackageId: photographyPackage._id,
-              status: 'ACTIVE',
-            },
-            { $inc: { usedCount: 1 } },
-          ).session(session).exec();
-        } catch (e) {
-          console.warn('Failed to increment ComboPromotion usedCount fallback:', e);
-        }
-      }
+    // Reserve a promotion usage atomically. Do not swallow a failed update:
+    // otherwise the discounted booking would commit without consuming quota.
+    const promotionReservation = await comboPromotionModel.updateOne(
+      {
+        _id: comboPromo._id,
+        status: ComboPromotionStatus.Active,
+        usedCount: { $lt: comboPromo.maxUsage },
+      },
+      { $inc: { usedCount: 1 } },
+    ).session(session).exec();
+    if (promotionReservation.modifiedCount !== 1) {
+      throw new BadRequestException('Combo này đã hết lượt sử dụng.');
     }
 
     return this.toComboHoldResponse(booking, session);
@@ -1046,27 +1031,54 @@ export class PhotographyHoldService {
       },
       { $set: { status: BookingScheduleStatus.Expired } },
     );
+    // Atomically claim the pending booking before releasing its Combo quota.
+    // The generic pending-booking cleanup also cancels expired bookings; the
+    // successful status transition below is the single ownership marker.
+    const cancelledBookingIds: Types.ObjectId[] = [];
+    for (const bookingId of bookingIds) {
+      const cancelled = await this.bookingModel.findOneAndUpdate(
+        {
+          _id: bookingId,
+          status: BookingStatus.PendingPayment,
+          holdExpiresAt: { $lte: now },
+        },
+        {
+          $set: {
+            status: BookingStatus.Cancelled,
+            holdExpiresAt: null,
+          },
+          $push: {
+            statusTimeline: {
+              status: BookingStatus.Cancelled,
+              changedAt: now,
+              note: 'Tự động hủy đơn do hết thời hạn giữ lịch chụp.',
+            },
+          },
+        },
+        { new: false },
+      ).exec();
+      if (cancelled) cancelledBookingIds.push(bookingId);
+    }
+
+    if (!cancelledBookingIds.length) return result.modifiedCount;
+
     await this.inventoryReservationModel.updateMany(
       {
-        bookingId: { $in: bookingIds },
+        bookingId: { $in: cancelledBookingIds },
         status: ReservationStatus.TempReserved,
         expiresAt: { $lte: now },
       },
       {
-        $set: { status: ReservationStatus.Expired },
+        $set: { status: ReservationStatus.Cancelled },
         $unset: { expiresAt: 1 },
       },
-    );
-    await this.bookingModel.updateMany(
-      { _id: { $in: bookingIds } },
-      { $set: { holdExpiresAt: null } },
     );
 
     // Decrement usedCount on ComboPromotion for expired holds
     try {
       const bookingsWithCombo = await this.bookingModel
         .find({
-          _id: { $in: bookingIds },
+          _id: { $in: cancelledBookingIds },
           comboPromotionId: { $ne: null },
         })
         .select('_id comboPromotionId')
@@ -1076,7 +1088,7 @@ export class PhotographyHoldService {
       for (const b of bookingsWithCombo) {
         if (b.comboPromotionId) {
           await this.bookingModel.db.model('ComboPromotion').updateOne(
-            { _id: b.comboPromotionId },
+            { _id: b.comboPromotionId, usedCount: { $gt: 0 } },
             { $inc: { usedCount: -1 } }
           ).exec();
         }

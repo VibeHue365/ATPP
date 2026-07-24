@@ -633,8 +633,8 @@ export class PaymentsService {
 
   async executeProfitSplit(booking: {
     _id: Types.ObjectId | string;
-  }): Promise<void> {
-    await this.settlementsService.createSettlementsForBooking(
+  }) {
+    return this.settlementsService.createSettlementsForBooking(
       booking._id.toString(),
     );
   }
@@ -662,7 +662,7 @@ export class PaymentsService {
 
     try {
       // 1. Chuyển khoản trực tiếp chia tiền dịch vụ cho các Provider
-      await this.executeProfitSplit(booking);
+      const settlements = await this.executeProfitSplit(booking);
 
       // 2. Tự động hoàn cọc giữ đồ (depositTotal) cho khách hàng (chỉ dành cho thuê áo dài / combo, không hoàn tiền cọc giữ chỗ chụp ảnh)
       if (
@@ -680,30 +680,49 @@ export class PaymentsService {
         }
       }
 
-      // 3. Update provider wallet: move pending → available.
-      //    deduct by estimatedNetAmount (stored at CONFIRMED time) to prevent ghost-balance,
-      //    credit available by actual netAmount (grandTotal - commission).
-      //    For photography bookings only (ao dai uses a different escrow flow).
-      if (!wasAlreadySettled && booking.providerIds && booking.providerIds.length > 0) {
-        const COMMISSION_RATE = 0.2;
-        const actualNetAmount = Math.round(
-          booking.pricingSummary.grandTotal * (1 - COMMISSION_RATE),
-        );
-        // Use the stored estimate to deduct (prevents ghost-balance drift).
-        const estimatedDeduction =
-          (booking as any).estimatedNetAmount ?? actualNetAmount;
+      // 3. The escrow transition is the idempotency gate for wallet updates.
+      // Use every settlement's payable amount, never the booking grand total:
+      // a Combo can have several providers with different payable amounts.
+      if (!wasAlreadySettled && escrow) {
         const providerModel = this.bookingModel.db.model('Provider');
-        await providerModel.updateMany(
-          { _id: { $in: booking.providerIds } },
-          {
-            $inc: {
-              'wallet.pendingBalance': -estimatedDeduction, // deduct estimate
-              'wallet.availableBalance': +actualNetAmount, // credit actual
-              'wallet.totalEarned': +actualNetAmount, // cumulative (only grows)
-            },
-            $set: { 'wallet.lastUpdatedAt': new Date() },
-          },
-        );
+        if (booking.bookingType === BookingType.Photography) {
+          const photographySettlement = settlements[0];
+          const estimatedDeduction = (booking as any).estimatedNetAmount;
+          if (photographySettlement && estimatedDeduction != null) {
+            const moved = await providerModel.updateOne(
+              {
+                _id: photographySettlement.providerId,
+                'wallet.pendingBalance': { $gte: estimatedDeduction },
+              },
+              {
+                $inc: {
+                  'wallet.pendingBalance': -estimatedDeduction,
+                  'wallet.availableBalance': +photographySettlement.payableAmount,
+                  'wallet.totalEarned': +photographySettlement.payableAmount,
+                },
+                $set: { 'wallet.lastUpdatedAt': new Date() },
+              },
+            );
+            if (!moved.modifiedCount) {
+              this.logger.warn(
+                `Skipping wallet settlement for ${bookingIdStr}: no matching pending photography balance.`,
+              );
+            }
+          }
+        } else {
+          for (const settlement of settlements) {
+            await providerModel.updateOne(
+              { _id: settlement.providerId },
+              {
+                $inc: {
+                  'wallet.availableBalance': settlement.payableAmount,
+                  'wallet.totalEarned': settlement.payableAmount,
+                },
+                $set: { 'wallet.lastUpdatedAt': new Date() },
+              },
+            );
+          }
+        }
       }
     } catch (err) {
       // Revert lại trạng thái Held nếu gặp lỗi để có thể retry

@@ -379,23 +379,37 @@ export class BookingsService implements OnApplicationBootstrap {
 
     if (expiredBookings.length === 0) return;
 
-    const bookingIds = expiredBookings.map((b) => b._id);
+    // Claim each booking before releasing a Combo quota. The photography-hold
+    // sweeper can run at the same time, so only the process that performs the
+    // PENDING_PAYMENT -> CANCELLED transition may release the quota.
+    const cancelledBookings = [] as typeof expiredBookings;
+    for (const booking of expiredBookings) {
+      const cancelled = await this.bookingModel.findOneAndUpdate(
+        { _id: booking._id, status: BookingStatus.PendingPayment },
+        {
+          $set: { status: BookingStatus.Cancelled },
+          $push: {
+            statusTimeline: {
+              status: BookingStatus.Cancelled,
+              changedAt: new Date(),
+              note: `Tự động hủy đơn hàng do quá hạn thanh toán (${holdPolicy.holdMinutes} phút)`,
+            },
+          },
+        },
+        { new: false },
+      ).exec();
+      if (cancelled) cancelledBookings.push(cancelled);
+    }
+
+    if (!cancelledBookings.length) return;
+    const bookingIds = cancelledBookings.map((booking) => booking._id);
 
     // Decrement usedCount on ComboPromotion for auto-cancelled bookings
     try {
-      const bookingsWithCombo = await this.bookingModel
-        .find({
-          _id: { $in: bookingIds },
-          comboPromotionId: { $ne: null },
-        })
-        .select('_id comboPromotionId')
-        .lean()
-        .exec();
-
-      for (const b of bookingsWithCombo) {
+      for (const b of cancelledBookings) {
         if (b.comboPromotionId) {
           await this.bookingModel.db.model('ComboPromotion').updateOne(
-            { _id: b.comboPromotionId },
+            { _id: b.comboPromotionId, usedCount: { $gt: 0 } },
             { $inc: { usedCount: -1 } }
           ).exec();
         }
@@ -403,20 +417,6 @@ export class BookingsService implements OnApplicationBootstrap {
     } catch (e) {
       console.warn('Failed to decrement ComboPromotion usedCount on auto-cancel:', e);
     }
-
-    await this.bookingModel.updateMany(
-      { _id: { $in: bookingIds } },
-      {
-        $set: { status: BookingStatus.Cancelled },
-        $push: {
-          statusTimeline: {
-            status: BookingStatus.Cancelled,
-            changedAt: new Date(),
-            note: `Tự động hủy đơn hàng do quá hạn thanh toán (${holdPolicy.holdMinutes} phút)`,
-          },
-        },
-      },
-    );
 
     await this.bookingScheduleModel.updateMany(
       { bookingId: { $in: bookingIds } },
@@ -3694,7 +3694,7 @@ export class BookingsService implements OnApplicationBootstrap {
     if (booking.comboPromotionId) {
       try {
         await this.bookingModel.db.model('ComboPromotion').updateOne(
-          { _id: booking.comboPromotionId },
+          { _id: booking.comboPromotionId, usedCount: { $gt: 0 } },
           { $inc: { usedCount: -1 } }
         ).exec();
       } catch (e) {
