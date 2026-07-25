@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Heart,
@@ -26,6 +26,11 @@ import type { PublicSmartTagBadge } from "../../features/smart-tagging/types/sma
 const getImageUrl = (url: string) => {
   if (!url)
     return "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b";
+  if (url.includes('/public-media/legacy/')) {
+    const parts = url.split('/public-media/legacy/');
+    const filename = parts[parts.length - 1];
+    return `${API_BASE_URL}/uploads/${filename}`;
+  }
   if (url.startsWith("http://") || url.startsWith("https://")) {
     return url;
   }
@@ -72,6 +77,7 @@ interface FilterState {
   colors: string[];
   sizes: string[];
   materials: string[];
+  priceRange: number;
   minPrice: string;
   maxPrice: string;
   minRating: string;
@@ -108,8 +114,6 @@ export const AoDaiListingPage: React.FC = () => {
 
   // Search and range input states (to allow free typing before apply)
   const [searchVal, setSearchVal] = useState<string>("");
-  const [minPriceVal, setMinPriceVal] = useState<string>("");
-  const [maxPriceVal, setMaxPriceVal] = useState<string>("");
 
   // Filters State passed to API
   const [filters, setFilters] = useState<FilterState>({
@@ -119,18 +123,65 @@ export const AoDaiListingPage: React.FC = () => {
     colors: [],
     sizes: [],
     materials: [],
+    priceRange: 10000000,
     minPrice: "",
     maxPrice: "",
     minRating: "",
     search: "",
   });
 
+  const [localPriceRange, setLocalPriceRange] = useState<number>(filters.priceRange);
+  const [minPriceVal, setMinPriceVal] = useState<string>("");
+  const [maxPriceVal, setMaxPriceVal] = useState<string>("");
+  const [ratingDropdownOpen, setRatingDropdownOpen] = useState(false);
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+
+  const ratingRef = useRef<HTMLDivElement>(null);
+  const sortRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ratingRef.current && !ratingRef.current.contains(event.target as Node)) {
+        setRatingDropdownOpen(false);
+      }
+      if (sortRef.current && !sortRef.current.contains(event.target as Node)) {
+        setSortDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Sync local slider when filters state changes (e.g. on clear all)
+  useEffect(() => {
+    setLocalPriceRange(filters.priceRange);
+  }, [filters.priceRange]);
+
+  // Debounce the slider to only trigger API call after 250ms of inactivity
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setFilters((prev) => {
+        if (prev.priceRange === localPriceRange) return prev;
+        return {
+          ...prev,
+          priceRange: localPriceRange,
+        };
+      });
+    }, 250);
+    return () => clearTimeout(handler);
+  }, [localPriceRange]);
+
   const [sortOption, setSortOption] = useState<string>("newest");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const ITEMS_PER_PAGE = 12;
   const [favorites, setFavorites] = useState<string[]>([]);
   // Màu khách đang xem trên từng thẻ sản phẩm (chỉ để đổi ảnh tại chỗ, không lọc danh sách)
   const [cardColors, setCardColors] = useState<Record<string, string>>({});
   const [matchMySize, setMatchMySize] = useState<boolean>(false);
   const [recommendMyGu, setRecommendMyGu] = useState<boolean>(false);
+  const [hoveredCardColors, setHoveredCardColors] = useState<Record<string, string>>({});
+  const [lastSelectedColor, setLastSelectedColor] = useState<string | null>(null);
+  void hoveredCardColors; void lastSelectedColor;
 
   // Sync favorites with user context
   useEffect(() => {
@@ -243,8 +294,16 @@ export const AoDaiListingPage: React.FC = () => {
         if (filters.eventCategoryIds.length > 0)
           params.append("eventCategoryIds", filters.eventCategoryIds.join(","));
         if (filters.search) params.append("search", filters.search);
-        if (filters.minPrice) params.append("minPrice", filters.minPrice);
-        if (filters.maxPrice) params.append("maxPrice", filters.maxPrice);
+        
+        if (filters.minPrice) {
+          params.append("minPrice", filters.minPrice);
+        }
+        if (filters.maxPrice) {
+          params.append("maxPrice", filters.maxPrice);
+        } else {
+          params.append("maxPrice", filters.priceRange.toString());
+        }
+        
         if (filters.minRating) params.append("minRating", filters.minRating);
         if (filters.colors.length > 0)
           params.append("colors", filters.colors.join(","));
@@ -338,7 +397,10 @@ export const AoDaiListingPage: React.FC = () => {
           );
         }
 
-        if (active) setFilteredProducts(result);
+        if (active) {
+          setFilteredProducts(result);
+          setCurrentPage(1); // reset to page 1 whenever results change
+        }
       } catch (err: any) {
         console.error("Lỗi khi lọc sản phẩm từ API:", err);
         if (!active) return;
@@ -360,12 +422,24 @@ export const AoDaiListingPage: React.FC = () => {
   ]);
 
   const handleColorToggle = (colorValue: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      colors: prev.colors.includes(colorValue)
+    setFilters((prev) => {
+      const isSelected = prev.colors.includes(colorValue);
+      const nextColors = isSelected
         ? prev.colors.filter((c) => c !== colorValue)
-        : [...prev.colors, colorValue],
-    }));
+        : [...prev.colors, colorValue];
+
+      if (!isSelected) {
+        setLastSelectedColor(colorValue);
+      } else if (lastSelectedColor === colorValue) {
+        const remaining = nextColors[nextColors.length - 1] || null;
+        setLastSelectedColor(remaining);
+      }
+
+      return {
+        ...prev,
+        colors: nextColors,
+      };
+    });
   };
 
   const handleSizeToggle = (size: string) => {
@@ -395,6 +469,10 @@ export const AoDaiListingPage: React.FC = () => {
         ? prev[field].filter((id) => id !== categoryId)
         : [...prev[field], categoryId],
     }));
+  };
+
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalPriceRange(Number(e.target.value));
   };
 
   const applyPriceFilter = () => {
@@ -434,6 +512,7 @@ export const AoDaiListingPage: React.FC = () => {
     colors: [],
       sizes: [],
       materials: [],
+      priceRange: 10000000,
       minPrice: "",
       maxPrice: "",
       minRating: "",
@@ -515,7 +594,7 @@ export const AoDaiListingPage: React.FC = () => {
         }}
       >
         {/* LEFT COLUMN: Filters Sidebar */}
-        <aside className="vh-filter-sidebar">
+        <aside className="vh-filter-sidebar" style={{ position: 'sticky', top: '80px', alignSelf: 'flex-start', maxHeight: 'calc(100vh - 100px)', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}>
           <div
             style={{
               display: "flex",
@@ -931,12 +1010,8 @@ export const AoDaiListingPage: React.FC = () => {
                           height: "28px",
                           borderRadius: "50%",
                           backgroundColor: color.hex,
-                          border: isSelected
-                            ? "2px solid var(--color-primary)"
-                            : "1px solid rgba(0,0,0,0.15)",
-                          boxShadow: isSelected
-                            ? "0 0 0 2px white, var(--shadow-sm)"
-                            : "none",
+                          border: isSelected ? '1px solid rgba(0,0,0,0.2)' : '1px solid rgba(0,0,0,0.15)',
+                          boxShadow: isSelected ? '0 0 0 2px white, 0 0 0 4px var(--color-primary), var(--shadow-sm)' : 'none',
                           cursor: "pointer",
                           position: "relative",
                           transition: "all 0.2s ease",
@@ -1033,17 +1108,34 @@ export const AoDaiListingPage: React.FC = () => {
           {/* PRICE RANGE FILTER */}
           <div className="vh-filter-section" style={{ marginBottom: "20px" }}>
             <h4 className="vh-filter-section-title">KHOẢNG GIÁ</h4>
-            <div
-              style={{
-                marginTop: "12px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "10px",
-              }}
-            >
+            <div style={{ marginTop: "16px" }}>
+              <input
+                type="range"
+                min="0"
+                max="10000000"
+                step="100000"
+                value={localPriceRange}
+                onChange={handlePriceChange}
+                style={{ width: "100%", accentColor: "var(--color-primary)" }}
+              />
               <div
-                style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: "12px",
+                  color: "var(--color-text-secondary)",
+                  marginTop: "8px",
+                  fontWeight: 700,
+                }}
               >
+                <span>0đ</span>
+                <span style={{ color: "var(--color-primary)" }}>
+                  {localPriceRange.toLocaleString("vi-VN")}đ
+                </span>
+              </div>
+
+              {/* Min & Max Price Text Inputs */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "14px" }}>
                 <input
                   type="number"
                   placeholder="Từ (đ)"
@@ -1054,11 +1146,15 @@ export const AoDaiListingPage: React.FC = () => {
                     padding: "8px 10px",
                     borderRadius: "6px",
                     border: "1px solid var(--color-light-border)",
-                    fontSize: "13px",
+                    fontSize: "12px",
+                    fontWeight: 600,
                     outline: "none",
+                    backgroundColor: "white",
                   }}
+                  onFocus={(e) => e.currentTarget.style.borderColor = "var(--color-primary)"}
+                  onBlur={(e) => e.currentTarget.style.borderColor = "var(--color-light-border)"}
                 />
-                <span style={{ color: "var(--color-text-secondary)" }}>-</span>
+                <span style={{ color: "var(--color-text-secondary)", fontSize: "12px" }}>-</span>
                 <input
                   type="number"
                   placeholder="Đến (đ)"
@@ -1069,66 +1165,139 @@ export const AoDaiListingPage: React.FC = () => {
                     padding: "8px 10px",
                     borderRadius: "6px",
                     border: "1px solid var(--color-light-border)",
-                    fontSize: "13px",
+                    fontSize: "12px",
+                    fontWeight: 600,
                     outline: "none",
+                    backgroundColor: "white",
                   }}
+                  onFocus={(e) => e.currentTarget.style.borderColor = "var(--color-primary)"}
+                  onBlur={(e) => e.currentTarget.style.borderColor = "var(--color-light-border)"}
                 />
+                <button
+                  onClick={applyPriceFilter}
+                  style={{
+                    padding: "8px 12px",
+                    backgroundColor: "var(--color-primary)",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    transition: "background-color 0.2s",
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "var(--color-primary-dark)"}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "var(--color-primary)"}
+                >
+                  Lọc
+                </button>
               </div>
-              <button
-                onClick={applyPriceFilter}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  backgroundColor: "var(--color-primary)",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  transition: "background-color 0.2s",
-                }}
-                onMouseOver={(e) =>
-                  (e.currentTarget.style.backgroundColor =
-                    "var(--color-primary-dark)")
-                }
-                onMouseOut={(e) =>
-                  (e.currentTarget.style.backgroundColor =
-                    "var(--color-primary)")
-                }
-              >
-                Áp dụng khoảng giá
-              </button>
             </div>
           </div>
           <div className="vh-filter-divider" />
 
           {/* RATING FILTER (Dropdown) */}
-          <div className="vh-filter-section" style={{ marginBottom: "20px" }}>
+          <div className="vh-filter-section" style={{ marginBottom: "20px" }} ref={ratingRef}>
             <h4 className="vh-filter-section-title">ĐÁNH GIÁ</h4>
-            <div style={{ marginTop: "12px" }}>
-              <select
-                value={filters.minRating}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, minRating: e.target.value }))
-                }
+            <div style={{ marginTop: "12px", position: "relative" }}>
+              <button
+                onClick={() => setRatingDropdownOpen(!ratingDropdownOpen)}
                 style={{
                   width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "6px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
                   border: "1px solid var(--color-light-border)",
+                  backgroundColor: "white",
                   fontSize: "13px",
                   fontWeight: 600,
-                  outline: "none",
                   cursor: "pointer",
-                  backgroundColor: "white",
+                  color: "var(--color-text-primary)",
+                  boxShadow: "var(--shadow-sm)",
+                  transition: "all 0.2s ease",
                 }}
+                onMouseOver={(e) => e.currentTarget.style.borderColor = "var(--color-primary)"}
+                onMouseOut={(e) => e.currentTarget.style.borderColor = "var(--color-light-border)"}
               >
-                <option value="">Tất cả đánh giá</option>
-                <option value="4.5">Từ 4.5 ⭐ trở lên (Xuất sắc)</option>
-                <option value="4.0">Từ 4.0 ⭐ trở lên (Rất tốt)</option>
-                <option value="3.5">Từ 3.5 ⭐ trở lên (Tốt)</option>
-              </select>
+                <span>
+                  {filters.minRating === "4.5"
+                    ? "Từ 4.5 ⭐ trở lên (Xuất sắc)"
+                    : filters.minRating === "4.0"
+                    ? "Từ 4.0 ⭐ trở lên (Rất tốt)"
+                    : filters.minRating === "3.5"
+                    ? "Từ 3.5 ⭐ trở lên (Tốt)"
+                    : "Tất cả đánh giá"}
+                </span>
+                <ChevronDown
+                  size={16}
+                  style={{
+                    transform: ratingDropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform 0.2s ease",
+                    color: "var(--color-text-secondary)",
+                  }}
+                />
+              </button>
+
+              {ratingDropdownOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    marginTop: "6px",
+                    backgroundColor: "rgba(255, 255, 255, 0.95)",
+                    backdropFilter: "blur(8px)",
+                    border: "1px solid var(--color-light-border)",
+                    borderRadius: "8px",
+                    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+                    zIndex: 10,
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                    padding: "4px",
+                  }}
+                >
+                  {[
+                    { value: "", label: "Tất cả đánh giá" },
+                    { value: "4.5", label: "Từ 4.5 ⭐ trở lên (Xuất sắc)" },
+                    { value: "4.0", label: "Từ 4.0 ⭐ trở lên (Rất tốt)" },
+                    { value: "3.5", label: "Từ 3.5 ⭐ trở lên (Tốt)" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        setFilters((prev) => ({ ...prev, minRating: opt.value }));
+                        setRatingDropdownOpen(false);
+                      }}
+                      style={{
+                        padding: "10px 12px",
+                        textAlign: "left",
+                        backgroundColor: filters.minRating === opt.value ? "rgba(239, 68, 68, 0.08)" : "transparent",
+                        color: filters.minRating === opt.value ? "var(--color-primary)" : "var(--color-text-primary)",
+                        border: "none",
+                        borderRadius: "6px",
+                        fontSize: "13px",
+                        fontWeight: filters.minRating === opt.value ? 700 : 500,
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.backgroundColor = "var(--color-light-bg)";
+                        e.currentTarget.style.color = "var(--color-primary)";
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.backgroundColor = filters.minRating === opt.value ? "rgba(239, 68, 68, 0.08)" : "transparent";
+                        e.currentTarget.style.color = filters.minRating === opt.value ? "var(--color-primary)" : "var(--color-text-primary)";
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </aside>
@@ -1254,9 +1423,9 @@ export const AoDaiListingPage: React.FC = () => {
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                cursor: "pointer",
                 position: "relative",
               }}
+              ref={sortRef}
             >
               <span
                 style={{
@@ -1267,39 +1436,107 @@ export const AoDaiListingPage: React.FC = () => {
               >
                 Sắp xếp:
               </span>
-              <select
-                value={sortOption}
-                onChange={(e) => setSortOption(e.target.value)}
+              <button
+                onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
                 style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
                   border: "none",
                   background: "none",
                   fontSize: "13px",
                   fontWeight: 700,
                   color: "var(--color-text-primary)",
                   cursor: "pointer",
-                  paddingRight: "16px",
+                  padding: "4px 8px",
+                  borderRadius: "6px",
                   outline: "none",
-                  appearance: "none",
                 }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = "var(--color-light-bg)"}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
               >
-                <option value="newest">Sản phẩm mới</option>
-                <option value="price-asc">Giá: Thấp đến Cao</option>
-                <option value="price-desc">Giá: Cao đến Thấp</option>
-                <option value="rating">Được đánh giá cao</option>
-              </select>
-              <ChevronDown
-                size={14}
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  pointerEvents: "none",
-                }}
-              />
+                <span>
+                  {sortOption === "newest"
+                    ? "Sản phẩm mới"
+                    : sortOption === "price-asc"
+                    ? "Giá: Thấp đến Cao"
+                    : sortOption === "price-desc"
+                    ? "Giá: Cao đến Thấp"
+                    : sortOption === "rating"
+                    ? "Được đánh giá cao"
+                    : "Sắp xếp"}
+                </span>
+                <ChevronDown
+                  size={14}
+                  style={{
+                    transform: sortDropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform 0.2s ease",
+                  }}
+                />
+              </button>
+
+              {sortDropdownOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    right: 0,
+                    marginTop: "6px",
+                    backgroundColor: "rgba(255, 255, 255, 0.95)",
+                    backdropFilter: "blur(8px)",
+                    border: "1px solid var(--color-light-border)",
+                    borderRadius: "8px",
+                    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+                    zIndex: 10,
+                    width: "180px",
+                    display: "flex",
+                    flexDirection: "column",
+                    padding: "4px",
+                  }}
+                >
+                  {[
+                    { value: "newest", label: "Sản phẩm mới" },
+                    { value: "price-asc", label: "Giá: Thấp đến Cao" },
+                    { value: "price-desc", label: "Giá: Cao đến Thấp" },
+                    { value: "rating", label: "Được đánh giá cao" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        setSortOption(opt.value);
+                        setSortDropdownOpen(false);
+                      }}
+                      style={{
+                        padding: "8px 12px",
+                        textAlign: "left",
+                        backgroundColor: sortOption === opt.value ? "rgba(239, 68, 68, 0.08)" : "transparent",
+                        color: sortOption === opt.value ? "var(--color-primary)" : "var(--color-text-primary)",
+                        border: "none",
+                        borderRadius: "6px",
+                        fontSize: "13px",
+                        fontWeight: sortOption === opt.value ? 700 : 500,
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.backgroundColor = "var(--color-light-bg)";
+                        e.currentTarget.style.color = "var(--color-primary)";
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.backgroundColor = sortOption === opt.value ? "rgba(239, 68, 68, 0.08)" : "transparent";
+                        e.currentTarget.style.color = sortOption === opt.value ? "var(--color-primary)" : "var(--color-text-primary)";
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
           {/* Dynamic Listing Grid */}
-          {loading ? (
+          {loading && filteredProducts.length === 0 ? (
             <div
               style={{
                 display: "flex",
@@ -1342,8 +1579,14 @@ export const AoDaiListingPage: React.FC = () => {
               Không có sản phẩm nào phù hợp với bộ lọc đã chọn.
             </div>
           ) : (
-            <div className="vh-rentals-grid-3">
-              {filteredProducts.map((p) => {
+            <div
+              className="vh-rentals-grid-3"
+              style={{
+                opacity: loading ? 0.55 : 1,
+                transition: "opacity 0.15s ease-in-out",
+              }}
+            >
+              {filteredProducts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((p) => {
                 const isFavorite = favorites.includes(p._id);
                 // Màu đang xem trên từng thẻ; chưa chọn thì lấy ảnh mặc định của sản phẩm.
                 const previewColor = cardColors[p._id];
@@ -1358,6 +1601,11 @@ export const AoDaiListingPage: React.FC = () => {
                     key={p._id}
                     className="vh-premium-card"
                     style={{ padding: "16px" }}
+                    onMouseLeave={() => setHoveredCardColors(prev => {
+                      const copy = { ...prev };
+                      delete copy[p._id];
+                      return copy;
+                    })}
                   >
                     {/* Image Wrapper */}
                     <div className="vh-card-image-wrapper">
@@ -1532,7 +1780,6 @@ export const AoDaiListingPage: React.FC = () => {
                           </span>
                         </div>
 
-                        {/* Color Circles */}
                         <div style={{ display: "flex", gap: "4px" }}>
                           {p.colors.map((c, idx) => {
                             const foundColor = availableColors.find(
@@ -1545,7 +1792,6 @@ export const AoDaiListingPage: React.FC = () => {
                                 title={foundColor?.name || c}
                                 aria-label={`Xem màu ${foundColor?.name || c}`}
                                 onClick={(e) => {
-                                  // Thẻ sản phẩm là link sang trang chi tiết -> chặn nổi bọt
                                   e.preventDefault();
                                   e.stopPropagation();
                                   setCardColors((prev) => ({ ...prev, [p._id]: c }));
@@ -1575,23 +1821,51 @@ export const AoDaiListingPage: React.FC = () => {
           )}
 
           {/* PAGINATION */}
-          {!loading && filteredProducts.length > 0 && (
-            <div className="vh-pagination">
-              <button className="vh-pagination-btn">&lt;</button>
-              <button className="vh-pagination-btn active">1</button>
-              <button className="vh-pagination-btn">2</button>
-              <button className="vh-pagination-btn">3</button>
-              <span
-                style={{
-                  color: "var(--color-text-secondary)",
-                  fontSize: "13px",
-                }}
-              >
-                ...
-              </span>
-              <button className="vh-pagination-btn">&gt;</button>
-            </div>
-          )}
+          {!loading && filteredProducts.length > ITEMS_PER_PAGE && (() => {
+            const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
+            const delta = 2;
+            const pages: (number | 'ellipsis')[] = [];
+            for (let i = 1; i <= totalPages; i++) {
+              if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
+                pages.push(i);
+              } else if (pages[pages.length - 1] !== 'ellipsis') {
+                pages.push('ellipsis');
+              }
+            }
+            return (
+              <div className="vh-pagination">
+                <button
+                  className="vh-pagination-btn"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  style={{ opacity: currentPage === 1 ? 0.4 : 1 }}
+                >
+                  &lt;
+                </button>
+                {pages.map((page, idx) =>
+                  page === 'ellipsis' ? (
+                    <span key={`ell-${idx}`} style={{ color: 'var(--color-text-secondary)', fontSize: '13px', padding: '0 4px' }}>...</span>
+                  ) : (
+                    <button
+                      key={page}
+                      className={`vh-pagination-btn${currentPage === page ? ' active' : ''}`}
+                      onClick={() => { setCurrentPage(page); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    >
+                      {page}
+                    </button>
+                  )
+                )}
+                <button
+                  className="vh-pagination-btn"
+                  onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  disabled={currentPage === totalPages}
+                  style={{ opacity: currentPage === totalPages ? 0.4 : 1 }}
+                >
+                  &gt;
+                </button>
+              </div>
+            );
+          })()}
         </main>
       </div>
     </div>

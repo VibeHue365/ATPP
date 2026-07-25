@@ -3,12 +3,14 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { ProductsRepository } from '../repositories/products.repository';
 import { UsersRepository } from '../../users/repositories/users.repository';
 import {
+  Product,
   ProductDocument,
   ProductModerationStatus,
   ProductStatus,
@@ -26,7 +28,7 @@ import { PublicMediaService } from '../../storage/services/public-media.service'
 import { normalizeColor } from '../utils/color.util';
 
 @Injectable()
-export class ProductsService {
+export class ProductsService implements OnModuleInit {
   constructor(
     private readonly productsRepository: ProductsRepository,
     private readonly usersRepository: UsersRepository,
@@ -37,6 +39,14 @@ export class ProductsService {
     private readonly campaignService: DiscountCampaignService,
     private readonly publicMedia: PublicMediaService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.productsRepository.moveLegacyProductsToPendingReview();
+    } catch (e) {
+      console.error('Failed to auto-activate draft products on startup:', e);
+    }
+  }
 
   async getAllActiveProducts(options?: {
     search?: string;
@@ -49,6 +59,7 @@ export class ProductsService {
     categoryId?: string;
     styleCategoryIds?: string[];
     eventCategoryIds?: string[];
+    providerId?: string;
     limit?: number;
   }): Promise<any[]> {
     const products = await this.productsRepository.findAllActive(options);
@@ -86,6 +97,38 @@ export class ProductsService {
 
   async getCategories(): Promise<any[]> {
     return this.categoriesService.listActiveCategoriesForProducts();
+  }
+
+  async getPublicProviderProfile(providerId: string): Promise<any> {
+    if (!Types.ObjectId.isValid(providerId)) {
+      throw new NotFoundException('ID nhà cung cấp không hợp lệ');
+    }
+    const providerModel = this.connection.model('Provider');
+    const provider: any = await providerModel.findById(providerId).lean().exec();
+    if (!provider) {
+      throw new NotFoundException('Không tìm thấy nhà cung cấp');
+    }
+    const campaign = await this.campaignService.getActiveCampaign(new Types.ObjectId(providerId));
+    return {
+      _id: provider._id,
+      userId: provider.userId,
+      businessName: provider.businessName,
+      capabilities: provider.capabilities,
+      contact: provider.contact,
+      address: provider.address,
+      media: provider.media,
+      rating: provider.rating,
+      policies: provider.policies,
+      rentalSettings: provider.rentalSettings,
+      comboDiscountPercent: provider.comboDiscountPercent,
+      activeCampaign: campaign
+        ? {
+            occasion: campaign.occasion,
+            discountPercent: campaign.discountPercent,
+            endDate: campaign.endDate,
+          }
+        : null,
+    };
   }
 
   async getProductById(productId: string): Promise<any | null> {
@@ -254,7 +297,7 @@ export class ProductsService {
       sizes: productSizes,
       colors: productColors,
       materials: productMaterials,
-      status: dto.status || ProductStatus.Draft,
+      status: dto.status || ProductStatus.Active,
       moderationStatus: ProductModerationStatus.PendingReview,
       moderationReason: null,
       style: dto.style || null,
@@ -506,7 +549,7 @@ export class ProductsService {
       );
     }
 
-    const updated = await this.productsRepository.moderate(id, expectedStatus, {
+    const updateData: Partial<Product> = {
       moderationStatus: dto.action,
       moderationReason:
         dto.action === ProductModerationStatus.Rejected ||
@@ -515,7 +558,13 @@ export class ProductsService {
           : null,
       moderatedBy: new Types.ObjectId(adminId),
       moderatedAt: new Date(),
-    });
+    };
+
+    if (dto.action === ProductModerationStatus.Approved) {
+      updateData.status = ProductStatus.Active;
+    }
+
+    const updated = await this.productsRepository.moderate(id, expectedStatus, updateData);
 
     if (!updated) {
       throw new ConflictException(

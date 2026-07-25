@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { checkProductAvailability } from '../../features/rentals/services/productAvailabilityService';
 import { useProductAvailability } from '../../features/rentals/hooks/useProductAvailability';
 import { useParams, useNavigate } from "react-router-dom";
-import {Heart,Star,Sparkles,ArrowRight,ChevronRight,ChevronLeft,Shield,Camera,User,Check,MapPin,Flag,} from "lucide-react";
+import {Heart,Star,Sparkles,ArrowRight,ChevronRight,ChevronLeft,Shield,User,Check,MapPin,Flag} from "lucide-react";
 import Swal from "sweetalert2";
 import { httpClient } from "../../services/httpClient";
 import { useToast } from "../../components/feedback/Toast";
@@ -435,6 +435,31 @@ export const ProductDetailPage: React.FC = () => {
   const [busySlots, setBusySlots] = useState<
     { date: string; timeSlot: string }[]
   >([]);
+  const [variantBookedDates, setVariantBookedDates] = useState<Record<string, string[]>>({});
+  const [providerScheduleInfo, setProviderScheduleInfo] = useState<{
+    hasSchedule: boolean;
+    workingDays: number[];
+    offDays: string[];
+  } | null>(null);
+
+  const activeBusyDates = React.useMemo(() => {
+    let combined = [...busyDates];
+    if (selectedSize && selectedColor) {
+      const normalizeCol = (col: string) => {
+        const u = col.trim().toUpperCase();
+        if (u === 'ĐỎ' || u === 'RED') return 'RED';
+        if (u === 'TRẮNG' || u === 'WHITE') return 'WHITE';
+        if (u === 'VÀNG' || u === 'GOLD') return 'GOLD';
+        if (u === 'ĐEN' || u === 'BLACK') return 'BLACK';
+        return u;
+      };
+      const key = `${selectedSize.trim().toUpperCase()}_${normalizeCol(selectedColor)}`;
+      if (variantBookedDates[key]) {
+        combined = Array.from(new Set([...combined, ...variantBookedDates[key]]));
+      }
+    }
+    return combined;
+  }, [selectedSize, selectedColor, variantBookedDates, busyDates]);
 
   const bookedSlotsOnSelectedDate = React.useMemo(() => {
     if (!singleDate) return [];
@@ -461,7 +486,7 @@ export const ProductDetailPage: React.FC = () => {
   // Interactive UI modals
   const [isAiStylingOpen, setIsAiStylingOpen] = useState<boolean>(false);
   const [isAiSizeOpen, setIsAiSizeOpen] = useState<boolean>(false);
-  const [isComboOpen, setIsComboOpen] = useState<boolean>(false);
+
 
   // AI Size Form States
   const [aiHeight, setAiHeight] = useState<number | "">(160);
@@ -702,9 +727,27 @@ export const ProductDetailPage: React.FC = () => {
     }
     for (let i = 1; i <= daysInMonth; i++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
-      const dayOfWeek = new Date(dateStr).getDay();
+      const [yNum, mNum, dNum] = dateStr.split("-").map(Number);
+      const dateObj = new Date(yNum, mNum - 1, dNum);
+      const dayOfWeek = dateObj.getDay();
 
-      let isAvailable = !busyDates.includes(dateStr) && dateStr >= todayStr;
+      let isAvailable = !activeBusyDates.includes(dateStr) && dateStr >= todayStr;
+
+      if (providerScheduleInfo) {
+        if (!providerScheduleInfo.hasSchedule) {
+          isAvailable = false;
+        } else {
+          if (providerScheduleInfo.workingDays && providerScheduleInfo.workingDays.length > 0) {
+            if (!providerScheduleInfo.workingDays.includes(dayOfWeek)) {
+              isAvailable = false;
+            }
+          }
+          if (providerScheduleInfo.offDays && providerScheduleInfo.offDays.includes(dateStr)) {
+            isAvailable = false;
+          }
+        }
+      }
+
       if (rentalMode === "HOURLY" && dateStr === todayStr) {
         const currentHour = today.getHours();
         const currentMinute = today.getMinutes();
@@ -724,7 +767,7 @@ export const ProductDetailPage: React.FC = () => {
       });
     }
     return days;
-  }, [calendarDate, busyDates, rentalMode]);
+  }, [calendarDate, busyDates, rentalMode, providerScheduleInfo]);
 
   const startSlotIndex = React.useMemo(() => {
     return productSlots.findIndex((s) => s.start === startTime);
@@ -896,10 +939,24 @@ export const ProductDetailPage: React.FC = () => {
           const busyData = await httpClient.get<{
             bookedDates: string[];
             bookedSlots: { date: string; timeSlot: string }[];
+            variantBookedDates?: Record<string, string[]>;
+            workingDays?: number[];
+            offDays?: string[];
+            hasSchedule?: boolean;
           }>(`/api/bookings/busy-dates/product/${id}`);
           loadedBookedDates = busyData.bookedDates || [];
           setBusyDates(loadedBookedDates);
           setBusySlots(busyData.bookedSlots || []);
+          if (busyData.variantBookedDates) {
+            setVariantBookedDates(busyData.variantBookedDates);
+          }
+          if (busyData.hasSchedule !== undefined) {
+            setProviderScheduleInfo({
+              hasSchedule: busyData.hasSchedule,
+              workingDays: busyData.workingDays || [],
+              offDays: busyData.offDays || [],
+            });
+          }
         } catch (e) {
           console.error("Lỗi tải lịch bận của sản phẩm:", e);
         }
@@ -1014,7 +1071,8 @@ export const ProductDetailPage: React.FC = () => {
     if (!product) return;
     const fetchSuggestions = async () => {
       try {
-        const data = await httpClient.get<any[]>("/api/photographers");
+        const res = await httpClient.get<any>("/api/photographers");
+        const data = res?.data || [];
         const productCity =
           product.providerId?.address?.city || "Thừa Thiên Huế";
 
@@ -1580,9 +1638,18 @@ export const ProductDetailPage: React.FC = () => {
                   fontSize: "14px",
                   letterSpacing: "0.05em",
                   textTransform: "uppercase",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
                 }}
+                onClick={() => {
+                  const pId = typeof product.providerId === 'object' && product.providerId ? (product.providerId as any)._id : product.providerId;
+                  if (pId) navigate(`/stores/${pId}`);
+                }}
+                title="Xem gian hàng của Shop"
               >
-                Hãng: {product.providerId?.businessName || "Huế Cổ Phục Studio"}
+                Hãng: {product.providerId?.businessName || "Huế Cổ Phục Studio"} ↗
               </span>
               <h1 className="font-header text-4xl text-stone-900 font-bold mt-1 leading-tight">
                 {product.name}
@@ -2358,14 +2425,28 @@ export const ProductDetailPage: React.FC = () => {
 
                         <span
                           style={{
-                            fontSize: "10px",
+                            fontSize: "11px",
                             fontStyle: "italic",
                             color: "var(--color-text-secondary)",
                             marginTop: "8px",
                             lineHeight: 1.4,
+                            display: "block",
                           }}
                         >
                           * Chọn Ngày nhận và Ngày trả trực tiếp trên lịch.
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontStyle: "italic",
+                            color: "#8C6D1F",
+                            marginTop: "4px",
+                            lineHeight: 1.4,
+                            display: "block",
+                            fontWeight: 600,
+                          }}
+                        >
+                          ⏰ Giờ lấy đồ: từ 1h sáng | Giờ trả đồ: trước 11h đêm.
                         </span>
                       </div>
                     )}
@@ -2409,7 +2490,7 @@ export const ProductDetailPage: React.FC = () => {
               )}
               {availability.state === 'unavailable' && (
                 <div style={{ color: '#C0392B', fontSize: '14px' }}>
-                  Không đủ số lượng cho lịch thuê đã chọn. Vui lòng đổi ngày, giờ hoặc số lượng.
+                  {availability.result?.message || 'Không đủ số lượng cho lịch thuê đã chọn. Vui lòng đổi ngày, giờ hoặc số lượng.'}
                 </div>
               )}
               {availability.state === 'error' && (
@@ -2484,40 +2565,7 @@ export const ProductDetailPage: React.FC = () => {
                 <ArrowRight size={18} />
               </button>
 
-              {/* COMBO BANNER */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  backgroundColor: "#2D2926",
-                  color: "white",
-                  borderRadius: "12px",
-                  padding: "14px 20px",
-                  boxShadow: "var(--shadow-md)",
-                }}
-              >
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "10px" }}
-                >
-                  <Camera size={18} className="text-amber-400" />
-                  <span style={{ fontSize: "13px", fontWeight: 700 }}>
-                    ĐẶT KÈM THỢ CHỤP (COMBO)
-                  </span>
-                </div>
-                <button
-                  onClick={() => setIsComboOpen(true)}
-                  className="vh-btn vh-btn-secondary font-header font-bold"
-                  style={{
-                    borderRadius: "6px",
-                    fontSize: "11px",
-                    padding: "6px 14px",
-                    border: "none",
-                  }}
-                >
-                  CHI TIẾT
-                </button>
-              </div>
+
             </div>
 
             {/* Micro value bullets */}
@@ -3939,69 +3987,7 @@ export const ProductDetailPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* 3. Combo Details Modal */}
-      <Modal
-        isOpen={isComboOpen}
-        onClose={() => setIsComboOpen(false)}
-        title="Chi tiết gói Combo Tiết kiệm"
-        maxWidth="550px"
-      >
-        <div style={{ padding: "10px 0" }}>
-          <p
-            style={{
-              fontSize: "14px",
-              color: "var(--color-text-secondary)",
-              lineHeight: 1.6,
-              marginBottom: "20px",
-            }}
-          >
-            Nhận ngay ưu đãi **giảm giá 10%** tổng giá trị hóa đơn khi bạn lựa
-            chọn kết hợp thuê tà áo dài **{product.name}** cùng bất cứ nhiếp ảnh
-            gia tiêu biểu nào của hệ thống.
-          </p>
 
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-              backgroundColor: "white",
-              border: "1px solid var(--color-light-border)",
-              padding: "16px",
-              borderRadius: "12px",
-              marginBottom: "24px",
-              fontSize: "13px",
-            }}
-          >
-            <div>✔️ Giảm ngay 10% phí thuê áo dài</div>
-            <div>✔️ Giảm ngay 10% phí book thợ chụp ảnh ngoại cảnh</div>
-            <div>✔️ Tự động đồng bộ hóa lịch thử đồ & lịch đi chụp</div>
-            <div>✔️ Hỗ trợ hợp đồng bảo hiểm di sản combo trọn gói</div>
-          </div>
-
-          <div
-            style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}
-          >
-            <button
-              className="vh-btn vh-btn-primary"
-              style={{ padding: "8px 24px", borderRadius: "8px" }}
-              onClick={() => {
-                setIsComboOpen(false);
-                toast.success("Đã kích hoạt ưu đãi giảm giá Combo!");
-              }}
-            >
-              KÍCH HOẠT COMBO
-            </button>
-            <button
-              className="vh-btn vh-btn-outline"
-              style={{ padding: "8px 24px", borderRadius: "8px" }}
-              onClick={() => setIsComboOpen(false)}
-            >
-              Đóng
-            </button>
-          </div>
-        </div>
-      </Modal>
 
       {/* 4. Write Review Modal */}
       <Modal

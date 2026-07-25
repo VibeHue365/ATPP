@@ -22,6 +22,8 @@ const evidenceUrl = (reference: string) =>
     ? reference
     : `${API_BASE_URL}${reference}`;
 
+import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';
+
 export function DisputesPanel() {
   const { error, items, loading, refresh, setError } = useDisputes();
   const [selected, setSelected] = useState<Dispute | null>(null);
@@ -91,6 +93,12 @@ export function DisputesPanel() {
       await adminDisputesApi.resolve(selected.bookingId._id, payload);
       setSelected(null);
       await refresh();
+      await Swal.fire({
+        title: 'Thành công!',
+        text: 'Đã giải quyết tranh chấp và cập nhật trạng thái đơn hàng.',
+        icon: 'success',
+        confirmButtonColor: '#27AE60',
+      });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Không thể xử lý tranh chấp.');
     } finally {
@@ -102,7 +110,9 @@ export function DisputesPanel() {
 
   return (
     <section className="admin-disputes">
-      <div className="admin-disputes__toolbar"><button type="button" onClick={() => void refresh()} disabled={loading}>Tải lại</button></div>
+      <div className="admin-disputes__toolbar">
+        <AdminReloadButton onClick={() => void refresh()} isLoading={loading} />
+      </div>
 
       {error && <p className="admin-disputes__error" role="alert">{error}</p>}
 
@@ -137,9 +147,41 @@ export function DisputesPanel() {
               <div><dt>Khoản yêu cầu</dt><dd>{formatCurrency(selected.requestedAmount)}</dd></div>
             </dl>
 
+            {selected.bookingId?.deliveryDriveUrl && (
+              <section className='admin-disputes__evidence' aria-label='Link Google Drive'>
+                <h4>🔗 Link Google Drive bộ ảnh gốc:</h4>
+                <a
+                  href={selected.bookingId.deliveryDriveUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: '#2563EB', fontWeight: 700, fontSize: '13px', wordBreak: 'break-all' }}
+                >
+                  {selected.bookingId.deliveryDriveUrl}
+                </a>
+              </section>
+            )}
+
+            {selected.bookingId?.deliveredPhotos?.length ? (
+              <section className='admin-disputes__evidence' aria-label='Ảnh kết quả bàn giao'>
+                <h4>📸 Ảnh kết quả thợ chụp bàn giao</h4>
+                <div>
+                  {selected.bookingId.deliveredPhotos.map((reference: string, index: number) => (
+                    <PrivateEvidenceImage
+                      key={index}
+                      reference={reference}
+                      legacyUrl={evidenceUrl(reference)}
+                      alt={`Ảnh bàn giao ${index + 1}`}
+                      linkStyle={{ display: 'block', borderRadius: '6px', overflow: 'hidden', border: '1px solid #BFDBFE' }}
+                      imageStyle={{ width: '72px', height: '72px', objectFit: 'cover' }}
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             {selected.evidencePhotos?.length ? (
               <section className='admin-disputes__evidence' aria-label='Bằng chứng sự cố'>
-                <h4>Bằng chứng sự cố</h4>
+                <h4>Bằng chứng sự cố (Khách gửi)</h4>
                 <div>
                   {selected.evidencePhotos.map((reference, index) => (
                     <PrivateEvidenceImage

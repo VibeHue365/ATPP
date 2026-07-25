@@ -31,6 +31,12 @@ import ProviderDashboard from '../pages/providerdashboard/ProviderDashboard';
 import BecomeProviderPage from '../pages/provider/BecomeProviderPage';
 import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
 import AdminDashboardRefactored from '../pages/admin/AdminDashboardRefactored';
+import { ComboListingPage } from '../pages/combos/ComboListingPage';
+import ComboDetailPage from '../pages/combos/ComboDetailPage';
+import CheckoutResultPage from '../pages/checkout/CheckoutResultPage';
+import ProviderStorePage from '../pages/store/ProviderStorePage';
+import NotificationsPage from '../pages/notifications/NotificationsPage';
+import ChatPage from '../pages/chat/ChatPage';
 
 export const AppRouter: React.FC = () => {
   return (
@@ -48,6 +54,9 @@ export const AppRouter: React.FC = () => {
         <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
         <Route path={ROUTES.PHOTOGRAPHERS} element={<PhotographersListingPage />} />
         <Route path={ROUTES.PHOTOGRAPHER_DETAIL} element={<PhotographerDetailPage />} />
+        <Route path={ROUTES.COMBOS} element={<ComboListingPage />} />
+        <Route path={ROUTES.COMBO_DETAIL} element={<ComboDetailPage />} />
+        <Route path={ROUTES.PROVIDER_STORE} element={<ProviderStorePage />} />
         <Route path={ROUTES.CART} element={<CartPage />} />
       </Route>
 
@@ -72,10 +81,13 @@ export const AppRouter: React.FC = () => {
           <Route path={ROUTES.DASHBOARD} element={<Navigate to={ROUTES.PROFILE} replace />} />
           <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+          <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
+          <Route path={ROUTES.CHAT} element={<ChatPage />} />
+          <Route path={ROUTES.CHECKOUT_RESULT} element={<CheckoutResultPage />} />
           <Route path={ROUTES.PROVIDER_REGISTER} element={<BecomeProviderPage />} />
         </Route>
         {/* Admin Dashboard Page (No MainLayout header/footer) */}
-        <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardPage />} />
+        <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardRefactored />} />
         {/* Parallel preview route: legacy dashboard remains the production route during refactor. */}
         <Route path={ROUTES.ADMIN_DASHBOARD_REFACTORED} element={<AdminDashboardRefactored />} />
       </Route>
@@ -87,3 +99,4 @@ export const AppRouter: React.FC = () => {
 };
 
 export default AppRouter;
+// Force Vite HMR reload to recognize the new ComboDetailPage route.

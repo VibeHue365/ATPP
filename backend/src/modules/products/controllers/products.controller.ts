@@ -45,6 +45,7 @@ export class ProductsController {
     @Query('categoryId') categoryId?: string,
     @Query('styleCategoryIds') styleCategoryIds?: string,
     @Query('eventCategoryIds') eventCategoryIds?: string,
+    @Query('providerId') providerId?: string,
   ): Promise<any[]> {
     const options = {
       search,
@@ -57,8 +58,14 @@ export class ProductsController {
       categoryId,
       styleCategoryIds: styleCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
       eventCategoryIds: eventCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
+      providerId,
     };
     return this.productsService.getAllActiveProducts(options);
+  }
+
+  @Get('store-info/:providerId')
+  async getStoreInfo(@Param('providerId') providerId: string): Promise<any> {
+    return this.productsService.getPublicProviderProfile(providerId);
   }
 
   @Get('categories')

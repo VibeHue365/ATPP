@@ -20,6 +20,7 @@ import {
 } from '../schemas/provider.schema';
 import type { ProviderDocument } from '../schemas/provider.schema';
 import type { ProviderScheduleDocument } from '../../products/schemas/provider-schedule.schema';
+import { ScheduleCapability } from '../../products/schemas/provider-schedule.schema';
 import { Product } from '../../products/schemas/product.schema';
 import { Booking } from '../../bookings/schemas/booking.schema';
 import { BookingItem } from '../../bookings/schemas/booking-item.schema';
@@ -63,7 +64,7 @@ export class ProvidersService {
     @InjectModel(PortfolioItem.name)
     private readonly portfolioItemModel: Model<PortfolioItem>,
     private readonly smartTaggingService: SmartTaggingService,
-  ) {}
+  ) { }
 
   async getOrCreateProvider(
     userIdStr: string,
@@ -357,11 +358,13 @@ export class ProvidersService {
     userIdStr: string,
     dayOfWeek: number,
     workingHours: Array<{ start: string; end: string }>,
+    capability: ScheduleCapability | null = null,
   ): Promise<ProviderScheduleDocument> {
     const schedules = await this.updateRecurringSchedules(
       userIdStr,
       [dayOfWeek],
       workingHours,
+      capability,
     );
     return schedules[0];
   }
@@ -370,6 +373,7 @@ export class ProvidersService {
     userIdStr: string,
     dayOfWeeks: number[],
     workingHours: Array<{ start: string; end: string }>,
+    capability: ScheduleCapability | null = null,
   ): Promise<ProviderScheduleDocument[]> {
     const normalizedDays = [...new Set(dayOfWeeks)]
       .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
@@ -391,6 +395,7 @@ export class ProvidersService {
           provider._id,
           dayOfWeek,
           normalizedHours,
+          capability,
         ),
       ),
     );
@@ -436,6 +441,7 @@ export class ProvidersService {
     dateStr: string,
     isOffDay: boolean,
     customSlots: Array<{ timeSlot: string; status: string }>,
+    capability: ScheduleCapability | null = null,
   ): Promise<ProviderScheduleDocument> {
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
@@ -451,10 +457,11 @@ export class ProvidersService {
       specificDate,
       offDays,
       customSlots,
+      capability,
     );
   }
 
-  async getProviderAnalytics(userIdStr: string) {
+  async getProviderAnalytics(userIdStr: string, period = 'month') {
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
     if (!provider) {
@@ -477,19 +484,16 @@ export class ProvidersService {
       },
     } as any);
 
-    let totalRevenue = 0;
-    for (const b of bookings) {
-      const items = await this.bookingItemModel.find({
-        bookingId: b._id,
-        providerId: providerId,
-      } as any);
-      const bRevenue = items.reduce(
-        (sum, item) => sum + item.unitPrice * (item.quantity || 1),
-        0,
-      );
-      totalRevenue += bRevenue;
+const bookingIds = bookings.map((booking) => booking._id);
+    const revenueItems = bookingIds.length
+      ? await this.bookingItemModel.find({ bookingId: { $in: bookingIds }, providerId } as any).lean()
+      : [];
+    const revenueByBooking = new Map<string, number>();
+    for (const item of revenueItems) {
+      const bookingKey = item.bookingId.toString();
+      revenueByBooking.set(bookingKey, (revenueByBooking.get(bookingKey) || 0) + item.unitPrice * (item.quantity || 1));
     }
-
+    const totalRevenue = Array.from(revenueByBooking.values()).reduce((sum, amount) => sum + amount, 0);
     const commissionFee = Math.round(totalRevenue * 0.15);
 
     // 2. UC-K13: Tỷ lệ đặt lịch thành công & hủy lịch
@@ -507,10 +511,10 @@ export class ProvidersService {
 
     const successRate = allBookingsCount
       ? Math.round((successBookingsCount / allBookingsCount) * 1000) / 10
-      : 94.2;
+      : 0;
     const cancelRate = allBookingsCount
       ? Math.round((cancelledBookingsCount / allBookingsCount) * 1000) / 10
-      : 1.8;
+      : 0;
 
     // 3. UC-K05: Sản phẩm phổ biến nhất (Top 3)
     const popularItems = await this.bookingItemModel.aggregate([
@@ -537,69 +541,73 @@ export class ProvidersService {
     const totalProducts = await this.productModel.countDocuments({
       providerId,
     } as any);
-    const inventoryStatus = [
-      {
-        name: 'Áo dài Tứ Thân Lụa Hà Đông',
-        status: 'ĐANG CHO THUÊ',
-        count: '02 Bộ',
-        detail: 'Lịch thuê tiếp theo: 02/07',
-        color: 'rental',
-      },
-      {
-        name: 'Áo dài Cách Tân Cấm Thượng Hải',
-        status: 'CẦN BẢO TRÌ',
-        count: '15 Bộ',
-        detail: 'Cần làm sạch',
-        color: 'maintenance',
-      },
-    ];
+    const inventoryStatus = await this.bookingModel.db
+      .model('InventoryItem')
+      .aggregate([
+        { $match: { providerId } },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ])
+      .then((rows: Array<{ _id: string; count: number }>) => rows.map((row) => ({
+        name: row._id,
+        status: row._id,
+        count: row.count,
+        detail: '',
+        color: row._id === 'AVAILABLE' ? 'available' : row._id === 'RENTED' ? 'rental' : 'maintenance',
+      })));
 
-    // 5. UC-K08: Doanh thu theo thời gian (6 tháng gần đây)
+    // 5. UC-K08: Doanh thu theo thời gian (Tuần, Tháng, Năm)
     const revenueGrowth = [];
-    const labels = [
-      'Tháng 1',
-      'Tháng 2',
-      'Tháng 3',
-      'Tháng 4',
-      'Tháng 5',
-      'Tháng 6',
-    ];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const start = new Date(d.getFullYear(), d.getMonth(), 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const now = new Date();
 
-      const mBookings = await this.bookingModel.find({
-        providerIds: providerId,
-        status: {
-          $in: [
-            'COMPLETED',
-            'CONFIRMED',
-            'DEPOSIT_PAID',
-            'PICKED_UP',
-            'RETURNED',
-          ],
-        },
-        createdAt: { $gte: start, $lte: end },
-      } as any);
-
-      let mRevenue = 0;
-      for (const b of mBookings) {
-        const items = await this.bookingItemModel.find({
-          bookingId: b._id,
-          providerId: providerId,
-        } as any);
-        mRevenue += items.reduce(
-          (sum, item) => sum + item.unitPrice * (item.quantity || 1),
-          0,
-        );
+    if (period === 'week') {
+      const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+        const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+        const value = bookings.reduce((sum, booking) => {
+          const createdAt = new Date((booking as any).createdAt);
+          return createdAt >= dayStart && createdAt <= dayEnd
+            ? sum + (revenueByBooking.get(booking._id.toString()) || 0)
+            : sum;
+        }, 0);
+        const shortLabel = dayNames[d.getDay()];
+        const label = `${shortLabel} (${d.getDate()}/${d.getMonth() + 1})`;
+        revenueGrowth.push({ label, shortLabel, value });
       }
-
-      revenueGrowth.push({
-        label: labels[5 - i],
-        value: mRevenue,
-      });
+    } else if (period === 'year') {
+      const currentYear = now.getFullYear();
+      for (let i = 4; i >= 0; i--) {
+        const year = currentYear - i;
+        const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
+        const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+        const value = bookings.reduce((sum, booking) => {
+          const createdAt = new Date((booking as any).createdAt);
+          return createdAt >= yearStart && createdAt <= yearEnd
+            ? sum + (revenueByBooking.get(booking._id.toString()) || 0)
+            : sum;
+        }, 0);
+        revenueGrowth.push({ label: `${year}`, shortLabel: `${year}`, value });
+      }
+    } else {
+      // 'month'
+      for (let i = 5; i >= 0; i--) {
+        const month = new Date(now);
+        month.setDate(1);
+        month.setHours(0, 0, 0, 0);
+        month.setMonth(month.getMonth() - i);
+        const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
+        const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+        const value = bookings.reduce((sum, booking) => {
+          const createdAt = new Date((booking as any).createdAt);
+          return createdAt >= monthStart && createdAt < monthEnd
+            ? sum + (revenueByBooking.get(booking._id.toString()) || 0)
+            : sum;
+        }, 0);
+        revenueGrowth.push({ label: `Tháng ${month.getMonth() + 1}`, shortLabel: `T${month.getMonth() + 1}`, value });
+      }
     }
 
     // 6. UC-K10: Lịch booking (Lấy lịch chụp thật của photographer)
@@ -696,7 +704,7 @@ export class ProvidersService {
     }
 
     // 8. UC-K12: Theo dõi đánh giá
-    const avgRating = provider.rating?.averageRating || 4.9;
+    const avgRating = provider.rating?.averageRating ?? 0;
 
     return {
       capabilities: provider.capabilities,
@@ -704,8 +712,8 @@ export class ProvidersService {
       commissionFee,
       successRate,
       cancelRate,
-      totalProducts: totalProducts || 8,
-      averageRentalDuration: '4.2h',
+      totalProducts,
+      averageRentalDuration: null,
       popularProducts,
       inventoryStatus,
       revenueGrowth,
@@ -728,5 +736,49 @@ export class ProvidersService {
     );
     if (!provider) throw new NotFoundException('Provider profile not found');
     return provider;
+  }
+
+  /**
+   * GET /providers/me/wallet
+   * Trả về số dư ví thợ ảnh (pendingBalance, availableBalance, totalEarned)
+   * và 10 settlement gần nhất để hiển thị lịch sử giao dịch.
+   */
+  async getWallet(userIdStr: string) {
+    const provider = await this.requireProvider(userIdStr);
+
+    const wallet = provider.wallet ?? {
+      pendingBalance: 0,
+      availableBalance: 0,
+      totalEarned: 0,
+      lastUpdatedAt: null,
+    };
+
+    // Fetch 10 most recent completed settlements for this provider
+    const Settlement = this.bookingModel.db.model('Settlement');
+    const recentSettlements = await Settlement
+      .find({ providerId: provider._id })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .select('settlementCode bookingId netAmount payableAmount status createdAt')
+      .populate({ path: 'bookingId', select: 'bookingCode bookingType' })
+      .lean();
+
+    return {
+      wallet: {
+        pendingBalance: wallet.pendingBalance,
+        availableBalance: wallet.availableBalance,
+        totalEarned: wallet.totalEarned,
+        lastUpdatedAt: wallet.lastUpdatedAt,
+      },
+      recentSettlements: recentSettlements.map((s: any) => ({
+        settlementCode: s.settlementCode,
+        bookingCode: s.bookingId?.bookingCode ?? '—',
+        bookingType: s.bookingId?.bookingType ?? '—',
+        netAmount: s.netAmount,
+        payableAmount: s.payableAmount,
+        status: s.status,
+        createdAt: s.createdAt,
+      })),
+    };
   }
 }

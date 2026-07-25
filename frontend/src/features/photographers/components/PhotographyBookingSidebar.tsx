@@ -43,7 +43,7 @@ export const PhotographyBookingSidebar: React.FC<PhotographyBookingSidebarProps>
   onAddToCart,
 }) => {
   const total = quote?.valid && quote.totals ? quote.totals.totalAmount : null;
-  const deposit = total === null ? null : Math.round(total * 0.3);
+  const deposit = total;
   const isDisabled = isBusy || isBooking || isQuoteLoading || Boolean(quoteError) || quote?.valid === false || !quote;
   const isAddToCartDisabled = isDisabled || !canAddToCart;
   const location = selectedLocation || 'Chưa chọn địa điểm';
@@ -96,10 +96,10 @@ export const PhotographyBookingSidebar: React.FC<PhotographyBookingSidebarProps>
             <>
               <div style={{ height: '1px', backgroundColor: 'rgba(0,0,0,0.06)' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px' }}>
-                <span style={{ color: 'var(--color-text-secondary)', fontWeight: 650 }}>Đặt cọc (30%):</span>
+                <span style={{ color: 'var(--color-text-secondary)', fontWeight: 650 }}>Thanh toán trước (100%):</span>
                 <strong style={{ color: 'var(--color-primary-dark)' }}>{formatCurrency(deposit)}</strong>
               </div>
-              <span style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', fontStyle: 'italic', textAlign: 'right' }}>Còn lại {formatCurrency((total ?? 0) - deposit)} thanh toán sau.</span>
+              <span style={{ fontSize: '10.5px', color: '#059669', fontStyle: 'italic', textAlign: 'right' }}>Dịch vụ sẽ được giữ tiền an toàn tới khi chụp xong</span>
             </>
           )}
         </div>

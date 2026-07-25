@@ -222,7 +222,6 @@ export class ProviderVerification {
     type: [String],
     enum: Object.values(ProviderCapability),
     default: [],
-    index: true,
   })
   requestedCapabilities: ProviderCapability[];
 

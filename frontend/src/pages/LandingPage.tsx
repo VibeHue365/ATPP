@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AoDaiProductGrid } from '../features/rentals/components/AoDaiProductGrid';
 import { PhotographerFeaturedList } from '../features/photographers/components/PhotographerFeaturedList';
+import { ComboDealsSection } from '../features/combos/components/ComboDealsSection';
 import { AIStylingBanner } from '../features/ai-styling/components/AIStylingBanner';
 import { TestimonialGrid } from '../features/testimonials/components/TestimonialGrid';
 import { Sparkles, ArrowRight, Compass, Bookmark, Cpu } from 'lucide-react';
@@ -231,6 +232,9 @@ export const LandingPage: React.FC = () => {
 
       {/* Trending Ao Dai Rentals Grid */}
       <AoDaiProductGrid />
+
+      {/* Premium Combo Deals Section */}
+      <ComboDealsSection />
 
       {/* Featured Photographers List */}
       <PhotographerFeaturedList />

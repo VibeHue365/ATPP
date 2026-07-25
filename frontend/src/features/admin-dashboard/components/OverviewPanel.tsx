@@ -1,17 +1,24 @@
+import { useState } from 'react';
 import { useAdminTransactions } from '../hooks/useAdminTransactions';
 import { useAdminStats } from '../hooks/useAdminStats';
-import { BookingDistribution, MetricCard, TransactionTable, TrendChart } from './AdminAnalyticsShared';
+import { BookingDistribution, MetricCard, TransactionTable, GroupedBarChart } from './AdminAnalyticsShared';
 import { formatCurrency } from '../utils/adminAnalyticsUtils';
 
+import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';
+
 export function OverviewPanel() {
-  const stats = useAdminStats();
+  const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month');
+  const stats = useAdminStats(period);
   const transactions = useAdminTransactions();
   const data = stats.data;
 
   return (
     <section className="admin-dashboard-panel">
       <div className="admin-dashboard-panel__toolbar">
-        <button type="button" onClick={() => { void stats.refresh(); void transactions.refresh(); }} disabled={stats.isLoading || transactions.loading}>Tải lại</button>
+        <AdminReloadButton
+          onClick={() => { void stats.refresh(); void transactions.refresh(); }}
+          isLoading={stats.isLoading || transactions.loading}
+        />
       </div>
       {(stats.error || transactions.error) && <p className="admin-dashboard-panel__error" role="alert">{stats.error || transactions.error}</p>}
 
@@ -25,11 +32,16 @@ export function OverviewPanel() {
       </div>
 
       <div className="admin-analytics-split">
-        <TrendChart title="Thống kê đơn đặt lịch" legend="Đơn đặt lịch theo kỳ" points={data?.bookings?.growth ?? []} />
+        <GroupedBarChart
+          title="THỐNG KÊ ĐƠN ĐẶT LỊCH & DOANH THU"
+          period={period}
+          onPeriodChange={setPeriod}
+          bookingsGrowth={data?.bookings?.growth}
+          customersGrowth={data?.customers?.growth}
+          revenueGrowth={data?.revenue?.growth}
+        />
         <BookingDistribution items={data?.userBehavior?.popularBookings ?? []} />
       </div>
-
-      <TransactionTable title="Lịch sử giao dịch thanh toán gần đây" items={(transactions.data?.items ?? []).slice(0, 3)} />
       </>}
     </section>
   );

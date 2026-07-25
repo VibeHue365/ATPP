@@ -28,7 +28,21 @@ async function bootstrap() {
   app.use(cookieParser());
   // The Vite frontend is served from a different local origin in development.
   // Product/review uploads must be embeddable in its image elements.
-  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.tailwindcss.com"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          fontSrc: ["'self'", "https://fonts.gstatic.com"],
+          imgSrc: ["'self'", "data:", "https://img.vietqr.io", "https://images.unsplash.com", "*"],
+          connectSrc: ["'self'"],
+        },
+      },
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.use(securityHeaders);
   app.use(requestLogger(logger));
   if (process.env.SERVE_LEGACY_UPLOADS !== 'false') {

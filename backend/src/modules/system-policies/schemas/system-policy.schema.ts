@@ -12,7 +12,6 @@ export class SystemPolicy {
     type: String,
     enum: Object.values(PolicyCode),
     required: true,
-    index: true,
   })
   code: PolicyCode;
 

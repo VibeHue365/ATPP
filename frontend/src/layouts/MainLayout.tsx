@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { ROUTES } from '../config/routes';
-import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X, ShieldCheck, Check, CheckCheck } from 'lucide-react';
+import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X, ShieldCheck, Check, CheckCheck, MessageSquare } from 'lucide-react';
 import { API_BASE_URL } from '../config/env';
 import { AIChatBot } from '../features/dashboard/components/AIChatBot';
 import { useCart } from '../context/CartContext';
@@ -183,12 +183,12 @@ export const MainLayout: React.FC = () => {
               Nhiếp ảnh
             </Link>
 
-            <a 
-              href="/#heritage" 
-              className={`vh-header-nav-link-custom ${location.hash === '#heritage' ? 'active' : ''}`}
+            <Link 
+              to={ROUTES.COMBOS} 
+              className={`vh-header-nav-link-custom ${location.pathname === ROUTES.COMBOS ? 'active' : ''}`}
             >
-              Di sản
-            </a>
+              Combo
+            </Link>
           </nav>
 
           {/* Search bar Pill-shaped */}
@@ -372,7 +372,7 @@ export const MainLayout: React.FC = () => {
                       textAlign: 'center', background: '#FDFCFA'
                     }}>
                       <button
-                        onClick={() => { setIsNotiOpen(false); navigate('/dashboard/profile?tab=notifications'); }}
+                        onClick={() => { setIsNotiOpen(false); navigate(ROUTES.NOTIFICATIONS); }}
                         style={{
                           background: 'none', border: 'none', color: '#B89047',
                           fontSize: '12px', fontWeight: 700, cursor: 'pointer',
@@ -404,6 +404,10 @@ export const MainLayout: React.FC = () => {
                 </div>
               )}
             </div>
+            <Link to={ROUTES.CHAT} className="vh-header-action-icon-custom" title="Tin nhắn & Chat" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <MessageSquare size={20} />
+            </Link>
+
             <Link to={ROUTES.CART} className="vh-header-action-icon-custom" title="Giỏ hàng" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ShoppingBag size={20} />
               {cart.length > 0 && (
@@ -532,6 +536,15 @@ export const MainLayout: React.FC = () => {
                         <span>Cài đặt</span>
                       </Link>
 
+                      <Link 
+                        to={ROUTES.NOTIFICATIONS} 
+                        className="vh-header-dropdown-item-link" 
+                        onClick={() => setIsDropdownOpen(false)}
+                      >
+                        <Bell size={16} />
+                        <span>Thông báo</span>
+                      </Link>
+
                       <div className="vh-header-dropdown-divider-line"></div>
 
                       <button 
@@ -572,10 +585,10 @@ export const MainLayout: React.FC = () => {
           </div>
           
           <div className="vh-footer-right-links">
-            <a href="#about">About Us</a>
-            <a href="#terms">Terms of Service</a>
-            <a href="#privacy">Privacy Policy</a>
-            <a href="#contact">Contact</a>
+            <a href="#about">Về chúng tôi</a>
+            <a href="#terms">Điều khoản dịch vụ</a>
+            <a href="#privacy">Chính sách bảo mật</a>
+            <a href="#contact">Liên hệ</a>
           </div>
         </div>
       </footer>

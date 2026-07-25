@@ -44,7 +44,7 @@ export class Settlement {
   @Prop({ required: true, unique: true, index: true, trim: true, uppercase: true })
   settlementCode: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Booking', required: true })
   bookingId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'Provider', required: true, index: true })

@@ -15,7 +15,11 @@ import {
   CalendarRange,
   Star,
   Pencil,
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
+  Download,
+  XCircle,
+  Scale
 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/env';
 import { ROUTES } from '../../config/routes';
@@ -24,6 +28,43 @@ import { CustomerDashboard } from '../../features/dashboard/components/CustomerD
 import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
 import type { LocationSelection } from '../../features/photographers/types/photographer.types';
 import { RentalPickupReturnPanel } from '../../features/rentals/components/RentalPickupReturnPanel';
+import { ImageWithFallback } from '../../shared/media/ImageWithFallback';
+import { downloadPhotosAsZip, downloadSinglePhoto } from '../../utils/downloadUtils';
+
+type TimeRange = { start: string; end: string };
+type BusyTimeSlot = { date: string; timeSlot: string; bookingItemId?: string };
+
+const toMinutes = (value: string): number => {
+  const [hours, minutes] = value.trim().split(':').map(Number);
+  return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : NaN;
+};
+
+const toTime = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+const timeSlotsOverlap = (first: string, second: string): boolean => {
+  const [firstStart, firstEnd] = first.split('-').map(toMinutes);
+  const [secondStart, secondEnd] = second.split('-').map(toMinutes);
+  return [firstStart, firstEnd, secondStart, secondEnd].every(Number.isFinite)
+    && firstStart < secondEnd
+    && secondStart < firstEnd;
+};
+
+const getEntityId = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    if (/^[0-9a-fA-F]{24}$/.test(value)) return value;
+    return null;
+  }
+  if (value && typeof value === 'object') {
+    if ('_id' in value && typeof (value as any)._id === 'string' && /^[0-9a-fA-F]{24}$/.test((value as any)._id)) {
+      return (value as any)._id;
+    }
+    if ('providerId' in value) {
+      return getEntityId((value as any).providerId);
+    }
+  }
+  return null;
+};
 
 export const ProfilePage: React.FC = () => {
   const { user } = useAuth();
@@ -57,9 +98,14 @@ export const ProfilePage: React.FC = () => {
   const [rescheduleShootDate, setRescheduleShootDate] = useState('');
   const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
   const [rescheduleReason, setRescheduleReason] = useState('');
+  const [customRescheduleDuration, setCustomRescheduleDuration] = useState<number>(0);
+  const [availableRescheduleSlots, setAvailableRescheduleSlots] = useState<string[]>([]);
+  const [isLoadingRescheduleSlots, setIsLoadingRescheduleSlots] = useState(false);
+  const [rescheduleSlotsError, setRescheduleSlotsError] = useState<string | null>(null);
 
   // Bookings list state
   const [bookings, setBookings] = useState<any[]>([]);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(true);
 
   // Review states (UC-B03/UC-D05)
   const [reviewingItem, setReviewingItem] = useState<any>(null);
@@ -94,17 +140,19 @@ export const ProfilePage: React.FC = () => {
   const [bookingIncident, setBookingIncident] = useState<any | null>(null);
 
   useEffect(() => {
+    // Immediately clear stale incident data when switching bookings
+    setBookingIncident(null);
+
     const fetchIncident = async () => {
       if (activeDetailBooking) {
         try {
-          const inc = await httpClient.get(`/api/disputes/incidents/booking/${activeDetailBooking._id}`);
-          setBookingIncident(inc);
+          const inc = await httpClient.get<any | null>(`/api/disputes/incidents/booking/${activeDetailBooking._id}`);
+          // Only set if it's a real incident object (not null/undefined/empty)
+          setBookingIncident(inc && inc._id ? inc : null);
         } catch (err) {
           console.error('Không thể tải thông tin sự cố:', err);
           setBookingIncident(null);
         }
-      } else {
-        setBookingIncident(null);
       }
     };
     fetchIncident();
@@ -151,12 +199,36 @@ export const ProfilePage: React.FC = () => {
     return localStorage.getItem(`vh_user_location_${user?.id}`) || 'Hà Nội, VN';
   });
 
-  const fetchBookings = async () => {
+  const fetchBookings = async (silent = false) => {
+    if (!silent) setIsLoadingBookings(true);
     try {
       const data = await httpClient.get<any[]>('/api/bookings');
-      setBookings(data || []);
+      
+      setBookings(prevBookings => {
+        const isBookingsChanged = (prev: any[], next: any[]) => {
+          if (prev.length !== next.length) return true;
+          for (let i = 0; i < prev.length; i++) {
+            if (prev[i]._id !== next[i]._id) return true;
+            if (prev[i].status !== next[i].status) return true;
+            
+            const prevItems = prev[i].items || [];
+            const nextItems = next[i].items || [];
+            if (prevItems.length !== nextItems.length) return true;
+            for (let j = 0; j < prevItems.length; j++) {
+              if (prevItems[j].rentalFulfillment?.status !== nextItems[j].rentalFulfillment?.status) return true;
+              if (prevItems[j].rescheduleRequest?.status !== nextItems[j].rescheduleRequest?.status) return true;
+            }
+          }
+          return false;
+        };
+        
+        const changed = isBookingsChanged(prevBookings, data || []);
+        return changed ? (data || []) : prevBookings;
+      });
     } catch (err) {
       console.error('Lỗi khi tải danh sách đơn hàng:', err);
+    } finally {
+      if (!silent) setIsLoadingBookings(false);
     }
   };
 
@@ -351,7 +423,7 @@ export const ProfilePage: React.FC = () => {
       toast.info('Đang tải liên kết thanh toán...');
       const paymentRes: any = await httpClient.post('/payments/create-link', {
         bookingId,
-        purpose: 'FULL_PAYMENT',
+        purpose: activeDetailBooking?.bookingType === 'COMBO' ? 'DEPOSIT_PAYMENT' : 'FULL_PAYMENT',
       });
       if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
         toast.success('Đang chuyển hướng tới cổng thanh toán PayOS Simulator...');
@@ -391,6 +463,87 @@ export const ProfilePage: React.FC = () => {
       setIsSubmittingLocationChange(false);
     }
   };
+
+  const rescheduleIncludedDuration = useMemo(() => {
+    const packageDuration = Number(
+      rescheduleItem?.photographyPackageId?.includedDurationMinutes
+      || rescheduleItem?.photographyPackageId?.durationMinutes,
+    );
+    if (Number.isFinite(packageDuration) && packageDuration > 0) return packageDuration;
+    const packageHours = Number(rescheduleItem?.photographyPackageId?.durationHours);
+    return Number.isFinite(packageHours) && packageHours > 0 ? packageHours * 60 : 120;
+  }, [rescheduleItem]);
+
+  const rescheduleDurationMinutes = useMemo(() => {
+    if (customRescheduleDuration > 0) return customRescheduleDuration;
+    const currentSlot = String(rescheduleItem?.shootTimeSlot || '');
+    const [start, end] = currentSlot.split('-').map(toMinutes);
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) return end - start;
+    return rescheduleIncludedDuration;
+  }, [rescheduleItem, customRescheduleDuration, rescheduleIncludedDuration]);
+
+  useEffect(() => {
+    if (!isRescheduleOpen || !rescheduleItem || rescheduleItem.itemType === 'PRODUCT' || !rescheduleShootDate) {
+      setAvailableRescheduleSlots([]);
+      setRescheduleSlotsError(null);
+      return;
+    }
+
+    const photographerId =
+      getEntityId(rescheduleItem.providerId) ||
+      getEntityId(rescheduleItem.photographerId) ||
+      getEntityId(rescheduleItem.photographyPackageId?.providerId) ||
+      getEntityId(activeDetailBooking?.providerIds?.[0]);
+
+    if (!photographerId) {
+      setAvailableRescheduleSlots([]);
+      setRescheduleSlotsError('Không xác định được nhiếp ảnh gia của lịch này.');
+      return;
+    }
+
+    const cleanShootDate = String(rescheduleShootDate).slice(0, 10);
+    let isCurrent = true;
+    setIsLoadingRescheduleSlots(true);
+    setRescheduleSlotsError(null);
+    setRescheduleTimeSlot('');
+
+    Promise.all([
+      httpClient.get<{ timeRanges: TimeRange[] }>(`/api/photographers/${photographerId}/availability?date=${cleanShootDate}`),
+      httpClient.get<{ bookedSlots: BusyTimeSlot[] }>(`/api/bookings/busy-dates/provider/${photographerId}`),
+    ])
+      .then(([availability, busy]) => {
+        if (!isCurrent) return;
+        const slots = (availability.timeRanges || []).flatMap((range) => {
+          const rangeStart = toMinutes(range.start);
+          const rangeEnd = toMinutes(range.end);
+          if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd) || rangeEnd <= rangeStart) return [];
+
+          const candidates: string[] = [];
+          for (let start = rangeStart; start + rescheduleDurationMinutes <= rangeEnd; start += 30) {
+            const candidate = `${toTime(start)}-${toTime(start + rescheduleDurationMinutes)}`;
+            const conflicts = (busy.bookedSlots || []).some((booked) =>
+              booked.date === rescheduleShootDate
+              && String(booked.bookingItemId || '') !== String(rescheduleItem._id)
+              && timeSlotsOverlap(candidate, booked.timeSlot),
+            );
+            if (!conflicts) candidates.push(candidate);
+          }
+          return candidates;
+        });
+        setAvailableRescheduleSlots([...new Set(slots)]);
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setAvailableRescheduleSlots([]);
+        setRescheduleSlotsError('Không thể tải khung giờ trống. Vui lòng thử lại.');
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoadingRescheduleSlots(false);
+      });
+
+    return () => { isCurrent = false; };
+  }, [isRescheduleOpen, rescheduleItem, rescheduleShootDate, rescheduleDurationMinutes]);
+
   const handleReschedule = async () => {
     if (!rescheduleItem || !activeDetailBooking) return;
     const isProduct = rescheduleItem.itemType === 'PRODUCT';
@@ -398,20 +551,24 @@ export const ProfilePage: React.FC = () => {
       toast.error('Vui lòng chọn ngày nhận và ngày trả mới');
       return;
     }
-    if (!isProduct && !rescheduleShootDate) {
-      toast.error('Vui lòng chọn ngày chụp mới');
+    if (!isProduct && (!rescheduleShootDate || !rescheduleTimeSlot)) {
+      toast.error('Vui lòng chọn ngày chụp và khung giờ còn trống');
       return;
     }
     try {
-      await httpClient.patch<any>(`/api/bookings/${activeDetailBooking._id}/reschedule`, {
+      const res = await httpClient.patch<any>(`/api/bookings/${activeDetailBooking._id}/reschedule`, {
         itemId: rescheduleItem._id,
         ...(isProduct ? { newRentalFrom: rescheduleFrom, newRentalTo: rescheduleTo } : {
           newShootDate: rescheduleShootDate,
-          newShootTimeSlot: rescheduleTimeSlot || undefined,
+          newShootTimeSlot: rescheduleTimeSlot,
         }),
         reason: rescheduleReason || undefined,
       });
-      toast.success('Đổi lịch thành công!');
+      if (res?.directUpdate || res?.status === 'APPROVED') {
+        toast.success('Lịch chụp mới đã được cập nhật trực tiếp thành công!');
+      } else {
+        toast.success('Đã gửi yêu cầu đổi lịch. Vui lòng chờ provider xác nhận.');
+      }
       setIsRescheduleOpen(false);
       setRescheduleItem(null);
       setRescheduleFrom('');
@@ -528,6 +685,7 @@ export const ProfilePage: React.FC = () => {
         <CustomerDashboard
           user={user}
           bookings={bookings}
+          isLoadingBookings={isLoadingBookings}
           onViewDetails={(b) => setActiveDetailBooking(b)}
           onRefresh={fetchBookings}
         />
@@ -669,6 +827,232 @@ export const ProfilePage: React.FC = () => {
               </div>
             </div>
 
+            {/* Photography Delivered Photos */}
+            {(() => {
+              const photos = (activeDetailBooking.deliveredPhotos && activeDetailBooking.deliveredPhotos.length > 0)
+                ? activeDetailBooking.deliveredPhotos
+                : [];
+              const driveUrl = activeDetailBooking.deliveryDriveUrl;
+
+              if (photos.length === 0 && !driveUrl) return null;
+
+              return (
+                <div style={{
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '10px',
+                  padding: '14px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1D4ED8', fontWeight: 700, fontSize: '13px' }}>
+                      <Camera size={16} />
+                      <span>📸 ẢNH KẾT QUẢ TỪ THỢ CHỤP</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {driveUrl && (
+                        <a
+                          href={driveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            background: '#2563EB', color: 'white', border: 'none',
+                            borderRadius: '6px', padding: '6px 12px', fontSize: '12px',
+                            fontWeight: 700, textDecoration: 'none', transition: 'all 0.2s',
+                            boxShadow: '0 2px 4px rgba(37,99,235,0.2)'
+                          }}
+                        >
+                          🔗 Mở Kho Ảnh Gốc (Google Drive)
+                        </a>
+                      )}
+                      {photos.length > 0 && (
+                        <button
+                          onClick={() => {
+                            const zipName = `anh_chup_${activeDetailBooking.bookingCode || 'ket_qua'}.zip`;
+                            void downloadPhotosAsZip(photos, zipName, toast);
+                          }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            background: '#1D4ED8', color: 'white', border: 'none',
+                            borderRadius: '6px', padding: '5px 10px', fontSize: '11px',
+                            fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                          }}
+                          onMouseOver={(e) => (e.currentTarget.style.background = '#1E40AF')}
+                          onMouseOut={(e) => (e.currentTarget.style.background = '#1D4ED8')}
+                        >
+                          <Download size={12} /> Tải tất cả ({photos.length})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {photos.length > 0 && (
+                    <>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        {photos.map((photo: string, index: number) => {
+                          const photoUrl = photo.startsWith('http') ? photo : `${import.meta.env.VITE_API_URL || ''}${photo}`;
+                          return (
+                            <div key={index} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #BFDBFE', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}>
+                              <a href={photoUrl} target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
+                                <img src={photoUrl} alt={`Ảnh kết quả ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => void downloadSinglePhoto(photoUrl, `photo_${index + 1}.jpg`)}
+                                style={{
+                                  position: 'absolute', bottom: '3px', right: '3px',
+                                  background: 'rgba(29, 78, 216, 0.85)', color: 'white',
+                                  border: 'none', borderRadius: '4px', padding: '3px', display: 'flex',
+                                  alignItems: 'center', justifyContent: 'center',
+                                  cursor: 'pointer', transition: 'all 0.2s',
+                                }}
+                                title="Tải xuống"
+                              >
+                                <Download size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p style={{ fontSize: '11px', color: '#6B7280', margin: 0, lineHeight: 1.4 }}>
+                        Thợ chụp đã bàn giao {photos.length} ảnh. Bấm vào ảnh để xem hoặc nút ⬇ để tải về.
+                      </p>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Cancellation Reason Display */}
+            {activeDetailBooking.status === 'CANCELLED' && activeDetailBooking.cancellation?.reason && (
+              <div style={{
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                borderRadius: '10px',
+                padding: '14px 18px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontWeight: 700, fontSize: '13px' }}>
+                  <XCircle size={16} />
+                  <span>LÝ DO HỦY ĐƠN</span>
+                </div>
+                <p style={{ fontSize: '13px', color: '#7F1D1D', margin: 0, lineHeight: 1.5, fontWeight: 500 }}>
+                  {activeDetailBooking.cancellation.reason}
+                </p>
+                {activeDetailBooking.cancellation.cancelledAt && (
+                  <p style={{ fontSize: '11px', color: '#9CA3AF', margin: 0 }}>
+                    Thời gian hủy: {new Date(activeDetailBooking.cancellation.cancelledAt).toLocaleString('vi-VN')}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Admin Dispute Result Display */}
+            {(() => {
+              const resInput = activeDetailBooking.disputeResult || (() => {
+                const log = [...(activeDetailBooking.statusTimeline || [])].reverse().find((t: any) => t.note?.includes('Admin giải quyết tranh chấp'));
+                if (!log) return null;
+                return {
+                  decisionLabel: log.note,
+                  resolvedAt: log.changedAt,
+                };
+              })();
+
+              if (!resInput) return null;
+
+              let decisionText = resInput.decisionLabel || 'Admin đã phán quyết';
+              let adminNote = resInput.notes || '';
+              let refundAmt: any = resInput.refundAmount;
+              let compAmt: any = resInput.compensationAmount;
+
+              if (typeof decisionText === 'string' && decisionText.includes('Admin giải quyết tranh chấp.')) {
+                const raw = decisionText;
+                const decMatch = raw.match(/Quyết định:\s*([^.]+)/);
+                if (decMatch) decisionText = decMatch[1].trim();
+
+                const noteMatch = raw.match(/Ghi chú:\s*(.*)$/);
+                if (noteMatch && !adminNote) adminNote = noteMatch[1].trim();
+
+                const refMatch = raw.match(/Hoàn khách:\s*([\d.,\s]+đ)/);
+                if (refMatch && (refundAmt === undefined || refundAmt === null)) {
+                  refundAmt = refMatch[1];
+                }
+                const compMatch = raw.match(/bồi thường provider:\s*([\d.,\s]+đ)/);
+                if (compMatch && (compAmt === undefined || compAmt === null)) {
+                  compAmt = compMatch[1];
+                }
+              }
+
+              return (
+                <div style={{
+                  backgroundColor: '#FFFBEB',
+                  border: '1px solid #FCD34D',
+                  borderRadius: '10px',
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  boxShadow: '0 2px 8px rgba(217, 119, 6, 0.08)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#B45309', fontWeight: 750, fontSize: '14px' }}>
+                    <Scale size={18} />
+                    <span>⚖️ KẾT QUẢ GIẢI QUYẾT TRANH CHẤP TỪ ADMIN</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: '13px', borderTop: '1px solid #FDE68A', paddingTop: '10px' }}>
+                    <div>
+                      <span style={{ color: '#6B7280' }}>Quyết định: </span>
+                      <strong style={{ color: '#D97706', fontSize: '13.5px' }}>{decisionText}</strong>
+                    </div>
+                    {refundAmt !== undefined && refundAmt !== null && (
+                      <div>
+                        <span style={{ color: '#6B7280' }}>Hoàn tiền khách: </span>
+                        <strong style={{ color: '#059669' }}>
+                          {typeof refundAmt === 'number' ? `${refundAmt.toLocaleString('vi-VN')}đ` : refundAmt}
+                        </strong>
+                      </div>
+                    )}
+                    {compAmt !== undefined && compAmt !== null && (
+                      <div>
+                        <span style={{ color: '#6B7280' }}>Bồi thường shop/thợ: </span>
+                        <strong style={{ color: '#D97706' }}>
+                          {typeof compAmt === 'number' ? `${compAmt.toLocaleString('vi-VN')}đ` : compAmt}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+
+                  {adminNote && (
+                    <div style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #FDE68A',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      marginTop: '2px',
+                    }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#B45309', textTransform: 'uppercase', marginBottom: '4px' }}>
+                        💬 Ghi chú phán quyết từ Admin:
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#1F2937', lineHeight: 1.5, whiteSpace: 'pre-wrap', fontWeight: 500 }}>
+                        "{adminNote}"
+                      </div>
+                    </div>
+                  )}
+
+                  {resInput.resolvedAt && (
+                    <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
+                      Thời gian phán quyết: {new Date(resInput.resolvedAt).toLocaleString('vi-VN')}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Items details loop */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary-dark)', margin: 0 }}>
@@ -677,6 +1061,20 @@ export const ProfilePage: React.FC = () => {
 
               {activeDetailBooking.items?.map((item: any, idx: number) => {
                 const isProduct = item.itemType === 'PRODUCT';
+                const populatedProduct = isProduct && item.productId && typeof item.productId === 'object'
+                  ? item.productId
+                  : null;
+                const selectedColorImages = populatedProduct?.colorImages?.find(
+                  (entry: { color?: string; images?: string[] }) =>
+                    entry.color?.trim().toUpperCase() === item.color?.trim().toUpperCase(),
+                )?.images;
+                const itemImage = selectedColorImages?.[0]
+                  || populatedProduct?.images?.[0]
+                  || item.image
+                  || item.productImage;
+                const itemName = populatedProduct?.name
+                  || item.name
+                  || (isProduct ? 'Sản phẩm áo dài' : 'Gói chụp ảnh cổ phục');
                 const formattedDateStr = isProduct
                   ? (item.rentalType === 'DAILY'
                     ? `${formatDate(item.startDate || item.rentalFrom)} - ${formatDate(item.endDate || item.rentalTo)}`
@@ -695,9 +1093,17 @@ export const ProfilePage: React.FC = () => {
                       backgroundColor: 'white'
                     }}
                   >
-                    <img
-                      src={item.image || item.productImage || (isProduct ? 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b' : '/avatar_hanna.png')}
-                      alt={item.name}
+                    <ImageWithFallback
+                      src={itemImage || (isProduct ? undefined : '/avatar_hanna.png')}
+                      alt={itemName}
+                      fallback={
+                        <div
+                          aria-label={'Chưa có ảnh cho ' + itemName}
+                          style={{ width: '80px', height: '100px', display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: '6px', border: '1px solid #EAEAE8', background: '#F7F3ED', color: '#9A8170', fontSize: '11px', textAlign: 'center', padding: '8px' }}
+                        >
+                          Chưa có ảnh
+                        </div>
+                      }
                       style={{ width: '80px', height: '100px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #EAEAE8' }}
                     />
 
@@ -705,7 +1111,7 @@ export const ProfilePage: React.FC = () => {
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <h5 style={{ fontSize: '15px', fontWeight: 700, color: '#2D2926', margin: 0 }}>
-                            {item.name || (isProduct ? 'Sản phẩm áo dài' : 'Gói chụp ảnh cổ phục')}
+                            {itemName}
                           </h5>
                           {activeDetailBooking.status === 'COMPLETED' && (
                             item.isReviewed ? (
@@ -787,7 +1193,7 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             {/* Incident / Dispute section */}
-            {bookingIncident && (
+            {bookingIncident && bookingIncident._id && (
               <div style={{
                 backgroundColor: '#FFF5F5',
                 border: '1px solid #FEB2B2',
@@ -816,9 +1222,8 @@ export const ProfilePage: React.FC = () => {
                 <div style={{ fontSize: '13px', color: '#2D3748', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <span>Sản phẩm gặp sự cố: <strong>{bookingIncident.bookingItemId?.name || bookingIncident.productId?.name || 'Sản phẩm'}</strong></span>
                   <span>Hình thức xử lý: <strong>{bookingIncident.bookingItemId?.actionType === 'MAINTENANCE' || bookingIncident.actionType === 'MAINTENANCE' ? 'Sửa chữa / Bảo dưỡng (MAINTENANCE)' : 'Giặt là / Tẩy rửa (CLEANING)'}</strong></span>
-                  <span>Mô tả sự cố: <em style={{ color: '#4A5568' }}>"{bookingIncident.description}"</em></span>
-                  <span>Số tiền đền bù yêu cầu: <strong style={{ color: '#C53030', fontSize: '15px' }}>{bookingIncident.requestedAmount?.toLocaleString('vi-VN')}đ</strong></span>
-
+                  <span>Mô tả sự cố: <em style={{ color: '#4A5568' }}>{bookingIncident.description ? `"${bookingIncident.description}"` : <span style={{ color: '#A0AEC0' }}>Không có mô tả</span>}</em></span>
+                  <span>Số tiền đền bù yêu cầu: <strong style={{ color: '#C53030', fontSize: '15px' }}>{(bookingIncident.requestedAmount ?? 0).toLocaleString('vi-VN')}đ</strong></span>
                   {bookingIncident.evidencePhotos && bookingIncident.evidencePhotos.length > 0 && (
                     <div style={{ marginTop: '8px' }}>
                       <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#4A5568', marginBottom: '4px' }}>Hình ảnh bằng chứng:</span>
@@ -902,37 +1307,79 @@ export const ProfilePage: React.FC = () => {
                 })}
               </section>
             )}
+
             {/* Financial Summary */}
-            <div style={{ marginLeft: 'auto', width: '320px', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #EAEAE8', paddingTop: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span>Giá thuê/chụp:</span>
-                <span>{(activeDetailBooking.pricingSummary?.subTotal || 0).toLocaleString('vi-VN')}đ</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span>Tiền cọc trang phục:</span>
-                <span>{(activeDetailBooking.pricingSummary?.depositTotal || 0).toLocaleString('vi-VN')}đ</span>
-              </div>
-              {activeDetailBooking.pricingSummary?.discountAmount > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#27AE60' }}>
-                  <span>Giảm giá:</span>
-                  <span>-{(activeDetailBooking.pricingSummary?.discountAmount || 0).toLocaleString('vi-VN')}đ</span>
+            {(() => {
+              const bType = activeDetailBooking.bookingType || 'PHOTOGRAPHY';
+              const depositTotal = activeDetailBooking.pricingSummary?.depositTotal || 0;
+              const subTotal = activeDetailBooking.pricingSummary?.subTotal || 0;
+              const discountAmount = activeDetailBooking.pricingSummary?.discountAmount || 0;
+              const grandTotal = activeDetailBooking.pricingSummary?.grandTotal || 0;
+              const isPaid = activeDetailBooking.status !== 'PENDING_PAYMENT' && activeDetailBooking.status !== 'WAITING_PAYMENT';
+              const totalPaid = activeDetailBooking.paymentSummary?.totalPaid || (isPaid ? grandTotal : 0);
+
+              const photoBasePrice = grandTotal || subTotal;
+              const photoDeposit = Math.round(photoBasePrice * 0.3);
+
+              return (
+                <div style={{ marginLeft: 'auto', width: '350px', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #EAEAE8', paddingTop: '12px' }}>
+                  {bType === 'PHOTOGRAPHY' ? (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                        <span>Tiền gói dịch vụ chụp ảnh:</span>
+                        <span style={{ fontWeight: 600 }}>{photoBasePrice.toLocaleString('vi-VN')}đ</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#D97706', paddingLeft: '8px' }}>
+                        <span>• Trong đó: Cọc giữ lịch chụp (30%):</span>
+                        <span style={{ fontWeight: 600 }}>{photoDeposit.toLocaleString('vi-VN')}đ</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                        <span>{bType === 'AODAI_RENTAL' ? 'Tiền thuê áo dài:' : 'Tiền dịch vụ chụp & thuê:'}</span>
+                        <span>{subTotal.toLocaleString('vi-VN')}đ</span>
+                      </div>
+
+                      {depositTotal > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                          <span>Tiền cọc giữ đồ trang phục (Hoàn trả khi trả đồ):</span>
+                          <span style={{ color: '#D97706', fontWeight: 600 }}>{depositTotal.toLocaleString('vi-VN')}đ</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {discountAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#27AE60' }}>
+                      <span>Giảm giá:</span>
+                      <span>-{discountAmount.toLocaleString('vi-VN')}đ</span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', borderTop: '1px dashed #EAEAE8', paddingTop: '8px' }}>
+                    <span>Tổng chi phí:</span>
+                    <span style={{ color: '#4A0E17' }}>{grandTotal.toLocaleString('vi-VN')}đ</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#059669', marginTop: '4px', fontWeight: 700 }}>
+                    <span>{isPaid ? 'Thanh toán online (100%):' : 'Cần thanh toán online:'}</span>
+                    <span>{(isPaid ? (totalPaid || grandTotal) : grandTotal).toLocaleString('vi-VN')}đ</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#8C827A' }}>
+                    <span>Còn lại thanh toán tại tiệm:</span>
+                    <span style={{ fontWeight: 700, color: '#27AE60' }}>0đ</span>
+                  </div>
+
+                  {isPaid && (
+                    <div style={{ fontSize: '11px', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '4px 8px', borderRadius: '6px', textAlign: 'center', marginTop: '2px', fontWeight: 700 }}>
+                      ✅ Đã thanh toán đầy đủ 100% online
+                    </div>
+                  )}
                 </div>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', borderTop: '1px dashed #EAEAE8', paddingTop: '8px' }}>
-                <span>Tổng chi phí:</span>
-                <span>{(activeDetailBooking.pricingSummary?.grandTotal || 0).toLocaleString('vi-VN')}đ</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#8C827A', marginTop: '4px' }}>
-                <span>Đã cọc (thanh toán online):</span>
-                <span style={{ fontWeight: 600 }}>{(activeDetailBooking.paymentSummary?.totalPaid || 0).toLocaleString('vi-VN')}đ</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#8C827A' }}>
-                <span>Còn lại thanh toán tại tiệm:</span>
-                <span style={{ fontWeight: 600, color: (activeDetailBooking.pricingSummary?.grandTotal - activeDetailBooking.paymentSummary?.totalPaid) > 0 ? '#D35400' : '#27AE60' }}>
-                  {Math.max(0, (activeDetailBooking.pricingSummary?.grandTotal || 0) - (activeDetailBooking.paymentSummary?.totalPaid || 0)).toLocaleString('vi-VN')}đ
-                </span>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Footer action buttons */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px', borderTop: '1px solid #EAEAE8', paddingTop: '16px' }}>
@@ -956,42 +1403,52 @@ export const ProfilePage: React.FC = () => {
                     if (activeDetailBooking.items && activeDetailBooking.items.length > 0) {
                       setRescheduleItem(activeDetailBooking.items[0]);
                       const item = activeDetailBooking.items[0];
+                      if (item.rescheduleRequest?.status === 'PENDING') {
+                        toast.info('Yêu cầu đổi lịch của đơn này đang chờ provider phản hồi.');
+                        return;
+                      }
                       if (item.itemType === 'PRODUCT') {
                         setRescheduleFrom(item.startDate || item.rentalFrom || '');
                         setRescheduleTo(item.endDate || item.rentalTo || '');
                       } else {
-                        setRescheduleShootDate(item.shootDate || '');
+                        const rawDate = item.shootDate ? String(item.shootDate).slice(0, 10) : '';
+                        setRescheduleShootDate(rawDate);
                         setRescheduleTimeSlot(item.shootTimeSlot || '');
                       }
                       setIsRescheduleOpen(true);
                     }
                   }}
                 >
-                  <Calendar size={14} /> Đổi lịch hẹn
+                  <Calendar size={14} /> {activeDetailBooking.items?.[0]?.rescheduleRequest?.status === 'PENDING' ? 'Đang chờ duyệt đổi lịch' : 'Đổi lịch hẹn'}
                 </button>
               )}
 
               {/* Only show Cancel button if status is cancellable */}
-              {activeDetailBooking.status !== 'CANCELLED' &&
-                activeDetailBooking.status !== 'COMPLETED' &&
-                activeDetailBooking.status !== 'RETURNED' &&
-                activeDetailBooking.status !== 'PICKED_UP' && (
-                  <button
-                    className="vh-btn"
-                    style={{
-                      padding: '8px 24px',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      backgroundColor: '#C0392B',
-                      color: 'white',
-                      border: 'none',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => handleCancelClick(activeDetailBooking)}
-                  >
-                    Hủy lịch / Trả hàng
-                  </button>
-                )}
+              {activeDetailBooking.status !== 'CANCELLED' && 
+               activeDetailBooking.status !== 'COMPLETED' && 
+               activeDetailBooking.status !== 'RETURNED' && 
+               activeDetailBooking.status !== 'PICKED_UP' && 
+               activeDetailBooking.status !== 'RETURN_PENDING' && 
+               activeDetailBooking.status !== 'DISPUTED' && 
+               activeDetailBooking.status !== 'AWAITING_REVIEW' && 
+               activeDetailBooking.status !== 'IN_PROGRESS' && 
+               !bookingIncident && (
+                <button 
+                  className="vh-btn" 
+                  style={{ 
+                    padding: '8px 24px', 
+                    borderRadius: '8px', 
+                    fontSize: '13px', 
+                    backgroundColor: '#C0392B', 
+                    color: 'white', 
+                    border: 'none', 
+                    cursor: 'pointer' 
+                  }} 
+                  onClick={() => handleCancelClick(activeDetailBooking)}
+                >
+                  {activeDetailBooking.bookingType === 'PHOTOGRAPHY' ? 'Hủy lịch chụp' : 'Hủy đơn / Trả hàng'}
+                </button>
+              )}
 
               {activeDetailBooking.status === 'PENDING_PAYMENT' && (
                 <button
@@ -1030,11 +1487,30 @@ export const ProfilePage: React.FC = () => {
           isOpen={true}
           onClose={() => { setIsRescheduleOpen(false); setRescheduleItem(null); }}
           title={`ĐỔI LỊCH: ${activeDetailBooking.bookingCode}`}
-          maxWidth="480px"
+          maxWidth="600px"
         >
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
-            <div style={{ backgroundColor: '#EBF5FB', borderRadius: '8px', padding: '12px 14px', fontSize: '13px', color: '#1A5276', lineHeight: 1.5 }}>
-              <strong>Lưu ý:</strong> Chỉ có thể đổi lịch trước giờ bắt đầu ít nhất <strong>24 tiếng</strong>. Lịch mới phải còn trống và không trùng với đơn khác.
+            
+            {/* Thẻ Thông tin Lịch Hiện Tại */}
+            <div style={{ backgroundColor: '#FDF8F5', border: '1px solid #F3E4D8', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span style={{ color: '#8C6D1F', fontWeight: 700 }}>📌 LỊCH CHỤP HIỆN TẠI:</span>
+                <strong style={{ color: '#7D161A' }}>
+                  {rescheduleItem.shootDate ? formatDate(rescheduleItem.shootDate) : 'Chưa có'} {rescheduleItem.shootTimeSlot ? `(${rescheduleItem.shootTimeSlot.replace('-', ' - ')})` : ''}
+                </strong>
+              </div>
+              {rescheduleItem.photographyPackageId && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666', borderTop: '1px dashed #EAD8C7', paddingTop: '6px', marginTop: '2px' }}>
+                  <span>Gói dịch vụ:</span>
+                  <span style={{ fontWeight: 600, color: '#333' }}>
+                    {rescheduleItem.photographyPackageId.name || 'Gói chụp ảnh'} ({rescheduleDurationMinutes / 60} giờ)
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div style={{ backgroundColor: '#EBF5FB', borderRadius: '8px', padding: '12px 14px', fontSize: '12.5px', color: '#1A5276', lineHeight: 1.5 }}>
+              <strong>Lưu ý nghiệp vụ:</strong> Yêu cầu đổi lịch phải được gửi trước giờ chụp ít nhất <strong>24 tiếng</strong>. Khung giờ mới sẽ được tạm <strong>khóa giữ chỗ (TTL 12h)</strong> chờ Nhiếp ảnh gia xác nhận.
             </div>
 
             {rescheduleItem.itemType === 'PRODUCT' ? (
@@ -1065,24 +1541,179 @@ export const ProfilePage: React.FC = () => {
             ) : (
               <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>NGÀY CHỤP MỚI</label>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>CHỌN NGÀY CHỤP MỚI</label>
                   <input
                     type="date"
                     min={new Date().toISOString().split('T')[0]}
                     value={rescheduleShootDate}
-                    onChange={e => setRescheduleShootDate(e.target.value)}
+                    onChange={e => {
+                      setRescheduleShootDate(e.target.value);
+                      setRescheduleTimeSlot('');
+                    }}
                     style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
                   />
                 </div>
+
+                {/* Bộ Tăng / Giảm Thời Lượng Chụp khi Đổi Lịch */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>KHUNG GIỜ MỚI (tùy chọn)</label>
-                  <input
-                    type="text"
-                    placeholder="VD: 09:00 - 11:00"
-                    value={rescheduleTimeSlot}
-                    onChange={e => setRescheduleTimeSlot(e.target.value)}
-                    style={{ border: '1px solid #D5C2AD', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', width: '100%' }}
-                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>THỜI LƯỢNG BUỔI CHỤP MỚI</label>
+                    <span style={{ fontSize: '12.5px', color: '#7D161A', fontWeight: 700 }}>
+                      {Math.floor(rescheduleDurationMinutes / 60)} giờ {rescheduleDurationMinutes % 60 ? `${rescheduleDurationMinutes % 60}p` : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: '#F9F6F0', padding: '8px 12px', borderRadius: '8px', border: '1px solid #EAD8C7' }}>
+                    <button
+                      type="button"
+                      disabled={rescheduleDurationMinutes <= rescheduleIncludedDuration}
+                      onClick={() => {
+                        setCustomRescheduleDuration(Math.max(rescheduleIncludedDuration, rescheduleDurationMinutes - 30));
+                        setRescheduleTimeSlot('');
+                      }}
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        border: '1px solid #D5C2AD',
+                        backgroundColor: rescheduleDurationMinutes <= rescheduleIncludedDuration ? '#EAEAE8' : '#FFF',
+                        color: rescheduleDurationMinutes <= rescheduleIncludedDuration ? '#AAA' : '#333',
+                        cursor: rescheduleDurationMinutes <= rescheduleIncludedDuration ? 'not-allowed' : 'pointer',
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      -
+                    </button>
+                    <div style={{ flex: 1, textAlign: 'center', fontSize: '12px' }}>
+                      {rescheduleDurationMinutes > rescheduleIncludedDuration ? (
+                        <span style={{ color: '#C0392B', fontWeight: 700 }}>
+                          Tăng giờ thêm: +{Math.floor((rescheduleDurationMinutes - rescheduleIncludedDuration) / 60)}h {(rescheduleDurationMinutes - rescheduleIncludedDuration) % 60 ? `${(rescheduleDurationMinutes - rescheduleIncludedDuration) % 60}p` : ''} (sẽ tính phí phụ thu)
+                        </span>
+                      ) : (
+                        <span style={{ color: '#27AE60', fontWeight: 600 }}>Thời lượng gói chụp gốc ({rescheduleIncludedDuration / 60} giờ)</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={rescheduleDurationMinutes >= rescheduleIncludedDuration + 240}
+                      onClick={() => {
+                        setCustomRescheduleDuration(rescheduleDurationMinutes + 30);
+                        setRescheduleTimeSlot('');
+                      }}
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        border: '1px solid #D5C2AD',
+                        backgroundColor: rescheduleDurationMinutes >= rescheduleIncludedDuration + 240 ? '#EAEAE8' : '#FFF',
+                        color: rescheduleDurationMinutes >= rescheduleIncludedDuration + 240 ? '#AAA' : '#333',
+                        cursor: rescheduleDurationMinutes >= rescheduleIncludedDuration + 240 ? 'not-allowed' : 'pointer',
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bộ Chọn Khung Giờ Mới dạng Grid Phân Ca Sáng / Ca Chiều */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>CHỌN KHUNG GIỜ MỚI</label>
+                  
+                  {!rescheduleShootDate ? (
+                    <p style={{ fontSize: '12.5px', color: '#888', fontStyle: 'italic', margin: 0 }}>Vui lòng chọn Ngày chụp mới ở trên trước.</p>
+                  ) : isLoadingRescheduleSlots ? (
+                    <p style={{ fontSize: '12.5px', color: '#2980B9', fontStyle: 'italic', margin: 0 }}>Đang kiểm tra ca làm việc & lịch bận của nhiếp ảnh gia...</p>
+                  ) : rescheduleSlotsError ? (
+                    <small style={{ color: '#C0392B', fontSize: '12px' }}>{rescheduleSlotsError}</small>
+                  ) : availableRescheduleSlots.length === 0 ? (
+                    <small style={{ color: '#C0392B', fontSize: '12px' }}>Nhiếp ảnh gia đã kín lịch hoặc không có ca làm việc phù hợp vào ngày này.</small>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '220px', overflowY: 'auto', paddingRight: '4px' }}>
+                      {/* Ca Sáng */}
+                      {availableRescheduleSlots.some((slot) => Number(slot.split('-')[0].split(':')[0]) < 12) && (
+                        <div>
+                          <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#555', display: 'block', marginBottom: '6px' }}>🌅 Ca Sáng (Bắt đầu trước 12:00)</span>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px' }}>
+                            {availableRescheduleSlots.filter((slot) => Number(slot.split('-')[0].split(':')[0]) < 12).map((slot) => {
+                              const isSelected = rescheduleTimeSlot === slot;
+                              const isSameAsCurrent = String(rescheduleItem.shootDate || '').slice(0, 10) === rescheduleShootDate && rescheduleItem.shootTimeSlot === slot;
+                              return (
+                                <button
+                                  key={slot}
+                                  type="button"
+                                  disabled={isSameAsCurrent}
+                                  onClick={() => setRescheduleTimeSlot(slot)}
+                                  style={{
+                                    padding: '9px 8px',
+                                    borderRadius: '8px',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    border: isSelected ? '1.5px solid #7D161A' : '1px solid #D5C2AD',
+                                    backgroundColor: isSelected ? '#7D161A' : isSameAsCurrent ? '#F3F4F6' : '#FFFFFF',
+                                    color: isSelected ? '#FFFFFF' : isSameAsCurrent ? '#9CA3AF' : '#2C3E50',
+                                    cursor: isSameAsCurrent ? 'not-allowed' : 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                  }}
+                                >
+                                  <span>{slot.replace('-', ' - ')}</span>
+                                  <span style={{ fontSize: '10px', fontWeight: 600, opacity: 0.85 }}>
+                                    {isSameAsCurrent ? 'Lịch hiện tại' : isSelected ? 'Đã chọn' : 'Trống'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Ca Chiều */}
+                      {availableRescheduleSlots.some((slot) => Number(slot.split('-')[0].split(':')[0]) >= 12) && (
+                        <div>
+                          <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#555', display: 'block', marginBottom: '6px' }}>🌇 Ca Chiều (Bắt đầu từ 12:00)</span>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px' }}>
+                            {availableRescheduleSlots.filter((slot) => Number(slot.split('-')[0].split(':')[0]) >= 12).map((slot) => {
+                              const isSelected = rescheduleTimeSlot === slot;
+                              const isSameAsCurrent = String(rescheduleItem.shootDate || '').slice(0, 10) === rescheduleShootDate && rescheduleItem.shootTimeSlot === slot;
+                              return (
+                                <button
+                                  key={slot}
+                                  type="button"
+                                  disabled={isSameAsCurrent}
+                                  onClick={() => setRescheduleTimeSlot(slot)}
+                                  style={{
+                                    padding: '9px 8px',
+                                    borderRadius: '8px',
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    border: isSelected ? '1.5px solid #7D161A' : '1px solid #D5C2AD',
+                                    backgroundColor: isSelected ? '#7D161A' : isSameAsCurrent ? '#F3F4F6' : '#FFFFFF',
+                                    color: isSelected ? '#FFFFFF' : isSameAsCurrent ? '#9CA3AF' : '#2C3E50',
+                                    cursor: isSameAsCurrent ? 'not-allowed' : 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                  }}
+                                >
+                                  <span>{slot.replace('-', ' - ')}</span>
+                                  <span style={{ fontSize: '10px', fontWeight: 600, opacity: 0.85 }}>
+                                    {isSameAsCurrent ? 'Lịch hiện tại' : isSelected ? 'Đã chọn' : 'Trống'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -1110,7 +1741,7 @@ export const ProfilePage: React.FC = () => {
                 style={{ padding: '8px 24px', borderRadius: '8px', fontSize: '13px', backgroundColor: '#2980B9', color: 'white', border: 'none', cursor: 'pointer' }}
                 onClick={handleReschedule}
               >
-                Xác nhận đổi lịch
+                Gửi yêu cầu đổi lịch
               </button>
             </div>
           </div>

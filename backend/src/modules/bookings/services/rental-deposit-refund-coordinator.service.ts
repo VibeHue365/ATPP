@@ -26,14 +26,74 @@ export class RentalDepositRefundCoordinatorService {
     const booking = await this.bookingModel.findById(bookingId).lean().exec();
     if (!booking) return { status: 'PENDING' as const };
     const existing = booking.rentalDepositRefund;
-    if (existing?.status && existing.status !== 'PENDING' && existing.status !== 'FAILED') return existing;
+    if (existing?.status === 'REFUNDED') return existing;
 
-    const items = await this.bookingItemModel.find({ bookingId, itemType: BookingItemType.Product }).lean().exec();
-    if (!items.length || items.some((item) => !item.rentalFulfillment || !finalDepositStatuses.includes(item.rentalFulfillment.depositSettlementStatus))) return { status: 'PENDING' as const };
+    if (booking.bookingType === 'PHOTOGRAPHY' && booking.status !== 'CANCELLED' && booking.status !== 'DISPUTED') {
+      await this.bookingModel.updateOne(
+        { _id: bookingId },
+        { $set: { 'rentalDepositRefund.status': 'NO_REFUND', 'rentalDepositRefund.amount': 0, 'rentalDepositRefund.completedAt': new Date(), 'rentalDepositReason': null } }
+      ).exec();
+      return { status: 'NO_REFUND' as const, amount: 0 };
+    }
 
-    const amount = items.reduce((sum, item) => sum + Math.max(item.rentalFulfillment?.depositRefundAmount ?? 0, 0), 0);
+    let items = await this.bookingItemModel.find({ bookingId }).lean().exec();
+    const isProductItem = (i: any) => i.itemType === BookingItemType.Product || (!i.itemType && booking.bookingType !== 'PHOTOGRAPHY');
+    const productItems = items.filter(isProductItem);
+    if (!productItems.length) {
+      await this.bookingModel.updateOne(
+        { _id: bookingId },
+        { $set: { 'rentalDepositRefund.status': 'NO_REFUND', 'rentalDepositRefund.amount': 0, 'rentalDepositRefund.completedAt': new Date(), 'rentalDepositReason': null } }
+      ).exec();
+      return { status: 'NO_REFUND' as const, amount: 0 };
+    }
+
+    for (const item of productItems) {
+      if (
+        item.rentalFulfillment &&
+        ['RETURNED', 'COMPLETED'].includes(item.rentalFulfillment.status) &&
+        (item.rentalFulfillment.depositSettlementStatus === DepositSettlementStatus.PendingSettlement ||
+          !finalDepositStatuses.includes(item.rentalFulfillment.depositSettlementStatus))
+      ) {
+        const charges = Object.values(item.rentalFulfillment.charges || {}).filter(Boolean) as Array<{ status: string }>;
+        const hasProposedCharges = charges.some((c) => c?.status === 'PROPOSED');
+        if (!hasProposedCharges) {
+          let depositAmt = (item.depositAmount || 0) * (item.quantity || 1);
+          if (depositAmt === 0 && productItems.length === 1 && booking.bookingType === 'AODAI_RENTAL') {
+            depositAmt = (booking.pricingSummary?.depositTotal || 0);
+          }
+          await this.bookingItemModel.updateOne(
+            { _id: item._id },
+            {
+              $set: {
+                'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.FullyReleased,
+                'rentalFulfillment.depositDeductedAmount': 0,
+                'rentalFulfillment.depositRefundAmount': depositAmt,
+              },
+            },
+          ).exec();
+        }
+      }
+    }
+
+    items = await this.bookingItemModel.find({ bookingId }).lean().exec();
+    const updatedProductItems = items.filter(isProductItem);
+    if (updatedProductItems.some((item) => !item.rentalFulfillment || !finalDepositStatuses.includes(item.rentalFulfillment.depositSettlementStatus))) return { status: 'PENDING' as const };
+
+    let amount = updatedProductItems.reduce((sum, item) => sum + Math.max(item.rentalFulfillment?.depositRefundAmount ?? 0, 0), 0);
     if (amount === 0) {
-      await this.bookingModel.updateOne({ _id: bookingId, 'rentalDepositRefund.status': { $in: ['PENDING', 'FAILED'] } }, { $set: { 'rentalDepositRefund.status': 'NO_REFUND', 'rentalDepositRefund.amount': 0, 'rentalDepositRefund.completedAt': new Date(), 'rentalDepositRefund.failureReason': null } }).exec();
+      const hasDeductions = updatedProductItems.some((item) => (item.rentalFulfillment?.depositDeductedAmount || 0) > 0);
+      if (!hasDeductions && booking.bookingType !== 'PHOTOGRAPHY') {
+        const productItemsDepositSum = updatedProductItems.reduce((sum, item) => sum + ((item.depositAmount || 0) * (item.quantity || 1)), 0);
+        if (productItemsDepositSum > 0) {
+          amount = productItemsDepositSum;
+        } else if (['AODAI_RENTAL', 'COMBO'].includes(booking.bookingType)) {
+          amount = booking.pricingSummary?.depositTotal || 0;
+        }
+      }
+    }
+
+    if (amount === 0) {
+      await this.bookingModel.updateOne({ _id: bookingId }, { $set: { 'rentalDepositRefund.status': 'NO_REFUND', 'rentalDepositRefund.amount': 0, 'rentalDepositRefund.completedAt': new Date(), 'rentalDepositReason': null } }).exec();
       return { status: 'NO_REFUND' as const, amount: 0 };
     }
 

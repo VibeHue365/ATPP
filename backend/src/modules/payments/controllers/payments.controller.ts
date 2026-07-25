@@ -8,6 +8,7 @@ import {
   UseGuards,
   Logger,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
@@ -22,6 +23,7 @@ import { CreatePaymentLinkDto } from '../dto/create-payment-link.dto';
 import { ResolveDisputeDto } from '../dto/resolve-dispute.dto';
 import { WebhookBodyDto } from '../dto/webhook-body.dto';
 import { WebhookData } from '../interfaces/webhook.interfaces';
+import { PaymentStatus } from '../schemas/payment.schema';
 
 @Controller('payments')
 export class PaymentsController {
@@ -34,10 +36,35 @@ export class PaymentsController {
     private readonly webhookEventRepository: WebhookEventRepository,
   ) {}
 
+  private ensureSimulatorEnabled() {
+    if (this.configService.get<string>('NODE_ENV') === 'production') {
+      throw new NotFoundException();
+    }
+  }
+
   @Post('create-link')
   @UseGuards(JwtAuthGuard)
-  async createLink(@Body() dto: CreatePaymentLinkDto) {
-    return this.paymentsService.createPaymentLink(dto.bookingId, dto.purpose);
+  async createLink(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreatePaymentLinkDto,
+  ) {
+    return this.paymentsService.createPaymentLink(
+      dto.bookingId,
+      dto.purpose,
+      user.sub,
+    );
+  }
+
+  @Get(':code/status')
+  @UseGuards(JwtAuthGuard)
+  async getStatus(@CurrentUser() user: AuthUser, @Param('code') code: string) {
+    return this.paymentsService.getPaymentStatus(code, user.sub);
+  }
+
+  @Get('pending-checkouts')
+  @UseGuards(JwtAuthGuard)
+  async getPendingCheckouts(@CurrentUser() user: AuthUser) {
+    return this.paymentsService.getPendingCheckouts(user.sub);
   }
 
   @Get('history')
@@ -54,7 +81,11 @@ export class PaymentsController {
 
   @Post(':code/confirm')
   @UseGuards(JwtAuthGuard)
-  async confirmManual(@Param('code') code: string) {
+  async confirmManual(
+    @CurrentUser() user: AuthUser,
+    @Param('code') code: string,
+  ) {
+    await this.paymentsService.getPaymentStatus(code, user.sub);
     return this.paymentsService.confirmPayment(code);
   }
 
@@ -77,17 +108,26 @@ export class PaymentsController {
     const orderCode = webhookData?.orderCode;
     const status = webhookData?.status;
     if (orderCode === undefined || !status) {
-      throw new BadRequestException('Webhook PayOS thiếu orderCode hoặc trạng thái.');
+      throw new BadRequestException(
+        'Webhook PayOS thiếu orderCode hoặc trạng thái.',
+      );
     }
 
-    const checksumKey = this.configService.get<string>('PAYOS_CHECKSUM_KEY', '');
+    const checksumKey = this.configService.get<string>(
+      'PAYOS_CHECKSUM_KEY',
+      '',
+    );
     if (checksumKey && !checksumKey.includes('your_')) {
       if (!this.verifyPayOSSignature(body.data, body.signature, checksumKey)) {
-        this.logger.warn(`Invalid signature detected in PayOS webhook for order ${orderCode}.`);
+        this.logger.warn(
+          `Invalid signature detected in PayOS webhook for order ${orderCode}.`,
+        );
         throw new BadRequestException('Signature verification failed');
       }
     } else {
-      this.logger.warn('PAYOS_CHECKSUM_KEY is not configured; signature check is bypassed for the local simulator.');
+      this.logger.warn(
+        'PAYOS_CHECKSUM_KEY is not configured; signature check is bypassed for the local simulator.',
+      );
     }
 
     const webhookId = `payos_${orderCode}_${status}`;
@@ -106,11 +146,36 @@ export class PaymentsController {
     try {
       this.logger.log(`Processing PayOS webhook ${webhookId}.`);
       if (status === 'PAID') {
-        const payment = await this.paymentsRepository.findByOrderCode(orderCode);
+        const payment =
+          await this.paymentsRepository.findByOrderCode(orderCode);
         if (!payment) {
-          throw new BadRequestException(`Không tìm thấy giao dịch PayOS có orderCode ${orderCode}.`);
+          throw new BadRequestException(
+            `Không tìm thấy giao dịch PayOS có orderCode ${orderCode}.`,
+          );
+        }
+        if (
+          typeof webhookData.amount === 'number' &&
+          webhookData.amount !== payment.amount
+        ) {
+          throw new BadRequestException(
+            'Số tiền webhook không khớp giao dịch.',
+          );
         }
         await this.paymentsService.confirmPayment(payment.paymentCode);
+      } else if (['FAILED', 'EXPIRED', 'CANCELLED'].includes(status)) {
+        const payment =
+          await this.paymentsRepository.findByOrderCode(orderCode);
+        if (!payment) {
+          throw new BadRequestException(
+            `Không tìm thấy giao dịch PayOS có orderCode ${orderCode}.`,
+          );
+        }
+        await this.paymentsService.failPayment(
+          payment.paymentCode,
+          status === 'CANCELLED'
+            ? PaymentStatus.Cancelled
+            : PaymentStatus.Failed,
+        );
       }
       await this.webhookEventRepository.markProcessed(webhookId);
       return { status: 'success' };
@@ -149,19 +214,28 @@ export class PaymentsController {
 
   @Post('checkout/:code/confirm')
   async confirmSimulation(@Param('code') code: string) {
+    this.ensureSimulatorEnabled();
     return this.paymentsService.confirmPayment(code);
+  }
+
+  @Post('checkout/:code/cancel')
+  async cancelSimulation(@Param('code') code: string) {
+    this.ensureSimulatorEnabled();
+    return this.paymentsService.cancelPayment(code);
   }
 
   // CHECKOUT SCREEN SIMULATOR (HTML View)
   @Get('checkout/:code')
   async renderCheckout(@Param('code') code: string, @Res() res: Response) {
+    this.ensureSimulatorEnabled();
     try {
-      const payment = await this.paymentsRepository.findPaymentWithBooking(code);
+      const payment =
+        await this.paymentsRepository.findPaymentWithBooking(code);
       if (!payment) {
         return res.status(404).send('Không tìm thấy thông tin thanh toán.');
       }
 
-       const booking = payment.bookingId as any;
+      const booking = payment.bookingId as any;
       const bookingCode = booking?.bookingCode || 'N/A';
       const amount = payment.amount;
       const memo = `VIBEHUE PAY ${payment.paymentCode}`;
@@ -390,11 +464,19 @@ export class PaymentsController {
 
             // Setup deep link click handlers with web redirects fallbacks
             const cancelBackBtn = document.getElementById('cancel-back-btn');
-            cancelBackBtn.addEventListener('click', (e) => {
+            cancelBackBtn.addEventListener('click', async (e) => {
               e.preventDefault();
+              try {
+                await fetch('/payments/checkout/' + code + '/cancel', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' }
+                });
+              } catch (err) {
+                console.error('Failed to cancel payment:', err);
+              }
               window.location.href = 'vibehue://payment/cancel';
               setTimeout(() => {
-                window.location.href = frontendUrl + '/dashboard/profile';
+                 window.location.href = frontendUrl + '/checkout/result?paymentCode=' + encodeURIComponent(code);
               }, 500);
             });
 
@@ -403,7 +485,7 @@ export class PaymentsController {
               e.preventDefault();
               window.location.href = 'vibehue://payment/success';
               setTimeout(() => {
-                window.location.href = frontendUrl + '/dashboard/profile';
+                 window.location.href = frontendUrl + '/checkout/result?paymentCode=' + encodeURIComponent(code);
               }, 500);
             });
 
@@ -433,7 +515,7 @@ export class PaymentsController {
                     // Thử chuyển hướng ứng dụng di động trước, sau đó fallback về web sau 1.5s
                     window.location.href = 'vibehue://payment/success';
                     setTimeout(() => {
-                      window.location.href = frontendUrl + '/dashboard/profile';
+                       window.location.href = frontendUrl + '/checkout/result?paymentCode=' + encodeURIComponent(code);
                     }, 1500);
                   }, 800);
                 } else {
@@ -459,4 +541,3 @@ export class PaymentsController {
     }
   }
 }
-

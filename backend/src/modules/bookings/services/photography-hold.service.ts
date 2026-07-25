@@ -14,19 +14,14 @@ import {
   BookingType,
   PaymentStatus as BookingPaymentStatus,
 } from '../schemas/booking.schema';
-import {
-  BookingItem,
-  BookingItemType,
-} from '../schemas/booking-item.schema';
+import { BookingItem, BookingItemType } from '../schemas/booking-item.schema';
 import { createRentalFulfillment } from '../schemas/rental-fulfillment.types';
 import {
   BookingSchedule,
   BookingScheduleStatus,
   BookingScheduleType,
 } from '../schemas/booking-schedule.schema';
-import {
-  ProviderScheduleLock,
-} from '../schemas/provider-schedule-lock.schema';
+import { ProviderScheduleLock } from '../schemas/provider-schedule-lock.schema';
 import { CreatePhotographyHoldDto } from '../dto/create-photography-hold.dto';
 import {
   PackageStatus,
@@ -125,7 +120,9 @@ export class PhotographyHoldService {
     idempotencyKey: string,
   ) {
     if (!Types.ObjectId.isValid(customerIdValue)) {
-      throw new BadRequestException('TÃ i khoáº£n Ä‘áº·t lá»‹ch khÃ´ng há»£p lá»‡.');
+      throw new BadRequestException(
+        'TÃ i khoáº£n Ä‘áº·t lá»‹ch khÃ´ng há»£p lá»‡.',
+      );
     }
     if (!Types.ObjectId.isValid(dto.packageId)) {
       throw new BadRequestException('GÃ³i chá»¥p khÃ´ng há»£p lá»‡.');
@@ -145,7 +142,9 @@ export class PhotographyHoldService {
       status: PackageStatus.Active,
     });
     if (!packagePreview) {
-      throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y gÃ³i chá»¥p Ä‘ang hoáº¡t Ä‘á»™ng.');
+      throw new NotFoundException(
+        'KhÃ´ng tÃ¬m tháº¥y gÃ³i chá»¥p Ä‘ang hoáº¡t Ä‘á»™ng.',
+      );
     }
 
     // The preflight checks working hours, blocked days and existing legacy data.
@@ -163,7 +162,13 @@ export class PhotographyHoldService {
 
     const sessions = this.toHoldSessions(dto);
     return this.withTransactionRetry((session) =>
-      this.createHoldInTransaction(customerId, dto, idempotencyKey, sessions, session),
+      this.createHoldInTransaction(
+        customerId,
+        dto,
+        idempotencyKey,
+        sessions,
+        session,
+      ),
     );
   }
 
@@ -177,7 +182,9 @@ export class PhotographyHoldService {
     idempotencyKey: string,
   ) {
     if (!Types.ObjectId.isValid(customerIdValue)) {
-      throw new BadRequestException('TÃ i khoáº£n Ä‘áº·t lá»‹ch khÃ´ng há»£p lá»‡.');
+      throw new BadRequestException(
+        'TÃ i khoáº£n Ä‘áº·t lá»‹ch khÃ´ng há»£p lá»‡.',
+      );
     }
     if (!Types.ObjectId.isValid(dto.packageId)) {
       throw new BadRequestException('GÃ³i chá»¥p khÃ´ng há»£p lá»‡.');
@@ -197,7 +204,9 @@ export class PhotographyHoldService {
       status: PackageStatus.Active,
     });
     if (!packagePreview) {
-      throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y gÃ³i chá»¥p Ä‘ang hoáº¡t Ä‘á»™ng.');
+      throw new NotFoundException(
+        'KhÃ´ng tÃ¬m tháº¥y gÃ³i chá»¥p Ä‘ang hoáº¡t Ä‘á»™ng.',
+      );
     }
 
     const preflight = await this.quoteService.quote(
@@ -271,11 +280,16 @@ export class PhotographyHoldService {
     const aodaiReservations: ComboAoDaiReservation[] = [];
     for (const item of dto.aodaiItems) {
       aodaiReservations.push(
-        await this.reserveComboAoDaiItem(item, sessions, holdExpiresAt, session),
+        await this.reserveComboAoDaiItem(
+          item,
+          sessions,
+          holdExpiresAt,
+          session,
+        ),
       );
     }
 
-    const photoDeposit = Math.round(quote.totalAmount * 0.3);
+    const photoDeposit = quote.totalAmount; // 100% thanh toán trước cho thợ chụp
     const photoDiscount = Math.round(quote.totalAmount * 0.1);
     const productRentalTotal = aodaiReservations.reduce(
       (sum, item) => sum + item.unitPrice * item.quantity,
@@ -291,8 +305,7 @@ export class PhotographyHoldService {
     );
     const comboDiscountTotal = photoDiscount + productDiscountTotal;
     const subTotal = quote.totalAmount + productRentalTotal;
-    const grandTotal =
-      subTotal - comboDiscountTotal + productDepositTotal;
+    const grandTotal = subTotal - comboDiscountTotal + productDepositTotal;
     const providerIds = [
       photographyPackage.providerId,
       ...aodaiReservations.map((item) => item.product.providerId),
@@ -405,7 +418,9 @@ export class PhotographyHoldService {
 
     for (const reservation of aodaiReservations) {
       if (reservation.inventoryItemIds.length !== reservation.quantity) {
-        throw new ConflictException('Số đơn vị tồn kho được giữ không khớp số lượng áo dài yêu cầu.');
+        throw new ConflictException(
+          'Số đơn vị tồn kho được giữ không khớp số lượng áo dài yêu cầu.',
+        );
       }
       const productPriceVersion = await this.findOrCreateProductPriceVersion(
         reservation.product,
@@ -415,10 +430,14 @@ export class PhotographyHoldService {
         reservation.unitPrice * reservation.quantity * 0.1,
       );
       let distributedDiscount = 0;
-      for (const [index, inventoryItemId] of reservation.inventoryItemIds.entries()) {
-        const itemDiscount = index === reservation.inventoryItemIds.length - 1
-          ? totalDiscount - distributedDiscount
-          : Math.round(totalDiscount / reservation.quantity);
+      for (const [
+        index,
+        inventoryItemId,
+      ] of reservation.inventoryItemIds.entries()) {
+        const itemDiscount =
+          index === reservation.inventoryItemIds.length - 1
+            ? totalDiscount - distributedDiscount
+            : Math.round(totalDiscount / reservation.quantity);
         distributedDiscount += itemDiscount;
         const bookingItem = new this.bookingItemModel({
           bookingId: booking._id,
@@ -435,23 +454,50 @@ export class PhotographyHoldService {
           rentalType: 'DAILY',
           selectedSize: reservation.selectedSize,
           selectedColor: reservation.selectedColor,
-          pickupReturnLocationSnapshot: reservation.pickupReturnLocationSnapshot,
-          rentalFulfillment: createRentalFulfillment(reservation.rentalTo, reservation.rentalFrom),
+          pickupReturnLocationSnapshot:
+            reservation.pickupReturnLocationSnapshot,
+          rentalFulfillment: createRentalFulfillment(
+            reservation.rentalTo,
+            reservation.rentalFrom,
+          ),
           customRequests: null,
           priceBreakdown: [],
           comboDiscountPercent: 10,
           comboDiscountAmount: itemDiscount,
         });
         await bookingItem.save({ session });
-        await this.inventoryReservationModel.create([{
-          inventoryItemId,
-          bookingId: booking._id,
-          bookingItemId: bookingItem._id,
-          reservedFrom: reservation.rentalFrom,
-          reservedTo: reservation.rentalTo,
-          status: ReservationStatus.TempReserved,
-          expiresAt: holdExpiresAt,
-        }], { session });
+        await this.inventoryReservationModel.create(
+          [
+            {
+              inventoryItemId,
+              bookingId: booking._id,
+              bookingItemId: bookingItem._id,
+              reservedFrom: reservation.rentalFrom,
+              reservedTo: reservation.rentalTo,
+              status: ReservationStatus.TempReserved,
+              expiresAt: holdExpiresAt,
+            },
+          ],
+          { session },
+        );
+      }
+    }
+
+    // Increment usedCount on ComboPromotion
+    const firstProductRes = aodaiReservations[0];
+    if (firstProductRes?.product?._id) {
+      try {
+        await this.bookingModel.db.model('ComboPromotion').updateOne(
+          {
+            providerId: photographyPackage.providerId,
+            productId: firstProductRes.product._id,
+            photographyPackageId: photographyPackage._id,
+            status: 'ACTIVE',
+          },
+          { $inc: { usedCount: 1 } },
+        ).session(session).exec();
+      } catch (e) {
+        console.warn('Failed to increment ComboPromotion usedCount:', e);
       }
     }
 
@@ -476,7 +522,9 @@ export class PhotographyHoldService {
       .session(session)
       .exec();
     if (!product) {
-      throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y Ã¡o dÃ i Ä‘ang hoáº¡t Ä‘á»™ng.');
+      throw new NotFoundException(
+        'KhÃ´ng tÃ¬m tháº¥y Ã¡o dÃ i Ä‘ang hoáº¡t Ä‘á»™ng.',
+      );
     }
 
     const provider = await this.providerModel
@@ -494,7 +542,9 @@ export class PhotographyHoldService {
       product.sizes.length &&
       !product.sizes.some((size) => size.trim().toUpperCase() === selectedSize)
     ) {
-      throw new BadRequestException('KÃ­ch cá»¡ Ã¡o dÃ i Ä‘Ã£ chá»n khÃ´ng kháº£ dá»¥ng.');
+      throw new BadRequestException(
+        'KÃ­ch cá»¡ Ã¡o dÃ i Ä‘Ã£ chá»n khÃ´ng kháº£ dá»¥ng.',
+      );
     }
     if (
       product.colors.length &&
@@ -502,17 +552,26 @@ export class PhotographyHoldService {
         (color) => this.normalizeInventoryColor(color) === selectedColor,
       )
     ) {
-      throw new BadRequestException('MÃ u sáº¯c Ã¡o dÃ i Ä‘Ã£ chá»n khÃ´ng kháº£ dá»¥ng.');
+      throw new BadRequestException(
+        'MÃ u sáº¯c Ã¡o dÃ i Ä‘Ã£ chá»n khÃ´ng kháº£ dá»¥ng.',
+      );
     }
 
-    const { rentalFrom, rentalTo } = this.toRentalRange(dto.rentalFrom, dto.rentalTo);
+    const { rentalFrom, rentalTo } = this.toRentalRange(
+      dto.rentalFrom,
+      dto.rentalTo,
+    );
     if (rentalTo.getTime() < rentalFrom.getTime()) {
-      throw new BadRequestException('NgÃ y tráº£ Ã¡o dÃ i pháº£i sau hoáº·c báº±ng ngÃ y nháº­n.');
+      throw new BadRequestException(
+        'NgÃ y tráº£ Ã¡o dÃ i pháº£i sau hoáº·c báº±ng ngÃ y nháº­n.',
+      );
     }
     const rentalDurationDays =
       Math.floor((rentalTo.getTime() - rentalFrom.getTime()) / 86_400_000) + 1;
     if (rentalDurationDays > 30) {
-      throw new BadRequestException('Thá»i gian thuÃª Ã¡o dÃ i tá»‘i Ä‘a lÃ  30 ngÃ y.');
+      throw new BadRequestException(
+        'Thá»i gian thuÃª Ã¡o dÃ i tá»‘i Ä‘a lÃ  30 ngÃ y.',
+      );
     }
 
     const rentalFromKey = this.toBusinessDateKey(rentalFrom);
@@ -536,7 +595,9 @@ export class PhotographyHoldService {
         size: selectedSize,
         color: selectedColor,
         status: InventoryItemStatus.Available,
-        conditionStatus: { $nin: [ConditionStatus.Locked, ConditionStatus.Retired] },
+        conditionStatus: {
+          $nin: [ConditionStatus.Locked, ConditionStatus.Retired],
+        },
       })
       .sort({ _id: 1 })
       .session(session)
@@ -617,13 +678,19 @@ export class PhotographyHoldService {
       pickupReturnLocationSnapshot,
     };
   }
-  async confirmForBooking(bookingIdValue: Types.ObjectId | string): Promise<{
+  async confirmForBooking(
+    bookingIdValue: Types.ObjectId | string,
+    externalSession?: ClientSession,
+  ): Promise<{
     hasPhotographyHold: boolean;
     confirmed: boolean;
     paymentReviewRequired: boolean;
   }> {
-    const bookingId = this.toObjectId(bookingIdValue, 'ÄÆ¡n Ä‘áº·t lá»‹ch khÃ´ng há»£p lá»‡.');
-    return this.withTransactionRetry(async (session) => {
+    const bookingId = this.toObjectId(
+      bookingIdValue,
+      'ÄÆ¡n Ä‘áº·t lá»‹ch khÃ´ng há»£p lá»‡.',
+    );
+    const confirm = async (session: ClientSession) => {
       const initialSchedules = await this.bookingScheduleModel
         .find({
           bookingId,
@@ -698,10 +765,7 @@ export class PhotographyHoldService {
         .find({
           bookingId,
           status: {
-            $in: [
-              ReservationStatus.TempReserved,
-              ReservationStatus.Expired,
-            ],
+            $in: [ReservationStatus.TempReserved, ReservationStatus.Expired],
           },
         })
         .session(session)
@@ -715,11 +779,13 @@ export class PhotographyHoldService {
       const now = new Date();
       const hasExpiredHold = heldSchedules.some(
         (schedule) =>
-          !schedule.holdExpiresAt || schedule.holdExpiresAt.getTime() <= now.getTime(),
+          !schedule.holdExpiresAt ||
+          schedule.holdExpiresAt.getTime() <= now.getTime(),
       );
       const hasExpiredInventoryHold = heldInventoryReservations.some(
         (reservation) =>
-          !reservation.expiresAt || reservation.expiresAt.getTime() <= now.getTime(),
+          !reservation.expiresAt ||
+          reservation.expiresAt.getTime() <= now.getTime(),
       );
       if (
         expiredSchedules.length ||
@@ -742,7 +808,11 @@ export class PhotographyHoldService {
         if (heldInventoryReservations.length) {
           await this.inventoryReservationModel.updateMany(
             {
-              _id: { $in: heldInventoryReservations.map((reservation) => reservation._id) },
+              _id: {
+                $in: heldInventoryReservations.map(
+                  (reservation) => reservation._id,
+                ),
+              },
               status: ReservationStatus.TempReserved,
             },
             {
@@ -776,7 +846,9 @@ export class PhotographyHoldService {
           await this.inventoryReservationModel.updateMany(
             {
               _id: {
-                $in: heldInventoryReservations.map((reservation) => reservation._id),
+                $in: heldInventoryReservations.map(
+                  (reservation) => reservation._id,
+                ),
               },
               status: ReservationStatus.TempReserved,
               expiresAt: { $gt: now },
@@ -787,7 +859,9 @@ export class PhotographyHoldService {
             },
             { session },
           );
-        if (inventoryTransition.modifiedCount !== heldInventoryReservations.length) {
+        if (
+          inventoryTransition.modifiedCount !== heldInventoryReservations.length
+        ) {
           await this.bookingModel.updateOne(
             { _id: bookingId },
             {
@@ -829,7 +903,9 @@ export class PhotographyHoldService {
             await this.inventoryReservationModel.updateMany(
               {
                 _id: {
-                  $in: heldInventoryReservations.map((reservation) => reservation._id),
+                  $in: heldInventoryReservations.map(
+                    (reservation) => reservation._id,
+                  ),
                 },
                 status: ReservationStatus.Confirmed,
               },
@@ -875,7 +951,10 @@ export class PhotographyHoldService {
         confirmed: true,
         paymentReviewRequired: false,
       };
-    });
+    };
+    return externalSession
+      ? confirm(externalSession)
+      : this.withTransactionRetry(confirm);
   }
 
   async expireExpiredHolds(): Promise<number> {
@@ -893,7 +972,9 @@ export class PhotographyHoldService {
 
     const scheduleIds = expiredSchedules.map((schedule) => schedule._id);
     const bookingIds = [
-      ...new Set(expiredSchedules.map((schedule) => schedule.bookingId.toString())),
+      ...new Set(
+        expiredSchedules.map((schedule) => schedule.bookingId.toString()),
+      ),
     ].map((id) => new Types.ObjectId(id));
     const result = await this.bookingScheduleModel.updateMany(
       {
@@ -969,7 +1050,7 @@ export class PhotographyHoldService {
       quote.totalAmount,
       session,
     );
-    const depositTotal = Math.round(quote.totalAmount * 0.3);
+    const depositTotal = quote.totalAmount; // 100% thanh toán trước cho thợ chụp
     const booking = new this.bookingModel({
       bookingCode: this.createBookingCode(),
       customerId,
@@ -1103,7 +1184,9 @@ export class PhotographyHoldService {
     session: ClientSession,
   ): Promise<void> {
     const now = new Date();
-    const dateKeys = [...new Set(requested.map((item) => item.providerLocalDate))];
+    const dateKeys = [
+      ...new Set(requested.map((item) => item.providerLocalDate)),
+    ];
     const schedules = await this.bookingScheduleModel
       .find({
         providerId,
@@ -1144,7 +1227,10 @@ export class PhotographyHoldService {
       const providerOrder = left.providerId
         .toString()
         .localeCompare(right.providerId.toString());
-      return providerOrder || left.providerLocalDate.localeCompare(right.providerLocalDate);
+      return (
+        providerOrder ||
+        left.providerLocalDate.localeCompare(right.providerLocalDate)
+      );
     });
     for (const key of keys) {
       await this.scheduleLockModel
@@ -1161,7 +1247,10 @@ export class PhotographyHoldService {
   }
 
   private getLockKeys(
-    input: Array<{ providerId?: Types.ObjectId | null; providerLocalDate?: string | null }>,
+    input: Array<{
+      providerId?: Types.ObjectId | null;
+      providerLocalDate?: string | null;
+    }>,
   ): LockKey[] {
     const map = new Map<string, LockKey>();
     for (const item of input) {
@@ -1225,7 +1314,7 @@ export class PhotographyHoldService {
         targetType: PriceTargetType.PhotographyPackage,
         targetId: photographyPackage._id,
         price,
-        depositAmount: Math.round(price * 0.3),
+        depositAmount: price, // 100% thanh toán trước cho thợ chụp
         effectiveFrom: new Date(),
         note: 'Tá»± Ä‘á»™ng táº¡o khi giá»¯ lá»‹ch gÃ³i chá»¥p',
       });
@@ -1239,16 +1328,23 @@ export class PhotographyHoldService {
     session?: ClientSession,
   ) {
     const scheduleQuery = this.bookingScheduleModel
-      .find({ bookingId: booking._id, scheduleType: BookingScheduleType.Photoshoot })
+      .find({
+        bookingId: booking._id,
+        scheduleType: BookingScheduleType.Photoshoot,
+      })
       .sort({ startsAt: 1 });
     if (session) scheduleQuery.session(session);
     const schedules = await scheduleQuery.lean().exec();
     return {
       bookingId: booking._id.toString(),
       bookingCode: booking.bookingCode,
-      status: schedules.some((schedule) => schedule.status === BookingScheduleStatus.Held)
+      status: schedules.some(
+        (schedule) => schedule.status === BookingScheduleStatus.Held,
+      )
         ? BookingScheduleStatus.Held
-        : schedules.every((schedule) => schedule.status === BookingScheduleStatus.Confirmed)
+        : schedules.every(
+              (schedule) => schedule.status === BookingScheduleStatus.Confirmed,
+            )
           ? BookingScheduleStatus.Confirmed
           : BookingScheduleStatus.Expired,
       holdExpiresAt: booking.holdExpiresAt?.toISOString() ?? null,
@@ -1295,7 +1391,9 @@ export class PhotographyHoldService {
         startsAt,
         endsAt,
         providerLocalDate: this.toBusinessDateKey(startsAt),
-        durationMinutes: Math.round((endsAt.getTime() - startsAt.getTime()) / 60000),
+        durationMinutes: Math.round(
+          (endsAt.getTime() - startsAt.getTime()) / 60000,
+        ),
         locationAddress: item.locationAddress,
         locationLatitude: item.locationLatitude,
         locationLongitude: item.locationLongitude,
@@ -1349,7 +1447,7 @@ export class PhotographyHoldService {
       );
       if (distanceKm > radiusKm) {
         throw new BadRequestException(
-          'The shoot location is outside this photographer\'s service radius.',
+          "The shoot location is outside this photographer's service radius.",
         );
       }
     }
@@ -1458,7 +1556,8 @@ export class PhotographyHoldService {
       month: '2-digit',
       day: '2-digit',
     }).formatToParts(value);
-    const part = (type: string) => parts.find((item) => item.type === type)?.value;
+    const part = (type: string) =>
+      parts.find((item) => item.type === type)?.value;
     return `${part('year')}-${part('month')}-${part('day')}`;
   }
 
@@ -1468,7 +1567,10 @@ export class PhotographyHoldService {
     )}`;
   }
 
-  private toObjectId(value: Types.ObjectId | string, message: string): Types.ObjectId {
+  private toObjectId(
+    value: Types.ObjectId | string,
+    message: string,
+  ): Types.ObjectId {
     if (!Types.ObjectId.isValid(value)) throw new BadRequestException(message);
     return new Types.ObjectId(value);
   }
@@ -1490,9 +1592,9 @@ export class PhotographyHoldService {
         const retryable =
           (typeof (error as { hasErrorLabel?: unknown })?.hasErrorLabel ===
             'function' &&
-            (error as { hasErrorLabel: (label: string) => boolean }).hasErrorLabel(
-              'TransientTransactionError',
-            )) ||
+            (
+              error as { hasErrorLabel: (label: string) => boolean }
+            ).hasErrorLabel('TransientTransactionError')) ||
           (error as { code?: number })?.code === 11000;
         if (!retryable || attempt === MAX_TRANSACTION_RETRIES - 1) throw error;
       } finally {

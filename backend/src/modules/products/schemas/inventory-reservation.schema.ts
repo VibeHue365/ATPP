@@ -47,7 +47,7 @@ export class InventoryReservation {
   })
   status: ReservationStatus;
 
-  @Prop({ type: Date, required: false, index: true, default: null })
+  @Prop({ type: Date, required: false, default: null })
   expiresAt?: Date | null;
 }
 

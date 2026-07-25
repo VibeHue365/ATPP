@@ -439,7 +439,7 @@ export const SettlementManagement: React.FC = () => {
                 <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>ĐƠN HÀNG</th>
                 <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>NHÀ CUNG CẤP</th>
                 <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>TỔNG TIỀN</th>
-                <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>COMMISSION</th>
+                <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>HOA HỒNG</th>
                 <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>SỐ TIỀN QUYẾT TOÁN</th>
                 <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>TRẠNG THÁI</th>
                 <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: '#7A7A7A', fontSize: '11px' }}>THAO TÁC</th>
@@ -570,7 +570,7 @@ export const SettlementManagement: React.FC = () => {
                 ['Nhà cung cấp', providerLabel(selectedSettlement.providerId)],
                 ['Trạng thái', selectedSettlement.status],
                 ['Tổng dịch vụ', formatMoney(selectedSettlement.grossAmount)],
-                [`Commission (${(selectedSettlement.commissionRate * 100).toLocaleString('vi-VN')}%)`, formatMoney(selectedSettlement.commissionAmount)],
+                [`Hoa hồng (${(selectedSettlement.commissionRate * 100).toLocaleString('vi-VN')}%)`, formatMoney(selectedSettlement.commissionAmount)],
                 ['Phí nền tảng', formatMoney(selectedSettlement.allocatedPlatformFee)],
                 ['Hoàn tiền điều chỉnh', formatMoney(selectedSettlement.refundAmount)],
                 ['Phạt vi phạm', formatMoney(selectedSettlement.penaltyAmount)],
@@ -590,7 +590,7 @@ export const SettlementManagement: React.FC = () => {
               <h4 style={{ margin: '0 0 10px', fontSize: '14px' }}>Chi tiết dịch vụ</h4>
               <div style={{ overflowX: 'auto', border: '1px solid #E8E2D5', borderRadius: '7px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                  <thead><tr style={{ background: '#FAF6F0' }}><th style={{ padding: '10px', textAlign: 'left' }}>Dịch vụ</th><th style={{ padding: '10px', textAlign: 'right' }}>Giá</th><th style={{ padding: '10px', textAlign: 'right' }}>Giảm giá</th><th style={{ padding: '10px', textAlign: 'right' }}>Commission</th><th style={{ padding: '10px', textAlign: 'right' }}>Thực nhận</th></tr></thead>
+                  <thead><tr style={{ background: '#FAF6F0' }}><th style={{ padding: '10px', textAlign: 'left' }}>Dịch vụ</th><th style={{ padding: '10px', textAlign: 'right' }}>Giá</th><th style={{ padding: '10px', textAlign: 'right' }}>Giảm giá</th><th style={{ padding: '10px', textAlign: 'right' }}>Hoa hồng</th><th style={{ padding: '10px', textAlign: 'right' }}>Thực nhận</th></tr></thead>
                   <tbody>{selectedSettlement.itemSnapshots.map((item) => <tr key={item.bookingItemId} style={{ borderTop: '1px solid #E8E2D5' }}><td style={{ padding: '10px' }}>{item.itemName || item.itemType}</td><td style={{ padding: '10px', textAlign: 'right' }}>{formatMoney(item.serviceAmount)}</td><td style={{ padding: '10px', textAlign: 'right' }}>{formatMoney(item.providerDiscountAmount)}</td><td style={{ padding: '10px', textAlign: 'right' }}>{formatMoney(item.commissionAmount)}</td><td style={{ padding: '10px', textAlign: 'right', fontWeight: 700 }}>{formatMoney(item.netAmount)}</td></tr>)}</tbody>
                 </table>
               </div>

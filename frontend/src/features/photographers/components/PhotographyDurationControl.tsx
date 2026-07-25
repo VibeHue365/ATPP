@@ -65,6 +65,11 @@ export const PhotographyDurationControl: React.FC<PhotographyDurationControlProp
       <p>
         Gói bao gồm {formatDuration(includedDurationMinutes)}. Mỗi lần tăng thêm {formatDuration(overtimeIncrementMinutes)}
         {maxOvertimeMinutes > 0 ? `, tối đa ${formatDuration(maxOvertimeMinutes)}.` : '.'}
+        {overtimeMinutes > 0 ? (
+          <strong style={{ color: 'var(--color-primary-dark)', display: 'block', marginTop: '4px' }}>
+            Phụ thu tăng giờ ({formatDuration(overtimeMinutes)}): Được tính tự động theo tỷ lệ thời gian của gói.
+          </strong>
+        ) : null}
       </p>
       {!canIncrease && unavailableReason && <small>{unavailableReason}</small>}
     </div>

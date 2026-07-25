@@ -17,7 +17,8 @@ export interface PhotographyPackageSnapshot {
 }
 
 export interface BookingPriceBreakdownItem {
-  type: 'BASE_PACKAGE' | 'OVERTIME' | 'TRAVEL' | 'SURCHARGE' | 'MULTI_DAY_DISCOUNT';
+  type:
+    'BASE_PACKAGE' | 'OVERTIME' | 'TRAVEL' | 'SURCHARGE' | 'MULTI_DAY_DISCOUNT';
   label: string;
   amount: number;
   scheduleId?: Types.ObjectId | null;
@@ -123,7 +124,12 @@ export class BookingItem {
   @Prop({
     type: {
       version: { type: Number, required: true },
-      status: { type: String, enum: ['MIGRATED', 'NEEDS_ADMIN_REVIEW', 'LEGACY_READ_ONLY'], required: true, index: true },
+      status: {
+        type: String,
+        enum: ['MIGRATED', 'NEEDS_ADMIN_REVIEW', 'LEGACY_READ_ONLY'],
+        required: true,
+        index: true,
+      },
       reasons: { type: [String], default: [] },
       migratedAt: { type: Date, default: null },
     },
@@ -159,6 +165,43 @@ export class BookingItem {
 
   @Prop({ type: String, default: null, trim: true })
   customRequests?: string | null;
+
+  /** A customer proposal; the booking dates remain unchanged until its provider approves it. */
+  @Prop({
+    type: {
+      status: {
+        type: String,
+        enum: ['PENDING', 'PROCESSING', 'APPROVED', 'REJECTED'],
+        required: true,
+      },
+      requestedBy: { type: Types.ObjectId, ref: 'User', required: true },
+      requestedAt: { type: Date, required: true },
+      resolvedBy: { type: Types.ObjectId, ref: 'Provider', default: null },
+      resolvedAt: { type: Date, default: null },
+      newRentalFrom: { type: Date, default: null },
+      newRentalTo: { type: Date, default: null },
+      newShootDate: { type: String, default: null },
+      newShootTimeSlot: { type: String, default: null },
+      lockedExpiresAt: { type: Date, default: null },
+      customerReason: { type: String, default: null, maxlength: 500 },
+      providerNote: { type: String, default: null, maxlength: 500 },
+    },
+    default: null,
+  })
+  rescheduleRequest?: {
+    status: 'PENDING' | 'PROCESSING' | 'APPROVED' | 'REJECTED';
+    requestedBy: Types.ObjectId;
+    requestedAt: Date;
+    resolvedBy?: Types.ObjectId | null;
+    resolvedAt?: Date | null;
+    newRentalFrom?: Date | null;
+    newRentalTo?: Date | null;
+    newShootDate?: string | null;
+    newShootTimeSlot?: string | null;
+    lockedExpiresAt?: Date | null;
+    customerReason?: string | null;
+    providerNote?: string | null;
+  } | null;
 
   @Prop({ type: Boolean, default: false })
   isReviewed?: boolean;

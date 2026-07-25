@@ -14,7 +14,6 @@ backend/uploads/
 .vscode/
 .idea/
 
-
 # Environment variables / Secrets
 **/.env
 **/.env.local
@@ -25,4 +24,7 @@ backend/uploads/
 .DS_Store
 Thumbs.db
 *.log
-/docs/
+
+# Large binary executables
+minio.exe
+*.exe

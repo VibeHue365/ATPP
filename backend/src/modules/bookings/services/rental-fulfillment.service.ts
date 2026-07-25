@@ -30,7 +30,32 @@ export class RentalFulfillmentService {
 
   async markReturned(input: TransitionInput) {
     this.assertEvidence(input.evidence, 'Nhận lại áo dài yêu cầu ít nhất một ảnh tình trạng.');
-    return this.transition({ ...input, expectedStatus: RentalFulfillmentStatus.PickedUp, nextStatus: RentalFulfillmentStatus.Returned, action: 'MARKED_RETURNED', set: { 'rentalFulfillment.returnedAt': new Date(), 'rentalFulfillment.returnEvidence': input.evidence, 'rentalFulfillment.returnConditionNote': input.conditionNote?.trim() || null, 'rentalFulfillment.inventoryStatus': RentalInventoryStatus.ReturnedPendingInspection, 'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.PendingSettlement } });
+    const itemId = this.objectId(input.itemId);
+    const current = await this.bookingItemModel.findOne({ _id: itemId, itemType: BookingItemType.Product }).lean().exec();
+    const depositAmt = current?.depositAmount || 0;
+    const hasProposedCharges = Object.values(current?.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED');
+
+    const depositSettlementStatus = hasProposedCharges
+      ? DepositSettlementStatus.PendingSettlement
+      : DepositSettlementStatus.FullyReleased;
+    const depositDeductedAmount = 0;
+    const depositRefundAmount = hasProposedCharges ? 0 : depositAmt;
+
+    return this.transition({
+      ...input,
+      expectedStatus: RentalFulfillmentStatus.PickedUp,
+      nextStatus: RentalFulfillmentStatus.Returned,
+      action: 'MARKED_RETURNED',
+      set: {
+        'rentalFulfillment.returnedAt': new Date(),
+        'rentalFulfillment.returnEvidence': input.evidence,
+        'rentalFulfillment.returnConditionNote': input.conditionNote?.trim() || null,
+        'rentalFulfillment.inventoryStatus': RentalInventoryStatus.ReturnedPendingInspection,
+        'rentalFulfillment.depositSettlementStatus': depositSettlementStatus,
+        'rentalFulfillment.depositDeductedAmount': depositDeductedAmount,
+        'rentalFulfillment.depositRefundAmount': depositRefundAmount,
+      },
+    });
   }
 
   async proposeCharge(input: TransitionInput & { chargeType: ChargeType; amount: number; reason: string }) {
@@ -41,11 +66,17 @@ export class RentalFulfillmentService {
     const charge = { amount: Math.round(input.amount), status: 'PROPOSED', reason: input.reason.trim(), proposedBy: input.actor, proposedAt: now };
     const updated = await this.bookingItemModel.findOneAndUpdate({
       _id: itemId, itemType: BookingItemType.Product, 'rentalFulfillment.status': RentalFulfillmentStatus.Returned,
-      'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.PendingSettlement,
+      'rentalFulfillment.depositSettlementStatus': { $in: [DepositSettlementStatus.PendingSettlement, DepositSettlementStatus.FullyReleased] },
       [`rentalFulfillment.charges.${input.chargeType}`]: { $exists: false },
       depositAmount: { $gte: charge.amount },
     }, {
-      $set: { [`rentalFulfillment.charges.${input.chargeType}`]: charge, 'rentalFulfillment.issueStatus': RentalIssueStatus.Reported },
+      $set: {
+        [`rentalFulfillment.charges.${input.chargeType}`]: charge,
+        'rentalFulfillment.issueStatus': RentalIssueStatus.Reported,
+        'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.PendingSettlement,
+        'rentalFulfillment.depositDeductedAmount': 0,
+        'rentalFulfillment.depositRefundAmount': 0,
+      },
       $push: { 'rentalFulfillment.history': this.history('CHARGE_PROPOSED', input.actor, input.note, { chargeType: input.chargeType, amount: charge.amount }) },
     }, { new: true }).lean().exec();
     if (!updated) throw new ConflictException('Không thể đề xuất phí: item chưa được nhận lại, số tiền vượt cọc hoặc loại phí đã được đề xuất.');

@@ -42,10 +42,14 @@ export function PrivateEvidenceImage({
             signal: controller.signal,
           },
         );
-        if (!response.ok) throw new Error('Cannot load private evidence');
+        if (!response.ok) {
+          console.error('[DEBUG] PrivateEvidenceImage response NOT OK:', response.status, response.statusText);
+          throw new Error('Cannot load private evidence: ' + response.status);
+        }
         nextObjectUrl = URL.createObjectURL(await response.blob());
         setObjectUrl(nextObjectUrl);
-      } catch (error) {
+      } catch (error: any) {
+        console.error('[DEBUG] PrivateEvidenceImage load failed:', error?.message || error);
         if (!controller.signal.aborted) setFailed(true);
       }
     };
