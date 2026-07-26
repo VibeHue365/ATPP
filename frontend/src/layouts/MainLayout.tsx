@@ -600,40 +600,17 @@ export const MainLayout: React.FC = () => {
               position: 'absolute',
               bottom: '72px',
               right: '0',
-              width: '380px',
-              height: '520px',
-              background: 'white',
-              borderRadius: '16px',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              width: 'min(380px, calc(100vw - 32px))',
+              height: 'min(540px, calc(100vh - 120px))',
+              background: '#fcfbf9',
+              borderRadius: '20px',
+              boxShadow: '0 20px 50px -10px rgba(0, 0, 0, 0.3), 0 10px 20px -5px rgba(0, 0, 0, 0.1)',
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
-              border: '1px solid rgba(139, 90, 43, 0.15)',
+              border: '1px solid rgba(139, 90, 43, 0.2)',
             }}>
-              {/* Chat Header */}
-              <div style={{
-                background: 'linear-gradient(135deg, #8B5A2B 0%, #6B4226 100%)',
-                padding: '12px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                color: 'white',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sparkles size={18} />
-                  <span style={{ fontWeight: 600, fontSize: '14px' }}>Trợ Lý AI Áo Dài</span>
-                </div>
-                <button
-                  onClick={() => setIsChatOpen(false)}
-                  style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '2px' }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              {/* Chat Content */}
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <AIChatBot />
-              </div>
+              <AIChatBot onClose={() => setIsChatOpen(false)} />
             </div>
           )}
 

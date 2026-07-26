@@ -84,6 +84,7 @@ export const AppRouter: React.FC = () => {
           <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
           <Route path={ROUTES.CHAT} element={<ChatPage />} />
           <Route path={ROUTES.CHECKOUT_RESULT} element={<CheckoutResultPage />} />
+          <Route path="/payments/checkout/:code" element={<CheckoutResultPage />} />
           <Route path={ROUTES.PROVIDER_REGISTER} element={<BecomeProviderPage />} />
         </Route>
         {/* Admin Dashboard Page (No MainLayout header/footer) */}

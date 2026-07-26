@@ -1235,6 +1235,7 @@ export const ProviderDashboard: React.FC = () => {
           totalAmt = b.pricingSummary.grandTotal;
         }
 
+        const hasIncident = (b.items || []).some((item: any) => item.rentalFulfillment?.issueStatus === 'REPORTED' || item.rentalFulfillment?.issueStatus === 'UNDER_REVIEW');
         const statusMap: Record<string, string> = {
           PENDING: 'CHỜ XỬ LÝ',
           PENDING_PAYMENT: 'CHỜ THANH TOÁN',
@@ -1242,7 +1243,7 @@ export const ProviderDashboard: React.FC = () => {
           CONFIRMED: 'ĐANG THỰC HIỆN',
           PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
           PICKED_UP: 'ĐANG THUÊ',
-          RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
+          RETURN_PENDING: hasIncident ? 'CHỜ KHÁCH DUYỆT SỰ CỐ' : 'CHỜ KIỂM TRA ĐỒ',
           RETURNED: 'ĐÃ TRẢ ĐỒ',
           COMPLETED: 'HOÀN THÀNH',
           CANCELLED: 'ĐÃ HỦY',
@@ -2496,9 +2497,37 @@ export const ProviderDashboard: React.FC = () => {
       return;
     }
 
+    if (apiStatus === 'IN_PROGRESS') {
+      const photoItem = order?.items?.find((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE') || order?.items?.[0];
+      const rawShootDate = photoItem?.shootDate || photoItem?.startDate || photoItem?.rentalFrom || order?.startDate;
+      const rawTimeSlot = photoItem?.shootTimeSlot || photoItem?.timeSlot || '';
+
+      if (rawShootDate) {
+        try {
+          const shootStartTime = new Date(rawShootDate);
+          if (rawTimeSlot && rawTimeSlot.includes('-')) {
+            const startStr = rawTimeSlot.split('-')[0].trim();
+            const parts = startStr.split(':');
+            const startHour = parseInt(parts[0] || '0', 10);
+            const startMin = parseInt(parts[1] || '0', 10);
+            if (!isNaN(startHour)) shootStartTime.setHours(startHour, isNaN(startMin) ? 0 : startMin, 0, 0);
+          }
+          const earliestAllowedTime = new Date(shootStartTime.getTime() - 30 * 60 * 1000);
+          if (new Date() < earliestAllowedTime) {
+            toast.error('Chưa đến giờ hẹn chụp! Bạn chỉ có thể bấm bắt đầu trước giờ hẹn tối đa 30 phút.');
+            setActionMenuId(null);
+            return;
+          }
+        } catch {}
+      }
+    }
+
     try {
       await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus });
-      const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
+      const hasIncident = order?.items?.some((item: any) => item.rentalFulfillment?.issueStatus === 'REPORTED' || item.rentalFulfillment?.issueStatus === 'UNDER_REVIEW');
+      const displayStatus = apiStatus === 'RETURN_PENDING'
+        ? (hasIncident ? 'CHỜ KHÁCH DUYỆT SỰ CỐ' : 'CHỜ KIỂM TRA ĐỒ')
+        : (statusDisplayMap[apiStatus] || apiStatus);
       setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus } : o));
       toast.success(`Đã cập nhật trạng thái đơn hàng thành "${displayStatus}"!`);
     } catch (err: any) {
@@ -3751,9 +3780,13 @@ export const ProviderDashboard: React.FC = () => {
                                     { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
                                     { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
                                   ],
-                                  RETURN_PENDING: [
-                                    { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                  ],
+                                  RETURN_PENDING: o.items?.some((item: any) => item.rentalFulfillment?.issueStatus === 'REPORTED' || item.rentalFulfillment?.issueStatus === 'UNDER_REVIEW')
+                                    ? [
+                                        { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                      ]
+                                    : [
+                                        { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                      ],
                                   RETURNED: [
                                     { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
                                   ],
@@ -3800,9 +3833,13 @@ export const ProviderDashboard: React.FC = () => {
                                     { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
                                     { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
                                   ],
-                                  RETURN_PENDING: [
-                                    { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                  ],
+                                  RETURN_PENDING: o.items?.some((item: any) => item.rentalFulfillment?.issueStatus === 'REPORTED' || item.rentalFulfillment?.issueStatus === 'UNDER_REVIEW')
+                                    ? [
+                                        { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                      ]
+                                    : [
+                                        { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                      ],
                                   RETURNED: [
                                     { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
                                   ],

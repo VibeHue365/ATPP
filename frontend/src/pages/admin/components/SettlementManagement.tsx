@@ -117,10 +117,10 @@ export const SettlementManagement: React.FC = () => {
       setPagination(res.pagination);
 
       // Calculate stats based on fetched items
-      const pendingSum = items.filter((s: any) => s.status === 'READY_TO_SETTLE').reduce((sum: number, s: any) => sum + s.payableAmount, 0);
-      const settledSum = items.filter((s: any) => s.status === 'SETTLED').reduce((sum: number, s: any) => sum + s.payableAmount, 0);
-      const heldSum = items.filter((s: any) => s.status === 'ON_HOLD').reduce((sum: number, s: any) => sum + s.payableAmount, 0);
-      const cancelledSum = items.filter((s: any) => s.status === 'CANCELLED').reduce((sum: number, s: any) => sum + s.payableAmount, 0);
+      const pendingSum = items.filter((s: any) => s.status === 'READY_TO_SETTLE').reduce((sum: number, s: any) => sum + (s.payableAmount ?? 0), 0);
+      const settledSum = items.filter((s: any) => s.status === 'SETTLED').reduce((sum: number, s: any) => sum + (s.payableAmount ?? 0), 0);
+      const heldSum = items.filter((s: any) => s.status === 'ON_HOLD').reduce((sum: number, s: any) => sum + (s.payableAmount ?? 0), 0);
+      const cancelledSum = items.filter((s: any) => s.status === 'CANCELLED').reduce((sum: number, s: any) => sum + (s.payableAmount ?? 0), 0);
 
       setStats({
         pending: pendingSum,
@@ -477,12 +477,12 @@ export const SettlementManagement: React.FC = () => {
                         <div style={{ fontWeight: 600 }}>{providerLabel(s.providerId)}</div>
                         <span style={{ fontSize: '11px', color: '#7A7A7A' }}>STK: {defaultAccount?.accountNumberMasked || 'Chưa cập nhật'}</span>
                       </td>
-                      <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 600 }}>{s.grossAmount.toLocaleString()}đ</td>
+                      <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 600 }}>{(s.grossAmount ?? 0).toLocaleString()}đ</td>
                       <td style={{ padding: '16px 20px', textAlign: 'right', color: '#B89047', fontWeight: 600 }}>
-                        -{s.commissionAmount.toLocaleString()}đ
+                        -{(s.commissionAmount ?? 0).toLocaleString()}đ
                         <span style={{ display: 'block', fontSize: '10px', color: '#7A7A7A' }}>{((s.commissionRate ?? 0) * 100).toLocaleString('vi-VN')}%</span>
                       </td>
-                      <td style={{ padding: '16px 20px', textAlign: 'right', color: '#166534', fontWeight: 800 }}>{s.payableAmount.toLocaleString()}đ</td>
+                      <td style={{ padding: '16px 20px', textAlign: 'right', color: '#166534', fontWeight: 800 }}>{(s.payableAmount ?? 0).toLocaleString()}đ</td>
 
                       <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                         <span style={{

@@ -173,7 +173,8 @@ export class PaymentsService {
 
     const paymentCode = `PAY${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
     const orderCode = Math.floor(100000 + Math.random() * 900000);
-    const checkoutUrl = `http://127.0.0.1:3000/payments/checkout/${paymentCode}`;
+    const frontendBase = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const checkoutUrl = `${frontendBase}/checkout/result?paymentCode=${paymentCode}`;
 
     const payment = await this.paymentsRepository.createPayment({
       bookingId,

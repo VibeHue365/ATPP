@@ -979,6 +979,7 @@ export const PhotographerDetailPage: React.FC = () => {
               concept={selectedConcept}
               request={customRequest}
               referenceFile={referenceFile}
+              radiusKm={photographer.serviceRadiusKm}
               onLocationChange={setSelectedLocation}
               onConceptChange={setSelectedConcept}
               onRequestChange={setCustomRequest}

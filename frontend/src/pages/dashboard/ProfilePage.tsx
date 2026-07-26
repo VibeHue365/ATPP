@@ -143,20 +143,31 @@ export const ProfilePage: React.FC = () => {
     // Immediately clear stale incident data when switching bookings
     setBookingIncident(null);
 
-    const fetchIncident = async () => {
-      if (activeDetailBooking) {
-        try {
-          const inc = await httpClient.get<any | null>(`/api/disputes/incidents/booking/${activeDetailBooking._id}`);
-          // Only set if it's a real incident object (not null/undefined/empty)
-          setBookingIncident(inc && inc._id ? inc : null);
-        } catch (err) {
-          console.error('Không thể tải thông tin sự cố:', err);
-          setBookingIncident(null);
+    if (!activeDetailBooking?._id) return;
+
+    let isSubscribed = true;
+
+    // Fetch full booking details (with populated schedules, startsAt, timeSlot)
+    httpClient.get<any>(`/api/bookings/${activeDetailBooking._id}`)
+      .then((fullBooking) => {
+        if (isSubscribed && fullBooking && fullBooking._id) {
+          setActiveDetailBooking((prev) => (prev?._id === fullBooking._id ? { ...prev, ...fullBooking } : prev));
         }
+      })
+      .catch((err) => console.error('Lỗi khi tải chi tiết đầy đủ đơn hàng:', err));
+
+    const fetchIncident = async () => {
+      try {
+        const inc = await httpClient.get<any | null>(`/api/disputes/incidents/booking/${activeDetailBooking._id}`);
+        if (isSubscribed) setBookingIncident(inc && inc._id ? inc : null);
+      } catch (err) {
+        if (isSubscribed) setBookingIncident(null);
       }
     };
     fetchIncident();
-  }, [activeDetailBooking]);
+
+    return () => { isSubscribed = false; };
+  }, [activeDetailBooking?._id]);
 
   const handleIncidentResponse = async (agree: boolean) => {
     if (!bookingIncident) return;
@@ -292,6 +303,42 @@ export const ProfilePage: React.FC = () => {
       month: '2-digit',
       year: 'numeric'
     });
+  };
+
+  const getTimeSlotDisplay = (item: any, booking: any, schedule?: any): string => {
+    const slot = item?.shootTimeSlot || item?.timeSlot || item?.shootTimeSlotSnapshot || schedule?.timeSlot || booking?.shootTimeSlot || booking?.timeSlot;
+    if (slot && typeof slot === 'string' && slot.trim() && slot.trim() !== 'Trống') {
+      return slot.replace(/\s*-\s*/, ' - ');
+    }
+
+    const rawStartsAt = item?.startsAt || item?.shootDate || schedule?.startsAt || schedule?.scheduledDate || booking?.startsAt || booking?.shootDate;
+    const rawEndsAt = item?.endsAt || schedule?.endsAt || booking?.endsAt;
+
+    if (rawStartsAt) {
+      const dStart = new Date(rawStartsAt);
+      if (!isNaN(dStart.getTime())) {
+        const hours = dStart.getHours();
+        const minutes = dStart.getMinutes();
+        const strVal = String(rawStartsAt);
+        const hasTimePart = strVal.includes('T') || strVal.includes(':') || hours > 0 || minutes > 0;
+        if (hasTimePart) {
+          const startStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+          if (rawEndsAt) {
+            const dEnd = new Date(rawEndsAt);
+            if (!isNaN(dEnd.getTime())) {
+              const endStr = `${String(dEnd.getHours()).padStart(2, '0')}:${String(dEnd.getMinutes()).padStart(2, '0')}`;
+              return `${startStr} - ${endStr}`;
+            }
+          }
+          return `${startStr} (Giờ bắt đầu)`;
+        }
+      }
+    }
+
+    const duration = item?.durationHours ? `${item.durationHours} giờ` : (item?.photographyPackageId?.includedDurationMinutes ? `${item.photographyPackageId.includedDurationMinutes / 60} giờ` : (booking?.durationHours ? `${booking.durationHours} giờ` : ''));
+    if (duration) return `Thời lượng ${duration}`;
+
+    return 'Thỏa thuận trực tiếp với thợ';
   };
 
   // Status mapping
@@ -815,16 +862,44 @@ export const ProfilePage: React.FC = () => {
               </div>
             </div>
 
-            {/* Customer Information */}
-            <div style={{ backgroundColor: '#FAF8F5', padding: '16px', borderRadius: '8px', border: '1px solid #EAE1D4' }}>
-              <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary-dark)', marginBottom: '8px', borderBottom: '1px solid rgba(182, 145, 91, 0.15)', paddingBottom: '4px' }}>
-                THÔNG TIN KHÁCH HÀNG
-              </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: '13px', color: '#4A4440' }}>
-                <span>Người đặt: <strong>{user?.fullName || 'Khách hàng'}</strong></span>
-                <span>Số điện thoại: <strong>{user?.phone || 'Chưa cập nhật'}</strong></span>
-                <span style={{ gridColumn: 'span 2' }}>Email: <strong>{user?.email}</strong></span>
+            {/* Customer Information & Photoshoot Summary Banner */}
+            <div style={{ backgroundColor: '#FAF8F5', padding: '16px', borderRadius: '8px', border: '1px solid #EAE1D4', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary-dark)', marginBottom: '8px', borderBottom: '1px solid rgba(182, 145, 91, 0.15)', paddingBottom: '4px' }}>
+                  THÔNG TIN KHÁCH HÀNG
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: '13px', color: '#4A4440' }}>
+                  <span>Người đặt: <strong>{user?.fullName || activeDetailBooking.customerName || 'Khách hàng'}</strong></span>
+                  <span>Số điện thoại: <strong>{user?.phone || activeDetailBooking.customerPhone || 'Chưa cập nhật'}</strong></span>
+                  <span style={{ gridColumn: 'span 2' }}>Email: <strong>{user?.email || activeDetailBooking.customerEmail || '—'}</strong></span>
+                </div>
               </div>
+
+              {/* Special Photography Banner if this is a photoshoot booking */}
+              {(() => {
+                const photoItem = activeDetailBooking.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.shootDate) || activeDetailBooking.items?.[0] || {};
+                const isPhoto = activeDetailBooking.bookingType === 'PHOTOGRAPHY' || photoItem.itemType === 'PHOTOGRAPHY_PACKAGE' || photoItem.shootDate;
+                if (!isPhoto) return null;
+
+                const matchedSchedule = activeDetailBooking.schedules?.find((s: any) => s.scheduleType === 'PHOTOSHOOT');
+                const rawShootDate = photoItem.shootDate || photoItem.startsAt || matchedSchedule?.scheduledDate || matchedSchedule?.startsAt || activeDetailBooking.shootDate;
+                const shootDateStr = rawShootDate ? formatDate(rawShootDate) : '';
+                const timeSlotDisplay = getTimeSlotDisplay(photoItem, activeDetailBooking, matchedSchedule);
+                const locationStr = photoItem.shootLocation || photoItem.location || matchedSchedule?.locationAddress || activeDetailBooking.shootLocation || activeDetailBooking.address || '';
+
+                return (
+                  <div style={{ borderTop: '1px dashed #D6C7B2', paddingTop: '10px', marginTop: '4px' }}>
+                    <h5 style={{ fontSize: '13px', fontWeight: 800, color: '#1E40AF', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>📸 CHI TIẾT THỜI GIAN & ĐỊA ĐIỂM CHỤP:</span>
+                    </h5>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12.5px', color: '#1E3A8A', backgroundColor: '#EFF6FF', padding: '10px 12px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
+                      <div>📅 Ngày chụp: <strong>{shootDateStr || 'Chưa xếp ngày'}</strong></div>
+                      <div>⏰ Khung giờ: <strong>{timeSlotDisplay}</strong></div>
+                      {locationStr && <div style={{ gridColumn: 'span 2' }}>📍 Địa điểm: <strong>{locationStr}</strong></div>}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Photography Delivered Photos */}
@@ -1064,22 +1139,47 @@ export const ProfilePage: React.FC = () => {
                 const populatedProduct = isProduct && item.productId && typeof item.productId === 'object'
                   ? item.productId
                   : null;
+                const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object'
+                  ? item.photographyPackageId
+                  : null;
+
                 const selectedColorImages = populatedProduct?.colorImages?.find(
                   (entry: { color?: string; images?: string[] }) =>
                     entry.color?.trim().toUpperCase() === item.color?.trim().toUpperCase(),
                 )?.images;
+
                 const itemImage = selectedColorImages?.[0]
                   || populatedProduct?.images?.[0]
+                  || pkgObj?.coverImage
+                  || pkgObj?.portfolio?.[0]
+                  || pkgObj?.images?.[0]
                   || item.image
-                  || item.productImage;
+                  || item.productImage
+                  || item.coverImage
+                  || (item.referenceImages && item.referenceImages.length > 0 ? item.referenceImages[0] : item.referenceImage);
+
                 const itemName = populatedProduct?.name
+                  || pkgObj?.name
                   || item.name
+                  || item.productName
                   || (isProduct ? 'Sản phẩm áo dài' : 'Gói chụp ảnh cổ phục');
+
+                const matchedSchedule = activeDetailBooking.schedules?.find(
+                  (s: any) => s.scheduleType === 'PHOTOSHOOT' || s.scheduleType === 'RENTAL_PERIOD'
+                );
+
+                const rawShootDate = item.shootDate || item.startsAt || item.startDate || matchedSchedule?.scheduledDate || matchedSchedule?.startsAt || activeDetailBooking.shootDate || activeDetailBooking.startDate;
+                const timeSlotDisplay = getTimeSlotDisplay(item, activeDetailBooking, matchedSchedule);
+
                 const formattedDateStr = isProduct
                   ? (item.rentalType === 'DAILY'
-                    ? `${formatDate(item.startDate || item.rentalFrom)} - ${formatDate(item.endDate || item.rentalTo)}`
-                    : `Ngày ${formatDate(item.startDate || item.rentalFrom)} (Khung giờ: ${item.startTime} - ${item.endTime})`)
-                  : `Ngày chụp: ${formatDate(item.shootDate)} (${item.shootTimeSlot || 'Trống'})`;
+                    ? `${formatDate(item.startDate || item.rentalFrom || activeDetailBooking.startDate)} - ${formatDate(item.endDate || item.rentalTo || activeDetailBooking.endDate)}`
+                    : `Ngày ${formatDate(item.startDate || item.rentalFrom || activeDetailBooking.startDate)} (Khung giờ: ${item.startTime || '08:00'} - ${item.endTime || '18:00'})`)
+                  : `Ngày chụp: ${formatDate(rawShootDate)} (Khung giờ: ${timeSlotDisplay})`;
+
+                const photographerProvider = pkgObj?.providerId || item.providerId || activeDetailBooking.providerId || {};
+                const photographerName = typeof photographerProvider === 'object' ? (photographerProvider.businessName || photographerProvider.fullName || photographerProvider.name || '') : '';
+                const photographerPhone = typeof photographerProvider === 'object' ? (photographerProvider.contact?.phone || photographerProvider.phone || '') : '';
 
                 return (
                   <div
@@ -1094,14 +1194,14 @@ export const ProfilePage: React.FC = () => {
                     }}
                   >
                     <ImageWithFallback
-                      src={itemImage || (isProduct ? undefined : '/avatar_hanna.png')}
+                      src={itemImage || (isProduct ? undefined : 'https://images.unsplash.com/photo-1537633552985-df8429e8048b')}
                       alt={itemName}
                       fallback={
                         <div
-                          aria-label={'Chưa có ảnh cho ' + itemName}
+                          aria-label={'Ảnh gói ' + itemName}
                           style={{ width: '80px', height: '100px', display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: '6px', border: '1px solid #EAEAE8', background: '#F7F3ED', color: '#9A8170', fontSize: '11px', textAlign: 'center', padding: '8px' }}
                         >
-                          Chưa có ảnh
+                          Gói chụp
                         </div>
                       }
                       style={{ width: '80px', height: '100px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #EAEAE8' }}
@@ -1144,35 +1244,45 @@ export const ProfilePage: React.FC = () => {
                           )}
                         </div>
 
-                        <div style={{ fontSize: '12px', color: '#7E6D5B', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <div style={{ fontSize: '12px', color: '#7E6D5B', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <span>Thời gian: <strong>{formattedDateStr}</strong></span>
                           {isProduct ? (
                             <>
-                              <span>Kích cỡ: <strong>{item.size}</strong> • Màu sắc: <strong>{item.color}</strong></span>
-                              <span>Địa chỉ nhận: <strong>{item.providerAddress || 'Cửa hàng VibeHue'}</strong></span>
+                              <span>Kích cỡ: <strong>{item.selectedSize || item.size || 'M'}</strong> • Màu sắc: <strong>{item.selectedColor || item.color || 'Đỏ'}</strong></span>
+                              <span>Địa chỉ nhận: <strong>{item.providerAddress || 'Showroom VibeHue'}</strong></span>
                             </>
                           ) : (
                             <>
-                              <span>Địa điểm chụp: <strong>{item.shootLocation || 'Đại Nội Huế'}</strong></span>
-                              <span>Concept: <strong>{item.concept || 'Cổ phục tự do'}</strong></span>
-                              {item.referenceImage && (
-                                <div style={{ marginTop: '8px' }}>
-                                  <span style={{ display: 'block', marginBottom: '4px' }}>Ảnh concept mẫu:</span>
-                                  <a href={item.referenceImage.startsWith('http') ? item.referenceImage : `${API_BASE_URL}${item.referenceImage.startsWith('/') ? '' : '/'}${item.referenceImage}`} target="_blank" rel="noopener noreferrer">
-                                    <img
-                                      src={item.referenceImage.startsWith('http') ? item.referenceImage : `${API_BASE_URL}${item.referenceImage.startsWith('/') ? '' : '/'}${item.referenceImage}`}
-                                      alt="Ảnh concept mẫu"
-                                      style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #EAEAE8', cursor: 'pointer' }}
-                                    />
-                                  </a>
+                              {photographerName && (
+                                <span>Thợ ảnh / Studio: <strong style={{ color: '#1E293B' }}>{photographerName}</strong> {photographerPhone ? `(SĐT: ${photographerPhone})` : ''}</span>
+                              )}
+                              <span>Địa điểm chụp: <strong>{item.shootLocation || item.locationAddress || activeDetailBooking.shootLocation || 'Lăng Khải Định, Thủy Bằng, Huế'}</strong></span>
+                              <span>Concept: <strong>{item.shootConcept || item.concept || 'Cổ phục tự do'}</strong></span>
+                              {(item.referenceImage || (item.referenceImages && item.referenceImages.length > 0)) && (
+                                <div style={{ marginTop: '6px' }}>
+                                  <span style={{ display: 'block', marginBottom: '4px', fontSize: '11px', fontWeight: 700, color: '#7E22CE' }}>📸 Ảnh concept mẫu tham khảo:</span>
+                                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                    {(Array.isArray(item.referenceImages) ? item.referenceImages : [item.referenceImage]).filter(Boolean).map((refImg: string, rIdx: number) => {
+                                      const refUrl = refImg.startsWith('http') ? refImg : `${API_BASE_URL}${refImg.startsWith('/') ? '' : '/'}${refImg}`;
+                                      return (
+                                        <a key={rIdx} href={refUrl} target="_blank" rel="noopener noreferrer">
+                                          <img
+                                            src={refUrl}
+                                            alt={`Ảnh concept mẫu ${rIdx + 1}`}
+                                            style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #E9D5FF', cursor: 'pointer' }}
+                                          />
+                                        </a>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
                               )}
                             </>
                           )}
                           {isProduct && item.pickupReturnLocationSnapshot?.address && <RentalPickupReturnPanel location={item.pickupReturnLocationSnapshot} itemName={item.name} />}
-                          {item.customRequests && (
-                            <span style={{ color: '#C0392B', fontStyle: 'italic' }}>
-                              Yêu cầu đặc biệt: "{item.customRequests}"
+                          {(item.customRequests || item.conceptNotes || item.notes) && (
+                            <span style={{ color: '#C0392B', fontStyle: 'italic', marginTop: '2px' }}>
+                              Yêu cầu đặc biệt: "{item.customRequests || item.conceptNotes || item.notes}"
                             </span>
                           )}
                         </div>

@@ -953,6 +953,23 @@ export class DisputesService {
           notes,
           adminUserId,
         );
+
+        if (reportedBy) {
+          try {
+            const providerModel = this.bookingModel.db.model('Provider');
+            const provider = await providerModel.findById(reportedBy);
+            if (provider) {
+              const newViolationCount = (provider.violationCount || 0) + 1;
+              const updateData: Record<string, any> = { violationCount: newViolationCount };
+              if (newViolationCount >= 3) {
+                updateData.status = 'SUSPENDED';
+              }
+              await providerModel.findByIdAndUpdate(reportedBy, { $set: updateData });
+            }
+          } catch (pErr) {
+            console.error('Lỗi tự động ghi nhận vi phạm/đình chỉ đối tác:', pErr);
+          }
+        }
       } else {
         await this.settlementsService.releaseSettlementsForBooking(
           booking._id.toString(),

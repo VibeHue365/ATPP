@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Check, CheckCircle2, Clock3, Home, LoaderCircle, RefreshCw, ShoppingBag, XCircle } from 'lucide-react';
 import { ROUTES } from '../../config/routes';
 import { useCart } from '../../context/CartContext';
@@ -9,7 +9,9 @@ import './CheckoutResultPage.css';
 type State = 'PENDING' | 'SUCCESS' | 'FAILED' | 'ERROR';
 type Result = { paymentStatus: 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED'; bookingStatus: string; confirmed: boolean };
 const CheckoutResultPage: React.FC = () => {
-  const [params] = useSearchParams(), code = params.get('paymentCode') || '';
+  const routeParams = useParams<{ code?: string }>();
+  const [searchParams] = useSearchParams();
+  const code = routeParams.code || searchParams.get('paymentCode') || searchParams.get('code') || '';
   const { removeFromCart } = useCart();
   const [state, setState] = useState<State>('PENDING');
   const [message, setMessage] = useState('Hệ thống đang xác minh giao dịch của bạn.');

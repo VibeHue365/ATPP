@@ -12,7 +12,11 @@ interface Message {
   confidence?: number;
 }
 
-export const AIChatBot: React.FC = () => {
+interface AIChatBotProps {
+  onClose?: () => void;
+}
+
+export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: 'ai',
@@ -132,44 +136,71 @@ export const AIChatBot: React.FC = () => {
   ];
 
   return (
-    <div className="flex flex-col h-full bg-stone-50 border border-stone-200/80 rounded-2xl overflow-hidden shadow-sm">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fafaf9', overflow: 'hidden' }}>
       {/* Bot Header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-stone-900 text-white">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 bg-[#a11e22] text-white rounded-lg">
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 16px', background: 'linear-gradient(135deg, #1c1917 0%, #292524 50%, #1c1917 100%)',
+        color: '#ffffff', borderBottom: '1px solid #44403c', flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{
+            padding: '6px', background: '#8B5A2B', color: '#fff', borderRadius: '8px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
             <Sparkles size={16} />
           </div>
           <div>
-            <h4 className="font-header text-sm font-bold tracking-wide">Trợ Lý Thiết Kế Cổ Phong AI</h4>
-            <span className="text-[10px] text-stone-400 font-medium tracking-wide flex items-center gap-1">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '14px', fontWeight: 700, letterSpacing: '0.025em', color: '#fef3c7', margin: 0, lineHeight: 1.3 }}>
+              Trợ Lý AI Áo Dài Cổ Phong
+            </h4>
+            <span style={{ fontSize: '10px', color: '#a8a29e', fontWeight: 500, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', animation: 'pulse 2s infinite' }}></span>
               <span>TRỰC TUYẾN • TỰ HỌC THÔNG MINH</span>
             </span>
           </div>
         </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            style={{ padding: '4px', color: '#a8a29e', background: 'none', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}
+            title="Đóng cửa sổ"
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = '#44403c'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#a8a29e'; e.currentTarget.style.background = 'none'; }}
+          >
+            <X size={18} />
+          </button>
+        )}
       </div>
 
       {/* Message Area */}
-      <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-4">
+      <div style={{ flex: 1, padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
         {messages.map((msg, idx) => (
           <div
             key={idx}
-            className={`flex flex-col max-w-[85%] ${
-              msg.sender === 'user' ? 'self-end items-end' : 'self-start items-start'
-            }`}
+            style={{
+              display: 'flex', flexDirection: 'column', maxWidth: '85%',
+              alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+              alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+            }}
           >
             <div
-              className={`px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
-                msg.sender === 'user'
-                  ? 'bg-stone-900 text-white rounded-tr-none'
-                  : 'bg-white text-stone-900 border border-stone-100 rounded-tl-none'
-              }`}
+              style={{
+                padding: '12px 16px',
+                borderRadius: msg.sender === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
+                fontSize: '13px', lineHeight: '1.65',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                ...(msg.sender === 'user'
+                  ? { background: '#1c1917', color: '#ffffff' }
+                  : { background: '#ffffff', color: '#1c1917', border: '1px solid #e7e5e4' }
+                ),
+              }}
             >
               {msg.image && (
                 <img
                   src={msg.image}
                   alt="User uploaded"
-                  className="max-w-full max-h-48 rounded-lg mb-2 object-cover block"
+                  style={{ maxWidth: '100%', maxHeight: '192px', borderRadius: '8px', marginBottom: '8px', objectFit: 'cover', display: 'block' }}
                 />
               )}
               {msg.text}
@@ -177,35 +208,39 @@ export const AIChatBot: React.FC = () => {
 
             {/* Recommended Products UI */}
             {msg.sender === 'ai' && msg.recommended_products && msg.recommended_products.length > 0 && (
-              <div className="flex flex-col gap-1.5 mt-2 w-full max-w-[280px] xs:max-w-[320px]">
-                <span className="text-[10px] font-extrabold text-stone-500 uppercase tracking-wider block px-1">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', width: '100%', maxWidth: '320px' }}>
+                <span style={{ fontSize: '10px', fontWeight: 800, color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0 4px' }}>
                   Mẫu sản phẩm gợi ý:
                 </span>
-                <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-200">
+                <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '8px' }}>
                   {msg.recommended_products.map((prod: any) => (
                     <div
                       key={prod._id}
-                      className="flex-shrink-0 w-[140px] bg-white border border-stone-200 rounded-xl overflow-hidden shadow-xs hover:border-stone-800 transition flex flex-col"
+                      style={{
+                        flexShrink: 0, width: '140px', background: '#fff', border: '1px solid #e7e5e4',
+                        borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+                        transition: 'border-color 0.2s',
+                      }}
                     >
-                      <div className="h-20 bg-stone-100 relative">
+                      <div style={{ height: '80px', background: '#f5f5f4', position: 'relative' }}>
                         <img
                           src={prod.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=300&q=80'}
                           alt={prod.name}
-                          className="w-full h-full object-cover"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           onError={(e) => {
                             (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=300&q=80';
                           }}
                         />
-                        <span className="absolute bottom-1 right-1 px-1 py-0.5 bg-black/60 text-[8px] text-white font-bold rounded">
+                        <span style={{ position: 'absolute', bottom: '4px', right: '4px', padding: '2px 4px', background: 'rgba(0,0,0,0.6)', fontSize: '8px', color: '#fff', fontWeight: 700, borderRadius: '4px' }}>
                           {prod.basePrice?.toLocaleString('vi-VN')}đ
                         </span>
                       </div>
-                      <div className="p-2 flex-1 flex flex-col justify-between">
+                      <div style={{ padding: '8px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                         <div>
-                          <h5 className="font-header text-[11px] font-bold text-stone-900 truncate">
+                          <h5 style={{ fontFamily: 'var(--font-header)', fontSize: '11px', fontWeight: 700, color: '#1c1917', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
                             {prod.name}
                           </h5>
-                          <p className="text-[9px] text-stone-500 truncate">
+                          <p style={{ fontSize: '9px', color: '#78716c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '2px 0 0' }}>
                             {prod.materials?.join(', ') || 'N/A'}
                           </p>
                         </div>
@@ -218,7 +253,13 @@ export const AIChatBot: React.FC = () => {
                               alert(`Sản phẩm: ${prod.name}\nGiá thuê: ${prod.basePrice?.toLocaleString('vi-VN')}đ\nChất liệu: ${prod.materials?.join(', ')}`);
                             }
                           }}
-                          className="mt-1.5 w-full py-1 bg-stone-900 hover:bg-[#a11e22] text-white text-[9px] font-bold rounded transition text-center"
+                          style={{
+                            marginTop: '6px', width: '100%', padding: '4px 0', background: '#1c1917', color: '#fff',
+                            fontSize: '9px', fontWeight: 700, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                            textAlign: 'center', transition: 'background 0.2s',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = '#a11e22'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = '#1c1917'; }}
                         >
                           Thuê ngay
                         </button>
@@ -231,19 +272,21 @@ export const AIChatBot: React.FC = () => {
 
             {/* Smart tags for AI replies */}
             {msg.sender === 'ai' && (msg.category || msg.source) && (
-              <div className="flex gap-2 mt-1.5 text-[10px] text-stone-500 font-bold px-1">
+              <div style={{ display: 'flex', gap: '8px', marginTop: '6px', fontSize: '10px', color: '#78716c', fontWeight: 700, padding: '0 4px' }}>
                 {msg.category && msg.category !== 'general' && (
-                  <span className="px-2 py-0.5 bg-stone-200/50 rounded-full flex items-center gap-0.5 border border-stone-200/30">
+                  <span style={{ padding: '2px 8px', background: 'rgba(214,211,209,0.5)', borderRadius: '9999px', display: 'flex', alignItems: 'center', gap: '2px', border: '1px solid rgba(214,211,209,0.3)' }}>
                     <Cpu size={10} />
                     <span>CHỦ ĐỀ: {msg.category.toUpperCase()}</span>
                   </span>
                 )}
                 {msg.source && (
-                  <span className={`px-2 py-0.5 rounded-full flex items-center gap-0.5 border ${
-                    msg.source === 'gemini_learned' 
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                      : 'bg-stone-200/50 border-stone-200/30'
-                  }`}>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: '9999px', display: 'flex', alignItems: 'center', gap: '2px',
+                    ...(msg.source === 'gemini_learned'
+                      ? { background: '#ecfdf5', color: '#15803d', border: '1px solid #d1fae5' }
+                      : { background: 'rgba(214,211,209,0.5)', border: '1px solid rgba(214,211,209,0.3)' }
+                    ),
+                  }}>
                     <Brain size={10} />
                     <span>NGUỒN: {msg.source === 'gemini_learned' ? 'AI TỰ HỌC (GEMINI)' : 'CƠ SỞ TRI THỨC'}</span>
                   </span>
@@ -254,10 +297,14 @@ export const AIChatBot: React.FC = () => {
         ))}
 
         {isLoading && (
-          <div className="self-start flex gap-1 items-center px-4 py-3 bg-white border border-stone-100 rounded-2xl rounded-tl-none shadow-sm">
-            <span className="w-1.5 h-1.5 bg-stone-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-            <span className="w-1.5 h-1.5 bg-stone-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-            <span className="w-1.5 h-1.5 bg-stone-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+          <div style={{
+            alignSelf: 'flex-start', display: 'flex', gap: '4px', alignItems: 'center',
+            padding: '12px 16px', background: '#fff', border: '1px solid #f5f5f4',
+            borderRadius: '4px 16px 16px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <span className="animate-bounce" style={{ width: '6px', height: '6px', background: '#78716c', borderRadius: '50%', animationDelay: '0ms' }}></span>
+            <span className="animate-bounce" style={{ width: '6px', height: '6px', background: '#78716c', borderRadius: '50%', animationDelay: '150ms' }}></span>
+            <span className="animate-bounce" style={{ width: '6px', height: '6px', background: '#78716c', borderRadius: '50%', animationDelay: '300ms' }}></span>
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -265,12 +312,18 @@ export const AIChatBot: React.FC = () => {
 
       {/* Suggested prompts */}
       {messages.length === 1 && (
-        <div className="px-6 py-2 flex flex-wrap gap-2">
+        <div style={{ padding: '8px 16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {suggestions.map((s, idx) => (
             <button
               key={idx}
               onClick={() => handleSend(s.text)}
-              className="px-3.5 py-1.5 bg-white hover:bg-stone-100 border border-stone-200 text-xs font-bold text-stone-700 rounded-full transition flex items-center gap-1"
+              style={{
+                padding: '6px 14px', background: '#ffffff', border: '1px solid #e7e5e4',
+                fontSize: '12px', fontWeight: 700, color: '#44403c', borderRadius: '9999px',
+                cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '4px',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f4'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; }}
             >
               <MessageSquare size={10} />
               <span>{s.label}</span>
@@ -281,57 +334,77 @@ export const AIChatBot: React.FC = () => {
 
       {/* Image Preview Row */}
       {selectedImage && (
-        <div className="px-4 py-2 bg-stone-50 border-t border-stone-200 flex items-center gap-3">
-          <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-stone-200 shadow-sm flex-shrink-0">
-            <img src={selectedImage.previewUrl} alt="Preview" className="w-full h-full object-cover" />
+        <div style={{ padding: '8px 16px', background: '#fafaf9', borderTop: '1px solid #e7e5e4', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ position: 'relative', width: '48px', height: '48px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e7e5e4', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', flexShrink: 0 }}>
+            <img src={selectedImage.previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             <button
               type="button"
               onClick={handleRemoveImage}
-              className="absolute top-0.5 right-0.5 p-0.5 bg-stone-950/70 hover:bg-stone-950 text-white rounded-full transition"
+              style={{
+                position: 'absolute', top: '2px', right: '2px', padding: '2px',
+                background: 'rgba(12,10,9,0.7)', color: '#fff', border: 'none',
+                borderRadius: '50%', cursor: 'pointer', transition: 'background 0.2s',
+              }}
             >
               <X size={8} />
             </button>
           </div>
-          <span className="text-[10px] text-stone-500 font-medium truncate max-w-[220px]">
+          <span style={{ fontSize: '10px', color: '#78716c', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
             Ảnh đã chọn để tìm sản phẩm
           </span>
         </div>
       )}
 
       {/* Input Box */}
-      <div className="p-4 bg-white border-t border-stone-200 flex gap-2.5 items-center">
+      <div style={{ padding: '12px 16px', background: '#ffffff', borderTop: '1px solid #e7e5e4', display: 'flex', gap: '10px', alignItems: 'center' }}>
         <input
           type="file"
           ref={fileInputRef}
           onChange={handleFileChange}
           accept="image/*"
-          className="hidden"
+          style={{ display: 'none' }}
         />
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading}
-          className="p-2 bg-stone-50 hover:bg-stone-100 border border-stone-200 text-stone-500 rounded-xl transition flex items-center justify-center shadow-xs"
+          style={{
+            width: '38px', height: '38px', padding: '8px', background: '#fafaf9',
+            border: '1px solid #e7e5e4', color: '#78716c', borderRadius: '12px',
+            cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
           title="Tải ảnh lên để tìm sản phẩm"
-          style={{ width: '38px', height: '38px' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f4'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = '#fafaf9'; }}
         >
           <Image size={18} />
         </button>
         <input
           type="text"
-          className="flex-1 px-4 py-2 bg-stone-50 border border-stone-200/80 rounded-xl text-sm focus:outline-none focus:border-stone-900 focus:bg-white placeholder:text-stone-400"
           placeholder="Yêu cầu áo dài đỏ thêu hoa, tay lỡ..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           disabled={isLoading}
-          style={{ height: '38px' }}
+          style={{
+            flex: 1, height: '38px', padding: '0 16px', background: '#fafaf9',
+            border: '1px solid rgba(231,229,228,0.8)', borderRadius: '12px',
+            fontSize: '13px', color: '#1c1917', outline: 'none',
+          }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = '#1c1917'; e.currentTarget.style.background = '#fff'; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(231,229,228,0.8)'; e.currentTarget.style.background = '#fafaf9'; }}
         />
         <button
           onClick={() => handleSend()}
           disabled={isLoading || (!input.trim() && !selectedImage)}
-          className="p-2 bg-stone-900 hover:bg-stone-800 disabled:bg-stone-300 text-white rounded-xl transition flex items-center justify-center shadow-sm"
-          style={{ width: '38px', height: '38px' }}
+          style={{
+            width: '38px', height: '38px', padding: '8px',
+            background: (isLoading || (!input.trim() && !selectedImage)) ? '#d6d3d1' : '#1c1917',
+            color: '#ffffff', borderRadius: '12px', border: 'none',
+            cursor: (isLoading || (!input.trim() && !selectedImage)) ? 'not-allowed' : 'pointer',
+            transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+          }}
         >
           <Send size={18} />
         </button>
@@ -339,3 +412,4 @@ export const AIChatBot: React.FC = () => {
     </div>
   );
 };
+

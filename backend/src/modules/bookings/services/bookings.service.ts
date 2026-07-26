@@ -2925,6 +2925,47 @@ export class BookingsService implements OnApplicationBootstrap {
       );
     }
 
+    if (nextStatus === BookingStatus.InProgress) {
+      let shootStartTime: Date | null = null;
+      try {
+        const scheduleModel = this.bookingModel.db.model('BookingSchedule');
+        const schedule: any = await scheduleModel.findOne({
+          bookingId: booking._id,
+          scheduleType: 'PHOTOSHOOT',
+          status: { $ne: 'CANCELLED' }
+        }).lean().exec();
+
+        if (schedule?.startsAt) {
+          shootStartTime = new Date(schedule.startsAt);
+        } else if (schedule?.scheduledDate) {
+          shootStartTime = new Date(schedule.scheduledDate);
+          if (schedule.timeSlot) {
+            const startHour = parseInt(schedule.timeSlot.split('-')[0] || '0', 10);
+            if (!isNaN(startHour)) shootStartTime.setHours(startHour, 0, 0, 0);
+          }
+        } else {
+          const photoItem = (booking as any).items?.find((i: any) => i?.shootDate || i?.itemType === 'PHOTOGRAPHY_PACKAGE');
+          if (photoItem?.shootDate) {
+            shootStartTime = new Date(photoItem.shootDate);
+            if (photoItem.shootTimeSlot) {
+              const startHour = parseInt(photoItem.shootTimeSlot.split('-')[0] || '0', 10);
+              if (!isNaN(startHour)) shootStartTime.setHours(startHour, 0, 0, 0);
+            }
+          }
+        }
+      } catch (sErr) {
+        console.warn('Lỗi kiểm tra thời gian bắt đầu chụp:', sErr);
+      }
+
+      if (shootStartTime) {
+        const now = new Date();
+        const earliestAllowedTime = new Date(shootStartTime.getTime() - 30 * 60 * 1000);
+        if (now < earliestAllowedTime) {
+          throw new BadRequestException('Chưa đến giờ hẹn chụp! Bạn chỉ có thể bấm bắt đầu buổi chụp trước giờ hẹn tối đa 30 phút.');
+        }
+      }
+    }
+
     booking.status = nextStatus;
     if (nextStatus === BookingStatus.AwaitingReview) {
       booking.awaitingReviewSince = new Date();
@@ -2936,10 +2977,68 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     }
     if (nextStatus === BookingStatus.Disputed) {
+      const isNoShowDispute = note && (
+        note.includes('vắng mặt') ||
+        note.includes('không đến') ||
+        note.includes('Thợ chụp')
+      );
+
+      if (isNoShowDispute) {
+        let shootStartTime: Date | null = null;
+        try {
+          const scheduleModel = this.bookingModel.db.model('BookingSchedule');
+          const schedule: any = await scheduleModel.findOne({
+            bookingId: booking._id,
+            scheduleType: 'PHOTOSHOOT',
+            status: { $ne: 'CANCELLED' }
+          }).lean().exec();
+
+          if (schedule?.startsAt) {
+            shootStartTime = new Date(schedule.startsAt);
+          } else if (schedule?.scheduledDate) {
+            shootStartTime = new Date(schedule.scheduledDate);
+            if (schedule.timeSlot) {
+              const startHour = parseInt(schedule.timeSlot.split('-')[0] || '0', 10);
+              if (!isNaN(startHour)) shootStartTime.setHours(startHour, 0, 0, 0);
+            }
+          } else {
+            const photoItem = (booking as any).items?.find((i: any) => i?.shootDate || i?.itemType === 'PHOTOGRAPHY_PACKAGE');
+            if (photoItem?.shootDate) {
+              shootStartTime = new Date(photoItem.shootDate);
+              if (photoItem.shootTimeSlot) {
+                const startHour = parseInt(photoItem.shootTimeSlot.split('-')[0] || '0', 10);
+                if (!isNaN(startHour)) shootStartTime.setHours(startHour, 0, 0, 0);
+              }
+            }
+          }
+        } catch (sErr) {
+          console.warn('Lỗi kiểm tra thời gian chụp:', sErr);
+        }
+
+        if (shootStartTime) {
+          const now = new Date();
+          const minAllowedTime = new Date(shootStartTime.getTime() + 15 * 60 * 1000);
+          if (now < minAllowedTime) {
+            throw new BadRequestException('Bạn chỉ có thể báo cáo thợ chụp ảnh vắng mặt sau giờ hẹn ít nhất 15 phút.');
+          }
+        }
+      }
+
       if (evidencePhotos && evidencePhotos.length > 0) {
         (booking as any).evidencePhotos = evidencePhotos;
         (booking as any).disputeEvidencePhotos = evidencePhotos;
       }
+
+      // Tự động đóng băng khoản tiền quyết toán (Hold settlement)
+      try {
+        await this.settlementsService.holdSettlementsForBooking(
+          booking._id.toString(),
+          note || 'Khách hàng gửi khiếu nại tranh chấp',
+        );
+      } catch (hErr) {
+        console.warn('Lỗi đóng băng quyết toán khi có khiếu nại:', hErr);
+      }
+
       try {
         const disputeModel = this.bookingModel.db.model('Dispute');
         const existing = await disputeModel.findOne({ bookingId: booking._id });
@@ -2971,6 +3070,24 @@ export class BookingsService implements OnApplicationBootstrap {
         }
       } catch (e) {
         console.warn('Lỗi tự động khởi tạo Dispute document:', e);
+      }
+
+      // Gửi thông báo đến tài khoản Provider về khiếu nại
+      try {
+        const providerUserId = booking.providerIds?.[0];
+        if (providerUserId) {
+          const providerDoc: any = await this.bookingModel.db.model('Provider').findById(providerUserId).lean().exec();
+          const targetUserId = providerDoc?.userId || providerUserId;
+          await this.notificationsService.createNotification(
+            targetUserId.toString(),
+            'Thông báo khiếu nại đơn hàng',
+            `Khách hàng vừa gửi khiếu nại cho đơn hàng #${booking.bookingCode || booking._id.toString().slice(-6)}. Lý do: ${note || 'Khiếu nại dịch vụ'}. Vui lòng kiểm tra và phản hồi.`,
+            NotificationType.Booking,
+            { bookingId: booking._id },
+          );
+        }
+      } catch (nErr) {
+        console.error('Lỗi gửi thông báo khiếu nại cho Provider:', nErr);
       }
     }
     if (nextStatus === BookingStatus.PickupPending) {

@@ -210,7 +210,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
       CONFIRMED: { text: 'Đã xác nhận', bg: '#E0F2FE', color: '#0284C7' },
       PICKUP_PENDING: { text: 'Chờ nhận đồ', bg: '#EEF2F6', color: '#4B5563' },
       PICKED_UP: { text: 'Đang thuê', bg: '#F5F3FF', color: '#7C3AED' },
-      RETURN_PENDING: { text: 'Chờ duyệt sự cố', bg: '#FFF1F2', color: '#E11D48' },
+      RETURN_PENDING: incident
+        ? { text: 'Chờ duyệt sự cố', bg: '#FFF1F2', color: '#E11D48' }
+        : { text: 'Chờ kiểm tra đồ', bg: '#FAF6F0', color: '#7A6B58' },
       RETURNED: { text: 'Đã trả đồ', bg: '#ECFDF5', color: '#059669' },
       COMPLETED: { text: 'Đã hoàn thành', bg: '#D1FAE5', color: '#065F46' },
       CANCELLED: { text: 'Đã hủy', bg: '#FEE2E2', color: '#B91C1C' },
@@ -258,19 +260,25 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
     return new Date(dateStr).toLocaleDateString('vi-VN');
   };
 
-  // Tính toán thời hạn dịch vụ chung dựa trên các items
+  // Tính toán thời hạn dịch vụ chung dựa trên các items và booking root
   let startDate: string | null = null;
   let endDate: string | null = null;
   if (booking?.items && booking.items.length > 0) {
-    const dates = booking.items.map((item: any) => ({
-      from: item.rentalFrom || item.shootDate,
-      to: item.rentalTo || item.shootDate
-    })).filter((d: any) => d.from);
+    const dates = booking.items.map((item: any) => {
+      const fromVal = item.startDate || item.rentalFrom || item.shootDate || item.startsAt || booking?.startDate || booking?.shootDate;
+      const toVal = item.endDate || item.rentalTo || item.shootDate || item.endsAt || booking?.endDate || booking?.shootDate;
+      return {
+        from: fromVal,
+        to: toVal || fromVal
+      };
+    }).filter((d: any) => d.from);
     if (dates.length > 0) {
-      startDate = dates.reduce((min: string, d: any) => d.from < min ? d.from : min, dates[0].from);
-      endDate = dates.reduce((max: string, d: any) => d.to < max ? d.to : max, dates[0].to);
+      startDate = dates.reduce((min: string, d: any) => (d.from && d.from < min) ? d.from : min, dates[0].from);
+      endDate = dates.reduce((max: string, d: any) => (d.to && d.to > max) ? d.to : max, dates[0].to);
     }
   }
+  if (!startDate) startDate = booking?.startDate || booking?.shootDate || booking?.createdAt;
+  if (!endDate) endDate = booking?.endDate || booking?.shootDate || startDate;
 
   const renderRefundOrDisputeInfo = () => {
     if (!booking) return null;
@@ -359,13 +367,19 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
       infoText = `Đơn hàng đang trong trạng thái tranh chấp sự cố hỏng đồ. Ban quản trị đang tiến hành xác minh bằng chứng để đưa ra phán quyết cuối cùng.`;
     } else if (booking.status === 'RETURN_PENDING') {
       hasInfo = true;
-      titleText = 'Yêu cầu đền bù sự cố hỏng đồ';
-      bgColor = '#FFFBEB';
-      borderColor = '#FDE68A';
-      textColor = '#92400E';
-      infoText = incident
-        ? `Cửa hàng yêu cầu đền bù sự cố hỏng đồ với số tiền: ${formatCurrency(incident.requestedAmount)}.\nMô tả sự cố: "${incident.description || ''}".\nĐang chờ khách hàng phản hồi (Đồng ý đền bù hoặc Khiếu nại).`
-        : 'Đơn hàng đang chờ xác nhận sự cố hỏng đồ từ phía khách hàng.';
+      if (incident) {
+        titleText = 'Yêu cầu đền bù sự cố hỏng đồ';
+        bgColor = '#FFFBEB';
+        borderColor = '#FDE68A';
+        textColor = '#92400E';
+        infoText = `Cửa hàng yêu cầu đền bù sự cố hỏng đồ với số tiền: ${formatCurrency(incident.requestedAmount)}.\nMô tả sự cố: "${incident.description || ''}".\nĐang chờ khách hàng phản hồi (Đồng ý đền bù hoặc Khiếu nại).`;
+      } else {
+        titleText = 'Chờ kiểm tra đồ';
+        bgColor = '#FAF6F0';
+        borderColor = '#E8E2D5';
+        textColor = '#5F5A52';
+        infoText = 'Khách hàng đã trả đồ. Đơn hàng đang chờ nhà cung cấp kiểm tra tình trạng trang phục để hoàn tất cọc.';
+      }
     }
 
     if (!hasInfo) return null;
@@ -649,8 +663,10 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             const colorVal = rentalItem.selectedColor || rentalItem.color || rentalItem.variant?.color || rentalItem.variantAttributes?.color || '';
             const materialVal = rentalItem.selectedMaterial || rentalItem.material || rentalItem.variant?.material || rentalItem.variantAttributes?.material || '';
 
-            const fromDate = rentalItem.startDate || rentalItem.rentalFrom ? new Date(rentalItem.startDate || rentalItem.rentalFrom) : null;
-            const toDate = rentalItem.endDate || rentalItem.rentalTo ? new Date(rentalItem.endDate || rentalItem.rentalTo) : null;
+            const rawFrom = rentalItem.startDate || rentalItem.rentalFrom || booking.startDate;
+            const rawTo = rentalItem.endDate || rentalItem.rentalTo || booking.endDate;
+            const fromDate = rawFrom ? new Date(rawFrom) : null;
+            const toDate = rawTo ? new Date(rawTo) : null;
             const fromStr = fromDate ? fromDate.toLocaleDateString('vi-VN') : (formatDate(booking.createdAt));
             const toStr = toDate ? toDate.toLocaleDateString('vi-VN') : '';
 
@@ -997,43 +1013,72 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           })()}
 
           {/* Customer / Service Provider info */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={{ padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid #F3F4F6', paddingBottom: '6px' }}>
-                <User size={14} color="#B89047" />
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#4A0E17', textTransform: 'uppercase' }}>Khách hàng</span>
+          {(() => {
+            const firstItem = booking.items?.[0] || {};
+            const prov = firstItem.productId?.providerId || firstItem.photographyPackageId?.providerId || firstItem.providerId || booking.providerId || {};
+            const pName = typeof prov === 'object' ? (prov.businessName || prov.fullName || prov.name || 'Đối tác VibeHue') : 'Đối tác VibeHue';
+            const pPhone = typeof prov === 'object' ? (prov.contact?.phone || prov.phone || '—') : '—';
+            const pAddrObj = typeof prov === 'object' ? prov.address : null;
+            const pAddr = pAddrObj ? `${pAddrObj.addressLine || ''}, ${pAddrObj.district || ''}, ${pAddrObj.city || ''}`.replace(/^,\s*/, '') : '';
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '12px' }}>
+                {/* 1. Khách hàng */}
+                <div style={{ padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid #F3F4F6', paddingBottom: '6px' }}>
+                    <User size={14} color="#B89047" />
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#4A0E17', textTransform: 'uppercase' }}>Khách hàng</span>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>
+                    {onCustomerClick ? (
+                      <span
+                        onClick={() => {
+                          const custId = booking.customerId?._id || booking.customerId;
+                          if (custId) onCustomerClick(custId);
+                        }}
+                        style={{ color: '#2563EB', textDecoration: 'underline', cursor: 'pointer', fontWeight: 750 }}
+                        title="Bấm để xem thông tin tín nhiệm khách hàng"
+                      >
+                        {booking.customerName || 'Khách hàng'}
+                      </span>
+                    ) : (
+                      booking.customerName || 'Khách vãng lai'
+                    )}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>SĐT: <strong>{booking.customerPhone || '—'}</strong></div>
+                </div>
+
+                {/* 2. Đối tác / Cửa hàng / Thợ ảnh */}
+                <div style={{ padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid #F3F4F6', paddingBottom: '6px' }}>
+                    <Camera size={14} color="#B89047" />
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#4A0E17', textTransform: 'uppercase' }}>Cửa hàng / Thợ chụp</span>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>{pName}</div>
+                  <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>SĐT: <strong>{pPhone}</strong></div>
+                  {pAddr && (
+                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', lineHeight: 1.3 }} title={pAddr}>
+                      {pAddr.length > 35 ? `${pAddr.slice(0, 35)}...` : pAddr}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Thời hạn dịch vụ */}
+                <div style={{ padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid #F3F4F6', paddingBottom: '6px' }}>
+                    <Clock size={14} color="#B89047" />
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#4A0E17', textTransform: 'uppercase' }}>Thời hạn dịch vụ</span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151' }}>
+                    Bắt đầu: <strong>{formatDate(startDate)}</strong>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151', marginTop: '4px' }}>
+                    Kết thúc: <strong>{formatDate(endDate)}</strong>
+                  </div>
+                </div>
               </div>
-              <div style={{ fontSize: '13px', fontWeight: 600 }}>
-                {onCustomerClick ? (
-                  <span
-                    onClick={() => {
-                      const custId = booking.customerId?._id || booking.customerId;
-                      if (custId) onCustomerClick(custId);
-                    }}
-                    style={{ color: '#2563EB', textDecoration: 'underline', cursor: 'pointer', fontWeight: 750 }}
-                    title="Bấm để xem thông tin tín nhiệm khách hàng"
-                  >
-                    {booking.customerName || 'Khách hàng'}
-                  </span>
-                ) : (
-                  booking.customerName || 'Khách vãng lai'
-                )}
-              </div>
-              <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>SĐT: {booking.customerPhone || '—'}</div>
-            </div>
-            <div style={{ padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid #F3F4F6', paddingBottom: '6px' }}>
-                <Clock size={14} color="#B89047" />
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#4A0E17', textTransform: 'uppercase' }}>Thời hạn dịch vụ</span>
-              </div>
-              <div style={{ fontSize: '12px', color: '#374151' }}>
-                Bắt đầu: <strong>{formatDate(startDate)}</strong>
-              </div>
-              <div style={{ fontSize: '12px', color: '#374151', marginTop: '4px' }}>
-                Kết thúc: <strong>{formatDate(endDate)}</strong>
-              </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* List Items */}
           <div>

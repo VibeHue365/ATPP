@@ -2695,21 +2695,22 @@ button {
 }
 
 .vh-profile-appointment-card {
-  background-color: white;
-  border: 1px solid var(--color-light-border);
-  border-radius: 12px;
+  background-color: #FFFFFF;
+  border: 1px solid #E2D7C7;
+  border-radius: 14px;
   padding: 24px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   min-height: 184px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 16px rgba(74, 14, 23, 0.07), 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: var(--transition-smooth);
 }
 
 .vh-profile-appointment-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(74, 14, 23, 0.13), 0 2px 6px rgba(0, 0, 0, 0.07);
+  border-color: #B89047;
 }
 
 .vh-appointment-upcoming {
@@ -2795,9 +2796,10 @@ button {
 
 /* Dashed booking card */
 .vh-profile-appointment-card-dashed-btn {
-  border: 2px dashed rgba(182, 145, 91, 0.3);
-  border-radius: 12px;
-  background-color: transparent;
+  border: 2px dashed #B89047;
+  border-radius: 14px;
+  background-color: #FAF6F0;
+  box-shadow: 0 4px 12px rgba(184, 144, 71, 0.08);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2810,9 +2812,10 @@ button {
 }
 
 .vh-profile-appointment-card-dashed-btn:hover {
-  border-color: var(--color-primary);
-  background-color: var(--color-primary-trans);
-  transform: translateY(-3px);
+  border-color: #8B1E22;
+  background-color: #FFF5F5;
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(139, 30, 34, 0.12);
 }
 
 .vh-appointment-dashed-circle {
@@ -6826,21 +6829,22 @@ button {
 }
 
 .vh-profile-appointment-card {
-  background-color: white;
-  border: 1px solid var(--color-light-border);
-  border-radius: 12px;
+  background-color: #FFFFFF;
+  border: 1px solid #E2D7C7;
+  border-radius: 14px;
   padding: 24px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   min-height: 184px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 16px rgba(74, 14, 23, 0.07), 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: var(--transition-smooth);
 }
 
 .vh-profile-appointment-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(74, 14, 23, 0.13), 0 2px 6px rgba(0, 0, 0, 0.07);
+  border-color: #B89047;
 }
 
 .vh-appointment-upcoming {

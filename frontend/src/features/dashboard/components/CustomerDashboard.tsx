@@ -309,6 +309,28 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       finalReason = `${selectedDisputeReason}: ${photoDisputeNote.trim()}`;
     }
 
+    if (selectedDisputeReason.includes('vắng mặt') || selectedDisputeReason.includes('không đến')) {
+      const currentBooking = bookings.find(b => b._id === photoDisputeBookingId);
+      if (currentBooking) {
+        const photoItem = currentBooking.items?.find((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE') || currentBooking.items?.[0];
+        const rawShootDate = photoItem?.shootDate || photoItem?.startDate || photoItem?.rentalFrom || currentBooking.startDate;
+        const rawTimeSlot = photoItem?.shootTimeSlot || photoItem?.timeSlot || '';
+
+        if (rawShootDate) {
+          const shootStartTime = new Date(rawShootDate);
+          if (rawTimeSlot) {
+            const startHour = parseInt(rawTimeSlot.split('-')[0] || '0', 10);
+            if (!isNaN(startHour)) shootStartTime.setHours(startHour, 0, 0, 0);
+          }
+          const minAllowedTime = new Date(shootStartTime.getTime() + 15 * 60 * 1000);
+          if (new Date() < minAllowedTime) {
+            toast.error('Chưa đến thời gian báo thợ vắng mặt! Bạn chỉ có thể gửi khiếu nại vắng mặt sau giờ hẹn ít nhất 15 phút.');
+            return;
+          }
+        }
+      }
+    }
+
     try {
       toast.info('Đang gửi khiếu nại...');
       await httpClient.patch(`/bookings/${photoDisputeBookingId}/status`, {
@@ -395,6 +417,27 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     const formattedDate = rawShootDate ? formatDate(String(rawShootDate)) : '';
     const fullDateTimeStr = formattedDate ? `${formattedDate}${timeStr ? ` (${timeStr})` : ''}` : '';
 
+    let canShowNoShowButton = false;
+    if (rawShootDate) {
+      try {
+        const shootStartTime = new Date(rawShootDate);
+        if (timeStr && timeStr.includes('-')) {
+          const startStr = timeStr.split('-')[0].trim();
+          const parts = startStr.split(':');
+          const startHour = parseInt(parts[0] || '0', 10);
+          const startMin = parseInt(parts[1] || '0', 10);
+          if (!isNaN(startHour)) shootStartTime.setHours(startHour, isNaN(startMin) ? 0 : startMin, 0, 0);
+        }
+        const minAllowedTime = new Date(shootStartTime.getTime() + 15 * 60 * 1000);
+        canShowNoShowButton = new Date() >= minAllowedTime;
+      } catch (e) {
+        canShowNoShowButton = false;
+      }
+    }
+    if (b.status === 'AWAITING_REVIEW' || isOverdue) {
+      canShowNoShowButton = true;
+    }
+
     return {
       id: b._id,
       isReal: true,
@@ -402,6 +445,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       rawStatus: b.status,
       isOverdue,
       isPastTimeToday,
+      canShowNoShowButton,
       shootYMD,
       endTimeStr,
       awaitingReviewSince: b.awaitingReviewSince,
@@ -994,7 +1038,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     )}
 
                     {/* Customer Report / Dispute button during CONFIRMED, IN_PROGRESS, AWAITING_REVIEW or OVERDUE */}
-                    {(app.rawStatus === 'CONFIRMED' || app.rawStatus === 'IN_PROGRESS' || app.rawStatus === 'AWAITING_REVIEW' || app.isOverdue) && app.rawStatus !== 'DISPUTED' && app.rawStatus !== 'COMPLETED' && app.rawStatus !== 'CANCELLED' && (
+                    {app.canShowNoShowButton && (app.rawStatus === 'CONFIRMED' || app.rawStatus === 'IN_PROGRESS' || app.rawStatus === 'AWAITING_REVIEW' || app.isOverdue) && app.rawStatus !== 'DISPUTED' && app.rawStatus !== 'COMPLETED' && app.rawStatus !== 'CANCELLED' && (
                       <div style={{ marginTop: '12px' }}>
                         <button
                           onClick={() => handleDisputeBooking(app.id)}
