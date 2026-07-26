@@ -21,6 +21,10 @@ const normalizeUserProfile = (response: BackendUserProfileResponse): UserProfile
     isEmailVerified: response.isEmailVerified ?? response.emailVerified ?? false,
     roles: response.roles,
     status: response.status,
+    hasCompletedOnboarding: response.hasCompletedOnboarding,
+    preferences: response.preferences,
+    favorites: response.favorites,
+    addresses: response.addresses,
     createdAt: response.createdAt,
   };
 };
@@ -38,6 +42,17 @@ export const userService = {
 
   async updateAvatar(formData: FormData): Promise<UserProfile> {
     const response = await httpClient.patch<BackendUserProfileResponse>('/users/me/avatar', formData);
+    return normalizeUserProfile(response);
+  },
+
+  async updatePreferences(payload: any): Promise<UserProfile> {
+    const response = await httpClient.patch<BackendUserProfileResponse>('/users/me/preferences', payload);
+    return normalizeUserProfile(response);
+  },
+
+  async toggleFavorite(targetType: 'PRODUCT' | 'PHOTOGRAPHER' | 'PROVIDER', targetId: string): Promise<UserProfile> {
+    const backendTargetType = targetType === 'PHOTOGRAPHER' ? 'PROVIDER' : targetType;
+    const response = await httpClient.patch<BackendUserProfileResponse>('/users/me/favorites', { targetType: backendTargetType, targetId });
     return normalizeUserProfile(response);
   },
 };

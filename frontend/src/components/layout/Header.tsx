@@ -22,10 +22,10 @@ export const Header: React.FC = () => {
         </Link>
 
         <nav className="vh-header-nav">
-          <a href="#rentals">RENTALS</a>
-          <a href="#photographers">PHOTOGRAPHERS</a>
-          <a href="#ai-styling">AI STYLING</a>
-          <a href="#heritage">HERITAGE</a>
+          <a href="#rentals">CHO THUÊ</a>
+          <a href="#photographers">NHIẾP ẢNH</a>
+          <a href="#ai-styling">PHỐI ĐỒ AI</a>
+          <a href="#heritage">DI SẢN</a>
         </nav>
 
         <div className="vh-header-actions">
@@ -47,7 +47,7 @@ export const Header: React.FC = () => {
               </button>
             </div>
           ) : (
-            <Link to={ROUTES.LOGIN} className="vh-btn vh-btn-primary vh-btn-sm">
+            <Link to={ROUTES.LOGIN} className="vh-btn vh-btn-primary vh-btn-sm vh-header-signin-btn">
               SIGN IN
             </Link>
           )}

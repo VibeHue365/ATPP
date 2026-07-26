@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import {
   AuthProviderType,
   User,
@@ -9,11 +9,21 @@ import {
   UserProfile,
   UserStatus,
 } from '../schemas/user.schema';
+import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
+
+export interface AdminUserListFilters {
+  keyword?: string;
+  role?: string;
+  status?: UserStatus;
+  page: number;
+  limit: number;
+}
 
 @Injectable()
 export class UsersRepository {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
+    @InjectConnection() private readonly connection: Connection,
   ) {}
 
   async existsByEmail(emailNormalized: string): Promise<boolean> {
@@ -68,6 +78,180 @@ export class UsersRepository {
 
   findUserById(userId: Types.ObjectId): Promise<UserDocument | null> {
     return this.userModel.findOne({ _id: userId, deletedAt: null });
+  }
+
+  async listUsersForAdmin(
+    filters: AdminUserListFilters,
+  ): Promise<{ items: UserDocument[]; total: number }> {
+    const query: Record<string, unknown> = { deletedAt: null };
+
+    if (filters.role) {
+      query.roles = filters.role.toUpperCase();
+    }
+
+    if (filters.status) {
+      query.accountStatus = filters.status;
+    }
+
+    if (filters.keyword) {
+      const keyword = filters.keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.$or = [
+        { 'profile.fullName': { $regex: keyword, $options: 'i' } },
+        { 'auth.email': { $regex: keyword, $options: 'i' } },
+        { 'auth.phone': { $regex: keyword, $options: 'i' } },
+      ];
+    }
+
+    const skip = (filters.page - 1) * filters.limit;
+    const [items, total] = await Promise.all([
+      this.userModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(filters.limit),
+      this.userModel.countDocuments(query),
+    ]);
+
+    return { items, total };
+  }
+
+  async updateRoles(
+    userId: Types.ObjectId,
+    roles: string[],
+    defaultRole: string,
+  ): Promise<UserDocument | null> {
+    return this.userModel.findOneAndUpdate(
+      { _id: userId, deletedAt: null },
+      { $set: { roles, defaultRole } },
+      { new: true },
+    );
+  }
+
+  async updateAccountStatus(
+    userId: Types.ObjectId,
+    status: UserStatus,
+    reason?: string,
+  ): Promise<UserDocument | null> {
+    const update: Record<string, unknown> = { accountStatus: status };
+
+    if (status === UserStatus.Active) {
+      update['security.lockedUntil'] = null;
+      update['security.lockedAt'] = null;
+      update['security.lockedBy'] = null;
+      update['security.lockedReason'] = null;
+    } else if (reason !== undefined) {
+      update['security.lockedReason'] = reason;
+    }
+
+    return this.userModel.findOneAndUpdate(
+      { _id: userId, deletedAt: null },
+      { $set: update },
+      { new: true },
+    );
+  }
+
+  async lockUser(
+    userId: Types.ObjectId,
+    status: UserStatus.Suspended | UserStatus.Banned,
+    actorId: Types.ObjectId,
+    reason?: string,
+    lockedUntil?: Date | null,
+  ): Promise<UserDocument | null> {
+    return this.userModel.findOneAndUpdate(
+      { _id: userId, deletedAt: null },
+      {
+        $set: {
+          accountStatus: status,
+          'security.lockedUntil': lockedUntil ?? null,
+          'security.lockedAt': new Date(),
+          'security.lockedBy': actorId,
+          'security.lockedReason': reason ?? null,
+        },
+      },
+      { new: true },
+    );
+  }
+
+  async unlockUser(userId: Types.ObjectId): Promise<UserDocument | null> {
+    return this.userModel.findOneAndUpdate(
+      { _id: userId, deletedAt: null },
+      {
+        $set: { accountStatus: UserStatus.Active },
+        $unset: {
+          'security.lockedUntil': '',
+          'security.lockedAt': '',
+          'security.lockedBy': '',
+          'security.lockedReason': '',
+        },
+      },
+      { new: true },
+    );
+  }
+
+  countActiveAdmins(): Promise<number> {
+    return this.userModel.countDocuments({
+      roles: 'ADMIN',
+      accountStatus: UserStatus.Active,
+      deletedAt: null,
+    });
+  }
+
+  async findActiveRoleCodes(roleCodes: string[]): Promise<string[]> {
+    const roles = await this.connection
+      .collection<{ code: string }>('roles')
+      .find({ code: { $in: roleCodes }, status: 'ACTIVE' }, { projection: { code: 1 } })
+      .toArray();
+    return roles.map((role) => role.code);
+  }
+
+  async revokeActiveSessions(userId: Types.ObjectId, reason: string): Promise<number> {
+    const result = await this.connection.collection('refresh_tokens').updateMany(
+      { userId, revokedAt: null },
+      { $set: { revokedAt: new Date(), revokedReason: reason } },
+    );
+    return result.modifiedCount;
+  }
+
+  async listRecentLoginHistory(userId: Types.ObjectId, limit = 10) {
+    return this.connection
+      .collection('login_histories')
+      .find(
+        { userId },
+        {
+          projection: {
+            provider: 1,
+            status: 1,
+            ipAddress: 1,
+            userAgent: 1,
+            loggedInAt: 1,
+            failureReason: 1,
+          },
+        },
+      )
+      .sort({ loggedInAt: -1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  async restoreExpiredSuspension(userId: Types.ObjectId): Promise<UserDocument | null> {
+    return this.userModel.findOneAndUpdate(
+      {
+        _id: userId,
+        accountStatus: UserStatus.Suspended,
+        'security.lockedUntil': { $ne: null, $lte: new Date() },
+        deletedAt: null,
+      },
+      {
+        $set: { accountStatus: UserStatus.Active },
+        $unset: {
+          'security.lockedUntil': '',
+          'security.lockedAt': '',
+          'security.lockedBy': '',
+          'security.lockedReason': '',
+        },
+      },
+      { new: true },
+    );
   }
 
   findUserByAuthProvider(
@@ -173,5 +357,103 @@ export class UsersRepository {
         $unset: { 'security.lockedUntil': '' },
       },
     );
+  }
+
+  async updatePreferences(
+    userId: Types.ObjectId,
+    dto: UpdatePreferencesDto,
+  ): Promise<void> {
+    const updateQuery: any = {};
+
+    if (dto.hasCompletedOnboarding !== undefined) {
+      updateQuery.hasCompletedOnboarding = dto.hasCompletedOnboarding;
+    }
+
+    if (dto.preferences) {
+      const prefs = dto.preferences;
+      if (prefs.stylePreferences !== undefined) {
+        updateQuery['preferences.stylePreferences'] = prefs.stylePreferences;
+      }
+      if (prefs.favoriteColors !== undefined) {
+        updateQuery['preferences.favoriteColors'] = prefs.favoriteColors;
+      }
+      if (prefs.preferredAoDaiStyles !== undefined) {
+        updateQuery['preferences.preferredAoDaiStyles'] = prefs.preferredAoDaiStyles;
+      }
+      if (prefs.preferredPhotographyStyles !== undefined) {
+        updateQuery['preferences.preferredPhotographyStyles'] = prefs.preferredPhotographyStyles;
+      }
+      if (prefs.sizeInfo) {
+        const size = prefs.sizeInfo;
+        if (size.height !== undefined) {
+          updateQuery['preferences.sizeInfo.height'] = size.height;
+        }
+        if (size.weight !== undefined) {
+          updateQuery['preferences.sizeInfo.weight'] = size.weight;
+        }
+        if (size.preferredSize !== undefined) {
+          updateQuery['preferences.sizeInfo.preferredSize'] = size.preferredSize;
+        }
+        if (size.bodyShape !== undefined) {
+          updateQuery['preferences.sizeInfo.bodyShape'] = size.bodyShape;
+        }
+      }
+      if (prefs.budgetRange) {
+        const budget = prefs.budgetRange;
+        if (budget.min !== undefined) {
+          updateQuery['preferences.budgetRange.min'] = budget.min;
+        }
+        if (budget.max !== undefined) {
+          updateQuery['preferences.budgetRange.max'] = budget.max;
+        }
+      }
+      if (prefs.preferredLocations !== undefined) {
+        updateQuery['preferences.preferredLocations'] = prefs.preferredLocations;
+      }
+      if (prefs.preferredOccasions !== undefined) {
+        updateQuery['preferences.preferredOccasions'] = prefs.preferredOccasions;
+      }
+    }
+
+    if (Object.keys(updateQuery).length > 0) {
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $set: updateQuery },
+      );
+    }
+  }
+
+  async toggleFavorite(
+    userId: Types.ObjectId,
+    targetType: string,
+    targetId: Types.ObjectId,
+  ): Promise<void> {
+    const user = await this.userModel.findById(userId);
+    if (!user) return;
+
+    const favorites = user.favorites || [];
+    const index = favorites.findIndex(
+      (fav) => fav.targetId.toString() === targetId.toString() && fav.targetType === targetType
+    );
+
+    if (index > -1) {
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $pull: { favorites: { targetId, targetType } } }
+      );
+    } else {
+      await this.userModel.updateOne(
+        { _id: userId },
+        {
+          $push: {
+            favorites: {
+              targetType,
+              targetId,
+              addedAt: new Date(),
+            },
+          },
+        }
+      );
+    }
   }
 }

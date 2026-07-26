@@ -2,29 +2,30 @@ import {
   UnsupportedMediaTypeException,
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
   Patch,
+  Post,
   Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
+import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
+import { CreateUserAddressDto, UpdateUserAddressDto } from '../dto/user-address.dto';
 import { UsersService } from '../services/users.service';
 
 interface RequestMeta {
   ip?: string;
   headers: Record<string, string | string[] | undefined>;
 }
-
-const avatarDestination = join(process.cwd(), 'uploads', 'avatars');
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -51,6 +52,44 @@ export class UsersController {
     );
   }
 
+  @Get('me/addresses')
+  listAddresses(@CurrentUser() user: AuthUser): Promise<Record<string, unknown>[]> {
+    return this.usersService.listAddresses(user.sub);
+  }
+
+  @Post('me/addresses')
+  createAddress(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateUserAddressDto,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.createAddress(user.sub, dto);
+  }
+
+  @Patch('me/addresses/:addressId')
+  updateAddress(
+    @CurrentUser() user: AuthUser,
+    @Param('addressId') addressId: string,
+    @Body() dto: UpdateUserAddressDto,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.updateAddress(user.sub, addressId, dto);
+  }
+
+  @Delete('me/addresses/:addressId')
+  async removeAddress(
+    @CurrentUser() user: AuthUser,
+    @Param('addressId') addressId: string,
+  ): Promise<void> {
+    await this.usersService.removeAddress(user.sub, addressId);
+  }
+
+  @Post('me/addresses/:addressId/default')
+  setDefaultAddress(
+    @CurrentUser() user: AuthUser,
+    @Param('addressId') addressId: string,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.setDefaultAddress(user.sub, addressId);
+  }
+
   @Patch('me/avatar')
   @UseInterceptors(
     FileInterceptor('avatar', {
@@ -69,21 +108,7 @@ export class UsersController {
 
         callback(null, true);
       },
-      storage: diskStorage({
-        destination: (_request, _file, callback) => {
-          if (!existsSync(avatarDestination)) {
-            mkdirSync(avatarDestination, { recursive: true });
-          }
-          callback(null, avatarDestination);
-        },
-        filename: (_request, file, callback) => {
-          const safeExt = extname(file.originalname).toLowerCase() || '.jpg';
-          callback(
-            null,
-            `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`,
-          );
-        },
-      }),
+      storage: memoryStorage(),
     }),
   )
   updateAvatar(
@@ -96,6 +121,32 @@ export class UsersController {
       file,
       request.ip,
       this.userAgent(request),
+      user.roles,
+    );
+  }
+
+  @Patch('me/preferences')
+  updatePreferences(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdatePreferencesDto,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.updatePreferences(
+      user.sub,
+      dto,
+      user.roles,
+    );
+  }
+
+  @Patch('me/favorites')
+  toggleFavorite(
+    @CurrentUser() user: AuthUser,
+    @Body('targetType') targetType: string,
+    @Body('targetId') targetId: string,
+  ): Promise<Record<string, unknown>> {
+    return this.usersService.toggleFavorite(
+      user.sub,
+      targetType,
+      targetId,
       user.roles,
     );
   }

@@ -30,6 +30,10 @@ export class Role {
 
   @Prop({ enum: RoleStatus, default: RoleStatus.Active, index: true })
   status: RoleStatus;
+
+  createdAt?: Date;
+
+  updatedAt?: Date;
 }
 
 export const RoleSchema = SchemaFactory.createForClass(Role);

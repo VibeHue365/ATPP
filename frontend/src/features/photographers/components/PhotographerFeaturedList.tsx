@@ -93,7 +93,7 @@ export const PhotographerFeaturedList: React.FC = () => {
                 <div style={{ display: 'flex', gap: '12px', marginTop: '32px', paddingTop: '16px', borderTop: '1px solid var(--color-light-border)' }}>
                   <button className="vh-btn vh-btn-outline" style={{ flex: 1, padding: '10px', fontSize: '14px', borderRadius: '8px', display: 'flex', justifyContent: 'center', gap: '6px' }}>
                     <Camera size={16} />
-                    <span>Portfolio</span>
+                    <span>Bộ ảnh</span>
                   </button>
                   <button className="vh-btn vh-btn-primary" style={{ flex: 1, padding: '10px', fontSize: '14px', borderRadius: '8px', display: 'flex', justifyContent: 'center', gap: '6px' }}>
                     <Calendar size={16} />

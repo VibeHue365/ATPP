@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, ShoppingCart } from 'lucide-react';
 import { httpClient } from '../../../services/httpClient';
 import { ROUTES } from '../../../config/routes';
+import { SmartTagList } from '../../smart-tagging/components/SmartTagList';
+import type { PublicSmartTagBadge } from '../../smart-tagging/types/smartTag.types';
 
 interface AoDaiItem {
   id: string;
@@ -11,6 +13,7 @@ interface AoDaiItem {
   price: string;
   status: 'AVAILABLE' | 'RESERVED';
   image: string;
+  badges?: PublicSmartTagBadge[];
 }
 
 interface ProductFromDb {
@@ -23,6 +26,7 @@ interface ProductFromDb {
   colors: string[];
   materials: string[];
   status: string;
+  badges?: PublicSmartTagBadge[];
 }
 
 const translateMaterial = (mat: string): string => {
@@ -44,15 +48,16 @@ export const AoDaiProductGrid: React.FC = () => {
     const fetchProducts = async () => {
       try {
         setLoading(true);
-        const data = await httpClient.get<ProductFromDb[]>('/products');
+        const data = await httpClient.get<ProductFromDb[]>('/products/featured?limit=8');
         
         const mappedItems: AoDaiItem[] = data.map((p) => ({
           id: p._id,
           name: p.name,
           material: p.materials?.[0] ? translateMaterial(p.materials[0]) : 'Lụa cao cấp',
           price: p.basePrice.toLocaleString('vi-VN') + 'đ',
-          status: p.status === 'ACTIVE' ? 'AVAILABLE' : 'RESERVED',
+          status: 'AVAILABLE',
           image: p.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b',
+          badges: p.badges,
         }));
 
         setItems(mappedItems);
@@ -71,7 +76,7 @@ export const AoDaiProductGrid: React.FC = () => {
     <section id="rentals" className="vh-features-section bg-stone-50/50 py-20 px-6 border-y border-stone-200">
       <div className="max-w-[1600px] w-full px-6 md:px-12 mx-auto">
         {/* Section Header */}
-        <div className="vh-section-header" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', textAlign: 'left', maxWidth: '100%', marginBottom: '40px' }}>
+        <div className="vh-section-header-row">
           <div>
             <span className="vh-section-badge">Thuê Áo Dài</span>
             <h2 className="text-3xl font-bold font-header text-stone-900 mt-2">Xu Hướng Áo Dài</h2>
@@ -112,8 +117,8 @@ export const AoDaiProductGrid: React.FC = () => {
                   />
                   {/* Premium Hover Overlay Button */}
                   <div className="vh-card-hover-overlay">
-                    <button 
-                      className="vh-btn vh-btn-primary vh-btn-sm" 
+                    <button
+                      className="vh-btn vh-btn-primary vh-btn-sm"
                       style={{ flex: 1, borderRadius: '6px', fontSize: '12px', padding: '8px 12px' }}
                       onClick={() => navigate(`/rentals/${item.id}`)}
                     >
@@ -122,15 +127,14 @@ export const AoDaiProductGrid: React.FC = () => {
                     <button 
                       className="vh-btn vh-btn-sm" 
                       style={{ padding: '8px', borderRadius: '6px', backgroundColor: 'rgba(255, 255, 255, 0.95)', color: 'var(--color-primary-dark)', border: '1px solid rgba(0,0,0,0.1)', minWidth: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                      onClick={() => navigate(`/rentals/${item.id}`)}
                       title="Thêm vào giỏ hàng"
                     >
                       <ShoppingCart size={16} />
                     </button>
                   </div>
                   {/* Status Tag Overlay */}
-                  <span className={`vh-status-badge ${
-                    item.status === 'AVAILABLE' ? 'vh-status-available' : 'vh-status-reserved'
-                  }`}>
+                  <span className="vh-status-badge vh-status-available" style={{ display: 'none' }}>
                     {item.status === 'AVAILABLE' ? 'CÓ SẴN' : 'ĐÃ ĐẶT'}
                   </span>
                 </div>
@@ -144,6 +148,9 @@ export const AoDaiProductGrid: React.FC = () => {
                     <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '4px' }}>
                       {item.material}
                     </span>
+                    <div style={{ marginTop: '10px' }}>
+                      <SmartTagList badges={item.badges} limit={2} />
+                    </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--color-light-border)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>

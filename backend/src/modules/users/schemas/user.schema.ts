@@ -6,6 +6,7 @@ export type UserDocument = HydratedDocument<User>;
 export enum UserStatus {
   PendingEmailVerification = 'PENDING_EMAIL_VERIFICATION',
   Active = 'ACTIVE',
+  Suspended = 'SUSPENDED',
   Banned = 'BANNED',
   Deleted = 'DELETED',
 }
@@ -33,9 +34,10 @@ export enum MembershipLevel {
 }
 
 export enum ProviderStatus {
-  Pending = 'PENDING',
-  Approved = 'APPROVED',
+  PendingApproval = 'PENDING_APPROVAL',
+  Active = 'ACTIVE',
   Rejected = 'REJECTED',
+  Suspended = 'SUSPENDED',
 }
 
 export interface UserAuthProvider {
@@ -77,14 +79,18 @@ export interface UserPreferences {
     max?: number | null;
   };
   preferredLocations: string[];
+  preferredOccasions: string[];
 }
 
 export interface UserAddress {
   label: string;
+  recipientName?: string | null;
+  phone?: string | null;
   addressLine: string;
   ward?: string | null;
   district?: string | null;
   city?: string | null;
+  note?: string | null;
   isDefault: boolean;
 }
 
@@ -109,6 +115,9 @@ export interface UserSecurity {
   passwordChangedAt?: Date | null;
   failedLoginAttempts: number;
   lockedUntil?: Date | null;
+  lockedAt?: Date | null;
+  lockedBy?: Types.ObjectId | null;
+  lockedReason?: string | null;
 }
 
 @Schema({ collection: 'users', timestamps: true })
@@ -156,6 +165,9 @@ export class User {
   })
   accountStatus: UserStatus;
 
+  @Prop({ type: Boolean, default: false })
+  hasCompletedOnboarding: boolean;
+
   @Prop({
     type: {
       fullName: { type: String, required: true, trim: true },
@@ -184,6 +196,7 @@ export class User {
         max: { type: Number, default: null },
       },
       preferredLocations: { type: [String], default: [] },
+      preferredOccasions: { type: [String], default: [] },
     },
     default: {},
   })
@@ -193,10 +206,13 @@ export class User {
     type: [
       {
         label: { type: String, required: true, trim: true },
+        recipientName: { type: String, default: null, trim: true },
+        phone: { type: String, default: null, trim: true },
         addressLine: { type: String, required: true, trim: true },
         ward: { type: String, default: null, trim: true },
         district: { type: String, default: null, trim: true },
         city: { type: String, default: null, trim: true },
+        note: { type: String, default: null, trim: true },
         isDefault: { type: Boolean, default: false },
       },
     ],
@@ -252,6 +268,9 @@ export class User {
       passwordChangedAt: { type: Date, default: null },
       failedLoginAttempts: { type: Number, default: 0 },
       lockedUntil: { type: Date, default: null },
+      lockedAt: { type: Date, default: null },
+      lockedBy: { type: Types.ObjectId, ref: 'User', default: null },
+      lockedReason: { type: String, default: null, trim: true },
     },
     default: {},
   })
@@ -269,6 +288,8 @@ UserSchema.index(
     partialFilterExpression: { 'auth.emailNormalized': { $type: 'string' } },
   },
 );
+UserSchema.index({ accountStatus: 1, roles: 1, deletedAt: 1 });
+UserSchema.index({ roles: 1, deletedAt: 1 });
 UserSchema.index(
   { 'auth.phoneNormalized': 1 },
   {
@@ -284,6 +305,25 @@ UserSchema.index(
   {
     partialFilterExpression: {
       'auth.authProviders.providerUserId': { $type: 'string' },
+    },
+  },
+);
+UserSchema.index(
+  {
+    'profile.fullName': 'text',
+    'auth.email': 'text',
+    'auth.emailNormalized': 'text',
+    'auth.phone': 'text',
+    'auth.phoneNormalized': 'text',
+  },
+  {
+    name: 'users_keyword_text',
+    weights: {
+      'profile.fullName': 5,
+      'auth.email': 4,
+      'auth.emailNormalized': 4,
+      'auth.phone': 3,
+      'auth.phoneNormalized': 3,
     },
   },
 );

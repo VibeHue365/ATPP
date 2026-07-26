@@ -1,0 +1,65 @@
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: vibehue-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-vibehue_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-vibehue_minio_password}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: vibehue-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  ocr-service:
+    build:
+      context: ./ocr-service
+    container_name: vibehue-ocr-service
+    environment:
+      TESSERACT_LANG: ${TESSERACT_LANG:-vie+eng}
+      TESSERACT_PSM: ${TESSERACT_PSM:-6}
+      OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-30}
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai-service:
+    build:
+      context: ./ai-service
+    container_name: vibehue-ai-service
+    env_file:
+      - ./ai-service/.env
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  minio_data:
+  redis_data:

@@ -6,6 +6,7 @@ import { Profile, Strategy, VerifyCallback } from 'passport-google-oauth20';
 export interface GoogleOAuthProfile {
   providerUserId: string;
   email: string;
+  emailVerified?: boolean;
   fullName: string;
   avatarUrl?: string;
 }
@@ -42,9 +43,12 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       return;
     }
 
+    const profileJson = profile._json as { email_verified?: boolean };
+
     done(null, {
       providerUserId: profile.id,
       email,
+      emailVerified: profileJson.email_verified,
       fullName: profile.displayName || email,
       avatarUrl: profile.photos?.[0]?.value,
     } satisfies GoogleOAuthProfile);

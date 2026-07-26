@@ -8,7 +8,12 @@ export class Review {
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
   bookingId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'BookingItem', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'BookingItem',
+    required: true,
+    index: true,
+  })
   bookingItemId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
@@ -31,7 +36,38 @@ export class Review {
 
   @Prop({ type: Date, default: null })
   repliedAt?: Date | null;
+
+  @Prop({ type: Boolean, default: false })
+  isReported?: boolean;
+
+  @Prop({ type: String, default: null })
+  reportReason?: string | null;
+
+  @Prop({ type: Date, default: null })
+  reportedAt?: Date | null;
 }
 
 export const ReviewSchema = SchemaFactory.createForClass(Review);
 ReviewSchema.index({ providerId: 1, rating: -1 });
+
+@Schema({ collection: 'customer_reviews', timestamps: true })
+export class CustomerReview {
+  @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
+  bookingId: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  customerId: Types.ObjectId; // Customer being reviewed
+
+  @Prop({ type: Types.ObjectId, ref: 'Provider', required: true, index: true })
+  providerId: Types.ObjectId; // Provider who reviews
+
+  @Prop({ required: true, min: 1, max: 5 })
+  rating: number;
+
+  @Prop({ type: String, default: '', trim: true })
+  comment: string;
+}
+
+export const CustomerReviewSchema =
+  SchemaFactory.createForClass(CustomerReview);
+CustomerReviewSchema.index({ customerId: 1 });

@@ -24,3 +24,7 @@ backend/uploads/
 .DS_Store
 Thumbs.db
 *.log
+
+# Large binary executables
+minio.exe
+*.exe

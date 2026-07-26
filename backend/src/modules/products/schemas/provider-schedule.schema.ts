@@ -8,14 +8,24 @@ export enum ScheduleType {
   SpecificDate = 'SPECIFIC_DATE',
 }
 
+/**
+ * Which service capability this schedule belongs to.
+ * null / undefined = applies to ALL capabilities (backward-compat for legacy single-role providers).
+ * Providers with both AODAI_RENTAL + PHOTOGRAPHY can maintain separate schedules per capability.
+ */
+export enum ScheduleCapability {
+  AodaiRental = 'AODAI_RENTAL',
+  Photography = 'PHOTOGRAPHY',
+}
+
 export interface TimeSlotRange {
   start: string; // e.g. "08:00"
-  end: string;   // e.g. "12:00"
+  end: string; // e.g. "12:00"
 }
 
 export interface CustomTimeSlot {
   timeSlot: string; // e.g. "14:00-16:00"
-  status: string;   // e.g. "AVAILABLE", "BLOCKED", "BOOKED"
+  status: string; // e.g. "AVAILABLE", "BLOCKED", "BOOKED"
 }
 
 @Schema({ collection: 'provider_schedules', timestamps: true })
@@ -30,6 +40,18 @@ export class ProviderSchedule {
     index: true,
   })
   scheduleType: ScheduleType;
+
+  /**
+   * Which capability this schedule is for.
+   * null = applies to all capabilities (legacy / single-role providers).
+   */
+  @Prop({
+    type: String,
+    enum: [...Object.values(ScheduleCapability), null],
+    default: null,
+    index: true,
+  })
+  capability: ScheduleCapability | null;
 
   @Prop({ type: Number, default: null, min: 0, max: 6 })
   dayOfWeek?: number | null; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
@@ -69,3 +91,4 @@ export const ProviderScheduleSchema =
   SchemaFactory.createForClass(ProviderSchedule);
 ProviderScheduleSchema.index({ providerId: 1, specificDate: 1 });
 ProviderScheduleSchema.index({ providerId: 1, dayOfWeek: 1 });
+ProviderScheduleSchema.index({ providerId: 1, capability: 1 });

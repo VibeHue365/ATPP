@@ -19,9 +19,11 @@ export class RegisterDto {
 
   @IsString()
   @MinLength(8)
+  @MaxLength(128)
   password: string;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(100)
   fullName: string;
 }

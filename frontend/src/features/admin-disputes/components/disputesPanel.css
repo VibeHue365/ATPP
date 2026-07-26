@@ -1,0 +1,559 @@
+.admin-disputes {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* Header & Controls Bar */
+.admin-disputes__header-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background-color: #FFFFFF;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.admin-disputes__search-box {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  align-items: center;
+}
+
+.admin-disputes__search-icon {
+  position: absolute;
+  left: 12px;
+  color: #94A3B8;
+  pointer-events: none;
+}
+
+.admin-disputes__search-box input {
+  width: 100%;
+  padding: 9px 32px 9px 36px;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.2s ease;
+  background-color: #F8FAFC;
+}
+
+.admin-disputes__search-box input:focus {
+  border-color: #4A0E17;
+  background-color: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(74, 14, 23, 0.1);
+}
+
+.admin-disputes__clear-btn {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #94A3B8;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 50%;
+}
+
+.admin-disputes__clear-btn:hover {
+  color: #475569;
+  background-color: #E2E8F0;
+}
+
+/* Status Tabs (Chờ xử lý / Đã giải quyết / Tất cả) */
+.admin-disputes__status-tabs {
+  display: flex;
+  gap: 4px;
+  background-color: #F1F5F9;
+  padding: 3px;
+  border-radius: 8px;
+}
+
+.admin-disputes__status-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: #64748B;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-disputes__status-tab:hover {
+  color: #1E293B;
+}
+
+.admin-disputes__status-tab.is-active {
+  background-color: #FFFFFF;
+  color: #4A0E17;
+  font-weight: 750;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Sort Select Dropdown */
+.admin-disputes__sort-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.admin-disputes__sort-icon {
+  position: absolute;
+  left: 10px;
+  color: #64748B;
+  pointer-events: none;
+}
+
+.admin-disputes__sort-box select {
+  padding: 7px 12px 7px 30px;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+  background-color: #FFFFFF;
+  cursor: pointer;
+  outline: none;
+}
+
+.admin-disputes__sort-box select:focus {
+  border-color: #4A0E17;
+}
+
+/* Category Filters */
+.admin-disputes__filters {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.admin-disputes__filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 20px;
+  border: 1px solid #E2E8F0;
+  background-color: #F1F5F9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.admin-disputes__filter-pill:hover {
+  background-color: #E2E8F0;
+  color: #1E293B;
+}
+
+.admin-disputes__filter-pill.is-active {
+  background-color: #4A0E17;
+  color: #FFFFFF;
+  border-color: #4A0E17;
+  box-shadow: 0 2px 6px rgba(74, 14, 23, 0.2);
+}
+
+.admin-disputes__toolbar {
+  margin-left: auto;
+}
+
+.admin-disputes__error {
+  color: #DC2626;
+  background-color: #FEF2F2;
+  border: 1px solid #FECACA;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+/* Grid Layout */
+.admin-disputes__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 20px;
+  align-items: start;
+}
+
+/* Left Column: List */
+.admin-disputes__list {
+  background-color: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.admin-disputes__list-header {
+  padding: 16px 20px;
+  background-color: #FAF6F0;
+  border-bottom: 1px solid #E8E2D5;
+}
+
+.admin-disputes__list-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: #4A0E17;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-disputes__list-header small {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #78350F;
+}
+
+.admin-disputes__list-items {
+  display: flex;
+  flex-direction: column;
+  max-height: 720px;
+  overflow-y: auto;
+}
+
+.admin-disputes__empty-state {
+  padding: 48px 24px;
+  text-align: center;
+}
+
+/* Item Card */
+.admin-disputes__item-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  border: none;
+  border-bottom: 1px solid #F1F5F9;
+  background-color: #FFFFFF;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.admin-disputes__item-card:hover {
+  background-color: #F8FAFC;
+}
+
+.admin-disputes__item-card.is-active {
+  background-color: #FFF9F9;
+  border-left: 4px solid #4A0E17;
+  padding-left: 16px;
+}
+
+.admin-disputes__item-card.is-resolved {
+  background-color: #F9FAFB;
+  opacity: 0.85;
+}
+
+.admin-disputes__item-card.is-resolved:hover {
+  opacity: 1;
+  background-color: #F3F4F6;
+}
+
+.admin-disputes__item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.admin-disputes__type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+}
+
+.badge-photo {
+  background-color: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+}
+
+.badge-rental {
+  background-color: #FDF4FF;
+  color: #86198F;
+  border: 1px solid #F5D0FE;
+}
+
+.admin-disputes__status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.badge-pending {
+  background-color: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FDE68A;
+}
+
+.badge-resolved {
+  background-color: #D1FAE5;
+  color: #065F46;
+  border: 1px solid #A7F3D0;
+}
+
+.admin-disputes__booking-code {
+  font-size: 13px;
+  font-weight: 750;
+  color: #4A0E17;
+}
+
+.admin-disputes__item-date {
+  margin-left: auto;
+  font-size: 11px;
+  color: #94A3B8;
+  font-weight: 500;
+}
+
+.admin-disputes__item-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1E293B;
+  line-height: 1.3;
+}
+
+.admin-disputes__item-parties {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #64748B;
+  flex-wrap: wrap;
+}
+
+.admin-disputes__item-parties span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin-disputes__item-parties strong {
+  color: #334155;
+}
+
+.admin-disputes__item-desc-snippet {
+  margin: 0;
+  font-size: 12px;
+  color: #475569;
+  background-color: #F8FAFC;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px dashed #E2E8F0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.admin-disputes__item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+
+.admin-disputes__item-price {
+  font-size: 12px;
+  color: #64748B;
+}
+
+.admin-disputes__item-price strong {
+  font-size: 13px;
+  color: #DC2626;
+  font-weight: 800;
+}
+
+/* Right Column: Details & Form */
+.admin-disputes__detail {
+  background-color: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 80px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+}
+
+.admin-disputes__detail-header {
+  border-bottom: 1px solid #F1F5F9;
+  padding-bottom: 12px;
+}
+
+.admin-disputes__summary {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.admin-disputes__summary div {
+  background-color: #F8FAFC;
+  border: 1px solid #F1F5F9;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.admin-disputes__summary dt {
+  font-size: 11px;
+  color: #64748B;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin-disputes__summary dd {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1E293B;
+}
+
+.admin-disputes__reason-box {
+  background-color: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.admin-disputes__reason-box strong {
+  display: block;
+  font-size: 12px;
+  color: #991B1B;
+  margin-bottom: 4px;
+}
+
+.admin-disputes__reason-box p {
+  margin: 0;
+  font-size: 13px;
+  color: #7F1D1D;
+  line-height: 1.4;
+}
+
+.admin-disputes__drive-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #2563EB;
+  color: #FFFFFF !important;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 6px;
+  text-decoration: none;
+  box-shadow: 0 2px 4px rgba(37,99,235,0.2);
+  transition: all 0.15s ease;
+}
+
+.admin-disputes__drive-link-btn:hover {
+  background-color: #1D4ED8;
+}
+
+.admin-disputes__resolved-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.admin-disputes__decision-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background-color: #FAF6F0;
+  border: 1px solid #E8E2D5;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.admin-disputes__decision-form select,
+.admin-disputes__decision-form input,
+.admin-disputes__decision-form textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  font-size: 13px;
+  background-color: #FFFFFF;
+}
+
+.admin-disputes__decision-form textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.admin-disputes__submit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 12px;
+  background-color: #4A0E17;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(74, 14, 23, 0.2);
+}
+
+.admin-disputes__submit-btn:hover:not(:disabled) {
+  background-color: #380A12;
+}
+
+.admin-disputes__no-selection {
+  background-color: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  padding: 60px 24px;
+  text-align: center;
+}
+
+@media (max-width: 1050px) {
+  .admin-disputes__grid {
+    grid-template-columns: 1fr;
+  }
+  .admin-disputes__detail {
+    position: static;
+  }
+}

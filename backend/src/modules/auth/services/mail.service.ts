@@ -22,11 +22,11 @@ export class MailService {
     this.transporter =
       host && user && pass
         ? nodemailer.createTransport({
-            host,
-            port,
-            secure,
-            auth: { user, pass },
-          })
+          host,
+          port,
+          secure,
+          auth: { user, pass },
+        })
         : null;
   }
 
@@ -57,6 +57,10 @@ export class MailService {
     `;
 
     await this.send(email, subject, text, html);
+  }
+
+  async sendMail(to: string, subject: string, html: string, text?: string): Promise<void> {
+    await this.send(to, subject, text || html.replace(/<[^>]*>/g, ''), html);
   }
 
   private async send(

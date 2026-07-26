@@ -9,8 +9,8 @@ export enum ProviderCapability {
 }
 
 export enum ProviderStatus {
-  Pending = 'PENDING',
-  Approved = 'APPROVED',
+  PendingApproval = 'PENDING_APPROVAL',
+  Active = 'ACTIVE',
   Rejected = 'REJECTED',
   Suspended = 'SUSPENDED',
 }
@@ -30,11 +30,28 @@ export interface ProviderContact {
   website?: string | null;
 }
 
+export interface GeoPoint {
+  type: 'Point';
+  /** GeoJSON coordinate order: [longitude, latitude]. */
+  coordinates: [number, number];
+}
+
+export interface ProviderRentalSettings {
+  useBusinessAddressForPickup: boolean;
+  pickupLocation?: ProviderAddress | null;
+}
+
+export interface ProviderPhotographySettings {
+  /** Maximum straight-line distance from the provider base location in kilometres. */
+  serviceRadiusKm?: number | null;
+}
+
 export interface ProviderAddress {
   addressLine: string;
   ward?: string | null;
   district?: string | null;
   city?: string | null;
+  geo?: GeoPoint | null;
 }
 
 export interface ProviderMedia {
@@ -64,7 +81,13 @@ export interface ProviderRating {
 
 @Schema({ collection: 'providers', timestamps: true })
 export class Provider {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, unique: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'User',
+    required: true,
+    unique: true,
+    index: true,
+  })
   userId: Types.ObjectId;
 
   @Prop({ required: true, trim: true })
@@ -93,10 +116,17 @@ export class Provider {
       ward: { type: String, default: null, trim: true },
       district: { type: String, default: null, trim: true },
       city: { type: String, default: null, trim: true },
+      geo: { type: Object, default: null },
     },
     required: true,
   })
   address: ProviderAddress;
+
+  @Prop({ type: Object, default: { useBusinessAddressForPickup: true, pickupLocation: null } })
+  rentalSettings: ProviderRentalSettings;
+
+  @Prop({ type: Object, default: { serviceRadiusKm: null } })
+  photographySettings: ProviderPhotographySettings;
 
   @Prop({
     type: {
@@ -153,7 +183,7 @@ export class Provider {
   @Prop({
     type: String,
     enum: Object.values(ProviderStatus),
-    default: ProviderStatus.Pending,
+    default: ProviderStatus.PendingApproval,
     index: true,
   })
   status: ProviderStatus;
@@ -163,6 +193,40 @@ export class Provider {
 
   @Prop({ type: Types.ObjectId, ref: 'User', default: null })
   approvedBy?: Types.ObjectId | null;
+
+  @Prop({ type: Number, default: 0 })
+  comboDiscountPercent: number;
+
+  @Prop({ type: Number, default: 0 })
+  violationCount: number;
+
+  /**
+   * Virtual escrow wallet — tracks provider earnings without a separate collection.
+   * pendingBalance:   sum of estimated net amounts for CONFIRMED bookings not yet COMPLETED.
+   * availableBalance: sum of actual net amounts from COMPLETED settlements (ready to withdraw).
+   * totalEarned:      cumulative lifetime earnings (only increases).
+   * lastUpdatedAt:    last time any balance field changed (for cache invalidation).
+   */
+  @Prop({
+    type: {
+      pendingBalance:   { type: Number, default: 0, min: 0 },
+      availableBalance: { type: Number, default: 0, min: 0 },
+      totalEarned:      { type: Number, default: 0, min: 0 },
+      lastUpdatedAt:    { type: Date,   default: null },
+    },
+    default: { pendingBalance: 0, availableBalance: 0, totalEarned: 0, lastUpdatedAt: null },
+  })
+  wallet: {
+    pendingBalance:   number;
+    availableBalance: number;
+    totalEarned:      number;
+    lastUpdatedAt:    Date | null;
+  };
 }
 
 export const ProviderSchema = SchemaFactory.createForClass(Provider);
+ProviderSchema.index({ userId: 1, status: 1 });
+ProviderSchema.index({ capabilities: 1 });
+ProviderSchema.index({ 'address.city': 1 });
+ProviderSchema.index({ 'address.geo': '2dsphere' });
+ProviderSchema.index({ 'rentalSettings.pickupLocation.geo': '2dsphere' });

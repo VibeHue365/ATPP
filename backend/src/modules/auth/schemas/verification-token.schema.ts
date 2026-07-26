@@ -12,6 +12,7 @@ export enum VerificationPurpose {
   VerifyEmail = 'VERIFY_EMAIL',
   VerifyPhone = 'VERIFY_PHONE',
   PasswordReset = 'PASSWORD_RESET',
+  OAuthLogin = 'OAUTH_LOGIN',
   EmailChange = 'EMAIL_CHANGE',
   PhoneChange = 'PHONE_CHANGE',
 }
@@ -39,6 +40,9 @@ export class VerificationToken {
   @Prop({ type: Date, default: null })
   verifiedAt?: Date | null;
 
+  @Prop({ type: Date, default: null, index: true })
+  revokedAt?: Date | null;
+
   @Prop({ default: 0 })
   attemptCount: number;
 
@@ -55,4 +59,17 @@ VerificationTokenSchema.index({
   purpose: 1,
   verifiedAt: 1,
   createdAt: -1,
+});
+VerificationTokenSchema.index({
+  userId: 1,
+  purpose: 1,
+  expiresAt: 1,
+  verifiedAt: 1,
+  revokedAt: 1,
+});
+VerificationTokenSchema.index({
+  purpose: 1,
+  expiresAt: 1,
+  verifiedAt: 1,
+  revokedAt: 1,
 });

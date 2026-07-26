@@ -13,6 +13,7 @@ export enum PaymentPurpose {
   PlatformCommission = 'PLATFORM_COMMISSION',
   SubscriptionFee = 'SUBSCRIPTION_FEE',
   PromotionFee = 'PROMOTION_FEE',
+  DepositRefund = 'DEPOSIT_REFUND',
 }
 
 export enum PaymentStatus {
@@ -37,11 +38,23 @@ export class Payment {
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
   bookingId: Types.ObjectId;
 
-  @Prop({ required: true, unique: true, index: true, trim: true, uppercase: true })
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    trim: true,
+    uppercase: true,
+  })
   paymentCode: string;
 
   @Prop({ required: true, min: 0 })
   amount: number;
+
+  @Prop({ required: true, min: 0, default: 0 })
+  refundedAmount: number;
+
+  @Prop({ required: true, min: 0, default: 0 })
+  refundReservedAmount: number;
 
   @Prop({
     type: String,
@@ -81,3 +94,4 @@ export class Payment {
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
+PaymentSchema.index({ 'payos.orderCode': 1 }, { unique: true, sparse: true });

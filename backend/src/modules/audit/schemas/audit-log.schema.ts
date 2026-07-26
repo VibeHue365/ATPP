@@ -3,7 +3,10 @@ import { HydratedDocument, Types } from 'mongoose';
 
 export type AuditLogDocument = HydratedDocument<AuditLog>;
 
-@Schema({ collection: 'audit_logs', timestamps: { createdAt: true, updatedAt: false } })
+@Schema({
+  collection: 'audit_logs',
+  timestamps: { createdAt: true, updatedAt: false },
+})
 export class AuditLog {
   @Prop({ type: Types.ObjectId, ref: 'User', default: null, index: true })
   actorId?: Types.ObjectId | null; // Null indicates system action

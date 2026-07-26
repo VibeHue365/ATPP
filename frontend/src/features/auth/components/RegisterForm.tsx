@@ -6,6 +6,7 @@ import { Input } from "../../../components/common/Input";
 import { useToast } from "../../../components/feedback/Toast";
 import { ROUTES } from "../../../config/routes";
 import { useAuth } from "../hooks/useAuth";
+import { translateError } from "../../../utils/errorTranslator";
 
 export const RegisterForm: React.FC = () => {
   const { register } = useAuth();
@@ -78,24 +79,29 @@ export const RegisterForm: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await register({
+      const result = await register({
         email,
         fullName,
         phone,
         password,
       });
 
-      toast.success("Đăng ký tài khoản thành công. Mã OTP đã được gửi.");
+      const demoOtpHint = result?.demoOtp
+        ? ` Mã OTP demo: ${result.demoOtp}`
+        : "";
+      toast.success(
+        `Đăng ký tài khoản thành công. Mã OTP đã được gửi.${demoOtpHint}`,
+      );
       navigate(ROUTES.VERIFY_EMAIL, {
         state: {
           email,
           message:
-            "Đăng ký thành công. Hãy nhập mã OTP 6 số để kích hoạt tài khoản.",
+            `Đăng ký thành công. Hãy nhập mã OTP 6 số để kích hoạt tài khoản.${demoOtpHint}`,
         },
       });
     } catch (err: any) {
       toast.error(
-        err.message ||
+        translateError(err.message) ||
           "Đăng ký thất bại. Email hoặc số điện thoại có thể đã được sử dụng.",
       );
     } finally {
@@ -105,6 +111,19 @@ export const RegisterForm: React.FC = () => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
+      <style>{`
+        .vh-register-form-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+        @media (max-width: 480px) {
+          .vh-register-form-row {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+
       <Link
         to={ROUTES.LANDING}
         className="vh-auth-back-link"
@@ -116,7 +135,7 @@ export const RegisterForm: React.FC = () => {
           fontWeight: 600,
           color: "var(--color-text-secondary)",
           textDecoration: "none",
-          marginBottom: "10px",
+          marginBottom: "12px",
           alignSelf: "flex-start",
           transition: "var(--transition-smooth)",
         }}
@@ -133,71 +152,148 @@ export const RegisterForm: React.FC = () => {
 
       <h2
         className="vh-greeting-title"
-        style={{ fontSize: "20px", marginBottom: "2px" }}
+        style={{
+          fontSize: "20px",
+          fontWeight: 800,
+          color: "#2D2926",
+          marginBottom: "6px",
+        }}
       >
         Tạo tài khoản mới
       </h2>
       <p
         className="vh-greeting-subtitle"
-        style={{ fontSize: "12px", marginBottom: "16px" }}
+        style={{
+          fontSize: "13px",
+          color: "var(--color-text-secondary)",
+          marginBottom: "16px",
+          lineHeight: 1.5,
+        }}
       >
         Bắt đầu hành trình văn hóa của bạn
       </p>
 
       <form
         onSubmit={handleSubmit}
+        noValidate
         className="vh-auth-form"
-        style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+        style={{ display: "flex", flexDirection: "column", gap: "10px" }}
       >
         <Input
           label="Họ và tên"
           type="text"
-          placeholder="Họ và tên"
+          placeholder="Nhập họ và tên..."
           value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            setFullName(val);
+            if (errors.fullName) {
+              setErrors((prev) => ({
+                ...prev,
+                fullName: !val
+                  ? "Vui lòng nhập họ và tên"
+                  : val.length < 3
+                    ? "Họ tên phải chứa ít nhất 3 ký tự"
+                    : undefined,
+              }));
+            }
+          }}
           error={errors.fullName}
-          className="vh-underline-input"
+          className="vh-premium-input"
           required
         />
 
         <Input
           label="Email"
           type="email"
-          placeholder="Email"
+          placeholder="Nhập địa chỉ email..."
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            setEmail(val);
+            if (errors.email) {
+              setErrors((prev) => ({
+                ...prev,
+                email: !val
+                  ? "Vui lòng nhập địa chỉ email"
+                  : !/\S+@\S+\.\S+/.test(val)
+                    ? "Email không hợp lệ"
+                    : undefined,
+              }));
+            }
+          }}
           error={errors.email}
-          className="vh-underline-input"
+          className="vh-premium-input"
           required
         />
 
         <Input
           label="Số điện thoại"
           type="tel"
-          placeholder="Số điện thoại"
+          placeholder="Nhập số điện thoại..."
           value={phone}
-          onChange={(e) => setPhone(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            setPhone(val);
+            if (errors.phone) {
+              setErrors((prev) => ({
+                ...prev,
+                phone: !val
+                  ? "Vui lòng nhập số điện thoại"
+                  : !/^[0-9+\-\s()]{8,20}$/.test(val)
+                    ? "Số điện thoại không hợp lệ (8-20 số)"
+                    : undefined,
+              }));
+            }
+          }}
           error={errors.phone}
-          className="vh-underline-input"
+          className="vh-premium-input"
           required
         />
 
-        <div className="vh-form-row">
+        <div className="vh-register-form-row">
           <Input
             label="Mật khẩu"
             type={showPassword ? "text" : "password"}
-            placeholder="Mật khẩu"
+            placeholder="Mật khẩu..."
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setPassword(val);
+              if (errors.password || errors.confirmPassword) {
+                setErrors((prev) => ({
+                  ...prev,
+                  password: !val
+                    ? "Vui lòng nhập mật khẩu"
+                    : val.length < 8
+                      ? "Mật khẩu phải chứa ít nhất 8 ký tự"
+                      : undefined,
+                  confirmPassword:
+                    errors.confirmPassword && val !== confirmPassword
+                      ? "Mật khẩu xác nhận không trùng khớp"
+                      : undefined,
+                }));
+              }
+            }}
             error={errors.password}
-            className="vh-underline-input"
+            className="vh-premium-input"
             rightIcon={
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="vh-password-toggle-btn"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  color: "var(--color-text-secondary)",
+                  outline: "none",
+                }}
               >
-                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             }
             required
@@ -206,18 +302,40 @@ export const RegisterForm: React.FC = () => {
           <Input
             label="Xác nhận"
             type={showConfirmPassword ? "text" : "password"}
-            placeholder="Xác nhận"
+            placeholder="Xác nhận..."
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setConfirmPassword(val);
+              if (errors.confirmPassword) {
+                setErrors((prev) => ({
+                  ...prev,
+                  confirmPassword:
+                    val !== password
+                      ? "Mật khẩu xác nhận không trùng khớp"
+                      : undefined,
+                }));
+              }
+            }}
             error={errors.confirmPassword}
-            className="vh-underline-input"
+            className="vh-premium-input"
             rightIcon={
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 className="vh-password-toggle-btn"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  color: "var(--color-text-secondary)",
+                  outline: "none",
+                }}
               >
-                {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             }
             required
@@ -227,26 +345,37 @@ export const RegisterForm: React.FC = () => {
         <div
           className="vh-form-utils"
           style={{
-            margin: "4px 0 10px",
+            margin: "2px 0 6px",
             display: "flex",
             alignItems: "flex-start",
           }}
         >
           <label
             className="vh-checkbox-container"
-            style={{ alignItems: "flex-start" }}
+            style={{ display: "flex", alignItems: "flex-start", gap: "6px", cursor: "pointer" }}
           >
             <input
               type="checkbox"
               className="vh-checkbox-input"
               checked={agreeTerms}
-              onChange={(e) => setAgreeTerms(e.target.checked)}
-              style={{ marginTop: "2px" }}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setAgreeTerms(checked);
+                if (errors.agreeTerms) {
+                  setErrors((prev) => ({
+                    ...prev,
+                    agreeTerms: checked
+                      ? undefined
+                      : "Bạn phải đồng ý với Điều khoản dịch vụ",
+                  }));
+                }
+              }}
+              style={{ marginTop: "3px", cursor: "pointer" }}
             />
             <span
               style={{
                 fontWeight: 500,
-                fontSize: "11px",
+                fontSize: "12px",
                 color: "var(--color-text-secondary)",
                 lineHeight: 1.5,
               }}
@@ -284,11 +413,27 @@ export const RegisterForm: React.FC = () => {
           isLoading={isLoading}
           className="w-full"
           style={{
-            height: "38px",
-            borderRadius: "6px",
+            height: "44px",
+            borderRadius: "8px",
             fontWeight: 700,
-            fontSize: "13px",
-            letterSpacing: "0.05em",
+            fontSize: "14px",
+            letterSpacing: "0.02em",
+            backgroundColor: "var(--color-primary)",
+            border: "none",
+            boxShadow: "0 4px 12px rgba(161, 30, 34, 0.2)",
+            transition: "all 0.2s ease",
+            cursor: "pointer",
+            color: "white",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--color-primary-light)";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 6px 16px rgba(161, 30, 34, 0.3)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--color-primary)";
+            e.currentTarget.style.transform = "none";
+            e.currentTarget.style.boxShadow = "0 4px 12px rgba(161, 30, 34, 0.2)";
           }}
         >
           Đăng ký
@@ -297,7 +442,7 @@ export const RegisterForm: React.FC = () => {
 
       <div
         className="vh-auth-switch"
-        style={{ marginTop: "14px", fontSize: "13px" }}
+        style={{ marginTop: "12px", fontSize: "14px" }}
       >
         <span>Đã có tài khoản?</span>{" "}
         <Link
