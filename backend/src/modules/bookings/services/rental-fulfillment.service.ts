@@ -127,10 +127,13 @@ export class RentalFulfillmentService {
     return updated;
   }
 
-  async markCompleted(input: TransitionInput, inventoryStatus: RentalInventoryStatus) {
+  async markCompleted(input: TransitionInput, inventoryStatus?: RentalInventoryStatus) {
     const allowedInventoryStatuses = [RentalInventoryStatus.Available, RentalInventoryStatus.Maintenance, RentalInventoryStatus.Damaged, RentalInventoryStatus.Lost];
-    if (!allowedInventoryStatuses.includes(inventoryStatus)) throw new BadRequestException('Trạng thái tồn kho cuối không hợp lệ.');
-    return this.transition({ ...input, expectedStatus: RentalFulfillmentStatus.Returned, nextStatus: RentalFulfillmentStatus.Completed, action: 'MARKED_COMPLETED', set: { 'rentalFulfillment.completedAt': new Date(), 'rentalFulfillment.inventoryStatus': inventoryStatus }, extraFilter: { 'rentalFulfillment.issueStatus': { $in: [RentalIssueStatus.None, RentalIssueStatus.Resolved] }, 'rentalFulfillment.depositSettlementStatus': { $in: [DepositSettlementStatus.FullyReleased, DepositSettlementStatus.PartiallyDeducted, DepositSettlementStatus.FullyDeducted] } } });
+    let finalStatus = inventoryStatus;
+    if (!finalStatus || !allowedInventoryStatuses.includes(finalStatus)) {
+      finalStatus = RentalInventoryStatus.Available;
+    }
+    return this.transition({ ...input, expectedStatus: RentalFulfillmentStatus.Returned, nextStatus: RentalFulfillmentStatus.Completed, action: 'MARKED_COMPLETED', set: { 'rentalFulfillment.completedAt': new Date(), 'rentalFulfillment.inventoryStatus': finalStatus }, extraFilter: { 'rentalFulfillment.issueStatus': { $in: [RentalIssueStatus.None, RentalIssueStatus.Resolved] }, 'rentalFulfillment.depositSettlementStatus': { $in: [DepositSettlementStatus.FullyReleased, DepositSettlementStatus.PartiallyDeducted, DepositSettlementStatus.FullyDeducted] } } });
   }
 
   private async transition(input: TransitionInput & { expectedStatus: RentalFulfillmentStatus; nextStatus: RentalFulfillmentStatus; action: RentalFulfillmentAction; set: Record<string, unknown>; extraFilter?: Record<string, unknown> }) {

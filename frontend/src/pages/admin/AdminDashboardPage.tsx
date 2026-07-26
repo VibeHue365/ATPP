@@ -29,6 +29,7 @@ import { PortfolioModerationManagement } from './components/PortfolioModerationM
 import { RefundManagement } from './components/RefundManagement';
 import { ComboModerationManagement } from './components/ComboModerationManagement';
 import { NotificationsPage } from '../notifications/NotificationsPage';
+import { DisputesPanel } from '../../features/admin-disputes/components/DisputesPanel';
 
 const getImageUrl = (url: string) => {
   if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
@@ -3115,7 +3116,7 @@ export const AdminDashboardPage: React.FC = () => {
                 {activeTab === 'refunds' && <RefundManagement />}
                 {activeTab === 'revenue' && renderRevenueTab()}
                 {activeTab === 'verifications' && renderVerificationsTab()}
-                {activeTab === 'disputes' && renderDisputesTab()}
+                {activeTab === 'disputes' && <DisputesPanel />}
                 {activeTab === 'behavior' && renderBehaviorTab()}
                 {activeTab === 'product-moderation' && <><ProductModerationManagement /><PortfolioModerationManagement /></>}
                 {activeTab === 'reported-reviews' && renderReportedReviewsTab()}

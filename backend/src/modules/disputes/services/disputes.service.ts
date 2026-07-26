@@ -733,7 +733,10 @@ export class DisputesService {
       requestedAmount = incident.requestedAmount;
     }
 
-    const depositTotal = booking.pricingSummary.depositTotal || 0;
+    const depositTotal =
+      booking.pricingSummary?.depositTotal ||
+      booking.pricingSummary?.grandTotal ||
+      0;
     const refundAmount =
       decision === 'CUSTOMER_RIGHT'
         ? isDirectDispute
@@ -753,7 +756,9 @@ export class DisputesService {
           ? 0
           : (splitCompensationAmount ?? -1);
 
-    const limitTotal = isDirectDispute ? requestedAmount : depositTotal;
+    const limitTotal = isDirectDispute
+      ? (requestedAmount || booking.pricingSummary?.grandTotal || depositTotal)
+      : (depositTotal || requestedAmount || booking.pricingSummary?.grandTotal || 0);
     if (
       refundAmount < 0 ||
       compensationAmount < 0 ||
@@ -926,6 +931,22 @@ export class DisputesService {
       });
       await booking.save();
 
+      // Cập nhật trạng thái hoàn thành & giải phóng tồn kho cho các sản phẩm áo dài trong đơn
+      try {
+        await this.bookingItemModel.updateMany(
+          { bookingId: (booking as any)._id, itemType: 'PRODUCT' as any } as any,
+          {
+            $set: {
+              'rentalFulfillment.status': 'COMPLETED',
+              'rentalFulfillment.inventoryStatus': 'AVAILABLE',
+              'rentalFulfillment.completedAt': new Date(),
+            },
+          },
+        );
+      } catch (itemErr) {
+        console.warn('Lỗi tự động cập nhật rentalFulfillment cho booking items:', itemErr);
+      }
+
       if (decision === 'CUSTOMER_RIGHT') {
         await this.settlementsService.cancelSettlementsForBooking(
           booking._id.toString(),
@@ -1009,7 +1030,7 @@ export class DisputesService {
 
   async getDisputedIncidents(): Promise<any[]> {
     const incidents = await this.incidentModel
-      .find({ status: IncidentStatus.Disputed })
+      .find({ status: { $in: [IncidentStatus.Disputed, IncidentStatus.Resolved] } })
       .populate('bookingId')
       .populate('bookingItemId')
       .populate('productId')
@@ -1018,7 +1039,7 @@ export class DisputesService {
 
     const disputes = await this.disputeModel
       .find({
-        status: { $in: [DisputeStatus.Open, DisputeStatus.UnderReview] },
+        status: { $in: [DisputeStatus.Open, DisputeStatus.UnderReview, DisputeStatus.Resolved] },
       })
       .populate('bookingId')
       .populate('bookingItemId')
@@ -1028,6 +1049,7 @@ export class DisputesService {
 
     const mappedDisputes = disputes.map((d: any) => {
       const pricingSummary = d.bookingId?.pricingSummary || {};
+      const isResolved = d.status === DisputeStatus.Resolved || d.status === 'RESOLVED';
       return {
         _id: d._id,
         bookingId: d.bookingId,
@@ -1039,13 +1061,34 @@ export class DisputesService {
         evidencePhotos: d.evidencePhotos,
         requestedAmount:
           pricingSummary.grandTotal || pricingSummary.subTotal || 0,
-        status: IncidentStatus.Disputed,
+        status: isResolved ? 'RESOLVED' : IncidentStatus.Disputed,
         isDirectDispute: true,
         openedBy: d.openedBy,
+        createdAt: d.createdAt,
       };
     });
 
-    // Thêm các Booking có trạng thái DISPUTED chưa có record trong dispute/incident
+    const mappedIncidents = incidents.map((i: any) => {
+      const pricingSummary = i.bookingId?.pricingSummary || {};
+      const isResolved = i.status === IncidentStatus.Resolved || i.status === 'RESOLVED';
+      return {
+        _id: i._id,
+        bookingId: i.bookingId,
+        bookingItemId: i.bookingItemId,
+        productId: i.productId,
+        reportedBy: i.reportedBy,
+        description: i.description || i.incidentType,
+        actionType: 'INCIDENT_REPORT',
+        evidencePhotos: i.evidencePhotos,
+        requestedAmount: i.compensationAmount || pricingSummary.depositTotal || 0,
+        status: isResolved ? 'RESOLVED' : IncidentStatus.Disputed,
+        isDirectDispute: false,
+        openedBy: i.reportedBy,
+        createdAt: i.createdAt,
+      };
+    });
+
+    // Thêm các Booking có trạng thái DISPUTED hoặc có disputeResult chưa có record trong dispute/incident
     const existingBookingIds = [
       ...incidents.map((i: any) => i.bookingId?._id?.toString() || i.bookingId?.toString()),
       ...disputes.map((d: any) => d.bookingId?._id?.toString() || d.bookingId?.toString()),
@@ -1057,7 +1100,10 @@ export class DisputesService {
 
     const disputedBookings = await bookingModel
       .find({
-        status: BookingStatus.Disputed,
+        $or: [
+          { status: BookingStatus.Disputed },
+          { disputeResult: { $exists: true } },
+        ],
         _id: { $nin: existingBookingIds.map((id: string) => new Types.ObjectId(id)) },
       })
       .populate('customerId')
@@ -1082,6 +1128,8 @@ export class DisputesService {
           providerDoc = await providerModel.findById(providerId).exec();
         }
 
+        const isResolved = Boolean(b.disputeResult) || b.status !== BookingStatus.Disputed;
+
         return {
           _id: `bdispute_${b._id}`,
           bookingId: b,
@@ -1090,17 +1138,23 @@ export class DisputesService {
           reportedBy: providerDoc || null,
           description: reason,
           actionType: b.bookingType === 'PHOTOGRAPHY' ? 'PHOTOGRAPHY_DISPUTE' : 'CUSTOMER_DISPUTE',
-          evidencePhotos: b.deliveredPhotos || b.handoverPhotos || [],
+          evidencePhotos:
+            (b as any).disputeEvidencePhotos?.length
+              ? (b as any).disputeEvidencePhotos
+              : (b as any).evidencePhotos?.length
+              ? (b as any).evidencePhotos
+              : b.deliveredPhotos || b.handoverPhotos || [],
           requestedAmount: b.pricingSummary?.grandTotal || b.pricingSummary?.subTotal || 0,
-          status: IncidentStatus.Disputed,
+          status: isResolved ? 'RESOLVED' : IncidentStatus.Disputed,
           isDirectDispute: true,
           openedBy: b.customerId,
           isBookingDisputeOnly: true,
+          createdAt: b.createdAt,
         };
       })
     );
 
-    return [...incidents, ...mappedDisputes, ...mappedDisputedBookings];
+    return [...mappedIncidents, ...mappedDisputes, ...mappedDisputedBookings];
   }
 
   private async executeCompensationTransfer(input: {

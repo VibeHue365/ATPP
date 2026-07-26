@@ -11,6 +11,10 @@ import { getFirstMediaUrl } from '../../../shared/media/mediaUrl';
 const formatDate = (dateStr: string): string => {
   if (!dateStr) return '';
   try {
+    if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+      const [y, m, d] = dateStr.slice(0, 10).split('-');
+      return `${d}/${m}/${y}`;
+    }
     const d = new Date(dateStr);
     return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   } catch {
@@ -332,12 +336,38 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     const nowYMD = now.toLocaleDateString('sv-SE'); // 'YYYY-MM-DD'
     const currentHourMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    const shootYMD = photoItem?.shootDate ? new Date(photoItem.shootDate).toLocaleDateString('sv-SE') : '';
-    const timeStr = photoItem?.shootTimeSlot || '09:00 - 11:00';
+    const rawShootDate = photoItem?.shootDate || photoItem?.startDate || photoItem?.rentalFrom || b.startDate || b.shootDate;
+    const shootYMD = rawShootDate ? (typeof rawShootDate === 'string' ? rawShootDate.slice(0, 10) : new Date(rawShootDate).toLocaleDateString('sv-SE')) : '';
+
+    const rawTimeSlot = 
+      photoItem?.shootTimeSlot ||
+      photoItem?.timeSlot ||
+      photoItem?.rescheduleRequest?.newShootTimeSlot ||
+      (photoItem?.startTime && photoItem?.endTime ? `${photoItem.startTime} - ${photoItem.endTime}` : '') ||
+      (b as any).shootTimeSlot ||
+      (b as any).timeSlot ||
+      '';
+
+    let timeStr = '';
+    if (rawTimeSlot) {
+      timeStr = rawTimeSlot.replace(/\s*-\s*/, ' - ');
+    } else if (rawShootDate) {
+      try {
+        const d = new Date(rawShootDate);
+        const hrs = d.getHours();
+        const mins = d.getMinutes();
+        if (hrs > 0 || mins > 0) {
+          const startH = String(hrs).padStart(2, '0');
+          const startM = String(mins).padStart(2, '0');
+          const endH = String((hrs + 2) % 24).padStart(2, '0');
+          timeStr = `${startH}:${startM} - ${endH}:${startM}`;
+        }
+      } catch {}
+    }
     
     // Lấy giờ kết thúc ca chụp (ví dụ "08:00 - 09:00" -> "09:00")
     let endTimeStr = '23:59';
-    if (timeStr.includes('-')) {
+    if (timeStr && timeStr.includes('-')) {
       const parts = timeStr.split('-');
       if (parts.length >= 2) endTimeStr = parts[1].trim();
     }
@@ -361,6 +391,10 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       statusLabel = isPastTimeToday ? 'Quá giờ chụp' : 'Quá hạn chụp';
     }
 
+    const price = b.totalAmount || photoItem?.unitPrice || photoItem?.price || 0;
+    const formattedDate = rawShootDate ? formatDate(String(rawShootDate)) : '';
+    const fullDateTimeStr = formattedDate ? `${formattedDate}${timeStr ? ` (${timeStr})` : ''}` : '';
+
     return {
       id: b._id,
       isReal: true,
@@ -372,11 +406,13 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       endTimeStr,
       awaitingReviewSince: b.awaitingReviewSince,
       statusType: isPast ? 'PAST' : isOverdue ? 'OVERDUE' : (b.status === 'AWAITING_REVIEW' || b.status === 'IN_PROGRESS') ? 'ACTION' : 'UPCOMING',
-      dateStr: photoItem?.shootDate ? formatDate(photoItem.shootDate) : '',
+      dateStr: formattedDate,
+      fullDateTimeStr: fullDateTimeStr || formattedDate,
       title: photoItem?.photographyPackageId?.name || photoItem?.name || 'Gói Chụp Ảnh Cổ Phong',
       photographerName: photoItem?.providerId?.businessName || photoItem?.providerId?.fullName || photoItem?.photographerName || 'Nhiếp ảnh gia',
       shootLocation: photoItem?.shootLocation || 'Showroom Nam Kỳ Khởi Nghĩa, Q.1',
-      timeStr: photoItem?.shootTimeSlot || '09:00 - 11:00',
+      timeStr,
+      price,
       statusLabel
     };
   });
@@ -812,32 +848,32 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       {app.rawStatus === 'DEPOSIT_PAID' ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#EA580C', color: 'white' }}>
                           <Clock size={13} style={{ marginRight: '6px' }} />
-                          CHỜ THỢ CHỤP XÁC NHẬN • {app.dateStr}
+                          CHỜ THỢ CHỤP XÁC NHẬN • {app.fullDateTimeStr}
                         </span>
                       ) : app.rawStatus === 'AWAITING_REVIEW' ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#0284C7', color: 'white' }}>
                           <Clock size={13} style={{ marginRight: '6px' }} />
-                          CHỜ XÁC NHẬN • {app.dateStr}
+                          CHỜ XÁC NHẬN • {app.fullDateTimeStr}
                         </span>
                       ) : app.rawStatus === 'IN_PROGRESS' ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#059669', color: 'white' }}>
                           <Clock size={13} style={{ marginRight: '6px' }} />
-                          ĐANG CHỤP • {app.dateStr}
+                          ĐANG CHỤP • {app.fullDateTimeStr}
                         </span>
                       ) : app.isOverdue ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#C2410C', color: 'white' }}>
                           <Clock size={13} style={{ marginRight: '6px' }} />
-                          {app.isPastTimeToday ? 'QUÁ GIỜ CHỤP' : 'QUÁ HẠN CHỤP'} • {app.dateStr}
+                          {app.isPastTimeToday ? 'QUÁ GIỜ CHỤP' : 'QUÁ HẠN CHỤP'} • {app.fullDateTimeStr}
                         </span>
                       ) : app.statusType === 'UPCOMING' ? (
                         <span className="vh-appointment-status-label-upcoming">
                           <Calendar size={13} style={{ marginRight: '6px' }} />
-                          SẮP TỚI • {app.dateStr}
+                          SẮP TỚI • {app.fullDateTimeStr}
                         </span>
                       ) : (
                         <span className="vh-appointment-status-label-past">
                           <History size={13} style={{ marginRight: '6px' }} />
-                          {app.statusLabel.toUpperCase()} • {app.dateStr}
+                          {app.statusLabel.toUpperCase()} • {app.fullDateTimeStr}
                         </span>
                       )}
                     </div>
@@ -1004,11 +1040,9 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   </div>
 
                   <div className="vh-appointment-card-footer">
-                    {app.statusType === 'UPCOMING' ? (
-                      <span className="vh-appointment-time-badge">{app.timeStr}</span>
-                    ) : (
-                      <span className="vh-appointment-status-success">{app.timeStr}</span>
-                    )}
+                    <span className={app.statusType === 'UPCOMING' ? 'vh-appointment-time-badge' : 'vh-appointment-status-success'}>
+                      {app.price ? `${app.price.toLocaleString('vi-VN')}đ` : '0đ'}
+                    </span>
                     {app.isReal ? (
                       <button
                         className="vh-appointment-action-link"

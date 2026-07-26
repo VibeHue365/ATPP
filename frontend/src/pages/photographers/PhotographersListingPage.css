@@ -731,12 +731,12 @@
 
 .pl-map-floating-btn {
   position: fixed;
-  bottom: 30px;
-  right: 30px;
+  bottom: 24px;
+  right: 24px;
   background-color: var(--color-primary-dark);
   color: #ffffff;
   border: none;
-  padding: 13px 26px;
+  padding: 12px 22px;
   border-radius: var(--radius-full);
   box-shadow: 0 8px 24px rgba(161, 30, 34, 0.3);
   display: flex;

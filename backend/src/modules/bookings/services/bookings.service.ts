@@ -2772,6 +2772,7 @@ export class BookingsService implements OnApplicationBootstrap {
     handoverPhotos?: string[],
     deliveredPhotos?: string[],
     deliveryDriveUrl?: string,
+    evidencePhotos?: string[],
   ): Promise<BookingDocument> {
     const booking = await this.bookingModel.findById(bookingIdStr);
     if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
@@ -2853,12 +2854,15 @@ export class BookingsService implements OnApplicationBootstrap {
       [BookingStatus.DepositPaid]: [
         BookingStatus.Confirmed,
         BookingStatus.PickupPending,
+        BookingStatus.InProgress,
+        BookingStatus.AwaitingReview,
         BookingStatus.Cancelled,
         BookingStatus.Disputed,
       ],
       [BookingStatus.Confirmed]: [
         BookingStatus.PickupPending,
         BookingStatus.InProgress,
+        BookingStatus.AwaitingReview,
         BookingStatus.Cancelled,
         BookingStatus.Disputed,
       ],
@@ -2866,6 +2870,7 @@ export class BookingsService implements OnApplicationBootstrap {
         BookingStatus.PickedUp,
         BookingStatus.Cancelled,
         BookingStatus.InProgress,
+        BookingStatus.AwaitingReview,
         BookingStatus.Disputed,
       ],
       [BookingStatus.PickedUp]: [
@@ -2873,13 +2878,18 @@ export class BookingsService implements OnApplicationBootstrap {
         BookingStatus.Disputed,
         BookingStatus.Returned,
         BookingStatus.InProgress,
+        BookingStatus.AwaitingReview,
       ],
       [BookingStatus.ReturnPending]: [
         BookingStatus.Returned,
+        BookingStatus.InProgress,
+        BookingStatus.AwaitingReview,
         BookingStatus.Disputed,
       ],
       [BookingStatus.Returned]: [
         BookingStatus.Completed,
+        BookingStatus.InProgress,
+        BookingStatus.AwaitingReview,
         BookingStatus.Disputed,
       ],
       [BookingStatus.InProgress]: [
@@ -2894,6 +2904,8 @@ export class BookingsService implements OnApplicationBootstrap {
         BookingStatus.Disputed,
         BookingStatus.Returned,
         BookingStatus.ReturnPending,
+        BookingStatus.InProgress,
+        BookingStatus.PickedUp,
       ],
       [BookingStatus.Disputed]: [
         BookingStatus.Completed,
@@ -2924,10 +2936,19 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     }
     if (nextStatus === BookingStatus.Disputed) {
+      if (evidencePhotos && evidencePhotos.length > 0) {
+        (booking as any).evidencePhotos = evidencePhotos;
+        (booking as any).disputeEvidencePhotos = evidencePhotos;
+      }
       try {
         const disputeModel = this.bookingModel.db.model('Dispute');
         const existing = await disputeModel.findOne({ bookingId: booking._id });
-        if (!existing) {
+        if (existing) {
+          if (evidencePhotos && evidencePhotos.length > 0) {
+            existing.evidencePhotos = evidencePhotos;
+            await existing.save();
+          }
+        } else {
           const item = await this.bookingItemModel.findOne({
             bookingId: booking._id,
           });
@@ -2942,7 +2963,9 @@ export class BookingsService implements OnApplicationBootstrap {
             reason:
               note || 'Khách hàng gửi khiếu nại chất lượng dịch vụ/sản phẩm',
             evidencePhotos:
-              (booking as any).deliveredPhotos || booking.handoverPhotos || [],
+              (evidencePhotos && evidencePhotos.length > 0)
+                ? evidencePhotos
+                : (booking as any).deliveredPhotos || booking.handoverPhotos || [],
             status: 'OPEN',
           });
         }
@@ -3468,13 +3491,23 @@ export class BookingsService implements OnApplicationBootstrap {
               s.status !== 'EXPIRED',
           ) as any;
           if (matchedSchedule) {
+            let slot = item.shootTimeSlot || matchedSchedule.timeSlot;
+            if (!slot && matchedSchedule.startsAt && matchedSchedule.endsAt) {
+              const startD = new Date(matchedSchedule.startsAt);
+              const endD = new Date(matchedSchedule.endsAt);
+              const startH = String(startD.getHours()).padStart(2, '0');
+              const startM = String(startD.getMinutes()).padStart(2, '0');
+              const endH = String(endD.getHours()).padStart(2, '0');
+              const endM = String(endD.getMinutes()).padStart(2, '0');
+              slot = `${startH}:${startM} - ${endH}:${endM}`;
+            }
             return {
               ...item,
               shootDate:
                 item.shootDate ||
                 matchedSchedule.startsAt ||
                 matchedSchedule.scheduledDate,
-              shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+              shootTimeSlot: slot || null,
               shootLocation:
                 item.shootLocation || matchedSchedule.locationAddress,
             };

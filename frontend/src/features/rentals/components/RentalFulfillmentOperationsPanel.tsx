@@ -132,7 +132,11 @@ export const RentalFulfillmentOperationsPanel = ({ bookingId, item, viewerRole, 
 
   const completeRental = async () => {
     setReviewing('complete'); setMessage(null);
-    try { await httpClient.post(`${basePath}/complete`, { inventoryStatus: fulfillment.inventoryStatus }); onChanged(); }
+    const validStatuses = ['AVAILABLE', 'MAINTENANCE', 'DAMAGED', 'LOST'];
+    const targetStatus = fulfillment.inventoryStatus && validStatuses.includes(fulfillment.inventoryStatus)
+      ? fulfillment.inventoryStatus
+      : 'AVAILABLE';
+    try { await httpClient.post(`${basePath}/complete`, { inventoryStatus: targetStatus }); onChanged(); }
     catch (error: any) { setMessage(error?.message || 'Không thể hoàn tất áo dài.'); } finally { setReviewing(null); }
   };
   const canComplete = fulfillment.issueStatus === 'NONE' || fulfillment.issueStatus === 'RESOLVED';

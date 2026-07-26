@@ -2081,54 +2081,83 @@ export const ProviderDashboard: React.FC = () => {
     }
 
     // ===== PHOTOGRAPHY: Bàn giao ảnh chụp → AWAITING_REVIEW =====
-    if (apiStatus === 'AWAITING_REVIEW' && order?.bookingType === 'PHOTOGRAPHY') {
+    const isPhotographyOrder = order?.bookingType === 'PHOTOGRAPHY' || order?.bookingType === 'COMBO' || order?.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+    if (apiStatus === 'AWAITING_REVIEW' && isPhotographyOrder) {
       const result = await Swal.fire({
-        title: 'Bàn giao ảnh chụp',
+        title: 'Bàn giao sản phẩm buổi chụp',
         html: `
-          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0;">
-            <p style="font-size: 13px; color: #6B7280; margin-bottom: 18px; text-align: center; line-height: 1.5; max-width: 360px;">
-              Tải lên ảnh kết quả buổi chụp để gửi cho khách hàng xem và tải về. Khách hàng sẽ xác nhận hài lòng sau khi nhận ảnh.
+          <div style="display: flex; flex-direction: column; gap: 14px; text-align: left; padding: 6px 0;">
+            <p style="font-size: 13px; color: #4B5563; margin: 0; line-height: 1.5;">
+              Nhập <strong>Link Kho Ảnh Gốc (Google Drive / Cloud)</strong> và/hoặc <strong>Tải lên ảnh xem trước</strong> để gửi cho khách hàng xem & xác nhận.
             </p>
-            <label for="delivered-photo-input" style="
-              width: 100%;
-              max-width: 320px;
-              height: 130px;
-              border: 2px dashed #BFDBFE;
-              border-radius: 12px;
-              background-color: #EFF6FF;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              cursor: pointer;
-              transition: all 0.2s ease-in-out;
-              gap: 8px;
-              padding: 16px;
-              box-sizing: border-box;
-            "
-            onmouseover="this.style.borderColor='#1D4ED8'; this.style.backgroundColor='#DBEAFE';"
-            onmouseout="this.style.borderColor='#BFDBFE'; this.style.backgroundColor='#EFF6FF';"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              <span style="font-size: 13px; font-weight: 700; color: #1D4ED8; margin-top: 4px;">Tải lên ảnh kết quả</span>
-              <span style="font-size: 11px; color: #6B7280;">Hỗ trợ nhiều hình ảnh JPG, PNG, WEBP</span>
-              <input type="file" id="delivered-photo-input" multiple accept="image/*" style="display: none;" />
-            </label>
-            <div id="delivered-photo-preview" style="
-              display: flex;
-              gap: 10px;
-              flex-wrap: wrap;
-              justify-content: center;
-              margin-top: 20px;
-              width: 100%;
-              max-width: 360px;
-            "></div>
+
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label for="delivery-drive-url-input" style="font-size: 12.5px; font-weight: 700; color: #1E293B; display: flex; align-items: center; gap: 6px;">
+                🔗 Link Kho Ảnh Gốc (Google Drive / Cloud)
+              </label>
+              <input
+                type="url"
+                id="delivery-drive-url-input"
+                placeholder="https://drive.google.com/drive/folders/..."
+                style="
+                  width: 100%;
+                  padding: 10px 12px;
+                  border: 1.5px solid #CBD5E1;
+                  border-radius: 8px;
+                  font-size: 13px;
+                  box-sizing: border-box;
+                  outline: none;
+                "
+                value="${(order as any)?.deliveryDriveUrl || ''}"
+              />
+              <small style="font-size: 11px; color: #64748B;">Lưu ý: Bật quyền "Người có liên kết có thể xem" cho thư mục Drive.</small>
+            </div>
+
+            <div style="border-top: 1px dashed #E2E8F0; margin: 2px 0;"></div>
+
+            <div style="display: flex; flex-direction: column; gap: 6px; align-items: center;">
+              <label style="font-size: 12.5px; font-weight: 700; color: #1E293B; width: 100%; text-align: left;">
+                📸 Ảnh kết quả xem trước
+              </label>
+              <label for="delivered-photo-input" style="
+                width: 100%;
+                height: 100px;
+                border: 2px dashed #BFDBFE;
+                border-radius: 12px;
+                background-color: #EFF6FF;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s ease-in-out;
+                gap: 4px;
+                padding: 12px;
+                box-sizing: border-box;
+              "
+              onmouseover="this.style.borderColor='#1D4ED8'; this.style.backgroundColor='#DBEAFE';"
+              onmouseout="this.style.borderColor='#BFDBFE'; this.style.backgroundColor='#EFF6FF';"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span style="font-size: 12px; font-weight: 700; color: #1D4ED8;">Tải lên ảnh kết quả</span>
+                <span style="font-size: 11px; color: #6B7280;">Hỗ trợ nhiều hình ảnh JPG, PNG, WEBP</span>
+                <input type="file" id="delivered-photo-input" multiple accept="image/*" style="display: none;" />
+              </label>
+              <div id="delivered-photo-preview" style="
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+                justify-content: center;
+                margin-top: 10px;
+                width: 100%;
+              "></div>
+            </div>
           </div>
         `,
         showCancelButton: true,
         confirmButtonColor: '#1D4ED8',
         cancelButtonColor: '#9CA3AF',
-        confirmButtonText: '📸 Gửi ảnh cho khách hàng',
+        confirmButtonText: '📸 Bàn giao ảnh cho khách hàng',
         cancelButtonText: 'Hủy',
         background: 'white',
         didOpen: () => {
@@ -2166,16 +2195,26 @@ export const ProviderDashboard: React.FC = () => {
           }
         },
         preConfirm: () => {
+          const driveInput = document.getElementById('delivery-drive-url-input') as HTMLInputElement;
+          const driveUrl = driveInput?.value?.trim() || '';
+
           const imgs = document.querySelectorAll('.delivered-uploaded-img');
-          const urls: string[] = [];
+          const deliveredPhotos: string[] = [];
           imgs.forEach((img: any) => {
-            if (img.dataset.url) urls.push(img.dataset.url);
+            if (img.dataset.url) deliveredPhotos.push(img.dataset.url);
           });
-          if (urls.length === 0) {
-            Swal.showValidationMessage('Vui lòng tải lên ít nhất 1 ảnh kết quả để gửi cho khách hàng!');
+
+          if (!driveUrl && deliveredPhotos.length === 0) {
+            Swal.showValidationMessage('Vui lòng nhập Link Drive kho ảnh hoặc tải lên ít nhất 1 ảnh kết quả!');
             return false;
           }
-          return urls;
+
+          if (driveUrl && !/^https?:\/\//i.test(driveUrl)) {
+            Swal.showValidationMessage('Đường dẫn Drive không hợp lệ! Vui lòng nhập URL hợp lệ (bắt đầu bằng http:// hoặc https://)');
+            return false;
+          }
+
+          return { deliveredPhotos, deliveryDriveUrl: driveUrl };
         }
       });
 
@@ -2184,12 +2223,16 @@ export const ProviderDashboard: React.FC = () => {
         return;
       }
 
-      const deliveredPhotos = result.value;
+      const { deliveredPhotos, deliveryDriveUrl } = result.value;
       try {
-        await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus, deliveredPhotos });
+        await httpClient.patch(`/bookings/${_id}/status`, {
+          status: apiStatus,
+          deliveredPhotos: deliveredPhotos.length > 0 ? deliveredPhotos : undefined,
+          deliveryDriveUrl: deliveryDriveUrl || undefined,
+        });
         const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
-        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus } : o));
-        toast.success('Đã gửi ảnh kết quả cho khách hàng! Chờ khách xác nhận hài lòng.');
+        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus, deliveredPhotos, deliveryDriveUrl } : o));
+        toast.success('Đã gửi ảnh kết quả & Link Drive cho khách hàng! Chờ khách xác nhận hài lòng.');
       } catch (err: any) {
         toast.error(err.message || 'Gửi ảnh thất bại');
       }

@@ -594,7 +594,7 @@ export const MainLayout: React.FC = () => {
       </footer>
       {/* AI ChatBot Floating Widget */}
       {isAuthenticated && (
-        <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999 }}>
+        <div style={{ position: 'fixed', bottom: '84px', right: '24px', zIndex: 9999 }}>
           {isChatOpen && (
             <div style={{
               position: 'absolute',
