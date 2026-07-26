@@ -11,6 +11,7 @@ interface PhotographyLocationPickerProps {
   title?: string;
   hint?: string;
   radiusKm?: number | null;
+  compact?: boolean;
 }
 
 interface NominatimResult {

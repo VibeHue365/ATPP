@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
   HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, Trash2, Play, Pencil, Copy, Package, Eye, Shirt,
-  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck, Clock, ShieldCheck, AlertTriangle, Sparkles
+  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck, Clock, ShieldCheck, AlertTriangle, Sparkles, Store, MapPinned, FileText
 } from 'lucide-react';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 import Swal from 'sweetalert2';
@@ -20,6 +20,9 @@ import { categoryService } from '../../features/categories/services/categoryServ
 import type { Category } from '../../features/categories/types';
 import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
 import { NotificationsPage } from '../notifications/NotificationsPage';
+import { SectionLoading } from '../../components/feedback/AsyncState';
+import { useSocket } from '../../context/SocketContext';
+import './providerServiceProfile.css';
 
 interface Order {
   _id: string;
@@ -33,9 +36,13 @@ interface Order {
   status: string;
   totalAmount?: number;
   createdAt?: string;
+  rawOrderDate?: string;
+  photosApproved?: boolean;
   customerId?: any;
   items?: any[];
+  schedules?: Array<{ status?: string; [key: string]: any }>;
   depositTotal?: number;
+  startDate?: string;
   rawStatus?: string;
   bookingType?: 'AODAI_RENTAL' | 'PHOTOGRAPHY' | 'COMBO' | string;
   pickupDamageReport?: {
@@ -44,6 +51,43 @@ interface Order {
     evidencePhotos: string[];
   } | null;
 }
+
+const PHOTO_START_EARLY_MINUTES = 30;
+
+const getPhotoScheduleStartsAt = (schedule?: Record<string, any>): Date | null => {
+  if (schedule?.startsAt) {
+    const startsAt = new Date(schedule.startsAt);
+    if (!Number.isNaN(startsAt.getTime())) return startsAt;
+  }
+
+  const scheduledDate = schedule?.providerLocalDate
+    || (schedule?.scheduledDate
+      ? new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Ho_Chi_Minh',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(new Date(schedule.scheduledDate))
+      : null);
+  const startTime = String(schedule?.timeSlot || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!scheduledDate || !startTime) return null;
+
+  const legacyStartsAt = new Date(
+    `${scheduledDate}T${startTime[1].padStart(2, '0')}:${startTime[2]}:00+07:00`,
+  );
+  return Number.isNaN(legacyStartsAt.getTime()) ? null : legacyStartsAt;
+};
+
+const formatPhotoStartTime = (value: Date): string =>
+  new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour12: false,
+  }).format(value);
 
 interface Product {
   _id: string;
@@ -77,6 +121,42 @@ interface PortfolioItem {
   moderationStatus: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'HIDDEN';
   moderationReason?: string | null;
 }
+
+type CancellationRefundRule = {
+  noticeDays: number;
+  refundPercent: number;
+};
+
+const toLocalDateKey = (date: Date = new Date()): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const normalizeCancellationRefundRules = (rules: CancellationRefundRule[]) => rules
+  .filter((rule) => Number.isFinite(rule.noticeDays) && Number.isFinite(rule.refundPercent))
+  .map((rule) => ({
+    noticeDays: Math.max(0, Math.min(365, Number(rule.noticeDays))),
+    refundPercent: Math.max(0, Math.min(100, Number(rule.refundPercent))),
+  }))
+  .sort((left, right) => right.noticeDays - left.noticeDays);
+
+const buildCancellationPolicySummary = (rules: CancellationRefundRule[], additionalNotes: string) => {
+  const normalizedRules = normalizeCancellationRefundRules(rules);
+  const ruleLines = normalizedRules.map((rule, index) => {
+    const previousRule = normalizedRules[index - 1];
+    if (rule.noticeDays === 0 && previousRule) {
+      return `Hủy dưới ${previousRule.noticeDays} ngày: hoàn ${rule.refundPercent}% tiền cọc.`;
+    }
+    if (previousRule) {
+      return `Hủy từ ${rule.noticeDays} đến dưới ${previousRule.noticeDays} ngày: hoàn ${rule.refundPercent}% tiền cọc.`;
+    }
+    return `Hủy trước ít nhất ${rule.noticeDays} ngày: hoàn ${rule.refundPercent}% tiền cọc.`;
+  });
+  return [...ruleLines, additionalNotes.trim()].filter(Boolean).join(' ');
+};
+
 export const ProviderDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { logout, user, isAuthenticated } = useAuth();
@@ -251,7 +331,8 @@ export const ProviderDashboard: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [addressLine, setAddressLine] = useState('');
   const [city, setCity] = useState('');
-  const [cancellationPolicy, setCancellationPolicy] = useState('');
+  const [cancellationRefundRules, setCancellationRefundRules] = useState<CancellationRefundRule[]>([]);
+  const [cancellationAdditionalNotes, setCancellationAdditionalNotes] = useState('');
   const [comboDiscountPercent, setComboDiscountPercent] = useState(0);
   const [baseLatitude, setBaseLatitude] = useState('');
   const [baseLongitude, setBaseLongitude] = useState('');
@@ -260,6 +341,8 @@ export const ProviderDashboard: React.FC = () => {
   const [pickupAddressLine, setPickupAddressLine] = useState('');
   const [pickupLatitude, setPickupLatitude] = useState('');
   const [pickupLongitude, setPickupLongitude] = useState('');
+  const [profileSection, setProfileSection] = useState<'business' | 'location' | 'policy'>('business');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Form states - Voucher
   const [vCode, setVCode] = useState('');
@@ -375,7 +458,14 @@ export const ProviderDashboard: React.FC = () => {
       setPhone(pRes.contact?.phone || '');
       setAddressLine(pRes.address?.addressLine || '');
       setCity(pRes.address?.city || '');
-      setCancellationPolicy(pRes.policies?.cancellationPolicy || '');
+      const persistedCancellationConfig = pRes.policies?.cancellationPolicyConfig;
+      const legacyCancellationPolicy = pRes.policies?.cancellationPolicy || '';
+      setCancellationRefundRules(Array.isArray(persistedCancellationConfig?.refundRules)
+        ? normalizeCancellationRefundRules(persistedCancellationConfig.refundRules)
+        : []);
+      setCancellationAdditionalNotes(persistedCancellationConfig
+        ? (persistedCancellationConfig.additionalNotes || '')
+        : legacyCancellationPolicy);
       setComboDiscountPercent(pRes.comboDiscountPercent ?? 0);
       setBaseLatitude(pRes.address?.geo?.coordinates?.[1]?.toString() ?? '');
       setBaseLongitude(pRes.address?.geo?.coordinates?.[0]?.toString() ?? '');
@@ -736,6 +826,22 @@ export const ProviderDashboard: React.FC = () => {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!businessName.trim() || !phone.trim() || !addressLine.trim() || !city.trim()) {
+      toast.error('Vui lòng hoàn thiện tên cửa hàng, số điện thoại, thành phố và địa chỉ trên bản đồ.');
+      return;
+    }
+    const normalizedCancellationRules = normalizeCancellationRefundRules(cancellationRefundRules);
+    const hasInvalidCancellationRule = cancellationRefundRules.some((rule) =>
+      !Number.isInteger(rule.noticeDays) || rule.noticeDays < 0 || rule.noticeDays > 365 ||
+      !Number.isFinite(rule.refundPercent) || rule.refundPercent < 0 || rule.refundPercent > 100,
+    );
+    const hasDuplicateNoticeDays = new Set(cancellationRefundRules.map((rule) => rule.noticeDays)).size !== cancellationRefundRules.length;
+    if (hasInvalidCancellationRule || hasDuplicateNoticeDays) {
+      toast.error('Mỗi mốc hủy cần có số ngày và tỷ lệ hoàn từ 0 đến 100%; không được trùng mốc ngày.');
+      return;
+    }
+    const cancellationPolicySummary = buildCancellationPolicySummary(normalizedCancellationRules, cancellationAdditionalNotes);
+    setIsSavingProfile(true);
     try {
       await httpClient.patch('/providers/me', {
         businessName,
@@ -743,15 +849,51 @@ export const ProviderDashboard: React.FC = () => {
         address: { ...provider?.address, addressLine, city, geo: baseLatitude && baseLongitude ? { type: 'Point', coordinates: [Number(baseLongitude), Number(baseLatitude)] } : null },
         rentalSettings: { useBusinessAddressForPickup, pickupLocation: useBusinessAddressForPickup ? null : { addressLine: pickupAddressLine, geo: pickupLatitude && pickupLongitude ? { type: 'Point', coordinates: [Number(pickupLongitude), Number(pickupLatitude)] } : null } },
         photographySettings: { serviceRadiusKm: serviceRadiusKm === '' ? null : Number(serviceRadiusKm) },
-        policies: { ...provider?.policies, cancellationPolicy },
+        policies: {
+          ...provider?.policies,
+          cancellationPolicy: cancellationPolicySummary || null,
+          cancellationPolicyConfig: {
+            refundRules: normalizedCancellationRules,
+            additionalNotes: cancellationAdditionalNotes.trim() || null,
+          },
+        },
         comboDiscountPercent: Number(comboDiscountPercent),
       });
       toast.success('Cập nhật thông tin dịch vụ thành công!');
       fetchProviderData();
     } catch (err: any) {
       toast.error('Cập nhật thất bại');
+    } finally {
+      setIsSavingProfile(false);
     }
   };
+
+  const normalizedCancellationRules = normalizeCancellationRefundRules(cancellationRefundRules);
+  const cancellationPolicySummary = buildCancellationPolicySummary(normalizedCancellationRules, cancellationAdditionalNotes);
+  const persistedCancellationConfig = provider?.policies?.cancellationPolicyConfig;
+  const persistedCancellationRules = Array.isArray(persistedCancellationConfig?.refundRules)
+    ? normalizeCancellationRefundRules(persistedCancellationConfig.refundRules)
+    : [];
+  const persistedCancellationNotes = persistedCancellationConfig
+    ? (persistedCancellationConfig.additionalNotes || '')
+    : (provider?.policies?.cancellationPolicy ?? '');
+
+  const profileHasUnsavedChanges = Boolean(provider) && (
+    businessName !== (provider?.businessName ?? '') ||
+    phone !== (provider?.contact?.phone ?? '') ||
+    addressLine !== (provider?.address?.addressLine ?? '') ||
+    city !== (provider?.address?.city ?? '') ||
+    cancellationPolicySummary !== (provider?.policies?.cancellationPolicy ?? '') ||
+    JSON.stringify(normalizedCancellationRules) !== JSON.stringify(persistedCancellationRules) ||
+    cancellationAdditionalNotes !== persistedCancellationNotes ||
+    baseLatitude !== (provider?.address?.geo?.coordinates?.[1]?.toString() ?? '') ||
+    baseLongitude !== (provider?.address?.geo?.coordinates?.[0]?.toString() ?? '') ||
+    serviceRadiusKm !== (provider?.photographySettings?.serviceRadiusKm?.toString() ?? '') ||
+    useBusinessAddressForPickup !== (provider?.rentalSettings?.useBusinessAddressForPickup !== false) ||
+    pickupAddressLine !== (provider?.rentalSettings?.pickupLocation?.addressLine ?? '') ||
+    pickupLatitude !== (provider?.rentalSettings?.pickupLocation?.geo?.coordinates?.[1]?.toString() ?? '') ||
+    pickupLongitude !== (provider?.rentalSettings?.pickupLocation?.geo?.coordinates?.[0]?.toString() ?? '')
+  );
 
   const handleAddVoucher = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -875,10 +1017,10 @@ export const ProviderDashboard: React.FC = () => {
     setCShootPeopleCount(combo.shootPeopleCount || 1);
 
     if (combo.validFrom) {
-      setCValidFrom(new Date(combo.validFrom).toISOString().split('T')[0]);
+      setCValidFrom(toLocalDateKey(new Date(combo.validFrom)));
     }
     if (combo.validTo) {
-      setCValidTo(new Date(combo.validTo).toISOString().split('T')[0]);
+      setCValidTo(toLocalDateKey(new Date(combo.validTo)));
     }
   };
 
@@ -1211,7 +1353,7 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
-  const fetchOrders = async (silent = false) => {
+  const fetchOrders = async (silent = false, force = false) => {
     if (!silent) setLoadingOrders(true);
     try {
       const bRes: any = await httpClient.get('/bookings/provider');
@@ -1221,33 +1363,50 @@ export const ProviderDashboard: React.FC = () => {
         const custEmail = cust?.email || '';
         const initials = custName.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
         const productName = (b.items || []).map((item: any) => item?.name || item?.productId?.name || item?.photographyPackageId?.name).filter(Boolean).join(' + ') || 'Sản phẩm thuê';
-        const dateStr = b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : '';
+        const dateStr = b.createdAt
+          ? new Date(b.createdAt).toLocaleString('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          })
+          : '';
 
         let totalAmt = 0;
         if (b.items && b.items.length > 0) {
           totalAmt = b.items.reduce((sum: number, item: any) => {
-            const price = item.unitPrice ?? 0;
+            const price = Number(item.unitPrice ?? item.price ?? 0);
             const qty = item.quantity ?? 1;
-            return sum + (price * qty);
+            const discount = item.comboDiscountAmount ?? item.discountAmount ?? 0;
+            const lineTotal = Number(item.subtotal ?? item.totalPrice ?? 0);
+            return sum + Math.max(0, (lineTotal > 0 ? lineTotal : price * qty) - discount);
           }, 0);
         }
-        if (totalAmt === 0 && b.pricingSummary?.grandTotal) {
+        if (b.bookingType === 'COMBO' && b.pricingSummary?.grandTotal) {
           totalAmt = b.pricingSummary.grandTotal;
+        } else if (totalAmt === 0) {
+          totalAmt = Number(b.pricingSummary?.grandTotal ?? b.paymentSummary?.totalPaid ?? b.totalAmount ?? b.total ?? 0);
         }
 
-        const hasIncident = (b.items || []).some((item: any) => item.rentalFulfillment?.issueStatus === 'REPORTED' || item.rentalFulfillment?.issueStatus === 'UNDER_REVIEW');
         const statusMap: Record<string, string> = {
           PENDING: 'CHỜ XỬ LÝ',
           PENDING_PAYMENT: 'CHỜ THANH TOÁN',
           DEPOSIT_PAID: 'ĐÃ ĐẶT CỌC',
           CONFIRMED: 'ĐANG THỰC HIỆN',
+          IN_PROGRESS: 'ĐANG CHỤP',
+          AWAITING_REVIEW: 'CHỜ KHÁCH XÁC NHẬN ẢNH',
           PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
           PICKED_UP: 'ĐANG THUÊ',
-          RETURN_PENDING: hasIncident ? 'CHỜ KHÁCH DUYỆT SỰ CỐ' : 'CHỜ KIỂM TRA ĐỒ',
+          COMBO_PHOTOS_APPROVED: 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ',
+          RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
           RETURNED: 'ĐÃ TRẢ ĐỒ',
           COMPLETED: 'HOÀN THÀNH',
           CANCELLED: 'ĐÃ HỦY',
-          DISPUTED: 'TRANH CHẤP',
+          DISPUTED: 'ĐANG TRANH CHẤP',
+          PARTIALLY_REFUNDED: 'ĐÃ HOÀN TIỀN MỘT PHẦN',
+          REFUNDED: 'ĐÃ HOÀN TIỀN',
         };
         return {
           _id: b._id,
@@ -1257,13 +1416,16 @@ export const ProviderDashboard: React.FC = () => {
           customerInitials: initials,
           productName,
           orderDate: dateStr,
+          rawOrderDate: b.createdAt,
           total: `${totalAmt.toLocaleString('vi-VN')}đ`,
           status: statusMap[b.status] || b.status,
           totalAmount: totalAmt,
           items: b.items,
+          schedules: b.schedules,
           depositTotal: b.pricingSummary?.depositTotal || 0,
           rawStatus: b.status,
           bookingType: b.bookingType,
+          photosApproved: Boolean(b.photosApproved),
         };
       });
 
@@ -1273,12 +1435,20 @@ export const ProviderDashboard: React.FC = () => {
           if (prev[i]._id !== next[i]._id) return true;
           if (prev[i].rawStatus !== next[i].rawStatus) return true;
           if (prev[i].status !== next[i].status) return true;
+          if (prev[i].photosApproved !== next[i].photosApproved) return true;
+          const previousScheduleState = (prev[i].schedules || [])
+            .map((schedule) => `${schedule._id || ''}:${schedule.status || ''}:${schedule.startsAt || schedule.scheduledDate || ''}`)
+            .join('|');
+          const nextScheduleState = (next[i].schedules || [])
+            .map((schedule) => `${schedule._id || ''}:${schedule.status || ''}:${schedule.startsAt || schedule.scheduledDate || ''}`)
+            .join('|');
+          if (previousScheduleState !== nextScheduleState) return true;
         }
         return false;
       };
 
       setOrders(prevOrders => {
-        if (actionMenuId !== null) return prevOrders;
+        if (actionMenuId !== null && !force) return prevOrders;
         const changed = isOrdersChanged(prevOrders, mapped);
         return changed ? mapped : prevOrders;
       });
@@ -1404,8 +1574,8 @@ export const ProviderDashboard: React.FC = () => {
         const today = new Date();
         const nextWeek = new Date();
         nextWeek.setDate(today.getDate() + 7);
-        setCampaignStart(today.toISOString().split('T')[0]);
-        setCampaignEnd(nextWeek.toISOString().split('T')[0]);
+        setCampaignStart(toLocalDateKey(today));
+        setCampaignEnd(toLocalDateKey(nextWeek));
       }
     } catch (err) {
       console.error('Error fetching campaign:', err);
@@ -1428,6 +1598,19 @@ export const ProviderDashboard: React.FC = () => {
       fetchProviderData();
     }
   }, [currentView]);
+
+  // Real-time: auto-refresh orders when a booking is updated (by admin or customer)
+  const { socket } = useSocket();
+  const fetchOrdersRef = useRef(fetchOrders);
+  useEffect(() => { fetchOrdersRef.current = fetchOrders; });
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (_payload: { bookingId: string; status: string }) => {
+      fetchOrdersRef.current(true);
+    };
+    socket.on('booking_updated', handler);
+    return () => { socket.off('booking_updated', handler); };
+  }, [socket]);
 
 
 
@@ -1626,8 +1809,8 @@ export const ProviderDashboard: React.FC = () => {
       const today = new Date();
       const nextWeek = new Date();
       nextWeek.setDate(today.getDate() + 7);
-      setCampaignStart(today.toISOString().split('T')[0]);
-      setCampaignEnd(nextWeek.toISOString().split('T')[0]);
+      setCampaignStart(toLocalDateKey(today));
+      setCampaignEnd(toLocalDateKey(nextWeek));
       setIsCampaignModalOpen(false);
       fetchProducts();
     } catch (err: any) {
@@ -2012,8 +2195,19 @@ export const ProviderDashboard: React.FC = () => {
     const now = new Date();
     return orders
       .filter(o => {
-        const d = o.orderDate ? new Date(o.orderDate.split('/').reverse().join('-')) : null;
-        return o.status === 'HOÀN THÀNH' && d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        let d: Date | null = o.rawOrderDate ? new Date(o.rawOrderDate) : null;
+        if (!d || isNaN(d.getTime())) {
+          const parts = (o.orderDate || '').split(' ');
+          const datePart = parts[parts.length - 1];
+          if (datePart && datePart.includes('/')) {
+            const [day, month, year] = datePart.split('/').map(Number);
+            if (day && month && year) {
+              d = new Date(year, month - 1, day);
+            }
+          }
+        }
+        const isCompleted = o.rawStatus === 'COMPLETED' || o.status === 'HOÀN THÀNH';
+        return isCompleted && d && !isNaN(d.getTime()) && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
       })
       .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
   }, [orders]);
@@ -2032,6 +2226,7 @@ export const ProviderDashboard: React.FC = () => {
     if (status === 'CHỜ KHÁCH XÁC NHẬN') return { ...base, backgroundColor: '#0284C7' };
     if (status === 'CHỜ NHẬN ĐỒ') return { ...base, backgroundColor: '#E67E22' };
     if (status === 'ĐANG THUÊ') return { ...base, backgroundColor: '#27AE60' };
+    if (status === 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ') return { ...base, backgroundColor: '#15803D' };
     if (status === 'ĐÃ TRẢ ĐỒ') return { ...base, backgroundColor: '#558B2F' };
     return { ...base, backgroundColor: '#ccc', color: '#555' };
   };
@@ -2052,14 +2247,17 @@ export const ProviderDashboard: React.FC = () => {
     DEPOSIT_PAID: 'ĐÃ ĐẶT CỌC',
     CONFIRMED: 'ĐANG THỰC HIỆN',
     IN_PROGRESS: 'ĐANG CHỤP',
-    AWAITING_REVIEW: 'CHỜ KHÁCH XÁC NHẬN',
+    AWAITING_REVIEW: 'CHỜ KHÁCH XÁC NHẬN ẢNH',
     PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
     PICKED_UP: 'ĐANG THUÊ',
+    COMBO_PHOTOS_APPROVED: 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ',
     RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
     RETURNED: 'ĐÃ TRẢ ĐỒ',
     COMPLETED: 'HOÀN THÀNH',
     CANCELLED: 'ĐÃ HỦY',
-    DISPUTED: 'TRANH CHẤP',
+    DISPUTED: 'ĐANG TRANH CHẤP',
+    PARTIALLY_REFUNDED: 'ĐÃ HOÀN TIỀN MỘT PHẦN',
+    REFUNDED: 'ĐÃ HOÀN TIỀN',
   };
 
   const changeOrderStatus = async (_id: string, apiStatus: string) => {
@@ -2081,7 +2279,7 @@ export const ProviderDashboard: React.FC = () => {
       }
     }
 
-    // ===== PHOTOGRAPHY: Bàn giao ảnh chụp → AWAITING_REVIEW =====
+    // ===== PHOTOGRAPHY / COMBO: Bàn giao sản phẩm buổi chụp → AWAITING_REVIEW =====
     const isPhotographyOrder = order?.bookingType === 'PHOTOGRAPHY' || order?.bookingType === 'COMBO' || order?.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
     if (apiStatus === 'AWAITING_REVIEW' && isPhotographyOrder) {
       const result = await Swal.fire({
@@ -2233,7 +2431,7 @@ export const ProviderDashboard: React.FC = () => {
         });
         const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
         setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus, deliveredPhotos, deliveryDriveUrl } : o));
-        toast.success('Đã gửi ảnh kết quả & Link Drive cho khách hàng! Chờ khách xác nhận hài lòng.');
+        toast.success('Đã bàn giao sản phẩm ảnh cho khách hàng thành công!');
       } catch (err: any) {
         toast.error(err.message || 'Gửi ảnh thất bại');
       }
@@ -2244,7 +2442,7 @@ export const ProviderDashboard: React.FC = () => {
     // ===== PHOTOGRAPHY: Hủy/Từ chối lịch chụp → yêu cầu nhập lý do =====
     if (apiStatus === 'CANCELLED' && order?.bookingType === 'PHOTOGRAPHY') {
       const result = await Swal.fire({
-        title: 'Từ chối / Hủy lịch chụp',
+        title: 'Từ chối / Hủy toàn bộ booking',
         html: `
           <p style="font-size: 13px; color: #6B7280; margin-bottom: 14px; line-height: 1.5;">
             Vui lòng cho khách hàng biết lý do bạn từ chối hoặc hủy lịch chụp này.
@@ -2497,37 +2695,24 @@ export const ProviderDashboard: React.FC = () => {
       return;
     }
 
-    if (apiStatus === 'IN_PROGRESS') {
-      const photoItem = order?.items?.find((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE') || order?.items?.[0];
-      const rawShootDate = photoItem?.shootDate || photoItem?.startDate || photoItem?.rentalFrom || order?.startDate;
-      const rawTimeSlot = photoItem?.shootTimeSlot || photoItem?.timeSlot || '';
-
-      if (rawShootDate) {
-        try {
-          const shootStartTime = new Date(rawShootDate);
-          if (rawTimeSlot && rawTimeSlot.includes('-')) {
-            const startStr = rawTimeSlot.split('-')[0].trim();
-            const parts = startStr.split(':');
-            const startHour = parseInt(parts[0] || '0', 10);
-            const startMin = parseInt(parts[1] || '0', 10);
-            if (!isNaN(startHour)) shootStartTime.setHours(startHour, isNaN(startMin) ? 0 : startMin, 0, 0);
-          }
-          const earliestAllowedTime = new Date(shootStartTime.getTime() - 30 * 60 * 1000);
-          if (new Date() < earliestAllowedTime) {
-            toast.error('Chưa đến giờ hẹn chụp! Bạn chỉ có thể bấm bắt đầu trước giờ hẹn tối đa 30 phút.');
-            setActionMenuId(null);
-            return;
-          }
-        } catch {}
+    if (apiStatus === 'SESSION_START' || apiStatus === 'SESSION_COMPLETE') {
+      try {
+        await httpClient.patch(`/bookings/${_id}/status`, { status: 'IN_PROGRESS' });
+        await fetchOrders(true, true);
+        toast.success(
+          apiStatus === 'SESSION_START'
+            ? 'Đã bắt đầu buổi chụp.'
+            : 'Đã hoàn tất buổi chụp. Bạn có thể bắt đầu buổi kế tiếp.',
+        );
+      } catch (err: any) {
+        toast.error(err.message || 'Cập nhật buổi chụp thất bại');
       }
+      setActionMenuId(null);
+      return;
     }
-
     try {
       await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus });
-      const hasIncident = order?.items?.some((item: any) => item.rentalFulfillment?.issueStatus === 'REPORTED' || item.rentalFulfillment?.issueStatus === 'UNDER_REVIEW');
-      const displayStatus = apiStatus === 'RETURN_PENDING'
-        ? (hasIncident ? 'CHỜ KHÁCH DUYỆT SỰ CỐ' : 'CHỜ KIỂM TRA ĐỒ')
-        : (statusDisplayMap[apiStatus] || apiStatus);
+      const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
       setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus } : o));
       toast.success(`Đã cập nhật trạng thái đơn hàng thành "${displayStatus}"!`);
     } catch (err: any) {
@@ -2847,12 +3032,12 @@ export const ProviderDashboard: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
               <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Doanh thu nhiếp ảnh</span>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-primary)', marginTop: '8px' }}>{(analyticsData.totalRevenue || 84250000).toLocaleString('vi-VN')} VND</div>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-primary)', marginTop: '8px' }}>{(analyticsData.totalRevenue ?? 0).toLocaleString('vi-VN')} VND</div>
               <span style={{ fontSize: '12px', color: '#166534', marginTop: '6px', display: 'block', fontWeight: 600 }}>↑ Tăng trưởng tốt trong mùa lễ</span>
             </div>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
               <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Phí hoa hồng hệ thống (15%)</span>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: '#B89047', marginTop: '8px' }}>{(analyticsData.commissionFee || 12800000).toLocaleString('vi-VN')} VND</div>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: '#B89047', marginTop: '8px' }}>{(analyticsData.commissionFee ?? 0).toLocaleString('vi-VN')} VND</div>
               <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '6px', display: 'block' }}>Thu phí tự động hàng tuần</span>
             </div>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3545,7 +3730,7 @@ export const ProviderDashboard: React.FC = () => {
               }}>
                 <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Doanh thu tháng này</div>
                 <div style={{ fontFamily: 'var(--font-header)', fontSize: '28px', fontWeight: 700, color: 'var(--color-primary)' }}>
-                  {monthlyRevenue > 0 ? `${monthlyRevenue.toLocaleString('vi-VN')}đ` : '—'}
+                  {`${(monthlyRevenue || 0).toLocaleString('vi-VN')}đ`}
                 </div>
                 <div style={{ position: 'absolute', right: '16px', bottom: '8px', opacity: 0.06, pointerEvents: 'none', color: 'var(--color-primary)' }}><ShoppingBag size={80} /></div>
               </div>
@@ -3579,17 +3764,27 @@ export const ProviderDashboard: React.FC = () => {
                       if (o.bookingType === 'PHOTOGRAPHY' && rawShootDate) {
                         const d = new Date(rawShootDate);
                         if (!isNaN(d.getTime())) {
-                          let hours = 8;
-                          let minutes = 0;
+                          let startHours = 8;
+                          let startMinutes = 0;
+                          let endHours = 23;
+                          let endMinutes = 59;
                           if (timeSlotStr) {
-                            const match = timeSlotStr.split('-')[0]?.match(/(\d{1,2}):(\d{2})/);
-                            if (match) {
-                              hours = parseInt(match[1], 10);
-                              minutes = parseInt(match[2], 10);
+                            const [startPart, endPart] = timeSlotStr.split('-');
+                            const startMatch = startPart?.match(/(\d{1,2}):(\d{2})/);
+                            const endMatch = endPart?.match(/(\d{1,2}):(\d{2})/);
+                            if (startMatch) {
+                              startHours = parseInt(startMatch[1], 10);
+                              startMinutes = parseInt(startMatch[2], 10);
+                            }
+                            if (endMatch) {
+                              endHours = parseInt(endMatch[1], 10);
+                              endMinutes = parseInt(endMatch[2], 10);
                             }
                           }
-                          const target = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hours, minutes);
-                          const diffMs = target.getTime() - Date.now();
+                          const targetStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), startHours, startMinutes);
+                          const targetEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), endHours, endMinutes);
+                          const nowMs = Date.now();
+                          const diffMs = targetStart.getTime() - nowMs;
 
                           if (o.rawStatus === 'IN_PROGRESS') {
                             countdownBadge = { text: '⚡ Đang tác nghiệp', bg: '#ECFDF5', textCol: '#047857', border: '#A7F3D0' };
@@ -3606,8 +3801,15 @@ export const ProviderDashboard: React.FC = () => {
                                 textCol: isUrgent ? '#DC2626' : '#B45309',
                                 border: isUrgent ? '#FCA5A5' : '#FCD34D'
                               };
+                            } else if (nowMs <= targetEnd.getTime()) {
+                              countdownBadge = {
+                                text: '📷 Đang trong giờ chụp',
+                                bg: '#ECFDF5',
+                                textCol: '#047857',
+                                border: '#A7F3D0'
+                              };
                             } else {
-                              const overdueMins = Math.floor(Math.abs(diffMs) / 60000);
+                              const overdueMins = Math.floor((nowMs - targetEnd.getTime()) / 60000);
                               const overdueText = overdueMins > 60 ? `${Math.floor(overdueMins / 60)}h ${overdueMins % 60}m` : `${overdueMins}m`;
                               countdownBadge = {
                                 text: `⚠️ Đến giờ (Quá ${overdueText})`,
@@ -3746,47 +3948,83 @@ export const ProviderDashboard: React.FC = () => {
                             {actionMenuId === o._id && (() => {
                               const isComboOrder = o.bookingType === 'COMBO' || (o.items?.some((i: any) => i.itemType === 'PRODUCT') && o.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE'));
                               const isPhotoOrder = o.bookingType === 'PHOTOGRAPHY';
-                              const nextStepsMap: Record<string, { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }[]> = isComboOrder
+                              type OrderAction = { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean; title?: string };
+                              const photoSchedules = Array.isArray(o.schedules) ? o.schedules : [];
+                              const activePhotoSchedule = photoSchedules.find((schedule) => schedule.status === 'IN_PROGRESS');
+                              const nextPhotoSchedule = photoSchedules.find((schedule) => schedule.status === 'CONFIRMED');
+                              const nextPhotoStartsAt = getPhotoScheduleStartsAt(nextPhotoSchedule);
+                              const nextPhotoDateKey = nextPhotoStartsAt
+                                ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(nextPhotoStartsAt)
+                                : null;
+                              const photoDayStartsAt = nextPhotoDateKey
+                                ? new Date(`${nextPhotoDateKey}T00:00:00+07:00`)
+                                : null;
+                              const photoCanStartAt = nextPhotoStartsAt && photoDayStartsAt
+                                ? new Date(Math.max(
+                                    photoDayStartsAt.getTime(),
+                                    nextPhotoStartsAt.getTime() - PHOTO_START_EARLY_MINUTES * 60 * 1000,
+                                  ))
+                                : null;
+                              const isPhotoStartLocked = Boolean(photoCanStartAt && Date.now() < photoCanStartAt.getTime());
+                              const photoStartAction: OrderAction = nextPhotoSchedule
+                                ? (!nextPhotoStartsAt || !photoCanStartAt
+                                  ? { label: 'Lịch chụp thiếu giờ bắt đầu', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true, title: 'Hãy cập nhật ngày và khung giờ chụp trước.' }
+                                  : isPhotoStartLocked
+                                    ? { label: `Có thể bắt đầu từ ${formatPhotoStartTime(photoCanStartAt)}`, apiStatus: 'SESSION_START', icon: <Clock size={14} />, color: '#D97706', disabled: true, title: `Lịch chụp bắt đầu lúc ${formatPhotoStartTime(nextPhotoStartsAt)}. Chỉ được bắt đầu sớm tối đa ${PHOTO_START_EARLY_MINUTES} phút.` }
+                                    : { label: 'Bắt đầu buổi chụp', apiStatus: 'SESSION_START', icon: <Play size={14} />, color: '#2e7d32' })
+                                : { label: 'Bắt đầu buổi chụp', apiStatus: 'SESSION_START', icon: <Play size={14} />, color: '#2e7d32' };
+                              const hasUnconfirmedPhotoSchedule = photoSchedules.some((schedule) => ['HELD', 'SCHEDULED'].includes(String(schedule.status)));
+                              const photoSessionSteps: OrderAction[] = activePhotoSchedule
+                                ? [
+                                    { label: 'Hoàn tất buổi chụp đang diễn ra', apiStatus: 'SESSION_COMPLETE', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                    { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                  ]
+                                : hasUnconfirmedPhotoSchedule
+                                  ? [{ label: 'Lịch chụp chưa được xác nhận', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }]
+                                  : [
+                                      { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                    ];
+                              const nextStepsMap: Record<string, OrderAction[]> = isComboOrder
                                 ? {
                                   PENDING_PAYMENT: [
                                     { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   DEPOSIT_PAID: [
-                                    { label: 'Xác nhận đơn & Lịch chụp', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
                                     { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
                                     { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   CONFIRMED: [
                                     { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
-                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
-                                    { label: 'Hủy lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   PICKUP_PENDING: [
                                     { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
                                     { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
-                                  PICKED_UP: [
-                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
-                                    { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                  PICKED_UP: o.photosApproved ? [
+                                    { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
                                     { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                  ] : [
+                                    photoStartAction,
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
-                                  IN_PROGRESS: [
-                                    { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
-                                    { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                  IN_PROGRESS: o.photosApproved ? [
+                                    { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                  ] : [
+                                    ...photoSessionSteps,
                                   ],
-                                  AWAITING_REVIEW: [
+                                  AWAITING_REVIEW: o.photosApproved ? [
+                                    { label: '✓ Khách đã duyệt ảnh • Chờ trả áo dài', apiStatus: '', icon: <CheckCircle size={14} />, color: '#059669', disabled: true },
+                                  ] : [
                                     { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                    { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
                                   ],
-                                  RETURN_PENDING: o.items?.some((item: any) => item.rentalFulfillment?.issueStatus === 'REPORTED' || item.rentalFulfillment?.issueStatus === 'UNDER_REVIEW')
-                                    ? [
-                                        { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                      ]
-                                    : [
-                                        { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-                                      ],
+                                  COMBO_PHOTOS_APPROVED: [
+                                    { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                  ],
+                                  RETURN_PENDING: [
+                                    { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                  ],
                                   RETURNED: [
                                     { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
                                   ],
@@ -3801,11 +4039,11 @@ export const ProviderDashboard: React.FC = () => {
                                     { label: 'Từ chối lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   CONFIRMED: [
-                                    { label: 'Bắt đầu buổi chụp', apiStatus: 'IN_PROGRESS', icon: <Play size={14} />, color: '#2e7d32' },
-                                    { label: 'Hủy lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    photoStartAction,
+                                    { label: 'Hủy toàn bộ booking', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
                                   ],
                                   IN_PROGRESS: [
-                                    { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                    ...photoSessionSteps,
                                   ],
                                   AWAITING_REVIEW: [
                                     { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
@@ -3833,19 +4071,15 @@ export const ProviderDashboard: React.FC = () => {
                                     { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
                                     { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
                                   ],
-                                  RETURN_PENDING: o.items?.some((item: any) => item.rentalFulfillment?.issueStatus === 'REPORTED' || item.rentalFulfillment?.issueStatus === 'UNDER_REVIEW')
-                                    ? [
-                                        { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                      ]
-                                    : [
-                                        { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-                                      ],
+                                  RETURN_PENDING: [
+                                    { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                  ],
                                   RETURNED: [
                                     { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
                                   ],
                                 };
                               const rawStatus = (o.rawStatus || '') as string;
-                              const steps: { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
+                              const steps: OrderAction[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
                               const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
                               const pendingReschedule = o.items?.find((item: any) => item?.rescheduleRequest?.status === 'PENDING');
                               if (steps.length === 0 && !canReport && !pendingReschedule) return null;
@@ -3918,7 +4152,7 @@ export const ProviderDashboard: React.FC = () => {
                                         Cập nhật trạng thái
                                       </div>
                                     )}
-                                    {steps.map((a: { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean }) => {
+                                    {steps.map((a: OrderAction) => {
                                       const isHandoverAction = a.apiStatus === 'PICKUP_PENDING';
                                       let isDisabled = !!a.disabled;
                                       if (isHandoverAction) {
@@ -3948,7 +4182,7 @@ export const ProviderDashboard: React.FC = () => {
                                             opacity: isDisabled ? 0.85 : 1,
                                             fontWeight: 600, textAlign: 'left',
                                           }}
-                                          title={isDisabled ? (a.disabled ? a.label : "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)") : ""}
+                                          title={isDisabled ? (a.title || (a.disabled ? a.label : "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)")) : ""}
                                         >
                                           {a.icon} {a.label}
                                         </button>
@@ -3989,7 +4223,7 @@ export const ProviderDashboard: React.FC = () => {
                                               width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
                                               fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: '#D97706',
                                               fontWeight: 700, textAlign: 'left', borderTop: (steps.length > 0 || !isPhoto) ? '1px solid var(--color-light-border)' : 'none'
-                                            }}><Flag size={14} /> Báo cáo khách hàng (Thợ chụp)</button>
+                                            }}><Flag size={14} /> Báo khách không đến / sự cố</button>
                                           )}
                                         </>
                                       );
@@ -4290,120 +4524,142 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {currentView === 'profile' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+          <main className="provider-service-page">
+            <div className="provider-service-header">
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Thông tin dịch vụ</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Thiết lập thông tin thương hiệu, showroom nhận đồ và chính sách hủy dịch vụ.</p>
+                <p className="provider-service-eyebrow">THIẾT LẬP NHÀ CUNG CẤP</p>
+                <h2>Thông tin dịch vụ</h2>
+                <p>Hoàn thiện từng phần thay vì điền một biểu mẫu dài. Địa chỉ chính xác chỉ dùng nội bộ để phục vụ đặt lịch và giao nhận.</p>
               </div>
+              <span className={`provider-service-status${profileHasUnsavedChanges ? ' is-dirty' : ''}`}>
+                <CheckCircle size={16} /> {profileHasUnsavedChanges ? 'Có thay đổi chưa lưu' : 'Đã lưu'}
+              </span>
             </div>
 
-            {isLoadingProvider ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải thông tin dịch vụ...</div>
-            ) : (
-              <form onSubmit={handleUpdateProfile} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '32px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TÊN THƯƠNG HIỆU / CỬA HÀNG</label>
-                    <input
-                      type="text"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
+            {isLoadingProvider ? <SectionLoading message="Đang tải thông tin dịch vụ…" /> : (
+              <form onSubmit={handleUpdateProfile} className="provider-service-form">
+                <div className="provider-service-tabs" role="tablist" aria-label="Các phần thông tin dịch vụ">
+                  <button type="button" role="tab" aria-selected={profileSection === 'business'} className={`provider-service-tab${profileSection === 'business' ? ' is-active' : ''}`} onClick={() => setProfileSection('business')}>
+                    <Store size={20} /><span>Cửa hàng<small>Thương hiệu & liên hệ</small></span>
+                  </button>
+                  <button type="button" role="tab" aria-selected={profileSection === 'location'} className={`provider-service-tab${profileSection === 'location' ? ' is-active' : ''}`} onClick={() => setProfileSection('location')}>
+                    <MapPinned size={20} /><span>Địa điểm & phạm vi<small>Pin bản đồ, bán kính, giao nhận</small></span>
+                  </button>
+                  <button type="button" role="tab" aria-selected={profileSection === 'policy'} className={`provider-service-tab${profileSection === 'policy' ? ' is-active' : ''}`} onClick={() => setProfileSection('policy')}>
+                    <FileText size={20} /><span>Chính sách<small>Hủy dịch vụ & hoàn cọc</small></span>
+                  </button>
+                </div>
+
+                {profileSection === 'business' && <section className="provider-service-panel" role="tabpanel">
+                  <div className="provider-service-panel-heading">
+                    <h3>Thông tin cửa hàng</h3>
+                    <p>Đây là thông tin khách hàng nhìn thấy khi tìm đến dịch vụ của bạn.</p>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>SỐ ĐIỆN THOẠI LIÊN HỆ</label>
-                    <input
-                      type="text"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
+                  <div className="provider-service-field-grid">
+                    <div className="provider-service-field">
+                      <label htmlFor="provider-business-name">Tên thương hiệu / cửa hàng</label>
+                      <input id="provider-business-name" type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Ví dụ: Áo Dài Cổ Phong Vibe" required />
+                      <p className="provider-service-field-note">Dùng tên nhất quán trên trang sản phẩm và đơn đặt.</p>
+                    </div>
+                    <div className="provider-service-field">
+                      <label htmlFor="provider-phone">Số điện thoại liên hệ</label>
+                      <input id="provider-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ví dụ: 0901 234 567" required />
+                      <p className="provider-service-field-note">Dùng để hỗ trợ khách khi phát sinh đơn đặt.</p>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>ĐỊA CHỈ SHOWROOM / ĐỊA ĐIỂM NHẬN ĐỒ</label>
-                    <input
-                      type="text"
-                      value={addressLine}
-                      onChange={(e) => setAddressLine(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
+                </section>}
+
+                {profileSection === 'location' && <section className="provider-service-panel" role="tabpanel">
+                  <div className="provider-service-panel-heading">
+                    <h3>Địa điểm và phạm vi phục vụ</h3>
+                    <p>Tìm địa chỉ, chọn pin trên bản đồ rồi thiết lập phạm vi phù hợp. Tọa độ được ẩn trong phần nâng cao để biểu mẫu dễ dùng hơn.</p>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>THÀNH PHỐ</label>
-                    <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TỶ LỆ GIẢM GIÁ COMBO (%)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={comboDiscountPercent}
-                      onChange={(e) => setComboDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>CHÍNH SÁCH HỦY DỊCH VỤ / HOÀN CỌC</label>
-                    <textarea
-                      value={cancellationPolicy}
-                      onChange={(e) => setCancellationPolicy(e.target.value)}
-                      rows={3}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'none', fontFamily: 'inherit' }}
-                    />
-                  </div>
-                  <div style={{ gridColumn: 'span 2', borderTop: '1px solid var(--color-light-border)', paddingTop: '20px', marginTop: '4px' }}>
-                    <h3 style={{ margin: '0 0 8px', fontSize: '16px', color: 'var(--color-text-primary)' }}>Địa điểm và phạm vi phục vụ</h3>
-                    <p style={{ margin: '0 0 14px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Pin nội bộ này dùng để kiểm tra bán kính. Tọa độ chính xác không hiển thị công khai cho khách.</p>
+                  <div className="provider-service-location-stack">
+                    <div className="provider-service-field" style={{ maxWidth: 420 }}>
+                      <label htmlFor="provider-city">Thành phố</label>
+                      <input id="provider-city" type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ví dụ: Thành phố Huế" required />
+                    </div>
                     <PhotographyLocationPicker
+                      compact
                       value={baseLatitude !== '' && baseLongitude !== '' ? { address: addressLine, latitude: Number(baseLatitude), longitude: Number(baseLongitude) } : null}
                       onSelect={(location) => {
                         setAddressLine(location.address);
                         setBaseLatitude(location.latitude.toString());
                         setBaseLongitude(location.longitude.toString());
                       }}
-                      title="Pin địa chỉ kinh doanh / điểm xuất phát"
-                      hint="Kéo pin để chọn vị trí chính xác. Đây là tâm để kiểm tra bán kính phục vụ chụp ảnh."
+                      title="Địa chỉ kinh doanh / điểm xuất phát"
+                      hint="Tìm địa chỉ hoặc kéo pin. Đây là vị trí nội bộ dùng để kiểm tra lịch và bán kính phục vụ."
                       radiusKm={hasPhotographyCapability && serviceRadiusKm !== '' ? Number(serviceRadiusKm) : null}
                     />
-                    {hasPhotographyCapability && <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '14px', maxWidth: '280px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>BÁN KÍNH PHỤC VỤ CHỤP (KM)</label>
-                      <input type="number" min={0} max={500} step="0.1" value={serviceRadiusKm} onChange={(e) => setServiceRadiusKm(e.target.value)} placeholder="Ví dụ: 15" style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }} />
+
+                    {hasPhotographyCapability && <div className="provider-service-radius">
+                      <div className="provider-service-radius-header"><strong>Bán kính phục vụ chụp ảnh</strong><span className="provider-service-radius-value">{serviceRadiusKm || 0} km</span></div>
+                      <div className="provider-service-radius-presets">
+                        {[5, 10, 20, 50].map((radius) => <button type="button" key={radius} className={Number(serviceRadiusKm) === radius ? 'is-selected' : ''} onClick={() => setServiceRadiusKm(String(radius))}>{radius} km</button>)}
+                      </div>
+                      <div className="provider-service-radius-controls">
+                        <input type="range" min="1" max="100" value={Math.min(100, Math.max(1, Number(serviceRadiusKm) || 1))} onChange={(e) => setServiceRadiusKm(e.target.value)} aria-label="Bán kính phục vụ chụp ảnh" />
+                        <input type="number" min="1" max="500" step="1" value={serviceRadiusKm} onChange={(e) => setServiceRadiusKm(e.target.value)} placeholder="Số km" aria-label="Nhập bán kính phục vụ" />
+                      </div>
+                    </div>}
+
+                    {hasAodaiCapability && <div className="provider-service-pickup">
+                      <label className="provider-service-pickup-toggle">
+                        <input type="checkbox" checked={useBusinessAddressForPickup} onChange={(e) => setUseBusinessAddressForPickup(e.target.checked)} />
+                        <span><strong>Dùng địa chỉ kinh doanh cho nhận và trả áo dài</strong><span>Chỉ tắt lựa chọn này nếu điểm giao nhận khác với cửa hàng.</span></span>
+                      </label>
+                      {!useBusinessAddressForPickup && <PhotographyLocationPicker
+                        compact
+                        value={pickupLatitude !== '' && pickupLongitude !== '' ? { address: pickupAddressLine, latitude: Number(pickupLatitude), longitude: Number(pickupLongitude) } : null}
+                        onSelect={(location) => {
+                          setPickupAddressLine(location.address);
+                          setPickupLatitude(location.latitude.toString());
+                          setPickupLongitude(location.longitude.toString());
+                        }}
+                        title="Điểm nhận và trả áo dài"
+                        hint="MVP hiện dùng một điểm chung cho cả nhận và trả."
+                      />}
                     </div>}
                   </div>
-                  <div style={{ gridColumn: 'span 2', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: useBusinessAddressForPickup ? 0 : '14px' }}><input type="checkbox" checked={useBusinessAddressForPickup} onChange={(e) => setUseBusinessAddressForPickup(e.target.checked)} /> Dùng địa chỉ kinh doanh cho cả nhận và trả áo dài</label>
-                    {!useBusinessAddressForPickup && <PhotographyLocationPicker
-                      value={pickupLatitude !== '' && pickupLongitude !== '' ? { address: pickupAddressLine, latitude: Number(pickupLatitude), longitude: Number(pickupLongitude) } : null}
-                      onSelect={(location) => {
-                        setPickupAddressLine(location.address);
-                        setPickupLatitude(location.latitude.toString());
-                        setPickupLongitude(location.longitude.toString());
-                      }}
-                      title="Pin điểm nhận và trả áo dài"
-                      hint="MVP dùng cùng một điểm cho cả nhận và trả áo dài."
-                    />}
+                </section>}
+
+                {profileSection === 'policy' && <section className="provider-service-panel" role="tabpanel">
+                  <div className="provider-service-panel-heading">
+                    <h3>Chính sách hủy dịch vụ và hoàn cọc</h3>
+                    <p>Thiết lập từng mốc hủy và tỷ lệ hoàn cọc. Hệ thống sẽ tự viết thành chính sách rõ ràng cho khách.</p>
                   </div>
+                  <div className="provider-policy-builder">
+                    <div className="provider-policy-builder-header">
+                      <div><strong>Mốc hoàn cọc</strong><span>Nhập số ngày trước lịch hẹn và phần trăm hoàn tiền cọc tương ứng.</span></div>
+                      <div className="provider-policy-builder-actions">
+                        <button type="button" className="provider-policy-secondary-action" onClick={() => setCancellationRefundRules([{ noticeDays: 7, refundPercent: 100 }, { noticeDays: 3, refundPercent: 50 }, { noticeDays: 0, refundPercent: 0 }])}>Dùng mẫu phổ biến</button>
+                        <button type="button" className="provider-policy-primary-action" onClick={() => setCancellationRefundRules((rules) => [...rules, { noticeDays: 0, refundPercent: 0 }])}><Plus size={15} /> Thêm mốc</button>
+                      </div>
+                    </div>
+                    {cancellationRefundRules.length === 0 ? <div className="provider-policy-empty"><strong>Chưa có mốc hoàn cọc.</strong><span>Chọn “Dùng mẫu phổ biến” hoặc thêm mốc theo chính sách của cửa hàng.</span></div> : <div className="provider-policy-rules">
+                      <div className="provider-policy-rule-labels"><span>Hủy trước lịch</span><span>Tỷ lệ hoàn cọc</span><span /></div>
+                      {cancellationRefundRules.map((rule, index) => <div className="provider-policy-rule" key={index}>
+                        <label><input type="number" min="0" max="365" step="1" value={rule.noticeDays} onChange={(event) => setCancellationRefundRules((rules) => rules.map((item, itemIndex) => itemIndex === index ? { ...item, noticeDays: Number(event.target.value) } : item))} /><span>ngày</span></label>
+                        <label><input type="number" min="0" max="100" step="1" value={rule.refundPercent} onChange={(event) => setCancellationRefundRules((rules) => rules.map((item, itemIndex) => itemIndex === index ? { ...item, refundPercent: Number(event.target.value) } : item))} /><span>% hoàn</span></label>
+                        <button type="button" className="provider-policy-remove" onClick={() => setCancellationRefundRules((rules) => rules.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Xóa mốc hủy ${rule.noticeDays} ngày`}><Trash2 size={16} /></button>
+                      </div>)}
+                    </div>}
+                  </div>
+                  <div className="provider-service-field provider-policy-notes">
+                    <label htmlFor="provider-cancellation-notes">Ghi chú thêm (không bắt buộc)</label>
+                    <textarea id="provider-cancellation-notes" value={cancellationAdditionalNotes} onChange={(e) => setCancellationAdditionalNotes(e.target.value)} placeholder="Ví dụ: Phí chuyển khoản không được hoàn; khách cần liên hệ shop để xác nhận yêu cầu hủy." />
+                  </div>
+                  <div className="provider-service-policy-preview"><strong>Xem trước hiển thị với khách:</strong><p>{cancellationPolicySummary || 'Chưa thiết lập chính sách hủy và hoàn cọc.'}</p></div>
+                </section>}
+
+                <div className="provider-service-savebar">
+                  <div className={`provider-service-savebar-copy${profileHasUnsavedChanges ? ' is-dirty' : ''}`}>
+                    <CheckCircle size={17} /> {profileHasUnsavedChanges ? 'Bạn có thay đổi chưa được lưu.' : 'Thông tin đang được đồng bộ.'}
+                  </div>
+                  <button type="submit" disabled={isSavingProfile}>
+                    <Save size={16} /> {isSavingProfile ? 'Đang lưu…' : 'Lưu thay đổi'}
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  style={{ alignSelf: 'flex-start', padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-sm)' }}
-                >
-                  <Save size={14} />
-                  Lưu thay đổi
-                </button>
               </form>
             )}
           </main>
@@ -4760,7 +5016,7 @@ export const ProviderDashboard: React.FC = () => {
                         type="date"
                         value={blockedDate}
                         onChange={(e) => setBlockedDate(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]}
+                        min={toLocalDateKey()}
                         style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
                       />
                     </div>
@@ -5553,6 +5809,7 @@ export const ProviderDashboard: React.FC = () => {
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
                           <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
+                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ ĐƠN HÀNG</th>
                             <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ QUYẾT TOÁN</th>
                             <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ BOOKING</th>
                             <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>SỐ TIỀN THỰC NHẬN</th>
@@ -5575,6 +5832,7 @@ export const ProviderDashboard: React.FC = () => {
                               style={{ borderBottom: '1px solid var(--color-light-border)', cursor: 'pointer' }}
                               className="hover:bg-stone-50 transition"
                             >
+                              <td style={{ padding: '16px 20px', fontWeight: 700, color: '#1F2937' }}>{(() => { const bId = p.bookingId?._id || (typeof p.bookingId === 'string' ? p.bookingId : (p.bookingId?.id || null)); return bId ? `#${String(bId).slice(-6).toUpperCase()}` : '—'; })()}</td>
                               <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.settlementCode || p.id}</td>
                               <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingId?.bookingCode || p.bookingCode || '—'}</td>
                               <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.payableAmount ?? p.netAmount ?? p.amount ?? 0).toLocaleString('vi-VN')}đ</td>

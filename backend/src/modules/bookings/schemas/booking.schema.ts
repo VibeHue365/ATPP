@@ -201,6 +201,9 @@ export class Booking {
   @Prop({ type: Date, default: null, index: true })
   awaitingReviewSince?: Date | null;
 
+  @Prop({ type: Boolean, default: false })
+  photosApproved?: boolean;
+
   /**
    * Photography only: estimated net amount credited to provider's pendingBalance
    * when booking enters CONFIRMED. Used at settlement time to deduct the exact

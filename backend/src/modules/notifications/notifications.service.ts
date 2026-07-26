@@ -111,4 +111,31 @@ export class NotificationsService {
 
     return savedNotification;
   }
+
+  /**
+   * Emit a real-time `booking_updated` event to both the customer and all provider sockets.
+   * This is used by updateBookingStatus so that the Provider Dashboard and customer Profile
+   * page immediately reflect status/photo changes without requiring a manual page refresh.
+   */
+  emitBookingUpdate(payload: {
+    bookingId: string;
+    bookingCode?: string;
+    status: string;
+    deliveredPhotos?: string[];
+    handoverPhotos?: string[];
+    deliveryDriveUrl?: string | null;
+  }, recipientUserIds: string[]): void {
+    try {
+      if (!this.chatGateway?.server) return;
+      const connections = this.chatGateway.getActiveConnections();
+      for (const userId of recipientUserIds) {
+        const sockets = connections.get(userId) || [];
+        sockets.forEach((socketId) => {
+          this.chatGateway.server.to(socketId).emit('booking_updated', payload);
+        });
+      }
+    } catch (e) {
+      console.warn('emitBookingUpdate failed:', e);
+    }
+  }
 }

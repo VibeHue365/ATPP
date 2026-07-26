@@ -325,7 +325,7 @@ export class PhotographyHoldService {
       holdExpiresAt,
       pricingSummary: {
         subTotal,
-        depositTotal: photoDeposit + productDepositTotal,
+        depositTotal: productDepositTotal,
         discountAmount: comboDiscountTotal,
         comboDiscountTotal,
         voucherDiscountTotal: 0,

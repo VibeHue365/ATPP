@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
-import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle, Check, XCircle, X, Sparkles } from 'lucide-react';
+import { Calendar, MapPin, User, History, Plus, Heart, Star, ShieldCheck, Clock, AlertTriangle, Check, CheckCircle, XCircle, X, Sparkles } from 'lucide-react';
 import { BookingDetailModal } from '../../../components/common/BookingDetailModal';
 import { API_BASE_URL } from '../../../config/env';
 import { getFirstMediaUrl } from '../../../shared/media/mediaUrl';
@@ -97,15 +97,37 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [realProductList, setRealProductList] = useState<any[]>([]);
   const [realPhotographersList, setRealPhotographersList] = useState<any[]>([]);
 
+  // Cache flags – prevent re-fetching on every tab switch
+  const paymentsLoadedRef = useRef(false);
+  const favoritesLoadedRef = useRef(false);
+
   const [currentPageAppointments, setCurrentPageAppointments] = useState(1);
   const [currentPageRentals, setCurrentPageRentals] = useState(1);
-  const ITEMS_PER_PAGE = 9;
+  const [currentPagePayments, setCurrentPagePayments] = useState(1);
+  const ITEMS_PER_PAGE = 8;
+
+  // ─── Smart Pagination Helper ───────────────────────────────────────────────
+  // Returns an array of page numbers / 'ellipsis' markers to render.
+  const getPageNumbers = useCallback((current: number, total: number): (number | 'ellipsis')[] => {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const pages: (number | 'ellipsis')[] = [1];
+    const left = Math.max(2, current - 2);
+    const right = Math.min(total - 1, current + 2);
+    if (left > 2) pages.push('ellipsis');
+    for (let p = left; p <= right; p++) pages.push(p);
+    if (right < total - 1) pages.push('ellipsis');
+    pages.push(total);
+    return pages;
+  }, []);
 
   useEffect(() => {
     setCurrentPageAppointments(1);
     setCurrentPageRentals(1);
+    setCurrentPagePayments(1);
 
-    if (activeTab === 'payments') {
+    // Payments: fetch once and cache
+    if (activeTab === 'payments' && !paymentsLoadedRef.current) {
+      paymentsLoadedRef.current = true;
       setIsLoadingPayments(true);
       httpClient.get<any[]>('/payments/history')
         .then((res: any) => {
@@ -113,18 +135,23 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
         })
         .catch((err: any) => {
           console.error('Failed to fetch payment history:', err);
+          paymentsLoadedRef.current = false; // allow retry on error
         })
         .finally(() => {
           setIsLoadingPayments(false);
         });
     }
 
-    if (activeTab === 'favorites') {
+    // Favorites: fetch once and cache
+    if (activeTab === 'favorites' && !favoritesLoadedRef.current) {
+      favoritesLoadedRef.current = true;
       setIsLoadingFavorites(true);
       Promise.allSettled([
         httpClient.get<any[]>('/products').then((res: any) => setRealProductList(Array.isArray(res) ? res : (res?.data || []))),
         httpClient.get<any[]>('/providers/photographers').then((res: any) => setRealPhotographersList(Array.isArray(res) ? res : (res?.data || []))),
-      ]).finally(() => {
+      ]).catch(() => {
+        favoritesLoadedRef.current = false;
+      }).finally(() => {
         setIsLoadingFavorites(false);
       });
     }
@@ -309,28 +336,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       finalReason = `${selectedDisputeReason}: ${photoDisputeNote.trim()}`;
     }
 
-    if (selectedDisputeReason.includes('vắng mặt') || selectedDisputeReason.includes('không đến')) {
-      const currentBooking = bookings.find(b => b._id === photoDisputeBookingId);
-      if (currentBooking) {
-        const photoItem = currentBooking.items?.find((item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE') || currentBooking.items?.[0];
-        const rawShootDate = photoItem?.shootDate || photoItem?.startDate || photoItem?.rentalFrom || currentBooking.startDate;
-        const rawTimeSlot = photoItem?.shootTimeSlot || photoItem?.timeSlot || '';
-
-        if (rawShootDate) {
-          const shootStartTime = new Date(rawShootDate);
-          if (rawTimeSlot) {
-            const startHour = parseInt(rawTimeSlot.split('-')[0] || '0', 10);
-            if (!isNaN(startHour)) shootStartTime.setHours(startHour, 0, 0, 0);
-          }
-          const minAllowedTime = new Date(shootStartTime.getTime() + 15 * 60 * 1000);
-          if (new Date() < minAllowedTime) {
-            toast.error('Chưa đến thời gian báo thợ vắng mặt! Bạn chỉ có thể gửi khiếu nại vắng mặt sau giờ hẹn ít nhất 15 phút.');
-            return;
-          }
-        }
-      }
-    }
-
     try {
       toast.info('Đang gửi khiếu nại...');
       await httpClient.patch(`/bookings/${photoDisputeBookingId}/status`, {
@@ -358,38 +363,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     const nowYMD = now.toLocaleDateString('sv-SE'); // 'YYYY-MM-DD'
     const currentHourMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    const rawShootDate = photoItem?.shootDate || photoItem?.startDate || photoItem?.rentalFrom || b.startDate || b.shootDate;
-    const shootYMD = rawShootDate ? (typeof rawShootDate === 'string' ? rawShootDate.slice(0, 10) : new Date(rawShootDate).toLocaleDateString('sv-SE')) : '';
-
-    const rawTimeSlot = 
-      photoItem?.shootTimeSlot ||
-      photoItem?.timeSlot ||
-      photoItem?.rescheduleRequest?.newShootTimeSlot ||
-      (photoItem?.startTime && photoItem?.endTime ? `${photoItem.startTime} - ${photoItem.endTime}` : '') ||
-      (b as any).shootTimeSlot ||
-      (b as any).timeSlot ||
-      '';
-
-    let timeStr = '';
-    if (rawTimeSlot) {
-      timeStr = rawTimeSlot.replace(/\s*-\s*/, ' - ');
-    } else if (rawShootDate) {
-      try {
-        const d = new Date(rawShootDate);
-        const hrs = d.getHours();
-        const mins = d.getMinutes();
-        if (hrs > 0 || mins > 0) {
-          const startH = String(hrs).padStart(2, '0');
-          const startM = String(mins).padStart(2, '0');
-          const endH = String((hrs + 2) % 24).padStart(2, '0');
-          timeStr = `${startH}:${startM} - ${endH}:${startM}`;
-        }
-      } catch {}
-    }
+    const shootYMD = photoItem?.shootDate ? new Date(photoItem.shootDate).toLocaleDateString('sv-SE') : '';
+    const timeStr = photoItem?.shootTimeSlot || '09:00 - 11:00';
     
     // Lấy giờ kết thúc ca chụp (ví dụ "08:00 - 09:00" -> "09:00")
     let endTimeStr = '23:59';
-    if (timeStr && timeStr.includes('-')) {
+    if (timeStr.includes('-')) {
       const parts = timeStr.split('-');
       if (parts.length >= 2) endTimeStr = parts[1].trim();
     }
@@ -405,37 +384,13 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     if (b.status === 'DEPOSIT_PAID') statusLabel = 'Chờ xác nhận';
     else if (b.status === 'IN_PROGRESS') statusLabel = 'Đang chụp';
     else if (b.status === 'AWAITING_REVIEW') statusLabel = 'Chờ bạn duyệt';
+    else if (b.status === 'COMBO_PHOTOS_APPROVED') statusLabel = 'Đã duyệt ảnh • Đang thuê áo';
     else if (b.status === 'COMPLETED') statusLabel = 'Hoàn thành';
     else if (b.status === 'CANCELLED') statusLabel = 'Đã hủy';
     else if (b.status === 'DISPUTED') statusLabel = 'Tranh chấp';
 
     if (!isPast && isOverdue && ['CONFIRMED', 'DEPOSIT_PAID'].includes(b.status)) {
       statusLabel = isPastTimeToday ? 'Quá giờ chụp' : 'Quá hạn chụp';
-    }
-
-    const price = b.totalAmount || photoItem?.unitPrice || photoItem?.price || 0;
-    const formattedDate = rawShootDate ? formatDate(String(rawShootDate)) : '';
-    const fullDateTimeStr = formattedDate ? `${formattedDate}${timeStr ? ` (${timeStr})` : ''}` : '';
-
-    let canShowNoShowButton = false;
-    if (rawShootDate) {
-      try {
-        const shootStartTime = new Date(rawShootDate);
-        if (timeStr && timeStr.includes('-')) {
-          const startStr = timeStr.split('-')[0].trim();
-          const parts = startStr.split(':');
-          const startHour = parseInt(parts[0] || '0', 10);
-          const startMin = parseInt(parts[1] || '0', 10);
-          if (!isNaN(startHour)) shootStartTime.setHours(startHour, isNaN(startMin) ? 0 : startMin, 0, 0);
-        }
-        const minAllowedTime = new Date(shootStartTime.getTime() + 15 * 60 * 1000);
-        canShowNoShowButton = new Date() >= minAllowedTime;
-      } catch (e) {
-        canShowNoShowButton = false;
-      }
-    }
-    if (b.status === 'AWAITING_REVIEW' || isOverdue) {
-      canShowNoShowButton = true;
     }
 
     return {
@@ -445,18 +400,18 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       rawStatus: b.status,
       isOverdue,
       isPastTimeToday,
-      canShowNoShowButton,
       shootYMD,
       endTimeStr,
       awaitingReviewSince: b.awaitingReviewSince,
       statusType: isPast ? 'PAST' : isOverdue ? 'OVERDUE' : (b.status === 'AWAITING_REVIEW' || b.status === 'IN_PROGRESS') ? 'ACTION' : 'UPCOMING',
-      dateStr: formattedDate,
-      fullDateTimeStr: fullDateTimeStr || formattedDate,
+      dateStr: photoItem?.shootDate ? formatDate(photoItem.shootDate) : '',
       title: photoItem?.photographyPackageId?.name || photoItem?.name || 'Gói Chụp Ảnh Cổ Phong',
-      photographerName: photoItem?.providerId?.businessName || photoItem?.providerId?.fullName || photoItem?.photographerName || 'Nhiếp ảnh gia',
-      shootLocation: photoItem?.shootLocation || 'Showroom Nam Kỳ Khởi Nghĩa, Q.1',
-      timeStr,
-      price,
+      shootLocation: photoItem?.shootLocation || photoItem?.location || b.shootLocation || (
+        photoItem?.providerId?.address
+          ? `${photoItem.providerId.address.addressLine || ''}, ${photoItem.providerId.address.district || ''}, ${photoItem.providerId.address.city || ''}`.replace(/^,\s*/, '')
+          : ''
+      ) || 'Showroom VibeHue',
+      timeStr: photoItem?.shootTimeSlot || '09:00 - 11:00',
       statusLabel
     };
   });
@@ -892,32 +847,37 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       {app.rawStatus === 'DEPOSIT_PAID' ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#EA580C', color: 'white' }}>
                           <Clock size={13} style={{ marginRight: '6px' }} />
-                          CHỜ THỢ CHỤP XÁC NHẬN • {app.fullDateTimeStr}
+                          CHỜ THỢ CHỤP XÁC NHẬN • {app.dateStr}
                         </span>
                       ) : app.rawStatus === 'AWAITING_REVIEW' ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#0284C7', color: 'white' }}>
                           <Clock size={13} style={{ marginRight: '6px' }} />
-                          CHỜ XÁC NHẬN • {app.fullDateTimeStr}
+                          CHỜ XÁC NHẬN • {app.dateStr}
+                        </span>
+                      ) : app.rawStatus === 'COMBO_PHOTOS_APPROVED' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#059669', color: 'white' }}>
+                          <CheckCircle size={13} style={{ marginRight: '6px' }} />
+                          ĐÃ DUYỆT ẢNH • {app.dateStr}
                         </span>
                       ) : app.rawStatus === 'IN_PROGRESS' ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#059669', color: 'white' }}>
                           <Clock size={13} style={{ marginRight: '6px' }} />
-                          ĐANG CHỤP • {app.fullDateTimeStr}
+                          ĐANG CHỤP • {app.dateStr}
                         </span>
                       ) : app.isOverdue ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#C2410C', color: 'white' }}>
                           <Clock size={13} style={{ marginRight: '6px' }} />
-                          {app.isPastTimeToday ? 'QUÁ GIỜ CHỤP' : 'QUÁ HẠN CHỤP'} • {app.fullDateTimeStr}
+                          {app.isPastTimeToday ? 'QUÁ GIỜ CHỤP' : 'QUÁ HẠN CHỤP'} • {app.dateStr}
                         </span>
                       ) : app.statusType === 'UPCOMING' ? (
                         <span className="vh-appointment-status-label-upcoming">
                           <Calendar size={13} style={{ marginRight: '6px' }} />
-                          SẮP TỚI • {app.fullDateTimeStr}
+                          SẮP TỚI • {app.dateStr}
                         </span>
                       ) : (
                         <span className="vh-appointment-status-label-past">
                           <History size={13} style={{ marginRight: '6px' }} />
-                          {app.statusLabel.toUpperCase()} • {app.fullDateTimeStr}
+                          {app.statusLabel.toUpperCase()} • {app.dateStr}
                         </span>
                       )}
                     </div>
@@ -945,11 +905,43 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         }} 
                         title={app.shootLocation}
                       >
-                        {app.shootLocation}
+                        {app.shootLocation || 'Chưa cập nhật địa điểm'}
                       </span>
                     </div>
 
-                    {app.rawStatus === 'AWAITING_REVIEW' && (
+                    {(app.rawStatus === 'PICKUP_PENDING' || app.booking?.status === 'PICKUP_PENDING') && (
+                      <div style={{ marginTop: '14px', padding: '12px', backgroundColor: '#EDF9F2', border: '1px solid #C2F0D7', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <p style={{ fontSize: '12px', color: '#27AE60', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Check size={14} /> Cửa hàng đã chuẩn bị xong áo dài. Vui lòng kiểm tra & xác nhận nhận đồ:
+                        </p>
+                        {app.booking?.handoverPhotos && app.booking.handoverPhotos.length > 0 && (
+                          <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+                            {app.booking.handoverPhotos.map((photo: string, index: number) => {
+                              const url = photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`;
+                              return (
+                                <a key={index} href={url} target="_blank" rel="noreferrer" style={{ width: '48px', height: '48px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #C2F0D7', flexShrink: 0 }}>
+                                  <img src={url} alt="Handover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                </a>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '4px' }}>
+                          <button 
+                            onClick={() => handleConfirmPickup(app.id)}
+                            style={{
+                              flex: 1, backgroundColor: '#27AE60', color: 'white', border: 'none',
+                              padding: '8px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700,
+                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
+                            }}
+                          >
+                            <Check size={14} /> Xác nhận đã nhận áo dài
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {(app.rawStatus === 'AWAITING_REVIEW' || app.rawStatus === 'COMBO_PHOTOS_APPROVED') && (
                       <div style={{ marginTop: '14px', padding: '12px', backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: '8px' }}>
                         <p style={{ fontSize: '12px', color: '#0369A1', fontWeight: 600, margin: '0 0 10px 0', lineHeight: 1.4 }}>
                           📷 Thợ ảnh đã báo hoàn thành buổi chụp. Vui lòng kiểm tra & xác nhận trong 48h (hệ thống sẽ tự động xác nhận sau 48h).
@@ -1020,25 +1012,31 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             </div>
                           );
                         })()}
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            onClick={() => handleConfirmComplete(app.id)}
-                            style={{ flex: 1, backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
-                          >
-                            ✓ Xác nhận hài lòng
-                          </button>
-                          <button
-                            onClick={() => handleDisputeBooking(app.id)}
-                            style={{ backgroundColor: 'white', color: '#DC2626', border: '1px solid #FCA5A5', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
-                          >
-                            Khiếu nại
-                          </button>
-                        </div>
+                        {app.booking?.photosApproved ? (
+                          <div style={{ padding: '8px 12px', backgroundColor: '#EDF9F2', border: '1px solid #C2F0D7', borderRadius: '6px', fontSize: '12px', fontWeight: 700, color: '#27AE60', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Check size={14} /> Bạn đã xác nhận hài lòng với bộ ảnh chụp này.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={() => handleConfirmComplete(app.id)}
+                              style={{ flex: 1, backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                            >
+                              ✓ Xác nhận hài lòng
+                            </button>
+                            <button
+                              onClick={() => handleDisputeBooking(app.id)}
+                              style={{ backgroundColor: 'white', color: '#DC2626', border: '1px solid #FCA5A5', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              Khiếu nại
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {/* Customer Report / Dispute button during CONFIRMED, IN_PROGRESS, AWAITING_REVIEW or OVERDUE */}
-                    {app.canShowNoShowButton && (app.rawStatus === 'CONFIRMED' || app.rawStatus === 'IN_PROGRESS' || app.rawStatus === 'AWAITING_REVIEW' || app.isOverdue) && app.rawStatus !== 'DISPUTED' && app.rawStatus !== 'COMPLETED' && app.rawStatus !== 'CANCELLED' && (
+                    {(app.rawStatus === 'CONFIRMED' || app.rawStatus === 'IN_PROGRESS' || app.rawStatus === 'AWAITING_REVIEW' || app.isOverdue) && app.rawStatus !== 'DISPUTED' && app.rawStatus !== 'COMPLETED' && app.rawStatus !== 'CANCELLED' && (
                       <div style={{ marginTop: '12px' }}>
                         <button
                           onClick={() => handleDisputeBooking(app.id)}
@@ -1084,9 +1082,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   </div>
 
                   <div className="vh-appointment-card-footer">
-                    <span className={app.statusType === 'UPCOMING' ? 'vh-appointment-time-badge' : 'vh-appointment-status-success'}>
-                      {app.price ? `${app.price.toLocaleString('vi-VN')}đ` : '0đ'}
-                    </span>
+                    {app.statusType === 'UPCOMING' ? (
+                      <span className="vh-appointment-time-badge">{app.timeStr}</span>
+                    ) : (
+                      <span className="vh-appointment-status-success">{app.timeStr}</span>
+                    )}
                     {app.isReal ? (
                       <button
                         className="vh-appointment-action-link"
@@ -1118,48 +1118,25 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               <p className="vh-appointment-dashed-desc">Trải nghiệm dịch vụ cá nhân hóa</p>
             </button>
 
-            {/* Pagination Controls for Appointments */}
+            {/* Smart Pagination – Appointments */}
             {totalAppointmentPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '24px', width: '100%', gridColumn: 'span 2' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', marginTop: '24px', width: '100%', gridColumn: 'span 2', flexWrap: 'wrap' }}>
                 <button
                   disabled={currentPageAppointments === 1}
                   onClick={() => setCurrentPageAppointments(p => Math.max(p - 1, 1))}
-                  style={{
-                    padding: '8px 14px', borderRadius: '6px', border: '1px solid #E5E7EB',
-                    backgroundColor: currentPageAppointments === 1 ? '#F3F4F6' : 'white',
-                    color: currentPageAppointments === 1 ? '#9CA3AF' : '#374151',
-                    fontWeight: 600, cursor: currentPageAppointments === 1 ? 'not-allowed' : 'pointer', fontSize: '13px'
-                  }}
-                >
-                  &laquo; Trang trước
-                </button>
-                {Array.from({ length: totalAppointmentPages }).map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setCurrentPageAppointments(idx + 1)}
-                    style={{
-                      width: '36px', height: '36px', borderRadius: '6px', border: '1px solid',
-                      borderColor: currentPageAppointments === idx + 1 ? 'var(--color-primary-dark, #4A0E17)' : '#E5E7EB',
-                      backgroundColor: currentPageAppointments === idx + 1 ? 'var(--color-primary-dark, #4A0E17)' : 'white',
-                      color: currentPageAppointments === idx + 1 ? 'white' : '#374151',
-                      fontWeight: 700, cursor: 'pointer', fontSize: '13px'
-                    }}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
+                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: currentPageAppointments === 1 ? '#F9FAFB' : 'white', color: currentPageAppointments === 1 ? '#9CA3AF' : '#374151', fontWeight: 600, cursor: currentPageAppointments === 1 ? 'not-allowed' : 'pointer', fontSize: '13px', transition: 'all 0.15s' }}
+                >‹</button>
+                {getPageNumbers(currentPageAppointments, totalAppointmentPages).map((p, i) =>
+                  p === 'ellipsis'
+                    ? <span key={`e-${i}`} style={{ padding: '0 4px', color: '#9CA3AF', fontWeight: 700, lineHeight: '36px' }}>…</span>
+                    : <button key={p} onClick={() => setCurrentPageAppointments(p)} style={{ width: '36px', height: '36px', borderRadius: '8px', border: '1px solid', borderColor: currentPageAppointments === p ? 'var(--color-primary-dark,#4A0E17)' : '#E5E7EB', backgroundColor: currentPageAppointments === p ? 'var(--color-primary-dark,#4A0E17)' : 'white', color: currentPageAppointments === p ? 'white' : '#374151', fontWeight: 700, cursor: 'pointer', fontSize: '13px', transition: 'all 0.15s' }}>{p}</button>
+                )}
                 <button
                   disabled={currentPageAppointments === totalAppointmentPages}
                   onClick={() => setCurrentPageAppointments(p => Math.min(p + 1, totalAppointmentPages))}
-                  style={{
-                    padding: '8px 14px', borderRadius: '6px', border: '1px solid #E5E7EB',
-                    backgroundColor: currentPageAppointments === totalAppointmentPages ? '#F3F4F6' : 'white',
-                    color: currentPageAppointments === totalAppointmentPages ? '#9CA3AF' : '#374151',
-                    fontWeight: 600, cursor: currentPageAppointments === totalAppointmentPages ? 'not-allowed' : 'pointer', fontSize: '13px'
-                  }}
-                >
-                  Trang sau &raquo;
-                </button>
+                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: currentPageAppointments === totalAppointmentPages ? '#F9FAFB' : 'white', color: currentPageAppointments === totalAppointmentPages ? '#9CA3AF' : '#374151', fontWeight: 600, cursor: currentPageAppointments === totalAppointmentPages ? 'not-allowed' : 'pointer', fontSize: '13px', transition: 'all 0.15s' }}
+                >›</button>
+                <span style={{ marginLeft: '8px', fontSize: '12px', color: '#9CA3AF', fontWeight: 500 }}>Trang {currentPageAppointments}/{totalAppointmentPages}</span>
               </div>
             )}
           </div>
@@ -1494,48 +1471,25 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 );
               })
             )}
-            {/* Pagination Controls for Rentals */}
+            {/* Smart Pagination – Rentals */}
             {totalRentalPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '24px', width: '100%', gridColumn: 'span 2' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', marginTop: '24px', width: '100%', gridColumn: 'span 2', flexWrap: 'wrap' }}>
                 <button
                   disabled={currentPageRentals === 1}
                   onClick={() => setCurrentPageRentals(p => Math.max(p - 1, 1))}
-                  style={{
-                    padding: '8px 14px', borderRadius: '6px', border: '1px solid #E5E7EB',
-                    backgroundColor: currentPageRentals === 1 ? '#F3F4F6' : 'white',
-                    color: currentPageRentals === 1 ? '#9CA3AF' : '#374151',
-                    fontWeight: 600, cursor: currentPageRentals === 1 ? 'not-allowed' : 'pointer', fontSize: '13px'
-                  }}
-                >
-                  &laquo; Trang trước
-                </button>
-                {Array.from({ length: totalRentalPages }).map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setCurrentPageRentals(idx + 1)}
-                    style={{
-                      width: '36px', height: '36px', borderRadius: '6px', border: '1px solid',
-                      borderColor: currentPageRentals === idx + 1 ? 'var(--color-primary-dark, #4A0E17)' : '#E5E7EB',
-                      backgroundColor: currentPageRentals === idx + 1 ? 'var(--color-primary-dark, #4A0E17)' : 'white',
-                      color: currentPageRentals === idx + 1 ? 'white' : '#374151',
-                      fontWeight: 700, cursor: 'pointer', fontSize: '13px'
-                    }}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
+                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: currentPageRentals === 1 ? '#F9FAFB' : 'white', color: currentPageRentals === 1 ? '#9CA3AF' : '#374151', fontWeight: 600, cursor: currentPageRentals === 1 ? 'not-allowed' : 'pointer', fontSize: '13px', transition: 'all 0.15s' }}
+                >‹</button>
+                {getPageNumbers(currentPageRentals, totalRentalPages).map((p, i) =>
+                  p === 'ellipsis'
+                    ? <span key={`e-${i}`} style={{ padding: '0 4px', color: '#9CA3AF', fontWeight: 700, lineHeight: '36px' }}>…</span>
+                    : <button key={p} onClick={() => setCurrentPageRentals(p)} style={{ width: '36px', height: '36px', borderRadius: '8px', border: '1px solid', borderColor: currentPageRentals === p ? 'var(--color-primary-dark,#4A0E17)' : '#E5E7EB', backgroundColor: currentPageRentals === p ? 'var(--color-primary-dark,#4A0E17)' : 'white', color: currentPageRentals === p ? 'white' : '#374151', fontWeight: 700, cursor: 'pointer', fontSize: '13px', transition: 'all 0.15s' }}>{p}</button>
+                )}
                 <button
                   disabled={currentPageRentals === totalRentalPages}
                   onClick={() => setCurrentPageRentals(p => Math.min(p + 1, totalRentalPages))}
-                  style={{
-                    padding: '8px 14px', borderRadius: '6px', border: '1px solid #E5E7EB',
-                    backgroundColor: currentPageRentals === totalRentalPages ? '#F3F4F6' : 'white',
-                    color: currentPageRentals === totalRentalPages ? '#9CA3AF' : '#374151',
-                    fontWeight: 600, cursor: currentPageRentals === totalRentalPages ? 'not-allowed' : 'pointer', fontSize: '13px'
-                  }}
-                >
-                  Trang sau &raquo;
-                </button>
+                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: currentPageRentals === totalRentalPages ? '#F9FAFB' : 'white', color: currentPageRentals === totalRentalPages ? '#9CA3AF' : '#374151', fontWeight: 600, cursor: currentPageRentals === totalRentalPages ? 'not-allowed' : 'pointer', fontSize: '13px', transition: 'all 0.15s' }}
+                >›</button>
+                <span style={{ marginLeft: '8px', fontSize: '12px', color: '#9CA3AF', fontWeight: 500 }}>Trang {currentPageRentals}/{totalRentalPages}</span>
               </div>
             )}
           </div>
@@ -1780,7 +1734,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 );
               }
 
+              const totalPaymentPages = Math.ceil(filteredList.length / ITEMS_PER_PAGE) || 1;
+              const safePagePayments = Math.min(currentPagePayments, totalPaymentPages);
+              const displayPayments = filteredList.slice((safePagePayments - 1) * ITEMS_PER_PAGE, safePagePayments * ITEMS_PER_PAGE);
+
               return (
+                <>
                 <table className="vh-profile-payments-table">
                   <thead>
                     <tr>
@@ -1792,7 +1751,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredList.map((p) => {
+                    {displayPayments.map((p) => {
                       let bType: string | undefined = undefined;
                       if (p.bookingId && typeof p.bookingId === 'object') {
                         bType = p.bookingId.bookingType;
@@ -1903,6 +1862,28 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     })}
                   </tbody>
                 </table>
+                {/* Smart Pagination – Payments */}
+                {totalPaymentPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', marginTop: '20px', flexWrap: 'wrap' }}>
+                    <button
+                      disabled={safePagePayments === 1}
+                      onClick={() => setCurrentPagePayments(p => Math.max(p - 1, 1))}
+                      style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: safePagePayments === 1 ? '#F9FAFB' : 'white', color: safePagePayments === 1 ? '#9CA3AF' : '#374151', fontWeight: 600, cursor: safePagePayments === 1 ? 'not-allowed' : 'pointer', fontSize: '13px', transition: 'all 0.15s' }}
+                    >‹</button>
+                    {getPageNumbers(safePagePayments, totalPaymentPages).map((p, i) =>
+                      p === 'ellipsis'
+                        ? <span key={`e-${i}`} style={{ padding: '0 4px', color: '#9CA3AF', fontWeight: 700, lineHeight: '36px' }}>…</span>
+                        : <button key={p} onClick={() => setCurrentPagePayments(p)} style={{ width: '36px', height: '36px', borderRadius: '8px', border: '1px solid', borderColor: safePagePayments === p ? 'var(--color-primary-dark,#4A0E17)' : '#E5E7EB', backgroundColor: safePagePayments === p ? 'var(--color-primary-dark,#4A0E17)' : 'white', color: safePagePayments === p ? 'white' : '#374151', fontWeight: 700, cursor: 'pointer', fontSize: '13px', transition: 'all 0.15s' }}>{p}</button>
+                    )}
+                    <button
+                      disabled={safePagePayments === totalPaymentPages}
+                      onClick={() => setCurrentPagePayments(p => Math.min(p + 1, totalPaymentPages))}
+                      style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: safePagePayments === totalPaymentPages ? '#F9FAFB' : 'white', color: safePagePayments === totalPaymentPages ? '#9CA3AF' : '#374151', fontWeight: 600, cursor: safePagePayments === totalPaymentPages ? 'not-allowed' : 'pointer', fontSize: '13px', transition: 'all 0.15s' }}
+                    >›</button>
+                    <span style={{ marginLeft: '8px', fontSize: '12px', color: '#9CA3AF', fontWeight: 500 }}>Trang {safePagePayments}/{totalPaymentPages} · {filteredList.length} giao dịch</span>
+                  </div>
+                )}
+                </>
               );
             })()}
           </div>

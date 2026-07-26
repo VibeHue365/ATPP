@@ -49,7 +49,7 @@ export class SettlementsService {
       throw new NotFoundException(SETTLEMENT_ERROR_CODES.BookingNotFound);
     }
 
-    if (booking.status !== BookingStatus.Completed) {
+    if (!this.isEligibleForSettlement(booking)) {
       throw new BadRequestException(
         SETTLEMENT_ERROR_CODES.BookingNotCompleted,
       );
@@ -453,6 +453,19 @@ export class SettlementsService {
     throw new BadRequestException(
       SETTLEMENT_ERROR_CODES.PartialStateDetected,
     );
+  }
+
+  private isEligibleForSettlement(booking: Booking): boolean {
+    if (booking.status === BookingStatus.Completed) return true;
+    if (booking.status !== BookingStatus.Returned) return false;
+    if ((booking.bookingType as string) === 'AODAI_RENTAL') return true;
+    const isComboPhotoDelivered =
+      Boolean(booking.photosApproved) ||
+      Boolean((booking as any).photosApproved) ||
+      Boolean((booking as any).deliveredPhotos?.length > 0) ||
+      Boolean((booking as any).deliveryDriveUrl) ||
+      booking.statusTimeline?.some((t) => (t.status as string) === 'COMBO_PHOTOS_APPROVED' || t.status === BookingStatus.Completed);
+    return (booking.bookingType as string) === 'COMBO' && isComboPhotoDelivered;
   }
 
   private async markGenerationSuccess(bookingId: Types.ObjectId): Promise<void> {

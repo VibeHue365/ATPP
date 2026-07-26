@@ -1257,9 +1257,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           }}>
             {(() => {
               const bType = booking.bookingType || 'PHOTOGRAPHY';
+              const depositTotal = booking.pricingSummary?.depositTotal ?? 0;
               const grandTotal = booking.pricingSummary?.grandTotal || booking.paymentSummary?.totalPaid || 0;
-              const subTotal = booking.paymentSummary?.subTotal || booking.pricingSummary?.subTotal || grandTotal;
-              const depositTotal = booking.paymentSummary?.depositTotal || booking.pricingSummary?.depositTotal || 0;
+              const subTotal = Math.max(0, (booking.pricingSummary?.subTotal || grandTotal) - depositTotal);
               const photoBasePrice = grandTotal || subTotal;
               const photoDeposit = Math.round(photoBasePrice * 0.3);
 

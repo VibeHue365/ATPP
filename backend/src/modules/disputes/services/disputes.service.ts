@@ -733,39 +733,92 @@ export class DisputesService {
       requestedAmount = incident.requestedAmount;
     }
 
-    const depositTotal =
-      booking.pricingSummary?.depositTotal ||
-      booking.pricingSummary?.grandTotal ||
-      0;
-    const refundAmount =
-      decision === 'CUSTOMER_RIGHT'
-        ? isDirectDispute
-          ? requestedAmount
-          : depositTotal
-        : decision === 'SHOP_RIGHT'
-          ? Math.max(
-              (isDirectDispute ? requestedAmount : depositTotal) -
-                requestedAmount,
-              0,
-            )
-          : (splitRefundAmount ?? -1);
-    const compensationAmount =
-      decision === 'SHOP_RIGHT'
-        ? requestedAmount
-        : decision === 'CUSTOMER_RIGHT'
-          ? 0
-          : (splitCompensationAmount ?? -1);
+    const depositTotal = booking.pricingSummary?.depositTotal || 0;
+    const grandTotal = booking.pricingSummary?.grandTotal || booking.pricingSummary?.subTotal || 0;
+    // Tiền thuê = tổng đơn hàng trừ tiền cọc
+    const rentalFee = Math.max(grandTotal - depositTotal, 0);
 
-    const limitTotal = isDirectDispute
-      ? (requestedAmount || booking.pricingSummary?.grandTotal || depositTotal)
-      : (depositTotal || requestedAmount || booking.pricingSummary?.grandTotal || 0);
+    // Tính số tiền thực sự đã thanh toán (loại bỏ refund đã thực hiện)
+    let actualPaidTotal = grandTotal;
+    try {
+      const paidPayments = await this.bookingModel.db.model('Payment').find({
+        bookingId: booking._id,
+        status: { $in: ['SUCCESS', 'success', 'CONFIRMED'] },
+        purpose: { $nin: ['DEPOSIT_REFUND', 'COMPENSATION'] },
+      }).lean() as any[];
+      actualPaidTotal = Math.max(
+        paidPayments.reduce((s: number, p: any) => s + (p.amount || 0), 0)
+          - paidPayments.reduce((s: number, p: any) => s + (p.refundedAmount || 0), 0),
+        0,
+      );
+      if (actualPaidTotal === 0) actualPaidTotal = grandTotal;
+    } catch (e) {
+      console.warn('Could not compute actualPaidTotal, falling back to grandTotal:', e);
+      actualPaidTotal = grandTotal;
+    }
+
+    /*
+     * ─── LUỒNG 1: Khách tố cáo trong giai đoạn 30 phút NHẬN ĐỒ (isDirectDispute = true) ───
+     *   • Khách đúng  → hoàn TOÀN BỘ tiền (cả thuê lẫn cọc)
+     *   • Provider đúng → chỉ hoàn tiền THUÊ cho khách, provider giữ tiền CỌC
+     *
+     * ─── LUỒNG 2: Provider tố cáo sau khi khách ĐÃ TRẢ ĐỒ (isDirectDispute = false) ─────
+     *   • Khách đúng   → hoàn tiền CỌC cho khách
+     *   • Provider đúng → provider giữ tiền CỌC (compensation), khách không được gì thêm
+     */
+    let refundAmount: number;
+    let compensationAmount: number;
+
+    const isPhotosDeliveredPhase = booking.bookingType === 'PHOTOGRAPHY' && (
+      booking.status === BookingStatus.AwaitingReview ||
+      Boolean((booking as any).deliveredPhotos?.length) ||
+      Boolean((booking as any).deliveryDriveUrl)
+    );
+
+    if (decision === 'SPLIT') {
+      refundAmount = splitRefundAmount ?? -1;
+      compensationAmount = splitCompensationAmount ?? -1;
+    } else if (isPhotosDeliveredPhase) {
+      // Khi tranh chấp xảy ra SAU KHI Thợ ảnh đã hoàn thành buổi chụp & bàn giao sản phẩm:
+      if (decision === 'CUSTOMER_RIGHT') {
+        refundAmount = splitRefundAmount ?? Math.round(actualPaidTotal * 0.5);
+        compensationAmount = splitCompensationAmount ?? Math.max(0, actualPaidTotal - refundAmount);
+      } else {
+        // SHOP_RIGHT: Thợ ảnh đúng → Thợ hưởng 100% tiền chụp, khách không được hoàn
+        refundAmount = 0;
+        compensationAmount = actualPaidTotal;
+      }
+    } else if (isDirectDispute) {
+      // Luồng 1 — Khách tố trong 30p nhận đồ hoặc trước buổi chụp
+      if (decision === 'CUSTOMER_RIGHT') {
+        refundAmount = actualPaidTotal;   // hoàn tất cả (thuê + cọc)
+        compensationAmount = 0;
+      } else {
+        // SHOP_RIGHT — chỉ hoàn tiền thuê, provider giữ tiền cọc
+        refundAmount = Math.min(rentalFee, actualPaidTotal);
+        compensationAmount = Math.min(depositTotal, actualPaidTotal - refundAmount);
+      }
+    } else {
+      // Luồng 2 — Provider tố sau khi trả đồ (incident)
+      if (decision === 'CUSTOMER_RIGHT') {
+        refundAmount = depositTotal;      // hoàn tiền cọc cho khách
+        compensationAmount = 0;
+      } else {
+        // SHOP_RIGHT — provider lấy tiền cọc, khách không được gì
+        refundAmount = 0;
+        compensationAmount = Math.min(incident?.requestedAmount ?? depositTotal, depositTotal);
+      }
+    }
+
+    // Giới hạn tổng không vượt quá số tiền thực tế có thể chi trả
+    const limitTotal = isDirectDispute ? actualPaidTotal : depositTotal;
     if (
       refundAmount < 0 ||
       compensationAmount < 0 ||
-      refundAmount + compensationAmount > limitTotal
+      refundAmount + compensationAmount > limitTotal + 1
     ) {
       throw new BadRequestException(
-        'Tổng tiền hoàn khách và bồi thường provider không được vượt quá số tiền ký quỹ/tiền cọc',
+        `Tổng tiền hoàn khách (${refundAmount.toLocaleString('vi-VN')}đ) và bồi thường provider (${compensationAmount.toLocaleString('vi-VN')}đ) không được vượt quá giới hạn ${limitTotal.toLocaleString('vi-VN')}đ`,
       );
     }
 
@@ -840,7 +893,6 @@ export class DisputesService {
           const existingRefundPayment = await this.bookingModel.db.model('Payment').findOne({
             bookingId: booking._id,
             purpose: 'DEPOSIT_REFUND',
-            amount: refundAmount,
           });
           if (!existingRefundPayment) {
             const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
@@ -853,10 +905,46 @@ export class DisputesService {
               status: 'SUCCESS',
               paidAt: new Date(),
             });
+          } else {
+            existingRefundPayment.amount = refundAmount;
+            existingRefundPayment.status = 'SUCCESS';
+            await existingRefundPayment.save();
           }
         } catch (errPayment) {
           console.error('Error ensuring DEPOSIT_REFUND payment record:', errPayment);
         }
+
+        // Cập nhật rentalDepositRefund & paymentSummary trên Booking khi khách được hoàn tiền
+        (booking as any).rentalDepositRefund = {
+          status: 'REFUNDED',
+          amount: refundAmount,
+          completedAt: new Date(),
+          rentalDepositReason: notes,
+        };
+        if (!booking.paymentSummary) (booking as any).paymentSummary = {};
+        booking.paymentSummary.totalRefunded = refundAmount;
+        booking.paymentSummary.paymentStatus = 'REFUNDED' as any;
+      } else {
+        // Khi refundAmount === 0 (Provider đúng, giữ tiền cọc):
+        // 1. Xóa / Hủy các payment DEPOSIT_REFUND tự động phát sinh trước đó
+        try {
+          await this.bookingModel.db.model('Payment').deleteMany({
+            bookingId: booking._id,
+            purpose: 'DEPOSIT_REFUND',
+          });
+        } catch (delErr) {
+          console.warn('Could not delete old DEPOSIT_REFUND payment records:', delErr);
+        }
+
+        // 2. Cập nhật rentalDepositRefund = NO_REFUND & totalRefunded = 0
+        (booking as any).rentalDepositRefund = {
+          status: 'NO_REFUND',
+          amount: 0,
+          completedAt: new Date(),
+          rentalDepositReason: 'Khấu trừ đền bù hỏng đồ (Provider thắng tranh chấp)',
+        };
+        if (!booking.paymentSummary) (booking as any).paymentSummary = {};
+        booking.paymentSummary.totalRefunded = 0;
       }
 
       // Cập nhật trạng thái sự cố và tranh chấp
@@ -910,9 +998,20 @@ export class DisputesService {
       }
 
       // Chuyển đơn hàng sang Completed và lưu kết quả tranh chấp
-      let decisionLabel = 'Thỏa thuận chia tiền';
-      if (decision === 'CUSTOMER_RIGHT') decisionLabel = 'Khách hàng đúng (Hoàn 100% tiền)';
-      else if (decision === 'SHOP_RIGHT') decisionLabel = 'Thợ chụp / Shop đúng (Giải ngân cho Shop)';
+      let decisionLabel: string;
+      if (decision === 'SPLIT') {
+        decisionLabel = 'Thỏa thuận chia tiền';
+      } else if (isDirectDispute) {
+        // Luồng 1: khách tố trong 30p nhận đồ
+        decisionLabel = decision === 'CUSTOMER_RIGHT'
+          ? 'Khách hàng đúng — Hoàn toàn bộ tiền (thuê + cọc)'
+          : 'Shop đúng — Hoàn tiền thuê cho khách, provider giữ tiền cọc';
+      } else {
+        // Luồng 2: provider tố sau khi trả đồ
+        decisionLabel = decision === 'CUSTOMER_RIGHT'
+          ? 'Khách hàng đúng — Hoàn tiền cọc cho khách'
+          : 'Provider đúng — Provider giữ tiền cọc';
+      }
 
       (booking as any).disputeResult = {
         decision,
@@ -931,7 +1030,7 @@ export class DisputesService {
       });
       await booking.save();
 
-      // Cập nhật trạng thái hoàn thành & giải phóng tồn kho cho các sản phẩm áo dài trong đơn
+      // Cập nhật trạng thái hoàn thành, cọc & giải phóng tồn kho cho các sản phẩm áo dài trong đơn
       try {
         await this.bookingItemModel.updateMany(
           { bookingId: (booking as any)._id, itemType: 'PRODUCT' as any } as any,
@@ -940,6 +1039,9 @@ export class DisputesService {
               'rentalFulfillment.status': 'COMPLETED',
               'rentalFulfillment.inventoryStatus': 'AVAILABLE',
               'rentalFulfillment.completedAt': new Date(),
+              'rentalFulfillment.depositSettlementStatus': refundAmount > 0 ? 'FULLY_RELEASED' : 'FULLY_DEDUCTED',
+              'rentalFulfillment.depositRefundAmount': refundAmount,
+              'rentalFulfillment.depositDeductedAmount': refundAmount > 0 ? 0 : depositTotal,
             },
           },
         );
@@ -987,13 +1089,7 @@ export class DisputesService {
         await notificationModel.create({
           userId: customerUserId,
           title: `Kết quả giải quyết tranh chấp đơn hàng #${booking.bookingCode}`,
-          content: `Admin đã đưa ra phán quyết cho đơn hàng ${booking.bookingCode}. Quyết định: ${
-            decision === 'SHOP_RIGHT'
-              ? 'Shop đúng'
-              : decision === 'CUSTOMER_RIGHT'
-                ? 'Khách hàng đúng'
-                : 'Chia tiền cọc'
-          }. Số tiền hoàn lại cho bạn: ${refundAmount.toLocaleString('vi-VN')}đ. Ghi chú của Admin: ${notes}`,
+          content: `Admin đã đưa ra phán quyết cho đơn hàng ${booking.bookingCode}. Quyết định: ${decisionLabel}. Số tiền hoàn lại cho bạn: ${refundAmount.toLocaleString('vi-VN')}đ. Ghi chú của Admin: ${notes}`,
           type: 'SYSTEM',
           metadata: { bookingId: booking._id },
           isRead: false,
@@ -1007,13 +1103,7 @@ export class DisputesService {
             await notificationModel.create({
               userId: provider.userId,
               title: `Kết quả giải quyết tranh chấp đơn hàng #${booking.bookingCode}`,
-              content: `Admin đã đưa ra phán quyết cho đơn hàng ${booking.bookingCode}. Quyết định: ${
-                decision === 'SHOP_RIGHT'
-                  ? 'Shop đúng (Được bồi thường)'
-                  : decision === 'CUSTOMER_RIGHT'
-                    ? 'Khách hàng đúng'
-                    : 'Chia tiền cọc'
-              }. Số tiền bồi thường giải ngân cho Shop: ${compensationAmount.toLocaleString('vi-VN')}đ. Ghi chú của Admin: ${notes}`,
+              content: `Admin đã đưa ra phán quyết cho đơn hàng ${booking.bookingCode}. Quyết định: ${decisionLabel}. Số tiền bồi thường giải ngân cho Shop: ${compensationAmount.toLocaleString('vi-VN')}đ. Ghi chú của Admin: ${notes}`,
               type: 'SYSTEM',
               metadata: { bookingId: booking._id },
               isRead: false,

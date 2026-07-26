@@ -714,7 +714,7 @@ export class BookingCreationService {
           status: BookingStatus.PendingPayment,
           pricingSummary: {
             subTotal,
-            depositTotal,
+            depositTotal: productDepositTotal,
             discountAmount,
             comboDiscountTotal,
             voucherDiscountTotal,

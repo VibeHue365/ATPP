@@ -1,0 +1,19 @@
+.vh-async-state { min-height: 180px; padding: 28px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; border-radius: 14px; color: var(--color-text-secondary, #756b62); }
+.vh-async-state--page { min-height: 70vh; }
+.vh-async-state__spinner { color: var(--color-primary, #8f1d2c); animation: vh-async-spin .85s linear infinite; }
+.vh-async-state p { margin: 0; max-width: 460px; font-size: 14px; line-height: 1.55; }
+.vh-async-state h3 { margin: 0; color: var(--color-text-primary, #312b27); font-size: 18px; }
+.vh-async-state__icon { color: var(--color-gold, #b89047); }
+.vh-async-state--error { background: #fff8f7; border: 1px solid #f0d3cf; }
+.vh-async-state--error .vh-async-state__icon { color: #b42318; }
+.vh-async-state--empty { background: #fffdf9; border: 1px dashed var(--color-light-border, #ded4c6); }
+.vh-async-state__action { margin-top: 5px; border: 1px solid var(--color-primary, #8f1d2c); border-radius: 7px; padding: 8px 14px; background: #fff; color: var(--color-primary, #8f1d2c); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.vh-async-state__action:hover { background: #fff0f1; }
+.vh-async-skeleton-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; width: 100%; }
+.vh-async-skeleton-card { min-height: 330px; padding: 18px; border: 1px solid var(--color-light-border, #ded4c6); border-radius: 14px; background: #fff; display: flex; flex-direction: column; gap: 12px; }
+.vh-async-skeleton { display: block; border-radius: 7px; background: linear-gradient(90deg, #f3eee7 25%, #fbf8f3 37%, #f3eee7 63%); background-size: 400% 100%; animation: vh-async-shimmer 1.35s ease infinite; }
+.vh-async-skeleton--image { height: 210px; }
+.vh-async-skeleton--title { width: 62%; height: 19px; margin-top: 3px; }
+.vh-async-skeleton--text { width: 94%; height: 12px; }.vh-async-skeleton--text.is-short { width: 54%; }
+@keyframes vh-async-spin { to { transform: rotate(360deg); } }
+@keyframes vh-async-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }

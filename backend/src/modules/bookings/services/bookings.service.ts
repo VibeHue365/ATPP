@@ -1548,13 +1548,12 @@ export class BookingsService implements OnApplicationBootstrap {
       }
 
       const discountAmount = comboDiscountTotal + voucherDiscountTotal;
-      let depositTotal = 0;
-      for (const item of itemDetails) {
-        depositTotal += (item.depositAmount || 0) * (item.quantity || 1);
-      }
+      const productDepositTotal = itemDetails
+        .filter((i) => i.itemType === BookingItemType.Product)
+        .reduce((sum, i) => sum + (i.depositAmount || 0) * (i.quantity || 1), 0);
       const serviceFee = 0;
       const grandTotal =
-        Math.max(subTotal - discountAmount + travelFee, 0) + depositTotal;
+        Math.max(subTotal - discountAmount + travelFee, 0) + productDepositTotal;
 
       const [savedBookingDoc] = await this.bookingModel.create(
         [
@@ -1568,7 +1567,7 @@ export class BookingsService implements OnApplicationBootstrap {
             status: BookingStatus.PendingPayment,
             pricingSummary: {
               subTotal,
-              depositTotal,
+              depositTotal: productDepositTotal,
               discountAmount,
               comboDiscountTotal,
               voucherDiscountTotal,
@@ -2737,12 +2736,44 @@ export class BookingsService implements OnApplicationBootstrap {
       throw new ForbiddenException('Bạn không có quyền xác nhận đơn hàng này.');
     }
 
-    if (booking.status === BookingStatus.Completed) return booking;
+    if (booking.status === BookingStatus.Completed || (booking.status as any) === 'COMBO_PHOTOS_APPROVED') {
+      return booking;
+    }
 
     if (booking.status !== BookingStatus.AwaitingReview) {
       throw new BadRequestException(
         `Chỉ có thể xác nhận hoàn thành khi đơn đang chờ đánh giá (AWAITING_REVIEW). Trạng thái hiện tại: ${booking.status}`,
       );
+    }
+
+    // Check if there are physical rental items in this booking that are not completed yet
+    const rentalLifecycleItems = await this.bookingItemModel
+      .find({
+        bookingId: booking._id,
+        itemType: BookingItemType.Product,
+        'rentalFulfillment.status': { $exists: true },
+      })
+      .lean()
+      .exec();
+
+    const hasIncompleteRentals =
+      rentalLifecycleItems.length > 0 &&
+      rentalLifecycleItems.some(
+        (item) =>
+          item.rentalFulfillment?.status !== RentalFulfillmentStatus.Completed,
+      );
+
+    if (hasIncompleteRentals) {
+      // For combo bookings where Ao Dai rentals are still ongoing, approving photos marks photosApproved = true and advances status to COMBO_PHOTOS_APPROVED
+      (booking as any).photosApproved = true;
+      booking.status = 'COMBO_PHOTOS_APPROVED' as any;
+      booking.statusTimeline.push({
+        status: 'COMBO_PHOTOS_APPROVED' as any,
+        changedAt: new Date(),
+        note: 'Khách hàng đã xác nhận hài lòng về sản phẩm ảnh chụp. Đơn hàng tiếp tục luồng thuê áo dài.',
+      });
+      await booking.save();
+      return booking;
     }
 
     // Atomic lock: prevents double-processing if cron job runs simultaneously
@@ -2821,6 +2852,10 @@ export class BookingsService implements OnApplicationBootstrap {
         roles || [],
         note || 'Provider hủy đơn',
       );
+    }
+
+    if (newStatus === 'SESSION_START' || newStatus === 'SESSION_COMPLETE') {
+      newStatus = BookingStatus.InProgress;
     }
 
     const currentStatus = booking.status;
@@ -2926,44 +2961,7 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     if (nextStatus === BookingStatus.InProgress) {
-      let shootStartTime: Date | null = null;
-      try {
-        const scheduleModel = this.bookingModel.db.model('BookingSchedule');
-        const schedule: any = await scheduleModel.findOne({
-          bookingId: booking._id,
-          scheduleType: 'PHOTOSHOOT',
-          status: { $ne: 'CANCELLED' }
-        }).lean().exec();
-
-        if (schedule?.startsAt) {
-          shootStartTime = new Date(schedule.startsAt);
-        } else if (schedule?.scheduledDate) {
-          shootStartTime = new Date(schedule.scheduledDate);
-          if (schedule.timeSlot) {
-            const startHour = parseInt(schedule.timeSlot.split('-')[0] || '0', 10);
-            if (!isNaN(startHour)) shootStartTime.setHours(startHour, 0, 0, 0);
-          }
-        } else {
-          const photoItem = (booking as any).items?.find((i: any) => i?.shootDate || i?.itemType === 'PHOTOGRAPHY_PACKAGE');
-          if (photoItem?.shootDate) {
-            shootStartTime = new Date(photoItem.shootDate);
-            if (photoItem.shootTimeSlot) {
-              const startHour = parseInt(photoItem.shootTimeSlot.split('-')[0] || '0', 10);
-              if (!isNaN(startHour)) shootStartTime.setHours(startHour, 0, 0, 0);
-            }
-          }
-        }
-      } catch (sErr) {
-        console.warn('Lỗi kiểm tra thời gian bắt đầu chụp:', sErr);
-      }
-
-      if (shootStartTime) {
-        const now = new Date();
-        const earliestAllowedTime = new Date(shootStartTime.getTime() - 30 * 60 * 1000);
-        if (now < earliestAllowedTime) {
-          throw new BadRequestException('Chưa đến giờ hẹn chụp! Bạn chỉ có thể bấm bắt đầu buổi chụp trước giờ hẹn tối đa 30 phút.');
-        }
-      }
+      booking.status = nextStatus;
     }
 
     booking.status = nextStatus;
@@ -3162,6 +3160,48 @@ export class BookingsService implements OnApplicationBootstrap {
       );
     } catch (e) {
       console.error('Failed to create updateBookingStatus notification:', e);
+    }
+
+    // Emit real-time update to customer + provider so both sides refresh without page reload
+    try {
+      const customerIdStr = this.getCustomerIdStr(booking);
+      const providerIdStrs = (booking.providerIds || []).map((id) => id.toString());
+      const recipientIds = [...new Set([customerIdStr, ...providerIdStrs])].filter(Boolean);
+      this.notificationsService.emitBookingUpdate(
+        {
+          bookingId: booking._id.toString(),
+          bookingCode: booking.bookingCode,
+          status: nextStatus,
+          deliveredPhotos: (booking as any).deliveredPhotos ?? [],
+          handoverPhotos: booking.handoverPhotos ?? [],
+          deliveryDriveUrl: (booking as any).deliveryDriveUrl ?? null,
+        },
+        recipientIds,
+      );
+    } catch (e) {
+      console.warn('Failed to emit booking_updated WebSocket event:', e);
+    }
+
+    // Auto trigger settlement if completed / returned
+    const isComboPhotoDelivered =
+      Boolean((booking as any).photosApproved) ||
+      Boolean((booking as any).deliveredPhotos?.length > 0) ||
+      Boolean((booking as any).deliveryDriveUrl) ||
+      booking.statusTimeline?.some((t) => (t.status as string) === 'COMBO_PHOTOS_APPROVED' || t.status === BookingStatus.Completed);
+
+    const isReturnedRentalCompletion =
+      nextStatus === BookingStatus.Returned &&
+      (booking.bookingType === BookingType.AoDaiRental ||
+        (booking.bookingType === BookingType.Combo && isComboPhotoDelivered));
+    if (
+      nextStatus === BookingStatus.Completed ||
+      isReturnedRentalCompletion
+    ) {
+      try {
+        await this.paymentsService.settleBooking(bookingIdStr);
+      } catch (settleErr) {
+        console.warn('Auto settlement trigger warning:', settleErr);
+      }
     }
 
     return booking;
@@ -3578,12 +3618,16 @@ export class BookingsService implements OnApplicationBootstrap {
   async getCustomerBookings(customerId: string): Promise<any[]> {
     const bookings = await this.bookingModel
       .find({ customerId: new Types.ObjectId(customerId) })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .exec();
 
-    const populatedBookings = [];
-    for (const booking of bookings) {
-      const items = await this.bookingItemModel
-        .find({ bookingId: booking._id })
+    if (!bookings.length) return [];
+
+    const bookingIds = bookings.map((b) => b._id);
+
+    const [allItems, allSchedules] = await Promise.all([
+      this.bookingItemModel
+        .find({ bookingId: { $in: bookingIds } })
         .populate({
           path: 'productId',
           populate: { path: 'providerId' },
@@ -3591,13 +3635,33 @@ export class BookingsService implements OnApplicationBootstrap {
         .populate('photographyPackageId')
         .populate('providerId')
         .lean()
-        .exec();
-
-      const schedules = await this.bookingModel.db
+        .exec(),
+      this.bookingModel.db
         .model('BookingSchedule')
-        .find({ bookingId: booking._id })
+        .find({ bookingId: { $in: bookingIds } })
         .lean()
-        .exec();
+        .exec(),
+    ]);
+
+    const itemsByBookingMap = new Map<string, any[]>();
+    for (const item of allItems) {
+      const key = item.bookingId.toString();
+      if (!itemsByBookingMap.has(key)) itemsByBookingMap.set(key, []);
+      itemsByBookingMap.get(key)!.push(item);
+    }
+
+    const schedulesByBookingMap = new Map<string, any[]>();
+    for (const sched of allSchedules) {
+      const key = (sched as any).bookingId?.toString();
+      if (!key) continue;
+      if (!schedulesByBookingMap.has(key)) schedulesByBookingMap.set(key, []);
+      schedulesByBookingMap.get(key)!.push(sched);
+    }
+
+    return bookings.map((booking) => {
+      const bId = booking._id.toString();
+      const items = itemsByBookingMap.get(bId) || [];
+      const schedules = schedulesByBookingMap.get(bId) || [];
 
       const updatedItems = items.map((item) => {
         if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
@@ -3633,14 +3697,12 @@ export class BookingsService implements OnApplicationBootstrap {
         return item;
       });
 
-      populatedBookings.push({
+      return {
         ...booking.toObject(),
         items: updatedItems,
         schedules,
-      });
-    }
-
-    return populatedBookings;
+      };
+    });
   }
 
   async getBusySchedulesForProduct(productId: string): Promise<{

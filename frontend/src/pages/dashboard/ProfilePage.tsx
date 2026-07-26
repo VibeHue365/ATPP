@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useSocket } from '../../context/SocketContext';
 import { PrivateEvidenceImage } from '../../components/common/PrivateEvidenceImage';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
@@ -80,10 +81,17 @@ export const ProfilePage: React.FC = () => {
   const [isSubmittingLocationChange, setIsSubmittingLocationChange] = useState(false);
 
   useEffect(() => {
-    if (!activeDetailBooking?._id) return;
-    void httpClient.get<any>('/api/bookings/' + activeDetailBooking._id)
-      .then((detail) => setActiveDetailBooking(detail))
+    const bookingId = activeDetailBooking?._id;
+    if (!bookingId) return;
+    let isCancelled = false;
+    httpClient.get<any>('/api/bookings/' + bookingId)
+      .then((detail) => {
+        if (!isCancelled && detail) setActiveDetailBooking(detail);
+      })
       .catch(() => undefined);
+    return () => {
+      isCancelled = true;
+    };
   }, [activeDetailBooking?._id]);
   // Booking Cancel Confirmation state
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
@@ -246,6 +254,28 @@ export const ProfilePage: React.FC = () => {
   useEffect(() => {
     fetchBookings();
   }, []);
+
+  // Real-time: listen for booking_updated events pushed by the backend after provider actions
+  const { socket } = useSocket();
+  const fetchBookingsRef = useRef(fetchBookings);
+  useEffect(() => { fetchBookingsRef.current = fetchBookings; });
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (payload: { bookingId: string; status: string }) => {
+      console.log('[RT] booking_updated received', payload);
+      fetchBookingsRef.current(true);
+      setActiveDetailBooking((prev: any) => {
+        if (prev && prev._id === payload.bookingId) {
+          httpClient.get<any>('/api/bookings/' + payload.bookingId)
+            .then((fresh) => setActiveDetailBooking(fresh))
+            .catch(() => {});
+        }
+        return prev;
+      });
+    };
+    socket.on('booking_updated', handler);
+    return () => { socket.off('booking_updated', handler); };
+  }, [socket]);
 
   // Sync state when custom event triggers (profile updated successfully)
   useEffect(() => {
@@ -1421,10 +1451,9 @@ export const ProfilePage: React.FC = () => {
             {/* Financial Summary */}
             {(() => {
               const bType = activeDetailBooking.bookingType || 'PHOTOGRAPHY';
-              const depositTotal = activeDetailBooking.pricingSummary?.depositTotal || 0;
-              const subTotal = activeDetailBooking.pricingSummary?.subTotal || 0;
-              const discountAmount = activeDetailBooking.pricingSummary?.discountAmount || 0;
+              const depositTotal = activeDetailBooking.pricingSummary?.depositTotal ?? 0;
               const grandTotal = activeDetailBooking.pricingSummary?.grandTotal || 0;
+              const subTotal = Math.max(0, (activeDetailBooking.pricingSummary?.subTotal || grandTotal) - depositTotal);
               const isPaid = activeDetailBooking.status !== 'PENDING_PAYMENT' && activeDetailBooking.status !== 'WAITING_PAYMENT';
               const totalPaid = activeDetailBooking.paymentSummary?.totalPaid || (isPaid ? grandTotal : 0);
 
