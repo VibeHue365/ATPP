@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../services/httpClient';
@@ -366,10 +366,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     const shootYMD = photoItem?.shootDate ? new Date(photoItem.shootDate).toLocaleDateString('sv-SE') : '';
     const timeStr = photoItem?.shootTimeSlot || '09:00 - 11:00';
     
-    // Lấy giờ kết thúc ca chụp (ví dụ "08:00 - 09:00" -> "09:00")
+    // Lấy giờ bắt đầu & giờ kết thúc ca chụp (ví dụ "11:00 - 12:00" -> start: "11:00", end: "12:00")
+    let startTimeStr = '08:00';
     let endTimeStr = '23:59';
     if (timeStr.includes('-')) {
       const parts = timeStr.split('-');
+      if (parts.length >= 1) startTimeStr = parts[0].trim();
       if (parts.length >= 2) endTimeStr = parts[1].trim();
     }
 
@@ -379,6 +381,24 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
     // Đơn CHỈ BỊ COI LÀ QUÁ GIỜ/QUÁ HẠN khi Thợ ảnh CHƯA bấm "Bắt đầu buổi chụp" (trạng thái vẫn là DEPOSIT_PAID/CONFIRMED)
     const isOverdue = !isPast && isPendingStartStatus && (isPastDate || isPastTimeToday);
+
+    // Nút Báo thợ ảnh không đến / Khiếu nại CHỈ hiển thị khi:
+    // 1. Trạng thái đã/đang diễn ra (IN_PROGRESS, AWAITING_REVIEW, COMBO_PHOTOS_APPROVED, isOverdue)
+    // 2. Hoặc trạng thái CONFIRMED/DEPOSIT_PAID nhưng đã QUÁ 15 PHÚT tính từ giờ BẮT ĐẦU chụp của đơn hàng
+    let canReportDispute = false;
+    if (['IN_PROGRESS', 'AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED'].includes(b.status) || isOverdue) {
+      canReportDispute = true;
+    } else if (['CONFIRMED', 'DEPOSIT_PAID'].includes(b.status)) {
+      if (isPastDate) {
+        canReportDispute = true;
+      } else if (shootYMD && shootYMD === nowYMD) {
+        const [sh, sm] = startTimeStr.split(':').map(Number);
+        const startMinutes = (sh || 0) * 60 + (sm || 0);
+        const disputeEligibleMinutes = startMinutes + 15; // Quá 15 phút sau giờ bắt đầu
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        canReportDispute = currentMinutes >= disputeEligibleMinutes;
+      }
+    }
 
     let statusLabel = 'Sắp tới';
     if (b.status === 'DEPOSIT_PAID') statusLabel = 'Chờ xác nhận';
@@ -400,12 +420,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       rawStatus: b.status,
       isOverdue,
       isPastTimeToday,
+      canReportDispute,
       shootYMD,
       endTimeStr,
       awaitingReviewSince: b.awaitingReviewSince,
       statusType: isPast ? 'PAST' : isOverdue ? 'OVERDUE' : (b.status === 'AWAITING_REVIEW' || b.status === 'IN_PROGRESS') ? 'ACTION' : 'UPCOMING',
       dateStr: photoItem?.shootDate ? formatDate(photoItem.shootDate) : '',
       title: photoItem?.photographyPackageId?.name || photoItem?.name || 'Gói Chụp Ảnh Cổ Phong',
+      photographerName: photoItem?.providerId?.brandName || photoItem?.providerId?.profile?.fullName || photoItem?.providerId?.name || b.providerId?.brandName || b.providerId?.profile?.fullName || b.providerId?.name || 'Thợ ảnh VibeHue',
       shootLocation: photoItem?.shootLocation || photoItem?.location || b.shootLocation || (
         photoItem?.providerId?.address
           ? `${photoItem.providerId.address.addressLine || ''}, ${photoItem.providerId.address.district || ''}, ${photoItem.providerId.address.city || ''}`.replace(/^,\s*/, '')
@@ -1035,8 +1057,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       </div>
                     )}
 
-                    {/* Customer Report / Dispute button during CONFIRMED, IN_PROGRESS, AWAITING_REVIEW or OVERDUE */}
-                    {(app.rawStatus === 'CONFIRMED' || app.rawStatus === 'IN_PROGRESS' || app.rawStatus === 'AWAITING_REVIEW' || app.isOverdue) && app.rawStatus !== 'DISPUTED' && app.rawStatus !== 'COMPLETED' && app.rawStatus !== 'CANCELLED' && (
+                    {/* Customer Report / Dispute button during CONFIRMED (>= 15m after shoot start), IN_PROGRESS, AWAITING_REVIEW or OVERDUE */}
+                    {app.canReportDispute && app.rawStatus !== 'DISPUTED' && app.rawStatus !== 'COMPLETED' && app.rawStatus !== 'CANCELLED' && (
                       <div style={{ marginTop: '12px' }}>
                         <button
                           onClick={() => handleDisputeBooking(app.id)}

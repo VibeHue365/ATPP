@@ -17,7 +17,6 @@ import {
   Star,
   Pencil,
   AlertTriangle,
-  Loader2,
   Download,
   XCircle,
   Scale
@@ -222,14 +221,14 @@ export const ProfilePage: React.FC = () => {
     if (!silent) setIsLoadingBookings(true);
     try {
       const data = await httpClient.get<any[]>('/api/bookings');
-      
+
       setBookings(prevBookings => {
         const isBookingsChanged = (prev: any[], next: any[]) => {
           if (prev.length !== next.length) return true;
           for (let i = 0; i < prev.length; i++) {
             if (prev[i]._id !== next[i]._id) return true;
             if (prev[i].status !== next[i].status) return true;
-            
+
             const prevItems = prev[i].items || [];
             const nextItems = next[i].items || [];
             if (prevItems.length !== nextItems.length) return true;
@@ -240,7 +239,7 @@ export const ProfilePage: React.FC = () => {
           }
           return false;
         };
-        
+
         const changed = isBookingsChanged(prevBookings, data || []);
         return changed ? (data || []) : prevBookings;
       });
@@ -268,7 +267,7 @@ export const ProfilePage: React.FC = () => {
         if (prev && prev._id === payload.bookingId) {
           httpClient.get<any>('/api/bookings/' + payload.bookingId)
             .then((fresh) => setActiveDetailBooking(fresh))
-            .catch(() => {});
+            .catch(() => { });
         }
         return prev;
       });
@@ -1452,12 +1451,18 @@ export const ProfilePage: React.FC = () => {
             {(() => {
               const bType = activeDetailBooking.bookingType || 'PHOTOGRAPHY';
               const depositTotal = activeDetailBooking.pricingSummary?.depositTotal ?? 0;
-              const grandTotal = activeDetailBooking.pricingSummary?.grandTotal || 0;
-              const subTotal = Math.max(0, (activeDetailBooking.pricingSummary?.subTotal || grandTotal) - depositTotal);
+              const grandTotalRaw = activeDetailBooking.pricingSummary?.grandTotal || 0;
+              const subTotalRaw = activeDetailBooking.pricingSummary?.subTotal || grandTotalRaw;
+              const discountAmount = activeDetailBooking.pricingSummary?.discountAmount ?? 0;
               const isPaid = activeDetailBooking.status !== 'PENDING_PAYMENT' && activeDetailBooking.status !== 'WAITING_PAYMENT';
+
+              const subTotal = Math.max(0, subTotalRaw - depositTotal);
+              const grandTotal = bType === 'PHOTOGRAPHY'
+                ? grandTotalRaw
+                : (subTotal + depositTotal - discountAmount);
               const totalPaid = activeDetailBooking.paymentSummary?.totalPaid || (isPaid ? grandTotal : 0);
 
-              const photoBasePrice = grandTotal || subTotal;
+              const photoBasePrice = grandTotalRaw || subTotal;
               const photoDeposit = Math.round(photoBasePrice * 0.3);
 
               return (
@@ -1563,31 +1568,31 @@ export const ProfilePage: React.FC = () => {
               )}
 
               {/* Only show Cancel button if status is cancellable */}
-              {activeDetailBooking.status !== 'CANCELLED' && 
-               activeDetailBooking.status !== 'COMPLETED' && 
-               activeDetailBooking.status !== 'RETURNED' && 
-               activeDetailBooking.status !== 'PICKED_UP' && 
-               activeDetailBooking.status !== 'RETURN_PENDING' && 
-               activeDetailBooking.status !== 'DISPUTED' && 
-               activeDetailBooking.status !== 'AWAITING_REVIEW' && 
-               activeDetailBooking.status !== 'IN_PROGRESS' && 
-               !bookingIncident && (
-                <button 
-                  className="vh-btn" 
-                  style={{ 
-                    padding: '8px 24px', 
-                    borderRadius: '8px', 
-                    fontSize: '13px', 
-                    backgroundColor: '#C0392B', 
-                    color: 'white', 
-                    border: 'none', 
-                    cursor: 'pointer' 
-                  }} 
-                  onClick={() => handleCancelClick(activeDetailBooking)}
-                >
-                  {activeDetailBooking.bookingType === 'PHOTOGRAPHY' ? 'Hủy lịch chụp' : 'Hủy đơn / Trả hàng'}
-                </button>
-              )}
+              {activeDetailBooking.status !== 'CANCELLED' &&
+                activeDetailBooking.status !== 'COMPLETED' &&
+                activeDetailBooking.status !== 'RETURNED' &&
+                activeDetailBooking.status !== 'PICKED_UP' &&
+                activeDetailBooking.status !== 'RETURN_PENDING' &&
+                activeDetailBooking.status !== 'DISPUTED' &&
+                activeDetailBooking.status !== 'AWAITING_REVIEW' &&
+                activeDetailBooking.status !== 'IN_PROGRESS' &&
+                !bookingIncident && (
+                  <button
+                    className="vh-btn"
+                    style={{
+                      padding: '8px 24px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      backgroundColor: '#C0392B',
+                      color: 'white',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => handleCancelClick(activeDetailBooking)}
+                  >
+                    {activeDetailBooking.bookingType === 'PHOTOGRAPHY' ? 'Hủy lịch chụp' : 'Hủy đơn / Trả hàng'}
+                  </button>
+                )}
 
               {activeDetailBooking.status === 'PENDING_PAYMENT' && (
                 <button
@@ -1629,7 +1634,7 @@ export const ProfilePage: React.FC = () => {
           maxWidth="600px"
         >
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
-            
+
             {/* Thẻ Thông tin Lịch Hiện Tại */}
             <div style={{ backgroundColor: '#FDF8F5', border: '1px solid #F3E4D8', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
@@ -1759,7 +1764,7 @@ export const ProfilePage: React.FC = () => {
                 {/* Bộ Chọn Khung Giờ Mới dạng Grid Phân Ca Sáng / Ca Chiều */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>CHỌN KHUNG GIỜ MỚI</label>
-                  
+
                   {!rescheduleShootDate ? (
                     <p style={{ fontSize: '12.5px', color: '#888', fontStyle: 'italic', margin: 0 }}>Vui lòng chọn Ngày chụp mới ở trên trước.</p>
                   ) : isLoadingRescheduleSlots ? (

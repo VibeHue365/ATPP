@@ -26,7 +26,7 @@ export class RentalDepositRefundCoordinatorService {
     const booking = await this.bookingModel.findById(bookingId).lean().exec();
     if (!booking) return { status: 'PENDING' as const };
     const existing = booking.rentalDepositRefund;
-    if (existing?.status === 'REFUNDED') return existing;
+    if (existing?.status === 'REFUNDED' || existing?.status === 'NO_REFUND') return existing;
 
     if (booking.bookingType === 'PHOTOGRAPHY' && booking.status !== 'CANCELLED' && booking.status !== 'DISPUTED') {
       await this.bookingModel.updateOne(

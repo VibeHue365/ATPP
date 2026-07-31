@@ -574,6 +574,25 @@ export class DisputesService {
       incident.status = IncidentStatus.Accepted;
       await incident.save();
 
+      (booking as any).rentalDepositRefund = {
+        status: remainingRefund > 0 ? 'REFUNDED' : 'NO_REFUND',
+        amount: remainingRefund > 0 ? remainingRefund : 0,
+        completedAt: new Date(),
+        refundRequestId: refundResult?._id || null,
+      };
+
+      await this.bookingItemModel.updateMany(
+        { bookingId: booking._id },
+        {
+          $set: {
+            'rentalFulfillment.depositSettlementStatus':
+              remainingRefund > 0 ? 'PARTIALLY_DEDUCTED' : 'FULLY_DEDUCTED',
+            'rentalFulfillment.depositDeductedAmount': incident.requestedAmount,
+            'rentalFulfillment.depositRefundAmount': remainingRefund > 0 ? remainingRefund : 0,
+          },
+        },
+      );
+
       booking.status = BookingStatus.Completed;
       booking.statusTimeline.push({
         status: BookingStatus.Completed,

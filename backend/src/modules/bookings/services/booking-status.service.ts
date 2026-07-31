@@ -745,9 +745,19 @@ export class BookingStatusService {
         // Photography only: customer confirms or 48h auto-complete
         [BookingStatus.AwaitingReview]: [
           BookingStatus.Completed,
+          BookingStatus.ComboPhotosApproved,
           BookingStatus.Disputed,
           BookingStatus.Returned,
           BookingStatus.ReturnPending,
+        ],
+        [BookingStatus.ComboPhotosApproved]: [
+          BookingStatus.PickupPending,
+          BookingStatus.PickedUp,
+          BookingStatus.ReturnPending,
+          BookingStatus.Returned,
+          BookingStatus.Completed,
+          BookingStatus.Disputed,
+          BookingStatus.Cancelled,
         ],
         [BookingStatus.Disputed]: [
           BookingStatus.Completed,

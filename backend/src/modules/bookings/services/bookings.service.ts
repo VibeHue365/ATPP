@@ -2736,7 +2736,7 @@ export class BookingsService implements OnApplicationBootstrap {
       throw new ForbiddenException('Bạn không có quyền xác nhận đơn hàng này.');
     }
 
-    if (booking.status === BookingStatus.Completed || (booking.status as any) === 'COMBO_PHOTOS_APPROVED') {
+    if (booking.status === BookingStatus.Completed || booking.status === BookingStatus.ComboPhotosApproved) {
       return booking;
     }
 
@@ -2766,9 +2766,9 @@ export class BookingsService implements OnApplicationBootstrap {
     if (hasIncompleteRentals) {
       // For combo bookings where Ao Dai rentals are still ongoing, approving photos marks photosApproved = true and advances status to COMBO_PHOTOS_APPROVED
       (booking as any).photosApproved = true;
-      booking.status = 'COMBO_PHOTOS_APPROVED' as any;
+      booking.status = BookingStatus.ComboPhotosApproved;
       booking.statusTimeline.push({
-        status: 'COMBO_PHOTOS_APPROVED' as any,
+        status: BookingStatus.ComboPhotosApproved,
         changedAt: new Date(),
         note: 'Khách hàng đã xác nhận hài lòng về sản phẩm ảnh chụp. Đơn hàng tiếp tục luồng thuê áo dài.',
       });
@@ -2936,11 +2936,21 @@ export class BookingsService implements OnApplicationBootstrap {
       ],
       [BookingStatus.AwaitingReview]: [
         BookingStatus.Completed,
+        BookingStatus.ComboPhotosApproved,
         BookingStatus.Disputed,
         BookingStatus.Returned,
         BookingStatus.ReturnPending,
         BookingStatus.InProgress,
         BookingStatus.PickedUp,
+      ],
+      [BookingStatus.ComboPhotosApproved]: [
+        BookingStatus.PickupPending,
+        BookingStatus.PickedUp,
+        BookingStatus.ReturnPending,
+        BookingStatus.Returned,
+        BookingStatus.Completed,
+        BookingStatus.Disputed,
+        BookingStatus.Cancelled,
       ],
       [BookingStatus.Disputed]: [
         BookingStatus.Completed,
@@ -3187,7 +3197,7 @@ export class BookingsService implements OnApplicationBootstrap {
       Boolean((booking as any).photosApproved) ||
       Boolean((booking as any).deliveredPhotos?.length > 0) ||
       Boolean((booking as any).deliveryDriveUrl) ||
-      booking.statusTimeline?.some((t) => (t.status as string) === 'COMBO_PHOTOS_APPROVED' || t.status === BookingStatus.Completed);
+      booking.statusTimeline?.some((t) => t.status === BookingStatus.ComboPhotosApproved || t.status === BookingStatus.Completed);
 
     const isReturnedRentalCompletion =
       nextStatus === BookingStatus.Returned &&

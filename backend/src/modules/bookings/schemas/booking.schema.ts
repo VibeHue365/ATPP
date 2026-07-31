@@ -22,6 +22,8 @@ export enum BookingStatus {
   InProgress = 'IN_PROGRESS',
   /** Photography only: shoot done, waiting for customer confirmation (48h window) */
   AwaitingReview = 'AWAITING_REVIEW',
+  /** Combo only: photos approved by customer while rental lifecycle is still ongoing */
+  ComboPhotosApproved = 'COMBO_PHOTOS_APPROVED',
   Completed = 'COMPLETED',
   Cancelled = 'CANCELLED',
   Disputed = 'DISPUTED',

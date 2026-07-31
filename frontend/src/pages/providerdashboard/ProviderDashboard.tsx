@@ -40,7 +40,7 @@ interface Order {
   photosApproved?: boolean;
   customerId?: any;
   items?: any[];
-  schedules?: Array<{ status?: string; [key: string]: any }>;
+  schedules?: Array<{ status?: string;[key: string]: any }>;
   depositTotal?: number;
   startDate?: string;
   rawStatus?: string;
@@ -63,11 +63,11 @@ const getPhotoScheduleStartsAt = (schedule?: Record<string, any>): Date | null =
   const scheduledDate = schedule?.providerLocalDate
     || (schedule?.scheduledDate
       ? new Intl.DateTimeFormat('en-CA', {
-          timeZone: 'Asia/Ho_Chi_Minh',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        }).format(new Date(schedule.scheduledDate))
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date(schedule.scheduledDate))
       : null);
   const startTime = String(schedule?.timeSlot || '').match(/^(\d{1,2}):(\d{2})/);
   if (!scheduledDate || !startTime) return null;
@@ -1362,7 +1362,42 @@ export const ProviderDashboard: React.FC = () => {
         const custName = cust?.profile?.fullName || cust?.email?.split('@')[0] || 'Khách hàng';
         const custEmail = cust?.email || '';
         const initials = custName.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
-        const productName = (b.items || []).map((item: any) => item?.name || item?.productId?.name || item?.photographyPackageId?.name).filter(Boolean).join(' + ') || 'Sản phẩm thuê';
+
+        const items = b.items || [];
+        let productName = 'Sản phẩm thuê';
+        if (items.length > 0) {
+          const isCombo = b.bookingType === 'COMBO' || (items.some((i: any) => i.itemType === 'PRODUCT' || i.productId) && items.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId));
+
+          if (isCombo) {
+            const explicitComboName = b.comboName || b.comboTitle || b.comboPromotionName || b.comboPromotionId?.name || b.comboId?.name ||
+              items.find((i: any) => i.comboName || i.comboPromotionId?.name)?.comboName ||
+              items.find((i: any) => i.comboPromotionId?.name)?.comboPromotionId?.name;
+
+            const photoItem = items.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId);
+            const photoName = photoItem?.name || photoItem?.photographyPackageId?.name || photoItem?.productName || b.productName || 'Gói Chụp Ảnh Combo';
+
+            const rawComboName = explicitComboName || photoName;
+            if (rawComboName.toLowerCase().includes('combo')) {
+              productName = rawComboName;
+            } else {
+              productName = `Combo: ${rawComboName}`;
+            }
+          } else {
+            const uniqueNames: string[] = [];
+            items.forEach((i: any) => {
+              const n = i?.name || i?.productId?.name || i?.photographyPackageId?.name;
+              if (n && !uniqueNames.includes(n)) uniqueNames.push(n);
+            });
+            if (uniqueNames.length === 1) {
+              const totalQty = items.reduce((sum: number, i: any) => sum + (i.quantity || 1), 0);
+              productName = totalQty > 1 ? `${uniqueNames[0]} (x${totalQty})` : uniqueNames[0];
+            } else if (uniqueNames.length > 1) {
+              productName = `${uniqueNames[0]} + ${uniqueNames.length - 1} sản phẩm khác`;
+            } else {
+              productName = (items.map((i: any) => i?.name || i?.productId?.name || i?.photographyPackageId?.name).filter(Boolean).join(' + ')) || 'Sản phẩm thuê';
+            }
+          }
+        }
         const dateStr = b.createdAt
           ? new Date(b.createdAt).toLocaleString('vi-VN', {
             day: '2-digit',
@@ -3036,7 +3071,7 @@ export const ProviderDashboard: React.FC = () => {
               <span style={{ fontSize: '12px', color: '#166534', marginTop: '6px', display: 'block', fontWeight: 600 }}>↑ Tăng trưởng tốt trong mùa lễ</span>
             </div>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Phí hoa hồng hệ thống (15%)</span>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Phí hoa hồng hệ thống</span>
               <div style={{ fontSize: '28px', fontWeight: 800, color: '#B89047', marginTop: '8px' }}>{(analyticsData.commissionFee ?? 0).toLocaleString('vi-VN')} VND</div>
               <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '6px', display: 'block' }}>Thu phí tự động hàng tuần</span>
             </div>
@@ -3961,9 +3996,9 @@ export const ProviderDashboard: React.FC = () => {
                                 : null;
                               const photoCanStartAt = nextPhotoStartsAt && photoDayStartsAt
                                 ? new Date(Math.max(
-                                    photoDayStartsAt.getTime(),
-                                    nextPhotoStartsAt.getTime() - PHOTO_START_EARLY_MINUTES * 60 * 1000,
-                                  ))
+                                  photoDayStartsAt.getTime(),
+                                  nextPhotoStartsAt.getTime() - PHOTO_START_EARLY_MINUTES * 60 * 1000,
+                                ))
                                 : null;
                               const isPhotoStartLocked = Boolean(photoCanStartAt && Date.now() < photoCanStartAt.getTime());
                               const photoStartAction: OrderAction = nextPhotoSchedule
@@ -3976,14 +4011,14 @@ export const ProviderDashboard: React.FC = () => {
                               const hasUnconfirmedPhotoSchedule = photoSchedules.some((schedule) => ['HELD', 'SCHEDULED'].includes(String(schedule.status)));
                               const photoSessionSteps: OrderAction[] = activePhotoSchedule
                                 ? [
-                                    { label: 'Hoàn tất buổi chụp đang diễn ra', apiStatus: 'SESSION_COMPLETE', icon: <CheckCircle size={14} />, color: '#2e7d32' },
-                                    { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
-                                  ]
+                                  { label: 'Hoàn tất buổi chụp đang diễn ra', apiStatus: 'SESSION_COMPLETE', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                  { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                ]
                                 : hasUnconfirmedPhotoSchedule
                                   ? [{ label: 'Lịch chụp chưa được xác nhận', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }]
                                   : [
-                                      { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
-                                    ];
+                                    { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                  ];
                               const nextStepsMap: Record<string, OrderAction[]> = isComboOrder
                                 ? {
                                   PENDING_PAYMENT: [
@@ -4030,54 +4065,54 @@ export const ProviderDashboard: React.FC = () => {
                                   ],
                                 }
                                 : isPhotoOrder
-                                ? {
-                                  PENDING_PAYMENT: [
-                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                  ],
-                                  DEPOSIT_PAID: [
-                                    { label: 'Chấp nhận lịch chụp', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
-                                    { label: 'Từ chối lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                  ],
-                                  CONFIRMED: [
-                                    photoStartAction,
-                                    { label: 'Hủy toàn bộ booking', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                  ],
-                                  IN_PROGRESS: [
-                                    ...photoSessionSteps,
-                                  ],
-                                  AWAITING_REVIEW: [
-                                    { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                  ],
-                                }
-                                : {
-                                  PENDING_PAYMENT: [
-                                    { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
-                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                  ],
-                                  DEPOSIT_PAID: [
-                                    { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
-                                    { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
-                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                  ],
-                                  CONFIRMED: [
-                                    { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
-                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                  ],
-                                  PICKUP_PENDING: [
-                                    { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
-                                  ],
-                                  PICKED_UP: [
-                                    { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
-                                  ],
-                                  RETURN_PENDING: [
-                                    { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
-                                  ],
-                                  RETURNED: [
-                                    { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
-                                  ],
-                                };
+                                  ? {
+                                    PENDING_PAYMENT: [
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    DEPOSIT_PAID: [
+                                      { label: 'Chấp nhận lịch chụp', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                      { label: 'Từ chối lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    CONFIRMED: [
+                                      photoStartAction,
+                                      { label: 'Hủy toàn bộ booking', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    IN_PROGRESS: [
+                                      ...photoSessionSteps,
+                                    ],
+                                    AWAITING_REVIEW: [
+                                      { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                    ],
+                                  }
+                                  : {
+                                    PENDING_PAYMENT: [
+                                      { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    DEPOSIT_PAID: [
+                                      { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                      { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    CONFIRMED: [
+                                      { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    PICKUP_PENDING: [
+                                      { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    PICKED_UP: [
+                                      { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                      { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                    ],
+                                    RETURN_PENDING: [
+                                      { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                    ],
+                                    RETURNED: [
+                                      { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                    ],
+                                  };
                               const rawStatus = (o.rawStatus || '') as string;
                               const steps: OrderAction[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
                               const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);

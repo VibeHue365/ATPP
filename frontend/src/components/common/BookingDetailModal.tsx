@@ -19,14 +19,18 @@ interface BookingDetailModalProps {
   onWriteReview?: (itemDetails: { bookingId: string, itemId: string, productId?: string, photographyPackageId?: string }) => void;
 }
 
-function getPhotoshootStartTarget(rawShootDate?: any, timeSlotStr?: string): Date | null {
+function getPhotoshootStartTarget(rawShootDate?: any, timeSlotStr?: string, startsAtRaw?: any): Date | null {
+  if (startsAtRaw) {
+    const s = new Date(startsAtRaw);
+    if (!isNaN(s.getTime())) return s;
+  }
   if (!rawShootDate) return null;
   const d = new Date(rawShootDate);
   if (isNaN(d.getTime())) return null;
 
   let hours = 8;
   let minutes = 0;
-  if (timeSlotStr) {
+  if (timeSlotStr && timeSlotStr !== 'Thỏa thuận') {
     const startTimePart = timeSlotStr.split('-')[0]?.trim();
     if (startTimePart) {
       const match = startTimePart.match(/(\d{1,2}):(\d{2})/);
@@ -103,8 +107,8 @@ function getCountdownDisplay(targetDate: Date | null, bookingStatus?: string, cu
       borderColor: '#F87171',
       textColor: '#991B1B',
       icon: '⏰',
-      badgeColor: '#DC2626',
-      isUrgent: true,
+      badgeColor: '#EF4444',
+      isUrgent: false,
       isOverdue: true
     };
   }
@@ -467,7 +471,23 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               const matchedSchedule = booking.schedules?.find((s: any) => s.scheduleType === 'PHOTOSHOOT' || s.scheduleType === 'RENTAL_PERIOD');
               const rawShootDate = photoItem.shootDate || matchedSchedule?.scheduledDate || matchedSchedule?.startsAt || booking.shootDate;
               const shootDateStr = rawShootDate ? new Date(rawShootDate).toLocaleDateString('vi-VN') : (booking.createdAt ? new Date(booking.createdAt).toLocaleDateString('vi-VN') : '');
-              const timeSlotStr = photoItem.shootTimeSlot || photoItem.timeSlot || matchedSchedule?.timeSlot || booking.shootTimeSlot || '';
+              const rawTimeSlot = photoItem.shootTimeSlot || photoItem.timeSlot || matchedSchedule?.timeSlot || booking.shootTimeSlot || booking.timeSlot || '';
+              const derivedTimeSlot = (!rawTimeSlot && matchedSchedule?.startsAt && matchedSchedule?.endsAt)
+                ? `${new Date(matchedSchedule.startsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - ${new Date(matchedSchedule.endsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
+                : rawTimeSlot;
+              const timeSlotStr = derivedTimeSlot || '';
+
+              let startTimeOnly = '';
+              if (timeSlotStr && timeSlotStr !== 'Thỏa thuận') {
+                const match = timeSlotStr.split('-')[0]?.trim().match(/(\d{1,2}):(\d{2})/);
+                if (match) {
+                  startTimeOnly = `${match[1].padStart(2, '0')}:${match[2]}`;
+                }
+              }
+              if (!startTimeOnly && matchedSchedule?.startsAt) {
+                startTimeOnly = new Date(matchedSchedule.startsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+              }
+
               const durationStr = photoItem.durationHours ? `${photoItem.durationHours} giờ` : (photoItem.photographyPackageSnapshot?.includedDurationMinutes ? `${photoItem.photographyPackageSnapshot.includedDurationMinutes / 60} giờ` : (photoItem.photographyPackageId?.includedDurationMinutes ? `${photoItem.photographyPackageId.includedDurationMinutes / 60} giờ` : (booking.durationHours ? `${booking.durationHours} giờ` : '')));
               const locationStr = photoItem.shootLocation || photoItem.shootLocationSnapshot?.address || photoItem.location || photoItem.address || matchedSchedule?.locationAddress || booking.shootLocation || booking.location || booking.address || booking.deliveryAddress || booking.shippingAddress || '';
               const conceptTheme = photoItem.shootConcept || photoItem.concept || booking.shootConcept || '';
@@ -476,7 +496,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               const refImageArray = Array.isArray(photoItem.referenceImages) ? photoItem.referenceImages : (refImage ? [refImage] : []);
               const rescheduleReq = photoItem.rescheduleRequest || booking.rescheduleRequest;
 
-              const targetDate = getPhotoshootStartTarget(rawShootDate, timeSlotStr);
+              const targetDate = getPhotoshootStartTarget(rawShootDate, timeSlotStr, matchedSchedule?.startsAt || photoItem.startsAt);
               const countdown = getCountdownDisplay(targetDate, booking.status, now);
 
               return (
@@ -532,7 +552,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                         fontWeight: 800,
                         whiteSpace: 'nowrap'
                       }}>
-                        {countdown.isUrgent ? 'CẤP BÁCH' : countdown.isOverdue ? 'ĐÃ ĐẾN GIỜ' : 'ĐẾM NGƯỢC'}
+                        {countdown.isOverdue ? 'ĐÃ ĐẾN GIỜ' : countdown.isUrgent ? 'CẤP BÁCH' : 'ĐẾM NGƯỢC'}
                       </span>
                     </div>
                   )}
@@ -553,7 +573,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                       <div>
                         <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#1D4ED8', textTransform: 'uppercase' }}>KHUNG GIỜ & THỜI LƯỢNG</div>
                         <div style={{ fontWeight: 800, color: '#1E3A8A', fontSize: '13.5px' }}>
-                          {timeSlotStr ? timeSlotStr.replace('-', ' - ') : 'Thỏa thuận'} {durationStr ? `(${durationStr})` : ''}
+                          {timeSlotStr ? timeSlotStr.replace('-', ' - ') : 'Thỏa thuận'} {startTimeOnly && !timeSlotStr.includes(startTimeOnly) ? `(Bắt đầu: ${startTimeOnly})` : ''} {durationStr ? `• ${durationStr}` : ''}
                         </div>
                       </div>
                     </div>
@@ -1107,6 +1127,14 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                         ? (item.productId?.name || 'Sản phẩm áo dài')
                         : (item.photographyPackageId?.name || 'Gói chụp ảnh');
 
+                      const matchedItemSchedule = booking.schedules?.find((s: any) => s.scheduleType === 'PHOTOSHOOT' || s.scheduleType === 'RENTAL_PERIOD');
+                      const rawItemSlot = item.shootTimeSlot || item.timeSlot || matchedItemSchedule?.timeSlot || booking.shootTimeSlot || booking.timeSlot || '';
+                      const itemSlot = (!rawItemSlot && matchedItemSchedule?.startsAt && matchedItemSchedule?.endsAt)
+                        ? `${new Date(matchedItemSchedule.startsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - ${new Date(matchedItemSchedule.endsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
+                        : rawItemSlot;
+
+                      const itemShootDate = item.shootDate || matchedItemSchedule?.scheduledDate || matchedItemSchedule?.startsAt || booking.shootDate;
+
                       return (
                         <tr key={item._id} style={{ borderBottom: '1px solid #F3F4F6' }}>
                           <td style={{ padding: '10px 12px' }}>
@@ -1117,7 +1145,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                             <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
                               {isProduct
                                 ? `Thời gian thuê: ${formatDate(item.rentalFrom)} - ${formatDate(item.rentalTo)}`
-                                : `Ngày chụp: ${formatDate(item.shootDate)}`
+                                : `Ngày chụp: ${formatDate(itemShootDate)} ${itemSlot ? `(Khung giờ: ${itemSlot})` : ''}`
                               }
                             </div>
                           </td>
@@ -1125,7 +1153,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                             {isProduct ? (
                               <span>Size {item.selectedSize || '—'} • Màu {item.selectedColor || '—'}</span>
                             ) : (
-                              <span>Khung giờ: {item.shootTimeSlot || '—'}</span>
+                              <span style={{ fontWeight: 600, color: '#1E40AF' }}>
+                                Khung giờ: {itemSlot || 'Thỏa thuận'}
+                              </span>
                             )}
                           </td>
                           <td style={{ padding: '10px 12px', textAlign: 'right' }}>
@@ -1258,12 +1288,15 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             {(() => {
               const bType = booking.bookingType || 'PHOTOGRAPHY';
               const depositTotal = booking.pricingSummary?.depositTotal ?? 0;
-              const grandTotal = booking.pricingSummary?.grandTotal || booking.paymentSummary?.totalPaid || 0;
-              const subTotal = Math.max(0, (booking.pricingSummary?.subTotal || grandTotal) - depositTotal);
-              const photoBasePrice = grandTotal || subTotal;
-              const photoDeposit = Math.round(photoBasePrice * 0.3);
+              const grandTotalRaw = booking.pricingSummary?.grandTotal || booking.paymentSummary?.totalPaid || 0;
+              const subTotalRaw = booking.pricingSummary?.subTotal || grandTotalRaw;
+              const discountAmount = booking.pricingSummary?.discountAmount ?? 0;
+
+              const subTotal = Math.max(0, subTotalRaw - depositTotal);
 
               if (bType === 'PHOTOGRAPHY') {
+                const photoBasePrice = grandTotalRaw || subTotal;
+                const photoDeposit = Math.round(photoBasePrice * 0.3);
                 return (
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1290,6 +1323,12 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                       <span style={{ fontWeight: 600, color: '#D97706' }}>{formatCurrency(depositTotal)}</span>
                     </div>
                   )}
+                  {discountAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#27AE60' }}>
+                      <span style={{ color: '#27AE60' }}>Giảm giá:</span>
+                      <span style={{ fontWeight: 600, color: '#27AE60' }}>-{formatCurrency(discountAmount)}</span>
+                    </div>
+                  )}
                 </>
               );
             })()}
@@ -1302,11 +1341,23 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             <div style={{ borderTop: '1px dashed #D1D5DB', margin: '6px 0' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 800 }}>
               <span style={{ color: '#4A0E17' }}>TỔNG CỘNG HÓA ĐƠN:</span>
-              <span style={{ color: '#4A0E17' }}>{formatCurrency(booking.pricingSummary?.grandTotal)}</span>
+              <span style={{ color: '#4A0E17' }}>
+                {formatCurrency(
+                  (booking.bookingType || 'PHOTOGRAPHY') === 'PHOTOGRAPHY'
+                    ? (booking.pricingSummary?.grandTotal || booking.paymentSummary?.totalPaid)
+                    : (Math.max(0, (booking.pricingSummary?.subTotal || booking.pricingSummary?.grandTotal || 0) - (booking.pricingSummary?.depositTotal ?? 0)) + (booking.pricingSummary?.depositTotal ?? 0) + (booking.pricingSummary?.serviceFee ?? 0) - (booking.pricingSummary?.discountAmount ?? 0))
+                )}
+              </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '4px' }}>
               <span style={{ color: '#047857', fontWeight: 700 }}>Số tiền đã thanh toán:</span>
-              <span style={{ color: '#047857', fontWeight: 800 }}>{formatCurrency(booking.paymentSummary?.totalPaid)}</span>
+              <span style={{ color: '#047857', fontWeight: 800 }}>
+                {formatCurrency(
+                  (booking.bookingType || 'PHOTOGRAPHY') === 'PHOTOGRAPHY'
+                    ? (booking.paymentSummary?.totalPaid || booking.pricingSummary?.grandTotal)
+                    : (Math.max(0, (booking.pricingSummary?.subTotal || booking.pricingSummary?.grandTotal || 0) - (booking.pricingSummary?.depositTotal ?? 0)) + (booking.pricingSummary?.depositTotal ?? 0) + (booking.pricingSummary?.serviceFee ?? 0) - (booking.pricingSummary?.discountAmount ?? 0))
+                )}
+              </span>
             </div>
           </div>
 

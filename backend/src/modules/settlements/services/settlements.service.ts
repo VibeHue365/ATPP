@@ -464,7 +464,7 @@ export class SettlementsService {
       Boolean((booking as any).photosApproved) ||
       Boolean((booking as any).deliveredPhotos?.length > 0) ||
       Boolean((booking as any).deliveryDriveUrl) ||
-      booking.statusTimeline?.some((t) => (t.status as string) === 'COMBO_PHOTOS_APPROVED' || t.status === BookingStatus.Completed);
+      booking.statusTimeline?.some((t) => t.status === BookingStatus.ComboPhotosApproved || t.status === BookingStatus.Completed);
     return (booking.bookingType as string) === 'COMBO' && isComboPhotoDelivered;
   }
 
