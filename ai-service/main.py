@@ -1,14 +1,22 @@
+from typing import List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from db.connection import users_col, services_col, bookings_col, db, products_col
+
 from recommendation.style_engine import StyleMatchingEngine
 from chatbot.chatbot_engine import ChatbotEngine
 from chatbot.normalization import extract_age_and_range, extract_gender
 from tagging.schemas import TaggingRequest, TaggingResponse
 from tagging.tagging_engine import suggest_tags
 
-app    = FastAPI(title="AI Style Matching", version="2.0")
+from inspection.inspection_engine import analyze_damage, DamageInspectionRequest, DamageInspectionResponse
+from visual_search.search_engine import match_by_image, recommend_by_context, VisualSearchRequest, ContextRecommendRequest, ContextRecommendationResponse
+from culling.culling_engine import analyze_photo_batch, CullingRequest, CullingResponse
+from anti_fraud.fraud_engine import inspect_portfolio, PortfolioPhotoInput, AntiFraudResponse
+
+app    = FastAPI(title="AI Style Matching & Advanced AI Suite", version="3.0")
+
 engine = StyleMatchingEngine()
 chatbot = ChatbotEngine()
 
@@ -229,7 +237,8 @@ async def chat(message: str):
         top_k=1
     )
 
-    MIN_SCORE_THRESHOLD = 35.0
+    MIN_SCORE_THRESHOLD = 65.0
+
     recommended_prods = []
 
     # Nếu tìm thấy câu trả lời khớp tốt trong local QA
@@ -371,3 +380,49 @@ async def get_qa_by_category(category: str):
     qa_col = db["qa_data"]
     qa_list = await qa_col.find({"category": category}).to_list(length=500)
     return {"category": category, "total": len(qa_list), "items": qa_list}
+
+
+# ════════════════════════════════════════════════════════════════
+# NEW ADVANCED AI SUITE ENDPOINTS
+# ════════════════════════════════════════════════════════════════
+
+@app.post("/inspection/analyze-damage", response_model=DamageInspectionResponse)
+async def api_analyze_damage(req: DamageInspectionRequest):
+    """
+    AI Giám định hư hại Áo Dài khi khách trả đồ: So sánh/phân tích vết bẩn, vết rách,
+    tự động tính % trừ cọc Escrow và hoàn lại tiền dư cho khách.
+    """
+    return await analyze_damage(req)
+
+
+@app.post("/visual-search/context-recommend", response_model=ContextRecommendationResponse)
+async def api_context_recommend(req: ContextRecommendRequest):
+    """
+    AI Gợi ý phối màu Áo Dài + Phong cách Makeup + Photographer theo bối cảnh (Đại Nội, Phố Cổ...) và Tone da.
+    """
+    return await recommend_by_context(req)
+
+
+@app.post("/visual-search/match")
+async def api_visual_match(req: VisualSearchRequest):
+    """
+    AI Tìm kiếm sản phẩm tương đồng bằng ảnh mẫu (Visual Search).
+    """
+    return await match_by_image(req)
+
+
+@app.post("/culling/analyze-photos", response_model=CullingResponse)
+async def api_culling_photos(req: CullingRequest):
+    """
+    AI Phân tích bộ ảnh của Photographer: Tự động phát hiện ảnh mờ (Out-focus), lỗi phơi sáng, đánh giá chất lượng.
+    """
+    return analyze_photo_batch(req)
+
+
+@app.post("/anti-fraud/inspect-portfolio", response_model=AntiFraudResponse)
+async def api_anti_fraud_portfolio(provider_id: str, photos: List[PortfolioPhotoInput]):
+    """
+    AI Bóc tách EXIF Metadata & Xác thực chính chủ bộ ảnh Portfolio đăng ký của Provider/Photographer.
+    """
+    return inspect_portfolio(provider_id, photos)
+

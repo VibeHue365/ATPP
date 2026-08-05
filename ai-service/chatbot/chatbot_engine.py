@@ -15,10 +15,13 @@ class ChatbotEngine:
     def __init__(self):
         self.stopwords = {
             "mình", "là", "và", "thì", "có", "bộ", "nào", "với", "cho", "ở", "của", "gì", "nhé",
-            "ạ", "ad", "đây", "đó", "kia", "này", "vậy", "thế", "cái", "con", "chiếc", "những",
+            "ạ", "ad", "shop", "ơi", "dạ", "nha", "tôi", "tớ", "tui", "cháu", "em", "anh", "chị",
+            "đây", "đó", "kia", "này", "vậy", "thế", "cái", "con", "chiếc", "những",
             "các", "đang", "đã", "sẽ", "được", "bị", "lại", "ra", "vào", "lên", "xuống", "như",
-            "nhưng", "để", "làm", "sao", "bao", "nhiều", "ít", "hơn", "đi", "luôn", "nữa", "thôi"
+            "nhưng", "để", "làm", "sao", "bao", "nhiều", "ít", "hơn", "đi", "luôn", "nữa", "thôi",
+            "tư", "vấn", "giúp", "hộ", "hỏi", "muốn"
         }
+
         self.idf = {}
         self.last_docs_len = 0
 
@@ -112,9 +115,15 @@ class ChatbotEngine:
                     kw_idf = sum(self.idf.get(w, 1.0) for w in kw_words)
                     score += 15.0 + kw_idf * 2.0
 
-            # Question words match (dùng normalized)
+            # Question words match (cả có dấu & không dấu & variations)
             q_clean = self._preprocess(qa.get("question_normalized", ""))
-            question_words = set(q_clean.split())
+            q_no_acc = self._preprocess(qa.get("question_no_accent", ""))
+            
+            question_words = set(q_clean.split()) | set(q_no_acc.split())
+            
+            for var_text in qa.get("question_variations", []):
+                question_words.update(self._preprocess(str(var_text)).split())
+
             matched_q_words = [word for word in user_words if word in question_words]
             question_score = 0.0
             for word in matched_q_words:
@@ -125,6 +134,7 @@ class ChatbotEngine:
                 question_score *= 0.3
 
             score += question_score
+
 
             # Answer words match
             a_clean = self._preprocess(qa.get("answer", ""))
@@ -224,8 +234,8 @@ class ChatbotEngine:
 
     def call_gemini_fallback(self, question: str, product_context: str = "") -> str:
         """
-        Gọi trực tiếp Gemini API để trả lời câu hỏi khi database nội bộ không có dữ liệu.
-        Nếu có product_context (từ MongoDB products), inject vào prompt để RAG.
+        Gọi Gemini API theo khung Prompt Engineering chuyên nghiệp 4 bước (Role - Context - Task - Constraints)
+        khi database nội bộ không có dữ liệu. Tự động RAG dữ liệu sản phẩm từ MongoDB.
         """
         from google import genai
 
@@ -238,26 +248,35 @@ class ChatbotEngine:
         context_block = ""
         if product_context:
             context_block = f"""
-Dưới đây là danh sách sản phẩm Áo Dài đang có trong hệ thống cửa hàng:
+[DANH SÁCH SẢN PHẨM ÁO DÀI HIỆN CÓ TẠI VIBEHUE]
 ---
 {product_context}
 ---
 """
 
-        prompt = f"""Bạn là một chuyên gia tư vấn áo dài Việt Nam am hiểu sâu sắc, nhiệt tình và lịch sự.
+        prompt = f"""[SYSTEM ROLE & PERSONA]
+Bạn là Chuyên gia Stylist & Tư vấn Thời trang Áo Dài cao cấp của VibeHue (ATPP). 
+Phong cách giao tiếp: Ấm áp, lịch sự, chuyên nghiệp, tự nhiên. Xưng là "Mình" và gọi khách là "Bạn".
+
 {context_block}
-Khách hàng vừa hỏi một câu hỏi hoặc đưa ra yêu cầu về kiểu dáng, màu sắc, chất liệu áo dài.
-Hãy:
-1. Phân tích yêu cầu của khách hàng để trích xuất các đặc tính mong muốn (ví dụ: màu đỏ, chất liệu gấm, lụa Hà Đông, thêu phượng, tay lỡ, cổ cao...).
-2. Trả lời ngắn gọn, hữu ích và tự nhiên (tối đa 3-4 câu). Xưng là "Mình" và gọi khách là "Bạn".
-3. Đối chiếu các đặc tính này với danh sách sản phẩm ở trên. Nếu có sản phẩm nào khớp hoặc tương tự các đặc tính đó, hãy giới thiệu và đề xuất sản phẩm đó.
-4. Ở cuối câu trả lời (sau tất cả các câu tư vấn), hãy thêm một dòng định dạng chính xác chứa các ID sản phẩm đề xuất: `[RECOMMENDED_IDS: id1, id2, ...]`. Ví dụ: `[RECOMMENDED_IDS: 6a3115219c5d63a0697e1cbd]`. Nếu không có sản phẩm nào phù hợp, tuyệt đối không thêm dòng này.
 
-Câu hỏi: {question}
+[NHIỆM VỤ TƯ VẤN & LÀM RÕ Ý ĐỊNH]
+Khách hàng đặt câu hỏi: "{question}"
 
-Trả lời:"""
+Hãy thực hiện theo các bước:
+1. Nếu câu hỏi của khách quá ngắn hoặc mơ hồ (như "tư vấn áo dài", "cho thuê đồ"): Hãy đưa ra lời chào ngắn gọn và CHỦ ĐỘNG HỎI LẠI khách hàng 1-2 câu hỏi gợi mở (ví dụ: Bạn mặc áo dài đi chụp Tết, ăn hỏi, đám cưới hay kỷ yếu? Chiều cao và tone da của bạn thế nào?).
+2. Nếu câu hỏi đã rõ ràng: Phân tích ý định & đặc tính khách tìm kiếm (Màu sắc, kiểu dáng, chất liệu, vóc dáng).
+3. Đưa ra lời khuyên thời trang ngắn gọn, tự nhiên (tối đa 3 câu).
+4. Đề xuất 1-2 sản phẩm khớp nhất từ danh sách sản phẩm VibeHue ở trên.
+5. Ở DÒNG CUỐI CÙNG, thêm dòng chứa ID sản phẩm đề xuất: `[RECOMMENDED_IDS: id1, id2]`. Nếu không có sản phẩm phù hợp, KHÔNG thêm dòng này.
 
-        for model_name in ["gemini-2.0-flash", "gemini-3.1-flash-lite"]:
+[RÀO CẢN BẢO VỆ (CONSTRAINTS)]
+- Không tự bịa đặt giá tiền hoặc ID sản phẩm không có trong danh sách.
+- Trả lời thuần tiếng Việt. Phong cách lịch sự, thân thiện.
+"""
+
+
+        for model_name in ["gemini-1.5-flash", "gemini-2.0-flash"]:
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -266,13 +285,13 @@ Trả lời:"""
                 if response and response.text:
                     return response.text.strip()
             except Exception as e:
-                print(f"[Gemini Fallback Error] Thất bại khi gọi model {model_name}: {e}")
+                print(f"[Gemini Fallback Error] Model {model_name} failed: {e}")
 
-        return "Hiện tại trợ lý AI đang quá tải lượt yêu cầu hoặc gặp sự cố kết nối. Bạn vui lòng thử lại sau giây lát nhé! 😊"
+        return "Hiện tại trợ lý AI đang bận xử lý cuộc gọi. Bạn vui lòng thử lại sau giây lát nhé! 😊"
 
     def call_gemini_with_image(self, question: str, image_base64: str, mime_type: str = "image/jpeg", product_context: str = "") -> str:
         """
-        Gọi Gemini multimodal API để phân tích hình ảnh áo dài + đề xuất sản phẩm từ cửa hàng.
+        Gọi Gemini Multimodal Vision API phân tích ảnh áo dài + RAG đề xuất mẫu sản phẩm tương đồng.
         """
         from google import genai
         from google.genai import types
@@ -287,31 +306,39 @@ Trả lời:"""
         context_block = ""
         if product_context:
             context_block = f"""
-Dưới đây là danh sách sản phẩm Áo Dài đang có trong hệ thống cửa hàng:
+[DANH SÁCH SẢN PHẨM CHUẨN TẠI VIBEHUE]
 ---
 {product_context}
 ---
 """
 
-        text_prompt = f"""Bạn là chuyên gia tư vấn Áo Dài Việt Nam với con mắt thẩm mỹ tinh tế.
+        text_prompt = f"""[SYSTEM ROLE & PERSONA]
+Bạn là Chuyên gia Giám định & Stylist Áo Dài cao cấp của VibeHue.
+Xưng là "Mình", gọi khách là "Bạn".
+
 {context_block}
-Khách hàng vừa gửi cho bạn một hình ảnh mẫu áo dài{' kèm câu hỏi: ' + question if question else ''}.
 
-Hãy:
-1. Phân tích hình ảnh áo dài để trích xuất các đặc tính kiểu dáng, màu sắc, họa tiết, chất liệu.
-2. Trả lời ngắn gọn, nhận xét về phom dáng, màu sắc và độ phù hợp vóc dáng/dịp mặc (tối đa 4 câu). Xưng là "Mình", gọi khách là "Bạn".
-3. Đối chiếu các đặc tính trích xuất được với danh sách sản phẩm cửa hàng được cung cấp ở trên. Tìm kiếm các sản phẩm tương đồng nhất để đề xuất cho khách.
-4. Ở cuối câu trả lời (sau tất cả các câu tư vấn), hãy thêm một dòng định dạng chính xác chứa các ID sản phẩm tương đồng: `[RECOMMENDED_IDS: id1, id2, ...]`. Ví dụ: `[RECOMMENDED_IDS: 6a3115219c5d63a0697e1cbc]`. Nếu không có sản phẩm nào phù hợp, tuyệt đối không thêm dòng này.
+[NHIỆM VỤ PHÂN TÍCH THỊ GIÁC]
+Khách hàng gửi một hình ảnh mẫu Áo Dài{' kèm lời nhắn: ' + question if question else ''}.
 
-Trả lời bằng tiếng Việt."""
+Hãy thực hiện:
+1. Quan sát hình ảnh, nhận xét nhanh về kiểu dáng, màu sắc chủ đạo, họa tiết và chất liệu vải.
+2. Đánh giá tính thẩm mỹ & bối cảnh mặc phù hợp (tối đa 3-4 câu ngắn gọn).
+3. Đề xuất mẫu Áo Dài có hoa văn/màu sắc tương đồng nhất từ danh sách sản phẩm VibeHue ở trên.
+4. Ở DÒNG CUỐI CÙNG, thêm dòng chứa ID sản phẩm đề xuất: `[RECOMMENDED_IDS: id1, id2]`.
+
+Trả lời bằng tiếng Việt lịch sự, tinh tế."""
 
         try:
-            image_bytes = base64.b64decode(image_base64)
+            clean_b64 = image_base64
+            if "," in clean_b64:
+                clean_b64 = clean_b64.split(",")[1]
+            image_bytes = base64.b64decode(clean_b64)
         except Exception as e:
-            print(f"[Gemini Image Error] Lỗi decode base64: {e}")
+            print(f"[Gemini Image Error] Decode base64 error: {e}")
             return "Hình ảnh không hợp lệ. Vui lòng gửi lại ảnh khác nhé!"
 
-        for model_name in ["gemini-2.0-flash", "gemini-3.1-flash-lite"]:
+        for model_name in ["gemini-1.5-flash", "gemini-2.0-flash"]:
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -323,9 +350,10 @@ Trả lời bằng tiếng Việt."""
                 if response and response.text:
                     return response.text.strip()
             except Exception as e:
-                print(f"[Gemini Image Error] Thất bại khi gọi model {model_name}: {e}")
+                print(f"[Gemini Image Error] Model {model_name} failed: {e}")
 
-        return "Hiện tại trợ lý AI đang bận hoặc quá tải cuộc gọi phân tích hình ảnh. Bạn vui lòng thử lại sau giây lát nhé! 😊"
+        return "Hiện tại trợ lý AI đang bận phân tích hình ảnh. Bạn vui lòng thử lại sau giây lát nhé! 😊"
+
 
     @staticmethod
     def _preprocess(text: str) -> str:

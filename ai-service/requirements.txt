@@ -4,3 +4,9 @@ motor
 python-dotenv
 pydantic
 google-genai
+pillow
+opencv-python-headless
+numpy
+exifread
+scikit-learn
+

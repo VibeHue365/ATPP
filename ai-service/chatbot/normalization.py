@@ -4,22 +4,33 @@ import re
 
 def normalize_pronouns(text: str) -> str:
     """
-    Chuẩn hóa xưng hô - thay tất cả xưng hô thứ nhất thành 'tôi'
+    Chuẩn hóa xưng hô thông minh - phân biệt xưng hô bản thân vs từ chào hỏi (salutation) và người nhận
     """
-    text = text.lower()
+    text = text.lower().strip()
     
-    pronouns_patterns = {
-        r'\bmình\b': 'tôi',
-        r'\bta\b': 'tôi',
-        r'\bcháu\b': 'tôi',
-        r'\bem\b': 'tôi',
+    # 1. Loại bỏ các từ chào hỏi / từ đệm giao tiếp gây nhiễu (noise filler words)
+    salutation_patterns = [
+        r'^\s*(shop|ad|bạn|anh|chị)\s*(ơi|à|ạ|nhi)\b',
+        r'\b(dạ|ạ|nha|nhé|ơi|tư vấn giúp|tư vấn hộ|cho hỏi|mình hỏi)\b'
+    ]
+    cleaned = text
+    for pat in salutation_patterns:
+        cleaned = re.sub(pat, ' ', cleaned)
+        
+    # 2. Chuẩn hóa xưng hô bản thân thành 'tôi' (tớ, mình, mềnh, cháu, tui)
+    # Tránh thay thế trong các cụm như 'em gái', 'anh trai', 'chị gái'
+    pronoun_replacements = {
+        r'\b(tớ|mình|mềnh|cháu|tui|ta)\b': 'tôi',
+        r'\b(em|tôi)\s+(là|muốn|cần|tìm|thích|đang)\b': r'tôi \2',
     }
     
-    result = text
-    for pattern, replacement in pronouns_patterns.items():
+    result = cleaned
+    for pattern, replacement in pronoun_replacements.items():
         result = re.sub(pattern, replacement, result)
     
-    return result.strip()
+    # Clean multiple spaces
+    result = re.sub(r'\s+', ' ', result).strip()
+    return result
 
 
 def extract_age_and_range(text: str) -> dict:
@@ -34,7 +45,7 @@ def extract_age_and_range(text: str) -> dict:
         "senior": (50, 120)
     }
     
-    age_match = re.search(r'(\d+)\s*(tuổi|age|years?|yo|tuôi)', text.lower())
+    age_match = re.search(r'(\d+)\s*(tuổi|age|years?|yo|tuôi|t)', text.lower())
     
     if age_match:
         age_mentioned = int(age_match.group(1))
@@ -57,23 +68,45 @@ def extract_age_and_range(text: str) -> dict:
 
 
 def extract_gender(text: str) -> str:
+
     """
-    Trích xuất giới tính từ câu hỏi (check cả question và answer)
+    Trích xuất giới tính thông minh - Lọc từ chào hỏi shop (Anh/Chị/Shop ơi) và phân biệt giới tính mục tiêu
     """
     text_lower = text.lower()
     
-    male_keywords = ["con trai", "nam", "đàn ông", "phái mạnh", "nam giới", "anh", "em trai", "cậu", "chú rể", "áo dài nam", "áo dài cho nam"]
-    female_keywords = ["con gái", "nữ", "phụ nữ", "phái đẹp", "nữ giới", "chị", "em gái", "cô", "cô dâu", "mặc áo dài nữ"]
+    # Bỏ qua từ chào hỏi đầu câu (VD: "Anh ơi em muốn mua...", "Chị ơi tư vấn cho em...")
+    cleaned_for_gender = re.sub(r'^\s*(anh|chị|shop|ad|bạn)\s*(ơi|à|ạ|nhé)?\b', '', text_lower).strip()
     
-    has_male = any(keyword in text_lower for keyword in male_keywords)
-    has_female = any(keyword in text_lower for keyword in female_keywords)
+    # Các từ khóa khẳng định giới tính NỮ rõ ràng
+    female_explicit = [
+        "nữ", "con gái", "phụ nữ", "phái đẹp", "nữ giới", "cô dâu",
+        "áo dài nữ", "áo dài cho nữ", "cho nữ", "mặc áo dài nữ", "mình là nữ",
+        "tôi là nữ", "tớ là nữ", "em là nữ", "em là con gái", "tớ là con gái"
+    ]
+    
+    # Các từ khóa khẳng định giới tính NAM rõ ràng
+    male_explicit = [
+        "nam", "con trai", "đàn ông", "phái mạnh", "nam giới", "chú rể",
+        "áo dài nam", "áo dài cho nam", "cho nam", "mặc áo dài nam", "mình là nam",
+        "tôi là nam", "tớ là nam", "em là nam", "em là con trai", "tớ là con trai"
+    ]
+    
+    has_female = any(re.search(r'\b' + re.escape(kw) + r'\b', cleaned_for_gender) for kw in female_explicit)
+    has_male = any(re.search(r'\b' + re.escape(kw) + r'\b', cleaned_for_gender) for kw in male_explicit)
     
     if has_female and not has_male:
         return "female"
     elif has_male and not has_female:
         return "male"
-    else:
-        return "unknown"
+    
+    # Kiểm tra ngữ cảnh từ xưng hô khi không có từ ngữ khẳng định trực tiếp
+    if "em gái" in text_lower or "chị" in cleaned_for_gender or "cô" in cleaned_for_gender:
+        return "female"
+    if "em trai" in text_lower or "anh" in cleaned_for_gender or "cậu" in cleaned_for_gender:
+        return "male"
+        
+    return "unknown"
+
 
 
 def extract_occasion(text: str) -> str:
@@ -336,42 +369,53 @@ def create_normalized_doc(question: str, answer: str, source: str = "kaggle", si
     else:
         category = "general"
     
-    # Tạo document
+    # Detect service type
+    service_type = "all"
+    if any(kw in question.lower() for kw in ["chụp", "ảnh", "thợ", "photo", "studio", "concept"]):
+        service_type = "photographer"
+    elif any(kw in question.lower() for kw in ["áo", "dài", "thuê", "mặc", "vải", "gấm", "lụa"]):
+        service_type = "ao_dai"
+
+    # Tạo document chuẩn hóa nâng cao
     document = {
         "question_original": question.strip(),
         "question_normalized": question_normalized,
+        "question_variations": [question.strip(), question_normalized],
         "answer": answer.strip(),
         
-        # Age normalization
+        # Age & Body metrics
         "age_mentioned": age_info["age_mentioned"],
         "age_range": age_info["age_range"],
-        
-        # Body metrics (NEW)
         "height_cm": height_cm,
         "height_range": height_range,
         "skin_tone": skin_tone,
         "hairstyle": hairstyle,
         
-        # Metadata
+        # Domain Metadata
+        "service_type": service_type,
         "gender": gender,
         "occasion": occasion,
         "intent": intent,
         "category": category,
         "keywords": keywords,
         
-        # Personalized advice (NEW)
+        # Trust & Quality Governance
+        "priority_score": 100 if source == "manual" else 65,
+        "status": "ACTIVE",
+        "action_link": "/booking" if is_recommendation_intent else None,
+        
+        # Personalized advice
         "sizing_advice": sizing_advice,
         "color_advice": color_advice,
         
-        # Flags
+        # Flags & Tracking
         "has_personal_metrics": has_personal_metrics,
         "is_recommendation_intent": is_recommendation_intent,
-        
-        # Tracking
         "source": source,
     }
     
     return document
+
 
 
 # ===== TEST =====
