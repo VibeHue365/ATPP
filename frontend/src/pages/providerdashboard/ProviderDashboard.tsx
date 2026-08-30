@@ -2297,22 +2297,6 @@ export const ProviderDashboard: React.FC = () => {
 
   const changeOrderStatus = async (_id: string, apiStatus: string) => {
     const order = orders.find(o => o._id === _id || o.id === _id);
-    if (order && (apiStatus === 'PICKUP_PENDING' || apiStatus === 'PICKED_UP')) {
-      const firstItem = order.items?.[0];
-      const startDateStr = firstItem?.startDate || firstItem?.rentalFrom;
-      if (startDateStr) {
-        const today = new Date();
-        const start = new Date(startDateStr);
-        const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const startZero = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-        const diffDays = (startZero.getTime() - todayZero.getTime()) / (1000 * 60 * 60 * 24);
-
-        if (diffDays > 1) {
-          toast.error('Chưa đến thời gian bàn giao đồ! Chỉ được thực hiện tối đa trước ngày nhận 24 giờ.');
-          return;
-        }
-      }
-    }
 
     // ===== PHOTOGRAPHY / COMBO: Bàn giao sản phẩm buổi chụp → AWAITING_REVIEW =====
     const isPhotographyOrder = order?.bookingType === 'PHOTOGRAPHY' || order?.bookingType === 'COMBO' || order?.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
@@ -4188,22 +4172,7 @@ export const ProviderDashboard: React.FC = () => {
                                       </div>
                                     )}
                                     {steps.map((a: OrderAction) => {
-                                      const isHandoverAction = a.apiStatus === 'PICKUP_PENDING';
                                       let isDisabled = !!a.disabled;
-                                      if (isHandoverAction) {
-                                        const firstItem = o.items?.[0];
-                                        const startDateStr = firstItem?.startDate || firstItem?.rentalFrom;
-                                        if (startDateStr) {
-                                          const today = new Date();
-                                          const start = new Date(startDateStr);
-                                          const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                                          const startZero = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                                          const diffDays = (startZero.getTime() - todayZero.getTime()) / (1000 * 60 * 60 * 24);
-                                          if (diffDays > 1) {
-                                            isDisabled = true;
-                                          }
-                                        }
-                                      }
                                       return (
                                         <button
                                           key={a.apiStatus || a.label}
@@ -4217,7 +4186,7 @@ export const ProviderDashboard: React.FC = () => {
                                             opacity: isDisabled ? 0.85 : 1,
                                             fontWeight: 600, textAlign: 'left',
                                           }}
-                                          title={isDisabled ? (a.title || (a.disabled ? a.label : "Chưa đến thời gian bàn giao đồ (tối đa trước 24h)")) : ""}
+                                          title={isDisabled ? (a.title || a.label) : ""}
                                         >
                                           {a.icon} {a.label}
                                         </button>

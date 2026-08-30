@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { ROUTES } from '../config/routes';
@@ -83,24 +83,24 @@ export const MainLayout: React.FC = () => {
   const getTimeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Vừa xong';
-    if (mins < 60) return `${mins} phút trước`;
+    if (mins < 1) return 'Vá»«a xong';
+    if (mins < 60) return `${mins} phÃºt trÆ°á»›c`;
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} giờ trước`;
+    if (hours < 24) return `${hours} giá» trÆ°á»›c`;
     const days = Math.floor(hours / 24);
-    if (days < 7) return `${days} ngày trước`;
+    if (days < 7) return `${days} ngÃ y trÆ°á»›c`;
     return new Date(dateStr).toLocaleDateString('vi-VN');
   };
 
   const getNotiTypeColor = (type: string) => {
     switch (type) {
-      case 'BOOKING': return { bg: '#EEF2FF', color: '#4338CA', icon: '📋' };
-      case 'PAYMENT': return { bg: '#F0FDF4', color: '#166534', icon: '💳' };
-      case 'HANDOVER': return { bg: '#FFF7ED', color: '#C2410C', icon: '🤝' };
-      case 'REFUND': return { bg: '#FEF3C7', color: '#92400E', icon: '💰' };
-      case 'DISPUTE': return { bg: '#FEE2E2', color: '#991B1B', icon: '⚠️' };
-      case 'SYSTEM': return { bg: '#F5F3FF', color: '#7C3AED', icon: '🔔' };
-      default: return { bg: '#F9FAFB', color: '#6B7280', icon: '📌' };
+      case 'BOOKING': return { bg: '#EEF2FF', color: '#4338CA', icon: 'ðŸ“‹' };
+      case 'PAYMENT': return { bg: '#F0FDF4', color: '#166534', icon: 'ðŸ’³' };
+      case 'HANDOVER': return { bg: '#FFF7ED', color: '#C2410C', icon: 'ðŸ¤' };
+      case 'REFUND': return { bg: '#FEF3C7', color: '#92400E', icon: 'ðŸ’°' };
+      case 'DISPUTE': return { bg: '#FEE2E2', color: '#991B1B', icon: 'âš ï¸' };
+      case 'SYSTEM': return { bg: '#F5F3FF', color: '#7C3AED', icon: 'ðŸ””' };
+      default: return { bg: '#F9FAFB', color: '#6B7280', icon: 'ðŸ“Œ' };
     }
   };
   // Redirect to onboarding if user is logged in but hasn't completed onboarding
@@ -136,12 +136,12 @@ export const MainLayout: React.FC = () => {
 
   // Convert role arrays into Vietnamese display name
   const getRoleDisplayName = (roles?: string[]) => {
-    if (!roles || roles.length === 0) return 'Khách hàng';
-    if (roles.includes('ADMIN')) return 'Quản trị viên';
-    if (roles.includes('PROVIDER')) return 'Đối tác (Provider)';
-    if (roles.includes('MERCHANT') || roles.includes('STORE_OWNER') || roles.includes('SHOP_OWNER')) return 'Chủ cửa hàng';
-    if (roles.includes('PHOTOGRAPHER')) return 'Nhiếp ảnh gia';
-    return 'Khách hàng';
+    if (!roles || roles.length === 0) return 'KhÃ¡ch hÃ ng';
+    if (roles.includes('ADMIN')) return 'Quáº£n trá»‹ viÃªn';
+    if (roles.includes('PROVIDER')) return 'Äá»‘i tÃ¡c (Provider)';
+    if (roles.includes('MERCHANT') || roles.includes('STORE_OWNER') || roles.includes('SHOP_OWNER')) return 'Chá»§ cá»­a hÃ ng';
+    if (roles.includes('PHOTOGRAPHER')) return 'Nhiáº¿p áº£nh gia';
+    return 'KhÃ¡ch hÃ ng';
   };
 
   return (
@@ -150,10 +150,10 @@ export const MainLayout: React.FC = () => {
       <header className="vh-header">
         <div className="vh-header-container">
           
-          {/* Logo block: Di sản Áo Dài + CURATING ELEGANCE */}
+          {/* Logo block: Di sáº£n Ão DÃ i + CURATING ELEGANCE */}
           <Link to={ROUTES.LANDING} className="vh-logo-redesigned" style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0' }}>
             <span className="font-header" style={{ color: 'var(--color-primary-dark)', fontSize: '24px', fontWeight: 700, lineHeight: 1.15 }}>
-              Di sản Áo Dài
+              Di sáº£n Ão DÃ i
             </span>
             <span className="font-header" style={{ color: 'var(--color-gold)', fontSize: '8px', fontWeight: 600, letterSpacing: '0.15em', marginTop: '2px' }}>
               CURATING ELEGANCE
@@ -166,21 +166,29 @@ export const MainLayout: React.FC = () => {
               to="/" 
               className={`vh-header-nav-link-custom ${location.pathname === '/' && !location.hash ? 'active' : ''}`}
             >
-              Khám phá
+              KhÃ¡m phÃ¡
             </Link>
 
             <Link 
               to={ROUTES.RENTALS} 
               className={`vh-header-nav-link-custom ${location.pathname === ROUTES.RENTALS ? 'active' : ''}`}
             >
-              Cho thuê
+              Cho thuÃª
+            </Link>
+
+            <Link 
+              to={ROUTES.VIRTUAL_TRYON_3D} 
+              className={`vh-header-nav-link-custom ${location.pathname === ROUTES.VIRTUAL_TRYON_3D ? 'active' : ''}`}
+              style={{ color: 'var(--color-primary-dark)', fontWeight: 700 }}
+            >
+              ✨ Thử Đồ 3D
             </Link>
 
             <Link 
               to={ROUTES.PHOTOGRAPHERS} 
               className={`vh-header-nav-link-custom ${location.pathname.startsWith('/photographers') ? 'active' : ''}`}
             >
-              Nhiếp ảnh
+              Nhiáº¿p áº£nh
             </Link>
 
             <Link 
@@ -194,7 +202,7 @@ export const MainLayout: React.FC = () => {
           {/* Search bar Pill-shaped */}
           <div className="vh-header-search-container">
             <Search size={16} className="vh-header-search-icon" />
-            <input type="text" placeholder="Tìm kiếm sản phẩm" className="vh-header-search-input" />
+            <input type="text" placeholder="TÃ¬m kiáº¿m sáº£n pháº©m" className="vh-header-search-input" />
           </div>
 
           {/* Right Action Icons & User section */}
@@ -203,7 +211,7 @@ export const MainLayout: React.FC = () => {
             <div style={{ position: 'relative' }} ref={notiRef}>
               <button 
                 className="vh-header-action-icon-custom" 
-                title="Thông báo"
+                title="ThÃ´ng bÃ¡o"
                 onClick={() => { setIsNotiOpen(!isNotiOpen); if (!isNotiOpen) fetchNotifications(); }}
                 style={{ position: 'relative' }}
               >
@@ -240,9 +248,9 @@ export const MainLayout: React.FC = () => {
                     background: 'linear-gradient(135deg, #FAF6F0 0%, #FFF 100%)'
                   }}>
                     <div>
-                      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#4A0E17', letterSpacing: '-0.01em' }}>Thông báo</h3>
+                      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#4A0E17', letterSpacing: '-0.01em' }}>ThÃ´ng bÃ¡o</h3>
                       {unreadCount > 0 && (
-                        <span style={{ fontSize: '11px', color: '#B89047', fontWeight: 600 }}>{unreadCount} thông báo chưa đọc</span>
+                        <span style={{ fontSize: '11px', color: '#B89047', fontWeight: 600 }}>{unreadCount} thÃ´ng bÃ¡o chÆ°a Ä‘á»c</span>
                       )}
                     </div>
                     {unreadCount > 0 && (
@@ -258,7 +266,7 @@ export const MainLayout: React.FC = () => {
                         onMouseOut={e => { e.currentTarget.style.backgroundColor = 'white'; }}
                       >
                         <CheckCheck size={12} />
-                        Đọc tất cả
+                        Äá»c táº¥t cáº£
                       </button>
                     )}
                   </div>
@@ -268,13 +276,13 @@ export const MainLayout: React.FC = () => {
                     {loadingNoti ? (
                       <div style={{ padding: '40px', textAlign: 'center', color: '#7A7A7A' }}>
                         <div style={{ width: '24px', height: '24px', border: '2px solid #E8E2D5', borderTop: '2px solid #4A0E17', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 8px' }} />
-                        <span style={{ fontSize: '12px', fontWeight: 600 }}>Đang tải...</span>
+                        <span style={{ fontSize: '12px', fontWeight: 600 }}>Äang táº£i...</span>
                       </div>
                     ) : notifications.length === 0 ? (
                       <div style={{ padding: '50px 20px', textAlign: 'center' }}>
                         <Bell size={32} color="#D4C5A9" style={{ marginBottom: '12px' }} />
-                        <p style={{ margin: 0, fontSize: '13px', color: '#7A7A7A', fontWeight: 600 }}>Chưa có thông báo nào</p>
-                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#B0A89A' }}>Các thông báo mới sẽ hiển thị tại đây</p>
+                        <p style={{ margin: 0, fontSize: '13px', color: '#7A7A7A', fontWeight: 600 }}>ChÆ°a cÃ³ thÃ´ng bÃ¡o nÃ o</p>
+                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#B0A89A' }}>CÃ¡c thÃ´ng bÃ¡o má»›i sáº½ hiá»ƒn thá»‹ táº¡i Ä‘Ã¢y</p>
                       </div>
                     ) : (
                       notifications.map((noti) => {
@@ -347,7 +355,7 @@ export const MainLayout: React.FC = () => {
                             {!noti.isRead && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleMarkAsRead(noti._id); }}
-                                title="Đánh dấu đã đọc"
+                                title="ÄÃ¡nh dáº¥u Ä‘Ã£ Ä‘á»c"
                                 style={{
                                   background: 'none', border: 'none', padding: '4px',
                                   cursor: 'pointer', color: '#B89047', flexShrink: 0,
@@ -381,7 +389,7 @@ export const MainLayout: React.FC = () => {
                         onMouseOver={e => { e.currentTarget.style.color = '#4A0E17'; }}
                         onMouseOut={e => { e.currentTarget.style.color = '#B89047'; }}
                       >
-                        Xem tất cả thông báo →
+                        Xem táº¥t cáº£ thÃ´ng bÃ¡o â†’
                       </button>
                     </div>
                   )}
@@ -404,11 +412,11 @@ export const MainLayout: React.FC = () => {
                 </div>
               )}
             </div>
-            <Link to={ROUTES.CHAT} className="vh-header-action-icon-custom" title="Tin nhắn & Chat" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Link to={ROUTES.CHAT} className="vh-header-action-icon-custom" title="Tin nháº¯n & Chat" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <MessageSquare size={20} />
             </Link>
 
-            <Link to={ROUTES.CART} className="vh-header-action-icon-custom" title="Giỏ hàng" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Link to={ROUTES.CART} className="vh-header-action-icon-custom" title="Giá» hÃ ng" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ShoppingBag size={20} />
               {cart.length > 0 && (
                 <span className="vh-cart-badge" style={{
@@ -443,7 +451,7 @@ export const MainLayout: React.FC = () => {
                   {/* User info: Name + Role below */}
                   <div className="vh-header-user-text-custom">
                     <span className="vh-header-username-custom font-body">
-                      {user?.fullName || 'Người dùng'}
+                      {user?.fullName || 'NgÆ°á»i dÃ¹ng'}
                     </span>
                     <span className="vh-header-userrole-custom font-body">
                       {getRoleDisplayName(user?.roles)}
@@ -481,7 +489,7 @@ export const MainLayout: React.FC = () => {
                           style={{ color: '#C0392B', fontWeight: 'bold' }}
                         >
                           <ShieldCheck size={16} />
-                          <span>Kênh Quản Trị (Admin)</span>
+                          <span>KÃªnh Quáº£n Trá»‹ (Admin)</span>
                         </Link>
                       )}
 
@@ -493,7 +501,7 @@ export const MainLayout: React.FC = () => {
                           style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}
                         >
                           <Sparkles size={16} />
-                          <span>Kênh Đối Tác</span>
+                          <span>KÃªnh Äá»‘i TÃ¡c</span>
                         </Link>
                       )}
 
@@ -504,7 +512,7 @@ export const MainLayout: React.FC = () => {
                           onClick={() => setIsDropdownOpen(false)}
                         >
                           <Sparkles size={16} />
-                          <span>Đăng ký Provider</span>
+                          <span>ÄÄƒng kÃ½ Provider</span>
                         </Link>
                       )}
                       {!user?.roles?.includes('PROVIDER') && (
@@ -514,7 +522,7 @@ export const MainLayout: React.FC = () => {
                           onClick={() => setIsDropdownOpen(false)}
                         >
                           <UserIcon size={16} />
-                          <span>Trang cá nhân</span>
+                          <span>Trang cÃ¡ nhÃ¢n</span>
                         </Link>
                       )}
 
@@ -524,7 +532,7 @@ export const MainLayout: React.FC = () => {
                         onClick={() => setIsDropdownOpen(false)}
                       >
                         <ShoppingBag size={16} />
-                        <span>Đơn hàng</span>
+                        <span>ÄÆ¡n hÃ ng</span>
                       </Link>
 
                       <Link 
@@ -533,7 +541,7 @@ export const MainLayout: React.FC = () => {
                         onClick={() => setIsDropdownOpen(false)}
                       >
                         <Settings size={16} />
-                        <span>Cài đặt</span>
+                        <span>CÃ i Ä‘áº·t</span>
                       </Link>
 
                       <Link 
@@ -542,7 +550,7 @@ export const MainLayout: React.FC = () => {
                         onClick={() => setIsDropdownOpen(false)}
                       >
                         <Bell size={16} />
-                        <span>Thông báo</span>
+                        <span>ThÃ´ng bÃ¡o</span>
                       </Link>
 
                       <div className="vh-header-dropdown-divider-line"></div>
@@ -552,7 +560,7 @@ export const MainLayout: React.FC = () => {
                         onClick={handleLogout}
                       >
                         <LogOut size={16} />
-                        <span>Đăng xuất</span>
+                        <span>ÄÄƒng xuáº¥t</span>
                       </button>
                     </div>
                   </div>
@@ -560,7 +568,7 @@ export const MainLayout: React.FC = () => {
               </div>
             ) : (
               <Link to={ROUTES.LOGIN} className="vh-btn vh-btn-primary vh-btn-sm" style={{ borderRadius: '8px', padding: '8px 20px', fontWeight: 600 }}>
-                ĐĂNG NHẬP
+                ÄÄ‚NG NHáº¬P
               </Link>
             )}
           </div>
@@ -577,18 +585,18 @@ export const MainLayout: React.FC = () => {
         <div className="vh-footer-container-redesigned">
           <div className="vh-footer-left">
             <Link to={ROUTES.LANDING} className="vh-footer-logo-redesigned font-header" style={{ textDecoration: 'none' }}>
-              Di sản Áo Dài
+              Di sáº£n Ão DÃ i
             </Link>
             <p className="vh-footer-copy">
-              © {new Date().getFullYear()} Di sản Áo Dài. Curating Vietnamese Elegance through time and craftsmanship.
+              Â© {new Date().getFullYear()} Di sáº£n Ão DÃ i. Curating Vietnamese Elegance through time and craftsmanship.
             </p>
           </div>
           
           <div className="vh-footer-right-links">
-            <a href="#about">Về chúng tôi</a>
-            <a href="#terms">Điều khoản dịch vụ</a>
-            <a href="#privacy">Chính sách bảo mật</a>
-            <a href="#contact">Liên hệ</a>
+            <a href="#about">Vá» chÃºng tÃ´i</a>
+            <a href="#terms">Äiá»u khoáº£n dá»‹ch vá»¥</a>
+            <a href="#privacy">ChÃ­nh sÃ¡ch báº£o máº­t</a>
+            <a href="#contact">LiÃªn há»‡</a>
           </div>
         </div>
       </footer>
@@ -617,7 +625,7 @@ export const MainLayout: React.FC = () => {
           {/* Floating Toggle Button */}
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
-            title="Trợ Lý AI"
+            title="Trá»£ LÃ½ AI"
             style={{
               width: '56px',
               height: '56px',
@@ -644,3 +652,4 @@ export const MainLayout: React.FC = () => {
 };
 
 export default MainLayout;
+

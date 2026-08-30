@@ -1,4 +1,4 @@
-export const ROUTES = {
+﻿export const ROUTES = {
   LANDING: '/',
   RENTALS: '/rentals',
   PHOTOGRAPHERS: '/photographers',
@@ -25,5 +25,5 @@ export const ROUTES = {
   PROVIDER_STORE: '/stores/:id',
   NOTIFICATIONS: '/notifications',
   CHAT: '/chat',
+  VIRTUAL_TRYON_3D: '/virtual-tryon-3d',
 } as const;
-// Touch to reload.

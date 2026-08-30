@@ -1,3 +1,4 @@
+import { VirtualTryOn3DModal } from '../../features/virtual-tryon-3d/components/VirtualTryOn3DModal';
 import React, { useState, useEffect } from "react";
 import { checkProductAvailability } from '../../features/rentals/services/productAvailabilityService';
 import { useProductAvailability } from '../../features/rentals/hooks/useProductAvailability';
@@ -3480,115 +3481,13 @@ export const ProductDetailPage: React.FC = () => {
 
       {/* -------------------- INTERACTIVE MODALS -------------------- */}
 
-      {/* 1. AI Virtual Try-On Modal */}
-      <Modal
+      {/* 1. AI Virtual Try-On 3D Modal */}
+      <VirtualTryOn3DModal
         isOpen={isAiStylingOpen}
         onClose={() => setIsAiStylingOpen(false)}
-        title="Trải nghiệm Phòng Thử Đồ ẢO (AI Virtual Try-On)"
-        maxWidth="640px"
-      >
-        <div style={{ padding: "10px 0", textAlign: "center" }}>
-          <div
-            style={{
-              width: "80px",
-              height: "80px",
-              borderRadius: "50%",
-              backgroundColor: "var(--color-primary-trans)",
-              color: "var(--color-primary)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 20px",
-            }}
-          >
-            <Sparkles size={36} className="animate-bounce" />
-          </div>
-          <h3 className="font-header text-xl font-bold text-stone-900 mb-2">
-            Đang khởi tạo công nghệ AI Virtual Try-On
-          </h3>
-          <p
-            style={{
-              fontSize: "14px",
-              color: "var(--color-text-secondary)",
-              lineHeight: 1.6,
-              maxWidth: "480px",
-              margin: "0 auto 24px",
-            }}
-          >
-            Hệ thống đang đồng bộ chỉ số cơ thể từ trang cá nhân của bạn để dựng
-            mô phỏng 3D chính xác tà áo **{product.name}** trên dáng người của
-            bạn.
-          </p>
-
-          <div
-            style={{
-              border: "1px solid rgba(182, 145, 91, 0.2)",
-              padding: "16px",
-              borderRadius: "12px",
-              backgroundColor: "white",
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-              textAlign: "left",
-              maxWidth: "400px",
-              margin: "0 auto 24px",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: "13px",
-              }}
-            >
-              <span>Chiều cao ước tính:</span>
-              <strong>165 cm</strong>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: "13px",
-              }}
-            >
-              <span>Cân nặng ước tính:</span>
-              <strong>52 kg</strong>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: "13px",
-              }}
-            >
-              <span>Dáng người phân tích:</span>
-              <strong>Đồng hồ cát (Hourglass)</strong>
-            </div>
-          </div>
-
-          <div
-            style={{ display: "flex", gap: "12px", justifyContent: "center" }}
-          >
-            <button
-              className="vh-btn vh-btn-secondary"
-              style={{ padding: "8px 24px", borderRadius: "8px" }}
-              onClick={() => {
-                toast.success("Mô phỏng 3D hoàn tất!");
-                setIsAiStylingOpen(false);
-              }}
-            >
-              BẮT ĐẦU XEM MÔ PHỎNG
-            </button>
-            <button
-              className="vh-btn vh-btn-outline"
-              style={{ padding: "8px 24px", borderRadius: "8px" }}
-              onClick={() => setIsAiStylingOpen(false)}
-            >
-              Đóng
-            </button>
-          </div>
-        </div>
-      </Modal>
+        productImage={getImageUrl(product.images?.[0] || '')}
+        productName={product.name}
+      />
 
       {/* 2. AI Size Suggestion Modal */}
       <Modal
