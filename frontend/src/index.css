@@ -2211,258 +2211,733 @@ button {
   }
 }
 
-/* Silk & Stone Custom Auth Redesign Styles */
-.vh-brand-title {
-  font-family: var(--font-header);
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--color-primary);
-  margin-bottom: 8px;
+/* ==========================================================================
+   LUMÉ AUTH MODERN DESIGN SYSTEM (.lume-auth-*)
+   Synced with LandingPage.css design tokens
+   ========================================================================== */
+
+.lume-auth-page {
+  --lume-ink: #292324;
+  --lume-muted: #746568;
+  --lume-brand: #B52B47;
+  --lume-brand-hover: #9E223B;
+  --lume-soft: #FBE5E9;
+  --lume-blush: #FFFDFC;
+  --lume-line: #F0DADC;
+  --lume-image: #F5EDEF;
+
+  min-height: 100vh;
+  width: 100%;
+  background: #FCFAF8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  position: relative;
+  overflow-x: hidden;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--lume-ink);
 }
 
-.vh-greeting-title {
-  font-family: var(--font-header);
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin-bottom: 2px;
+/* Background ambient glow matching landing page */
+.lume-auth-page::before {
+  content: '';
+  position: absolute;
+  top: -10%;
+  left: -5%;
+  width: 45vw;
+  height: 45vw;
+  max-width: 600px;
+  max-height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(181, 43, 71, 0.07) 0%, rgba(251, 229, 233, 0) 70%);
+  pointer-events: none;
+  z-index: 0;
 }
 
-.vh-greeting-subtitle {
-  font-family: var(--font-body);
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-bottom: 12px;
+.lume-auth-page::after {
+  content: '';
+  position: absolute;
+  bottom: -10%;
+  right: -5%;
+  width: 45vw;
+  height: 45vw;
+  max-width: 600px;
+  max-height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(251, 229, 233, 0.4) 0%, rgba(252, 250, 248, 0) 70%);
+  pointer-events: none;
+  z-index: 0;
 }
 
-.vh-role-section-label {
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-  margin-bottom: 6px;
-}
-
-.vh-role-selector-grid {
+/* Auth Card Master Container */
+.lume-auth-container {
+  width: 100%;
+  max-width: 1080px;
+  min-height: 590px;
+  background: #FFFFFF;
+  border: 1px solid var(--lume-line);
+  border-radius: 24px;
+  box-shadow: 0 16px 40px -10px rgba(41, 35, 36, 0.06), 0 0 0 1px rgba(240, 218, 220, 0.5);
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: 1.05fr 1fr;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  animation: fadeIn 0.35s ease-out;
+}
+
+@media (max-width: 960px) {
+  .lume-auth-container {
+    grid-template-columns: 1fr;
+    max-width: 480px;
+    min-height: auto;
+    border-radius: 20px;
+  }
+}
+
+/* Left Visual Column */
+.lume-auth-visual {
+  position: relative;
+  background-color: var(--lume-soft);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 28px 32px;
+  min-height: 420px;
+  border-right: 1px solid var(--lume-line);
+}
+
+@media (max-width: 960px) {
+  .lume-auth-visual {
+    display: none;
+  }
+}
+
+.lume-auth-visual-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center top;
+  transition: opacity 1s ease-in-out, transform 6s ease-out;
+  z-index: 1;
+}
+
+.lume-auth-visual-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(41, 35, 36, 0.15) 0%, rgba(41, 35, 36, 0.35) 45%, rgba(41, 35, 36, 0.82) 100%);
+  z-index: 2;
+}
+
+.lume-auth-visual-top {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lume-auth-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--lume-line);
+  padding: 5px 12px 5px 6px;
+  border-radius: 9999px;
+  color: var(--lume-ink);
+  box-shadow: 0 4px 14px rgba(41, 35, 36, 0.08);
+}
+
+.lume-auth-brand-badge-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--lume-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  color: #FFFFFF;
+}
+
+.lume-auth-brand-badge-text {
+  font-family: 'Manrope', sans-serif;
+  font-weight: 800;
+  font-size: 12.5px;
+  letter-spacing: 0.05em;
+  color: var(--lume-ink);
+}
+
+.lume-auth-visual-dots {
+  display: flex;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+  padding: 4px 8px;
+  border-radius: 9999px;
+}
+
+.lume-auth-visual-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+  transition: all 0.3s ease;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.lume-auth-visual-dot.active {
+  width: 18px;
+  border-radius: 4px;
+  background: #FFFFFF;
+}
+
+.lume-auth-visual-bottom {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Landing Hero style floating banner card */
+.lume-auth-visual-card {
+  background: var(--lume-brand);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 16px;
+  padding: 16px 18px;
+  color: #FFFFFF;
+  box-shadow: 0 12px 28px -6px rgba(181, 43, 71, 0.45);
+}
+
+.lume-auth-visual-tag {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lume-soft);
+  margin-bottom: 4px;
+}
+
+.lume-auth-visual-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #FFFFFF;
+  margin-bottom: 5px;
+}
+
+.lume-auth-visual-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 10px;
+}
+
+.lume-auth-visual-features {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lume-auth-visual-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.lume-auth-visual-feature-icon {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #FFFFFF;
+  flex-shrink: 0;
+}
+
+/* Right Content Column */
+.lume-auth-form-side {
+  padding: 26px 34px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  background: #FFFFFF;
+}
+
+@media (max-width: 960px) {
+  .lume-auth-form-side {
+    padding: 24px 20px;
+  }
+}
+
+.lume-auth-form-side-inner {
+  max-width: 410px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Header & Home Link */
+.lume-auth-top-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 14px;
 }
 
-.vh-role-card {
-  display: flex;
-  flex-direction: column;
+.lume-auth-back-btn {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 8px 4px;
-  background-color: #FFFFFF;
-  border: 1px solid rgba(45, 41, 38, 0.08);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: var(--transition-smooth);
-}
-
-.vh-role-card.active {
-  background-color: rgba(161, 30, 34, 0.06);
-  border: 1.5px solid var(--color-primary);
-}
-
-.vh-role-card:hover:not(.active) {
-  border-color: var(--color-gold);
-  background-color: #FCF9F2;
-}
-
-.vh-role-icon {
-  color: var(--color-gold);
-  transition: var(--transition-smooth);
-}
-
-.vh-role-card.active .vh-role-icon {
-  color: var(--color-primary);
-}
-
-.vh-role-text {
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-top: 2px;
-  transition: var(--transition-smooth);
-}
-
-.vh-role-card.active .vh-role-text {
-  color: var(--color-primary);
+  gap: 6px;
+  font-size: 11.5px;
   font-weight: 700;
+  color: var(--lume-brand);
+  text-decoration: none;
+  transition: all 0.2s ease;
+  padding: 5px 11px;
+  border-radius: 10px;
+  background: var(--lume-soft);
+  border: 1px solid var(--lume-line);
 }
 
-/* Underline Inputs */
-.vh-underline-input .vh-input-label {
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-  margin-bottom: 2px;
+.lume-auth-back-btn:hover {
+  color: #FFFFFF;
+  background: var(--lume-brand);
+  border-color: var(--lume-brand);
+  transform: translateX(-2px);
 }
 
-.vh-underline-input .vh-input-wrapper {
-  background-color: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
+.lume-auth-mobile-logo {
+  display: none;
+  align-items: center;
+  gap: 8px;
 }
 
-.vh-underline-input .vh-input-field {
-  background-color: transparent !important;
-  border: none !important;
-  border-bottom: 1.5px solid rgba(45, 41, 38, 0.15) !important;
-  border-radius: 0 !important;
-  padding: 6px 0 !important;
-  font-size: 13.5px !important;
-  font-weight: 600 !important;
-  color: var(--color-text-primary) !important;
-  box-shadow: none !important;
-  transition: var(--transition-smooth);
+@media (max-width: 960px) {
+  .lume-auth-mobile-logo {
+    display: flex;
+  }
 }
 
-.vh-underline-input .vh-input-field:focus {
-  border-bottom-color: var(--color-primary) !important;
-  background-color: transparent !important;
-  box-shadow: none !important;
-}
-
-.vh-underline-input .vh-input-field::placeholder {
-  color: rgba(45, 41, 38, 0.3) !important;
-  text-transform: uppercase !important;
-  font-size: 10px !important;
-  letter-spacing: 0.08em !important;
-}
-
-.vh-underline-input .vh-input-icon-right {
-  right: 0 !important;
-  color: var(--color-text-secondary);
-}
-
-/* Autofill styling overrides to blend with cream background */
-.vh-underline-input input:-webkit-autofill,
-.vh-underline-input input:-webkit-autofill:hover, 
-.vh-underline-input input:-webkit-autofill:focus, 
-.vh-underline-input input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 30px #FCF9F2 inset !important;
-  -webkit-text-fill-color: var(--color-text-primary) !important;
-  transition: background-color 5000s ease-in-out 0s;
-}
-
-.vh-social-grid {
+/* Switcher Tabs (Đăng nhập / Đăng ký) */
+.lume-auth-tab-bar {
   display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
-  width: 100%;
+  background: var(--lume-soft);
+  padding: 3px;
+  border-radius: 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--lume-line);
 }
 
-.vh-social-btn {
+.lume-auth-tab-item {
+  flex: 1;
+  text-align: center;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--lume-muted);
+  border-radius: 9px;
+  text-decoration: none;
+  transition: all 0.25s ease;
+  cursor: pointer;
+  border: none;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background-color: #FFFFFF;
-  border: 1.5px solid rgba(45, 41, 38, 0.08);
-  border-radius: 6px;
-  height: 38px;
-  font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  cursor: pointer;
-  transition: var(--transition-smooth);
-  flex: 1;
 }
 
-.vh-social-btn:hover {
-  background-color: #FAF8F5;
-  border-color: var(--color-gold);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+.lume-auth-tab-item.active {
+  background: #FFFFFF;
+  color: var(--lume-brand);
+  box-shadow: 0 2px 8px rgba(41, 35, 36, 0.06);
 }
 
-.vh-password-toggle-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
+.lume-auth-tab-item:hover:not(.active) {
+  color: var(--lume-ink);
+}
+
+/* Form Titles */
+.lume-auth-title-group {
+  margin-bottom: 13px;
+}
+
+.lume-auth-title {
+  font-family: 'Manrope', sans-serif;
+  font-size: 21px;
+  font-weight: 800;
+  color: var(--lume-ink);
+  letter-spacing: -0.025em;
+  margin-bottom: 3px;
+  line-height: 1.25;
+}
+
+.lume-auth-title span {
+  font-family: 'Playfair Display', serif;
+  color: var(--lume-brand);
+  font-style: italic;
+}
+
+.lume-auth-subtitle {
+  font-size: 12.5px;
+  color: var(--lume-muted);
+  line-height: 1.45;
+}
+
+/* Form Fields */
+.lume-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.lume-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lume-form-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--lume-ink);
+}
+
+.lume-form-input-wrapper {
+  position: relative;
   display: flex;
   align-items: center;
-  color: var(--color-text-secondary);
-  transition: var(--transition-smooth);
 }
 
-.vh-password-toggle-btn:hover {
-  color: var(--color-primary);
-}
-
-/* Register Page Role Tabs */
-.vh-register-role-tabs {
+.lume-form-input-icon-left {
+  position: absolute;
+  left: 12px;
+  color: var(--lume-muted);
+  pointer-events: none;
   display: flex;
-  gap: 20px;
-  border-bottom: 1px solid rgba(45, 41, 38, 0.08);
-  margin-bottom: 16px;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
 }
 
-.vh-register-role-tab {
+.lume-form-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--lume-ink);
+  background: var(--lume-soft);
+  border: 1px solid var(--lume-line);
+  border-radius: 11px;
+  transition: all 0.2s ease;
+  font-family: 'Manrope', sans-serif;
+}
+
+.lume-form-input.has-left-icon {
+  padding-left: 36px;
+}
+
+.lume-form-input.has-right-icon {
+  padding-right: 36px;
+}
+
+.lume-form-input:focus {
+  outline: none;
+  background: #FFFFFF;
+  border-color: var(--lume-brand);
+  box-shadow: 0 0 0 3px rgba(181, 43, 71, 0.12);
+}
+
+.lume-form-input:focus + .lume-form-input-icon-left,
+.lume-form-input-wrapper:focus-within .lume-form-input-icon-left {
+  color: var(--lume-brand);
+}
+
+.lume-form-input.is-error {
+  border-color: var(--color-error, #E53E3E);
+  background: #FFF5F5;
+}
+
+.lume-form-input-toggle-btn {
+  position: absolute;
+  right: 10px;
   background: none;
   border: none;
-  padding: 6px 0;
-  font-family: var(--font-body);
+  color: var(--lume-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: color 0.2s ease;
+}
+
+.lume-form-input-toggle-btn:hover {
+  color: var(--lume-brand);
+}
+
+.lume-form-error-text {
+  font-size: 11px;
+  color: var(--color-error, #E53E3E);
+  margin-top: 1px;
+  font-weight: 500;
+}
+
+.lume-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .lume-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Password Strength Bar */
+.lume-password-strength {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: -2px;
+}
+
+.lume-password-strength-bar {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  height: 4px;
+}
+
+.lume-password-strength-segment {
+  flex: 1;
+  background: var(--lume-line);
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+
+.lume-password-strength-segment.weak {
+  background: #EF4444;
+}
+
+.lume-password-strength-segment.medium {
+  background: #F59E0B;
+}
+
+.lume-password-strength-segment.strong {
+  background: #10B981;
+}
+
+.lume-password-strength-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lume-muted);
+}
+
+/* Auth Options Row (Remember me, Forgot password) */
+.lume-auth-options-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  margin: 1px 0;
+}
+
+.lume-auth-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--lume-muted);
+  font-size: 12px;
+}
+
+.lume-auth-checkbox {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  accent-color: var(--lume-brand);
+  cursor: pointer;
+}
+
+.lume-auth-forgot-link {
+  color: var(--lume-brand);
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 12px;
+  transition: color 0.2s ease;
+}
+
+.lume-auth-forgot-link:hover {
+  text-decoration: underline;
+  color: var(--lume-brand-hover);
+}
+
+/* Submit Button */
+.lume-auth-submit-btn {
+  width: 100%;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--lume-brand);
+  color: #FFFFFF;
+  font-family: 'Manrope', sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(181, 43, 71, 0.28);
+  transition: all 0.2s ease;
+  margin-top: 2px;
+}
+
+.lume-auth-submit-btn:hover:not(:disabled) {
+  background: var(--lume-brand-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(181, 43, 71, 0.36);
+}
+
+.lume-auth-submit-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Divider */
+.lume-auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 12px 0 10px;
+  color: var(--lume-muted);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  position: relative;
-  transition: var(--transition-smooth);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
-.vh-register-role-tab:hover {
-  color: var(--color-primary);
-}
-
-.vh-register-role-tab.active {
-  color: var(--color-primary);
-}
-
-.vh-register-role-tab.active::after {
+.lume-auth-divider::before,
+.lume-auth-divider::after {
   content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2.5px;
-  background-color: var(--color-primary);
-}
-
-/* Side-by-side inputs row */
-.vh-form-row {
-  display: flex;
-  gap: 16px;
-  width: 100%;
-}
-
-.vh-form-row > * {
   flex: 1;
+  height: 1px;
+  background: var(--lume-line);
 }
 
-/* Sparkles decorative cluster */
-.vh-sparkle-cluster {
-  position: absolute;
-  bottom: 24px;
-  right: 24px;
-  opacity: 0.15;
-  pointer-events: none;
-  z-index: 1;
+.lume-auth-divider span {
+  padding: 0 10px;
 }
+
+/* Social Login Grid */
+.lume-auth-social-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.lume-auth-social-btn {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #FFFFFF;
+  border: 1px solid var(--lume-line);
+  border-radius: 11px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--lume-ink);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lume-auth-social-btn:hover {
+  background: var(--lume-soft);
+  border-color: var(--lume-line);
+  transform: translateY(-1px);
+}
+
+/* Partner Promotion Callout Card */
+.lume-auth-partner-card {
+  margin-top: 10px;
+  background: var(--lume-soft);
+  border: 1px solid var(--lume-line);
+  border-radius: 12px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--lume-ink);
+}
+
+.lume-auth-partner-card-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.lume-auth-partner-card-link {
+  font-weight: 800;
+  color: var(--lume-brand);
+  text-decoration: none;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+
+.lume-auth-partner-card-link:hover {
+  text-decoration: underline;
+}
+
+/* Footer Switch Link */
+.lume-auth-footer-switch {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--lume-muted);
+}
+
+.lume-auth-footer-switch a {
+  font-weight: 800;
+  color: var(--lume-brand);
+  text-decoration: none;
+  margin-left: 4px;
+}
+
+.lume-auth-footer-switch a:hover {
+  text-decoration: underline;
+}
+
+
+
 
 /* ==========================================================================
    DI SẢN ÁO DÀI REDESIGNED PROFILE PAGE & LAYOUT STYLES (VANILLA CSS STYLE)

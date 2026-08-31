@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Store,
   Star,
@@ -109,6 +109,7 @@ const ITEMS_PER_PAGE = 12;
 export const ProviderStorePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const productsGridRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const toast = useToast();
@@ -123,7 +124,7 @@ export const ProviderStorePage: React.FC = () => {
   const handleOpenChat = async () => {
     if (!user) {
       toast.error('Vui lòng đăng nhập để trò chuyện với Shop.');
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
     const targetUserId = store?.userId || store?._id;

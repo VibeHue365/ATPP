@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Mail, RefreshCw, ShieldCheck } from "lucide-react";
-import { Button } from "../../../components/common/Button";
-import { Input } from "../../../components/common/Input";
 import { useToast } from "../../../components/feedback/Toast";
 import { ROUTES } from "../../../config/routes";
 import { useAuth } from "../hooks/useAuth";
@@ -58,7 +56,7 @@ export const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({
         replace: true,
         state: {
           email,
-          message: "Tài khoản đã được kích hoạt. Vui lòng đăng nhập.",
+          message: "Tài khoản đã được kích hoạt thành công. Vui lòng đăng nhập.",
         },
       });
     } catch (err: any) {
@@ -89,57 +87,107 @@ export const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({
   };
 
   return (
-    <>
-      <form onSubmit={handleSubmit} className="vh-auth-form">
-        <Input
-          label="Địa chỉ email"
-          type="email"
-          placeholder="example@gmail.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          leftIcon={<Mail size={18} />}
-          required
-        />
+    <div className="w-full">
+      {/* Title Group */}
+      <div className="lume-auth-title-group">
+        <h1 className="lume-auth-title">
+          Xác thực <span>tài khoản</span>
+        </h1>
+        <p className="lume-auth-subtitle">
+          Nhập mã OTP 6 số đã được gửi tới email của bạn để kích hoạt tài khoản.
+        </p>
+      </div>
 
-        <Input
-          label="Mã xác thực OTP (6 chữ số)"
-          type="text"
-          maxLength={6}
-          placeholder="123456"
-          value={otp}
-          onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-          leftIcon={<ShieldCheck size={18} />}
-          required
-        />
+      {/* Form Fields */}
+      <form onSubmit={handleSubmit} className="lume-auth-form">
+        <div className="lume-form-group">
+          <label htmlFor="otp-email" className="lume-form-label">
+            Địa chỉ email
+          </label>
+          <div className="lume-form-input-wrapper">
+            <input
+              id="otp-email"
+              type="email"
+              placeholder="nhap.email@example.com"
+              value={email}
+              autoComplete="email"
+              onChange={(e) => setEmail(e.target.value)}
+              className="lume-form-input has-left-icon"
+              required
+            />
+            <div className="lume-form-input-icon-left">
+              <Mail size={17} />
+            </div>
+          </div>
+        </div>
 
-        <Button
+        <div className="lume-form-group">
+          <label htmlFor="otp-code" className="lume-form-label">
+            Mã xác thực OTP (6 chữ số)
+          </label>
+          <div className="lume-form-input-wrapper">
+            <input
+              id="otp-code"
+              type="text"
+              maxLength={6}
+              placeholder="123456"
+              value={otp}
+              autoComplete="one-time-code"
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+              className="lume-form-input has-left-icon font-mono text-center tracking-[0.3em] font-bold text-lg"
+              required
+            />
+            <div className="lume-form-input-icon-left">
+              <ShieldCheck size={17} />
+            </div>
+          </div>
+        </div>
+
+        {/* Submit CTA */}
+        <button
           type="submit"
-          variant="primary"
-          isLoading={isSubmitting}
-          className="w-full mt-4"
+          disabled={isSubmitting}
+          className="lume-auth-submit-btn"
         >
-          Kích hoạt tài khoản
-        </Button>
+          {isSubmitting ? (
+            <>
+              <svg className="animate-spin w-4 h-4 text-white" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="30 150" />
+              </svg>
+              <span>Đang kích hoạt...</span>
+            </>
+          ) : (
+            <span>Kích hoạt tài khoản</span>
+          )}
+        </button>
       </form>
 
-      <div className="vh-otp-resend">
-        <span>Không nhận được mã xác thực?</span>{" "}
+      {/* Resend OTP Block */}
+      <div className="mt-4 pt-4 border-t border-[#E8DEDF]/70 flex items-center justify-between text-xs text-[#6F6264]">
+        <span>Chưa nhận được mã OTP?</span>
         {cooldown > 0 ? (
-          <span className="vh-cooldown-text">Gửi lại sau {cooldown}s</span>
+          <span className="font-semibold text-[#B52B47]">Gửi lại sau {cooldown}s</span>
         ) : (
           <button
             type="button"
             onClick={handleResend}
             disabled={isResending}
-            className="vh-resend-btn"
+            className="font-bold text-[#B52B47] hover:underline bg-transparent border-none p-0 cursor-pointer flex items-center gap-1.5"
           >
-            {isResending ? (
-              <RefreshCw className="animate-spin" size={14} />
-            ) : null}
+            {isResending && <RefreshCw size={12} className="animate-spin" />}
             <span>Gửi lại mã OTP</span>
           </button>
         )}
       </div>
-    </>
+
+      {/* Switch Link */}
+      <div className="lume-auth-footer-switch">
+        <span>Đã có tài khoản?</span>
+        <Link to={ROUTES.LOGIN}>Đăng nhập ngay</Link>
+      </div>
+    </div>
   );
 };
+
+export default VerifyOtpForm;
+

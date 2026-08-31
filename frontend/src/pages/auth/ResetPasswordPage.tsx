@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { useToast } from "../../components/feedback/Toast";
-import { ROUTES } from "../../config/routes";
 import { ResetPasswordForm } from "../../features/auth/components/ResetPasswordForm";
 
 export const ResetPasswordPage: React.FC = () => {
@@ -19,20 +17,11 @@ export const ResetPasswordPage: React.FC = () => {
   }, [searchParams, toast]);
 
   return (
-    <div className="vh-reset-view">
-      <Link to={ROUTES.LOGIN} className="vh-auth-back-link">
-        <ArrowLeft size={16} />
-        <span>Quay về Đăng nhập</span>
-      </Link>
-
-      <div className="vh-auth-header-card mt-2">
-        <h2>Đặt lại mật khẩu</h2>
-        <p>Tạo mật khẩu mới cho tài khoản VibeHue của bạn</p>
-      </div>
-
+    <div className="w-full">
       <ResetPasswordForm initialToken={token} />
     </div>
   );
 };
 
 export default ResetPasswordPage;
+
