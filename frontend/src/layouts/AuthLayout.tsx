@@ -6,10 +6,10 @@ export const AuthLayout: React.FC = () => {
   const isRegister = location.pathname.includes('/register');
 
   const images = [
-    '/hero_bg.png',
-    '/nang_thuy_tien.png',
-    '/phuong_hoang.png',
-    '/hong_lien_hoa.png',
+    '/hero_bg.webp',
+    '/nang_thuy_tien.webp',
+    '/phuong_hoang.webp',
+    '/hong_lien_hoa.webp',
   ];
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);

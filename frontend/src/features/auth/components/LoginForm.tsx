@@ -65,9 +65,17 @@ export const LoginForm: React.FC = () => {
       } else if (loggedInUser?.roles?.includes('PROVIDER')) {
         navigate(ROUTES.PROVIDER_DASHBOARD, { replace: true });
       } else {
-        const destination =
-          (location.state as any)?.from?.pathname || ROUTES.LANDING;
-        navigate(destination, { replace: true });
+        const fromState = (location.state as any)?.from;
+        let destination: string = ROUTES.LANDING;
+        if (typeof fromState === 'string' && fromState.trim()) {
+          destination = fromState;
+        } else if (fromState?.pathname) {
+          destination = `${fromState.pathname}${fromState.search || ''}${fromState.hash || ''}`;
+        }
+        if (destination.startsWith('/auth')) {
+          destination = ROUTES.LANDING;
+        }
+        navigate(destination as any, { replace: true });
       }
     } catch (err: any) {
       toast.error(

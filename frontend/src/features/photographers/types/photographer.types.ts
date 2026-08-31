@@ -17,6 +17,11 @@ export interface PhotographerPackage {
   overtimeFeePerHour?: number;
   overtimeIncrementMinutes?: number;
   maxOvertimeMinutes?: number;
+  includedSessionCount?: number;
+  includedDayCount?: number;
+  maxPeople?: number;
+  additionalSessionFee?: number;
+  travelFeeNotes?: string | null;
 }
 
 export interface LocationSelection {
@@ -92,6 +97,7 @@ export interface PhotographerAddress {
   ward?: string | null;
   district?: string | null;
   city?: string | null;
+  geo?: { coordinates?: number[] | null } | null;
 }
 
 /** The public response contract returned by `/api/photographers`. */
@@ -116,6 +122,7 @@ export interface PhotographerApiResponse {
   defaultPackage?: PhotographerPackage | null;
   activePackageCount?: number;
   isBookable?: boolean;
+  serviceRadiusKm?: number | null;
 }
 
 /** View model consumed by cards, filters and listing UI. */
@@ -142,6 +149,7 @@ export interface PhotographerSummary {
 export interface PhotographerDetails {
   id: string;
   _id: string;
+  providerId?: string;
   businessName: string;
   quote: string;
   rating: PhotographerRating;
@@ -153,6 +161,7 @@ export interface PhotographerDetails {
   portfolioItems: PhotographerPortfolioItem[];
   packages: PhotographerPackage[];
   coverImage?: string;
+  serviceRadiusKm?: number | null;
 }
 
 export type PhotographerDiscoverySort =
@@ -198,4 +207,18 @@ export interface PhotographerConcept {
   label: string;
   photographerCount: number;
   coverImage: string | null;
+}
+export interface PhotographerPackageCategory {
+  id: string;
+  name: string;
+  slug: string;
+  type: 'PHOTOGRAPHY_CATEGORY';
+  description?: string | null;
+  iconUrl?: string | null;
+  coverImageUrl?: string | null;
+  parentId?: string | null;
+  status: 'ACTIVE' | 'INACTIVE';
+  displayOrder: number;
+  metadata?: { color?: string | null; occasion?: string | null; season?: string | null };
+  packageCount: number;
 }

@@ -75,18 +75,18 @@ export const BookingCheckoutModal: React.FC<BookingCheckoutModalProps> = ({
 
     setIsLoading(true);
     try {
+      if (bookingType === 'PHOTOGRAPHY') {
+        throw new Error('Vui lòng đặt gói chụp từ trang nhiếp ảnh gia để chọn vị trí trên bản đồ.');
+      }
       // 1. Create booking
       const bookingPayload = {
         bookingType,
         items: [
           {
-            productId: bookingType === 'AODAI_RENTAL' ? item.id : undefined,
-            photographyPackageId: bookingType === 'PHOTOGRAPHY' ? item.id : undefined,
+            productId: item.id,
             quantity: 1,
-            rentalFrom: bookingType === 'AODAI_RENTAL' ? dateStr : undefined,
-            rentalTo: bookingType === 'AODAI_RENTAL' ? new Date(new Date(dateStr).getTime() + 3 * 24 * 3600 * 1000).toISOString() : undefined, // Default 3 days
-            shootDate: bookingType === 'PHOTOGRAPHY' ? dateStr : undefined,
-            shootTimeSlot: bookingType === 'PHOTOGRAPHY' ? timeSlot : undefined,
+            rentalFrom: dateStr,
+            rentalTo: new Date(new Date(dateStr).getTime() + 3 * 24 * 3600 * 1000).toISOString(),
           },
         ],
         promoCode: appliedPromo?.code || undefined,
@@ -94,7 +94,7 @@ export const BookingCheckoutModal: React.FC<BookingCheckoutModalProps> = ({
       };
 
       const bookingRes: any = await httpClient.post('/bookings', bookingPayload);
-      toast.success('Khởi tạo đơn hàng thành công!');
+      toast.info('Đơn đã được giữ tạm thời. Đang chuyển đến thanh toán…');
 
       // 2. Create PayOS Simulated Payment Link
       const paymentRes: any = await httpClient.post('/payments/create-link', {
@@ -132,7 +132,7 @@ export const BookingCheckoutModal: React.FC<BookingCheckoutModalProps> = ({
           {/* Selected Product Summary */}
           <div className="flex gap-4 p-4 rounded-xl bg-stone-50 border border-stone-100">
             <img
-              src={item.images?.[0] || item.image || '/cuc_hoa_mi.png'}
+              src={item.images?.[0] || item.image || '/cuc_hoa_mi.webp'}
               alt={item.name}
               className="w-20 h-20 object-cover rounded-lg border border-stone-200"
             />

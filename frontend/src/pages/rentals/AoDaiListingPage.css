@@ -1,0 +1,1160 @@
+/* ==========================================================================
+   LUMÉ ÁO DÀI LISTING PAGE (Photography Color Palette: #B52B47 & #FBE5E9)
+   ========================================================================== */
+
+:root {
+  --lume-primary: #B52B47;
+  --lume-primary-hover: #CA3653;
+  --lume-primary-dark: #8D1D34;
+  --lume-soft: #FBE5E9;
+  --lume-soft-bg: #FFF8F9;
+  --lume-border: #F0DADC;
+  --lume-border-hover: #DFACB7;
+  --lume-ink: #292324;
+  --lume-text-secondary: #5E5054;
+  --lume-muted: #746568;
+  --lume-text-light: #9A858A;
+  --lume-bg-gray: #F9EFF1;
+  --lume-verified-green: #16A34A;
+  --lume-star-gold: #FACC15;
+}
+
+.lume-aodai-page {
+  width: 100%;
+  min-height: 100vh;
+  background-color: #FFFDFC;
+  color: var(--lume-ink);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.lume-aodai-container {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px clamp(16px, 3vw, 32px) 80px;
+  box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   1. Breadcrumb
+   -------------------------------------------------------------------------- */
+.lume-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--lume-text-light);
+  margin-bottom: 20px;
+}
+
+.lume-breadcrumb a {
+  color: var(--lume-text-light);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.lume-breadcrumb a:hover {
+  color: var(--lume-primary);
+}
+
+.lume-breadcrumb-sep {
+  color: #DAB7BF;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.lume-breadcrumb-current {
+  color: var(--lume-ink);
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   2. Hero Section
+   -------------------------------------------------------------------------- */
+.lume-hero-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 32px;
+  margin-bottom: 28px;
+}
+
+.lume-hero-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.lume-hero-eyebrow {
+  display: inline-block;
+  color: var(--lume-primary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.lume-hero-title {
+  margin: 0;
+  font-size: clamp(28px, 3.5vw, 40px);
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--lume-ink);
+  letter-spacing: -0.035em;
+}
+
+.lume-hero-sub {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--lume-muted);
+}
+
+.lume-hero-stats {
+  display: flex;
+  gap: 32px;
+  flex-shrink: 0;
+  padding-bottom: 4px;
+}
+
+.lume-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.lume-stat-item strong {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--lume-primary);
+  line-height: 1.1;
+}
+
+.lume-stat-item span {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--lume-text-light);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   3. Quick Search Bar
+   -------------------------------------------------------------------------- */
+.lume-search-card {
+  background: #FFFFFF;
+  border: 1px solid var(--lume-border);
+  border-radius: 16px;
+  padding: 12px 16px;
+  box-shadow: 0 8px 24px rgba(181, 43, 71, 0.04);
+  margin-bottom: 24px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.lume-search-card:focus-within {
+  border-color: var(--lume-border-hover);
+  box-shadow: 0 8px 24px rgba(181, 43, 71, 0.08);
+}
+
+.lume-search-form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-search-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+
+.lume-search-field:hover,
+.lume-search-field:focus-within {
+  background: var(--lume-soft-bg);
+}
+
+.lume-search-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--lume-text-light);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lume-search-select,
+.lume-search-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--lume-ink);
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.lume-search-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.lume-search-divider {
+  width: 1px;
+  height: 36px;
+  background-color: var(--lume-border);
+  flex-shrink: 0;
+}
+
+.lume-search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: var(--lume-primary);
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 13px 26px;
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 8px 16px rgba(181, 43, 71, 0.18);
+}
+
+.lume-search-btn:hover {
+  background-color: var(--lume-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 11px 21px rgba(181, 43, 71, 0.24);
+}
+
+.lume-search-btn:active {
+  transform: translateY(0);
+}
+
+/* --------------------------------------------------------------------------
+   4. Category Quick Filter Pills
+   -------------------------------------------------------------------------- */
+.lume-category-pills {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: 28px;
+  scrollbar-width: thin;
+}
+
+.lume-category-pills::-webkit-scrollbar {
+  height: 4px;
+}
+
+.lume-category-pills::-webkit-scrollbar-thumb {
+  background: var(--lume-border);
+  border-radius: 4px;
+}
+
+.lume-pill-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  background: #FFFFFF;
+  border: 1px solid var(--lume-border);
+  border-radius: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  text-align: left;
+}
+
+.lume-pill-btn:hover {
+  border-color: var(--lume-border-hover);
+  background: var(--lume-soft-bg);
+  transform: translateY(-2px);
+}
+
+.lume-pill-btn.is-active {
+  border-color: var(--lume-primary);
+  background: #FFFFFF;
+  box-shadow: 0 8px 20px rgba(181, 43, 71, 0.1);
+}
+
+.lume-pill-icon-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #F9EFF1;
+  color: var(--lume-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.lume-pill-btn.is-active .lume-pill-icon-box {
+  background: var(--lume-soft);
+  color: var(--lume-primary);
+}
+
+.lume-pill-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lume-pill-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--lume-ink);
+  line-height: 1.2;
+}
+
+.lume-pill-btn.is-active .lume-pill-name {
+  color: var(--lume-primary);
+}
+
+.lume-pill-count {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--lume-text-light);
+}
+
+/* --------------------------------------------------------------------------
+   5. Main 2-Column Layout
+   -------------------------------------------------------------------------- */
+.lume-main-layout {
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+
+/* --------------------------------------------------------------------------
+   6. Sidebar Filter
+   -------------------------------------------------------------------------- */
+.lume-sidebar {
+  background: #FFFFFF;
+  border: 1px solid var(--lume-border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 6px 18px rgba(71, 37, 44, 0.04);
+  position: sticky;
+  top: 90px;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+}
+
+.lume-sidebar-header {
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #F5EAEC;
+}
+
+.lume-sidebar-eyebrow {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--lume-text-light);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.lume-sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lume-sidebar-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--lume-ink);
+  letter-spacing: -0.02em;
+}
+
+.lume-reset-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--lume-primary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: opacity 0.15s;
+}
+
+.lume-reset-btn:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+.lume-filter-section {
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #F5EAEC;
+}
+
+.lume-filter-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.lume-filter-heading {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #5E5054;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Checkbox Groups */
+.lume-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lume-checkbox-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: #67575B;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+.lume-checkbox-label:hover {
+  color: var(--lume-primary);
+}
+
+.lume-checkbox-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lume-custom-checkbox {
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid var(--lume-border);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  background: #FFFFFF;
+}
+
+.lume-checkbox-label input {
+  display: none;
+}
+
+.lume-checkbox-label input:checked + .lume-custom-checkbox {
+  background: var(--lume-primary);
+  border-color: var(--lume-primary);
+}
+
+.lume-checkbox-count {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--lume-text-light);
+}
+
+/* Size Buttons */
+.lume-size-options {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.lume-size-btn {
+  padding: 7px 13px;
+  background: #FFFFFF;
+  border: 1px solid var(--lume-border);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--lume-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-size-btn:hover {
+  border-color: var(--lume-border-hover);
+  color: var(--lume-primary);
+}
+
+.lume-size-btn.is-selected {
+  background: var(--lume-primary);
+  border-color: var(--lume-primary);
+  color: #FFFFFF;
+  box-shadow: 0 4px 10px rgba(181, 43, 71, 0.2);
+}
+
+/* Color Circles */
+.lume-color-options {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.lume-color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.15s, box-shadow 0.15s;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  padding: 0;
+  outline: none;
+}
+
+.lume-color-swatch:hover {
+  transform: scale(1.18);
+}
+
+.lume-color-swatch.is-selected {
+  box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px var(--lume-primary);
+  transform: scale(1.1);
+}
+
+/* Price Range Slider */
+.lume-range-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lume-range-slider {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--lume-border);
+  accent-color: var(--lume-primary);
+  cursor: pointer;
+}
+
+.lume-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--lume-text-light);
+}
+
+.lume-current-price-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--lume-primary);
+  background: var(--lume-soft);
+  padding: 4px 8px;
+  border-radius: 6px;
+  align-self: flex-start;
+}
+
+/* --------------------------------------------------------------------------
+   7. Listing Results Area
+   -------------------------------------------------------------------------- */
+.lume-listing-results {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+/* Top Toolbar */
+.lume-results-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFFFFF;
+  border: 1px solid var(--lume-border);
+  border-radius: 14px;
+  padding: 16px 20px;
+  box-shadow: 0 4px 16px rgba(181, 43, 71, 0.03);
+}
+
+.lume-toolbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lume-toolbar-eyebrow {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--lume-primary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lume-toolbar-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--lume-ink);
+  letter-spacing: -0.02em;
+}
+
+.lume-toolbar-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lume-text-light);
+}
+
+.lume-sort-dropdown {
+  position: relative;
+}
+
+.lume-sort-select {
+  padding: 8px 32px 8px 13px;
+  background: #FFFFFF;
+  border: 1px solid var(--lume-border);
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #44383B;
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+  appearance: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.lume-sort-select:hover,
+.lume-sort-select:focus {
+  border-color: var(--lume-primary);
+  box-shadow: 0 0 0 3px rgba(181, 43, 71, 0.08);
+}
+
+.lume-sort-icon {
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #8D7C80;
+  pointer-events: none;
+}
+
+/* Active Chips Bar */
+.lume-active-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lume-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--lume-soft-bg);
+  border: 1px solid var(--lume-border);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--lume-ink);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-chip:hover {
+  background: var(--lume-soft);
+  color: var(--lume-primary);
+  border-color: var(--lume-border-hover);
+}
+
+.lume-chip-remove {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--lume-primary);
+}
+
+/* Promo Banner Card */
+.lume-promo-banner {
+  background: linear-gradient(135deg, #B52B47 0%, #8D1D34 100%);
+  border-radius: 14px;
+  padding: 18px 22px;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 8px 20px rgba(181, 43, 71, 0.2);
+}
+
+.lume-promo-left {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lume-promo-tag {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.lume-promo-headline {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: #FFFFFF;
+  letter-spacing: -0.01em;
+}
+
+.lume-promo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #FFFFFF;
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 7px 14px;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.lume-promo-link:hover {
+  background: rgba(255, 255, 255, 0.26);
+  transform: translateX(2px);
+}
+
+/* --------------------------------------------------------------------------
+   8. Product Grid & Arched Cards
+   -------------------------------------------------------------------------- */
+.lume-product-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.lume-product-card {
+  background: #FFFFFF;
+  border: 1px solid var(--lume-border);
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  position: relative;
+  cursor: pointer;
+}
+
+.lume-product-card:hover {
+  border-color: var(--lume-border-hover);
+  transform: translateY(-4px);
+  box-shadow: 0 13px 28px rgba(181, 43, 71, 0.1);
+}
+
+/* Arched Image Container */
+.lume-card-image-wrap {
+  width: 100%;
+  aspect-ratio: 1.08;
+  background: var(--lume-soft);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-top: 12px;
+}
+
+/* The classical LUMÉ Arch Shape */
+.lume-card-arch {
+  width: 82%;
+  height: 92%;
+  background: #FFFFFF;
+  border-radius: 140px 140px 0 0;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 4px 14px rgba(181, 43, 71, 0.06);
+}
+
+.lume-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.lume-product-card:hover .lume-card-img {
+  transform: scale(1.05);
+}
+
+.lume-card-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: var(--lume-primary);
+  color: #FFFFFF;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  z-index: 2;
+  box-shadow: 0 2px 6px rgba(181, 43, 71, 0.25);
+}
+
+.lume-fav-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 31px;
+  height: 31px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  border: 1px solid var(--lume-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lume-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 2;
+}
+
+.lume-fav-btn:hover {
+  transform: scale(1.08) rotate(-4deg);
+  background: var(--lume-soft);
+}
+
+.lume-fav-btn.is-favorited {
+  background: var(--lume-primary);
+  border-color: var(--lume-primary);
+  color: #FFFFFF;
+}
+
+/* Card Body */
+.lume-card-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+}
+
+.lume-card-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+}
+
+.lume-brand-name {
+  font-weight: 800;
+  color: #9B7A80;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.lume-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--lume-verified-green);
+  font-weight: 700;
+  font-size: 10.5px;
+}
+
+.lume-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--lume-ink);
+  line-height: 1.35;
+  min-height: 40px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 0.15s;
+}
+
+.lume-product-card:hover .lume-card-title {
+  color: var(--lume-primary);
+}
+
+.lume-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--lume-muted);
+}
+
+.lume-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 750;
+  color: var(--lume-ink);
+}
+
+.lume-star-icon {
+  color: var(--lume-star-gold);
+}
+
+.lume-meta-dot {
+  color: var(--lume-text-light);
+}
+
+.lume-card-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 1px;
+}
+
+.lume-tag-pill {
+  background: var(--lume-soft-bg);
+  border: 1px solid #F6E6E9;
+  color: #6E5A5E;
+  font-size: 10.5px;
+  font-weight: 650;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.lume-card-hint {
+  margin: 2px 0 0;
+  font-size: 11px;
+  font-style: italic;
+  color: #9B8589;
+}
+
+.lume-card-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid #F3E7E9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lume-price-group {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.lume-price-amount {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--lume-primary);
+  letter-spacing: -0.02em;
+}
+
+.lume-price-unit {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9B8589;
+}
+
+.lume-detail-btn {
+  background: var(--lume-primary);
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.lume-detail-btn:hover {
+  background: var(--lume-primary-hover);
+  transform: translateY(-1px);
+}
+
+/* --------------------------------------------------------------------------
+   9. Pagination & States
+   -------------------------------------------------------------------------- */
+.lume-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 32px;
+}
+
+.lume-page-btn {
+  min-width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--lume-border);
+  background: #FFFFFF;
+  font-size: 13px;
+  font-weight: 700;
+  color: #5E5054;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.lume-page-btn:hover:not(:disabled) {
+  border-color: var(--lume-primary);
+  color: var(--lume-primary);
+}
+
+.lume-page-btn.is-active {
+  background: var(--lume-primary);
+  border-color: var(--lume-primary);
+  color: #FFFFFF;
+}
+
+.lume-page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Loading & Empty States */
+.lume-loading-state,
+.lume-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  background: #FFFFFF;
+  border: 1px dashed #E9C8CE;
+  border-radius: 16px;
+}
+
+.lume-empty-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: var(--lume-soft);
+  color: var(--lume-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.lume-empty-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0 0 6px;
+  color: var(--lume-ink);
+}
+
+.lume-empty-desc {
+  font-size: 13px;
+  color: var(--lume-muted);
+  margin: 0 0 16px;
+  max-width: 360px;
+}
+
+/* --------------------------------------------------------------------------
+   10. Responsive Media Queries
+   -------------------------------------------------------------------------- */
+@media (max-width: 1080px) {
+  .lume-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lume-main-layout {
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: 20px;
+  }
+}
+
+@media (max-width: 860px) {
+  .lume-main-layout {
+    grid-template-columns: 1fr;
+  }
+  .lume-sidebar {
+    position: static;
+    max-height: none;
+  }
+  .lume-search-form {
+    flex-wrap: wrap;
+  }
+  .lume-search-field {
+    flex: 1 1 40%;
+  }
+  .lume-search-divider {
+    display: none;
+  }
+  .lume-search-btn {
+    width: 100%;
+  }
+  .lume-hero-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .lume-hero-stats {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .lume-stat-item {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .lume-aodai-container {
+    padding: 16px 14px 60px;
+  }
+  .lume-product-grid {
+    grid-template-columns: 1fr;
+  }
+  .lume-search-field {
+    flex: 1 1 100%;
+  }
+  .lume-results-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .lume-sort-dropdown {
+    width: 100%;
+  }
+  .lume-sort-select {
+    width: 100%;
+  }
+  .lume-promo-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}

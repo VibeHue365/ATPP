@@ -37,7 +37,7 @@ export const RentalPickupReturnPanel = ({ location, itemName }: RentalPickupRetu
       .setView([latitude, longitude], 15);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
     }).addTo(map);
     L.marker([latitude, longitude], {
       icon: L.divIcon({ className: 'rental-pickup-marker', html: '<span></span>', iconSize: [24, 31], iconAnchor: [12, 31] }),

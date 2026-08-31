@@ -1,0 +1,1673 @@
+.product-detail-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid rgba(161, 30, 34, 0.12);
+  border-radius: 24px;
+  box-shadow: 0 16px 40px rgba(45, 41, 38, 0.06);
+}
+
+.product-detail-gallery {
+  min-width: 0;
+  position: sticky;
+  top: 104px;
+}
+
+.product-detail-gallery__main {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+  min-height: 460px;
+  background: #f5eeef;
+  border-radius: 18px;
+  border: 1px solid rgba(45, 41, 38, 0.08);
+}
+
+.product-detail-gallery__main-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-detail-gallery__empty {
+  width: 100%;
+  height: 100%;
+  min-height: 460px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  color: #a99b9d;
+  background: linear-gradient(135deg, #f8f1f2, #efe4e6);
+  font-size: 13px;
+}
+
+.product-detail-gallery__badge {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--landing-primary, #7d3543);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+
+.product-detail-gallery__favorite {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: #7d7072;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 8px 20px rgba(41, 35, 36, .12);
+  cursor: pointer;
+  transition: transform .2s ease, color .2s ease;
+}
+
+.product-detail-gallery__favorite:hover { transform: translateY(-2px); }
+.product-detail-gallery__favorite.is-active { color: var(--landing-primary, #7d3543); }
+
+.product-detail-gallery__thumbs {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  overflow-x: auto;
+  padding: 2px;
+}
+
+.product-detail-gallery__thumb {
+  flex: 0 0 76px;
+  width: 76px;
+  height: 96px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(45, 41, 38, .12);
+  border-radius: 10px;
+  background: #f7eff0;
+  cursor: pointer;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.product-detail-gallery__thumb.is-active {
+  border: 2px solid var(--landing-primary, #7d3543);
+  box-shadow: 0 0 0 3px rgba(125, 53, 67, .12);
+}
+
+.product-detail-gallery__thumb img,
+.product-detail-gallery__thumb-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-detail-gallery__thumb-fallback { background: linear-gradient(135deg, #f8f1f2, #eadbde); }
+
+.product-detail-booking {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.product-detail-heading { display: flex; flex-direction: column; gap: 9px; }
+
+.product-detail-provider {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  color: var(--landing-primary, #7d3543);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.product-detail-provider span { font-size: 16px; margin-left: 3px; }
+
+.product-detail-heading h1 {
+  margin: 0;
+  color: var(--landing-text-primary, #292324);
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1.12;
+  letter-spacing: -.04em;
+}
+
+.product-detail-rating { display: flex; align-items: center; gap: 8px; color: var(--landing-text-muted, #988b8d); font-size: 13px; }
+.product-detail-rating__stars { display: inline-flex; gap: 2px; color: #b6915b; }
+.product-detail-rating strong { color: var(--landing-text-primary, #292324); }
+
+.product-detail-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--landing-primary, #7d3543);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.product-detail-price-card,
+.product-detail-pickup,
+.product-detail-ai {
+  border-radius: 16px;
+  border: 1px solid var(--landing-border, #e8dedf);
+}
+
+.product-detail-price-card { padding: 20px; background: #fff8f8; }
+.product-detail-price-card > strong { display: block; margin-top: 5px; color: var(--landing-primary-dark, #642936); font-size: clamp(25px, 2.5vw, 33px); line-height: 1.1; letter-spacing: -.04em; }
+.product-detail-price-card__deposit { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 10px; color: var(--landing-text-secondary, #6f6264); font-size: 12px; }
+.product-detail-price-card__deposit svg { color: #2e7d57; }
+
+.product-detail-pickup { display: flex; gap: 12px; padding: 16px; background: #fbf7f1; border-color: rgba(182, 145, 91, .24); }
+.product-detail-pickup > svg { flex: 0 0 auto; margin-top: 2px; color: var(--landing-primary, #7d3543); }
+.product-detail-pickup > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.product-detail-pickup strong { color: var(--landing-text-primary, #292324); font-size: 14px; line-height: 1.45; }
+.product-detail-pickup span:not(.product-detail-eyebrow) { color: var(--landing-text-secondary, #6f6264); font-size: 12px; }
+
+.product-detail-ai { padding: 17px; background: rgba(252, 249, 242, .72); border-color: rgba(182, 145, 91, .3); }
+.product-detail-ai__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.product-detail-ai__actions button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 13px 10px; border: 1px solid rgba(182, 145, 91, .25); border-radius: 12px; color: var(--landing-text-primary, #292324); background: #fff; cursor: pointer; transition: transform .2s ease, box-shadow .2s ease; }
+.product-detail-ai__actions button:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(41, 35, 36, .08); }
+.product-detail-ai__actions button:first-child svg { color: #cf9b32; }
+.product-detail-ai__actions button:last-child svg { color: #7256a5; }
+.product-detail-ai__actions b { font-size: 12px; }
+
+.product-detail-option { display: flex; flex-direction: column; gap: 10px; }
+.product-detail-option__label { color: var(--landing-text-secondary, #6f6264); font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.product-detail-option__label b { color: var(--landing-text-primary, #292324); }
+.product-detail-colors, .product-detail-sizes { display: flex; flex-wrap: wrap; gap: 10px; }
+.product-detail-colors button { width: 31px; height: 31px; padding: 0; border: 1px solid rgba(45, 41, 38, .18); border-radius: 50%; cursor: pointer; }
+.product-detail-colors button.is-selected { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--landing-primary, #7d3543); }
+.product-detail-sizes button { min-width: 56px; padding: 9px 16px; border: 1px solid var(--landing-border, #e8dedf); border-radius: 9px; color: var(--landing-text-primary, #292324); background: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
+.product-detail-sizes button.is-selected { border-color: var(--landing-primary, #7d3543); color: #fff; background: var(--landing-primary, #7d3543); }
+
+.rental-picker { overflow: hidden; border: 1px solid var(--landing-border, #e8dedf); border-radius: 16px; background: #fff; }
+.rental-picker__tabs { display: grid; grid-template-columns: repeat(2, 1fr); background: #fbf6f5; border-bottom: 1px solid var(--landing-border, #e8dedf); }
+.rental-picker__tabs button { padding: 14px 10px; border: 0; border-right: 1px solid var(--landing-border, #e8dedf); color: var(--landing-text-secondary, #6f6264); background: transparent; font-size: 13px; font-weight: 800; cursor: pointer; }
+.rental-picker__tabs button:last-child { border-right: 0; }
+.rental-picker__tabs button.is-active { color: var(--landing-primary-dark, #642936); background: #fff; box-shadow: inset 0 -2px 0 var(--landing-primary, #7d3543); }
+.rental-picker__body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 22px; padding: 18px; }
+
+.rental-calendar__header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; color: var(--landing-text-primary, #292324); font-size: 13px; }
+.rental-calendar__header button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; color: var(--landing-primary, #7d3543); background: #fff7f8; cursor: pointer; }
+.rental-calendar__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; }
+.rental-calendar__weekday { padding: 3px 0; color: var(--landing-text-muted, #988b8d); font-size: 10px; font-weight: 800; }
+.rental-calendar__day { aspect-ratio: 1; padding: 0; border: 1px solid transparent; border-radius: 8px; color: var(--landing-text-primary, #292324); background: #fff; font-size: 12px; cursor: pointer; }
+.rental-calendar__day.is-weekend { background: #fffaf7; }
+.rental-calendar__day.is-in-range { color: var(--landing-primary-dark, #642936); background: #fff0f1; }
+.rental-calendar__day.is-selected { color: #fff; background: var(--landing-primary-dark, #642936); }
+.rental-calendar__day:disabled { color: #c6bfc0; background: #f5f3f3; cursor: not-allowed; }
+
+.rental-picker__summary { min-width: 0; }
+.rental-picker__summary h2 { margin: 0 0 10px; color: var(--landing-text-muted, #988b8d); font-size: 10px; letter-spacing: .08em; }
+.rental-picker__selected-time { display: block; margin: -2px 0 9px; color: var(--landing-primary-dark, #642936); font-size: 13px; font-weight: 800; }
+.rental-picker__slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.rental-picker__slots button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 5px; border: 1px solid rgba(45, 41, 38, .14); border-radius: 8px; color: var(--landing-text-primary, #292324); background: #fff; font-size: 10px; font-weight: 700; cursor: pointer; }
+.rental-picker__slots button small { color: var(--landing-text-muted, #988b8d); font-size: 9px; }
+.rental-picker__slots button.is-selected { color: #fff; background: var(--landing-primary-dark, #642936); border-color: var(--landing-primary-dark, #642936); }
+.rental-picker__slots button.is-selected small { color: #fff; opacity: .82; }
+.rental-picker__slots button.is-disabled { color: #aaa; background: #f1efef; cursor: not-allowed; }
+.rental-picker__summary p { margin: 11px 0 0; color: var(--landing-text-secondary, #6f6264); font-size: 10px; font-style: italic; line-height: 1.45; }
+.rental-picker__dates { display: flex; flex-direction: column; gap: 14px; }
+.rental-picker__dates div { display: flex; flex-direction: column; gap: 4px; }
+.rental-picker__dates span { color: var(--landing-text-muted, #988b8d); font-size: 10px; font-weight: 800; }
+.rental-picker__dates strong { color: var(--landing-text-primary, #292324); font-size: 14px; }
+
+.product-detail-actions { display: flex; flex-direction: column; gap: 10px; }
+.product-detail-availability { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-radius: 9px; color: #6f6264; background: #f8f5f2; font-size: 12px; line-height: 1.4; }
+.product-detail-availability.is-success { color: #1e7a46; background: #effaf3; }
+.product-detail-availability.is-error { color: #ad3b3b; background: #fff0ef; }
+.product-detail-availability.is-warning { color: #8c6d1f; background: #fff9e8; }
+.product-detail-quantity { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border: 1px solid var(--landing-border, #e8dedf); border-radius: 11px; color: var(--landing-text-secondary, #6f6264); font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+.product-detail-quantity > div { display: flex; align-items: center; gap: 14px; }
+.product-detail-quantity button { width: 29px; height: 29px; border: 1px solid var(--landing-primary, #7d3543); border-radius: 50%; color: var(--landing-primary, #7d3543); background: #fff; font-size: 17px; line-height: 1; cursor: pointer; }
+.product-detail-quantity strong { min-width: 16px; color: var(--landing-text-primary, #292324); text-align: center; }
+.product-detail-button { min-height: 52px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 11px; font-size: 13px; font-weight: 800; letter-spacing: .04em; cursor: pointer; }
+.product-detail-button:disabled { opacity: .48; cursor: not-allowed; }
+.product-detail-button--outline { border: 1px solid var(--landing-primary, #7d3543); color: var(--landing-primary-dark, #642936); background: #fff; }
+.product-detail-button--primary { border: 1px solid var(--landing-primary, #7d3543); color: #fff; background: var(--landing-primary, #7d3543); }
+.product-detail-assurances { display: flex; justify-content: space-between; gap: 12px; padding-top: 14px; border-top: 1px solid var(--landing-border, #e8dedf); color: var(--landing-text-secondary, #6f6264); font-size: 11px; }
+.product-detail-assurances span { display: inline-flex; align-items: center; gap: 5px; }
+
+@media (max-width: 960px) {
+  .product-detail-hero { grid-template-columns: 1fr; gap: 28px; }
+  .product-detail-gallery { position: static; }
+  .product-detail-gallery__main { max-height: 680px; }
+}
+
+@media (max-width: 560px) {
+  .product-detail-hero { padding: 14px; border-radius: 18px; }
+  .product-detail-gallery__main { min-height: 380px; }
+  .product-detail-gallery__empty { min-height: 380px; }
+  .rental-picker__body { grid-template-columns: 1fr; }
+  .product-detail-assurances { flex-direction: column; }
+}
+
+.product-info-tabs {
+  margin-top: 64px;
+  padding-top: 28px;
+  border-top: 1px solid var(--landing-border, #e8dedf);
+}
+
+.product-info-tabs__nav {
+  display: flex;
+  gap: 28px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--landing-border, #e8dedf);
+}
+
+.product-info-tabs__nav button {
+  flex: 0 0 auto;
+  padding: 0 0 13px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--landing-text-muted, #988b8d);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.product-info-tabs__nav button.is-active {
+  border-bottom-color: var(--landing-primary, #7d3543);
+  color: var(--landing-primary-dark, #642936);
+}
+
+.product-info-tabs__content {
+  min-height: 120px;
+  padding-top: 22px;
+  color: var(--landing-text-secondary, #6f6264);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.product-info-tabs__content p + p { margin-top: 10px; }
+.product-info-tabs__content ul { margin: 10px 0 0 20px; }
+.photographer-recommendations {
+  margin-top: 64px;
+  padding-top: 28px;
+  border-top: 1px solid var(--landing-border, #e8dedf);
+}
+
+.photographer-recommendations__heading { margin-bottom: 26px; }
+.photographer-recommendations__heading h2 { max-width: 660px; margin: 8px 0 0; color: var(--landing-text-primary, #292324); font-size: 28px; line-height: 1.2; letter-spacing: -.04em; }
+.photographer-recommendations__loading { padding: 28px; border: 1px solid var(--landing-border, #e8dedf); border-radius: 16px; color: var(--landing-text-secondary, #6f6264); background: #fff; font-size: 13px; }
+.photographer-recommendations__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.photographer-recommendation-card { overflow: hidden; border: 1px solid var(--landing-border, #e8dedf); border-radius: 16px; background: #fff; }
+.photographer-recommendation-card__image { position: relative; height: 235px; background: #f5eeef; }
+.photographer-recommendation-card__image-media, .photographer-recommendation-card__image-empty { display: block; width: 100%; height: 100%; object-fit: cover; }
+.photographer-recommendation-card__image-empty { display: grid; place-items: center; padding: 20px; color: #a99b9d; font-size: 12px; text-align: center; }
+.photographer-recommendation-card__rating { position: absolute; top: 12px; right: 12px; display: inline-flex; align-items: center; gap: 4px; padding: 5px 9px; border-radius: 999px; color: #4c3e2d; background: rgba(255, 255, 255, .94); font-size: 11px; font-weight: 800; }
+.photographer-recommendation-card__rating svg { color: #b6915b; }
+.photographer-recommendation-card__rating small { color: var(--landing-text-secondary, #6f6264); font-weight: 500; }
+.photographer-recommendation-card__body { padding: 17px; }
+.photographer-recommendation-card__body h3 { margin: 0; color: var(--landing-text-primary, #292324); font-size: 18px; }
+.photographer-recommendation-card__body p { min-height: 42px; margin: 8px 0 0; color: var(--landing-text-secondary, #6f6264); font-size: 12px; line-height: 1.6; }
+.photographer-recommendation-card__footer { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--landing-border, #e8dedf); }
+.photographer-recommendation-card__footer span { display: block; color: var(--landing-text-muted, #988b8d); font-size: 10px; text-transform: uppercase; }
+.photographer-recommendation-card__footer strong { display: block; margin-top: 2px; color: var(--landing-primary-dark, #642936); font-size: 17px; }
+.photographer-recommendation-card__footer button { padding: 8px 12px; border: 1px solid var(--landing-primary, #7d3543); border-radius: 7px; color: var(--landing-primary-dark, #642936); background: #fff; font-size: 11px; font-weight: 800; cursor: pointer; }
+
+@media (max-width: 760px) {
+  .photographer-recommendations__grid { grid-template-columns: 1fr; }
+}
+.product-reviews {
+  margin-top: 64px;
+  padding-top: 28px;
+  border-top: 1px solid var(--landing-border, #e8dedf);
+}
+
+.product-reviews__heading { margin-bottom: 26px; }
+.product-reviews__heading h2 { margin: 8px 0 0; color: var(--landing-text-primary, #292324); font-size: 28px; line-height: 1.2; letter-spacing: -.04em; }
+.product-reviews__overview { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(260px, 1.5fr) 210px; align-items: center; gap: 36px; margin-bottom: 28px; padding: 28px; border: 1px solid var(--landing-border, #e8dedf); border-radius: 16px; background: #fff; }
+.product-reviews__average { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.product-reviews__average > strong { color: var(--landing-text-primary, #292324); font-size: 48px; line-height: 1; letter-spacing: -.05em; }
+.product-reviews__average > div { display: flex; gap: 2px; color: #b6915b; }
+.product-reviews__average > span { color: var(--landing-text-secondary, #6f6264); font-size: 12px; }
+.product-reviews__bars { display: flex; flex-direction: column; gap: 9px; }
+.product-reviews__bar-row { display: grid; grid-template-columns: 48px 1fr 34px; align-items: center; gap: 9px; color: var(--landing-text-secondary, #6f6264); font-size: 11px; }
+.product-reviews__bar-row > span { text-align: right; }
+.product-reviews__bar-row > div { height: 6px; overflow: hidden; border-radius: 4px; background: #f0ebe0; }
+.product-reviews__bar-row i { display: block; height: 100%; border-radius: 4px; background: #b6915b; }
+.product-reviews__bar-row b { font-weight: 600; }
+.product-reviews__write { display: flex; justify-content: center; }
+.product-reviews__write button, .product-reviews__already { display: inline-flex; align-items: center; gap: 7px; padding: 11px 17px; border: 1px solid var(--landing-primary, #7d3543); border-radius: 8px; color: #fff; background: var(--landing-primary, #7d3543); font-size: 12px; font-weight: 800; cursor: pointer; }
+.product-reviews__write button:disabled { opacity: .5; cursor: not-allowed; }
+.product-reviews__already { border-color: #bbf7d0; color: #15803d; background: #f0fdf4; }
+.product-reviews__filters { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; padding-bottom: 14px; border-bottom: 1px solid var(--landing-border, #e8dedf); }
+.product-reviews__filters > div { display: flex; flex-wrap: wrap; gap: 20px; }
+.product-reviews__filters button { padding: 0 0 4px; border: 0; border-bottom: 2px solid transparent; color: var(--landing-text-secondary, #6f6264); background: transparent; font-size: 12px; font-weight: 800; cursor: pointer; }
+.product-reviews__filters button.is-active { border-bottom-color: var(--landing-primary, #7d3543); color: var(--landing-primary, #7d3543); }
+.product-reviews__filters label { display: inline-flex; align-items: center; gap: 6px; color: var(--landing-text-secondary, #6f6264); font-size: 12px; cursor: pointer; }
+.product-reviews__filters input { accent-color: var(--landing-primary, #7d3543); }
+.product-reviews__list { display: flex; flex-direction: column; gap: 24px; }
+.product-reviews__empty { padding: 28px 20px; border: 1px solid var(--landing-border, #e8dedf); border-radius: 12px; color: var(--landing-text-secondary, #6f6264); background: #fff; font-size: 13px; text-align: center; }
+.product-review { padding-bottom: 24px; border-bottom: 1px solid var(--landing-border, #e8dedf); }
+.product-review__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.product-review__author { display: flex; gap: 11px; }
+.product-review__avatar, .product-review__avatar-fallback { display: grid; flex: 0 0 40px; width: 40px; height: 40px; place-items: center; overflow: hidden; border-radius: 50%; object-fit: cover; color: var(--landing-primary-dark, #642936); background: #eadfc9; font-size: 14px; font-weight: 800; }
+.product-review__name { display: flex; align-items: center; gap: 8px; color: var(--landing-text-primary, #292324); font-size: 13px; }
+.product-review__name > span { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px; color: #1e7a46; background: #effaf3; font-size: 9px; font-weight: 800; }
+.product-review__stars { display: flex; gap: 2px; margin-top: 4px; color: #b6915b; }
+.product-review__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; color: var(--landing-text-secondary, #6f6264); font-size: 11px; }
+.product-review__meta button { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 0; border-radius: 4px; color: #9ca3af; background: transparent; font-size: 10px; cursor: pointer; }
+.product-review__meta button:hover { color: #dc2626; background: #fee2e2; }
+.product-review__comment { margin: 14px 0 0 51px; color: var(--landing-text-primary, #292324); font-size: 13px; line-height: 1.7; }
+.product-review__images { display: flex; gap: 10px; margin: 14px 0 0 51px; overflow-x: auto; }
+.product-review__images img, .product-review__images span { display: block; flex: 0 0 68px; width: 68px; height: 84px; border-radius: 7px; object-fit: cover; background: #f5eeef; }
+.product-review__reply { margin: 14px 0 0 51px; padding: 13px; border-left: 3px solid var(--landing-primary, #7d3543); border-radius: 0 10px 10px 0; background: #fbf7f1; font-size: 12px; }
+.product-review__reply > strong { color: var(--landing-primary-dark, #642936); }
+.product-review__reply > time { float: right; color: var(--landing-text-muted, #988b8d); font-size: 10px; }
+.product-review__reply p { margin: 5px 0 0; color: var(--landing-text-primary, #292324); line-height: 1.6; }
+
+@media (max-width: 780px) {
+  .product-reviews__overview { grid-template-columns: 1fr; gap: 22px; }
+  .product-reviews__write { justify-content: flex-start; }
+}
+
+@media (max-width: 560px) {
+  .product-reviews__filters { align-items: flex-start; flex-direction: column; }
+  .product-review__header { flex-direction: column; }
+  .product-review__meta { align-items: flex-start; margin-left: 51px; }
+}
+/* ProductSection - Figma ProductSection / 25:1525 */
+.figma-product-detail-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+  padding: 24px 24px 40px;
+  background: #fff;
+  border: 1px solid #ead9dc;
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(76, 40, 42, 0.04);
+}
+
+.figma-product-gallery {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 336px;
+}
+
+.figma-product-gallery__main {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #f5f5f5;
+  isolation: isolate;
+  cursor: zoom-in;
+}
+
+.figma-product-gallery__main.is-zoomed {
+  cursor: zoom-out;
+}
+
+.figma-product-gallery__main-image,
+.figma-product-gallery__main-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 320ms ease;
+}
+
+.figma-product-gallery__main.is-zoomed .figma-product-gallery__main-image,
+.figma-product-gallery__main.is-zoomed .figma-product-gallery__main-image img {
+  transform: scale(1.08);
+}
+
+.figma-product-gallery__empty {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #9c8e90;
+  font-size: 13px;
+}
+
+.figma-product-gallery__badges {
+  position: absolute;
+  z-index: 2;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.figma-product-gallery__badge {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #7a4045;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.figma-product-gallery__badge:nth-child(2) {
+  background: #1f2937;
+}
+
+.figma-product-gallery__actions {
+  position: absolute;
+  z-index: 2;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.figma-product-gallery__actions button,
+.figma-favorite-button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: #2e2526;
+  cursor: pointer;
+  transition: color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.figma-product-gallery__actions button:hover,
+.figma-favorite-button:hover {
+  transform: translateY(-1px);
+  background: #fff;
+  color: #b8294b;
+}
+
+.figma-product-gallery__actions button.is-active,
+.figma-favorite-button.is-active {
+  color: #b8294b;
+}
+
+.figma-product-gallery__zoom-hint {
+  position: absolute;
+  z-index: 2;
+  bottom: 16px;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(31, 25, 26, 0.62);
+  color: #fff;
+  font-size: 11px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.figma-product-gallery__thumbs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.figma-product-gallery__thumb {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: #f5f5f5;
+  cursor: pointer;
+}
+
+.figma-product-gallery__thumb.is-active {
+  border-color: #b8294b;
+}
+
+.figma-product-gallery__thumb-image,
+.figma-product-gallery__thumb-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.figma-product-gallery__thumb-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #f5f5f5;
+}
+
+.figma-product-gallery__more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(31, 25, 26, 0.48);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.figma-product-booking {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.figma-product-booking button {
+  font: inherit;
+}
+
+.figma-product-booking__store {
+  display: flex;
+  min-height: 43px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.figma-product-booking__store-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.figma-product-booking__store-avatar {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  background: #b8294b;
+  color: #fff;
+  font-family: Georgia, serif;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.figma-product-booking__store-brand div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.figma-product-booking__store-brand strong {
+  color: #2d2526;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.figma-product-booking__store-brand span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #8c7c7e;
+  font-size: 11px;
+}
+
+.figma-product-booking__store-brand span svg {
+  color: #2f9b67;
+}
+
+.figma-product-booking__store > button,
+.figma-product-booking__rating button,
+.figma-pickup-box button,
+.figma-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #b8294b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.figma-product-booking__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.figma-product-booking__intro h1 {
+  margin: 0;
+  color: #211b1c;
+  font-size: clamp(30px, 3vw, 38px);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1.07;
+}
+
+.figma-product-booking__intro p {
+  max-width: 520px;
+  margin: 0;
+  color: #75686a;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.figma-product-booking__rating {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #75686a;
+  font-size: 12px;
+}
+
+.figma-product-booking__rating svg {
+  color: #d49b39;
+}
+
+.figma-product-booking__rating strong {
+  color: #342b2c;
+}
+
+.figma-product-booking__rating span + span::before {
+  margin-right: 8px;
+  content: "•";
+  color: #c7b8ba;
+}
+
+.figma-product-booking__rating button {
+  margin-left: 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.figma-product-booking__divider {
+  height: 1px;
+  background: #eadfe0;
+}
+
+.figma-product-booking__price-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.figma-product-booking__price-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.figma-product-booking__price-row strong {
+  color: #b8294b;
+  font-size: 23px;
+  letter-spacing: -0.03em;
+}
+
+.figma-product-booking__deposit {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.figma-product-booking__deposit strong {
+  color: #332a2b;
+  font-size: 15px;
+}
+
+.figma-product-booking__eyebrow {
+  color: #8c7c7e;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.figma-product-booking__section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.figma-product-booking__section-heading h2 {
+  margin: 0;
+  color: #332a2b;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.figma-product-booking__section-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.figma-product-booking__section-heading span {
+  color: #98898a;
+  font-size: 11px;
+}
+
+.figma-product-booking__section-heading > strong {
+  color: #6e5d5f;
+  font-size: 12px;
+}
+
+.figma-rental-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.figma-rental-modes button {
+  display: flex;
+  min-height: 84px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid #e6d7d9;
+  border-radius: 10px;
+  background: #fff;
+  color: #4b3e40;
+  cursor: pointer;
+  text-align: left;
+}
+
+.figma-rental-modes button.is-selected {
+  border-color: #b8294b;
+  background: #fff8f9;
+  box-shadow: inset 0 0 0 1px #b8294b;
+}
+
+.figma-rental-modes strong {
+  font-size: 13px;
+}
+
+.figma-rental-modes span {
+  color: #8b7b7d;
+  font-size: 11px;
+}
+
+.figma-product-booking__helper,
+.figma-product-booking__availability-hint {
+  margin: -12px 0 0;
+  color: #98898a;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.figma-product-booking__choice {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.figma-color-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.figma-color-options button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid #e6d7d9;
+  border-radius: 999px;
+  background: #fff;
+  color: #5d4d4f;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.figma-color-options button.is-selected {
+  border-color: #b8294b;
+  color: #b8294b;
+  box-shadow: inset 0 0 0 1px #b8294b;
+}
+
+.figma-color-options button span {
+  display: block;
+  width: 15px;
+  height: 15px;
+  border: 1px solid rgba(45, 37, 38, 0.15);
+  border-radius: 50%;
+}
+
+.figma-size-options {
+  display: flex;
+  gap: 8px;
+}
+
+.figma-size-options button {
+  display: grid;
+  width: 48px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid #e6d7d9;
+  border-radius: 8px;
+  background: #fff;
+  color: #5d4d4f;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.figma-size-options button.is-selected {
+  border-color: #b8294b;
+  background: #b8294b;
+  color: #fff;
+}
+
+.figma-date-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.figma-date-field {
+  position: relative;
+  display: flex;
+  min-height: 65px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 5px;
+  padding: 12px 42px 12px 14px;
+  border: 1px solid #e6d7d9;
+  border-radius: 10px;
+  background: #fff;
+  color: #3e3335;
+  cursor: pointer;
+  text-align: left;
+}
+
+.figma-date-field:hover {
+  border-color: #b8294b;
+}
+
+.figma-date-field span {
+  color: #98898a;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.figma-date-field strong {
+  font-size: 13px;
+}
+
+.figma-date-field svg {
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  color: #b8294b;
+  transform: translateY(-50%);
+}
+
+.figma-calendar-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #ead9dc;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(76, 40, 42, 0.12);
+}
+
+.figma-hour-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.figma-hour-slots button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 8px;
+  border: 1px solid #e6d7d9;
+  border-radius: 6px;
+  background: #fff;
+  color: #5d4d4f;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.figma-hour-slots button.is-selected {
+  border-color: #b8294b;
+  background: #b8294b;
+  color: #fff;
+}
+
+.figma-hour-slots button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.figma-status-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.figma-status-box > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.figma-status-box > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.figma-status-box strong {
+  font-size: 12px;
+}
+
+.figma-status-box span {
+  line-height: 1.4;
+}
+
+.figma-status-box.is-success {
+  background: #edf9f2;
+  color: #25734c;
+}
+
+.figma-status-box.is-error {
+  background: #fff0f1;
+  color: #a52a3e;
+}
+
+.figma-status-box.is-warning {
+  background: #fff8e8;
+  color: #85651e;
+}
+
+.figma-pickup-box {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #eadfe0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.figma-pickup-box > svg {
+  color: #b8294b;
+}
+
+.figma-pickup-box > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.figma-pickup-box strong {
+  color: #443739;
+  font-size: 12px;
+}
+
+.figma-pickup-box span {
+  overflow: hidden;
+  color: #8b7b7d;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.figma-summary-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #faf8f8;
+}
+
+.figma-summary-box div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #88797b;
+  font-size: 11px;
+}
+
+.figma-summary-box strong {
+  color: #4a3b3d;
+  font-size: 12px;
+}
+
+.figma-summary-box .figma-summary-box__total {
+  padding-top: 10px;
+  border-top: 1px solid #ece4e5;
+  color: #5e4d4f;
+  font-weight: 700;
+}
+
+.figma-summary-box__total strong {
+  color: #b8294b;
+  font-size: 17px;
+}
+
+.figma-product-booking__actions {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.figma-favorite-button {
+  width: 42px;
+  height: 42px;
+  border: 1px solid #e3d2d5;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.figma-primary-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 9px;
+  background: #b8294b;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.figma-primary-button:hover {
+  background: #a52141;
+}
+
+.figma-primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.figma-assurances {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  color: #847678;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.figma-assurances span {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.figma-assurances svg {
+  flex: 0 0 auto;
+  color: #2f9b67;
+}
+
+@media (max-width: 980px) {
+  .figma-product-detail-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .figma-product-gallery {
+    padding-bottom: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .figma-product-detail-hero {
+    gap: 28px;
+    padding: 16px;
+  }
+
+  .figma-product-booking__price-row,
+  .figma-product-booking__store {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .figma-product-booking__deposit {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .figma-date-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .figma-assurances {
+    grid-template-columns: 1fr;
+  }
+}
+/* Compact date/time popover */
+.figma-calendar-popover {
+  align-self: flex-start;
+  width: min(100%, 380px);
+  max-height: min(430px, calc(100vh - 32px));
+  overflow-y: auto;
+  padding: 12px;
+  border-color: #e5d3d6;
+  border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(76, 40, 42, 0.14);
+  scrollbar-width: thin;
+  scrollbar-color: #d8b8be transparent;
+}
+
+.figma-calendar-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.figma-calendar-popover__header strong {
+  color: #473638;
+  font-size: 12px;
+}
+
+.figma-calendar-popover__header button {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: #fff5f6;
+  color: #b8294b;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.figma-calendar-popover .rental-calendar {
+  width: 100%;
+}
+
+.figma-calendar-popover .rental-calendar__header {
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.figma-calendar-popover .rental-calendar__header button {
+  width: 27px;
+  height: 27px;
+}
+
+.figma-calendar-popover .rental-calendar__grid {
+  gap: 4px;
+}
+
+.figma-calendar-popover .rental-calendar__weekday {
+  padding: 2px 0 5px;
+  font-size: 9px;
+}
+
+.figma-calendar-popover .rental-calendar__day {
+  aspect-ratio: auto;
+  min-height: 34px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+.figma-calendar-popover .figma-hour-slots {
+  padding-top: 10px;
+  border-top: 1px solid #f0e6e7;
+}
+
+@media (max-width: 560px) {
+  .figma-calendar-popover {
+    width: 100%;
+    max-height: min(430px, calc(100vh - 24px));
+  }
+}
+/* Guided rental date/time modal */
+.rental-date-modal {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(38, 27, 29, 0.42);
+  backdrop-filter: blur(3px);
+}
+
+.rental-date-modal__dialog {
+  width: min(520px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow-y: auto;
+  border: 1px solid #ead9dc;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(47, 24, 28, 0.24);
+  scrollbar-width: thin;
+  scrollbar-color: #d8b8be transparent;
+}
+
+.rental-date-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 24px 18px;
+}
+
+.rental-date-modal__header h2 {
+  margin: 5px 0 5px;
+  color: #2e2526;
+  font-size: 24px;
+  letter-spacing: -0.035em;
+}
+
+.rental-date-modal__header p {
+  margin: 0;
+  color: #8c7c7e;
+  font-size: 12px;
+}
+
+.rental-date-modal__close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #eadfe0;
+  border-radius: 50%;
+  background: #fff;
+  color: #806e70;
+  cursor: pointer;
+}
+
+.rental-date-modal__close:hover {
+  border-color: #b8294b;
+  color: #b8294b;
+}
+
+.rental-date-modal__mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0 24px 16px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f8f1f2;
+}
+
+.rental-date-modal__mode-tabs button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8b7b7d;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rental-date-modal__mode-tabs button.is-active {
+  background: #fff;
+  color: #b8294b;
+  box-shadow: 0 2px 8px rgba(76, 40, 42, 0.08);
+}
+
+.rental-date-modal__steps {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: 0 24px 18px;
+}
+
+.rental-date-modal__step {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #eadfe0;
+  border-radius: 10px;
+  background: #fff;
+  color: #5c4c4e;
+  cursor: pointer;
+  text-align: left;
+}
+
+.rental-date-modal__step.is-active {
+  border-color: #b8294b;
+  background: #fff8f9;
+  box-shadow: inset 0 0 0 1px #b8294b;
+}
+
+.rental-date-modal__step > span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #f7e8eb;
+  color: #b8294b;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.rental-date-modal__step div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rental-date-modal__step small {
+  color: #98898a;
+  font-size: 10px;
+}
+
+.rental-date-modal__step strong {
+  overflow: hidden;
+  color: #3e3335;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rental-date-modal__step-arrow {
+  color: #c3abad;
+  font-size: 16px;
+}
+
+.rental-date-modal__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 24px 18px;
+}
+
+.rental-date-modal__calendar-panel,
+.rental-date-modal__time-panel {
+  padding: 14px;
+  border: 1px solid #eadfe0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.rental-date-modal__panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.rental-date-modal__panel-heading > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #473638;
+}
+
+.rental-date-modal__panel-heading svg {
+  color: #b8294b;
+}
+
+.rental-date-modal__panel-heading strong {
+  font-size: 12px;
+}
+
+.rental-date-modal__panel-heading > span {
+  color: #9a8a8c;
+  font-size: 10px;
+}
+
+.rental-date-modal .rental-calendar__header {
+  margin-bottom: 10px;
+}
+
+.rental-date-modal .rental-calendar__header strong {
+  color: #3f3335;
+  font-size: 13px;
+}
+
+.rental-date-modal .rental-calendar__header button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.rental-date-modal .rental-calendar__grid {
+  gap: 5px;
+}
+
+.rental-date-modal .rental-calendar__weekday {
+  padding: 2px 0 6px;
+  color: #a08f91;
+  font-size: 9px;
+}
+
+.rental-date-modal .rental-calendar__day {
+  aspect-ratio: auto;
+  min-height: 38px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.rental-date-modal .rental-calendar__day.is-selected {
+  background: #7a2d3e;
+}
+
+.rental-date-modal .rental-calendar__day.is-in-range {
+  background: #fff0f2;
+  color: #7a2d3e;
+}
+
+.rental-date-modal__time-panel.is-muted {
+  color: #98898a;
+}
+
+.rental-date-modal__time-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.rental-date-modal__time-grid button {
+  position: relative;
+  display: flex;
+  min-height: 50px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid #eadfe0;
+  border-radius: 8px;
+  background: #fff;
+  color: #5c4c4e;
+  cursor: pointer;
+}
+
+.rental-date-modal__time-grid button span {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rental-date-modal__time-grid button small {
+  color: #a08f91;
+  font-size: 9px;
+}
+
+.rental-date-modal__time-grid button.is-selected {
+  border-color: #b8294b;
+  background: #b8294b;
+  color: #fff;
+}
+
+.rental-date-modal__time-grid button.is-selected small {
+  color: #ffe9ed;
+}
+
+.rental-date-modal__time-grid button:disabled {
+  border-color: #f0e9ea;
+  background: #faf8f8;
+  color: #c4b9ba;
+  cursor: not-allowed;
+}
+
+.rental-date-modal__time-grid button em {
+  position: absolute;
+  right: 5px;
+  bottom: 3px;
+  color: #b6a9aa;
+  font-size: 8px;
+  font-style: normal;
+}
+
+.rental-date-modal__empty-time {
+  margin: 0;
+  padding: 18px 10px;
+  color: #a08f91;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.rental-date-modal__footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid #f0e6e7;
+  background: #fff;
+}
+
+.rental-date-modal__summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #b8294b;
+}
+
+.rental-date-modal__summary > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rental-date-modal__summary strong {
+  overflow: hidden;
+  color: #443739;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rental-date-modal__summary span {
+  color: #98898a;
+  font-size: 10px;
+}
+
+.rental-date-modal__availability {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #2f9b67;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rental-date-modal__confirm {
+  min-height: 40px;
+  margin-left: auto;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 8px;
+  background: #b8294b;
+  color: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rental-date-modal__confirm:disabled {
+  background: #dec5ca;
+  cursor: not-allowed;
+}
+
+@media (max-width: 560px) {
+  .rental-date-modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .rental-date-modal__dialog {
+    width: 100%;
+    max-height: min(86vh, 720px);
+    border-radius: 18px 18px 0 0;
+  }
+
+  .rental-date-modal__header,
+  .rental-date-modal__footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .rental-date-modal__mode-tabs,
+  .rental-date-modal__steps {
+    margin-left: 18px;
+    margin-right: 18px;
+  }
+
+  .rental-date-modal__content {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .rental-date-modal__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rental-date-modal__confirm {
+    width: 100%;
+    margin-left: 0;
+  }
+}

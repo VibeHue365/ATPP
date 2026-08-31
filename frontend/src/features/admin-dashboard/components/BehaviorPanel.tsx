@@ -8,6 +8,8 @@ const pages = [
   { key: 'photographers', label: 'Danh sách nhiếp ảnh gia', color: '#2A2A2A' },
 ] as const;
 
+import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';
+
 export function BehaviorPanel() {
   const { data, error, isLoading, refresh } = useAdminStats();
   const searches = data?.userBehavior?.topSearches ?? [];
@@ -17,7 +19,9 @@ export function BehaviorPanel() {
 
   return (
     <section className="admin-dashboard-panel">
-      <div className="admin-dashboard-panel__toolbar"><button type="button" onClick={() => void refresh()} disabled={isLoading}>Tải lại</button></div>
+      <div className="admin-dashboard-panel__toolbar">
+        <AdminReloadButton onClick={() => void refresh()} isLoading={isLoading} />
+      </div>
       {error && <p className="admin-dashboard-panel__error" role="alert">{error}</p>}
       {isLoading && !data ? <p className="admin-dashboard-panel__loading">Đang tải số liệu…</p> : (
         <>

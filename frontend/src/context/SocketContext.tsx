@@ -29,10 +29,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (isAuthenticated) {
       const token = tokenStorage.getAccessToken();
       if (token) {
-        const socketUrl =
+        const rawUrl =
           import.meta.env.VITE_SOCKET_URL ||
           import.meta.env.VITE_API_BASE_URL ||
           'http://localhost:3000';
+        const socketUrl = rawUrl.replace(/\/api\/?$/, '');
 
         console.log(`[Socket] Initiating connection to ${socketUrl}...`);
 
@@ -49,17 +50,17 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setIsConnected(true);
         });
 
-        socketInstance.on('disconnect', (reason) => {
+        socketInstance.on('disconnect', (reason: string) => {
           console.log('[Socket] Disconnected from server. Reason:', reason);
           setIsConnected(false);
         });
 
-        socketInstance.on('connect_error', (error) => {
+        socketInstance.on('connect_error', (error: any) => {
           console.error('[Socket] Connection error:', error.message);
           setIsConnected(false);
         });
 
-        socketInstance.on('authenticated', (data) => {
+        socketInstance.on('authenticated', (data: any) => {
           console.log('[Socket] Handshake authenticated successfully. Payload:', data);
         });
 

@@ -1,3 +1,5 @@
+import type { BackendUserProfileResponse } from "../../users/types/users.types";
+
 export interface User {
   id: string;
   email: string;
@@ -24,7 +26,9 @@ export interface LoginResponse {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
-  user?: User;
+  user: BackendUserProfileResponse;
+  roles: string[];
+  permissions: string[];
 }
 
 export interface ForgotPasswordResponse {

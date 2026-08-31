@@ -26,6 +26,7 @@ import { useAuth } from '../../features/auth/hooks/useAuth';
 import { providerVerificationService } from '../../features/provider-verifications/services/providerVerificationService';
 import { API_BASE_URL } from '../../config/env';
 import { tokenStorage } from '../../services/tokenStorage';
+import { httpClient } from '../../services/httpClient';
 import type {
   AodaiInfo,
   PhotographyInfo,
@@ -407,14 +408,77 @@ export const BecomeProviderPage: React.FC = () => {
     setError(null);
     try {
       const current = await providerVerificationService.getCurrent();
+      
+      let existingProvider: any = null;
+      if (user?.roles?.includes('PROVIDER')) {
+        try {
+          existingProvider = await httpClient.get('/providers/me');
+        } catch (e) {
+          console.warn('Failed to load existing provider profile', e);
+        }
+      }
+
+      const upgradeCap = new URLSearchParams(window.location.search).get('upgrade') as ProviderCapability;
+
       if (current) {
         const normalized = normalizeVerificationDetail(current);
+        
+        if (existingProvider) {
+          if (!normalized.businessProfile?.businessName) {
+            normalized.businessProfile.businessName = existingProvider.businessName || '';
+          }
+          if (!normalized.businessProfile?.ownerName) {
+            normalized.businessProfile.ownerName = user?.fullName || existingProvider.ownerName || '';
+          }
+          if (!normalized.businessProfile?.phone) {
+            normalized.businessProfile.phone = existingProvider.contact?.phone || user?.phone || '';
+          }
+          if (!normalized.businessProfile?.email) {
+            normalized.businessProfile.email = existingProvider.contact?.email || user?.email || '';
+          }
+          if (!normalized.businessProfile?.address) {
+            normalized.businessProfile.address = existingProvider.address?.addressLine || '';
+          }
+          if (!normalized.businessProfile?.province) {
+            normalized.businessProfile.province = existingProvider.address?.city || '';
+          }
+          
+          if (existingProvider.capabilities?.includes('PHOTOGRAPHY') || normalized.requestedCapabilities.includes('PHOTOGRAPHY')) {
+            if (!normalized.photographyInfo?.studioName) {
+              normalized.photographyInfo.studioName = existingProvider.businessName || normalized.businessProfile?.businessName || '';
+            }
+            if (!normalized.photographyInfo?.workingArea) {
+              normalized.photographyInfo.workingArea = existingProvider.address?.addressLine || normalized.businessProfile?.address || '';
+            }
+          }
+          
+          if (existingProvider.capabilities?.includes('AODAI_RENTAL') || existingProvider.capabilities?.includes('RENTAL') || normalized.requestedCapabilities.includes('AODAI_RENTAL')) {
+            if (!normalized.aodaiInfo?.shopName) {
+              normalized.aodaiInfo.shopName = existingProvider.businessName || normalized.businessProfile?.businessName || '';
+            }
+            if (!normalized.aodaiInfo?.pickupAddress) {
+              normalized.aodaiInfo.pickupAddress = existingProvider.address?.addressLine || normalized.businessProfile?.address || '';
+            }
+            if (!normalized.aodaiInfo?.rentalPolicy) {
+              normalized.aodaiInfo.rentalPolicy = existingProvider.policies?.rentalPolicy || '';
+            }
+          }
+        }
+
         hydrateFromVerification(normalized);
         setVerification(normalized);
-        setActiveStep(stepFromVerification(normalized));
-        setShowStatusDashboard(normalized.status !== 'DRAFT');
+
+        if (upgradeCap && ['AODAI_RENTAL', 'PHOTOGRAPHY'].includes(upgradeCap)) {
+          const currentCaps = existingProvider?.capabilities || normalized.requestedCapabilities || [];
+          const combined = Array.from(new Set([...currentCaps, upgradeCap])) as ProviderCapability[];
+          setSelectedCapabilities(combined);
+          setShowStatusDashboard(false);
+          setActiveStep(0);
+        } else {
+          setActiveStep(stepFromVerification(normalized));
+          setShowStatusDashboard(normalized.status !== 'DRAFT');
+        }
         
-        // If profile details exist, keep address input stable (don't force editor)
         if (normalized.businessProfile?.address) {
           setIsAddressEditing(false);
         } else {
@@ -426,15 +490,46 @@ export const BecomeProviderPage: React.FC = () => {
           setIsPickupAddressEditing(true);
         }
       } else if (user) {
-        setBusinessProfile({
+        if (upgradeCap && ['AODAI_RENTAL', 'PHOTOGRAPHY'].includes(upgradeCap)) {
+          setSelectedCapabilities([upgradeCap]);
+        }
+        
+        const initialBusinessProfile = {
           ...emptyBusinessProfile,
           ownerName: user.fullName,
           email: user.email,
           phone: user.phone ?? '',
-        });
+        };
+
+        const initialAodaiInfo = { ...emptyAodaiInfo };
+        const initialPhotographyInfo = { ...emptyPhotographyInfo };
+
+        if (existingProvider) {
+          initialBusinessProfile.businessName = existingProvider.businessName || '';
+          initialBusinessProfile.phone = existingProvider.contact?.phone || initialBusinessProfile.phone;
+          initialBusinessProfile.email = existingProvider.contact?.email || initialBusinessProfile.email;
+          initialBusinessProfile.address = existingProvider.address?.addressLine || '';
+          initialBusinessProfile.province = existingProvider.address?.city || '';
+          
+          if (existingProvider.capabilities?.includes('PHOTOGRAPHY')) {
+            initialPhotographyInfo.studioName = existingProvider.businessName || '';
+            initialPhotographyInfo.workingArea = existingProvider.address?.addressLine || '';
+          }
+          
+          if (existingProvider.capabilities?.includes('AODAI_RENTAL') || existingProvider.capabilities?.includes('RENTAL')) {
+            initialAodaiInfo.shopName = existingProvider.businessName || '';
+            initialAodaiInfo.pickupAddress = existingProvider.address?.addressLine || '';
+            initialAodaiInfo.rentalPolicy = existingProvider.policies?.rentalPolicy || '';
+          }
+        }
+
+        setBusinessProfile(initialBusinessProfile);
+        setAodaiInfo(initialAodaiInfo);
+        setPhotographyInfo(initialPhotographyInfo);
+        
         setShowStatusDashboard(false);
-        setIsAddressEditing(true);
-        setIsPickupAddressEditing(true);
+        setIsAddressEditing(!initialBusinessProfile.address);
+        setIsPickupAddressEditing(!initialAodaiInfo.pickupAddress);
       }
     } catch (err) {
       setError(messageFromError(err));
@@ -545,7 +640,10 @@ export const BecomeProviderPage: React.FC = () => {
     }
   };
 
-  const validateProfile = (): boolean => {
+  const validateProfile = (
+    currentAodai: AodaiInfo,
+    currentPhotography: PhotographyInfo,
+  ) => {
     const errors: Record<string, string> = {};
     
     if (!businessProfile.businessName?.trim()) errors.businessName = 'Tên thương hiệu không được để trống';
@@ -567,16 +665,14 @@ export const BecomeProviderPage: React.FC = () => {
     if (!businessProfile.province?.trim()) errors.province = 'Tỉnh/Thành phố không được để trống';
 
     if (requiresAodai) {
-      if (!aodaiInfo.shopName?.trim()) errors.shopName = 'Tên cửa hàng không được để trống';
-      if (!aodaiInfo.pickupAddress?.trim()) errors.pickupAddress = 'Địa chỉ nhận trả không được để trống';
-      if (!aodaiInfo.rentalPolicy?.trim()) errors.rentalPolicy = 'Chính sách thuê không được để trống';
-      if (!aodaiInfo.depositPolicy?.trim()) errors.depositPolicy = 'Chính sách đặt cọc không được để trống';
-      if (!aodaiInfo.sizeSupport?.trim()) errors.sizeSupport = 'Thông tin size không được để trống';
+      if (!currentAodai.pickupAddress?.trim()) errors.pickupAddress = 'Địa chỉ nhận trả không được để trống';
+      if (!currentAodai.rentalPolicy?.trim()) errors.rentalPolicy = 'Chính sách thuê không được để trống';
+      if (!currentAodai.depositPolicy?.trim()) errors.depositPolicy = 'Chính sách đặt cọc không được để trống';
+      if (!currentAodai.sizeSupport?.trim()) errors.sizeSupport = 'Thông tin size không được để trống';
     }
 
     if (requiresPhotography) {
-      if (!photographyInfo.studioName?.trim()) errors.studioName = 'Tên studio không được để trống';
-      if (!photographyInfo.workingArea?.trim()) errors.workingArea = 'Khu vực làm việc không được để trống';
+      if (!currentPhotography.workingArea?.trim()) errors.workingArea = 'Khu vực làm việc không được để trống';
     }
 
     setValidationErrors(errors);
@@ -585,7 +681,12 @@ export const BecomeProviderPage: React.FC = () => {
 
   const saveProfile = async () => {
     if (!verificationId) return;
-    if (!validateProfile()) {
+
+    // Đồng bộ shopName và studioName theo businessName
+    const updatedAodaiInfo = { ...aodaiInfo, shopName: businessProfile.businessName };
+    const updatedPhotographyInfo = { ...photographyInfo, studioName: businessProfile.businessName };
+
+    if (!validateProfile(updatedAodaiInfo, updatedPhotographyInfo)) {
       setError('Vui lòng điền đầy đủ thông tin ở các trường bắt buộc.');
       return;
     }
@@ -595,8 +696,8 @@ export const BecomeProviderPage: React.FC = () => {
     setSuccess(null);
     try {
       const { _id: bpId, ...cleanBusinessProfile } = businessProfile as any;
-      const { _id: adId, ...cleanAodaiInfo } = aodaiInfo as any;
-      const { _id: phId, ...cleanPhotographyInfo } = photographyInfo as any;
+      const { _id: adId, ...cleanAodaiInfo } = updatedAodaiInfo as any;
+      const { _id: phId, ...cleanPhotographyInfo } = updatedPhotographyInfo as any;
 
       const detail = await providerVerificationService.update(verificationId, {
         businessProfile: cleanBusinessProfile,
@@ -770,7 +871,7 @@ export const BecomeProviderPage: React.FC = () => {
     <main className="vh-provider-shell animate-fade-in">
       <section className="vh-provider-header-band">
         <div>
-          <span className="vh-provider-kicker">VibeHue Partners</span>
+          <span className="vh-provider-kicker">ĐỐI TÁC VIBEHUE</span>
           <h1>Đăng ký tài khoản Đối tác</h1>
           <p>
             Đồng hành cùng VibeHue để kết nối với hàng ngàn khách hàng yêu thích cổ phục áo dài và nhiếp ảnh chuyên nghiệp.
@@ -852,15 +953,17 @@ export const BecomeProviderPage: React.FC = () => {
               errors={validationErrors}
               onBusinessChange={(val) => {
                 setBusinessProfile(val);
+                setAodaiInfo((prev) => ({ ...prev, shopName: val.businessName }));
+                setPhotographyInfo((prev) => ({ ...prev, studioName: val.businessName }));
                 setValidationErrors((prev) => ({ ...prev, businessName: '', ownerName: '', phone: '', email: '', address: '', province: '' }));
               }}
               onAodaiChange={(val) => {
                 setAodaiInfo(val);
-                setValidationErrors((prev) => ({ ...prev, shopName: '', pickupAddress: '', rentalPolicy: '', depositPolicy: '', sizeSupport: '' }));
+                setValidationErrors((prev) => ({ ...prev, shopName: '', brandName: '', pickupAddress: '', rentalPolicy: '', depositPolicy: '', sizeSupport: '' }));
               }}
               onPhotographyChange={(val) => {
                 setPhotographyInfo(val);
-                setValidationErrors((prev) => ({ ...prev, studioName: '', workingArea: '' }));
+                setValidationErrors((prev) => ({ ...prev, studioName: '', brandName: '', workingArea: '' }));
               }}
               onSave={saveProfile}
               isLoading={actionLoading === 'profile'}
@@ -1253,14 +1356,6 @@ function ProfileStep({
             <span>Thông tin dịch vụ cho thuê Áo Dài</span>
           </h3>
           <div className="vh-provider-form-grid">
-            <TextField
-              label="Tên cửa hàng áo dài"
-              value={aodaiInfo.shopName}
-              disabled={disabled}
-              required
-              error={errors.shopName}
-              onChange={(val) => onAodaiChange({ ...aodaiInfo, shopName: val })}
-            />
             <SizeSelectorField
               label="Hỗ trợ các kích cỡ size"
               value={aodaiInfo.sizeSupport}
@@ -1413,14 +1508,6 @@ function ProfileStep({
             <span>Thông tin dịch vụ Nhiếp Ảnh</span>
           </h3>
           <div className="vh-provider-form-grid">
-            <TextField
-              label="Tên thương hiệu studio / photographer"
-              value={photographyInfo.studioName}
-              disabled={disabled}
-              required
-              error={errors.studioName}
-              onChange={(val) => onPhotographyChange({ ...photographyInfo, studioName: val })}
-            />
             <TextField
               label="Khu vực hoạt động chính (Ví dụ: TP. Huế, Đà Nẵng, Quảng Trị)"
               value={photographyInfo.workingArea}
@@ -1692,7 +1779,7 @@ function UploadDropZone({
     ocrNextAction === 'WAIT_FOR_OCR'
       ? 'OCR is queued or processing. This page refreshes automatically.'
       : ocrNextAction === 'UPLOAD_AGAIN'
-        ? 'OCR could not verify this document. Please upload a clearer image.'
+        ? 'Hệ thống không thể xác minh tài liệu này. Vui lòng tải lên hình ảnh rõ nét hơn.'
         : ocrNextAction === 'SUBMIT_WITH_MANUAL_REVIEW'
           ? 'OCR needs manual review. You can continue and submit the application.'
           : ocrNextAction === 'READY_TO_SUBMIT' ? 'OCR verification is complete.' : null;

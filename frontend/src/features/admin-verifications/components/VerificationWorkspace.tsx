@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';
 import type { ProviderDocumentType } from '../../provider-verifications/types';
 import {
   useAdminVerifications,
@@ -368,7 +369,7 @@ export function VerificationWorkspace() {
             {verificationFilters.map((filter) => <option key={filter.value} value={filter.value}>{filter.label}</option>)}
           </select>
         </label>
-        <button type="button" onClick={() => void refresh()} disabled={isLoading}>Tải lại</button>
+        <AdminReloadButton onClick={() => void refresh()} isLoading={isLoading} />
       </div>
 
       {error && <p className="admin-verification-error" role="alert">{error}</p>}

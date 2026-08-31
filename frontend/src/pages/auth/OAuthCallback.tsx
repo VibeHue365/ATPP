@@ -25,7 +25,7 @@ export const OAuthCallback: React.FC = () => {
       if (code) {
         try {
           const session = await authService.exchangeOAuthCode(code);
-          const user = await setSession(session.accessToken, session.refreshToken);
+          const user = await setSession(session);
           toast.success("Đăng nhập bằng tài khoản Google thành công.");
           
           if (user?.roles?.includes('ADMIN') || user?.roles?.includes('admin')) {

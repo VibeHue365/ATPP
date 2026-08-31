@@ -3,6 +3,7 @@ import L, { type Map as LeafletMap, type Marker as LeafletMarker } from 'leaflet
 import 'leaflet/dist/leaflet.css';
 import { Crosshair, MapPin, Search } from 'lucide-react';
 import type { LocationSelection } from '../types/photographer.types';
+import { API_BASE_URL } from '../../../config/env';
 import './PhotographyLocationPicker.css';
 
 interface PhotographyLocationPickerProps {
@@ -11,6 +12,7 @@ interface PhotographyLocationPickerProps {
   title?: string;
   hint?: string;
   radiusKm?: number | null;
+  compact?: boolean;
 }
 
 interface NominatimResult {
@@ -39,6 +41,7 @@ export const PhotographyLocationPicker = ({
   title = 'Pin chính xác địa điểm chụp',
   hint = 'Địa điểm này được kiểm tra theo bán kính phục vụ trước khi giữ lịch.',
   radiusKm,
+  compact = false,
 }: PhotographyLocationPickerProps) => {
   const [address, setAddress] = useState(value?.address ?? '');
   const [latitude, setLatitude] = useState(value?.latitude?.toString() ?? '');
@@ -90,7 +93,7 @@ export const PhotographyLocationPicker = ({
       const { lat, lng } = marker.getLatLng();
       updatePinFromMap(lat, lng);
     });
-    map.on('click', (event) => updatePinFromMap(event.latlng.lat, event.latlng.lng));
+    map.on('click', (event: L.LeafletMouseEvent) => updatePinFromMap(event.latlng.lat, event.latlng.lng));
     mapRef.current = map;
     markerRef.current = marker;
 
@@ -189,9 +192,8 @@ export const PhotographyLocationPicker = ({
     setError(null);
     try {
       await waitForNominatimSlot();
-      const params = new URLSearchParams({ q: query, format: 'jsonv2', limit: '5', countrycodes: 'vn', 'accept-language': 'vi' });
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
-      if (!response.ok) throw new Error('Nominatim search failed');
+      const response = await fetch(`${API_BASE_URL}/geocoding/search?q=${encodeURIComponent(query)}`);
+      if (!response.ok) throw new Error('Không thể tìm kiếm địa điểm');
       const matches = await response.json() as NominatimResult[];
       setResults(matches);
       if (!matches.length) setError('Không tìm thấy địa điểm phù hợp. Hãy thử tên hoặc địa chỉ chi tiết hơn.');
@@ -229,7 +231,7 @@ export const PhotographyLocationPicker = ({
   };
 
   return (
-    <div className="pd-location-picker">
+    <div className={`pd-location-picker${compact ? ' pd-location-picker--compact' : ''}`}>
       <div className="pd-location-picker-heading"><MapPin size={17} /><span>{title}</span></div>
       <p className="pd-location-picker-hint">{hint}</p>
       <div className="pd-location-picker-fields">

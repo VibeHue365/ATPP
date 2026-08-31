@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';
 import Swal from 'sweetalert2';
 import { API_BASE_URL } from '../../../config/env';
 import { adminReportedReviewsApi } from '../api/adminReportedReviewsApi';
@@ -80,7 +81,9 @@ export function ReportedReviewsPanel() {
 
   return (
     <section className="admin-reviews">
-      <div className="admin-reviews__toolbar"><button type="button" onClick={() => void refresh()} disabled={loading}>Tải lại</button></div>
+      <div className="admin-reviews__toolbar">
+        <AdminReloadButton onClick={() => void refresh()} isLoading={loading} />
+      </div>
 
       {error && <p className="admin-reviews__error" role="alert">{error}</p>}
 
@@ -88,7 +91,7 @@ export function ReportedReviewsPanel() {
         <table>
           <thead>
             <tr>
-              <th>Booking</th>
+              <th>Đơn hàng</th>
               <th>Đối tác</th>
               <th>Khách hàng & đánh giá</th>
               <th>Lý do báo cáo</th>

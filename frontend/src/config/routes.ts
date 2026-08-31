@@ -1,4 +1,4 @@
-export const ROUTES = {
+﻿export const ROUTES = {
   LANDING: '/',
   RENTALS: '/rentals',
   PHOTOGRAPHERS: '/photographers',
@@ -17,6 +17,13 @@ export const ROUTES = {
   PRODUCT_DETAIL: '/rentals/:id',
   PHOTOGRAPHER_DETAIL: '/photographers/:id',
   CART: '/cart',
+  CHECKOUT_RESULT: '/checkout/result',
   ADMIN_DASHBOARD: '/admin/dashboard',
   ADMIN_DASHBOARD_REFACTORED: '/admin/dashboard-refactored',
+  COMBOS: '/combos',
+  COMBO_DETAIL: '/combos/:id',
+  PROVIDER_STORE: '/stores/:id',
+  NOTIFICATIONS: '/notifications',
+  CHAT: '/chat',
+  VIRTUAL_TRYON_3D: '/virtual-tryon-3d',
 } as const;

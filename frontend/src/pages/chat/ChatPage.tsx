@@ -10,8 +10,6 @@ import {
   Send,
   Paperclip,
   Image as ImageIcon,
-  Phone,
-  MoreVertical,
   Plus,
   X
 } from 'lucide-react';
@@ -168,20 +166,33 @@ export const ChatPage: React.FC = () => {
     setAttachmentUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     const hasText = !!inputText.trim();
     const hasAttachments = attachmentUrls.length > 0;
-    if ((!hasText && !hasAttachments) || !activeRoom || !socket) return;
+    if ((!hasText && !hasAttachments) || !activeRoom) return;
 
-    const payload = {
-      roomId: activeRoom.id,
-      messageText: inputText.trim(),
-      attachments: attachmentUrls,
-    };
+    const textToSend = inputText.trim();
+    const attachmentsToSend = [...attachmentUrls];
 
-    socket.emit('send_message', payload);
     setInputText('');
     setAttachmentUrls([]);
+
+    try {
+      if (socket && isConnected) {
+        socket.emit('send_message', {
+          roomId: activeRoom.id,
+          messageText: textToSend,
+          attachments: attachmentsToSend,
+        });
+      } else {
+        const newMsg = await chatService.sendMessage(activeRoom.id, textToSend, attachmentsToSend);
+        setMessages((prev) => [...prev, newMsg]);
+        fetchRooms(activeRoom.id);
+      }
+    } catch (err: any) {
+      console.error('Failed to send message:', err);
+      toast.error('Không thể gửi tin nhắn. Vui lòng thử lại.');
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -195,8 +206,8 @@ export const ChatPage: React.FC = () => {
     setIsNewChatOpen(true);
     try {
       setLoadingPartners(true);
-      const data = await httpClient.get<any[]>('/api/photographers');
-      setPotentialPartners(data);
+      const res = await httpClient.get<any>('/api/photographers');
+      setPotentialPartners(res?.data || []);
     } catch (err: any) {
       toast.error('Không thể lấy danh sách đối tác');
     } finally {
@@ -249,7 +260,7 @@ export const ChatPage: React.FC = () => {
       if (partner.avatarUrl.startsWith('http')) return partner.avatarUrl;
       return `${API_BASE_URL}${partner.avatarUrl}`;
     }
-    return '/avatar_hanna.png';
+    return '/avatar_hanna.webp';
   };
 
   return (
@@ -441,7 +452,7 @@ export const ChatPage: React.FC = () => {
               onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#6b0c22')}
             >
               <Plus size={16} />
-              <span>NEW CHAT</span>
+              <span>CUỘC TRÒ CHUYỆN MỚI</span>
             </button>
           </div>
         </div>
@@ -511,33 +522,7 @@ export const ChatPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#78716c',
-                      cursor: 'pointer',
-                      padding: '8px',
-                      borderRadius: '50%',
-                    }}
-                    title="Gọi thoại"
-                  >
-                    <Phone size={18} />
-                  </button>
-                  <button
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#78716c',
-                      cursor: 'pointer',
-                      padding: '8px',
-                      borderRadius: '50%',
-                    }}
-                  >
-                    <MoreVertical size={18} />
-                  </button>
-                </div>
+                {/* Actions container removed */}
               </div>
 
               {/* Message Stream */}
@@ -882,8 +867,8 @@ export const ChatPage: React.FC = () => {
                     letterSpacing: '0.05em',
                   }}
                 >
-                  <span>AI WRITING ASSISTANT AVAILABLE</span>
-                  <span>MAX 2000 CHARACTERS</span>
+                  <span>ĐÃ CÓ TRỢ LÝ SOẠN THẢO AI</span>
+                  <span>TỐI ĐA 2.000 KÝ TỰ</span>
                 </div>
               </div>
             </>
@@ -1001,7 +986,7 @@ export const ChatPage: React.FC = () => {
                     onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                   >
                     <img
-                      src={partner.portfolio?.[0] || '/avatar_hanna.png'}
+                      src={partner.portfolio?.[0] || '/avatar_hanna.webp'}
                       alt={partner.businessName}
                       style={{
                         width: '40px',

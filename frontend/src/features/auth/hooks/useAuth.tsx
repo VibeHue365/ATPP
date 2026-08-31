@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { authService } from "../services/authService";
-import { userService } from "../../users/services/userService";
+import type { LoginResponse } from "../types/auth.types";
+import {
+  normalizeUserProfile,
+  userService,
+} from "../../users/services/userService";
 import type { UserProfile } from "../../users/types/users.types";
 import { tokenStorage } from "../../../services/tokenStorage";
 
@@ -22,7 +26,8 @@ interface AuthContextType {
   updateProfile: (payload: any) => Promise<void>;
   updateAvatar: (formData: FormData) => Promise<void>;
   updatePreferences: (payload: any) => Promise<void>;
-  toggleFavorite: (targetType: 'PRODUCT' | 'PHOTOGRAPHER' | 'PROVIDER', targetId: string) => Promise<void>;  setSession: (accessToken: string, refreshToken: string) => Promise<UserProfile>;
+  toggleFavorite: (targetType: 'PRODUCT' | 'PHOTOGRAPHER' | 'PROVIDER', targetId: string) => Promise<void>;
+  setSession: (session: LoginResponse) => Promise<UserProfile>;
   clearError: () => void;
 }
 
@@ -100,14 +105,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       const { rememberMe = false, ...credentials } = payload;
       const res = await authService.login(credentials);
-      if (res.accessToken && res.refreshToken) {
-        tokenStorage.saveTokens(res.accessToken, res.refreshToken, rememberMe);
-        return await fetchProfile();
-      } else {
-        throw new Error("Tokens missing in login response");
+      if (!res.accessToken || !res.refreshToken || !res.user) {
+        throw new Error("Incomplete login response");
       }
+
+      tokenStorage.saveTokens(res.accessToken, res.refreshToken, rememberMe);
+      const nextUser = normalizeUserProfile(res.user);
+      setUser(nextUser);
+      setPermissions(res.permissions ?? []);
+      setIsAuthenticated(true);
+      return nextUser;
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      setError(err.message || "Đăng nhập thất bại");
       throw err;
     }
   };
@@ -118,7 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const res = await authService.register(payload);
       return res;
     } catch (err: any) {
-      setError(err.message || "Registration failed");
+      setError(err.message || "Đăng ký thất bại");
       throw err;
     }
   };
@@ -128,7 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       await authService.verifyEmail(payload);
     } catch (err: any) {
-      setError(err.message || "Email verification failed");
+      setError(err.message || "Xác minh email thất bại");
       throw err;
     }
   };
@@ -138,7 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       return await authService.resendVerification(payload);
     } catch (err: any) {
-      setError(err.message || "Resending verification failed");
+      setError(err.message || "Gửi lại mã xác minh thất bại");
       throw err;
     }
   };
@@ -148,7 +157,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       return await authService.forgotPassword(payload);
     } catch (err: any) {
-      setError(err.message || "Forgot password request failed");
+      setError(err.message || "Gửi yêu cầu quên mật khẩu thất bại");
       throw err;
     }
   };
@@ -158,7 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       await authService.resetPassword(payload);
     } catch (err: any) {
-      setError(err.message || "Reset password failed");
+      setError(err.message || "Đặt lại mật khẩu thất bại");
       throw err;
     }
   };
@@ -178,7 +187,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const updated = await userService.updateProfile(payload);
       setUser(updated);
     } catch (err: any) {
-      setError(err.message || "Updating profile failed");
+      setError(err.message || "Cập nhật hồ sơ thất bại");
       throw err;
     }
   };
@@ -189,7 +198,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const updated = await userService.updateAvatar(formData);
       setUser(updated);
     } catch (err: any) {
-      setError(err.message || "Uploading avatar failed");
+      setError(err.message || "Tải ảnh đại diện thất bại");
       throw err;
     }
   };
@@ -200,7 +209,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const updated = await userService.updatePreferences(payload);
       setUser(updated);
     } catch (err: any) {
-      setError(err.message || "Updating preferences failed");
+      setError(err.message || "Cập nhật tùy chọn thất bại");
       throw err;
     }
   };
@@ -211,19 +220,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const updated = await userService.toggleFavorite(targetType, targetId);
       setUser(updated);
     } catch (err: any) {
-      setError(err.message || "Toggling favorite failed");
+      setError(err.message || "Cập nhật mục yêu thích thất bại");
       throw err;
     }
   };
 
-  const setSession = async (
-    accessToken: string,
-    refreshToken: string,
-  ): Promise<UserProfile> => {
-    tokenStorage.saveTokens(accessToken, refreshToken, true);
+  const setSession = async (session: LoginResponse): Promise<UserProfile> => {
+    tokenStorage.saveTokens(session.accessToken, session.refreshToken, true);
     setIsLoading(true);
     try {
-      return await fetchProfile();
+      if (!session.user) {
+        return await fetchProfile();
+      }
+
+      const nextUser = normalizeUserProfile(session.user);
+      setUser(nextUser);
+      setPermissions(session.permissions ?? []);
+      setIsAuthenticated(true);
+      return nextUser;
     } finally {
       setIsLoading(false);
     }

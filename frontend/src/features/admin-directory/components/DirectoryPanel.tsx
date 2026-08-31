@@ -5,6 +5,7 @@ import { BookingDetailModal } from '../../../components/common/BookingDetailModa
 import { adminDirectoryApi } from '../api/adminDirectoryApi';
 import { useDirectory } from '../hooks/useDirectory';
 import type { Booking, Customer, DirectoryItem, DirectoryKind, Provider } from '../types';
+import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';
 import './directoryPanel.css';
 
 type StatusFilter = 'ALL' | 'ACTIVE' | 'BANNED' | 'SUSPENDED' | 'PENDING' | 'PICKED_UP' | 'RETURNED' | 'COMPLETED' | 'CANCELLED';
@@ -142,7 +143,7 @@ export function DirectoryPanel({ kind }: { kind: DirectoryKind }) {
             </button>
           ))}
         </div>
-        <button className="admin-directory__refresh" type="button" onClick={() => void refresh()} disabled={loading}>Tải lại</button>
+        <AdminReloadButton onClick={() => void refresh()} isLoading={loading} />
       </div>
 
       {error && <p className="admin-directory__error" role="alert">{error}</p>}
@@ -156,8 +157,8 @@ export function DirectoryPanel({ kind }: { kind: DirectoryKind }) {
               if (kind === 'providers') return <ProviderRow key={item.id} item={item as Provider} pending={pendingId === item.id} onChangeStatus={changeProviderStatus} onView={setSelectedItem} />;
               return <BookingRow key={item.id} item={item as Booking} onView={setSelectedBookingId} />;
             })}
-            {loading && <tr><td className='admin-directory__empty' colSpan={kind === 'customers' || kind === 'providers' ? 8 : 7}>Đang tải dữ liệu…</td></tr>}
-            {!loading && !items.length && <tr><td className="admin-directory__empty" colSpan={kind === 'customers' || kind === 'providers' ? 8 : 7}>Không tìm thấy dữ liệu phù hợp.</td></tr>}
+            {loading && <tr><td className='admin-directory__empty' colSpan={kind === 'customers' ? 7 : 8}>Đang tải dữ liệu…</td></tr>}
+            {!loading && !items.length && <tr><td className="admin-directory__empty" colSpan={kind === 'customers' ? 7 : 8}>Không tìm thấy dữ liệu phù hợp.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -182,7 +183,7 @@ export function DirectoryPanel({ kind }: { kind: DirectoryKind }) {
 }
 
 function DirectoryTableHead({ kind }: { kind: DirectoryKind }) {
-  if (kind === 'customers') return <thead><tr><th>Khách hàng</th><th>Email</th><th>Điện thoại</th><th>Ngày đăng ký</th><th>Đơn đã đặt</th><th>Chi tiêu tích lũy</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>;
+  if (kind === 'customers') return <thead><tr><th>Khách hàng</th><th>Email</th><th>Điện thoại</th><th>Ngày đăng ký</th><th>Đơn đã đặt</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>;
   if (kind === 'providers') return <thead><tr><th>Doanh nghiệp / Cửa hàng</th><th>Chủ sở hữu</th><th>Dịch vụ</th><th>Đánh giá</th><th>Sản phẩm</th><th>Tổng doanh thu</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>;
   return <thead><tr><th>Mã đặt lịch</th><th>Khách hàng</th><th>Đối tác</th><th>Dịch vụ</th><th>Ngày thuê</th><th>Phí</th><th>Trạng thái</th></tr></thead>;
 }
@@ -190,16 +191,26 @@ function DirectoryTableHead({ kind }: { kind: DirectoryKind }) {
 function CustomerRow({ item, pending, onChangeStatus, onView }: { item: Customer; pending: boolean; onChangeStatus: (customer: Customer) => Promise<void>; onView: (item: Customer) => void }) {
   const isBanned = item.status === 'BANNED';
   return <tr className='admin-directory__clickable-row' onClick={(event) => { if (!(event.target as HTMLElement).closest('button')) onView(item); }}>
-    <td><div className="admin-directory__identity"><img src={item.avatar || '/avatar_hanna.png'} alt="" /><div><strong>{item.fullName}</strong><small>ID: {item.id}</small></div></div></td>
-    <td>{item.email}</td><td>{item.phone || 'Chưa cung cấp'}</td><td>{item.date || '—'}</td><td className="admin-directory__center">{item.bookings ?? 0}</td><td className="admin-directory__amount">{formatCurrency(item.spent ?? 0)}</td>
+    <td><div className="admin-directory__identity"><img src={item.avatar || '/avatar_hanna.webp'} alt="" /><div><strong>{item.fullName}</strong><small>ID: {item.id}</small></div></div></td>
+    <td>{item.email}</td><td>{item.phone || 'Chưa cung cấp'}</td><td>{item.date || '—'}</td><td className="admin-directory__center">{item.bookings ?? 0}</td>
     <td className="admin-directory__center"><StatusBadge value={item.status} /></td>
     <td className="admin-directory__center"><button className={`admin-directory__icon-button ${isBanned ? 'is-positive' : 'is-danger'}`} type="button" disabled={pending} title={isBanned ? 'Mở khóa khách hàng' : 'Khóa khách hàng'} onClick={() => void onChangeStatus(item)}>{isBanned ? <CheckCircle2 size={15} /> : <Ban size={15} />}</button></td>
   </tr>;
 }
 
+function sortCapabilities(caps: string[]): string[] {
+  const orderMap: Record<string, number> = {
+    RENTAL: 1,
+    AODAI_RENTAL: 1,
+    PHOTOGRAPHY: 2,
+  };
+  return [...caps].sort((a, b) => (orderMap[a] || 99) - (orderMap[b] || 99));
+}
+
 function ProviderRow({ item, pending, onChangeStatus, onView }: { item: Provider; pending: boolean; onChangeStatus: (provider: Provider) => Promise<void>; onView: (item: Provider) => void }) {
   const status = item.status || 'UNKNOWN';
-  const capabilities = Array.isArray(item.capability) ? item.capability : [];
+  const rawCapabilities = Array.isArray(item.capability) ? item.capability : [];
+  const capabilities = sortCapabilities(rawCapabilities);
   const isSuspended = status.toUpperCase() === 'SUSPENDED';
   return <tr className='admin-directory__clickable-row' onClick={(event) => { if (!(event.target as HTMLElement).closest('button')) onView(item); }}>
     <td><strong className="admin-directory__business">{item.businessName}</strong><small>{item.phone || '—'} • {item.email || '—'}</small></td><td>{item.ownerName}</td>
@@ -253,13 +264,12 @@ function DirectoryDetailDrawer({
 
         {isCustomer ? (
           <>
-            <div className='admin-directory__drawer-profile'><img src={item.avatar || '/avatar_hanna.png'} alt='' /><StatusBadge value={item.status} /></div>
+            <div className='admin-directory__drawer-profile'><img src={item.avatar || '/avatar_hanna.webp'} alt='' /><StatusBadge value={item.status} /></div>
             <DetailList rows={[
               ['Email', item.email || 'Chưa cung cấp'],
               ['Số điện thoại', item.phone || 'Chưa cung cấp'],
               ['Ngày đăng ký', item.date || '—'],
               ['Số đơn đã đặt', `${item.bookings ?? 0} đơn`],
-              ['Chi tiêu tích lũy', formatCurrency(item.spent ?? 0)],
             ]} />
           </>
         ) : (
