@@ -1,18 +1,23 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { Booking, BookingStatus } from '../../bookings/schemas/booking.schema';
 import { SETTLEMENT_ERROR_CODES } from '../constants/settlement-error-codes';
 import {
   QueryProviderSettlementsDto,
   QuerySettlementsDto,
 } from '../dto/settlement.dto';
 import { Settlement } from '../schemas/settlement.schema';
+import { SettlementsService } from './settlements.service';
 
 @Injectable()
 export class SettlementQueryService {
   constructor(
     @InjectModel(Settlement.name)
     private readonly settlementModel: Model<Settlement>,
+    @InjectModel(Booking.name)
+    private readonly bookingModel: Model<Booking>,
+    private readonly settlementsService: SettlementsService,
   ) {}
 
   async findAdminSettlements(query: QuerySettlementsDto) {
@@ -50,6 +55,36 @@ export class SettlementQueryService {
     query: QueryProviderSettlementsDto,
   ) {
     this.assertValidDateRange(query.fromDate, query.toDate);
+
+    // Self-healing: auto-create settlement for any COMPLETED bookings of this provider that don't have one yet
+    try {
+      const itemsForProvider = await this.bookingModel.db.model('BookingItem').find({ providerId }).distinct('bookingId');
+      const completedBookings = await this.bookingModel
+        .find({
+          $or: [
+            { providerIds: providerId },
+            { providerId: providerId as any },
+            { _id: { $in: itemsForProvider } },
+          ],
+          status: BookingStatus.Completed,
+        })
+        .lean();
+
+      for (const b of completedBookings) {
+        const exists = await this.settlementModel.exists({
+          bookingId: b._id,
+          providerId,
+        });
+        if (!exists) {
+          await this.settlementsService.createSettlementsForBooking(
+            b._id.toString(),
+          );
+        }
+      }
+    } catch (_e) {
+      // Ignore background sync errors
+    }
+
     const filter = this.buildFilter({
       ...query,
       providerId: providerId.toString(),

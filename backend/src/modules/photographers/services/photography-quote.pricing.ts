@@ -1,7 +1,5 @@
 export type PhotographyQuotePricingUnit =
-  | 'PER_SESSION'
-  | 'PER_DAY'
-  | 'PER_BOOKING';
+  'PER_SESSION' | 'PER_DAY' | 'PER_BOOKING';
 
 export interface PhotographyQuotePricingPolicy {
   name: string;
@@ -52,7 +50,9 @@ export function calculatePhotographyQuote(
   sessions: QuoteSessionForPricing[],
 ): PhotographyQuotePriceResult {
   if (!sessions.length) {
-    throw new PhotographyPricingPolicyError('Cần có ít nhất một buổi chụp để tính giá.');
+    throw new PhotographyPricingPolicyError(
+      'Cần có ít nhất một buổi chụp để tính giá.',
+    );
   }
 
   const pricingUnit = policy.pricingUnit ?? 'PER_SESSION';
@@ -69,7 +69,14 @@ export function calculatePhotographyQuote(
     240,
   );
   const price = normalizeCurrency(policy.price);
-  const overtimeFeePerHour = normalizeCurrency(policy.overtimeFeePerHour ?? 0);
+  const includedHours = includedDurationMinutes / 60;
+  const derivedHourlyRate =
+    includedHours > 0 ? Math.round(price / includedHours) : 0;
+  const configuredOvertimeFee = normalizeCurrency(
+    policy.overtimeFeePerHour ?? 0,
+  );
+  const overtimeFeePerHour =
+    configuredOvertimeFee > 0 ? configuredOvertimeFee : derivedHourlyRate;
   const breakdown: PhotographyQuoteBreakdownItem[] = [];
   const overtimeMinutesByClientId: Record<string, number> = {};
 
@@ -186,7 +193,10 @@ export function calculatePhotographyQuote(
     baseAmount += charged.baseAmount;
     overtimeAmount += charged.overtimeAmount;
 
-    const extraSessionCount = Math.max(0, sessions.length - includedSessionCount);
+    const extraSessionCount = Math.max(
+      0,
+      sessions.length - includedSessionCount,
+    );
     const additionalSessionFee = normalizeCurrency(
       policy.additionalSessionFee ?? 0,
     );
@@ -198,7 +208,9 @@ export function calculatePhotographyQuote(
       sessions.slice(includedSessionCount).map((session) => session.clientId),
     );
   } else {
-    throw new PhotographyPricingPolicyError('Đơn vị tính giá của gói chụp không hợp lệ.');
+    throw new PhotographyPricingPolicyError(
+      'Đơn vị tính giá của gói chụp không hợp lệ.',
+    );
   }
 
   return {
@@ -224,13 +236,19 @@ function groupByDate(
   return groups;
 }
 
-function normalizePositiveInteger(value: number | null | undefined, fallback: number) {
+function normalizePositiveInteger(
+  value: number | null | undefined,
+  fallback: number,
+) {
   return Number.isInteger(value) && (value as number) > 0
     ? (value as number)
     : fallback;
 }
 
-function normalizeNonNegativeInteger(value: number | null | undefined, fallback: number) {
+function normalizeNonNegativeInteger(
+  value: number | null | undefined,
+  fallback: number,
+) {
   return Number.isInteger(value) && (value as number) >= 0
     ? (value as number)
     : fallback;

@@ -1,3 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
 import {
   BadRequestException,
   Injectable,
@@ -51,7 +57,8 @@ export class ReviewsService {
     @InjectModel(CustomerReview.name)
     private readonly customerReviewModel: Model<CustomerReview>,
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
-    @InjectModel(BookingItem.name) private readonly bookingItemModel: Model<BookingItem>,
+    @InjectModel(BookingItem.name)
+    private readonly bookingItemModel: Model<BookingItem>,
     @InjectModel(Product.name) private readonly productModel: Model<Product>,
     @InjectModel(PhotographyPackage.name)
     private readonly photoPackageModel: Model<PhotographyPackage>,
@@ -69,7 +76,9 @@ export class ReviewsService {
 
     const existingReview = await this.reviewModel.findOne({ bookingItemId });
     if (existingReview) {
-      throw new BadRequestException('Quý khách đã gửi đánh giá cho sản phẩm này của đơn hàng rồi.');
+      throw new BadRequestException(
+        'Quý khách đã gửi đánh giá cho sản phẩm này của đơn hàng rồi.',
+      );
     }
 
     const booking = await this.bookingModel.findById(bookingId);
@@ -78,8 +87,12 @@ export class ReviewsService {
     }
 
     // Verify booking belongs to this customer
-    if (booking.customerId.toString() !== customerIdStr) {
-      throw new BadRequestException('Bạn không có quyền đánh giá đơn hàng này.');
+    const bookingCustomerId =
+      (booking.customerId as any)?._id || booking.customerId;
+    if (bookingCustomerId.toString() !== customerIdStr) {
+      throw new BadRequestException(
+        'Bạn không có quyền đánh giá đơn hàng này.',
+      );
     }
 
     // Only allow review when booking is COMPLETED
@@ -206,21 +219,20 @@ export class ReviewsService {
 
   async getReviewsForItem(itemIdStr: string): Promise<Review[]> {
     const itemId = new Types.ObjectId(itemIdStr);
-    
+
     // Find all BookingItem IDs referencing this productId or photographyPackageId
-    const bookingItems = await this.bookingItemModel.find({
-      $or: [
-        { productId: itemId },
-        { photographyPackageId: itemId }
-      ]
-    }).select('_id');
-    
-    const bookingItemIds = bookingItems.map(item => item._id);
-    
+    const bookingItems = await this.bookingItemModel
+      .find({
+        $or: [{ productId: itemId }, { photographyPackageId: itemId }],
+      })
+      .select('_id');
+
+    const bookingItemIds = bookingItems.map((item) => item._id);
+
     if (bookingItemIds.length === 0) {
       return [];
     }
-    
+
     return this.reviewModel
       .find({ bookingItemId: { $in: bookingItemIds } })
       .populate('customerId')
@@ -305,8 +317,10 @@ export class ReviewsService {
   }
 
   private async updateProductRating(productId: Types.ObjectId): Promise<void> {
-    const bookingItems = await this.bookingItemModel.find({ productId }).select('_id');
-    const bookingItemIds = bookingItems.map(item => item._id);
+    const bookingItems = await this.bookingItemModel
+      .find({ productId })
+      .select('_id');
+    const bookingItemIds = bookingItems.map((item) => item._id);
     if (bookingItemIds.length === 0) {
       await this.productModel.updateOne(
         { _id: productId },
@@ -320,7 +334,9 @@ export class ReviewsService {
       return;
     }
 
-    const reviews = await this.reviewModel.find({ bookingItemId: { $in: bookingItemIds } });
+    const reviews = await this.reviewModel.find({
+      bookingItemId: { $in: bookingItemIds },
+    });
     const total = reviews.length;
     const average =
       total > 0 ? reviews.reduce((acc, r) => acc + r.rating, 0) / total : 0;
@@ -348,25 +364,37 @@ export class ReviewsService {
     const prodId = new Types.ObjectId(productId);
 
     // Tìm tất cả booking COMPLETED của customer
-    const completedBookings = await this.bookingModel.find({
-      customerId,
-      status: BookingStatus.Completed,
-    }).select('_id providerIds');
+    const completedBookings = await this.bookingModel
+      .find({
+        customerId,
+        status: BookingStatus.Completed,
+      })
+      .select('_id providerIds');
 
     if (completedBookings.length === 0) {
-      return { canReview: false, hasCompletedBooking: false, alreadyReviewed: false };
+      return {
+        canReview: false,
+        hasCompletedBooking: false,
+        alreadyReviewed: false,
+      };
     }
 
     const completedBookingIds = completedBookings.map((b) => b._id);
 
     // Tìm booking items chứa sản phẩm này trong các đơn COMPLETED
-    const matchingItems = await this.bookingItemModel.find({
-      bookingId: { $in: completedBookingIds },
-      productId: prodId,
-    }).select('_id bookingId isReviewed');
+    const matchingItems = await this.bookingItemModel
+      .find({
+        bookingId: { $in: completedBookingIds },
+        productId: prodId,
+      })
+      .select('_id bookingId isReviewed');
 
     if (matchingItems.length === 0) {
-      return { canReview: false, hasCompletedBooking: false, alreadyReviewed: false };
+      return {
+        canReview: false,
+        hasCompletedBooking: false,
+        alreadyReviewed: false,
+      };
     }
 
     // Tìm item chưa được review
@@ -392,8 +420,10 @@ export class ReviewsService {
   private async updatePhotoPackageRating(
     packageId: Types.ObjectId,
   ): Promise<void> {
-    const bookingItems = await this.bookingItemModel.find({ photographyPackageId: packageId }).select('_id');
-    const bookingItemIds = bookingItems.map(item => item._id);
+    const bookingItems = await this.bookingItemModel
+      .find({ photographyPackageId: packageId })
+      .select('_id');
+    const bookingItemIds = bookingItems.map((item) => item._id);
     if (bookingItemIds.length === 0) {
       await this.photoPackageModel.updateOne(
         { _id: packageId },
@@ -407,7 +437,9 @@ export class ReviewsService {
       return;
     }
 
-    const reviews = await this.reviewModel.find({ bookingItemId: { $in: bookingItemIds } });
+    const reviews = await this.reviewModel.find({
+      bookingItemId: { $in: bookingItemIds },
+    });
     const total = reviews.length;
     const average =
       total > 0 ? reviews.reduce((acc, r) => acc + r.rating, 0) / total : 0;
@@ -439,7 +471,8 @@ export class ReviewsService {
     reason: string,
   ): Promise<{ success: boolean }> {
     const reviewId = new Types.ObjectId(reviewIdStr);
-    const review = await this.reviewModel.findById(reviewId)
+    const review = await this.reviewModel
+      .findById(reviewId)
       .populate('customerId')
       .populate('providerId')
       .populate('bookingId');
@@ -452,7 +485,10 @@ export class ReviewsService {
     const provider = review.providerId as any;
     const booking = review.bookingId as any;
 
-    const bookingCode = booking?.bookingCode || booking?._id?.toString()?.slice(-6)?.toUpperCase() || 'N/A';
+    const bookingCode =
+      booking?.bookingCode ||
+      booking?._id?.toString()?.slice(-6)?.toUpperCase() ||
+      'N/A';
 
     let providerUserIdStr = '';
     if (provider) {
@@ -491,7 +527,7 @@ export class ReviewsService {
           'Đánh giá của bạn đã bị gỡ bỏ do vi phạm',
           `Đơn thuê #${bookingCode}: Đánh giá của bạn đối với dịch vụ đã bị gỡ bỏ bởi quản trị viên hệ thống. Lý do: ${reason}`,
           NotificationType.System,
-          { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() }
+          { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() },
         );
       }
 
@@ -502,10 +538,9 @@ export class ReviewsService {
           'Báo cáo vi phạm đánh giá đã được xử lý',
           `Đơn thuê #${bookingCode}: Báo cáo của bạn về đánh giá spam/vi phạm đã được Admin chấp nhận. Đánh giá của khách hàng đã được gỡ bỏ khỏi hệ thống. Lý do: ${reason}`,
           NotificationType.System,
-          { bookingId: review.bookingId?.toString() }
+          { bookingId: review.bookingId?.toString() },
         );
       }
-
     } else if (action === 'DISMISS') {
       // Dismiss flag
       review.isReported = false;
@@ -521,7 +556,7 @@ export class ReviewsService {
           'Kết quả kiểm duyệt báo cáo đánh giá',
           `Đơn thuê #${bookingCode}: Báo cáo của bạn về đánh giá của khách hàng đã được Admin kiểm duyệt. Hệ thống xác nhận đánh giá này không vi phạm chính sách cộng đồng và sẽ tiếp tục được hiển thị. Lý do: ${reason}`,
           NotificationType.System,
-          { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() }
+          { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() },
         );
       }
 
@@ -532,7 +567,7 @@ export class ReviewsService {
           'Đánh giá của bạn đã được duyệt hợp lệ',
           `Đơn thuê #${bookingCode}: Đánh giá của bạn đã được kiểm duyệt và xác nhận phù hợp với quy chuẩn cộng đồng. Trân trọng cảm ơn đóng góp của bạn!`,
           NotificationType.System,
-          { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() }
+          { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() },
         );
       }
     }

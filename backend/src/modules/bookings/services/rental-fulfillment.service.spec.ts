@@ -63,7 +63,9 @@ describe('RentalFulfillmentService', () => {
     expect(bookingItemModel.findOneAndUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         'rentalFulfillment.status': RentalFulfillmentStatus.Returned,
-        'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.PendingSettlement,
+        'rentalFulfillment.depositSettlementStatus': {
+          $in: [DepositSettlementStatus.PendingSettlement, DepositSettlementStatus.FullyReleased],
+        },
         depositAmount: { $gte: 100_000 },
       }),
       expect.objectContaining({

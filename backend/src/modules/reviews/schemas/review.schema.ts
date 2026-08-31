@@ -55,7 +55,7 @@ export class CustomerReview {
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
   bookingId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   customerId: Types.ObjectId; // Customer being reviewed
 
   @Prop({ type: Types.ObjectId, ref: 'Provider', required: true, index: true })

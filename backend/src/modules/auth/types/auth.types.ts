@@ -9,7 +9,12 @@ export interface IssuedTokens {
   expiresIn: number;
 }
 
-export interface AuthSession extends IssuedTokens {
+export interface AuthorizationContext {
+  roles: string[];
+  permissions: string[];
+}
+
+export interface AuthSession extends IssuedTokens, AuthorizationContext {
   user: Record<string, unknown>;
 }
 

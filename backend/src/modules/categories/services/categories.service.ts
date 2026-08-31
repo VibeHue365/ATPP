@@ -37,7 +37,21 @@ export class CategoriesService {
     private readonly securityLogService: SecurityLogService,
   ) {}
 
+  private publicCache = new Map<string, { data: any; expiresAt: number }>();
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+
+  clearPublicCache(): void {
+    this.publicCache.clear();
+  }
+
   async findPublic(query: QueryCategoriesDto): Promise<Record<string, unknown>> {
+    const cacheKey = `public:${JSON.stringify(query)}`;
+    const now = Date.now();
+    const cached = this.publicCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
+    }
+
     const filter = this.buildFilter({
       ...query,
       status: CategoryStatus.Active,
@@ -49,14 +63,23 @@ export class CategoriesService {
       .lean();
     const items = categories.map((category) => this.toResponse(category));
 
-    return {
+    const result = {
       data: query.includeTree ? this.toTree(items) : items,
     };
+    this.publicCache.set(cacheKey, { data: result, expiresAt: now + this.CACHE_TTL_MS });
+    return result;
   }
 
   async findPublicByIdentifier(
     identifier: string,
   ): Promise<Record<string, unknown>> {
+    const cacheKey = `identifier:${identifier}`;
+    const now = Date.now();
+    const cached = this.publicCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
+    }
+
     const normalizedIdentifier = this.normalizeSlug(identifier);
     const filter = Types.ObjectId.isValid(identifier)
       ? { _id: new Types.ObjectId(identifier) }
@@ -73,7 +96,9 @@ export class CategoriesService {
       throw new NotFoundException('CATEGORY_NOT_FOUND');
     }
 
-    return this.toResponse(category);
+    const result = this.toResponse(category);
+    this.publicCache.set(cacheKey, { data: result, expiresAt: now + this.CACHE_TTL_MS });
+    return result;
   }
 
   async findAdmin(query: QueryCategoriesDto): Promise<Record<string, unknown>> {
@@ -151,6 +176,7 @@ export class CategoriesService {
       context,
     });
 
+    this.clearPublicCache();
     return this.toResponse(category);
   }
 
@@ -219,6 +245,7 @@ export class CategoriesService {
       context,
     });
 
+    this.clearPublicCache();
     return this.toResponse(category);
   }
 
@@ -262,6 +289,7 @@ export class CategoriesService {
       context,
     });
 
+    this.clearPublicCache();
     return this.toResponse(category);
   }
 
@@ -323,6 +351,7 @@ export class CategoriesService {
       context,
     });
 
+    this.clearPublicCache();
     return {
       data: updated.map((category) => this.toResponse(category)),
     };
@@ -355,10 +384,18 @@ export class CategoriesService {
       context,
     });
 
+    this.clearPublicCache();
     return { success: true };
   }
 
   async listActiveCategoriesForProducts(): Promise<Record<string, unknown>[]> {
+    const cacheKey = 'active_product_categories';
+    const now = Date.now();
+    const cached = this.publicCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
+    }
+
     const categories = await this.categoryModel
       .find({
         type: ServiceCategoryType.AodaiCategory,
@@ -368,7 +405,9 @@ export class CategoriesService {
       .sort({ displayOrder: 1, createdAt: -1 })
       .lean();
 
-    return categories.map((category) => this.toResponse(category));
+    const result = categories.map((category) => this.toResponse(category));
+    this.publicCache.set(cacheKey, { data: result, expiresAt: now + this.CACHE_TTL_MS });
+    return result;
   }
 
   async assertActiveProductCategory(categoryId: string): Promise<void> {

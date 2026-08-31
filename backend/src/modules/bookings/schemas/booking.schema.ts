@@ -18,6 +18,12 @@ export enum BookingStatus {
   PickedUp = 'PICKED_UP',
   ReturnPending = 'RETURN_PENDING',
   Returned = 'RETURNED',
+  /** Photography only: provider has started the shoot session */
+  InProgress = 'IN_PROGRESS',
+  /** Photography only: shoot done, waiting for customer confirmation (48h window) */
+  AwaitingReview = 'AWAITING_REVIEW',
+  /** Combo only: photos approved by customer while rental lifecycle is still ongoing */
+  ComboPhotosApproved = 'COMBO_PHOTOS_APPROVED',
   Completed = 'COMPLETED',
   Cancelled = 'CANCELLED',
   Disputed = 'DISPUTED',
@@ -190,17 +196,102 @@ export class Booking {
   @Prop({ type: String, default: null, trim: true })
   settlementGenerationError?: string | null;
 
+  /**
+   * Photography only: timestamp when booking entered AWAITING_REVIEW.
+   * Used by the auto-complete cron job to calculate the 48-hour window.
+   */
+  @Prop({ type: Date, default: null, index: true })
+  awaitingReviewSince?: Date | null;
+
+  @Prop({ type: Boolean, default: false })
+  photosApproved?: boolean;
+
+  /**
+   * Photography only: estimated net amount credited to provider's pendingBalance
+   * when booking enters CONFIRMED. Used at settlement time to deduct the exact
+   * same figure (preventing ghost-balance drift if fees change).
+   */
+  @Prop({ type: Number, default: null })
+  estimatedNetAmount?: number | null;
+
+  /** Store pickup only: timestamp when shop clicks "Bàn giao đồ" (moves to PICKUP_PENDING) */
+  @Prop({ type: Date, default: null, index: true })
+  handoverInitiatedAt?: Date | null;
+
+  /** Store pickup only: photos uploaded by shop at handover time (when moving to PICKUP_PENDING) */
+  @Prop({ type: [String], default: [] })
+  handoverPhotos?: string[];
+
+  /** Photography only: result photos delivered by photographer when moving to AWAITING_REVIEW */
+  @Prop({ type: [String], default: [] })
+  deliveredPhotos?: string[];
+
+  /** Photography only: Google Drive / Dropbox album link delivered by photographer */
+  @Prop({ type: String, default: null, trim: true })
+  deliveryDriveUrl?: string | null;
+
+  /** Kết quả phán quyết tranh chấp từ Admin */
+  @Prop({
+    type: {
+      decision: { type: String, default: null },
+      decisionLabel: { type: String, default: null },
+      refundAmount: { type: Number, default: 0 },
+      compensationAmount: { type: Number, default: 0 },
+      notes: { type: String, default: null },
+      resolvedAt: { type: Date, default: null },
+    },
+    default: null,
+  })
+  disputeResult?: {
+    decision?: string;
+    decisionLabel?: string;
+    refundAmount?: number;
+    compensationAmount?: number;
+    notes?: string;
+    resolvedAt?: Date;
+  } | null;
+
+  /** Pre-existing damage report submitted by customer during pickup (within 30 minutes) */
+  @Prop({
+    type: {
+      reportedAt: { type: Date, default: null },
+      description: { type: String, default: null },
+      evidencePhotos: { type: [String], default: [] },
+    },
+    default: null,
+  })
+  pickupDamageReport?: {
+    reportedAt: Date | null;
+    description: string | null;
+    evidencePhotos: string[];
+  } | null;
+
   /** One booking-level refund request for all finalized Ao Dai item deposits. */
   @Prop({
     type: {
-      status: { type: String, enum: ['PENDING', 'NO_REFUND', 'REQUESTED', 'REFUNDED', 'FAILED'], default: 'PENDING' },
+      status: {
+        type: String,
+        enum: ['PENDING', 'NO_REFUND', 'REQUESTED', 'REFUNDED', 'FAILED'],
+        default: 'PENDING',
+      },
       amount: { type: Number, min: 0, default: 0 },
-      refundRequestId: { type: Types.ObjectId, ref: 'RefundRequest', default: null },
+      refundRequestId: {
+        type: Types.ObjectId,
+        ref: 'RefundRequest',
+        default: null,
+      },
       requestedAt: { type: Date, default: null },
       completedAt: { type: Date, default: null },
       failureReason: { type: String, default: null },
     },
-    default: () => ({ status: 'PENDING', amount: 0, refundRequestId: null, requestedAt: null, completedAt: null, failureReason: null }),
+    default: () => ({
+      status: 'PENDING',
+      amount: 0,
+      refundRequestId: null,
+      requestedAt: null,
+      completedAt: null,
+      failureReason: null,
+    }),
   })
   rentalDepositRefund?: {
     status: 'PENDING' | 'NO_REFUND' | 'REQUESTED' | 'REFUNDED' | 'FAILED';
@@ -208,7 +299,6 @@ export class Booking {
     refundRequestId?: Types.ObjectId | null;
     requestedAt?: Date | null;
     completedAt?: Date | null;
-    failureReason?: string | null;
   };
 }
 
@@ -220,3 +310,4 @@ BookingSchema.index(
     partialFilterExpression: { holdIdempotencyKey: { $type: 'string' } },
   },
 );
+BookingSchema.index({ providerIds: 1, status: 1, createdAt: -1 });

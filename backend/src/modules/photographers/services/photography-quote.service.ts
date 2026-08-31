@@ -48,6 +48,8 @@ type ParsedSession = {
   endMinutes: number;
   durationMinutes: number;
   locationAddress?: string;
+  locationLatitude?: number;
+  locationLongitude?: number;
 };
 
 export type PhotographyQuoteSessionError = {
@@ -60,7 +62,8 @@ export type PhotographyQuoteSessionError = {
     | 'DUPLICATE_CLIENT_ID'
     | 'OVERLAPS_REQUEST'
     | 'OUTSIDE_WORKING_HOURS'
-    | 'SLOT_UNAVAILABLE';
+    | 'SLOT_UNAVAILABLE'
+    | 'OUTSIDE_SERVICE_RADIUS';
   message: string;
 };
 
@@ -88,19 +91,23 @@ export class PhotographyQuoteService {
     }
 
     const providerId = new Types.ObjectId(providerIdValue);
-    const [provider, photographyPackage] = await Promise.all([
-      this.providerModel.exists({
-        _id: providerId,
-        capabilities: ProviderCapability.Photography,
-        status: ProviderStatus.Active,
-      }),
+    const [providerDoc, photographyPackage] = await Promise.all([
+      this.providerModel
+        .findOne({
+          _id: providerId,
+          capabilities: ProviderCapability.Photography,
+          status: ProviderStatus.Active,
+        })
+        .select('address.geo photographySettings.serviceRadiusKm')
+        .lean()
+        .exec(),
       this.packageModel.findOne({
         _id: new Types.ObjectId(dto.packageId),
         providerId,
         status: PackageStatus.Active,
       }),
     ]);
-    if (!provider) {
+    if (!providerDoc) {
       throw new NotFoundException('Không tìm thấy nhiếp ảnh gia đang hoạt động.');
     }
     if (!photographyPackage) {
@@ -137,6 +144,33 @@ export class PhotographyQuoteService {
           code: 'SLOT_UNAVAILABLE',
           message: 'Khung giờ này vừa có người khác đặt hoặc đang được giữ chỗ.',
         });
+      }
+
+      const radiusKm = (providerDoc as any)?.photographySettings?.serviceRadiusKm;
+      const coordinates = (providerDoc as any)?.address?.geo?.coordinates;
+      if (
+        radiusKm !== null &&
+        radiusKm !== undefined &&
+        radiusKm > 0 &&
+        coordinates &&
+        coordinates.length === 2 &&
+        Number.isFinite(session.locationLatitude) &&
+        Number.isFinite(session.locationLongitude)
+      ) {
+        const [providerLongitude, providerLatitude] = coordinates;
+        const distanceKm = this.distanceKm(
+          providerLatitude,
+          providerLongitude,
+          session.locationLatitude!,
+          session.locationLongitude!,
+        );
+        if (distanceKm > radiusKm) {
+          errors.push({
+            clientId: session.clientId,
+            code: 'OUTSIDE_SERVICE_RADIUS',
+            message: `Địa điểm chụp (cách ${distanceKm.toFixed(1)} km) vượt quá bán kính phục vụ (${radiusKm} km) của nhiếp ảnh gia.`,
+          });
+        }
       }
     }
 
@@ -299,6 +333,8 @@ export class PhotographyQuoteService {
         endMinutes: endParts.minutes,
         durationMinutes,
         locationAddress: item.locationAddress,
+        locationLatitude: item.locationLatitude,
+        locationLongitude: item.locationLongitude,
       });
     }
 
@@ -504,5 +540,25 @@ export class PhotographyQuoteService {
       date: `${part('year')}-${part('month')}-${part('day')}`,
       minutes: hour * 60 + minute,
     };
+  }
+
+  private distanceKm(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const toRad = (v: number) => (v * Math.PI) / 180;
+    const r = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) *
+        Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return r * c;
   }
 }

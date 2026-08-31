@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
@@ -13,7 +18,7 @@ import {
 import { ResendVerificationDto } from '../dto/resend-verification.dto';
 import { VerifyEmailDto } from '../dto/verify-email.dto';
 import { RequestContext } from '../types/auth.types';
-import { MailService } from './mail.service';
+import { EmailQueueService } from './email-queue.service';
 import { RateLimitService } from './rate-limit.service';
 import { SecurityLogService } from './security-log.service';
 
@@ -23,7 +28,7 @@ export class OtpService {
     private readonly authRepository: AuthRepository,
     private readonly usersRepository: UsersRepository,
     private readonly configService: ConfigService,
-    private readonly mailService: MailService,
+    private readonly emailQueueService: EmailQueueService,
     private readonly rateLimitService: RateLimitService,
     private readonly securityLogService: SecurityLogService,
   ) {}
@@ -142,12 +147,13 @@ export class OtpService {
     userId: Types.ObjectId,
     email: string,
   ): Promise<string> {
-    await this.authRepository.revokeActiveVerificationTokens(
+    const { otp, tokenId } = await this.createEmailVerificationOtp(userId, email);
+    await this.enqueueVerificationEmail(userId, email, otp, tokenId);
+    await this.authRepository.revokeOtherActiveVerificationTokens(
       userId,
       VerificationPurpose.VerifyEmail,
+      tokenId,
     );
-    const otp = await this.createEmailVerificationOtp(userId, email);
-    await this.mailService.sendEmailVerificationOtp(email, otp);
 
     return otp;
   }
@@ -156,8 +162,8 @@ export class OtpService {
     userId: Types.ObjectId,
     email: string,
   ): Promise<string> {
-    const otp = await this.createEmailVerificationOtp(userId, email);
-    await this.mailService.sendEmailVerificationOtp(email, otp);
+    const { otp, tokenId } = await this.createEmailVerificationOtp(userId, email);
+    await this.enqueueVerificationEmail(userId, email, otp, tokenId);
 
     return otp;
   }
@@ -165,11 +171,11 @@ export class OtpService {
   private async createEmailVerificationOtp(
     userId: Types.ObjectId,
     email: string,
-  ): Promise<string> {
+  ): Promise<{ otp: string; tokenId: Types.ObjectId }> {
     const otp = randomInt(100000, 1000000).toString();
     const codeHash = await bcrypt.hash(otp, 12);
 
-    await this.authRepository.createVerificationToken({
+    const token = await this.authRepository.createVerificationToken({
       userId,
       target: email,
       targetType: VerificationTargetType.Email,
@@ -178,7 +184,30 @@ export class OtpService {
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     });
 
-    return otp;
+    return { otp, tokenId: token._id };
+  }
+
+  private async enqueueVerificationEmail(
+    userId: Types.ObjectId,
+    email: string,
+    otp: string,
+    tokenId: Types.ObjectId,
+  ): Promise<void> {
+    try {
+      await this.emailQueueService.enqueueVerificationOtp({
+        userId: userId.toString(),
+        verificationTokenId: tokenId.toString(),
+        email,
+        otp,
+      });
+    } catch {
+      await this.authRepository
+        .revokeVerificationToken(tokenId)
+        .catch(() => undefined);
+      throw new ServiceUnavailableException(
+        'Email verification is temporarily unavailable. Please try again.',
+      );
+    }
   }
 
   private demoTokensEnabled(): boolean {

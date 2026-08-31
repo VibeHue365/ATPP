@@ -21,6 +21,7 @@ import {
   RentalHandoverSchema,
 } from './schemas/rental-handover.schema';
 import { BookingsController } from './controllers/bookings.controller';
+import { PublicBookingAvailabilityController } from './controllers/public-booking-availability.controller';
 import { PhotographyHoldsController } from './controllers/photography-holds.controller';
 import { BookingsService } from './services/bookings.service';
 import { BookingsSchedulerService } from './services/bookings-scheduler.service';
@@ -39,6 +40,10 @@ import { ProvidersModule } from '../providers/providers.module';
 import { SettlementsModule } from '../settlements/settlements.module';
 import { SystemPoliciesModule } from '../system-policies/system-policies.module';
 import { StorageModule } from '../storage/storage.module';
+
+import { BookingStatusService } from './services/booking-status.service';
+import { BookingCreationService } from './services/booking-creation.service';
+import { BookingsRepository } from './repositories/bookings.repository';
 
 export const bookingModels = MongooseModule.forFeature([
   { name: Cart.name, schema: CartSchema },
@@ -62,9 +67,12 @@ export const bookingModels = MongooseModule.forFeature([
     SystemPoliciesModule,
     StorageModule,
   ],
-  controllers: [BookingsController, PhotographyHoldsController, RentalFulfillmentController, AdminRentalMigrationController],
+  controllers: [BookingsController, PublicBookingAvailabilityController, PhotographyHoldsController, RentalFulfillmentController, AdminRentalMigrationController],
   providers: [
+    BookingsRepository,
     BookingsService,
+    BookingStatusService,
+    BookingCreationService,
     BookingsSchedulerService,
     PhotographyQuoteService,
     PhotographyHoldService,
@@ -75,6 +83,7 @@ export const bookingModels = MongooseModule.forFeature([
   exports: [
     bookingModels,
     BookingsService,
+    BookingStatusService,
     PhotographyQuoteService,
     PhotographyHoldService,
     RentalFulfillmentService,

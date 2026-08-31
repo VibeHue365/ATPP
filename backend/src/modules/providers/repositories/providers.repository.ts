@@ -5,6 +5,7 @@ import { Provider, ProviderDocument } from '../schemas/provider.schema';
 import {
   ProviderSchedule,
   ProviderScheduleDocument,
+  ScheduleCapability,
   ScheduleType,
 } from '../../products/schemas/provider-schedule.schema';
 
@@ -72,11 +73,12 @@ export class ProvidersRepository {
     providerId: Types.ObjectId,
     dayOfWeek: number,
     workingHours: Array<{ start: string; end: string }>,
+    capability: ScheduleCapability | null = null,
   ): Promise<ProviderScheduleDocument> {
     const result = await this.scheduleModel
       .findOneAndUpdate(
-        { providerId, dayOfWeek, scheduleType: ScheduleType.Recurring },
-        { $set: { workingHours, offDays: [] } },
+        { providerId, dayOfWeek, scheduleType: ScheduleType.Recurring, capability: capability ?? null },
+        { $set: { workingHours, offDays: [], capability: capability ?? null } },
         { upsert: true, new: true },
       )
       .exec();
@@ -88,6 +90,7 @@ export class ProvidersRepository {
     specificDate: Date,
     offDays: Date[],
     customSlots: Array<{ timeSlot: string; status: string }>,
+    capability: ScheduleCapability | null = null,
   ): Promise<ProviderScheduleDocument> {
     // Normalize date to midnight
     const normalizedDate = new Date(specificDate);
@@ -99,8 +102,9 @@ export class ProvidersRepository {
           providerId,
           specificDate: normalizedDate,
           scheduleType: ScheduleType.SpecificDate,
+          capability: capability ?? null,
         },
-        { $set: { offDays, customSlots, workingHours: [] } },
+        { $set: { offDays, customSlots, workingHours: [], capability: capability ?? null } },
         { upsert: true, new: true },
       )
       .exec();

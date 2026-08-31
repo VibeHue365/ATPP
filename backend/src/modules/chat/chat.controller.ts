@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile, Inject, forwardRef } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { ChatService } from './chat.service';
 import { CloudinaryService } from './cloudinary.service';
+import { ChatGateway } from './chat.gateway';
 
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
@@ -12,6 +13,8 @@ export class ChatController {
   constructor(
     private readonly chatService: ChatService,
     private readonly cloudinaryService: CloudinaryService,
+    @Inject(forwardRef(() => ChatGateway))
+    private readonly chatGateway: ChatGateway,
   ) {}
 
   @Get('rooms')
@@ -36,6 +39,20 @@ export class ChatController {
     @Body('otherUserId') otherUserId: string,
   ) {
     return this.chatService.getOrCreateRoom(user.sub, otherUserId);
+  }
+
+  @Post('rooms/:roomId/messages')
+  async createMessage(
+    @CurrentUser() user: AuthUser,
+    @Param('roomId') roomId: string,
+    @Body('messageText') messageText: string,
+    @Body('attachments') attachments?: string[],
+  ) {
+    const msg = await this.chatService.createMessage(roomId, user.sub, messageText, attachments || []);
+    if (this.chatGateway && this.chatGateway.server) {
+      this.chatGateway.server.to(`room:${roomId}`).emit('new_message', msg);
+    }
+    return msg;
   }
 
   @Post('upload')

@@ -143,3 +143,8 @@ export class Product {
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
+ProductSchema.index({ status: 1, moderationStatus: 1, categoryId: 1, basePrice: 1 });
+ProductSchema.index({ status: 1, moderationStatus: 1, providerId: 1, createdAt: -1 });
+ProductSchema.index({ status: 1, moderationStatus: 1, 'rating.averageRating': -1, createdAt: -1 });
+ProductSchema.index({ styleCategoryIds: 1 });
+ProductSchema.index({ eventCategoryIds: 1 });

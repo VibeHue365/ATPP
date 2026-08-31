@@ -30,6 +30,7 @@ import {
 import { SecurityLogModule } from './security-log.module';
 import { AuthService } from './services/auth.service';
 import { BootstrapAdminService } from './services/bootstrap-admin.service';
+import { EmailQueueService } from './services/email-queue.service';
 import { MailService } from './services/mail.service';
 import { OAuthService } from './services/oauth.service';
 import { OtpService } from './services/otp.service';
@@ -70,6 +71,7 @@ export const authModels = MongooseModule.forFeature([
     BootstrapAdminService,
     AuthRepository,
     MailService,
+    EmailQueueService,
     RolesService,
     RateLimitService,
     TokenService,

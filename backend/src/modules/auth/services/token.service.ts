@@ -4,7 +4,11 @@ import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { Types } from 'mongoose';
 import { AuthRepository } from '../repositories/auth.repository';
-import { IssuedTokens, RequestContext } from '../types/auth.types';
+import {
+  AuthorizationContext,
+  IssuedTokens,
+  RequestContext,
+} from '../types/auth.types';
 import { RolesService } from './roles.service';
 
 @Injectable()
@@ -22,7 +26,11 @@ export class TokenService {
     userId: Types.ObjectId,
     email: string,
     context: RequestContext,
-    options: { refreshTokenId?: Types.ObjectId; familyId?: string } = {},
+    options: {
+      refreshTokenId?: Types.ObjectId;
+      familyId?: string;
+      authorization?: AuthorizationContext;
+    } = {},
   ): Promise<IssuedTokens> {
     const refreshTokenId = options.refreshTokenId ?? new Types.ObjectId();
     const refreshToken = `${refreshTokenId.toString()}.${randomBytes(48).toString('hex')}`;
@@ -43,7 +51,8 @@ export class TokenService {
     });
 
     const { roles, permissions } =
-      await this.rolesService.getRoleCodesAndPermissions(userId);
+      options.authorization ??
+      (await this.rolesService.getRoleCodesAndPermissions(userId));
     const accessToken = await this.jwtService.signAsync(
       {
         sub: userId.toString(),

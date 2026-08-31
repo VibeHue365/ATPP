@@ -147,7 +147,9 @@ export class ProviderVerificationService {
     dto: CreateProviderVerificationDto,
     meta: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    this.requireRole(actor, 'CUSTOMER');
+    if (!actor.roles?.includes('CUSTOMER') && !actor.roles?.includes('PROVIDER')) {
+      throw new ForbiddenException('CUSTOMER or PROVIDER role is required');
+    }
     const user = await this.loadUser(actor.sub);
     if (!user.auth.emailVerified) {
       throw new BadRequestException('Email must be verified');
@@ -156,9 +158,29 @@ export class ProviderVerificationService {
     const requestedCapabilities = this.validateCapabilities(
       dto.requestedCapabilities,
     );
+
+    const existingProvider = await this.providerModel.findOne({
+      userId: user._id,
+      status: ProviderStatus.Active,
+    });
+
+    const verificationType = existingProvider
+      ? VerificationType.AddCapability
+      : VerificationType.NewProvider;
+
+    if (existingProvider) {
+      const existingCaps = existingProvider.capabilities || [];
+      const hasDuplicateCap = requestedCapabilities.some((cap) =>
+        existingCaps.includes(cap),
+      );
+      if (hasDuplicateCap) {
+        throw new BadRequestException('Bạn đã sở hữu vai trò dịch vụ này rồi.');
+      }
+    }
+
     const duplicate = await this.verificationModel.findOne({
       userId: user._id,
-      verificationType: VerificationType.NewProvider,
+      verificationType,
       status: { $in: ACTIVE_VERIFICATION_STATUSES },
     });
     if (duplicate) {
@@ -167,7 +189,7 @@ export class ProviderVerificationService {
 
     const verification = await this.verificationModel.create({
       userId: user._id,
-      verificationType: VerificationType.NewProvider,
+      verificationType,
       requestedCapabilities,
       status: VerificationStatus.Draft,
       documents: this.buildRequiredDocumentItems(requestedCapabilities),
@@ -187,7 +209,7 @@ export class ProviderVerificationService {
       'CREATE_PROVIDER_VERIFICATION',
       verification._id,
       {},
-      { requestedCapabilities },
+      { requestedCapabilities, verificationType },
       meta,
     );
 
@@ -204,11 +226,15 @@ export class ProviderVerificationService {
   async getCurrentVerification(
     actor: AuthUser,
   ): Promise<Record<string, unknown> | null> {
-    this.requireRole(actor, 'CUSTOMER');
+    if (!actor.roles?.includes('CUSTOMER') && !actor.roles?.includes('PROVIDER')) {
+      throw new ForbiddenException('CUSTOMER or PROVIDER role is required');
+    }
     const verification = await this.verificationModel
       .findOne({
         userId: this.toObjectId(actor.sub),
-        verificationType: VerificationType.NewProvider,
+        verificationType: {
+          $in: [VerificationType.NewProvider, VerificationType.AddCapability],
+        },
         status: { $in: ACTIVE_VERIFICATION_STATUSES },
       })
       .sort({ createdAt: -1 });
@@ -824,39 +850,66 @@ export class ProviderVerificationService {
       userId: verification.userId,
       status: ProviderStatus.Active,
     });
-    if (existingProvider) {
-      throw new ConflictException('User already has an active provider');
-    }
 
-    const provider = await this.providerModel.create({
-      userId: verification.userId,
-      businessName:
-        verification.businessProfile.businessName ??
-        verification.aodaiInfo.shopName ??
-        verification.photographyInfo.studioName ??
-        'VibeHue Provider',
-      capabilities: verification.requestedCapabilities,
-      contact: {
-        email: verification.businessProfile.email ?? '',
-        phone: verification.businessProfile.phone ?? '',
-      },
-      address: {
-        addressLine:
-          verification.businessProfile.address ??
-          verification.aodaiInfo.pickupAddress ??
-          verification.photographyInfo.workingArea ??
-          '',
-        city: verification.businessProfile.province ?? null,
-      },
-      media: { images: [] },
-      policies: {
-        rentalPolicy: verification.aodaiInfo.rentalPolicy ?? null,
-      },
-      status: ProviderStatus.Active,
-      approvedAt: new Date(),
-      approvedBy: this.toObjectId(actor.sub),
-      rating: { averageRating: 0, totalReviews: 0 },
-    });
+    let provider;
+    const isUpgrade = verification.verificationType === VerificationType.AddCapability;
+
+    if (isUpgrade) {
+      if (!existingProvider) {
+        throw new NotFoundException('Không tìm thấy tài khoản Provider hoạt động để nâng cấp vai trò.');
+      }
+      const nextCapabilities = Array.from(
+        new Set([
+          ...(existingProvider.capabilities || []),
+          ...verification.requestedCapabilities,
+        ]),
+      );
+      existingProvider.capabilities = nextCapabilities;
+
+      if (verification.requestedCapabilities.includes(ProviderCapability.AoDaiRental)) {
+        if (verification.aodaiInfo?.rentalPolicy) {
+          existingProvider.policies = {
+            ...existingProvider.policies,
+            rentalPolicy: verification.aodaiInfo.rentalPolicy,
+          };
+        }
+      }
+      provider = await existingProvider.save();
+    } else {
+      if (existingProvider) {
+        throw new ConflictException('User already has an active provider');
+      }
+
+      provider = await this.providerModel.create({
+        userId: verification.userId,
+        businessName:
+          verification.businessProfile.businessName ??
+          verification.aodaiInfo.shopName ??
+          verification.photographyInfo.studioName ??
+          'VibeHue Provider',
+        capabilities: verification.requestedCapabilities,
+        contact: {
+          email: verification.businessProfile.email ?? '',
+          phone: verification.businessProfile.phone ?? '',
+        },
+        address: {
+          addressLine:
+            verification.businessProfile.address ??
+            verification.aodaiInfo.pickupAddress ??
+            verification.photographyInfo.workingArea ??
+            '',
+          city: verification.businessProfile.province ?? null,
+        },
+        media: { images: [] },
+        policies: {
+          rentalPolicy: verification.aodaiInfo.rentalPolicy ?? null,
+        },
+        status: ProviderStatus.Active,
+        approvedAt: new Date(),
+        approvedBy: this.toObjectId(actor.sub),
+        rating: { averageRating: 0, totalReviews: 0 },
+      });
+    }
 
     const previousStatus = verification.status;
     verification.status = VerificationStatus.Approved;
@@ -896,7 +949,7 @@ export class ProviderVerificationService {
     );
     await this.writeAudit(
       actor,
-      'CREATE_PROVIDER_FROM_VERIFICATION',
+      isUpgrade ? 'UPGRADE_PROVIDER_CAPABILITIES' : 'CREATE_PROVIDER_FROM_VERIFICATION',
       provider._id,
       {},
       { verificationId: verification._id, capabilities: provider.capabilities },
