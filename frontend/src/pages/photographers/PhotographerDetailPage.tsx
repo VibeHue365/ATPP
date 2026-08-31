@@ -650,7 +650,7 @@ export const PhotographerDetailPage: React.FC = () => {
   const handleAddBookingToCart = async () => {
     if (!isAuthenticated) {
       toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
 
@@ -720,7 +720,7 @@ export const PhotographerDetailPage: React.FC = () => {
   const handleDirectBooking = async () => {
     if (!isAuthenticated) {
       toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
 

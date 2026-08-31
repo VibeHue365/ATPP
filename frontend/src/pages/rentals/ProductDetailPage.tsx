@@ -2,7 +2,7 @@ import { VirtualTryOn3DModal } from '../../features/virtual-tryon-3d/components/
 import React, { useState, useEffect } from "react";
 import { checkProductAvailability } from '../../features/rentals/services/productAvailabilityService';
 import { useProductAvailability } from '../../features/rentals/hooks/useProductAvailability';
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {Heart,Star,Sparkles,ArrowRight,ChevronRight,ChevronLeft,Shield,User,Check,MapPin,Flag} from "lucide-react";
 import Swal from "sweetalert2";
 import { httpClient } from "../../services/httpClient";
@@ -107,6 +107,7 @@ const productSlots = [
 export const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const { addToCart } = useCart();
   const {
@@ -254,7 +255,7 @@ export const ProductDetailPage: React.FC = () => {
   const handleWriteReviewClick = async () => {
     if (!isAuthenticated) {
       toast.error("Vui lòng đăng nhập để viết đánh giá.");
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
 
@@ -1288,7 +1289,7 @@ export const ProductDetailPage: React.FC = () => {
   const handleAddToCart = async () => {
     if (!isAuthenticated) {
       toast.error("Vui lòng đăng nhập để thực hiện chức năng này.");
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
 
@@ -1342,7 +1343,7 @@ export const ProductDetailPage: React.FC = () => {
   const handleBookingSubmit = async () => {
     if (!isAuthenticated) {
       toast.error("Vui lòng đăng nhập để thực hiện chức năng này.");
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
 
