@@ -5,6 +5,7 @@ import { translateError } from '../utils/errorTranslator';
 class HttpClient {
   private isRefreshing = false;
   private refreshSubscribers: ((token: string | null) => void)[] = [];
+  private inFlightGets = new Map<string, Promise<unknown>>();
 
   private subscribeTokenRefresh(cb: (token: string | null) => void) {
     this.refreshSubscribers.push(cb);
@@ -30,9 +31,15 @@ class HttpClient {
       headers.set('Content-Type', 'application/json');
     }
 
+    const timeoutMs = options.method === 'GET' ? 10_000 : 20_000;
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, timeoutSignal])
+      : timeoutSignal;
     const config: RequestInit = {
       ...options,
       headers,
+      signal,
     };
 
     try {
@@ -107,6 +114,7 @@ class HttpClient {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ refreshToken }),
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (!response.ok) {
@@ -140,7 +148,23 @@ class HttpClient {
   }
 
   get<T>(path: string, options?: Omit<RequestInit, 'method'>): Promise<T> {
-    return this.request<T>(path, { ...options, method: 'GET' });
+    const canDeduplicate = !options?.signal && !options?.headers;
+    if (!canDeduplicate) {
+      return this.request<T>(path, { ...options, method: 'GET' });
+    }
+
+    const token = tokenStorage.getAccessToken() || '';
+    const key = `${token}:${path}`;
+    const existing = this.inFlightGets.get(key);
+    if (existing) return existing as Promise<T>;
+
+    const request = this.request<T>(path, { ...options, method: 'GET' });
+    this.inFlightGets.set(key, request);
+    request.then(
+      () => { if (this.inFlightGets.get(key) === request) this.inFlightGets.delete(key); },
+      () => { if (this.inFlightGets.get(key) === request) this.inFlightGets.delete(key); },
+    );
+    return request;
   }
 
   post<T>(path: string, body?: any, options?: Omit<RequestInit, 'method' | 'body'>): Promise<T> {

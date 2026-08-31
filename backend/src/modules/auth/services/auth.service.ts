@@ -137,7 +137,6 @@ export class AuthService {
       },
     });
 
-    await this.rolesService.assignDefaultCustomerRole(user._id);
     const otp = await this.otpService.createAndSendEmailVerificationOtp(
       user._id,
       emailNormalized,
@@ -248,9 +247,13 @@ export class AuthService {
       throw new UnauthorizedException('Email hoặc mật khẩu không chính xác.');
     }
 
-    const tokens = await this.tokenService.issueTokens(user._id, email, context);
-    const { roles } = await this.rolesService.getRoleCodesAndPermissions(
+    const authorization =
+      await this.rolesService.getRoleCodesAndPermissionsForRoles(user.roles);
+    const tokens = await this.tokenService.issueTokens(
       user._id,
+      email,
+      context,
+      { authorization },
     );
     await Promise.all([
       this.usersRepository.markLoggedIn(user._id),
@@ -266,7 +269,8 @@ export class AuthService {
 
     return {
       ...tokens,
-      user: await this.usersService.getMe(user._id.toString(), roles),
+      ...authorization,
+      user: this.usersService.toMeResponse(user, authorization.roles),
     };
   }
 
@@ -339,28 +343,30 @@ export class AuthService {
     failureReason: string | null,
     context: RequestContext,
   ): Promise<void> {
-    await this.authRepository.recordLogin(
-      userId,
-      email,
-      provider,
-      status,
-      failureReason,
-      context.ipAddress,
-      context.userAgent,
-    );
-    await this.securityLogService.recordSecurityEvent({
-      type:
-        status === LoginStatus.Success
-          ? SecurityEventType.LoginSuccess
-          : SecurityEventType.LoginFailed,
-      userId,
-      email,
-      metadata: {
+    await Promise.all([
+      this.authRepository.recordLogin(
+        userId,
+        email,
         provider,
+        status,
         failureReason,
-      },
-      context,
-    });
+        context.ipAddress,
+        context.userAgent,
+      ),
+      this.securityLogService.recordSecurityEvent({
+        type:
+          status === LoginStatus.Success
+            ? SecurityEventType.LoginSuccess
+            : SecurityEventType.LoginFailed,
+        userId,
+        email,
+        metadata: {
+          provider,
+          failureReason,
+        },
+        context,
+      }),
+    ]);
   }
 
   private normalizeEmail(email: string): string {

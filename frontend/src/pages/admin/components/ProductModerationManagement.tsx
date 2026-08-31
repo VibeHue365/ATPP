@@ -4,7 +4,6 @@ import {
   Check,
   Eye,
   EyeOff,
-  RefreshCw,
   X,
   Search,
   User,

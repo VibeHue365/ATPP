@@ -223,3 +223,9 @@ export class BookingItem {
 }
 
 export const BookingItemSchema = SchemaFactory.createForClass(BookingItem);
+
+// Availability and product-stock queries always scope by provider/product
+// and date. These compound indexes avoid scanning every item in the remote
+// MongoDB collection after the provider filter is applied.
+BookingItemSchema.index({ providerId: 1, itemType: 1, shootDate: 1 });
+BookingItemSchema.index({ productId: 1, rentalFrom: 1, rentalTo: 1 });

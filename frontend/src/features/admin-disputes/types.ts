@@ -12,7 +12,10 @@ export interface Dispute {
     };
     pricingSummary?: {
       depositTotal?: number;
+      grandTotal?: number;
     };
+    bookingType?: string;
+    createdAt?: string;
     deliveryDriveUrl?: string;
     deliveredPhotos?: string[];
   };
@@ -24,6 +27,13 @@ export interface Dispute {
   };
   reportedBy?: {
     businessName?: string;
+    fullName?: string;
+    profile?: {
+      fullName?: string;
+    };
+  };
+  openedBy?: {
+    fullName?: string;
     profile?: {
       fullName?: string;
     };
@@ -31,6 +41,9 @@ export interface Dispute {
   requestedAmount: number;
   description: string;
   evidencePhotos?: string[];
+  actionType?: string;
+  status?: string;
+  createdAt?: string;
 }
 
 export interface ResolvePayload {

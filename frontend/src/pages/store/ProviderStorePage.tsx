@@ -15,7 +15,6 @@ import {
   Shirt,
   ChevronLeft,
   ChevronRight,
-  Filter,
   MessageSquare,
 } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';

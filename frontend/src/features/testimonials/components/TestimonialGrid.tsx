@@ -1,43 +1,8 @@
 import React from 'react';
 import { Star, Quote } from 'lucide-react';
-
-interface Testimonial {
-  id: string;
-  name: string;
-  location: string;
-  avatar: string;
-  comment: string;
-  rating: number;
-}
+import { TESTIMONIALS_DATA } from '../constants/testimonials.constants';
 
 export const TestimonialGrid: React.FC = () => {
-  const testimonials: Testimonial[] = [
-    {
-      id: '1',
-      name: 'Nguyễn Mai Anh',
-      location: 'HÀ NỘI, VN',
-      avatar: '/avatar_mai_anh.png',
-      comment: '"Dịch vụ tuyệt vời. Bộ Áo Dài tơ tằm mình thuê rất đẹp, phom dáng chuẩn. AI gợi ý concept chụp ảnh tại Hội An rất có tâm."',
-      rating: 5,
-    },
-    {
-      id: '2',
-      name: 'Lê Minh Tâm',
-      location: 'TP. HỒ CHÍ MINH, VN',
-      avatar: '/avatar_minh_tam.png',
-      comment: '"Đặt lịch chụp với anh Trần Bảo qua app cực nhanh. Hình ảnh nhận được rất chất lượng, đúng tinh thần heritage mà mình mong muốn."',
-      rating: 5,
-    },
-    {
-      id: '3',
-      name: 'Hanna Nguyen',
-      location: 'OVERSEAS CLIENT',
-      avatar: '/avatar_hanna.png',
-      comment: '"Platform chuyên nghiệp nhất về Áo Dài mà mình từng dùng. Giao diện đẹp, dễ thao tác và thanh toán minh bạch."',
-      rating: 5,
-    },
-  ];
-
   return (
     <section className="vh-features-section bg-stone-50 py-20 px-6 border-t border-stone-200">
       <div className="max-w-[1600px] w-full px-6 md:px-12 mx-auto">
@@ -50,7 +15,7 @@ export const TestimonialGrid: React.FC = () => {
 
         {/* Testimonials Grid */}
         <div className="vh-testimonials-grid">
-          {testimonials.map((t) => (
+          {TESTIMONIALS_DATA.map((t) => (
             <div key={t.id} className="vh-premium-card" style={{ padding: '32px', minHeight: '260px' }}>
 
               {/* Quote Icon */}

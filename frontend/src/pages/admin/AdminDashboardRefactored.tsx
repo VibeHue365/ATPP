@@ -1,6 +1,5 @@
 import {
   Component,
-  lazy,
   Suspense,
   useCallback,
   useEffect,
@@ -87,7 +86,6 @@ type AttentionItem = {
 
 import { OverviewPanel } from '../../features/admin-dashboard/components/OverviewPanel';
 import { DirectoryPanel } from '../../features/admin-directory/components/DirectoryPanel';
-import { CombinedDirectoryPanel } from '../../features/admin-directory/components/CombinedDirectoryPanel';
 import { CategoryManagement } from './components/CategoryManagement';
 import { SettlementManagement } from './components/SettlementManagement';
 import { RefundManagement } from './components/RefundManagement';
@@ -252,7 +250,7 @@ export default function AdminDashboardRefactored() {
   const [attentionError, setAttentionError] = useState<string | null>(null);
   const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
   const activeDefinition = tabs.find((tab) => tab.id === activeTab)!;
-  const avatar = user?.avatar || user?.avatarUrl || '/avatar_hanna.png';
+  const avatar = user?.avatar || user?.avatarUrl || '/avatar_hanna.webp';
   const isAdmin = user?.roles?.some((role) => role.toUpperCase() === 'ADMIN') ?? false;
 
   const toggleGroup = (groupId: string) => {

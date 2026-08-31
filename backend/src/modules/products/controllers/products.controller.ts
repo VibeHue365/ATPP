@@ -46,7 +46,12 @@ export class ProductsController {
     @Query('styleCategoryIds') styleCategoryIds?: string,
     @Query('eventCategoryIds') eventCategoryIds?: string,
     @Query('providerId') providerId?: string,
-  ): Promise<any[]> {
+    @Query('providerLocation') providerLocation?: string,
+    @Query('types') types?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sort') sort?: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc',
+  ): Promise<any> {
     const options = {
       search,
       minPrice: minPrice ? Number(minPrice) : undefined,
@@ -59,8 +64,20 @@ export class ProductsController {
       styleCategoryIds: styleCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
       eventCategoryIds: eventCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
       providerId,
+      providerLocation,
+      productTypes: types?.split(',').map((type) => type.trim()).filter(Boolean),
     };
+    if (page || limit) {
+      const parsedPage = Math.max(1, Number.parseInt(page ?? '1', 10) || 1);
+      const parsedLimit = Math.min(24, Math.max(1, Number.parseInt(limit ?? '12', 10) || 12));
+      return this.productsService.getActiveProductsPage(options, parsedPage, parsedLimit, sort);
+    }
     return this.productsService.getAllActiveProducts(options);
+  }
+
+  @Get('facets')
+  async getFilterFacets() {
+    return this.productsService.getPublicFilterFacets();
   }
 
   @Get('store-info/:providerId')

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+﻿import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -8,6 +8,7 @@ import {
   ProviderStatus,
 } from '../../providers/schemas/provider.schema';
 import { PackageStatus, PhotographyPackage } from '../../products/schemas/photography-package.schema';
+import { Category, CategoryStatus, ServiceCategoryType } from '../../categories/schemas/category.schema';
 import {
   ProviderSchedule,
   ScheduleCapability,
@@ -15,7 +16,7 @@ import {
 } from '../../products/schemas/provider-schedule.schema';
 import { PortfolioItem } from '../../providers/schemas/portfolio-item.schema';
 import { ProductModerationStatus } from '../../products/schemas/product.schema';
-import { SmartTagPublicProjectionService } from '../../smart-tagging/services/smart-tag-public-projection.service';
+import { SmartTagPublicProjectionService, type PublicSmartTagBadge } from '../../smart-tagging/services/smart-tag-public-projection.service';
 import { PhotographerDiscoveryQueryDto, PhotographerSortOption } from '../dto/photographer-discovery-query.dto';
 
 const DISCOVERY_LOCATION_KEY = '__locationForDiscovery';
@@ -26,13 +27,40 @@ export class PhotographersService {
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
     @InjectModel(PhotographyPackage.name)
     private readonly packageModel: Model<PhotographyPackage>,
+    @InjectModel(Category.name) private readonly categoryModel: Model<Category>,
     @InjectModel(PortfolioItem.name)
     private readonly portfolioItemModel: Model<PortfolioItem>,
     @InjectModel(ProviderSchedule.name)
     private readonly providerScheduleModel: Model<ProviderSchedule>,
     private readonly smartTagPublicProjectionService: SmartTagPublicProjectionService,
-  ) {}
+  ) {
+    void this.getPublicPhotographers().catch(() => undefined);
+  }
 
+  private publicPhotographersCache?: {
+    value: Record<string, unknown>[];
+    expiresAt: number;
+  };
+  private publicPhotographersInFlight?: Promise<Record<string, unknown>[]>;
+
+  private async getPublicPhotographers(): Promise<Record<string, unknown>[]> {
+    const now = Date.now();
+    if (this.publicPhotographersCache && this.publicPhotographersCache.expiresAt > now) {
+      return this.publicPhotographersCache.value;
+    }
+    if (this.publicPhotographersInFlight) return this.publicPhotographersInFlight;
+
+    this.publicPhotographersInFlight = this.loadPublicPhotographers()
+      .then((value) => {
+        this.publicPhotographersCache = { value, expiresAt: Date.now() + 120_000 };
+        return value;
+      })
+      .finally(() => {
+        this.publicPhotographersInFlight = undefined;
+      });
+    return this.publicPhotographersInFlight;
+  }
+  
   async findAll(query: PhotographerDiscoveryQueryDto = {}) {
     const publicPhotographers = await this.getPublicPhotographers();
     const normalizedQuery = this.normalizeDiscoveryQuery(query);
@@ -62,6 +90,48 @@ export class PhotographersService {
     };
   }
 
+  async findPackageCategories() {
+    const [categories, counts] = await Promise.all([
+      this.categoryModel
+        .find({
+          type: ServiceCategoryType.PhotographyCategory,
+          status: CategoryStatus.Active,
+        })
+        .sort({ displayOrder: 1, name: 1 })
+        .lean()
+        .exec(),
+      this.packageModel.aggregate<{ _id: Types.ObjectId; packageCount: number }>([
+        {
+          $match: {
+            status: PackageStatus.Active,
+            categoryId: { $ne: null },
+          },
+        },
+        { $group: { _id: '$categoryId', packageCount: { $sum: 1 } } },
+      ]).exec(),
+    ]);
+
+    const packageCountByCategory = new Map(
+      counts.map((item) => [String(item._id), item.packageCount]),
+    );
+
+    return {
+      data: categories.map((category) => ({
+        id: String(category._id),
+        name: category.name,
+        slug: category.slug,
+        type: category.type,
+        description: category.description ?? null,
+        iconUrl: category.iconUrl ?? null,
+        coverImageUrl: category.coverImageUrl ?? null,
+        parentId: category.parentId ? String(category.parentId) : null,
+        status: category.status,
+        displayOrder: category.displayOrder,
+        metadata: category.metadata ?? null,
+        packageCount: packageCountByCategory.get(String(category._id)) ?? 0,
+      })),
+    };
+  }
   async findConcepts() {
     const photographers = await this.getPublicPhotographers();
     const concepts = new Map<
@@ -116,7 +186,7 @@ export class PhotographersService {
 
   async findOne(id: string): Promise<any> {
     if (!Types.ObjectId.isValid(id)) {
-      throw new NotFoundException('ID nhiếp ảnh gia không hợp lệ');
+      throw new NotFoundException('ID nhiáº¿p áº£nh gia khÃ´ng há»£p lá»‡');
     }
     const photographer = await this.providerModel.findOne({
       _id: new Types.ObjectId(id),
@@ -124,7 +194,7 @@ export class PhotographersService {
       status: ProviderStatus.Active,
     }).exec();
     if (!photographer) {
-      throw new NotFoundException(`Không tìm thấy nhiếp ảnh gia với ID: ${id}`);
+      throw new NotFoundException(`KhÃ´ng tÃ¬m tháº¥y nhiáº¿p áº£nh gia vá»›i ID: ${id}`);
     }
 
     const packages = await this.packageModel
@@ -140,14 +210,14 @@ export class PhotographersService {
     );
     const portfolioItems = publicPhotographer.portfolioItems as unknown[];
     if (packages.length === 0 && portfolioItems.length === 0) {
-      throw new NotFoundException('Không tìm thấy nhiếp ảnh gia công khai');
+      throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhiáº¿p áº£nh gia cÃ´ng khai');
     }
     return publicPhotographer;
   }
 
   async findPackages(providerId: string): Promise<PhotographyPackage[]> {
     if (!Types.ObjectId.isValid(providerId)) {
-      throw new NotFoundException('ID nhà cung cấp không hợp lệ');
+      throw new NotFoundException('ID nhÃ  cung cáº¥p khÃ´ng há»£p lá»‡');
     }
     const photographer = await this.providerModel.exists({
       _id: new Types.ObjectId(providerId),
@@ -168,7 +238,7 @@ export class PhotographersService {
     timeRanges: Array<{ start: string; end: string }>;
   }> {
     if (!Types.ObjectId.isValid(providerId) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      throw new NotFoundException('Thông tin lịch làm việc không hợp lệ');
+      throw new NotFoundException('ThÃ´ng tin lá»‹ch lÃ m viá»‡c khÃ´ng há»£p lá»‡');
     }
 
     const photographer = await this.providerModel.findOne({
@@ -177,12 +247,12 @@ export class PhotographersService {
       status: ProviderStatus.Active,
     });
     if (!photographer) {
-      throw new NotFoundException('Không tìm thấy nhiếp ảnh gia đang hoạt động');
+      throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhiáº¿p áº£nh gia Ä‘ang hoáº¡t Ä‘á»™ng');
     }
 
     const selectedDate = new Date(`${date}T00:00:00`);
     if (Number.isNaN(selectedDate.getTime())) {
-      throw new NotFoundException('Thông tin lịch làm việc không hợp lệ');
+      throw new NotFoundException('ThÃ´ng tin lá»‹ch lÃ m viá»‡c khÃ´ng há»£p lá»‡');
     }
 
     const specificSchedule = await this.providerScheduleModel.findOne({
@@ -223,23 +293,26 @@ export class PhotographersService {
       timeRanges: recurringSchedule?.workingHours || [],
     };
   }
-  private async getPublicPhotographers(): Promise<Record<string, unknown>[]> {
-    const [activePackages, portfolioProviderIds] = await Promise.all([
+  private async loadPublicPhotographers(): Promise<Record<string, unknown>[]> {
+    const [activePackages, approvedPortfolioItems] = await Promise.all([
       this.packageModel
         .find({ status: PackageStatus.Active })
-        .select('providerId')
+        .select('providerId categoryId conceptCategoryIds styleCategoryIds eventCategoryIds name slug description price durationHours pricingUnit includedDurationMinutes includedSessionCount includedDayCount additionalSessionFee editedPhotosCount rawPhotosCount deliveryDays travelFeeNotes overtimeFeePerHour overtimeIncrementMinutes maxOvertimeMinutes bufferBeforeMinutes bufferAfterMinutes images status maxPeople rating createdAt updatedAt')
+        .sort({ price: 1, updatedAt: -1 })
         .lean()
         .exec(),
       this.portfolioItemModel
-        .distinct('providerId', {
-          moderationStatus: ProductModerationStatus.Approved,
-        })
+        .find({ moderationStatus: ProductModerationStatus.Approved })
+        .select('providerId title description images taggingRevision createdAt updatedAt')
+        .sort({ updatedAt: -1 })
+        .lean()
         .exec(),
     ]);
+
     const publicProviderIds = [
       ...new Set([
         ...activePackages.map((item) => item.providerId.toString()),
-        ...portfolioProviderIds.map((providerId) => providerId.toString()),
+        ...approvedPortfolioItems.map((item) => item.providerId.toString()),
       ]),
     ]
       .filter((id) => Types.ObjectId.isValid(id))
@@ -253,20 +326,40 @@ export class PhotographersService {
         _id: { $in: publicProviderIds },
         status: ProviderStatus.Active,
       })
+      .select('businessName status address media photographySettings rating quote equipment policies portfolio createdAt updatedAt')
+      .lean()
       .exec();
+    const visibleProviderIds = new Set(photographers.map((item) => item._id.toString()));
+    const packagesByProvider = new Map<string, any[]>();
+    const portfolioByProvider = new Map<string, typeof approvedPortfolioItems>();
+
+    for (const item of activePackages) {
+      const providerId = item.providerId.toString();
+      if (!visibleProviderIds.has(providerId)) continue;
+      const packages = packagesByProvider.get(providerId) || [];
+      packages.push(item);
+      packagesByProvider.set(providerId, packages);
+    }
+    for (const item of approvedPortfolioItems) {
+      const providerId = item.providerId.toString();
+      if (!visibleProviderIds.has(providerId)) continue;
+      const portfolioItems = portfolioByProvider.get(providerId) || [];
+      portfolioItems.push(item);
+      portfolioByProvider.set(providerId, portfolioItems);
+    }
+
+    const portfolioBadgeMap = await this.smartTagPublicProjectionService.projectPortfolioBadges(
+      approvedPortfolioItems.filter((item) => visibleProviderIds.has(item.providerId.toString())),
+    );
 
     return Promise.all(
       photographers.map(async (photographer) => {
-        const packages = await this.packageModel
-          .find({
-            providerId: photographer._id,
-            status: PackageStatus.Active,
-          })
-          .sort({ price: 1, updatedAt: -1 })
-          .exec();
+        const providerId = photographer._id.toString();
         const publicPhotographer = await this.toPublicPhotographer(
           photographer,
-          packages,
+          packagesByProvider.get(providerId) || [],
+          portfolioByProvider.get(providerId) || [],
+          portfolioBadgeMap,
         );
         return {
           ...publicPhotographer,
@@ -279,7 +372,6 @@ export class PhotographersService {
       }),
     );
   }
-
   private normalizeDiscoveryQuery(query: PhotographerDiscoveryQueryDto) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(48, Math.max(1, query.limit ?? 12));
@@ -507,14 +599,16 @@ export class PhotographersService {
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLocaleLowerCase('vi')
-      .replace(/đ/g, 'd')
+      .replace(/Ä‘/g, 'd')
       .trim();
   }
   private async toPublicPhotographer(
-    photographer: ProviderDocument,
-    packages: PhotographyPackage[],
+    photographer: ProviderDocument | Record<string, any>,
+    packages: any[],
+    portfolioItemsOverride?: Array<{ _id: Types.ObjectId; title: string; description?: string | null; images: string[]; taggingRevision: number }>,
+    badgeMapOverride?: Map<string, PublicSmartTagBadge[]>,
   ): Promise<Record<string, unknown>> {
-    const portfolioItems = await this.portfolioItemModel
+    const portfolioItems = portfolioItemsOverride ?? await this.portfolioItemModel
       .find({
         providerId: photographer._id,
         moderationStatus: ProductModerationStatus.Approved,
@@ -522,7 +616,9 @@ export class PhotographersService {
       .select('_id title description images taggingRevision createdAt updatedAt')
       .sort({ updatedAt: -1 })
       .lean();
-    const provider = photographer.toObject();
+    const provider = typeof (photographer as any).toObject === 'function'
+      ? (photographer as any).toObject()
+      : photographer;
     const {
       address: providerAddress,
       rentalSettings: _rentalSettings,
@@ -537,10 +633,8 @@ export class PhotographersService {
         }
       : null;
     const media = { ...provider.media, images: provider.media?.images || [] };
-    const badgeMap =
-      await this.smartTagPublicProjectionService.projectPortfolioBadges(
-        portfolioItems,
-      );
+    const badgeMap = badgeMapOverride ??
+      await this.smartTagPublicProjectionService.projectPortfolioBadges(portfolioItems);
     const publicPortfolioItems = portfolioItems.map((item) => ({
       _id: item._id,
       title: item.title,

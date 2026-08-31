@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -58,6 +58,30 @@
 
   /* Global Transitions */
   --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Scoped Landing Page Design Tokens */
+  --landing-primary: #7D3543;
+  --landing-primary-hover: #914454;
+  --landing-primary-dark: #642936;
+  --landing-primary-soft: #F3E7E9;
+
+  --landing-bg: #FCFAF8;
+  --landing-surface: #FFFFFF;
+  --landing-surface-soft: #F3EBEC;
+
+  --landing-border: #E8DEDF;
+
+  --landing-text-primary: #292324;
+  --landing-text-secondary: #6F6264;
+  --landing-text-muted: #988B8D;
+
+  --landing-radius-sm: 8px;
+  --landing-radius-md: 14px;
+  --landing-radius-lg: 20px;
+  --landing-radius-full: 9999px;
+
+  --landing-shadow-sm: 0 2px 10px rgba(41, 35, 36, 0.04);
+  --landing-shadow-md: 0 8px 24px rgba(41, 35, 36, 0.06);
 }
 
 /* Global Reset & Base */

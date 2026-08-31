@@ -218,6 +218,7 @@ export const ProviderDashboard: React.FC = () => {
   const [prodTotal, setProdTotal] = useState(0);
   const [prodSizeFilter, setProdSizeFilter] = useState('');
   const [prodColorFilter, setProdColorFilter] = useState('');
+  const [debouncedProdSearch, setDebouncedProdSearch] = useState('');
 
   // Inventory Search / Sort / Filter / Pagination States
   const [invSearch, setInvSearch] = useState('');
@@ -228,6 +229,7 @@ export const ProviderDashboard: React.FC = () => {
   const [invSummaryPage, setInvSummaryPage] = useState(1);
   const [invLimit] = useState(10); // 10 items per page
   const [invTotal, setInvTotal] = useState(0);
+  const [debouncedInvSearch, setDebouncedInvSearch] = useState('');
 
   // Inventory States
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
@@ -477,29 +479,40 @@ export const ProviderDashboard: React.FC = () => {
 
       const hasPhotography = Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY');
       const hasAodai = Array.isArray(pRes.capabilities) && (pRes.capabilities.includes('AODAI_RENTAL') || pRes.capabilities.includes('RENTAL'));
+      const view = currentView;
+      const shouldLoadPortfolio = view === 'portfolio';
+      const shouldLoadComboData = view === 'vouchers';
+      const shouldLoadCalendar = view === 'calendar';
+      const shouldLoadReviews = view === 'reviews';
+      const shouldLoadBookings = view === 'reviews' || view === 'trust';
+      const shouldLoadAnalytics = view === 'analytics';
       const [portfolioRes, packagesRes, productsRes, summary, combosRes, schedulesRes, vouchersRes, reviewsRes, bookingsRes, analyticsRes] = await Promise.all([
-        hasPhotography ? httpClient.get('/providers/me/portfolio-items') : Promise.resolve([]),
-        hasPhotography ? httpClient.get('/providers/me/photography-packages') : Promise.resolve([]),
-        hasAodai ? httpClient.get('/products/my-listings?limit=200') : Promise.resolve({ items: [] }),
-        hasAodai ? httpClient.get('/inventory/summary') : Promise.resolve([]),
-        hasAodai && hasPhotography ? httpClient.get('/combo-promotions/my') : Promise.resolve([]),
-        httpClient.get('/providers/me/schedules'),
-        httpClient.get('/promotions/provider'),
-        httpClient.get('/reviews/stats'),
-        httpClient.get('/bookings/provider'),
-        httpClient.get('/providers/me/analytics'),
+        shouldLoadPortfolio && hasPhotography ? httpClient.get('/providers/me/portfolio-items') : Promise.resolve(null),
+        shouldLoadComboData && hasPhotography ? httpClient.get('/providers/me/photography-packages') : Promise.resolve(null),
+        shouldLoadComboData && hasAodai ? httpClient.get('/products/my-listings?limit=200') : Promise.resolve(null),
+        shouldLoadComboData && hasAodai ? httpClient.get('/inventory/summary') : Promise.resolve(null),
+        shouldLoadComboData && hasAodai && hasPhotography ? httpClient.get('/combo-promotions/my') : Promise.resolve(null),
+        shouldLoadCalendar ? httpClient.get('/providers/me/schedules') : Promise.resolve(null),
+        view === 'vouchers' ? httpClient.get('/promotions/provider') : Promise.resolve(null),
+        shouldLoadReviews ? httpClient.get('/reviews/stats') : Promise.resolve(null),
+        shouldLoadBookings ? httpClient.get('/bookings/provider') : Promise.resolve(null),
+        shouldLoadAnalytics ? httpClient.get('/providers/me/analytics') : Promise.resolve(null),
       ]) as any[];
 
-      setPortfolioItems(Array.isArray(portfolioRes) ? portfolioRes : []);
-      setPhotoPackages(Array.isArray(packagesRes) ? packagesRes : []);
-      setMyProductsList(productsRes?.items || []);
-      setInventorySummary(Array.isArray(summary) ? summary : []);
-      setCombos(Array.isArray(combosRes) ? combosRes : []);
-      setSchedules(Array.isArray(schedulesRes) ? schedulesRes : []);
-      setVouchers(Array.isArray(vouchersRes) ? vouchersRes : []);
-      setReviewsData(reviewsRes);
-      setBookingsState(Array.isArray(bookingsRes) ? bookingsRes : []);
-      setAnalyticsData(analyticsRes);
+      if (shouldLoadPortfolio) setPortfolioItems(Array.isArray(portfolioRes) ? portfolioRes : []);
+      if (shouldLoadComboData) {
+        if (hasPhotography) setPhotoPackages(Array.isArray(packagesRes) ? packagesRes : []);
+        if (hasAodai) {
+          setMyProductsList(productsRes?.items || []);
+          setInventorySummary(Array.isArray(summary) ? summary : []);
+        }
+        if (hasAodai && hasPhotography) setCombos(Array.isArray(combosRes) ? combosRes : []);
+        setVouchers(Array.isArray(vouchersRes) ? vouchersRes : []);
+      }
+      if (shouldLoadCalendar) setSchedules(Array.isArray(schedulesRes) ? schedulesRes : []);
+      if (shouldLoadReviews) setReviewsData(reviewsRes);
+      if (shouldLoadBookings) setBookingsState(Array.isArray(bookingsRes) ? bookingsRes : []);
+      if (shouldLoadAnalytics) setAnalyticsData(analyticsRes);
       providerDataLoadedRef.current = true;
     } catch (err: any) {
       const msg = err.message || 'Không thể đồng bộ dữ liệu đối tác';
@@ -542,7 +555,7 @@ export const ProviderDashboard: React.FC = () => {
     const pageToLoad = options?.page ?? invPage;
     try {
       const res: any = await httpClient.get(
-        `/inventory?search=${encodeURIComponent(invSearch)}&status=${invStatusFilter}&conditionStatus=${invConditionFilter}&sortBy=${invSortBy}&page=${pageToLoad}&limit=${invLimit}`
+         `/inventory?search=${encodeURIComponent(debouncedInvSearch)}&status=${invStatusFilter}&conditionStatus=${invConditionFilter}&sortBy=${invSortBy}&page=${pageToLoad}&limit=${invLimit}`
       );
       setInventoryItems(res?.items || []);
       setInvTotal(res?.total || 0);
@@ -1558,7 +1571,7 @@ export const ProviderDashboard: React.FC = () => {
     setLoadingProducts(true);
     try {
       const res: any = await httpClient.get(
-        `/products/my-listings?search=${encodeURIComponent(prodSearch)}&sortBy=${prodSortBy}&page=${prodPage}&limit=${prodLimit}&sizes=${prodSizeFilter}&colors=${prodColorFilter}`
+         `/products/my-listings?search=${encodeURIComponent(debouncedProdSearch)}&sortBy=${prodSortBy}&page=${prodPage}&limit=${prodLimit}&sizes=${prodSizeFilter}&colors=${prodColorFilter}`
       );
       setProducts(res?.items || []);
       setProdTotal(res?.total || 0);
@@ -1621,7 +1634,6 @@ export const ProviderDashboard: React.FC = () => {
     if (currentView === 'orders' || currentView === 'rental-operations') {
       fetchOrders();
     } else if (currentView === 'collections') {
-      fetchProducts();
       fetchCategories();
       fetchServiceCategories();
       fetchActiveCampaign();
@@ -1650,10 +1662,20 @@ export const ProviderDashboard: React.FC = () => {
 
 
   useEffect(() => {
-    if (currentView === 'collections') {
+    const timeoutId = window.setTimeout(() => setDebouncedProdSearch(prodSearch.trim()), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [prodSearch]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedInvSearch(invSearch.trim()), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [invSearch]);
+
+  useEffect(() => {
+    if (currentView === 'collections' && collectionTab === 'products') {
       fetchProducts();
     }
-  }, [prodSearch, prodSortBy, prodPage, prodSizeFilter, prodColorFilter]);
+  }, [currentView, collectionTab, debouncedProdSearch, prodSortBy, prodPage, prodSizeFilter, prodColorFilter]);
 
   // Vào tab Tồn kho -> tải đầy đủ (có màn loading lần đầu)
   useEffect(() => {
@@ -1667,7 +1689,7 @@ export const ProviderDashboard: React.FC = () => {
     if (currentView === 'collections' && collectionTab === 'inventory') {
       fetchInventoryData({ silent: true, itemsOnly: true });
     }
-  }, [invSearch, invSortBy, invStatusFilter, invConditionFilter, invPage]);
+  }, [debouncedInvSearch, invSortBy, invStatusFilter, invConditionFilter, invPage]);
 
   const getImageUrl = (url: string) => {
     if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';

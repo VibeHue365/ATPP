@@ -5,7 +5,7 @@ import type {
   UpdateProfileDto,
 } from '../types/users.types';
 
-const normalizeUserProfile = (response: BackendUserProfileResponse): UserProfile => {
+export const normalizeUserProfile = (response: BackendUserProfileResponse): UserProfile => {
   const profile = response.profile;
   const avatar = profile?.avatarUrl ?? undefined;
 

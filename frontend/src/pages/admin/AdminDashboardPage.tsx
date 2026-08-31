@@ -2272,6 +2272,8 @@ export const AdminDashboardPage: React.FC = () => {
     );
   };
 
+  void renderDisputesTab;
+
   // Tab 8: User Behavior Analysis (UC-K25)
   const renderBehaviorTab = () => {
     const beh = statsData?.userBehavior;
@@ -2859,7 +2861,7 @@ export const AdminDashboardPage: React.FC = () => {
 
           {/* User Profile Card */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '8px', marginBottom: '28px', border: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
-            <img src={user?.avatar || '/avatar_hanna.png'} alt="Admin" style={{ width: '38px', height: '38px', borderRadius: '50%', border: '1px solid #F3C06B', objectFit: 'cover' }} />
+            <img src={user?.avatar || '/avatar_hanna.webp'} alt="Admin" style={{ width: '38px', height: '38px', borderRadius: '50%', border: '1px solid #F3C06B', objectFit: 'cover' }} />
             <div>
               <strong style={{ display: 'block', fontSize: '13px', color: 'white' }}>{user?.fullName || 'Hanna Nguyễn'}</strong>
               <span style={{ fontSize: '10px', color: '#F3C06B', fontWeight: 600 }}>Quản Trị Viên Hệ Thống</span>
@@ -3083,7 +3085,7 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
             <div style={{ width: '1px', height: '24px', backgroundColor: '#E8E2D5' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <img src={user?.avatar || '/avatar_hanna.png'} alt="Admin" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
+              <img src={user?.avatar || '/avatar_hanna.webp'} alt="Admin" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
               <span style={{ fontSize: '13px', fontWeight: 700, color: '#2A2A2A' }}>{user?.fullName || 'Admin'}</span>
             </div>
           </div>

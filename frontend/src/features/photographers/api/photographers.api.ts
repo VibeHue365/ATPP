@@ -4,6 +4,7 @@ import type {
   PhotographerConcept,
   PhotographerDiscoveryParams,
   PhotographerDiscoveryResponse,
+  PhotographerPackageCategory,
   PhotographyQuote,
 } from '../types/photographer.types';
 
@@ -19,9 +20,12 @@ const buildQuery = (params: PhotographerDiscoveryParams = {}): string => {
 };
 
 export const photographersApi = {
-  getAll: (params: PhotographerDiscoveryParams = {}) =>
-    httpClient.get<PhotographerDiscoveryResponse>(`/api/photographers${buildQuery(params)}`),
+  getAll: (params: PhotographerDiscoveryParams = {}, options?: Omit<RequestInit, 'method'>) =>
+    httpClient.get<PhotographerDiscoveryResponse>(`/api/photographers${buildQuery(params)}`, options),
+  getDiscovery: (params: PhotographerDiscoveryParams = {}, options?: Omit<RequestInit, 'method'>) =>
+    httpClient.get<PhotographerDiscoveryResponse>(`/api/photographers${buildQuery(params)}`, options),
   getConcepts: () => httpClient.get<{ data: PhotographerConcept[] }>('/api/photographers/concepts'),
+  getPackageCategories: () => httpClient.get<{ data: PhotographerPackageCategory[] }>('/api/photographers/package-categories'),
   getById: (id: string) => httpClient.get<PhotographerApiResponse>(`/api/photographers/${id}`),
   quote: (
     providerId: string,

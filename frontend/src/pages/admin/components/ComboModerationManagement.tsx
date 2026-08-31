@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AdminReloadButton } from './AdminReloadButton';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
-import { Check, X, RefreshCw, Clock, Layers, Camera, AlertCircle } from 'lucide-react';
+import { Check, X, Clock, Layers, Camera, AlertCircle } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 interface Combo {

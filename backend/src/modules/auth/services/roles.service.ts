@@ -212,16 +212,17 @@ export class RolesService implements OnModuleInit {
     await this.seedRolesAndPermissions();
   }
 
-  async assignDefaultCustomerRole(userId: Types.ObjectId): Promise<void> {
-    await this.usersRepository.addRole(userId, 'CUSTOMER');
-  }
 
   async getRoleCodesAndPermissions(
     userId: Types.ObjectId,
   ): Promise<{ roles: string[]; permissions: string[] }> {
     const user = await this.usersRepository.findUserById(userId);
-    const roles = user?.roles ?? [];
+    return this.getRoleCodesAndPermissionsForRoles(user?.roles ?? []);
+  }
 
+  async getRoleCodesAndPermissionsForRoles(
+    roles: string[],
+  ): Promise<{ roles: string[]; permissions: string[] }> {
     if (roles.length === 0) {
       return { roles: [], permissions: [] };
     }

@@ -1,28 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../components/feedback/Toast';
 import { httpClient } from '../../services/httpClient';
 import { ROUTES } from '../../config/routes';
-import { CheckCircle, AlertCircle, Camera, Plus } from 'lucide-react';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import './PhotographerDetailPage.css';
+import './PhotographerPackageDetail.css';
 import Swal from 'sweetalert2';
 import { usePhotographerDetail } from '../../features/photographers/hooks/usePhotographerDetail';
 import type { LocationSelection, PhotographerPackage as Package, PhotographyQuote } from '../../features/photographers/types/photographer.types';
 import { photographersApi } from '../../features/photographers/api/photographers.api';
-import { PhotographerPortfolioGrid } from '../../features/photographers/components/PhotographerPortfolioGrid';
 import { PhotographerPortfolioLightbox, type PhotographerPortfolioImage } from '../../features/photographers/components/PhotographerPortfolioLightbox';
-import { PhotographerReviews } from '../../features/photographers/components/PhotographerReviews';
-import { PhotographerPackageSelector } from '../../features/photographers/components/PhotographerPackageSelector';
-import { PhotographerHero } from '../../features/photographers/components/PhotographerHero';
-import { PhotographyBookingSidebar } from '../../features/photographers/components/PhotographyBookingSidebar';
-import { PhotographyScheduleSelector } from '../../features/photographers/components/PhotographyScheduleSelector';
-import { PhotographySessionDetailsForm } from '../../features/photographers/components/PhotographySessionDetailsForm';
-import { PhotographyDurationControl } from '../../features/photographers/components/PhotographyDurationControl';
-import { PhotographyMultiSessionEditor, type PhotographySessionDraft } from '../../features/photographers/components/PhotographyMultiSessionEditor';
+import type { PhotographySessionDraft } from '../../features/photographers/components/PhotographyMultiSessionEditor';
 import type { PhotographyCalendarDay } from '../../features/photographers/components/PhotographyScheduleSelector';
 import type { PhotographerReview } from '../../features/photographers/components/PhotographerReviews';
+import { PhotographerPackageDetailLayout } from '../../features/photographers/components/PhotographerPackageDetailLayout';
 type PhotographerAvailabilityStatus = 'AVAILABLE' | 'FULL' | 'NO_SCHEDULE' | 'OFF_DAY' | 'PAST';
 
 type MonthlyAvailabilityResponse = {
@@ -46,12 +39,6 @@ const distanceKm = (aLat: number, aLon: number, bLat: number, bLon: number): num
 const toTime = (minutes: number): string =>
   `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 
-const formatDuration = (minutes: number): string => {
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  if (!hours) return `${remainingMinutes} phút`;
-  return `${hours} giờ${remainingMinutes ? ` ${remainingMinutes} phút` : ''}`;
-};
 
 export const PhotographerDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -110,7 +97,6 @@ export const PhotographerDetailPage: React.FC = () => {
   const location = useLocation();
 
   const { photographer, isLoading: loading, error } = usePhotographerDetail(id);
-  const hasBookablePackage = Boolean(photographer?.packages.length);
   const [reviews, setReviews] = useState<PhotographerReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState<boolean>(true);
 
@@ -119,27 +105,32 @@ export const PhotographerDetailPage: React.FC = () => {
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const allPortfolioImages = useMemo<PhotographerPortfolioImage[]>(() => {
-    if (photographer?.portfolioItems?.length) {
-      return photographer.portfolioItems.flatMap((item) => {
-        const images = item.images.filter(Boolean);
-        return images.map((src, index) => ({
-          src,
-          title: item.title,
-          description: item.description || undefined,
-          imageNumber: index + 1,
-          imageCount: images.length,
-        }));
-      });
-    }
-    if (photographer?.portfolio?.length) {
-      return photographer.portfolio.filter(Boolean).map((src, index, images) => ({
+    if (!photographer) return [];
+    const portfolioImages = photographer.portfolioItems.flatMap((item) => {
+      const images = item.images.filter(Boolean);
+      return images.map((src, index) => ({
+        src,
+        title: item.title,
+        description: item.description || undefined,
+        imageNumber: index + 1,
+        imageCount: images.length,
+      }));
+    });
+    const packageImages = photographer.packages.flatMap((pkg) => (pkg.images || []).filter(Boolean)).map((src, index, images) => ({
+      src,
+      title: photographer.packages.find((pkg) => pkg.images?.includes(src))?.name || `Ảnh package #${index + 1}`,
+      imageNumber: index + 1,
+      imageCount: images.length,
+    }));
+    const legacyImages = photographer.portfolio.length && !portfolioImages.length
+      ? photographer.portfolio.filter(Boolean).map((src, index, images) => ({
         src,
         title: `Tác phẩm #${index + 1}`,
         imageNumber: index + 1,
         imageCount: images.length,
-      }));
-    }
-    return [];
+      }))
+      : [];
+    return [...portfolioImages, ...legacyImages, ...packageImages.filter((image) => !portfolioImages.some((item) => item.src === image.src) && !legacyImages.some((item) => item.src === image.src))];
   }, [photographer]);
 
   const handleImageClick = (imageSrc: string) => {
@@ -165,6 +156,7 @@ export const PhotographerDetailPage: React.FC = () => {
   // Booking Form States
   const [selectedPkg, setSelectedPkg] = useState<Package | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(''); // YYYY-MM-DD
+  const [schedulePreviewDate, setSchedulePreviewDate] = useState<string | null>(null);
   const [startTime, setStartTime] = useState<string>('');
   const [durationMinutes, setDurationMinutes] = useState<number>(0);
   const includedDurationMinutes = Math.max(selectedPkg?.includedDurationMinutes ?? Math.round((selectedPkg?.durationHours ?? 2) * 60), 30);
@@ -192,7 +184,6 @@ export const PhotographerDetailPage: React.FC = () => {
   // Calendar navigation & booking state
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const [isBookingNow, setIsBookingNow] = useState<boolean>(false);
-  const [bookingSuccess, setBookingSuccess] = useState<boolean>(false);
   const [busyDates, setBusyDates] = useState<string[]>([]);
   const [busySlots, setBusySlots] = useState<{ date: string, timeSlot: string }[]>([]);
   const [availableTimeRanges, setAvailableTimeRanges] = useState<Array<{ start: string; end: string }>>([]);
@@ -216,9 +207,6 @@ export const PhotographerDetailPage: React.FC = () => {
     return dateStr;
   };
 
-  const renderBanner = () => {
-    return null;
-  };
 
   // Load booking availability separately from the public photographer profile.
   useEffect(() => {
@@ -245,12 +233,12 @@ export const PhotographerDetailPage: React.FC = () => {
       return;
     }
 
-    const selectedPackageId = location.state?.selectedPackageId;
+    const selectedPackageId = location.state?.selectedPackageId || new URLSearchParams(location.search).get('packageId');
     const selectedPackage = selectedPackageId
       ? photographer.packages.find((item) => item._id === selectedPackageId)
       : undefined;
     setSelectedPkg(selectedPackage ?? photographer.packages[0]);
-  }, [location.state, photographer]);
+  }, [location.search, location.state, photographer]);
 
   useEffect(() => {
     if (!selectedPkg) {
@@ -302,6 +290,11 @@ export const PhotographerDetailPage: React.FC = () => {
     return busySlots.filter(s => s.date === selectedDate).map(s => s.timeSlot);
   }, [selectedDate, busySlots]);
 
+  const bookedSlotsOnPreviewDate = useMemo(() => {
+    const targetDate = schedulePreviewDate || selectedDate;
+    if (!targetDate) return [];
+    return busySlots.filter(s => s.date === targetDate).map(s => s.timeSlot);
+  }, [schedulePreviewDate, selectedDate, busySlots]);
   const isTimeSlotOverlap = (slot1: string, slot2: string) => {
     const parseTime = (t: string) => {
       const [h, m] = t.split(':').map(Number);
@@ -384,22 +377,24 @@ export const PhotographerDetailPage: React.FC = () => {
     }
   }, [calendarDate, monthlyAvailability, selectedDate]);
 
+  const availabilityDate = schedulePreviewDate || selectedDate;
+
   useEffect(() => {
-    if (!id || !selectedDate) {
+    if (!id || !availabilityDate) {
       setAvailableTimeRanges([]);
       return;
     }
 
     httpClient
       .get<{ timeRanges: Array<{ start: string; end: string }> }>(
-        `/api/photographers/${id}/availability?date=${selectedDate}`,
+        `/api/photographers/${id}/availability?date=${availabilityDate}`,
       )
       .then((availability) => setAvailableTimeRanges(availability.timeRanges || []))
       .catch((availabilityError) => {
         console.error("Unable to load photographer availability:", availabilityError);
         setAvailableTimeRanges([]);
       });
-  }, [id, selectedDate]);
+  }, [id, availabilityDate]);
 
   const photographerSlots = useMemo(() => {
     const stepMinutes = effectiveDurationMinutes >= 180 ? 60 : 30;
@@ -423,6 +418,7 @@ export const PhotographerDetailPage: React.FC = () => {
   }, [availableTimeRanges, effectiveDurationMinutes]);
 
   useEffect(() => {
+    if (schedulePreviewDate && schedulePreviewDate !== selectedDate) return;
     const currentSlot = photographerSlots.find((slot) => slot.start === startTime);
     const currentSlotIsAvailable = currentSlot && !bookedSlotsOnSelectedDate.some((bookedSlot) =>
       isTimeSlotOverlap(`${currentSlot.start}-${currentSlot.end}`, bookedSlot),
@@ -433,11 +429,23 @@ export const PhotographerDetailPage: React.FC = () => {
       isTimeSlotOverlap(`${slot.start}-${slot.end}`, bookedSlot),
     ));
     setStartTime(firstAvailableSlot?.start || '');
-  }, [photographerSlots, bookedSlotsOnSelectedDate, startTime]);
+  }, [photographerSlots, bookedSlotsOnSelectedDate, schedulePreviewDate, selectedDate, startTime]);
 
-  const handleSlotClick = (slot: { start: string; end: string }) => {
+  const handlePreviewDate = (date: string) => {
+    setAvailableTimeRanges([]);
+    setSchedulePreviewDate(date);
+  };
+
+  const handleConfirmSchedule = (date: string, slot: { start: string; end: string }) => {
+    setSchedulePreviewDate(null);
+    setSelectedDate(date);
     setStartTime(slot.start);
-  };  const isCurrentTimeSlotBusy = useMemo(() => {
+  };
+
+  const handleCancelSchedule = () => {
+    setSchedulePreviewDate(null);
+  };
+  const isCurrentTimeSlotBusy = useMemo(() => {
     return bookedSlotsOnSelectedDate.some(bookedSlot => {
       if (!bookedSlot) return false;
       return isTimeSlotOverlap(selectedTimeSlot, bookedSlot);
@@ -802,311 +810,70 @@ export const PhotographerDetailPage: React.FC = () => {
   };
 
   return (
-    <div className="pd-page-wrapper">
-
-      {/* BOOKING SUCCESS MODAL */}
-      {bookingSuccess && (
-        <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)',
-          backdropFilter: 'blur(6px)', zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px'
-        }}>
-          <div style={{
-            backgroundColor: '#FFFFFF', borderRadius: '20px', padding: '48px 40px',
-            maxWidth: '480px', width: '100%', textAlign: 'center',
-            boxShadow: '0 32px 64px rgba(0,0,0,0.25)', position: 'relative'
-          }}>
-            {/* Success icon */}
-            <div style={{
-              width: '72px', height: '72px', borderRadius: '50%',
-              backgroundColor: 'rgba(161, 30, 34, 0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 20px'
-            }}>
-              <CheckCircle size={40} color="var(--color-primary)" />
-            </div>
-            <h2 className="font-header" style={{ fontSize: '26px', color: 'var(--color-primary-dark)', marginBottom: '8px' }}>
-              Lịch chụp đang chờ thanh toán
-            </h2>
-            <p style={{ fontSize: '14px', color: '#8C827A', marginBottom: '28px', lineHeight: 1.6 }}>
-              Lịch chỉ được xác nhận sau khi hệ thống nhận được thanh toán thành công.
-            </p>
-            <div style={{
-              backgroundColor: '#FCF9F2', borderRadius: '12px', padding: '20px',
-              marginBottom: '28px', textAlign: 'left',
-              border: '1px solid rgba(182, 145, 91, 0.2)'
-            }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#8C827A', marginBottom: '12px', letterSpacing: '0.05em' }}>TÓM TẮT ĐẶT LỊCH</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#8C827A' }}>Nhiếp ảnh gia:</span>
-                  <strong style={{ color: 'var(--color-primary-dark)' }}>{photographer.businessName}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#8C827A' }}>Gói chụp:</span>
-                  <strong>{selectedPkg?.name || 'N/A'}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#8C827A' }}>Ngày chụp:</span>
-                  <strong>{selectedDate}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#8C827A' }}>Khung giờ:</span>
-                  <strong>{selectedTimeSlot}</strong>
-                </div>
-                <div style={{ height: '1px', backgroundColor: 'rgba(0,0,0,0.06)', margin: '4px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#8C827A' }}>Thanh toán trước (100%):</span>
-                  <strong style={{ color: 'var(--color-primary)' }}>
-                    {selectedPkg ? selectedPkg.price.toLocaleString('vi-VN') + 'đ' : ''}
-                  </strong>
-                </div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => navigate(ROUTES.PHOTOGRAPHERS)}
-                style={{
-                  flex: 1, padding: '13px', borderRadius: '10px',
-                  border: '1.5px solid var(--color-primary-dark)',
-                  backgroundColor: 'transparent', color: 'var(--color-primary-dark)',
-                  fontWeight: 700, fontSize: '13px', cursor: 'pointer'
-                }}
-              >
-                Xem thêm thợ ảnh
-              </button>
-              <button
-                onClick={() => { setBookingSuccess(false); navigate('/'); }}
-                style={{
-                  flex: 1, padding: '13px', borderRadius: '10px',
-                  backgroundColor: 'var(--color-primary-dark)', color: '#FFFFFF',
-                  border: 'none', fontWeight: 700, fontSize: '13px', cursor: 'pointer'
-                }}
-              >
-                Về trang chủ
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={{ maxWidth: '1400px', width: '100%', margin: '0 auto', padding: '0 40px' }}>
-
-        {/* Breadcrumb */}
-        <div className="pd-breadcrumb">
-          <Link to="/">Trang chủ</Link>
-          <span>/</span>
-          <Link to={ROUTES.PHOTOGRAPHERS}>Nhiếp ảnh gia</Link>
-          <span>/</span>
-          <span style={{ color: 'var(--color-primary)' }}>{photographer.businessName}</span>
-        </div>
-
-        {/* Dynamic Cart Info Banner */}
-        {renderBanner()}
-
-        <div className={`pd-layout-grid${hasBookablePackage ? '' : ' pd-layout-grid--portfolio-only'}`}>
-
-          {/* LEFT COLUMN: Configuration Forms */}
-          <div className="pd-details-column">
-
-            <PhotographerHero
-              name={photographer.businessName}
-              quote={photographer.quote}
-              isFavorite={favorites.includes(photographer._id)}
-              onToggleFavorite={(event) => handleToggleFavorite(photographer._id, event)}
-              avatarUrl={photographer.coverImage || photographer.portfolio[0]}
-              coverUrl={photographer.media?.coverUrl || photographer.coverImage || photographer.portfolio[0]}
-              rating={photographer.rating.averageRating}
-              reviewsCount={photographer.rating.totalReviews}
-              city={photographerCity}
-            />
-
-            <section className="pd-about-card">
-              <h3 className="pd-section-title" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-                Giới thiệu & Thiết bị
-              </h3>
-              <div className="pd-about-content">
-                <div className="pd-about-left">
-                  <span className="pd-info-label">Về nhiếp ảnh gia</span>
-                  <p className="pd-about-bio">
-                    {photographer.quote || 'Nhiếp ảnh gia chuyên nghiệp đồng hành cùng VibeHue mang lại cho bạn những bộ ảnh ấn tượng và đáng nhớ nhất.'}
-                  </p>
-
-                  {photographer.policies?.cancellationPolicy && (
-                    <div className="pd-policy-box" style={{ marginTop: '16px' }}>
-                      <div className="pd-policy-header">
-                        <AlertCircle size={15} />
-                        <span>Chính sách hủy lịch</span>
-                      </div>
-                      <div>{photographer.policies.cancellationPolicy}</div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="pd-about-right">
-                  <span className="pd-info-label">Thiết bị sử dụng</span>
-                  <div className="pd-equipment-list">
-                    {photographer.equipment?.length ? (
-                      photographer.equipment.map((eq, i) => (
-                        <span key={i} className="pd-equipment-tag">
-                          <Camera size={13} style={{ flexShrink: 0 }} />
-                          {eq}
-                        </span>
-                      ))
-                    ) : (
-                      <span style={{ fontSize: '13.5px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
-                        Chưa cập nhật danh sách thiết bị.
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {hasBookablePackage ? <>
-            <PhotographerPackageSelector
-              packages={photographer.packages}
-              selectedPackageId={selectedPkg?._id}
-              city={photographerCity}
-              onSelect={setSelectedPkg}
-            />
-
-            <section className="pd-booking-policy" aria-label="Cách tính giá đã chọn">
-              <span>Cách tính giá</span>
-              <div>
-                <strong>{selectedPricingUnit === 'PER_SESSION' ? 'Theo buổi' : selectedPricingUnit === 'PER_DAY' ? 'Theo ngày' : 'Trọn booking'}</strong>
-                <small>
-                  {selectedPricingUnit === 'PER_SESSION'
-                    ? `Mỗi buổi bao gồm ${formatDuration(includedDurationMinutes)} và được tính giá riêng.`
-                    : selectedPricingUnit === 'PER_DAY'
-                      ? `Các buổi cùng ngày dùng chung tổng ${formatDuration(includedDurationMinutes)}.`
-                      : `Toàn booking dùng chung tổng ${formatDuration(includedDurationMinutes)}, tối đa ${selectedPkg?.includedSessionCount ?? 1} buổi trong ${selectedPkg?.includedDayCount ?? 1} ngày.`}
-                </small>
-              </div>
-            </section>
-
-              {bookingMode === 'SINGLE' ? <>
-                <PhotographyScheduleSelector
-                  calendarDate={calendarDate}
-                  calendarDays={calendarDays}
-                  isCalendarLoading={isMonthlyAvailabilityLoading}
-                  selectedDate={selectedDate}
-                  slots={photographerSlots}
-                  selectedStartTime={startTime}
-                  selectedEndTime={endTime}
-                  onPreviousMonth={() => { const nextDate = new Date(calendarDate); nextDate.setMonth(nextDate.getMonth() - 1); setCalendarDate(nextDate); }}
-                  onNextMonth={() => { const nextDate = new Date(calendarDate); nextDate.setMonth(nextDate.getMonth() + 1); setCalendarDate(nextDate); }}
-                  onSelectDate={setSelectedDate}
-                  onSelectSlot={handleSlotClick}
-                  isSlotBusy={(slot) => bookedSlotsOnSelectedDate.some((bookedSlot) => isTimeSlotOverlap(`${slot.start}-${slot.end}`, bookedSlot))}
-                />
-                <PhotographyDurationControl
-                  includedDurationMinutes={includedDurationMinutes}
-                  durationMinutes={effectiveDurationMinutes}
-                  overtimeIncrementMinutes={overtimeIncrementMinutes}
-                  maxOvertimeMinutes={maxOvertimeMinutes}
-                  endTime={endTime}
-                  canIncrease={canIncreaseDuration}
-                  isCheckingIncrease={isNextDurationQuoteLoading}
-                  unavailableReason={increaseUnavailableReason}
-                  onDecrease={() => setDurationMinutes((current) => Math.max(includedDurationMinutes, current - overtimeIncrementMinutes))}
-                  onIncrease={() => {
-                    if (canIncreaseDuration) setDurationMinutes(nextDurationMinutes);
-                  }}
-                />
-                <button
-                  type="button"
-                  className="pd-add-session-cta"
-                  onClick={startMultiSessionBooking}
-                  disabled={!selectedDate || !startTime}
-                >
-                  <Plus size={16} /> Thêm buổi chụp
-                </button>
-              </> : (
-                <PhotographyMultiSessionEditor
-                  sessions={multiSessions}
-                  pricingUnit={selectedPricingUnit}
-                  minDate={localToday()}
-                  includedDurationMinutes={includedDurationMinutes}
-                  minimumSessionMinutes={minimumMultiSessionMinutes}
-                  overtimeIncrementMinutes={overtimeIncrementMinutes}
-                  maxOvertimeMinutes={maxOvertimeMinutes}
-                  errors={quote?.valid === false ? quote.errors : []}
-                  onAdd={() => setMultiSessions((current) => [...current, createSessionDraft(selectedDate || localToday(), minimumMultiSessionMinutes, '')])}
-                  onGenerateRange={generateSessionsForRange}
-                  onUpdate={updateMultiSession}
-                  onRemove={(clientId) => setMultiSessions((current) => current.filter((session) => session.clientId !== clientId))}
-                  onBackToSingle={backToSingleSession}
-                />
-              )}
-
-              <PhotographySessionDetailsForm
-              selectedLocation={selectedLocation}
-              concept={selectedConcept}
-              request={customRequest}
-              referenceFile={referenceFile}
-              onLocationChange={handleLocationChange}
-               radiusKm={photographer?.serviceRadiusKm ?? null}
-               radiusCenter={providerCenter}
-              onConceptChange={setSelectedConcept}
-              onRequestChange={setCustomRequest}
-              onReferenceFileChange={handleFileChange}
-            />
-            </> : (
-              <section className="pd-no-package">
-                <Camera size={22} />
-                <div>
-                  <strong>Nhiếp ảnh gia chưa mở lịch đặt</strong>
-                  <p>Bạn vẫn có thể xem Portfolio bên dưới. Gói chụp sẽ xuất hiện khi provider hoàn tất và đăng bán dịch vụ.</p>
-                </div>
-              </section>
-            )}
-
-            <PhotographerPortfolioGrid
-              portfolioItems={photographer.portfolioItems}
-              legacyPortfolio={photographer.portfolio}
-              onImageClick={handleImageClick}
-            />
-
-            <PhotographerReviews reviews={reviews} isLoading={reviewsLoading} />
-
-          </div>
-
-          {hasBookablePackage && (
-          <PhotographyBookingSidebar
-            photographer={photographer}
-            selectedPackage={selectedPkg}
-            selectedDate={bookingMode === 'SINGLE' ? selectedDate : (multiSessions[0]?.date || '')}
-            selectedTimeSlot={bookingMode === 'SINGLE' ? selectedTimeSlot : `${multiSessions.length} buổi chụp`}
-            selectedLocation={selectedLocation?.address ?? ''}
-            selectedConcept={selectedConcept}
-             quote={quote}
-             quoteError={quoteError}
-             isQuoteLoading={isQuoteLoading}
-            agreeTerms={agreeTerms}
-            isBusy={bookingMode === 'SINGLE' && isCurrentTimeSlotBusy}
-            isBooking={isBookingNow}
-             canAddToCart={false}
-            onAgreeTermsChange={setAgreeTerms}
-            onBookNow={handleDirectBooking}
-            onAddToCart={handleAddBookingToCart}
-          />
-          )}
-
-        </div>
-      </div>
-
-      {lightboxOpen && (
-        <PhotographerPortfolioLightbox
-          images={allPortfolioImages}
-          activeIndex={lightboxIndex}
-          onClose={() => setLightboxOpen(false)}
-          onPrevious={handlePreviousImage}
-          onNext={handleNextImage}
-        />
-      )}
-    </div>
+    <PhotographerPackageDetailLayout
+      photographer={photographer}
+      packages={photographer.packages}
+      selectedPackage={selectedPkg}
+      selectedDate={selectedDate}
+      startTime={startTime}
+      endTime={endTime}
+      durationMinutes={effectiveDurationMinutes}
+      selectedTimeSlot={selectedTimeSlot}
+      quote={quote}
+      quoteError={quoteError}
+      isQuoteLoading={isQuoteLoading}
+      selectedLocation={selectedLocation}
+      locationError={locationError}
+      selectedConcept={selectedConcept}
+      customRequest={customRequest}
+      referenceFile={referenceFile}
+      bookingMode={bookingMode}
+      multiSessions={multiSessions}
+      agreeTerms={agreeTerms}
+      isFavorite={favorites.includes(photographer._id)}
+      isBusy={bookingMode === 'SINGLE' && isCurrentTimeSlotBusy}
+      isBooking={isBookingNow}
+      canAddToCart={bookingMode === 'SINGLE'}
+      reviews={reviews}
+      reviewsLoading={reviewsLoading}
+      calendarDate={calendarDate}
+      calendarDays={calendarDays}
+      isCalendarLoading={isMonthlyAvailabilityLoading}
+      slots={photographerSlots}
+      isSlotBusy={(slot) => bookedSlotsOnPreviewDate.some((bookedSlot) => isTimeSlotOverlap(`${slot.start}-${slot.end}`, bookedSlot))}
+      includedDurationMinutes={includedDurationMinutes}
+      overtimeIncrementMinutes={overtimeIncrementMinutes}
+      maxOvertimeMinutes={maxOvertimeMinutes}
+      canIncreaseDuration={canIncreaseDuration}
+      isNextDurationQuoteLoading={isNextDurationQuoteLoading}
+      increaseUnavailableReason={increaseUnavailableReason}
+      onToggleFavorite={(event) => handleToggleFavorite(photographer._id, event)}
+      onSelectPackage={setSelectedPkg}
+      onPreviousMonth={() => { const nextDate = new Date(calendarDate); nextDate.setMonth(nextDate.getMonth() - 1); setCalendarDate(nextDate); }}
+      onNextMonth={() => { const nextDate = new Date(calendarDate); nextDate.setMonth(nextDate.getMonth() + 1); setCalendarDate(nextDate); }}
+      onPreviewDate={handlePreviewDate}
+      onConfirmSchedule={handleConfirmSchedule} onCancelSchedule={handleCancelSchedule}
+      onDecreaseDuration={() => setDurationMinutes((current) => Math.max(includedDurationMinutes, current - overtimeIncrementMinutes))}
+      onIncreaseDuration={() => { if (canIncreaseDuration) setDurationMinutes(nextDurationMinutes); }}
+      onLocationChange={handleLocationChange}
+      onConceptChange={setSelectedConcept}
+      onRequestChange={setCustomRequest}
+      onReferenceFileChange={handleFileChange}
+      onAgreeTermsChange={setAgreeTerms}
+      onBookNow={handleDirectBooking}
+      onAddToCart={handleAddBookingToCart}
+      onImageClick={handleImageClick}
+      lightbox={lightboxOpen ? <PhotographerPortfolioLightbox images={allPortfolioImages} activeIndex={lightboxIndex} onClose={() => setLightboxOpen(false)} onPrevious={handlePreviousImage} onNext={handleNextImage} /> : null}
+      onStartMultiSession={startMultiSessionBooking}
+      onBackToSingle={backToSingleSession}
+      onAddSession={() => setMultiSessions((current) => [...current, createSessionDraft(selectedDate || localToday(), minimumMultiSessionMinutes, '')])}
+      onGenerateRange={generateSessionsForRange}
+      onUpdateSession={updateMultiSession}
+      onRemoveSession={(clientId) => setMultiSessions((current) => current.filter((session) => session.clientId !== clientId))}
+    />
   );
+
+
 };
 
 export default PhotographerDetailPage;

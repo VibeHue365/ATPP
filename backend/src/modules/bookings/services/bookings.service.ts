@@ -231,6 +231,15 @@ export class CreatePhotographyBookingDto {
 
 @Injectable()
 export class BookingsService implements OnApplicationBootstrap {
+  private readonly productBusyCache = new Map<
+    string,
+    { value: { bookedDates: string[]; bookedSlots: { date: string; timeSlot: string }[]; variantBookedDates?: Record<string, string[]>; workingDays?: number[]; offDays?: string[]; hasSchedule?: boolean }; expiresAt: number }
+  >();
+  private readonly providerBusyCache = new Map<
+    string,
+    { value: { bookedDates: string[]; bookedSlots: { date: string; timeSlot: string; bookingItemId: string }[] }; expiresAt: number }
+  >();
+
   constructor(
     @InjectModel(Booking.name)
     private readonly bookingModel: Model<Booking>,
@@ -3723,13 +3732,19 @@ export class BookingsService implements OnApplicationBootstrap {
     offDays?: string[];
     hasSchedule?: boolean;
   }> {
+    const cacheKey = new Types.ObjectId(productId).toString();
+    const cached = this.productBusyCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+
     const inventoryItems = await this.inventoryItemModel.find({
       productId: new Types.ObjectId(productId),
       conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
-    } as any);
+    } as any).select('_id size color').lean().exec();
 
     if (inventoryItems.length === 0) {
-      return { bookedDates: [], bookedSlots: [] };
+      const value = { bookedDates: [], bookedSlots: [] };
+      this.productBusyCache.set(cacheKey, { value, expiresAt: Date.now() + 10_000 });
+      return value;
     }
 
     const stockMap = new Map<string, number>();
@@ -3747,7 +3762,7 @@ export class BookingsService implements OnApplicationBootstrap {
       status: {
         $nin: [ReservationStatus.Cancelled, ReservationStatus.Expired],
       },
-    });
+    }).select('inventoryItemId reservedFrom reservedTo').lean().exec();
 
     const dailyBookings = new Map<string, Map<string, number>>();
     const hourlyBookings = new Map<string, Map<string, number>>();
@@ -3877,7 +3892,7 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     } catch (_) {}
 
-    return {
+    const value = {
       bookedDates,
       bookedSlots,
       variantBookedDates,
@@ -3885,6 +3900,8 @@ export class BookingsService implements OnApplicationBootstrap {
       offDays,
       hasSchedule,
     };
+    this.productBusyCache.set(cacheKey, { value, expiresAt: Date.now() + 10_000 });
+    return value;
   }
 
   async getBusySchedulesForProvider(providerId: string): Promise<{
@@ -3904,19 +3921,36 @@ export class BookingsService implements OnApplicationBootstrap {
       providerObjId = new Types.ObjectId(providerId);
     }
 
+    const cacheKey = providerObjId?.toString() ?? providerId;
+    const cached = this.providerBusyCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
+    // Start both data sources immediately. They are independent queries and
+    // must not wait on each other over the remote MongoDB connection.
+    const v2SchedulesPromise = this.bookingScheduleModel
+      .find({
+        providerId: providerObjId || providerId,
+        scheduleType: BookingScheduleType.Photoshoot,
+        $or: [
+          { status: BookingScheduleStatus.Confirmed },
+          { status: BookingScheduleStatus.Scheduled },
+          { status: BookingScheduleStatus.Held, holdExpiresAt: { $gt: now } },
+        ],
+      })
+      .select('providerLocalDate startsAt endsAt bookingItemId bookingId')
+      .lean()
+      .exec();
+    const legacyItemsPromise = this.bookingItemModel
+      .find(providerObjId ? { providerId: providerObjId } : { providerId })
+      .select('bookingId shootDate shootTimeSlot rescheduleRequest')
+      .lean()
+      .exec();
+
     // 1. Query BookingSchedule (v2 schedules)
     try {
-      const v2Schedules = await this.bookingScheduleModel
-        .find({
-          providerId: providerObjId || providerId,
-          scheduleType: BookingScheduleType.Photoshoot,
-          $or: [
-            { status: BookingScheduleStatus.Confirmed },
-            { status: BookingScheduleStatus.Scheduled },
-            { status: BookingScheduleStatus.Held, holdExpiresAt: { $gt: now } },
-          ],
-        })
-        .lean();
+      const v2Schedules = await v2SchedulesPromise;
 
       for (const schedule of v2Schedules) {
         let dateKey = (schedule as any).providerLocalDate;
@@ -3956,29 +3990,33 @@ export class BookingsService implements OnApplicationBootstrap {
 
     // 2. Query BookingItems (legacy / active bookings)
     try {
-      const activeBookings = await this.bookingModel
-        .find({
-          status: {
-            $nin: [
-              BookingStatus.Cancelled,
-              BookingStatus.Completed,
-              BookingStatus.Returned,
-              BookingStatus.Refunded,
-            ],
-          },
-        })
-        .select('_id');
-      const activeBookingIds = activeBookings.map((b) => b._id);
+      // Query this provider's booking items first. The previous version
+      // loaded every active booking in the system and only then filtered by
+      // provider, which was especially expensive with a remote MongoDB.
+      const items = await legacyItemsPromise;
 
-      const items = await this.bookingItemModel.find({
-        bookingId: { $in: activeBookingIds },
-        $or: [
-          ...(providerObjId ? [{ providerId: providerObjId }] : []),
-          { providerId },
-        ],
-      });
+      if (items.length) {
+        const bookingIds = [...new Set(items.map((item) => item.bookingId.toString()))]
+          .filter((id) => Types.ObjectId.isValid(id))
+          .map((id) => new Types.ObjectId(id));
+        const activeBookings = await this.bookingModel
+          .find({
+            _id: { $in: bookingIds },
+            status: {
+              $nin: [
+                BookingStatus.Cancelled,
+                BookingStatus.Completed,
+                BookingStatus.Returned,
+                BookingStatus.Refunded,
+              ],
+            },
+          })
+          .select('_id')
+          .lean()
+          .exec();
+        const activeBookingIds = new Set(activeBookings.map((booking) => booking._id.toString()));
 
-      items.forEach((item) => {
+        items.filter((item) => activeBookingIds.has(item.bookingId.toString())).forEach((item) => {
         let dateStr = '';
         if (item.shootDate) {
           const rawDate: any = item.shootDate;
@@ -4018,15 +4056,21 @@ export class BookingsService implements OnApplicationBootstrap {
           });
           bookedDates.add(reqDateStr);
         }
-      });
+        });
+      }
     } catch (e) {
       console.warn('Unable to query BookingItems for provider:', e);
     }
 
-    return {
+    const value = {
       bookedDates: Array.from(bookedDates),
       bookedSlots,
     };
+    this.providerBusyCache.set(cacheKey, {
+      value,
+      expiresAt: Date.now() + 10_000,
+    });
+    return value;
   }
 
   private parseTimeSlot(slot: string): { start: number; end: number } {
@@ -4066,6 +4110,64 @@ export class BookingsService implements OnApplicationBootstrap {
     } as any);
 
     return { stock: count };
+  }
+
+  async getProductStockCounts(
+    requests: Array<{ key?: string; productId?: string; size?: string; color?: string }>,
+  ): Promise<Array<{ key: string; stock: number }>> {
+    const normalized = requests
+      .filter((item) =>
+        Types.ObjectId.isValid(item.productId ?? '')
+        && Boolean(item.size?.trim())
+        && Boolean(item.color?.trim()),
+      )
+      .map((item) => ({
+        requestKey: item.key,
+        productId: new Types.ObjectId(item.productId as string),
+        size: item.size!.trim().toUpperCase(),
+        color: this.normalizeColor(item.color!),
+      }));
+
+    if (!normalized.length) return [];
+
+    const uniqueRequests = Array.from(
+      new Map(
+        normalized.map((item) => [
+          `${item.productId.toString()}:${item.size}:${item.color}`,
+          item,
+        ]),
+      ).values(),
+    );
+    const counts = await this.inventoryItemModel.aggregate([
+      {
+        $match: {
+          $or: uniqueRequests.map((item) => ({
+            productId: item.productId,
+            size: item.size,
+            color: item.color,
+          })),
+          status: 'AVAILABLE',
+          conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
+        },
+      },
+      {
+        $group: {
+          _id: { productId: '$productId', size: '$size', color: '$color' },
+          stock: { $sum: 1 },
+        },
+      },
+    ]).exec();
+    const stockByKey = new Map(
+      counts.map((row: any) => [
+        `${row._id.productId.toString()}:${row._id.size}:${row._id.color}`,
+        Number(row.stock) || 0,
+      ]),
+    );
+
+    return normalized.map((item) => {
+      const key = `${item.productId.toString()}:${item.size}:${item.color}`;
+      return { key: item.requestKey ?? key, stock: stockByKey.get(key) ?? 0 };
+    });
   }
 
   async getProductStockSummary(productId: string): Promise<any[]> {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAdminTransactions } from '../hooks/useAdminTransactions';
 import { useAdminStats } from '../hooks/useAdminStats';
-import { BookingDistribution, MetricCard, TransactionTable, GroupedBarChart } from './AdminAnalyticsShared';
+import { BookingDistribution, MetricCard, GroupedBarChart } from './AdminAnalyticsShared';
 import { formatCurrency } from '../utils/adminAnalyticsUtils';
 
 import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';

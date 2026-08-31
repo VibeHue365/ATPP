@@ -21,6 +21,7 @@ import {
   RentalHandoverSchema,
 } from './schemas/rental-handover.schema';
 import { BookingsController } from './controllers/bookings.controller';
+import { PublicBookingAvailabilityController } from './controllers/public-booking-availability.controller';
 import { PhotographyHoldsController } from './controllers/photography-holds.controller';
 import { BookingsService } from './services/bookings.service';
 import { BookingsSchedulerService } from './services/bookings-scheduler.service';
@@ -66,7 +67,7 @@ export const bookingModels = MongooseModule.forFeature([
     SystemPoliciesModule,
     StorageModule,
   ],
-  controllers: [BookingsController, PhotographyHoldsController, RentalFulfillmentController, AdminRentalMigrationController],
+  controllers: [BookingsController, PublicBookingAvailabilityController, PhotographyHoldsController, RentalFulfillmentController, AdminRentalMigrationController],
   providers: [
     BookingsRepository,
     BookingsService,

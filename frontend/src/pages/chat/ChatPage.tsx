@@ -10,8 +10,6 @@ import {
   Send,
   Paperclip,
   Image as ImageIcon,
-  Phone,
-  MoreVertical,
   Plus,
   X
 } from 'lucide-react';
@@ -262,7 +260,7 @@ export const ChatPage: React.FC = () => {
       if (partner.avatarUrl.startsWith('http')) return partner.avatarUrl;
       return `${API_BASE_URL}${partner.avatarUrl}`;
     }
-    return '/avatar_hanna.png';
+    return '/avatar_hanna.webp';
   };
 
   return (
@@ -988,7 +986,7 @@ export const ChatPage: React.FC = () => {
                     onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                   >
                     <img
-                      src={partner.portfolio?.[0] || '/avatar_hanna.png'}
+                      src={partner.portfolio?.[0] || '/avatar_hanna.webp'}
                       alt={partner.businessName}
                       style={{
                         width: '40px',

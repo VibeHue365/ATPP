@@ -278,21 +278,22 @@ export class BookingsController {
   }
 
   /** GET /bookings/busy-dates/product/:productId hoặc GET /api/bookings/busy-dates/product/:productId */
-  @Get('busy-dates/product/:productId')
-  async getProductBusyDates(@Param('productId') productId: string) {
-    return this.bookingsService.getBusySchedulesForProduct(productId);
-  }
+ 
 
   /** GET /bookings/busy-dates/provider/:providerId hoặc GET /api/bookings/busy-dates/provider/:providerId */
-  @Get('busy-dates/provider/:providerId')
-  async getProviderBusyDates(@Param('providerId') providerId: string) {
-    return this.bookingsService.getBusySchedulesForProvider(providerId);
-  }
+ 
 
   /** GET /bookings/stock/product/:productId/summary */
   @Get('stock/product/:productId/summary')
   async getProductStockSummary(@Param('productId') productId: string) {
     return this.bookingsService.getProductStockSummary(productId);
+  }
+
+  @Post('stock/batch')
+  async getProductStockBatch(
+    @Body() body: { items?: Array<{ key?: string; productId?: string; size?: string; color?: string }> },
+  ) {
+    return this.bookingsService.getProductStockCounts(body?.items ?? []);
   }
 
   /** GET /bookings/stock/product/:productId */

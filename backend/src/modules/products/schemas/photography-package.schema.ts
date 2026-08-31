@@ -127,3 +127,11 @@ export class PhotographyPackage {
 
 export const PhotographyPackageSchema =
   SchemaFactory.createForClass(PhotographyPackage);
+
+PhotographyPackageSchema.index({
+  status: 1,
+  providerId: 1,
+  price: 1,
+  updatedAt: -1,
+});
+PhotographyPackageSchema.index({ status: 1, categoryId: 1 });

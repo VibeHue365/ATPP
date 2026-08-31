@@ -22,12 +22,12 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({ user, onSucces
     user?.dateOfBirth ? new Date(user.dateOfBirth).toISOString().split('T')[0] : ''
   );
   
-  // Custom Bio & Location stored in localStorage for premium high-fidelity mockup persistence
+  // Custom Bio & Location stored in localStorage for user customization
   const [bio, setBio] = useState(() => {
-    return localStorage.getItem(`vh_user_bio_${user?.id}`) || 'Người yêu tơ lụa & di sản văn hóa Việt';
+    return localStorage.getItem(`vh_user_bio_${user?.id}`) || '';
   });
   const [locationText, setLocationText] = useState(() => {
-    return localStorage.getItem(`vh_user_location_${user?.id}`) || 'Hà Nội, VN';
+    return localStorage.getItem(`vh_user_location_${user?.id}`) || (user as any)?.address || user?.addresses?.[0]?.addressLine || '';
   });
   
   const [isSavingProfile, setIsSavingProfile] = useState(false);

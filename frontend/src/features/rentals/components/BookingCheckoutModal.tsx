@@ -132,7 +132,7 @@ export const BookingCheckoutModal: React.FC<BookingCheckoutModalProps> = ({
           {/* Selected Product Summary */}
           <div className="flex gap-4 p-4 rounded-xl bg-stone-50 border border-stone-100">
             <img
-              src={item.images?.[0] || item.image || '/cuc_hoa_mi.png'}
+              src={item.images?.[0] || item.image || '/cuc_hoa_mi.webp'}
               alt={item.name}
               className="w-20 h-20 object-cover rounded-lg border border-stone-200"
             />

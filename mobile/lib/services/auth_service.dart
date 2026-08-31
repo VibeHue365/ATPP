@@ -75,8 +75,12 @@ class AuthService {
         await SecureStorageService.saveRefreshToken(refreshToken);
       }
 
-      // Fetch user profile from getMe
-      final user = await getMe();
+      final userData = data['user'];
+      if (userData is! Map) {
+        throw StateError('Login response did not include user profile');
+      }
+
+      final user = User.fromJson(Map<String, dynamic>.from(userData));
       await SecureStorageService.saveUserRole(user.role);
       await SecureStorageService.saveUserId(user.id);
       return user;

@@ -32,7 +32,7 @@ export const AIStylingBanner: React.FC = () => {
           <div className="vh-ai-banner-visual" style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
             <div style={{ position: 'relative', width: '100%', maxWidth: '380px', aspectRatio: '4 / 5', borderRadius: '24px', overflow: 'hidden', border: '1px solid #334155', boxShadow: 'var(--shadow-lg)', backgroundColor: '#1e293b' }}>
               <img
-                src="/ai_mockup.png"
+                src="/ai_mockup.webp"
                 alt="AI Styling Mockup"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />

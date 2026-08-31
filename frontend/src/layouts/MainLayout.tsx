@@ -1,108 +1,19 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { ROUTES } from '../config/routes';
-import { LogOut, ShoppingBag, Bell, Search, User as UserIcon, Settings, Sparkles, X, ShieldCheck, Check, CheckCheck, MessageSquare } from 'lucide-react';
-import { API_BASE_URL } from '../config/env';
+import { Sparkles, X } from 'lucide-react';
 import { AIChatBot } from '../features/dashboard/components/AIChatBot';
-import { useCart } from '../context/CartContext';
-import { httpClient } from '../services/httpClient';
+import { LandingHeader } from '../features/landing/components/LandingHeader';
 
 export const MainLayout: React.FC = () => {
-  const { isAuthenticated, user, logout } = useAuth();
-  const { cart } = useCart();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isNotiOpen, setIsNotiOpen] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [loadingNoti, setLoadingNoti] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const notiRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown / notification panel when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-      if (notiRef.current && !notiRef.current.contains(event.target as Node)) {
-        setIsNotiOpen(false);
-      }
-    };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  // Fetch notifications
-  const fetchNotifications = useCallback(async () => {
-    if (!isAuthenticated) return;
-    try {
-      setLoadingNoti(true);
-      const data = await httpClient.request<any[]>('/notifications');
-      setNotifications(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error('Failed to fetch notifications', e);
-    } finally {
-      setLoadingNoti(false);
-    }
-  }, [isAuthenticated]);
-
-  // Load notifications on mount & periodically every 30s
-  useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
-  }, [fetchNotifications]);
-
-  const unreadCount = notifications.filter(n => !n.isRead).length;
-
-  const handleMarkAsRead = async (id: string) => {
-    try {
-      await httpClient.request(`/notifications/${id}/read`, { method: 'PATCH' });
-      setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n));
-    } catch (e) {
-      console.error('Failed to mark notification as read', e);
-    }
-  };
-
-  const handleMarkAllAsRead = async () => {
-    try {
-      await httpClient.request('/notifications/read-all', { method: 'POST' });
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true, readAt: new Date().toISOString() })));
-    } catch (e) {
-      console.error('Failed to mark all notifications as read', e);
-    }
-  };
-
-  const getTimeAgo = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Vá»«a xong';
-    if (mins < 60) return `${mins} phÃºt trÆ°á»›c`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} giá» trÆ°á»›c`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days} ngÃ y trÆ°á»›c`;
-    return new Date(dateStr).toLocaleDateString('vi-VN');
-  };
-
-  const getNotiTypeColor = (type: string) => {
-    switch (type) {
-      case 'BOOKING': return { bg: '#EEF2FF', color: '#4338CA', icon: 'ðŸ“‹' };
-      case 'PAYMENT': return { bg: '#F0FDF4', color: '#166534', icon: 'ðŸ’³' };
-      case 'HANDOVER': return { bg: '#FFF7ED', color: '#C2410C', icon: 'ðŸ¤' };
-      case 'REFUND': return { bg: '#FEF3C7', color: '#92400E', icon: 'ðŸ’°' };
-      case 'DISPUTE': return { bg: '#FEE2E2', color: '#991B1B', icon: 'âš ï¸' };
-      case 'SYSTEM': return { bg: '#F5F3FF', color: '#7C3AED', icon: 'ðŸ””' };
-      default: return { bg: '#F9FAFB', color: '#6B7280', icon: 'ðŸ“Œ' };
-    }
-  };
   // Redirect to onboarding if user is logged in but hasn't completed onboarding
   // Also redirect Admin to Admin Dashboard automatically if they access customer layouts
   useEffect(() => {
@@ -117,466 +28,12 @@ export const MainLayout: React.FC = () => {
       }
     }
   }, [isAuthenticated, user, location.pathname, navigate]);
-  const handleLogout = async () => {
-    setIsDropdownOpen(false);
-    await logout();
-    navigate(ROUTES.LOGIN);
-  };
-
-  const getAvatarUrl = () => {
-    if (user?.avatar) {
-      if (user.avatar.startsWith('http')) return user.avatar;
-      const filename = user.avatar.includes('/') || user.avatar.includes('\\')
-        ? user.avatar.split(/[/\\]/).pop()
-        : user.avatar;
-      return `${API_BASE_URL}/uploads/avatars/${filename}`;
-    }
-    return '/avatar_hanna.png';
-  };
-
-  // Convert role arrays into Vietnamese display name
-  const getRoleDisplayName = (roles?: string[]) => {
-    if (!roles || roles.length === 0) return 'KhÃ¡ch hÃ ng';
-    if (roles.includes('ADMIN')) return 'Quáº£n trá»‹ viÃªn';
-    if (roles.includes('PROVIDER')) return 'Äá»‘i tÃ¡c (Provider)';
-    if (roles.includes('MERCHANT') || roles.includes('STORE_OWNER') || roles.includes('SHOP_OWNER')) return 'Chá»§ cá»­a hÃ ng';
-    if (roles.includes('PHOTOGRAPHER')) return 'Nhiáº¿p áº£nh gia';
-    return 'KhÃ¡ch hÃ ng';
-  };
-
   return (
     <div className="vh-main-layout">
-      {/* Global Redesigned Header - Premium Mockup Style */}
-      <header className="vh-header">
-        <div className="vh-header-container">
-          
-          {/* Logo block: Di sáº£n Ão DÃ i + CURATING ELEGANCE */}
-          <Link to={ROUTES.LANDING} className="vh-logo-redesigned" style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0' }}>
-            <span className="font-header" style={{ color: 'var(--color-primary-dark)', fontSize: '24px', fontWeight: 700, lineHeight: 1.15 }}>
-              Di sáº£n Ão DÃ i
-            </span>
-            <span className="font-header" style={{ color: 'var(--color-gold)', fontSize: '8px', fontWeight: 600, letterSpacing: '0.15em', marginTop: '2px' }}>
-              CURATING ELEGANCE
-            </span>
-          </Link>
-
-          {/* Centered Navigation Menu - Dynamic Brand Links */}
-          <nav className="vh-header-nav-custom">
-            <Link 
-              to="/" 
-              className={`vh-header-nav-link-custom ${location.pathname === '/' && !location.hash ? 'active' : ''}`}
-            >
-              KhÃ¡m phÃ¡
-            </Link>
-
-            <Link 
-              to={ROUTES.RENTALS} 
-              className={`vh-header-nav-link-custom ${location.pathname === ROUTES.RENTALS ? 'active' : ''}`}
-            >
-              Cho thuÃª
-            </Link>
-
-            <Link 
-              to={ROUTES.VIRTUAL_TRYON_3D} 
-              className={`vh-header-nav-link-custom ${location.pathname === ROUTES.VIRTUAL_TRYON_3D ? 'active' : ''}`}
-              style={{ color: 'var(--color-primary-dark)', fontWeight: 700 }}
-            >
-              ✨ Thử Đồ 3D
-            </Link>
-
-            <Link 
-              to={ROUTES.PHOTOGRAPHERS} 
-              className={`vh-header-nav-link-custom ${location.pathname.startsWith('/photographers') ? 'active' : ''}`}
-            >
-              Nhiáº¿p áº£nh
-            </Link>
-
-            <Link 
-              to={ROUTES.COMBOS} 
-              className={`vh-header-nav-link-custom ${location.pathname === ROUTES.COMBOS ? 'active' : ''}`}
-            >
-              Combo
-            </Link>
-          </nav>
-
-          {/* Search bar Pill-shaped */}
-          <div className="vh-header-search-container">
-            <Search size={16} className="vh-header-search-icon" />
-            <input type="text" placeholder="TÃ¬m kiáº¿m sáº£n pháº©m" className="vh-header-search-input" />
-          </div>
-
-          {/* Right Action Icons & User section */}
-          <div className="vh-header-actions-redesigned">
-            
-            <div style={{ position: 'relative' }} ref={notiRef}>
-              <button 
-                className="vh-header-action-icon-custom" 
-                title="ThÃ´ng bÃ¡o"
-                onClick={() => { setIsNotiOpen(!isNotiOpen); if (!isNotiOpen) fetchNotifications(); }}
-                style={{ position: 'relative' }}
-              >
-                <Bell size={20} />
-                {unreadCount > 0 && (
-                  <span style={{
-                    position: 'absolute', top: '-4px', right: '-4px',
-                    backgroundColor: 'var(--color-primary)', color: 'white',
-                    borderRadius: '50%', minWidth: '16px', height: '16px',
-                    fontSize: '9px', fontWeight: 'bold',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    padding: '0 3px', boxShadow: '0 1px 4px rgba(74,14,23,0.4)',
-                    animation: 'pulse-badge 2s infinite'
-                  }}>
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Notification Dropdown Panel */}
-              {isNotiOpen && (
-                <div style={{
-                  position: 'absolute', top: 'calc(100% + 12px)', right: '-60px',
-                  width: '400px', maxHeight: '520px',
-                  backgroundColor: 'white', borderRadius: '14px',
-                  boxShadow: '0 20px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04)',
-                  zIndex: 9999, overflow: 'hidden',
-                  animation: 'noti-slide-in 0.2s ease-out'
-                }}>
-                  {/* Header */}
-                  <div style={{
-                    padding: '16px 20px', borderBottom: '1px solid #F0EBE3',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    background: 'linear-gradient(135deg, #FAF6F0 0%, #FFF 100%)'
-                  }}>
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#4A0E17', letterSpacing: '-0.01em' }}>ThÃ´ng bÃ¡o</h3>
-                      {unreadCount > 0 && (
-                        <span style={{ fontSize: '11px', color: '#B89047', fontWeight: 600 }}>{unreadCount} thÃ´ng bÃ¡o chÆ°a Ä‘á»c</span>
-                      )}
-                    </div>
-                    {unreadCount > 0 && (
-                      <button
-                        onClick={handleMarkAllAsRead}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: '4px',
-                          padding: '5px 10px', border: '1px solid #E8E2D5', borderRadius: '6px',
-                          backgroundColor: 'white', color: '#706E3B', fontSize: '11px',
-                          fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s'
-                        }}
-                        onMouseOver={e => { e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
-                        onMouseOut={e => { e.currentTarget.style.backgroundColor = 'white'; }}
-                      >
-                        <CheckCheck size={12} />
-                        Äá»c táº¥t cáº£
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Notification List */}
-                  <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
-                    {loadingNoti ? (
-                      <div style={{ padding: '40px', textAlign: 'center', color: '#7A7A7A' }}>
-                        <div style={{ width: '24px', height: '24px', border: '2px solid #E8E2D5', borderTop: '2px solid #4A0E17', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 8px' }} />
-                        <span style={{ fontSize: '12px', fontWeight: 600 }}>Äang táº£i...</span>
-                      </div>
-                    ) : notifications.length === 0 ? (
-                      <div style={{ padding: '50px 20px', textAlign: 'center' }}>
-                        <Bell size={32} color="#D4C5A9" style={{ marginBottom: '12px' }} />
-                        <p style={{ margin: 0, fontSize: '13px', color: '#7A7A7A', fontWeight: 600 }}>ChÆ°a cÃ³ thÃ´ng bÃ¡o nÃ o</p>
-                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#B0A89A' }}>CÃ¡c thÃ´ng bÃ¡o má»›i sáº½ hiá»ƒn thá»‹ táº¡i Ä‘Ã¢y</p>
-                      </div>
-                    ) : (
-                      notifications.map((noti) => {
-                        const typeStyle = getNotiTypeColor(noti.type);
-                        return (
-                          <div
-                            key={noti._id}
-                            onClick={() => !noti.isRead && handleMarkAsRead(noti._id)}
-                            style={{
-                              padding: '14px 20px', cursor: 'pointer',
-                              borderBottom: '1px solid #F5F0E8',
-                              backgroundColor: noti.isRead ? 'white' : '#FFFCF7',
-                              transition: 'background 0.15s',
-                              display: 'flex', gap: '12px', alignItems: 'flex-start',
-                              position: 'relative'
-                            }}
-                            onMouseOver={e => { e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
-                            onMouseOut={e => { e.currentTarget.style.backgroundColor = noti.isRead ? 'white' : '#FFFCF7'; }}
-                          >
-                            {/* Unread dot */}
-                            {!noti.isRead && (
-                              <div style={{
-                                position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)',
-                                width: '6px', height: '6px', borderRadius: '50%',
-                                backgroundColor: '#4A0E17'
-                              }} />
-                            )}
-
-                            {/* Type icon */}
-                            <div style={{
-                              width: '36px', height: '36px', borderRadius: '10px',
-                              backgroundColor: typeStyle.bg, display: 'flex',
-                              alignItems: 'center', justifyContent: 'center',
-                              fontSize: '16px', flexShrink: 0
-                            }}>
-                              {typeStyle.icon}
-                            </div>
-
-                            {/* Content */}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-                                <span style={{
-                                  fontSize: '13px', fontWeight: noti.isRead ? 600 : 750,
-                                  color: '#2A2A2A', lineHeight: '1.3'
-                                }}>
-                                  {noti.title}
-                                </span>
-                                <span style={{
-                                  padding: '1px 5px', borderRadius: '3px', fontSize: '8px',
-                                  fontWeight: 700, backgroundColor: typeStyle.bg, color: typeStyle.color,
-                                  textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0
-                                }}>
-                                  {noti.type}
-                                </span>
-                              </div>
-                              <p style={{
-                                margin: 0, fontSize: '12px', color: '#6B6B6B',
-                                lineHeight: '1.45', wordBreak: 'break-word',
-                                display: '-webkit-box', WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical' as any, overflow: 'hidden'
-                              }}>
-                                {noti.content}
-                              </p>
-                              <span style={{ fontSize: '10px', color: '#B0A89A', fontWeight: 500, marginTop: '4px', display: 'block' }}>
-                                {getTimeAgo(noti.createdAt)}
-                              </span>
-                            </div>
-
-                            {/* Read indicator */}
-                            {!noti.isRead && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleMarkAsRead(noti._id); }}
-                                title="ÄÃ¡nh dáº¥u Ä‘Ã£ Ä‘á»c"
-                                style={{
-                                  background: 'none', border: 'none', padding: '4px',
-                                  cursor: 'pointer', color: '#B89047', flexShrink: 0,
-                                  opacity: 0.6, transition: 'opacity 0.15s'
-                                }}
-                                onMouseOver={e => { e.currentTarget.style.opacity = '1'; }}
-                                onMouseOut={e => { e.currentTarget.style.opacity = '0.6'; }}
-                              >
-                                <Check size={14} />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  {/* Footer */}
-                  {notifications.length > 0 && (
-                    <div style={{
-                      padding: '10px 20px', borderTop: '1px solid #F0EBE3',
-                      textAlign: 'center', background: '#FDFCFA'
-                    }}>
-                      <button
-                        onClick={() => { setIsNotiOpen(false); navigate(ROUTES.NOTIFICATIONS); }}
-                        style={{
-                          background: 'none', border: 'none', color: '#B89047',
-                          fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                          padding: '4px 12px', borderRadius: '4px', transition: 'all 0.15s'
-                        }}
-                        onMouseOver={e => { e.currentTarget.style.color = '#4A0E17'; }}
-                        onMouseOut={e => { e.currentTarget.style.color = '#B89047'; }}
-                      >
-                        Xem táº¥t cáº£ thÃ´ng bÃ¡o â†’
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Animations */}
-                  <style>{`
-                    @keyframes noti-slide-in {
-                      from { opacity: 0; transform: translateY(-8px); }
-                      to { opacity: 1; transform: translateY(0); }
-                    }
-                    @keyframes pulse-badge {
-                      0%, 100% { transform: scale(1); }
-                      50% { transform: scale(1.1); }
-                    }
-                    @keyframes spin {
-                      0% { transform: rotate(0deg); }
-                      100% { transform: rotate(360deg); }
-                    }
-                  `}</style>
-                </div>
-              )}
-            </div>
-            <Link to={ROUTES.CHAT} className="vh-header-action-icon-custom" title="Tin nháº¯n & Chat" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <MessageSquare size={20} />
-            </Link>
-
-            <Link to={ROUTES.CART} className="vh-header-action-icon-custom" title="Giá» hÃ ng" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <ShoppingBag size={20} />
-              {cart.length > 0 && (
-                <span className="vh-cart-badge" style={{
-                  position: 'absolute',
-                  top: '-4px',
-                  right: '-4px',
-                  backgroundColor: 'var(--color-primary)',
-                  color: 'white',
-                  borderRadius: '50%',
-                  width: '16px',
-                  height: '16px',
-                  fontSize: '10px',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
-                  {cart.length}
-                </span>
-              )}
-            </Link>
-
-            {isAuthenticated ? (
-              <div className="vh-header-user-section-relative-wrapper" ref={dropdownRef}>
-                {/* Trigger Area: Name/Role + Avatar */}
-                <div 
-                  className="vh-header-user-section-custom" 
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {/* User info: Name + Role below */}
-                  <div className="vh-header-user-text-custom">
-                    <span className="vh-header-username-custom font-body">
-                      {user?.fullName || 'NgÆ°á»i dÃ¹ng'}
-                    </span>
-                    <span className="vh-header-userrole-custom font-body">
-                      {getRoleDisplayName(user?.roles)}
-                    </span>
-                  </div>
-                  
-                  {/* Circular Avatar */}
-                  <div className="vh-header-avatar-link-custom">
-                    <img src={getAvatarUrl()} alt={user?.fullName} className="vh-header-avatar-img-custom" />
-                  </div>
-                </div>
-
-                {/* Dropdown Menu - EXACTLY as Mockup */}
-                {isDropdownOpen && (
-                  <div className="vh-header-dropdown-menu-container animate-scale-up-fade">
-                    {/* Position arrow */}
-                    <div className="vh-header-dropdown-arrow-up"></div>
-
-                    {/* Header info */}
-                    <div className="vh-header-dropdown-header-block">
-                      <img src={getAvatarUrl()} alt={user?.fullName} className="vh-header-dropdown-avatar-square" />
-                      <div className="vh-header-dropdown-header-text">
-                        <span className="vh-header-dropdown-header-name font-header">{user?.fullName}</span>
-                        <span className="vh-header-dropdown-header-email">{user?.email}</span>
-                      </div>
-                    </div>
-
-                    {/* Nav Items */}
-                    <div className="vh-header-dropdown-items-list">
-                      {(user?.roles?.includes('ADMIN') || user?.roles?.includes('admin')) && (
-                        <Link 
-                          to={ROUTES.ADMIN_DASHBOARD} 
-                          className="vh-header-dropdown-item-link" 
-                          onClick={() => setIsDropdownOpen(false)}
-                          style={{ color: '#C0392B', fontWeight: 'bold' }}
-                        >
-                          <ShieldCheck size={16} />
-                          <span>KÃªnh Quáº£n Trá»‹ (Admin)</span>
-                        </Link>
-                      )}
-
-                      {user?.roles?.includes('PROVIDER') && (
-                        <Link 
-                          to={ROUTES.PROVIDER_DASHBOARD} 
-                          className="vh-header-dropdown-item-link" 
-                          onClick={() => setIsDropdownOpen(false)}
-                          style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}
-                        >
-                          <Sparkles size={16} />
-                          <span>KÃªnh Äá»‘i TÃ¡c</span>
-                        </Link>
-                      )}
-
-                      {!user?.roles?.includes('PROVIDER') && (
-                        <Link
-                          to={ROUTES.PROVIDER_REGISTER}
-                          className="vh-header-dropdown-item-link"
-                          onClick={() => setIsDropdownOpen(false)}
-                        >
-                          <Sparkles size={16} />
-                          <span>ÄÄƒng kÃ½ Provider</span>
-                        </Link>
-                      )}
-                      {!user?.roles?.includes('PROVIDER') && (
-                        <Link 
-                          to={ROUTES.PROFILE} 
-                          className="vh-header-dropdown-item-link" 
-                          onClick={() => setIsDropdownOpen(false)}
-                        >
-                          <UserIcon size={16} />
-                          <span>Trang cÃ¡ nhÃ¢n</span>
-                        </Link>
-                      )}
-
-                      <Link 
-                        to="/dashboard/profile?tab=rentals" 
-                        className="vh-header-dropdown-item-link" 
-                        onClick={() => setIsDropdownOpen(false)}
-                      >
-                        <ShoppingBag size={16} />
-                        <span>ÄÆ¡n hÃ ng</span>
-                      </Link>
-
-                      <Link 
-                        to={ROUTES.SETTINGS} 
-                        className="vh-header-dropdown-item-link" 
-                        onClick={() => setIsDropdownOpen(false)}
-                      >
-                        <Settings size={16} />
-                        <span>CÃ i Ä‘áº·t</span>
-                      </Link>
-
-                      <Link 
-                        to={ROUTES.NOTIFICATIONS} 
-                        className="vh-header-dropdown-item-link" 
-                        onClick={() => setIsDropdownOpen(false)}
-                      >
-                        <Bell size={16} />
-                        <span>ThÃ´ng bÃ¡o</span>
-                      </Link>
-
-                      <div className="vh-header-dropdown-divider-line"></div>
-
-                      <button 
-                        className="vh-header-dropdown-item-btn logout font-body" 
-                        onClick={handleLogout}
-                      >
-                        <LogOut size={16} />
-                        <span>ÄÄƒng xuáº¥t</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Link to={ROUTES.LOGIN} className="vh-btn vh-btn-primary vh-btn-sm" style={{ borderRadius: '8px', padding: '8px 20px', fontWeight: 600 }}>
-                ÄÄ‚NG NHáº¬P
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
+      <LandingHeader />
 
       {/* Page Content */}
-      <main className="vh-content">
+      <main className="vh-content lume-main">
         <Outlet />
       </main>
 
@@ -585,18 +42,18 @@ export const MainLayout: React.FC = () => {
         <div className="vh-footer-container-redesigned">
           <div className="vh-footer-left">
             <Link to={ROUTES.LANDING} className="vh-footer-logo-redesigned font-header" style={{ textDecoration: 'none' }}>
-              Di sáº£n Ão DÃ i
+              Di sản Áo Dài
             </Link>
             <p className="vh-footer-copy">
-              Â© {new Date().getFullYear()} Di sáº£n Ão DÃ i. Curating Vietnamese Elegance through time and craftsmanship.
+              © {new Date().getFullYear()} Di sản Áo Dài. Curating Vietnamese Elegance through time and craftsmanship.
             </p>
           </div>
           
           <div className="vh-footer-right-links">
-            <a href="#about">Vá» chÃºng tÃ´i</a>
-            <a href="#terms">Äiá»u khoáº£n dá»‹ch vá»¥</a>
-            <a href="#privacy">ChÃ­nh sÃ¡ch báº£o máº­t</a>
-            <a href="#contact">LiÃªn há»‡</a>
+            <a href="#about">Về chúng tôi</a>
+            <a href="#terms">Điều khoản dịch vụ</a>
+            <a href="#privacy">Chính sách bảo mật</a>
+            <a href="#contact">Liên hệ</a>
           </div>
         </div>
       </footer>
@@ -625,7 +82,7 @@ export const MainLayout: React.FC = () => {
           {/* Floating Toggle Button */}
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
-            title="Trá»£ LÃ½ AI"
+            title="Trợ Lý AI"
             style={{
               width: '56px',
               height: '56px',
@@ -652,4 +109,3 @@ export const MainLayout: React.FC = () => {
 };
 
 export default MainLayout;
-

@@ -310,3 +310,4 @@ BookingSchema.index(
     partialFilterExpression: { holdIdempotencyKey: { $type: 'string' } },
   },
 );
+BookingSchema.index({ providerIds: 1, status: 1, createdAt: -1 });

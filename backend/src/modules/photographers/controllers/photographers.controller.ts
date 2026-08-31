@@ -24,6 +24,10 @@ export class PhotographersController {
     return this.photographersService.findConcepts();
   }
 
+  @Get('package-categories')
+  async findPackageCategories() {
+    return this.photographersService.findPackageCategories();
+  }
   @Get(':id/packages')
   async findPackages(@Param('id') id: string): Promise<PhotographyPackage[]> {
     return this.photographersService.findPackages(id);

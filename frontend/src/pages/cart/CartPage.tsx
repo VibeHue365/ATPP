@@ -102,30 +102,46 @@ export const CartPage: React.FC = () => {
   const [itemStocks, setItemStocks] = useState<Record<string, number>>({});
 
   useEffect(() => {
+    let active = true;
     const fetchStocks = async () => {
       const productItems = cart.filter(item => item.itemType === 'PRODUCT' && item.productId);
-      const stockMap: Record<string, number> = {};
-      
-      await Promise.all(
-        productItems.map(async (item) => {
-          try {
-            const res = await httpClient.get<{ stock: number }>(
-              `/bookings/stock/product/${item.productId}?size=${encodeURIComponent(item.size || '')}&color=${encodeURIComponent(item.color || '')}`
-            );
-            stockMap[item.id] = res.stock || 0;
-          } catch (e) {
-            console.error('Error fetching stock for item:', item.id, e);
-            stockMap[item.id] = 999;
-          }
-        })
-      );
-      
-      setItemStocks(prev => ({ ...prev, ...stockMap }));
+      if (!productItems.length) return;
+
+      try {
+        const response = await httpClient.post<Array<{ key: string; stock: number }>>(
+          '/bookings/stock/batch',
+          {
+            items: productItems.map((item) => ({
+              key: item.id,
+              productId: item.productId,
+              size: item.size || '',
+              color: item.color || '',
+            })),
+          },
+        );
+        if (!active) return;
+        const stockByItemId = new Map(response.map((item) => [item.key, item.stock]));
+        const stockMap = Object.fromEntries(productItems.map((item) => {
+          return [item.id, stockByItemId.get(item.id) ?? 0];
+        }));
+        setItemStocks((prev) => ({ ...prev, ...stockMap }));
+      } catch (error) {
+        console.error('Error fetching stock batch:', error);
+        if (active) {
+          setItemStocks((prev) => ({
+            ...prev,
+            ...Object.fromEntries(productItems.map((item) => [item.id, 999])),
+          }));
+        }
+      }
     };
     
     if (cart.length > 0) {
       fetchStocks();
     }
+    return () => {
+      active = false;
+    };
   }, [cart]);
 
   useEffect(() => {

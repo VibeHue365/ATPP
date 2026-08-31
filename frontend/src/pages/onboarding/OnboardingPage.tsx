@@ -15,9 +15,9 @@ import { useAuth } from '../../features/auth/hooks/useAuth';
 import { calculateRecommendedSize } from '../../utils/sizeHelper';
 
 // Import images
-import traditionalImg from '../../assets/images/onboarding_traditional.png';
-import modernImg from '../../assets/images/onboarding_modern.png';
-import edgyImg from '../../assets/images/onboarding_edgy.png';
+import traditionalImg from '../../assets/images/onboarding_traditional.webp';
+import modernImg from '../../assets/images/onboarding_modern.webp';
+import edgyImg from '../../assets/images/onboarding_edgy.webp';
 
 interface Step1Data {
   style: 'traditional' | 'modern' | 'edgy' | null;

@@ -26,6 +26,9 @@ export class MailService {
           port,
           secure,
           auth: { user, pass },
+          connectionTimeout: this.timeout('MAIL_CONNECTION_TIMEOUT_MS', 10000),
+          greetingTimeout: this.timeout('MAIL_GREETING_TIMEOUT_MS', 10000),
+          socketTimeout: this.timeout('MAIL_SOCKET_TIMEOUT_MS', 20000),
         })
         : null;
   }
@@ -71,7 +74,7 @@ export class MailService {
   ): Promise<void> {
     if (!this.transporter) {
       this.logger.warn(
-        `[MAIL NOT CONFIGURED] ${subject} -> ${to}. Content: ${text}`,
+        `[MAIL NOT CONFIGURED] ${subject} -> ${this.maskRecipient(to)}`,
       );
       return;
     }
@@ -83,5 +86,16 @@ export class MailService {
       text,
       html,
     });
+  }
+
+  private timeout(key: string, fallback: number): number {
+    const value = Number(this.configService.get<string>(key, String(fallback)));
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+  }
+
+  private maskRecipient(email: string): string {
+    const [localPart, domain] = email.split('@');
+    if (!localPart || !domain) return '***';
+    return `${localPart.slice(0, 2)}***@${domain}`;
   }
 }

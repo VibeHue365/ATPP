@@ -26,6 +26,7 @@ import { SmartTaggingModule } from './modules/smart-tagging/smart-tagging.module
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { validateEnv } from './common/config/env.validation';
 import { ApiDocsController } from './common/controllers/api-docs.controller';
+import { GeocodingModule } from './modules/geocoding/geocoding.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { ApiDocsController } from './common/controllers/api-docs.controller';
     AdminModule,
     SmartTaggingModule,
     AnalyticsModule,
+    GeocodingModule,
   ],
   controllers: [AppController, ApiDocsController],
   providers: [AppService],

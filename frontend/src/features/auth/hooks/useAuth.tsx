@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { authService } from "../services/authService";
-import { userService } from "../../users/services/userService";
+import type { LoginResponse } from "../types/auth.types";
+import {
+  normalizeUserProfile,
+  userService,
+} from "../../users/services/userService";
 import type { UserProfile } from "../../users/types/users.types";
 import { tokenStorage } from "../../../services/tokenStorage";
 
@@ -22,7 +26,8 @@ interface AuthContextType {
   updateProfile: (payload: any) => Promise<void>;
   updateAvatar: (formData: FormData) => Promise<void>;
   updatePreferences: (payload: any) => Promise<void>;
-  toggleFavorite: (targetType: 'PRODUCT' | 'PHOTOGRAPHER' | 'PROVIDER', targetId: string) => Promise<void>;  setSession: (accessToken: string, refreshToken: string) => Promise<UserProfile>;
+  toggleFavorite: (targetType: 'PRODUCT' | 'PHOTOGRAPHER' | 'PROVIDER', targetId: string) => Promise<void>;
+  setSession: (session: LoginResponse) => Promise<UserProfile>;
   clearError: () => void;
 }
 
@@ -100,12 +105,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       const { rememberMe = false, ...credentials } = payload;
       const res = await authService.login(credentials);
-      if (res.accessToken && res.refreshToken) {
-        tokenStorage.saveTokens(res.accessToken, res.refreshToken, rememberMe);
-        return await fetchProfile();
-      } else {
-        throw new Error("Tokens missing in login response");
+      if (!res.accessToken || !res.refreshToken || !res.user) {
+        throw new Error("Incomplete login response");
       }
+
+      tokenStorage.saveTokens(res.accessToken, res.refreshToken, rememberMe);
+      const nextUser = normalizeUserProfile(res.user);
+      setUser(nextUser);
+      setPermissions(res.permissions ?? []);
+      setIsAuthenticated(true);
+      return nextUser;
     } catch (err: any) {
       setError(err.message || "Đăng nhập thất bại");
       throw err;
@@ -216,14 +225,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const setSession = async (
-    accessToken: string,
-    refreshToken: string,
-  ): Promise<UserProfile> => {
-    tokenStorage.saveTokens(accessToken, refreshToken, true);
+  const setSession = async (session: LoginResponse): Promise<UserProfile> => {
+    tokenStorage.saveTokens(session.accessToken, session.refreshToken, true);
     setIsLoading(true);
     try {
-      return await fetchProfile();
+      if (!session.user) {
+        return await fetchProfile();
+      }
+
+      const nextUser = normalizeUserProfile(session.user);
+      setUser(nextUser);
+      setPermissions(session.permissions ?? []);
+      setIsAuthenticated(true);
+      return nextUser;
     } finally {
       setIsLoading(false);
     }

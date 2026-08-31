@@ -61,6 +61,13 @@ export class AuthRepository {
     return this.verificationTokenModel.findById(tokenId);
   }
 
+  async revokeVerificationToken(tokenId: Types.ObjectId): Promise<void> {
+    await this.verificationTokenModel.updateOne(
+      { _id: tokenId, verifiedAt: null, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+    );
+  }
+
   async revokeActiveVerificationTokens(
     userId: Types.ObjectId,
     purpose: VerificationPurpose,

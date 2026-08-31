@@ -9,6 +9,8 @@ import type {
 const getBadgeLabel = (badge: PhotographerPortfolioBadge): string | undefined =>
   badge.label?.trim() || badge.name?.trim();
 
+const mapPackage = (pkg: NonNullable<PhotographerApiResponse['packages']>[number]) => ({ ...pkg, images: getMediaUrls(pkg.images) });
+
 const getConcepts = (response: PhotographerApiResponse): string[] =>
   [...new Set(
     (response.portfolioItems ?? [])
@@ -42,7 +44,7 @@ export const toPhotographerSummary = (response: PhotographerApiResponse): Photog
     durationHours: defaultPackage?.durationHours ?? 0,
     editedPhotosCount: defaultPackage?.editedPhotosCount ?? 0,
     rawPhotosCount: defaultPackage?.rawPhotosCount ?? 0,
-    packages: response.packages ?? [],
+    packages: (response.packages ?? []).map(mapPackage),
     isBookable: response.isBookable ?? Boolean(defaultPackage),
     equipment: response.equipment ?? [],
   };
@@ -75,7 +77,8 @@ export const toPhotographerDetails = (response: PhotographerApiResponse): Photog
     ...item,
     images: getMediaUrls(item.images),
   })),
-  packages: response.packages ?? [],
+  packages: (response.packages ?? []).map(mapPackage),
+  serviceRadiusKm: response.serviceRadiusKm ?? null,
   coverImage: getFirstMediaUrl(
     response.coverImage,
     response.media?.coverUrl,

@@ -121,7 +121,7 @@ export const SettingsPage: React.FC = () => {
         : user.avatar;
       return `${API_BASE_URL}/uploads/avatars/${filename}`;
     }
-    return '/avatar_hanna.png';
+    return '/avatar_hanna.webp';
   };
 
   const handleAvatarClick = () => {

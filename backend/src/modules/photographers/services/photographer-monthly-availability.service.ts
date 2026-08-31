@@ -33,6 +33,11 @@ type TimeRange = { start: string; end: string };
 
 @Injectable()
 export class PhotographerMonthlyAvailabilityService {
+  private readonly monthlyCache = new Map<
+    string,
+    { value: { month: string; days: MonthlyAvailabilityDay[] }; expiresAt: number }
+  >();
+
   constructor(
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
     @InjectModel(PhotographyPackage.name)
@@ -54,6 +59,12 @@ export class PhotographerMonthlyAvailabilityService {
     const [year, monthIndex] = month.split('-').map(Number);
     if (!year || !monthIndex || monthIndex < 1 || monthIndex > 12) {
       throw new NotFoundException('Tháng cần kiểm tra không hợp lệ');
+    }
+
+    const cacheKey = `${providerId}:${packageId ?? ''}:${month}`;
+    const cached = this.monthlyCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
     }
 
     const providerObjectId = new Types.ObjectId(providerId);
@@ -148,7 +159,14 @@ export class PhotographerMonthlyAvailabilityService {
       days.push({ date, status: hasSlot ? 'AVAILABLE' : 'FULL' });
     }
 
-    return { month, days };
+    const value = { month, days };
+    this.monthlyCache.set(cacheKey, {
+      value,
+      // The final booking flow revalidates availability, so this short TTL
+      // only removes repeated month-navigation queries.
+      expiresAt: Date.now() + 30_000,
+    });
+    return value;
   }
 
   private async getDurationMinutes(

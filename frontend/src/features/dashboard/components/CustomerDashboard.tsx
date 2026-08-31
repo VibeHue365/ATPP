@@ -426,6 +426,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       awaitingReviewSince: b.awaitingReviewSince,
       statusType: isPast ? 'PAST' : isOverdue ? 'OVERDUE' : (b.status === 'AWAITING_REVIEW' || b.status === 'IN_PROGRESS') ? 'ACTION' : 'UPCOMING',
       dateStr: photoItem?.shootDate ? formatDate(photoItem.shootDate) : '',
+      photographerName: photoItem?.providerId?.businessName || photoItem?.provider?.businessName || 'Nhiáº¿p áº£nh gia',
       title: photoItem?.photographyPackageId?.name || photoItem?.name || 'Gói Chụp Ảnh Cổ Phong',
       photographerName: photoItem?.providerId?.brandName || photoItem?.providerId?.profile?.fullName || photoItem?.providerId?.name || b.providerId?.brandName || b.providerId?.profile?.fullName || b.providerId?.name || 'Thợ ảnh VibeHue',
       shootLocation: photoItem?.shootLocation || photoItem?.location || b.shootLocation || (
@@ -629,7 +630,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               photo.media?.coverUrl,
               photo.media?.images?.[0],
               photo.portfolioItems?.[0]?.images?.[0]
-            ) || '/avatar_hanna.png',
+            ) || '/avatar_hanna.webp',
             price: photo.packages && photo.packages.length > 0 ? Math.min(...photo.packages.map((p: any) => p.price)) : 1500000,
             material: photo.quote || 'Nhiếp ảnh gia chuyên nghiệp',
             link: `/photographers`

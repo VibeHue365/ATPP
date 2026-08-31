@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { photographersApi } from '../api/photographers.api';
 import { toPhotographerSummary } from '../mappers/photographer.mapper';
 import type {
@@ -29,17 +29,22 @@ export const usePhotographers = (
   const [meta, setMeta] = useState<PhotographerDiscoveryMeta>(emptyMeta);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const queryKey = useMemo(() => JSON.stringify(params), [params]);
 
   const reload = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await photographersApi.getAll(params);
+      const response = await photographersApi.getAll(params, { signal: controller.signal });
       setPhotographers(response.data.map(toPhotographerSummary));
       setMeta(response.meta);
     } catch (requestError) {
+      if (controller.signal.aborted) return;
       const message = requestError instanceof Error
         ? requestError.message
         : 'Không thể tải danh sách nhiếp ảnh gia.';
@@ -47,12 +52,13 @@ export const usePhotographers = (
       setPhotographers([]);
       setMeta(emptyMeta);
     } finally {
-      setIsLoading(false);
+      if (!controller.signal.aborted) setIsLoading(false);
     }
   }, [queryKey]);
 
   useEffect(() => {
     void reload();
+    return () => abortRef.current?.abort();
   }, [reload]);
 
   return { photographers, meta, isLoading, error, reload };
