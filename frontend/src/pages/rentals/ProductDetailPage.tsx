@@ -2,7 +2,7 @@ import { VirtualTryOn3DModal } from '../../features/virtual-tryon-3d/components/
 import React, { useState, useEffect } from "react";
 import { checkProductAvailability } from '../../features/rentals/services/productAvailabilityService';
 import { useProductAvailability } from '../../features/rentals/hooks/useProductAvailability';
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {Heart,Star,Sparkles,ArrowRight,ChevronRight,ChevronLeft,Shield,User,Check,MapPin,Flag} from "lucide-react";
 import Swal from "sweetalert2";
 import { httpClient } from "../../services/httpClient";
@@ -107,6 +107,7 @@ const productSlots = [
 export const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const { addToCart } = useCart();
   const {
@@ -254,7 +255,7 @@ export const ProductDetailPage: React.FC = () => {
   const handleWriteReviewClick = async () => {
     if (!isAuthenticated) {
       toast.error("Vui lòng đăng nhập để viết đánh giá.");
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
 
@@ -1073,7 +1074,12 @@ export const ProductDetailPage: React.FC = () => {
     const fetchSuggestions = async () => {
       try {
         const res = await httpClient.get<any>("/api/photographers");
-        const data = res?.data || [];
+        const data = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        if (!data.length) {
+          setSuggestedPhotographers([]);
+          return;
+        }
+
         const productCity =
           product.providerId?.address?.city || "Thừa Thiên Huế";
 
@@ -1092,122 +1098,51 @@ export const ProductDetailPage: React.FC = () => {
           );
         });
 
-        // Use filtered or fallback to original data if filtered is empty
+        // Use filtered or fallback to top photographers
         const listToMap = filtered.length > 0 ? filtered : data;
 
         const mapped = listToMap.slice(0, 3).map((prov: any) => {
-          const rawName = prov.businessName || "Nhiếp ảnh gia";
-          let displayName = rawName;
-          let quote = "Chuyên chụp cổ phục ngoại cảnh Đại Nội Huế";
-          let avatar = "/hoang_minh.png";
+          const displayName = prov.businessName || "Nhiếp ảnh gia chuyên nghiệp";
+          const quote =
+            prov.quote ||
+            prov.portfolioItems?.[0]?.description ||
+            (prov.address?.city
+              ? `Chuyên chụp ảnh nghệ thuật & ngoại cảnh tại ${prov.address.city}`
+              : "Chuyên chụp cổ phục ngoại cảnh và bộ sưu tập nghệ thuật");
 
-          if (rawName.includes("Minh Trí") || rawName.includes("Hoàng Minh")) {
-            displayName = "Hoàng Minh";
-            quote =
-              "Phong cách nghệ thuật hoài cổ. Concept Mộng Thơ sẽ phù hợp với thiết kế này.";
-            avatar = "/hoang_minh.png";
-          } else if (
-            rawName.includes("Hoàng Lê") ||
-            rawName.includes("Lê Thảo")
-          ) {
-            displayName = "Lê Thảo";
-            quote =
-              "Phong cách thơ mộng, ánh sáng tự nhiên, tôn nét dịu dàng của tà áo dài truyền thống.";
-            avatar = "/le_thao.png";
-          } else if (
-            rawName.includes("Thanh Thủy") ||
-            rawName.includes("Trần Bảo")
-          ) {
-            displayName = "Trần Bảo";
-            quote =
-              "Kể chuyện cổ phục bằng ngôn ngữ điện ảnh, tạo góc máy thần thái đạt chất lượng cao.";
-            avatar = "/tran_bao.png";
-          } else {
-            avatar = prov.portfolio?.[0] || "/hoang_minh.png";
-          }
+          // Extract real image from photographer provider entity
+          const rawImage =
+            prov.coverImage ||
+            prov.media?.coverUrl ||
+            prov.media?.images?.[0] ||
+            prov.packages?.[0]?.images?.[0] ||
+            prov.portfolioItems?.[0]?.images?.[0] ||
+            prov.portfolio?.[0] ||
+            prov.avatar;
 
-          const minPrice =
-            prov.packages && prov.packages.length > 0
-              ? Math.min(...prov.packages.map((p: any) => p.price))
-              : 1500000;
+          const avatar = rawImage ? getImageUrl(rawImage) : "/hoang_minh.webp";
+
+          const prices = Array.isArray(prov.packages) && prov.packages.length > 0
+            ? prov.packages.map((p: any) => p.price).filter((p: number) => typeof p === "number" && p > 0)
+            : [];
+
+          const minPrice = prices.length > 0 ? Math.min(...prices) : null;
 
           return {
             id: prov._id,
             name: displayName,
-            rating: prov.rating?.averageRating || 5.0,
-            count: prov.rating?.totalReviews || 12,
+            rating: typeof prov.rating?.averageRating === "number" ? prov.rating.averageRating : 5.0,
+            count: typeof prov.rating?.totalReviews === "number" ? prov.rating.totalReviews : 0,
             desc: quote,
-            price: `${minPrice.toLocaleString("vi-VN")}đ`,
+            price: minPrice ? `${minPrice.toLocaleString("vi-VN")}đ` : "Liên hệ",
             image: avatar,
           };
         });
 
-        if (mapped.length < 3) {
-          const fallbacks = [
-            {
-              id: "p1",
-              name: "Hoàng Minh",
-              rating: 4.9,
-              count: 142,
-              desc: "Phong cách nghệ thuật hoài cổ. Concept Mộng Thơ sẽ phù hợp với thiết kế này.",
-              price: "1.500.000đ",
-              image: "/hoang_minh.png",
-            },
-            {
-              id: "p2",
-              name: "Lê Thảo",
-              rating: 5.0,
-              count: 96,
-              desc: "Phong cách thơ mộng, ánh sáng tự nhiên, tôn nét dịu dàng của tà áo dài truyền thống.",
-              price: "2.000.000đ",
-              image: "/le_thao.png",
-            },
-            {
-              id: "p3",
-              name: "Trần Bảo",
-              rating: 4.8,
-              count: 75,
-              desc: "Kể chuyện cổ phục bằng ngôn ngữ điện ảnh, tạo góc máy thần thái đạt chất lượng cao.",
-              price: "2.500.000đ",
-              image: "/tran_bao.png",
-            },
-          ];
-          const combined = [...mapped, ...fallbacks.slice(mapped.length)];
-          setSuggestedPhotographers(combined);
-        } else {
-          setSuggestedPhotographers(mapped);
-        }
+        setSuggestedPhotographers(mapped);
       } catch (err) {
-        console.error("Lỗi lấy danh sách thợ gợi ý:", err);
-        setSuggestedPhotographers([
-          {
-            id: "p1",
-            name: "Hoàng Minh",
-            rating: 4.9,
-            count: 142,
-            desc: "Phong cách nghệ thuật hoài cổ. Concept Mộng Thơ sẽ phù hợp với thiết kế này.",
-            price: "1.500.000đ",
-            image: "/hoang_minh.png",
-          },
-          {
-            id: "p2",
-            name: "Lê Thảo",
-            rating: 5.0,
-            count: 96,
-            desc: "Phong cách thơ mộng, ánh sáng tự nhiên, tôn nét dịu dàng của tà áo dài truyền thống.",
-            price: "2.000.000đ",
-            image: "/le_thao.png",
-          },
-          {
-            id: "p3",
-            name: "Trần Bảo",
-            rating: 4.8,
-            count: 75,
-            desc: "Kể chuyện cổ phục bằng ngôn ngữ điện ảnh, tạo góc máy thần thái đạt chất lượng cao.",
-            price: "2.500.000đ",
-            image: "/tran_bao.png",
-          },
-        ]);
+        console.warn("Lỗi lấy danh sách thợ gợi ý:", err);
+        setSuggestedPhotographers([]);
       }
     };
 
@@ -1288,7 +1223,7 @@ export const ProductDetailPage: React.FC = () => {
   const handleAddToCart = async () => {
     if (!isAuthenticated) {
       toast.error("Vui lòng đăng nhập để thực hiện chức năng này.");
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
 
@@ -1342,7 +1277,7 @@ export const ProductDetailPage: React.FC = () => {
   const handleBookingSubmit = async () => {
     if (!isAuthenticated) {
       toast.error("Vui lòng đăng nhập để thực hiện chức năng này.");
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { state: { from: location } });
       return;
     }
 
@@ -2758,160 +2693,180 @@ export const ProductDetailPage: React.FC = () => {
         </section>
 
         {/* BOTTOM: Photographers recommended list */}
-        <section style={{ marginTop: "80px" }}>
-          <div
-            style={{
-              marginBottom: "40px",
-              textAlign: "left",
-              maxWidth: "100%",
-              margin: "0 0 40px 0",
-              alignItems: "flex-start",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <span
-              className="vh-section-badge"
-              style={{ display: "inline-block", marginBottom: "12px" }}
-            >
-              Nhiếp Ảnh Gia Gợi Ý
-            </span>
-            <h2
+        {suggestedPhotographers.length > 0 && (
+          <section style={{ marginTop: "80px" }}>
+            <div
               style={{
-                fontSize: "28px",
-                fontWeight: 700,
-                fontFamily: "var(--font-header)",
-                color: "#1c1917",
-                marginTop: "4px",
+                marginBottom: "40px",
+                textAlign: "left",
+                maxWidth: "100%",
+                margin: "0 0 40px 0",
+                alignItems: "flex-start",
+                display: "flex",
+                flexDirection: "column",
               }}
             >
-              Hoàn thiện trải nghiệm với các gói chụp ảnh chuyên nghiệp
-            </h2>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: "32px",
-            }}
-          >
-            {suggestedPhotographers.map((photographer) => (
-              <div
-                key={photographer.id}
-                className="vh-premium-card"
+              <span
+                className="vh-section-badge"
+                style={{ display: "inline-block", marginBottom: "12px" }}
+              >
+                Nhiếp Ảnh Gia Gợi Ý
+              </span>
+              <h2
                 style={{
-                  padding: "20px",
-                  backgroundColor: "white",
-                  border: "1px solid var(--color-light-border)",
+                  fontSize: "28px",
+                  fontWeight: 700,
+                  fontFamily: "var(--font-header)",
+                  color: "#1c1917",
+                  marginTop: "4px",
                 }}
               >
+                Hoàn thiện trải nghiệm với các gói chụp ảnh chuyên nghiệp
+              </h2>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+                gap: "32px",
+              }}
+            >
+              {suggestedPhotographers.map((photographer) => (
                 <div
-                  className="vh-card-image-wrapper"
-                  style={{ height: "240px" }}
+                  key={photographer.id}
+                  className="vh-premium-card"
+                  style={{
+                    padding: "20px",
+                    backgroundColor: "white",
+                    border: "1px solid var(--color-light-border)",
+                  }}
                 >
-                  <img
-                    src={photographer.image}
-                    alt={photographer.name}
-                    className="vh-card-image"
-                  />
                   <div
-                    style={{
-                      position: "absolute",
-                      top: "12px",
-                      right: "12px",
-                      zIndex: 10,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      padding: "4px 10px",
-                      borderRadius: "9999px",
-                      backgroundColor: "rgba(255,255,255,0.95)",
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      color: "var(--color-text-primary)",
-                    }}
+                    className="vh-card-image-wrapper"
+                    style={{ height: "240px" }}
                   >
-                    <Star
-                      size={11}
-                      className="fill-amber-400 stroke-amber-400"
+                    <img
+                      src={photographer.image}
+                      alt={photographer.name}
+                      className="vh-card-image"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/hoang_minh.webp";
+                      }}
                     />
-                    <span>{photographer.rating}</span>
-                    <span
+                    <div
                       style={{
-                        color: "var(--color-text-secondary)",
-                        fontWeight: 400,
+                        position: "absolute",
+                        top: "12px",
+                        right: "12px",
+                        zIndex: 10,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        padding: "4px 10px",
+                        borderRadius: "9999px",
+                        backgroundColor: "rgba(255,255,255,0.95)",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: "var(--color-text-primary)",
                       }}
                     >
-                      ({photographer.count})
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: "16px" }}>
-                  <h4
-                    className="font-header font-bold text-stone-900"
-                    style={{ fontSize: "18px" }}
-                  >
-                    {photographer.name}
-                  </h4>
-                  <p
-                    style={{
-                      fontSize: "13px",
-                      color: "var(--color-text-secondary)",
-                      marginTop: "8px",
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    {photographer.desc}
-                  </p>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginTop: "24px",
-                      paddingTop: "16px",
-                      borderTop: "1px solid var(--color-light-border)",
-                    }}
-                  >
-                    <div>
-                      <span
-                        style={{
-                          fontSize: "10px",
-                          color: "var(--color-text-secondary)",
-                          display: "block",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        Gói chụp từ
-                      </span>
-                      <strong
-                        className="font-header"
-                        style={{
-                          fontSize: "18px",
-                          color: "var(--color-primary-dark)",
-                        }}
-                      >
-                        {photographer.price}
-                      </strong>
+                      <Star
+                        size={11}
+                        className="fill-amber-400 stroke-amber-400"
+                      />
+                      <span>{typeof photographer.rating === 'number' ? photographer.rating.toFixed(1) : "5.0"}</span>
+                      {photographer.count > 0 ? (
+                        <span
+                          style={{
+                            color: "var(--color-text-secondary)",
+                            fontWeight: 400,
+                          }}
+                        >
+                          ({photographer.count})
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            color: "var(--color-text-secondary)",
+                            fontWeight: 500,
+                          }}
+                        >
+                          (Mới)
+                        </span>
+                      )}
                     </div>
-                    <button
-                      onClick={() =>
-                        navigate(`/photographers/${photographer.id}`)
-                      }
-                      className="vh-btn vh-btn-outline vh-btn-sm"
-                      style={{ borderRadius: "6px" }}
+                  </div>
+
+                  <div style={{ marginTop: "16px" }}>
+                    <h4
+                      className="font-header font-bold text-stone-900"
+                      style={{ fontSize: "18px" }}
                     >
-                      Đặt ngay
-                    </button>
+                      {photographer.name}
+                    </h4>
+                    <p
+                      style={{
+                        fontSize: "13px",
+                        color: "var(--color-text-secondary)",
+                        marginTop: "8px",
+                        lineHeight: 1.6,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {photographer.desc}
+                    </p>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginTop: "24px",
+                        paddingTop: "16px",
+                        borderTop: "1px solid var(--color-light-border)",
+                      }}
+                    >
+                      <div>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "var(--color-text-secondary)",
+                            display: "block",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Gói chụp từ
+                        </span>
+                        <strong
+                          className="font-header"
+                          style={{
+                            fontSize: "18px",
+                            color: "var(--color-primary-dark)",
+                          }}
+                        >
+                          {photographer.price}
+                        </strong>
+                      </div>
+                      <button
+                        onClick={() =>
+                          navigate(`/photographers/${photographer.id}`)
+                        }
+                        className="vh-btn vh-btn-outline vh-btn-sm"
+                        style={{ borderRadius: "6px" }}
+                      >
+                        Đặt ngay
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* BOTTOM: Review stats diary */}
         <section

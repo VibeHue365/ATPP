@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
-import { Button } from "../../../components/common/Button";
-import { Input } from "../../../components/common/Input";
+import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { useToast } from "../../../components/feedback/Toast";
 import { API_BASE_URL } from "../../../config/env";
 import { ROUTES } from "../../../config/routes";
@@ -21,9 +19,7 @@ export const LoginForm: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>(
-    {},
-  );
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   useEffect(() => {
     const state = location.state as { email?: string; message?: string } | null;
@@ -39,7 +35,7 @@ export const LoginForm: React.FC = () => {
     const tempErrors: { email?: string; password?: string } = {};
     if (!email) tempErrors.email = "Vui lòng nhập địa chỉ email";
     else if (!/\S+@\S+\.\S+/.test(email)) {
-      tempErrors.email = "Email không hợp lệ";
+      tempErrors.email = "Email không đúng định dạng";
     }
 
     if (!password) tempErrors.password = "Vui lòng nhập mật khẩu";
@@ -91,234 +87,151 @@ export const LoginForm: React.FC = () => {
   };
 
   const handleFacebookLogin = () => {
-    toast.info("Tính năng đăng nhập Facebook đang được phát triển.");
+    toast.info("Tính năng đăng nhập Facebook đang được tích hợp.");
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
-      <Link
-        to={ROUTES.LANDING}
-        className="vh-auth-back-link"
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "6px",
-          fontSize: "12px",
-          fontWeight: 600,
-          color: "var(--color-text-secondary)",
-          textDecoration: "none",
-          marginBottom: "24px",
-          alignSelf: "flex-start",
-          transition: "var(--transition-smooth)",
-        }}
-        onMouseEnter={(e) =>
-          (e.currentTarget.style.color = "var(--color-primary)")
-        }
-        onMouseLeave={(e) =>
-          (e.currentTarget.style.color = "var(--color-text-secondary)")
-        }
-      >
-        <ArrowLeft size={14} />
-        Quay lại trang chủ
-      </Link>
+    <div className="w-full">
+      {/* Title Group */}
+      <div className="lume-auth-title-group">
+        <h1 className="lume-auth-title">
+          Chào mừng bạn <span>trở lại</span>
+        </h1>
+        <p className="lume-auth-subtitle">
+          Đăng nhập để tiếp tục hành trình trải nghiệm di sản và đặt lịch chụp ảnh.
+        </p>
+      </div>
 
-      <h1 
-        className="vh-brand-title"
-        style={{
-          fontFamily: "'Libre Caslon Text', serif",
-          fontSize: "36px",
-          fontWeight: 700,
-          background: "linear-gradient(135deg, #4A0E17 0%, #B89047 100%)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          marginBottom: "8px",
-          lineHeight: 1.2,
-        }}
-      >
-        Silk &amp; Stone
-      </h1>
+      {/* Form Fields */}
+      <form onSubmit={handleSubmit} noValidate className="lume-auth-form">
+        {/* Email Input */}
+        <div className="lume-form-group">
+          <label htmlFor="login-email" className="lume-form-label">
+            Email tài khoản
+          </label>
+          <div className="lume-form-input-wrapper">
+            <input
+              id="login-email"
+              type="email"
+              placeholder="nhap.email@example.com"
+              value={email}
+              autoComplete="email"
+              onChange={(e) => {
+                const val = e.target.value;
+                setEmail(val);
+                if (errors.email) {
+                  setErrors((prev) => ({
+                    ...prev,
+                    email: !val
+                      ? "Vui lòng nhập địa chỉ email"
+                      : !/\S+@\S+\.\S+/.test(val)
+                      ? "Email không đúng định dạng"
+                      : undefined,
+                  }));
+                }
+              }}
+              className={`lume-form-input has-left-icon ${errors.email ? 'is-error' : ''}`}
+              required
+            />
+            <div className="lume-form-input-icon-left">
+              <Mail size={17} />
+            </div>
+          </div>
+          {errors.email && <span className="lume-form-error-text">{errors.email}</span>}
+        </div>
 
-      <h2 
-        className="vh-greeting-title"
-        style={{
-          fontSize: "20px",
-          fontWeight: 800,
-          color: "#2D2926",
-          marginBottom: "6px",
-        }}
-      >
-        Chào mừng bạn trở lại
-      </h2>
-      <p 
-        className="vh-greeting-subtitle"
-        style={{
-          fontSize: "13px",
-          color: "var(--color-text-secondary)",
-          marginBottom: "28px",
-          lineHeight: 1.5,
-        }}
-      >
-        Vui lòng đăng nhập để tiếp tục hành trình văn hóa.
-      </p>
-
-      <form
-        onSubmit={handleSubmit}
-        noValidate
-        className="vh-auth-form"
-        style={{ display: "flex", flexDirection: "column", gap: "16px" }}
-      >
-        <Input
-          label="Email đăng nhập"
-          type="email"
-          placeholder="Nhập email của bạn..."
-          value={email}
-          onChange={(e) => {
-            const val = e.target.value;
-            setEmail(val);
-            if (errors.email) {
-              setErrors((prev) => ({
-                ...prev,
-                email: !val
-                  ? "Vui lòng nhập địa chỉ email"
-                  : !/\S+@\S+\.\S+/.test(val)
-                    ? "Email không hợp lệ"
-                    : undefined,
-              }));
-            }
-          }}
-          error={errors.email}
-          className="vh-premium-input"
-          required
-        />
-
-        <Input
-          label="Mật khẩu"
-          type={showPassword ? "text" : "password"}
-          placeholder="Nhập mật khẩu..."
-          value={password}
-          onChange={(e) => {
-            const val = e.target.value;
-            setPassword(val);
-            if (errors.password) {
-              setErrors((prev) => ({
-                ...prev,
-                password: !val
-                  ? "Vui lòng nhập mật khẩu"
-                  : val.length < 8
-                    ? "Mật khẩu phải chứa ít nhất 8 ký tự"
-                    : undefined,
-              }));
-            }
-          }}
-          error={errors.password}
-          className="vh-premium-input"
-          rightIcon={
+        {/* Password Input */}
+        <div className="lume-form-group">
+          <label htmlFor="login-password" className="lume-form-label">
+            Mật khẩu
+          </label>
+          <div className="lume-form-input-wrapper">
+            <input
+              id="login-password"
+              type={showPassword ? "text" : "password"}
+              placeholder="••••••••"
+              value={password}
+              autoComplete="current-password"
+              onChange={(e) => {
+                const val = e.target.value;
+                setPassword(val);
+                if (errors.password) {
+                  setErrors((prev) => ({
+                    ...prev,
+                    password: !val
+                      ? "Vui lòng nhập mật khẩu"
+                      : val.length < 8
+                      ? "Mật khẩu phải chứa ít nhất 8 ký tự"
+                      : undefined,
+                  }));
+                }
+              }}
+              className={`lume-form-input has-left-icon has-right-icon ${errors.password ? 'is-error' : ''}`}
+              required
+            />
+            <div className="lume-form-input-icon-left">
+              <Lock size={17} />
+            </div>
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="vh-password-toggle-btn"
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: "4px",
-                display: "flex",
-                alignItems: "center",
-                color: "var(--color-text-secondary)",
-                outline: "none",
-              }}
+              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+              className="lume-form-input-toggle-btn"
             >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
             </button>
-          }
-          required
-        />
+          </div>
+          {errors.password && <span className="lume-form-error-text">{errors.password}</span>}
+        </div>
 
-        <div
-          className="vh-form-utils"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            margin: "2px 0 10px",
-          }}
-        >
-          <label className="vh-checkbox-container" style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+        {/* Remember Me & Forgot Password Row */}
+        <div className="lume-auth-options-row">
+          <label className="lume-auth-checkbox-label">
             <input
               type="checkbox"
-              className="vh-checkbox-input"
+              className="lume-auth-checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              style={{ cursor: "pointer" }}
             />
-            <span
-              style={{
-                fontWeight: 600,
-                fontSize: "13px",
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Ghi nhớ đăng nhập
-            </span>
+            <span>Ghi nhớ đăng nhập</span>
           </label>
-          <Link
-            to={ROUTES.FORGOT_PASSWORD}
-            className="vh-auth-link-sm"
-            style={{
-              margin: 0,
-              fontWeight: 700,
-              color: "var(--color-primary)",
-              fontSize: "13px",
-            }}
-          >
+          <Link to={ROUTES.FORGOT_PASSWORD} className="lume-auth-forgot-link">
             Quên mật khẩu?
           </Link>
         </div>
 
-        <Button
+        {/* Submit CTA */}
+        <button
           type="submit"
-          variant="primary"
-          isLoading={isLoading}
-          className="w-full"
-          style={{
-            height: "44px",
-            borderRadius: "8px",
-            fontWeight: 700,
-            fontSize: "14px",
-            letterSpacing: "0.02em",
-            backgroundColor: "var(--color-primary)",
-            border: "none",
-            boxShadow: "0 4px 12px rgba(161, 30, 34, 0.2)",
-            transition: "all 0.2s ease",
-            cursor: "pointer",
-            color: "white",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "var(--color-primary-light)";
-            e.currentTarget.style.transform = "translateY(-1px)";
-            e.currentTarget.style.boxShadow = "0 6px 16px rgba(161, 30, 34, 0.3)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "var(--color-primary)";
-            e.currentTarget.style.transform = "none";
-            e.currentTarget.style.boxShadow = "0 4px 12px rgba(161, 30, 34, 0.2)";
-          }}
+          disabled={isLoading}
+          className="lume-auth-submit-btn"
         >
-          Đăng nhập
-        </Button>
+          {isLoading ? (
+            <>
+              <svg className="animate-spin w-4 h-4 text-white" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="30 150" />
+              </svg>
+              <span>Đang xác thực...</span>
+            </>
+          ) : (
+            <span>Đăng nhập</span>
+          )}
+        </button>
       </form>
 
-      <div className="vh-auth-divider" style={{ margin: "20px 0" }}>
+      {/* Social Login Divider */}
+      <div className="lume-auth-divider">
         <span>Hoặc tiếp tục với</span>
       </div>
 
-      <div className="vh-social-grid">
+      {/* Social Buttons */}
+      <div className="lume-auth-social-grid">
         <button
           type="button"
-          className="vh-social-btn"
+          className="lume-auth-social-btn"
           onClick={handleGoogleLogin}
         >
-          <svg style={{ width: "18px", height: "18px" }} viewBox="0 0 24 24">
+          <svg style={{ width: "17px", height: "17px" }} viewBox="0 0 24 24">
             <path
               d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
               fill="#4285F4"
@@ -336,16 +249,16 @@ export const LoginForm: React.FC = () => {
               fill="#EA4335"
             />
           </svg>
-          Google
+          <span>Google</span>
         </button>
 
         <button
           type="button"
-          className="vh-social-btn"
+          className="lume-auth-social-btn"
           onClick={handleFacebookLogin}
         >
           <svg
-            style={{ width: "18px", height: "18px" }}
+            style={{ width: "17px", height: "17px" }}
             viewBox="0 0 24 24"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
@@ -355,19 +268,18 @@ export const LoginForm: React.FC = () => {
               fill="#1877F2"
             />
           </svg>
-          Facebook
+          <span>Facebook</span>
         </button>
       </div>
 
-      <div className="vh-auth-switch" style={{ marginTop: "20px", fontSize: "14px" }}>
-        <span>Chưa có tài khoản?</span>{" "}
-        <Link
-          to={ROUTES.REGISTER}
-          style={{ fontWeight: 700, color: "var(--color-primary)" }}
-        >
-          Đăng ký ngay
-        </Link>
+      {/* Switch to Register */}
+      <div className="lume-auth-footer-switch">
+        <span>Chưa có tài khoản?</span>
+        <Link to={ROUTES.REGISTER}>Đăng ký ngay</Link>
       </div>
     </div>
   );
 };
+
+export default LoginForm;
+
