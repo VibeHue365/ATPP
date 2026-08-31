@@ -426,7 +426,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       awaitingReviewSince: b.awaitingReviewSince,
       statusType: isPast ? 'PAST' : isOverdue ? 'OVERDUE' : (b.status === 'AWAITING_REVIEW' || b.status === 'IN_PROGRESS') ? 'ACTION' : 'UPCOMING',
       dateStr: photoItem?.shootDate ? formatDate(photoItem.shootDate) : '',
-      photographerName: photoItem?.providerId?.businessName || photoItem?.provider?.businessName || 'Nhiáº¿p áº£nh gia',
       title: photoItem?.photographyPackageId?.name || photoItem?.name || 'Gói Chụp Ảnh Cổ Phong',
       photographerName: photoItem?.providerId?.brandName || photoItem?.providerId?.profile?.fullName || photoItem?.providerId?.name || b.providerId?.brandName || b.providerId?.profile?.fullName || b.providerId?.name || 'Thợ ảnh VibeHue',
       shootLocation: photoItem?.shootLocation || photoItem?.location || b.shootLocation || (
