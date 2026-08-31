@@ -1,0 +1,185 @@
+[
+  {
+    "code": "PHONG_CACH_HUE",
+    "label": "Phong cách Huế",
+    "description": "Nội dung có dấu hiệu đặc trưng văn hóa Huế.",
+    "entityTypes": ["PRODUCT", "PORTFOLIO"],
+    "isPublicBadge": true,
+    "status": "ACTIVE",
+    "displayPriority": 10,
+    "displayConfig": {
+      "color": "#5A3A1A",
+      "backgroundColor": "#F7EFD9",
+      "icon": null
+    },
+    "ruleConfig": {
+      "keywords": [
+        "hue",
+        "huế",
+        "nhat binh",
+        "nhật bình",
+        "cung dinh",
+        "cung đình"
+      ]
+    }
+  },
+  {
+    "code": "TRUYEN_THONG",
+    "label": "Truyền thống",
+    "description": "Áo dài theo phong cách truyền thống.",
+    "entityTypes": ["PRODUCT"],
+    "isPublicBadge": true,
+    "status": "ACTIVE",
+    "displayPriority": 20,
+    "displayConfig": {
+      "color": "#5A3A1A",
+      "backgroundColor": "#F7EFD9",
+      "icon": null
+    },
+    "ruleConfig": { "styles": ["traditional"] }
+  },
+  {
+    "code": "CACH_TAN",
+    "label": "Cách tân",
+    "description": "Áo dài có thiết kế cách tân.",
+    "entityTypes": ["PRODUCT"],
+    "isPublicBadge": true,
+    "status": "ACTIVE",
+    "displayPriority": 30,
+    "displayConfig": {
+      "color": "#5A3A1A",
+      "backgroundColor": "#F7EFD9",
+      "icon": null
+    },
+    "ruleConfig": { "styles": ["modern"] }
+  },
+  {
+    "code": "PHA_CACH",
+    "label": "Phá cách",
+    "description": "Thiết kế sáng tạo hoặc phá cách.",
+    "entityTypes": ["PRODUCT"],
+    "isPublicBadge": true,
+    "status": "ACTIVE",
+    "displayPriority": 40,
+    "displayConfig": {
+      "color": "#5A3A1A",
+      "backgroundColor": "#F7EFD9",
+      "icon": null
+    },
+    "ruleConfig": { "styles": ["edgy"] }
+  },
+  {
+    "code": "PHU_HOP_LE_CUOI",
+    "label": "Phù hợp lễ cưới",
+    "description": "Phù hợp cưới, hỏi hoặc chụp ảnh cưới.",
+    "entityTypes": ["PRODUCT"],
+    "isPublicBadge": true,
+    "status": "ACTIVE",
+    "displayPriority": 50,
+    "displayConfig": {
+      "color": "#5A3A1A",
+      "backgroundColor": "#F7EFD9",
+      "icon": null
+    },
+    "ruleConfig": { "occasions": ["wedding"] }
+  },
+  {
+    "code": "CHUP_ANH_KY_YEU",
+    "label": "Chụp ảnh kỷ yếu",
+    "description": "Phù hợp chụp ảnh tốt nghiệp hoặc kỷ yếu.",
+    "entityTypes": ["PRODUCT"],
+    "isPublicBadge": true,
+    "status": "ACTIVE",
+    "displayPriority": 60,
+    "displayConfig": {
+      "color": "#5A3A1A",
+      "backgroundColor": "#F7EFD9",
+      "icon": null
+    },
+    "ruleConfig": { "occasions": ["graduation"] }
+  },
+  {
+    "code": "LE_HOI_TRUYEN_THONG",
+    "label": "Lễ hội truyền thống",
+    "description": "Phù hợp lễ hội hoặc hoạt động văn hóa.",
+    "entityTypes": ["PRODUCT"],
+    "isPublicBadge": true,
+    "status": "ACTIVE",
+    "displayPriority": 70,
+    "displayConfig": {
+      "color": "#5A3A1A",
+      "backgroundColor": "#F7EFD9",
+      "icon": null
+    },
+    "ruleConfig": { "occasions": ["festival"] }
+  },
+  {
+    "code": "BIEU_DIEN_SU_KIEN",
+    "label": "Biểu diễn và sự kiện",
+    "description": "Phù hợp biểu diễn hoặc sự kiện.",
+    "entityTypes": ["PRODUCT"],
+    "isPublicBadge": true,
+    "status": "ACTIVE",
+    "displayPriority": 80,
+    "displayConfig": {
+      "color": "#5A3A1A",
+      "backgroundColor": "#F7EFD9",
+      "icon": null
+    },
+    "ruleConfig": { "occasions": ["event"] }
+  },
+  {
+    "code": "CHAT_LIEU_LUA",
+    "label": "Chất liệu lụa",
+    "description": "Sản phẩm sử dụng chất liệu lụa.",
+    "entityTypes": ["PRODUCT"],
+    "isPublicBadge": true,
+    "status": "ACTIVE",
+    "displayPriority": 90,
+    "displayConfig": {
+      "color": "#5A3A1A",
+      "backgroundColor": "#F7EFD9",
+      "icon": null
+    },
+    "ruleConfig": { "materials": ["silk"] }
+  },
+  {
+    "code": "CHAT_LIEU_GAM",
+    "label": "Chất liệu gấm",
+    "description": "Sản phẩm sử dụng chất liệu gấm.",
+    "entityTypes": ["PRODUCT"],
+    "isPublicBadge": true,
+    "status": "ACTIVE",
+    "displayPriority": 100,
+    "displayConfig": {
+      "color": "#5A3A1A",
+      "backgroundColor": "#F7EFD9",
+      "icon": null
+    },
+    "ruleConfig": { "materials": ["brocade"] }
+  },
+  {
+    "code": "NGOAI_TROI",
+    "label": "Phù hợp ngoại cảnh",
+    "description": "Nội dung phù hợp chụp ngoại cảnh.",
+    "entityTypes": ["PRODUCT", "PORTFOLIO"],
+    "isPublicBadge": true,
+    "status": "ACTIVE",
+    "displayPriority": 110,
+    "displayConfig": {
+      "color": "#5A3A1A",
+      "backgroundColor": "#F7EFD9",
+      "icon": null
+    },
+    "ruleConfig": {
+      "keywords": [
+        "ngoai troi",
+        "ngoài trời",
+        "cong vien",
+        "công viên",
+        "lang que",
+        "làng quê"
+      ]
+    }
+  }
+]

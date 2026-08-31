@@ -48,3 +48,5 @@ PortfolioItemSchema.index({
   moderationStatus: 1,
   updatedAt: -1,
 });
+
+PortfolioItemSchema.index({ moderationStatus: 1, updatedAt: -1 });

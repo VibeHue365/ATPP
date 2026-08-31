@@ -8,6 +8,7 @@ import {
 } from '../../products/schemas/photography-package.schema';
 import {
   ProviderSchedule,
+  ScheduleCapability,
   ScheduleType,
 } from '../../products/schemas/provider-schedule.schema';
 import {
@@ -32,6 +33,11 @@ type TimeRange = { start: string; end: string };
 
 @Injectable()
 export class PhotographerMonthlyAvailabilityService {
+  private readonly monthlyCache = new Map<
+    string,
+    { value: { month: string; days: MonthlyAvailabilityDay[] }; expiresAt: number }
+  >();
+
   constructor(
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
     @InjectModel(PhotographyPackage.name)
@@ -55,6 +61,12 @@ export class PhotographerMonthlyAvailabilityService {
       throw new NotFoundException('Tháng cần kiểm tra không hợp lệ');
     }
 
+    const cacheKey = `${providerId}:${packageId ?? ''}:${month}`;
+    const cached = this.monthlyCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
     const providerObjectId = new Types.ObjectId(providerId);
     const provider = await this.providerModel.exists({
       _id: providerObjectId,
@@ -70,7 +82,11 @@ export class PhotographerMonthlyAvailabilityService {
     const nextMonthStart = new Date(Date.UTC(year, monthIndex, 1));
     const [recurringSchedules, specificSchedules, busySchedule] = await Promise.all([
       this.providerScheduleModel
-        .find({ providerId: providerObjectId, scheduleType: ScheduleType.Recurring })
+        .find({
+          providerId: providerObjectId,
+          scheduleType: ScheduleType.Recurring,
+          $or: [{ capability: null }, { capability: ScheduleCapability.Photography }],
+        })
         .lean()
         .exec(),
       this.providerScheduleModel
@@ -78,6 +94,7 @@ export class PhotographerMonthlyAvailabilityService {
           providerId: providerObjectId,
           scheduleType: ScheduleType.SpecificDate,
           specificDate: { $gte: monthStart, $lt: nextMonthStart },
+          $or: [{ capability: null }, { capability: ScheduleCapability.Photography }],
         })
         .lean()
         .exec(),
@@ -142,7 +159,14 @@ export class PhotographerMonthlyAvailabilityService {
       days.push({ date, status: hasSlot ? 'AVAILABLE' : 'FULL' });
     }
 
-    return { month, days };
+    const value = { month, days };
+    this.monthlyCache.set(cacheKey, {
+      value,
+      // The final booking flow revalidates availability, so this short TTL
+      // only removes repeated month-navigation queries.
+      expiresAt: Date.now() + 30_000,
+    });
+    return value;
   }
 
   private async getDurationMinutes(

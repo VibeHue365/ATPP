@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 import { InventoryItem, InventoryItemDocument } from '../schemas/inventory-item.schema';
-import { InventoryReservation } from '../schemas/inventory-reservation.schema';
+import { InventoryReservation, ReservationStatus } from '../schemas/inventory-reservation.schema';
 import { Product } from '../schemas/product.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
 import { UsersRepository } from '../../users/repositories/users.repository';
@@ -299,6 +299,65 @@ export class InventoryService {
       productId: { $in: productIds },
     });
 
+    const itemIds = items.map((i) => i._id);
+    const now = new Date();
+
+    // Lấy các hiện vật đang có lịch đặt/cho thuê hoạt động (TEMP_RESERVED hoặc CONFIRMED, đã/đang tới ngày thuê)
+    const activeReservations =
+      itemIds.length > 0
+        ? await this.inventoryReservationModel
+            .find({
+              inventoryItemId: { $in: itemIds },
+              status: { $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed] },
+              reservedFrom: { $lte: now },
+            })
+            .select({ inventoryItemId: 1, bookingId: 1, bookingItemId: 1 })
+            .lean()
+            .exec()
+        : [];
+
+    let activeRentedItemIds = new Set<string>();
+
+    if (activeReservations.length > 0) {
+      const bookingModel = this.connection.model('Booking');
+      const bookingItemModel = this.connection.model('BookingItem');
+
+      const bookingIds = Array.from(new Set(activeReservations.map((r) => r.bookingId?.toString()).filter(Boolean)));
+      const bookingItemIds = Array.from(new Set(activeReservations.map((r) => r.bookingItemId?.toString()).filter(Boolean)));
+
+      const inactiveBookings = bookingIds.length > 0
+        ? await bookingModel
+            .find({
+              _id: { $in: bookingIds.map((id) => new Types.ObjectId(id)) },
+              status: { $in: ['RETURNED', 'COMPLETED', 'CANCELLED', 'REFUNDED'] },
+            })
+            .select({ _id: 1 })
+            .lean()
+            .exec()
+        : [];
+      const inactiveBookingIds = new Set(inactiveBookings.map((b: any) => b._id.toString()));
+
+      const inactiveBookingItems = bookingItemIds.length > 0
+        ? await bookingItemModel
+            .find({
+              _id: { $in: bookingItemIds.map((id) => new Types.ObjectId(id)) },
+              'rentalFulfillment.status': { $in: ['Returned', 'Completed'] },
+            })
+            .select({ _id: 1 })
+            .lean()
+            .exec()
+        : [];
+      const inactiveBookingItemIds = new Set(inactiveBookingItems.map((bi: any) => bi._id.toString()));
+
+      activeReservations.forEach((r) => {
+        const isBookingInactive = r.bookingId && inactiveBookingIds.has(r.bookingId.toString());
+        const isItemInactive = r.bookingItemId && inactiveBookingItemIds.has(r.bookingItemId.toString());
+        if (!isBookingInactive && !isItemInactive) {
+          activeRentedItemIds.add(r.inventoryItemId.toString());
+        }
+      });
+    }
+
     // Grouping by productId, size, color
     const summaryMap = new Map<string, {
       productId: string;
@@ -347,16 +406,19 @@ export class InventoryService {
 
       const summary = summaryMap.get(key)!;
       summary.total++;
-      if (item.status === InventoryItemStatus.Available && item.conditionStatus !== ConditionStatus.Locked) {
-        summary.available++;
-      } else if (item.status === InventoryItemStatus.Rented) {
-        summary.rented++;
-      } else if (
+      if (
         item.status === InventoryItemStatus.Maintenance ||
         item.status === InventoryItemStatus.Cleaning ||
         item.conditionStatus === ConditionStatus.Locked
       ) {
         summary.maintenance++;
+      } else if (
+        item.status === InventoryItemStatus.Rented ||
+        activeRentedItemIds.has(item._id.toString())
+      ) {
+        summary.rented++;
+      } else {
+        summary.available++;
       }
     });
 

@@ -43,4 +43,30 @@ export class AiController {
       dto.mime_type,
     );
   }
+
+  @Post('inspection/analyze-damage')
+  async analyzeDamage(@Body() body: any): Promise<any> {
+    return this.aiService.analyzeDamage(body);
+  }
+
+  @Post('visual-search/context-recommend')
+  async contextRecommend(@Body() body: any): Promise<any> {
+    return this.aiService.contextRecommend(body);
+  }
+
+  @Post('visual-search/match')
+  async visualMatch(@Body() body: any): Promise<any> {
+    return this.aiService.visualMatch(body);
+  }
+
+  @Post('culling/analyze-photos')
+  async cullingAnalyze(@Body() body: any): Promise<any> {
+    return this.aiService.cullingAnalyze(body);
+  }
+
+  @Post('anti-fraud/inspect-portfolio')
+  async antiFraudInspect(@Body() body: { provider_id: string; photos: any[] }): Promise<any> {
+    return this.aiService.antiFraudInspect(body.provider_id, body.photos || []);
+  }
 }
+

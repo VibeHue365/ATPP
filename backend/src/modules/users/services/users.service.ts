@@ -53,6 +53,13 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    return this.toMeResponse(user, roles);
+  }
+
+  toMeResponse(
+    user: UserDocument,
+    roles: string[] = [],
+  ): Record<string, unknown> {
     return this.userProfileMapper.toMeResponse(user, roles);
   }
 

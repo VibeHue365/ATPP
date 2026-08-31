@@ -49,7 +49,7 @@ export interface DisputeObligation {
 
 @Schema({ collection: 'disputes', timestamps: true })
 export class Dispute {
-  @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Booking', required: true })
   bookingId: Types.ObjectId;
 
   @Prop({

@@ -12,6 +12,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import {
   PackageStatus,
   PhotographyPricingUnit,
@@ -126,6 +127,12 @@ export class CreatePhotographyPackageDto {
   @IsArray()
   @IsUrl({}, { each: true })
   images?: string[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  maxPeople?: number;
 
   @IsOptional()
   @IsEnum(PackageStatus)
@@ -246,6 +253,12 @@ export class UpdatePhotographyPackageDto {
   @IsArray()
   @IsUrl({}, { each: true })
   images?: string[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  maxPeople?: number;
 
   @IsOptional()
   @IsEnum(PackageStatus)

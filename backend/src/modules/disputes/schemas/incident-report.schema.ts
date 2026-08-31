@@ -27,6 +27,9 @@ export class IncidentReport {
   @Prop({ required: true, trim: true })
   description: string;
 
+  @Prop({ type: String, enum: ['CLEANING', 'MAINTENANCE'], default: 'CLEANING' })
+  actionType: 'CLEANING' | 'MAINTENANCE';
+
   @Prop({ type: [String], default: [] })
   evidencePhotos: string[];
 

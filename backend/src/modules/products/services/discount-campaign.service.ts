@@ -74,7 +74,11 @@ export class DiscountCampaignService {
       isActive: true,
       startDate: { $lte: now },
       endDate: { $gte: now },
-    }).sort({ createdAt: -1 });
+    })
+      .select('providerId occasion discountPercent endDate createdAt')
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
 
     const result: Record<string, DiscountCampaign> = {};
     for (const c of campaigns) {

@@ -6,7 +6,7 @@ import { PhotographerDiscoveryQueryDto } from '../dto/photographer-discovery-que
 import { CreatePhotographyQuoteDto } from '../dto/photography-quote.dto';
 import { PhotographyQuoteService } from '../services/photography-quote.service';
 
-@Controller('api/photographers')
+@Controller(['photographers', 'api/photographers'])
 export class PhotographersController {
   constructor(
     private readonly photographersService: PhotographersService,
@@ -24,6 +24,10 @@ export class PhotographersController {
     return this.photographersService.findConcepts();
   }
 
+  @Get('package-categories')
+  async findPackageCategories() {
+    return this.photographersService.findPackageCategories();
+  }
   @Get(':id/packages')
   async findPackages(@Param('id') id: string): Promise<PhotographyPackage[]> {
     return this.photographersService.findPackages(id);

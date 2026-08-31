@@ -127,7 +127,7 @@ export class OAuthService {
           failedLoginAttempts: 0,
         },
       });
-      await this.rolesService.assignDefaultCustomerRole(user._id);
+
     } else if (
       user.accountStatus === UserStatus.Suspended &&
       user.security?.lockedUntil &&
@@ -204,13 +204,13 @@ export class OAuthService {
       throw new UnauthorizedException('User is not active');
     }
 
+    const authorization =
+      await this.rolesService.getRoleCodesAndPermissionsForRoles(user.roles);
     const tokens = await this.tokenService.issueTokens(
       user._id,
       user.auth.emailNormalized,
       context,
-    );
-    const { roles } = await this.rolesService.getRoleCodesAndPermissions(
-      user._id,
+      { authorization },
     );
     await Promise.all([
       this.usersRepository.markLoggedIn(user._id),
@@ -237,7 +237,8 @@ export class OAuthService {
 
     return {
       ...tokens,
-      user: await this.usersService.getMe(user._id.toString(), roles),
+      ...authorization,
+      user: this.usersService.toMeResponse(user, authorization.roles),
     };
   }
 

@@ -3,12 +3,14 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { ProductsRepository } from '../repositories/products.repository';
 import { UsersRepository } from '../../users/repositories/users.repository';
 import {
+  Product,
   ProductDocument,
   ProductModerationStatus,
   ProductStatus,
@@ -26,7 +28,7 @@ import { PublicMediaService } from '../../storage/services/public-media.service'
 import { normalizeColor } from '../utils/color.util';
 
 @Injectable()
-export class ProductsService {
+export class ProductsService implements OnModuleInit {
   constructor(
     private readonly productsRepository: ProductsRepository,
     private readonly usersRepository: UsersRepository,
@@ -37,6 +39,25 @@ export class ProductsService {
     private readonly campaignService: DiscountCampaignService,
     private readonly publicMedia: PublicMediaService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.productsRepository.moveLegacyProductsToPendingReview();
+    } catch (e) {
+      console.error('Failed to auto-activate draft products on startup:', e);
+    }
+    try {
+      // Complete the first public page warm-up before the app starts serving
+      // traffic, so the landing page does not race the cache initialization.
+      await this.getActiveProductsPage({}, 1, 24, 'newest');
+    } catch {
+      // Cache warm-up is best-effort; it must not prevent the API from starting.
+    }
+  }
+
+  private publicProductsCache = new Map<string, { data: any[]; expiresAt: number }>();
+  private publicProductPagesCache = new Map<string, { data: any; expiresAt: number }>();
+  private publicProductPagesInFlight = new Map<string, Promise<any>>();
 
   async getAllActiveProducts(options?: {
     search?: string;
@@ -49,18 +70,31 @@ export class ProductsService {
     categoryId?: string;
     styleCategoryIds?: string[];
     eventCategoryIds?: string[];
+    providerId?: string;
+    providerLocation?: string;
+    productTypes?: string[];
     limit?: number;
   }): Promise<any[]> {
+    const cacheKey = `products:${JSON.stringify(options || {})}`;
+    const now = Date.now();
+    const cached = this.publicProductsCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
+    }
+
     const products = await this.productsRepository.findAllActive(options);
-    const productsWithBadges = await this.attachPublicBadges(products);
-    // Batch query active campaigns for all providers of retrieved products to prevent N+1 queries
+    // Badge projection and campaign lookup are independent remote queries.
+    // Run them together so their latency does not stack on public listing.
     const providerIds = [...new Set(products.map(p => {
       return typeof p.providerId === 'object' && p.providerId ? (p.providerId as any)._id : p.providerId;
     }))];
-    const campaigns = await this.campaignService.getActiveCampaignsForProviders(providerIds);
+    const [productsWithBadges, campaigns] = await Promise.all([
+      this.attachPublicBadges(products),
+      this.campaignService.getActiveCampaignsForProviders(providerIds),
+    ]);
 
-    return productsWithBadges.map((product: any) => {
-      const plain = { ...product } as any;
+    const result = productsWithBadges.map((product: any) => {
+      const plain = typeof product.toObject === 'function' ? product.toObject() : { ...product };
       const pId = typeof plain.providerId === 'object' && plain.providerId ? plain.providerId._id.toString() : plain.providerId.toString();
       const campaign = campaigns[pId];
       if (campaign) {
@@ -76,16 +110,157 @@ export class ProductsService {
       }
       return plain;
     });
+
+    this.publicProductsCache.set(cacheKey, { data: result, expiresAt: now + 5 * 60 * 1000 }); // 5 mins TTL
+    return result;
   }
 
+  async getActiveProductsPage(
+    options: {
+      search?: string; minPrice?: number; maxPrice?: number; minRating?: number;
+      colors?: string[]; sizes?: string[]; materials?: string[]; categoryId?: string;
+      styleCategoryIds?: string[]; eventCategoryIds?: string[]; providerId?: string;
+      providerLocation?: string; productTypes?: string[];
+    },
+    page: number,
+    limit: number,
+    sort: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc' = 'newest',
+  ) {
+    const cacheKey = `products-page:${JSON.stringify({ options, page, limit, sort })}`;
+    const cached = this.publicProductPagesCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+    const inFlight = this.publicProductPagesInFlight.get(cacheKey);
+    if (inFlight) return inFlight;
+
+    const request = this.loadActiveProductsPage(options, page, limit, sort);
+    this.publicProductPagesInFlight.set(cacheKey, request);
+    request.then(
+      (data) => {
+        this.publicProductPagesCache.set(cacheKey, { data, expiresAt: Date.now() + 5 * 60 * 1000 });
+        if (this.publicProductPagesInFlight.get(cacheKey) === request) this.publicProductPagesInFlight.delete(cacheKey);
+      },
+      () => {
+        if (this.publicProductPagesInFlight.get(cacheKey) === request) this.publicProductPagesInFlight.delete(cacheKey);
+      },
+    );
+    return request;
+  }
+
+  private async loadActiveProductsPage(
+    options: {
+      search?: string; minPrice?: number; maxPrice?: number; minRating?: number;
+      colors?: string[]; sizes?: string[]; materials?: string[]; categoryId?: string;
+      styleCategoryIds?: string[]; eventCategoryIds?: string[]; providerId?: string;
+      providerLocation?: string; productTypes?: string[];
+    },
+    page: number,
+    limit: number,
+    sort: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc',
+  ) {
+    const result = await this.productsRepository.findActivePage(options, page, limit, sort);
+    const providerIds = [...new Set(result.items.map((product) =>
+      typeof product.providerId === 'object' && product.providerId
+        ? (product.providerId as any)._id
+        : product.providerId,
+    ))];
+    const [productsWithBadges, campaigns] = await Promise.all([
+      this.attachPublicBadges(result.items),
+      this.campaignService.getActiveCampaignsForProviders(providerIds),
+    ]);
+    const data = productsWithBadges.map((product: any) => {
+      const plain = { ...product } as any;
+      const providerId = typeof plain.providerId === 'object' && plain.providerId
+        ? plain.providerId._id.toString()
+        : plain.providerId.toString();
+      const campaign = campaigns[providerId];
+      plain.activeCampaign = campaign
+        ? { occasion: campaign.occasion, discountPercent: campaign.discountPercent, endDate: campaign.endDate }
+        : null;
+      plain.discountedPrice = campaign
+        ? Math.round(plain.basePrice * (1 - campaign.discountPercent / 100))
+        : plain.basePrice;
+      return plain;
+    });
+    const safeLimit = Math.min(Math.max(limit, 1), 24);
+    const response = {
+      data,
+      meta: {
+        page: Math.max(page, 1),
+        limit: safeLimit,
+        total: result.total,
+        totalPages: Math.max(1, Math.ceil(result.total / safeLimit)),
+      },
+    };
+    return response;
+  }
+
+  private publicFacetsCache: {
+    data: { colors: string[]; sizes: string[]; materials: string[]; categoryCounts: Array<{ categoryId: string; count: number }> };
+    expiresAt: number;
+  } | null = null;
+
+  clearPublicFacetsCache(): void {
+    this.publicFacetsCache = null;
+    this.publicProductsCache.clear();
+    this.publicProductPagesCache.clear();
+  }
+
+  async getPublicFilterFacets() {
+    const now = Date.now();
+    if (this.publicFacetsCache && this.publicFacetsCache.expiresAt > now) {
+      return this.publicFacetsCache.data;
+    }
+    const data = await this.productsRepository.getPublicFilterFacets();
+    this.publicFacetsCache = {
+      data,
+      expiresAt: now + 5 * 60 * 1000, // 5 minutes TTL
+    };
+    return data;
+  }
   async getFeaturedProducts(limit = 8): Promise<any[]> {
     // Engagement metrics are not persisted yet, so newest public listings are
     // the deterministic fallback for the landing featured section.
-    return this.getAllActiveProducts({ limit });
+    // Reuse the warmed public page cache instead of creating a cold limit=8
+    // cache entry for the landing page.
+    const cacheLimit = Math.max(limit, 24);
+    const result = await this.getActiveProductsPage({}, 1, cacheLimit, 'newest');
+    return result.data.slice(0, limit);
   }
 
   async getCategories(): Promise<any[]> {
     return this.categoriesService.listActiveCategoriesForProducts();
+  }
+
+  async getPublicProviderProfile(providerId: string): Promise<any> {
+    if (!Types.ObjectId.isValid(providerId)) {
+      throw new NotFoundException('ID nhà cung cấp không hợp lệ');
+    }
+    const providerModel = this.connection.model('Provider');
+    const provider: any = await providerModel.findById(providerId).lean().exec();
+    if (!provider) {
+      throw new NotFoundException('Không tìm thấy nhà cung cấp');
+    }
+    const campaign = await this.campaignService.getActiveCampaign(new Types.ObjectId(providerId));
+    return {
+      _id: provider._id,
+      userId: provider.userId,
+      businessName: provider.businessName,
+      capabilities: provider.capabilities,
+      contact: provider.contact,
+      address: provider.address,
+      media: provider.media,
+      rating: provider.rating,
+      policies: provider.policies,
+      rentalSettings: provider.rentalSettings,
+      comboDiscountPercent: provider.comboDiscountPercent,
+      activeCampaign: campaign
+        ? {
+            occasion: campaign.occasion,
+            discountPercent: campaign.discountPercent,
+            endDate: campaign.endDate,
+          }
+        : null,
+    };
   }
 
   async getProductById(productId: string): Promise<any | null> {
@@ -254,7 +429,7 @@ export class ProductsService {
       sizes: productSizes,
       colors: productColors,
       materials: productMaterials,
-      status: dto.status || ProductStatus.Draft,
+      status: dto.status || ProductStatus.Active,
       moderationStatus: ProductModerationStatus.PendingReview,
       moderationReason: null,
       style: dto.style || null,
@@ -297,6 +472,7 @@ export class ProductsService {
       }
     }
 
+    this.clearPublicFacetsCache();
     return product;
   }
 
@@ -462,6 +638,7 @@ export class ProductsService {
         updated.taggingRevision,
       );
     }
+    this.clearPublicFacetsCache();
     return updated;
   }
 
@@ -506,7 +683,7 @@ export class ProductsService {
       );
     }
 
-    const updated = await this.productsRepository.moderate(id, expectedStatus, {
+    const updateData: Partial<Product> = {
       moderationStatus: dto.action,
       moderationReason:
         dto.action === ProductModerationStatus.Rejected ||
@@ -515,7 +692,13 @@ export class ProductsService {
           : null,
       moderatedBy: new Types.ObjectId(adminId),
       moderatedAt: new Date(),
-    });
+    };
+
+    if (dto.action === ProductModerationStatus.Approved) {
+      updateData.status = ProductStatus.Active;
+    }
+
+    const updated = await this.productsRepository.moderate(id, expectedStatus, updateData);
 
     if (!updated) {
       throw new ConflictException(
@@ -523,6 +706,7 @@ export class ProductsService {
       );
     }
 
+    this.clearPublicFacetsCache();
     return updated;
   }
 
@@ -603,18 +787,22 @@ export class ProductsService {
         this.publicMedia.deleteByUrl(media).catch(() => undefined),
       ),
     );
+    this.clearPublicFacetsCache();
     return { message: 'Product deleted successfully' };
   }
 
-  private async attachPublicBadges(
-    products: ProductDocument[],
-  ): Promise<any[]> {
+  private async attachPublicBadges(products: any[]): Promise<any[]> {
     const badgesByProductId =
       await this.smartTagPublicProjectionService.projectProductBadges(products);
-    return products.map((product) => ({
-      ...product.toObject(),
-      badges: badgesByProductId.get(product._id.toString()) || [],
-    }));
+    return products.map((product) => {
+      const plain = typeof product.toObject === 'function'
+        ? product.toObject()
+        : product;
+      return {
+        ...plain,
+        badges: badgesByProductId.get(product._id.toString()) || [],
+      };
+    });
   }
 }
 

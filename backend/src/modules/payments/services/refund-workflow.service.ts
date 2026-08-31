@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Booking, BookingStatus, PaymentStatus as BookingPaymentStatus } from '../../bookings/schemas/booking.schema';
-import { Payment, PaymentStatus } from '../schemas/payment.schema';
+import { Payment, PaymentPurpose, PaymentStatus } from '../schemas/payment.schema';
 import { RefundAttempt, RefundAttemptStatus } from '../schemas/refund-attempt.schema';
 import { RefundMode, RefundRequest, RefundStatus, RefundType } from '../schemas/refund-request.schema';
 import { Settlement } from '../../settlements/schemas/settlement.schema';
@@ -43,8 +43,8 @@ export class RefundWorkflowService {
 
   async getEligibility(bookingId: string, customerId: string) {
     const booking = await this.findOwnedBooking(bookingId, customerId);
-    if ([BookingStatus.Cancelled, BookingStatus.Disputed].includes(booking.status)) {
-      return { eligible: false, reason: 'Đơn hàng đang được xử lý bởi luồng hủy hoặc tranh chấp.' };
+    if ([BookingStatus.Cancelled, BookingStatus.Disputed, BookingStatus.Returned, BookingStatus.Completed].includes(booking.status)) {
+      return { eligible: false, reason: 'Đơn hàng đã được hoàn thành, trả đồ, hủy hoặc đang tranh chấp. Tiền cọc/hoàn tiền được hệ thống xử lý tự động.' };
     }
     const payments = await this.paymentModel.find({ bookingId: booking._id, status: PaymentStatus.Success }).lean();
     const capturedAmount = payments.reduce((sum, payment) => sum + payment.amount, 0);
@@ -62,7 +62,9 @@ export class RefundWorkflowService {
       ...input,
       type: RefundType.Cancellation,
       autoApprove: input.autoApprove
-        ?? Boolean(input.isFreeCancel && policy.autoApproveFreeCancelRefund && belowManualReviewThreshold),
+        ?? (policy.refundProcessingMode === RefundMode.Simulated
+          ? true
+          : Boolean(input.isFreeCancel && policy.autoApproveFreeCancelRefund && belowManualReviewThreshold)),
     });
   }
 
@@ -174,6 +176,22 @@ export class RefundWorkflowService {
     const updated = await this.refundModel.findOneAndUpdate({ _id: refund._id, status: RefundStatus.Processing }, { $set: { status: RefundStatus.Completed, processedAmount: amount, reservedAmount: 0 }, $inc: { version: 1 } }, { new: true });
     await this.bookingModel.updateOne({ _id: refund.bookingId }, { $inc: { 'paymentSummary.totalRefunded': amount }, $set: { 'paymentSummary.paymentStatus': BookingPaymentStatus.Refunded } });
     await this.applySettlementImpact(refund, amount);
+
+    try {
+      const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
+      await this.paymentModel.create({
+        bookingId: refund.bookingId,
+        paymentCode: refundPaymentCode,
+        amount: amount,
+        purpose: PaymentPurpose.DepositRefund,
+        paymentMethod: 'PAYOS_REFUND',
+        status: PaymentStatus.Success,
+        paidAt: new Date(),
+      });
+    } catch (createRefundErr) {
+      console.error(`Failed to create refund payment record for booking ${refund.bookingId}:`, createRefundErr);
+    }
+
     return updated;
   }
 

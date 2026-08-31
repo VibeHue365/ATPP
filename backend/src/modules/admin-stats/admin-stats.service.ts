@@ -4,7 +4,8 @@ import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { Provider, ProviderDocument, ProviderCapability } from '../providers/schemas/provider.schema';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
-import { Booking, BookingDocument } from '../bookings/schemas/booking.schema';
+import { Booking, BookingDocument, BookingStatus } from '../bookings/schemas/booking.schema';
+import { BookingItem, BookingItemDocument } from '../bookings/schemas/booking-item.schema';
 import { Payment, PaymentDocument, PaymentStatus, PaymentPurpose } from '../payments/schemas/payment.schema';
 import { RefreshToken } from '../auth/schemas/refresh-token.schema';
 import { AnalyticsService } from '../analytics/services/analytics.service';
@@ -16,12 +17,13 @@ export class AdminStatsService {
     @InjectModel(Provider.name) private readonly providerModel: Model<ProviderDocument>,
     @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
     @InjectModel(Booking.name) private readonly bookingModel: Model<BookingDocument>,
+    @InjectModel(BookingItem.name) private readonly bookingItemModel: Model<BookingItemDocument>,
     @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
     @InjectModel(RefreshToken.name) private readonly refreshTokenModel: Model<RefreshToken>,
     private readonly analyticsService: AnalyticsService,
   ) {}
 
-  async getAdminStats() {
+  async getAdminStats(period = 'month') {
     const customerFilter = {
       $and: [
         { roles: 'CUSTOMER' },
@@ -29,55 +31,63 @@ export class AdminStatsService {
       ]
     };
 
-    // 1. UC-K19: Customer statistics (Track actual count and activity, excluding admin accounts)
-    const totalCustomers = await this.userModel.countDocuments(customerFilter as any);
-    const activeCustomers = await this.userModel.countDocuments({ ...customerFilter, accountStatus: 'ACTIVE' } as any);
-    const bannedCustomers = await this.userModel.countDocuments({ ...customerFilter, accountStatus: 'BANNED' } as any);
-
-    // 2. UC-K20: Ao dai shop statistics (Actual count of shops and products in DB)
-    const totalShops = await this.providerModel.countDocuments({ capabilities: ProviderCapability.AoDaiRental } as any);
-    const activeProducts = await this.productModel.countDocuments({ status: 'ACTIVE' } as any);
-
-    // 3. UC-K21: Photographer statistics (Actual count of photographers and bookings in DB)
-    const totalPhotographers = await this.providerModel.countDocuments({ capabilities: 'PHOTOGRAPHY' } as any);
-    const totalPhotoBookings = await this.bookingModel.countDocuments({
-      bookingType: { $in: ['PHOTOGRAPHY', 'COMBO'] },
-    } as any);
-
-    // 4. UC-K23: System revenue statistics (Commission & Platform fee from DB)
-    const successfulPayments = await this.paymentModel.find({
-      status: PaymentStatus.Success,
-      purpose: { $in: [PaymentPurpose.DepositPayment, PaymentPurpose.RemainingPayment, PaymentPurpose.FullPayment] }
-    } as any);
-
-    const totalRevenue = successfulPayments.reduce((sum, p) => sum + p.amount, 0);
-    const platformCommission = totalRevenue * 0.10; // 10% platform commission fee
-
-    // 5. UC-K25: User behavior analysis - REAL data from DB
-    // Group actual bookings by type
-    const popularBookings = await this.bookingModel.aggregate([
-      { $match: { status: { $ne: 'CANCELLED' } } },
-      { $group: { _id: '$bookingType', count: { $sum: 1 } } }
+    const [
+      totalCustomers,
+      activeCustomers,
+      bannedCustomers,
+      totalShops,
+      activeProducts,
+      totalPhotographers,
+      totalPhotoBookings,
+      successfulPayments,
+      popularBookings,
+      topProductsByBookings,
+      topSearches,
+      registrationGrowth,
+      revenueGrowth,
+      bookingGrowth,
+      totalBookings,
+    ] = await Promise.all([
+      this.userModel.countDocuments(customerFilter as any),
+      this.userModel.countDocuments({ ...customerFilter, accountStatus: 'ACTIVE' } as any),
+      this.userModel.countDocuments({ ...customerFilter, accountStatus: 'BANNED' } as any),
+      this.providerModel.countDocuments({ capabilities: ProviderCapability.AoDaiRental } as any),
+      this.productModel.countDocuments({ status: 'ACTIVE' } as any),
+      this.providerModel.countDocuments({ capabilities: 'PHOTOGRAPHY' } as any),
+      this.bookingModel.countDocuments({ bookingType: { $in: ['PHOTOGRAPHY', 'COMBO'] } } as any),
+      this.paymentModel.find({
+        status: { $in: [PaymentStatus.Success, 'SUCCESS', 'PAID'] },
+        purpose: { $in: [PaymentPurpose.DepositPayment, PaymentPurpose.RemainingPayment, PaymentPurpose.FullPayment] }
+      } as any).select('amount'),
+      this.bookingModel.aggregate([
+        { $match: { status: { $ne: 'CANCELLED' } } },
+        { $group: { _id: '$bookingType', count: { $sum: 1 } } }
+      ]),
+      this.bookingItemModel.aggregate([
+        { $match: { productId: { $ne: null } } },
+        { $group: { _id: '$productId', count: { $sum: { $ifNull: ['$quantity', 1] } } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 },
+        {
+          $lookup: {
+            from: 'products',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'product'
+          }
+        },
+        { $unwind: { path: '$product', preserveNullAndEmptyArrays: false } }
+      ]).catch(() => []),
+      this.analyticsService.getTopSearches(10),
+      this.getCustomerGrowth(period),
+      this.getRevenueGrowth(period),
+      this.getBookingGrowth(period),
+      this.bookingModel.countDocuments({} as any),
     ]);
 
-    // Top products by how often they appear in booking_items
-    const topProductsByBookings = await this.bookingModel.aggregate([
-      { $unwind: '$items' },
-      { $group: { _id: '$items.productId', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 5 },
-      {
-        $lookup: {
-          from: 'products',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'product'
-        }
-      },
-      { $unwind: { path: '$product', preserveNullAndEmptyArrays: false } }
-    ]).catch(() => []);
+    const totalRevenue = successfulPayments.reduce((sum, p) => sum + p.amount, 0);
+    const platformCommission = totalRevenue * 0.10;
 
-    // Fallback: top 5 active products if join returns nothing
     const popularProducts = topProductsByBookings.length > 0
       ? topProductsByBookings.map((r: any) => ({
           _id: r._id.toString(),
@@ -94,16 +104,12 @@ export class AdminStatsService {
           rentCount: 0
         }));
 
-    // Fetch real view counts from AnalyticsService
     const topProductIds = popularProducts.map(p => new Types.ObjectId(p._id));
     const viewCountMap = await this.analyticsService.getViewCountMap(topProductIds);
     const popularProductsWithViews = popularProducts.map(p => ({
       ...p,
       viewCount: viewCountMap.get(p._id) ?? 0,
     }));
-
-    // Fetch real top searches from AnalyticsService
-    const topSearches = await this.analyticsService.getTopSearches(10);
 
     const userBehavior = {
       topSearches,
@@ -116,12 +122,6 @@ export class AdminStatsService {
       popularBookings,
       popularProducts: popularProductsWithViews
     };
-
-    // Get 6 months monthly growth data
-    const registrationGrowth = await this.getCustomerGrowth();
-    const revenueGrowth = await this.getRevenueGrowth();
-    const bookingGrowth = await this.getBookingGrowth();
-    const totalBookings = await this.bookingModel.countDocuments({} as any);
 
     return {
       customers: {
@@ -164,17 +164,22 @@ export class AdminStatsService {
       .skip((page - 1) * limit)
       .limit(limit);
 
-    const items = customers.map(c => ({
-      id: c._id.toString(),
-      fullName: c.profile?.fullName || 'Khách hàng',
-      email: c.auth?.email || '',
-      phone: c.auth?.phone || '',
-      avatar: c.profile?.avatarUrl || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-      status: c.accountStatus || 'ACTIVE',
-      date: (c as any).createdAt ? new Date((c as any).createdAt).toLocaleDateString('vi-VN') : '2026-01-01',
-      bookings: 0,
-      spent: 0
-    }));
+    const items = await Promise.all(
+      customers.map(async (c) => {
+        const bookingsCount = await this.bookingModel.countDocuments({ customerId: c._id });
+        return {
+          id: c._id.toString(),
+          fullName: c.profile?.fullName || 'Khách hàng',
+          email: c.auth?.email || '',
+          phone: c.auth?.phone || '',
+          avatar: c.profile?.avatarUrl || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+          status: c.accountStatus || 'ACTIVE',
+          date: (c as any).createdAt ? new Date((c as any).createdAt).toLocaleDateString('vi-VN') : '2026-01-01',
+          bookings: bookingsCount,
+          spent: 0,
+        };
+      })
+    );
 
     return {
       items,
@@ -193,21 +198,46 @@ export class AdminStatsService {
       .skip((page - 1) * limit)
       .limit(limit);
 
-    const items = providers.map(p => {
-      const userObj = p.userId as any;
-      return {
-        id: p._id.toString(),
-        businessName: p.businessName,
-        ownerName: userObj?.profile?.fullName || 'Chưa cập nhật',
-        email: p.contact?.email || userObj?.auth?.email || '',
-        phone: p.contact?.phone || userObj?.auth?.phone || '',
-        capability: p.capabilities || [],
-        status: p.status || 'ACTIVE',
-        totalProducts: 0,
-        rating: p.rating?.averageRating || 5.0,
-        totalEarnings: 0
-      };
-    });
+    const items = await Promise.all(
+      providers.map(async (p) => {
+        const userObj = p.userId as any;
+        const providerId = p._id;
+        const userId = userObj?._id;
+
+        const totalProducts = await this.productModel.countDocuments({
+          $or: [
+            { providerId: providerId },
+            ...(userId ? [{ providerId: userId }] : []),
+          ],
+        });
+
+        let walletEarned = p.wallet?.totalEarned || p.wallet?.availableBalance || 0;
+        if (walletEarned === 0) {
+          const completedBookings = await this.bookingModel.find({
+            providerIds: providerId,
+            status: BookingStatus.Completed,
+          } as any);
+          walletEarned = completedBookings.reduce((sum, b) => sum + (b.pricingSummary?.grandTotal || 0), 0);
+        }
+
+        const ratingVal = p.rating?.averageRating
+          ? Number(p.rating.averageRating.toFixed(1))
+          : 0;
+
+        return {
+          id: p._id.toString(),
+          businessName: p.businessName,
+          ownerName: userObj?.profile?.fullName || 'Chưa cập nhật',
+          email: p.contact?.email || userObj?.auth?.email || '',
+          phone: p.contact?.phone || userObj?.auth?.phone || '',
+          capability: p.capabilities || [],
+          status: p.status || 'ACTIVE',
+          totalProducts,
+          rating: ratingVal,
+          totalEarnings: walletEarned,
+        };
+      })
+    );
 
     return {
       items,
@@ -311,9 +341,8 @@ export class AdminStatsService {
     return { success: true, message: 'Khách hàng đã được mở khóa tài khoản' };
   }
 
-  private async getCustomerGrowth() {
+  private async getCustomerGrowth(period = 'month') {
     const growth = [];
-    const labels = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
     const customerFilter = {
       $and: [
         { roles: 'CUSTOMER' },
@@ -321,69 +350,179 @@ export class AdminStatsService {
       ]
     };
 
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const start = new Date(d.getFullYear(), d.getMonth(), 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    if (period === 'week') {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+        const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
-      const count = await this.userModel.countDocuments({
-        ...customerFilter,
-        createdAt: { $gte: start, $lte: end }
-      } as any);
+        const count = await this.userModel.countDocuments({
+          ...customerFilter,
+          createdAt: { $gte: start, $lte: end }
+        } as any);
 
-      growth.push({
-        label: labels[5 - i],
-        value: count
-      });
+        growth.push({
+          label: `${d.getDate()}/${d.getMonth() + 1}`,
+          value: count
+        });
+      }
+    } else if (period === 'year') {
+      const currentYear = new Date().getFullYear();
+      for (let i = 4; i >= 0; i--) {
+        const year = currentYear - i;
+        const start = new Date(year, 0, 1, 0, 0, 0, 0);
+        const end = new Date(year, 11, 31, 23, 59, 59, 999);
+
+        const count = await this.userModel.countDocuments({
+          ...customerFilter,
+          createdAt: { $gte: start, $lte: end }
+        } as any);
+
+        growth.push({
+          label: `${year}`,
+          value: count
+        });
+      }
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const start = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+
+        const count = await this.userModel.countDocuments({
+          ...customerFilter,
+          createdAt: { $gte: start, $lte: end }
+        } as any);
+
+        growth.push({
+          label: `Thg ${d.getMonth() + 1}`,
+          value: count
+        });
+      }
     }
     return growth;
   }
 
-  private async getRevenueGrowth() {
+  private async getRevenueGrowth(period = 'month') {
     const growth = [];
-    const labels = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
 
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const start = new Date(d.getFullYear(), d.getMonth(), 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    if (period === 'week') {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+        const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
-      const payments = await this.paymentModel.find({
-        status: PaymentStatus.Success,
-        purpose: { $in: [PaymentPurpose.DepositPayment, PaymentPurpose.RemainingPayment, PaymentPurpose.FullPayment] },
-        createdAt: { $gte: start, $lte: end }
-      } as any);
+        const payments = await this.paymentModel.find({
+          status: { $in: [PaymentStatus.Success, 'SUCCESS', 'PAID'] },
+          purpose: { $ne: PaymentPurpose.DepositRefund },
+          createdAt: { $gte: start, $lte: end }
+        } as any);
 
-      const total = payments.reduce((sum, p) => sum + p.amount, 0);
+        const total = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
-      growth.push({
-        label: labels[5 - i],
-        value: total
-      });
+        growth.push({
+          label: `${d.getDate()}/${d.getMonth() + 1}`,
+          value: total
+        });
+      }
+    } else if (period === 'year') {
+      const currentYear = new Date().getFullYear();
+      for (let i = 4; i >= 0; i--) {
+        const year = currentYear - i;
+        const start = new Date(year, 0, 1, 0, 0, 0, 0);
+        const end = new Date(year, 11, 31, 23, 59, 59, 999);
+
+        const payments = await this.paymentModel.find({
+          status: { $in: [PaymentStatus.Success, 'SUCCESS', 'PAID'] },
+          purpose: { $ne: PaymentPurpose.DepositRefund },
+          createdAt: { $gte: start, $lte: end }
+        } as any);
+
+        const total = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+        growth.push({
+          label: `${year}`,
+          value: total
+        });
+      }
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const start = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+
+        const payments = await this.paymentModel.find({
+          status: { $in: [PaymentStatus.Success, 'SUCCESS', 'PAID'] },
+          purpose: { $ne: PaymentPurpose.DepositRefund },
+          createdAt: { $gte: start, $lte: end }
+        } as any);
+
+        const total = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+        growth.push({
+          label: `Thg ${d.getMonth() + 1}`,
+          value: total
+        });
+      }
     }
     return growth;
   }
 
-  private async getBookingGrowth() {
+  private async getBookingGrowth(period = 'month') {
     const growth = [];
-    const labels = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
 
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const start = new Date(d.getFullYear(), d.getMonth(), 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    if (period === 'week') {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+        const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
-      const count = await this.bookingModel.countDocuments({
-        createdAt: { $gte: start, $lte: end }
-      } as any);
+        const count = await this.bookingModel.countDocuments({
+          createdAt: { $gte: start, $lte: end }
+        } as any);
 
-      growth.push({
-        label: labels[5 - i],
-        value: count
-      });
+        growth.push({
+          label: `${d.getDate()}/${d.getMonth() + 1}`,
+          value: count
+        });
+      }
+    } else if (period === 'year') {
+      const currentYear = new Date().getFullYear();
+      for (let i = 4; i >= 0; i--) {
+        const year = currentYear - i;
+        const start = new Date(year, 0, 1, 0, 0, 0, 0);
+        const end = new Date(year, 11, 31, 23, 59, 59, 999);
+
+        const count = await this.bookingModel.countDocuments({
+          createdAt: { $gte: start, $lte: end }
+        } as any);
+
+        growth.push({
+          label: `${year}`,
+          value: count
+        });
+      }
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const start = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+
+        const count = await this.bookingModel.countDocuments({
+          createdAt: { $gte: start, $lte: end }
+        } as any);
+
+        growth.push({
+          label: `Thg ${d.getMonth() + 1}`,
+          value: count
+        });
+      }
     }
     return growth;
   }

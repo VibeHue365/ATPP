@@ -12,6 +12,7 @@ import {
   UnsupportedMediaTypeException,
   Query,
   Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -96,13 +97,19 @@ export class DisputesController {
     @CurrentUser() user: AuthUser,
     @Query('ref') reference: string,
     @Res({ passthrough: true }) response: Response,
-  ) {
-    const result = await this.disputesService.viewEvidence(user.sub, user.roles, reference);
-    response.setHeader('Content-Type', result.mimeType);
-    response.setHeader('Content-Disposition', `inline; filename="${result.fileName}"`);
-    response.setHeader('Cache-Control', 'private, no-store, max-age=0');
-    response.setHeader('X-Content-Type-Options', 'nosniff');
-    return result.file;
+  ): Promise<StreamableFile> {
+    try {
+      const result = await this.disputesService.viewEvidence(user.sub, user.roles, reference);
+      response.setHeader('Content-Type', result.mimeType);
+      response.setHeader('Content-Disposition', `inline; filename="${result.fileName}"`);
+      response.setHeader('Cache-Control', 'private, no-store, max-age=0');
+      response.setHeader('X-Content-Type-Options', 'nosniff');
+      // StreamableFile tells NestJS to pipe this Readable stream directly to the response
+      return new StreamableFile(result.file);
+    } catch (err: any) {
+      console.error('[ERROR] viewEvidence caught:', err?.constructor?.name, err?.message);
+      throw err;
+    }
   }
 
   private hasValidImageSignature(file: Express.Multer.File): boolean {

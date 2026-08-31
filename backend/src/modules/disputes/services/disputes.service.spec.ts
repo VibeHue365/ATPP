@@ -38,7 +38,7 @@ describe('DisputesService', () => {
     };
     disputeModel = { findOneAndUpdate: jest.fn() };
     privateEvidenceUploadModel = { insertMany: jest.fn(), countDocuments: jest.fn(), updateMany: jest.fn(), findOne: jest.fn() };
-    bookingItemModel = {};
+    bookingItemModel = { findOne: jest.fn().mockResolvedValue(null) };
     inventoryModel = {};
     paymentsService = { executeProfitSplit: jest.fn() };
     refundWorkflowService = { createFromDispute: jest.fn() };
