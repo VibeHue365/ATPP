@@ -14,7 +14,7 @@ export const AIStylingBanner: React.FC = () => {
           <div className="vh-ai-banner-content">
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '9999px', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', color: '#fbbf24', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '24px' }}>
               <Sparkles size={12} />
-              <span>Smart Assistant</span>
+              <span>Trợ lý thông minh</span>
             </span>
             <h2 className="font-header text-white" style={{ fontSize: '36px', fontWeight: 800, margin: 0, lineHeight: 1.2 }}>
               AI Styling Assistant
@@ -32,7 +32,7 @@ export const AIStylingBanner: React.FC = () => {
           <div className="vh-ai-banner-visual" style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
             <div style={{ position: 'relative', width: '100%', maxWidth: '380px', aspectRatio: '4 / 5', borderRadius: '24px', overflow: 'hidden', border: '1px solid #334155', boxShadow: 'var(--shadow-lg)', backgroundColor: '#1e293b' }}>
               <img
-                src="/ai_mockup.png"
+                src="/ai_mockup.webp"
                 alt="AI Styling Mockup"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />

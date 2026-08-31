@@ -1,0 +1,1984 @@
+/* ==========================================================================
+   LUMÉ PROFILE & DASHBOARD STYLES (Figma V11 Master Stylesheet)
+   ========================================================================== */
+
+:root {
+  --lume-primary: #8B1E2D;
+  --lume-primary-hover: #721824;
+  --lume-primary-light: #FDF2F4;
+  --lume-primary-border: #F7D5DA;
+  --lume-surface: #FFFFFF;
+  --lume-bg: #FAF8F5;
+  --lume-card-border: #EFE9E1;
+  --lume-card-hover-border: #E0D3C3;
+  --lume-text-main: #231F20;
+  --lume-text-secondary: #574D4F;
+  --lume-text-muted: #8C827A;
+  --lume-accent-gold: #C28E3A;
+  --lume-accent-green: #1B8354;
+}
+
+/* Base Page Layout */
+.lume-profile-page-wrapper {
+  min-height: calc(100vh - 120px);
+  background-color: var(--lume-bg);
+  padding: 32px 20px 64px 20px;
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--lume-text-main);
+  box-sizing: border-box;
+}
+
+.lume-profile-page-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Two-Column Grid Layout */
+.lume-profile-grid-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .lume-profile-grid-layout {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+/* ==========================================================================
+   1. SIDEBAR COMPONENT
+   ========================================================================== */
+
+.lume-profile-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: sticky;
+  top: 96px;
+}
+
+.lume-sidebar-nav-card {
+  background: var(--lume-surface);
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lume-sidebar-menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--lume-text-secondary);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-decoration: none;
+}
+
+.lume-sidebar-menu-btn:hover {
+  background: #F8F5F1;
+  color: var(--lume-text-main);
+  transform: translateX(2px);
+}
+
+.lume-sidebar-menu-btn.active {
+  background: var(--lume-primary-light);
+  color: var(--lume-primary);
+  font-weight: 700;
+  position: relative;
+}
+
+.lume-sidebar-menu-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 15%;
+  height: 70%;
+  width: 3.5px;
+  background: var(--lume-primary);
+  border-radius: 0 4px 4px 0;
+}
+
+.lume-sidebar-menu-btn--logout {
+  color: #C0392B !important;
+  margin-top: 8px;
+  border-top: 1px dashed var(--lume-card-border);
+  border-radius: 0 0 10px 10px;
+  padding-top: 14px;
+}
+
+.lume-sidebar-menu-btn--logout:hover {
+  background: #FDEDEC !important;
+}
+
+/* Support Box */
+.lume-sidebar-support-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 20px 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lume-support-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lume-support-icon-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--lume-primary-light);
+  color: var(--lume-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lume-support-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--lume-text-main);
+  margin: 0;
+}
+
+.lume-support-desc {
+  font-size: 12px;
+  color: var(--lume-text-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.lume-support-contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px dashed #EFECE6;
+}
+
+.lume-support-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--lume-text-secondary);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.lume-support-link:hover {
+  color: var(--lume-primary);
+}
+
+.lume-support-link.phone {
+  color: var(--lume-primary);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+/* ==========================================================================
+   2. MAIN CONTENT & OVERVIEW SECTION
+   ========================================================================== */
+
+.lume-profile-main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+/* Welcome Header */
+.lume-overview-header {
+  background: var(--lume-surface);
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 24px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+}
+
+.lume-overview-greeting h1 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--lume-text-main);
+  margin: 0 0 4px 0;
+}
+
+.lume-overview-greeting p {
+  font-size: 14px;
+  color: var(--lume-text-muted);
+  margin: 0;
+}
+
+.lume-overview-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  border: 1px solid #DFD9CF;
+  color: var(--lume-text-main);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+  white-space: nowrap;
+}
+
+.lume-overview-edit-btn:hover {
+  border-color: var(--lume-primary);
+  color: var(--lume-primary);
+  background: var(--lume-primary-light);
+  transform: translateY(-1px);
+}
+
+/* Quick Stats Bar */
+.lume-quick-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .lume-quick-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .lume-quick-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-stat-card {
+  background: var(--lume-surface);
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.lume-stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--lume-card-hover-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+}
+
+.lume-stat-icon-wrapper {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lume-stat-icon-wrapper.red {
+  background: #FBECEF;
+  color: var(--lume-primary);
+}
+
+.lume-stat-icon-wrapper.amber {
+  background: #FEF3E8;
+  color: #D97706;
+}
+
+.lume-stat-icon-wrapper.gold {
+  background: #FCF5E3;
+  color: #B45309;
+}
+
+.lume-stat-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lume-stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--lume-text-main);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lume-stat-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--lume-text-muted);
+  margin-top: 3px;
+  line-height: 1.3;
+}
+
+/* 3-Column Mid Section */
+.lume-mid-section-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1140px) {
+  .lume-mid-section-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-dashboard-card {
+  background: var(--lume-surface);
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.lume-dashboard-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.lume-dashboard-card-title {
+  font-size: 15.5px;
+  font-weight: 800;
+  color: var(--lume-text-main);
+  margin: 0;
+}
+
+.lume-dashboard-card-action {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--lume-primary);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.lume-dashboard-card-action:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* Card 1: Upcoming Schedule Items */
+.lume-upcoming-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.lume-upcoming-item-box {
+  background: #FCFAF7;
+  border: 1px solid #ECE4DA;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s;
+}
+
+.lume-upcoming-item-box:hover {
+  border-color: #DCCFBF;
+}
+
+.lume-upcoming-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lume-countdown-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.lume-countdown-badge.urgent {
+  background: #FEF3C7;
+  color: #B45309;
+}
+
+.lume-countdown-badge.overdue {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.lume-countdown-badge.upcoming {
+  background: #EFF6FF;
+  color: #1D4ED8;
+}
+
+.lume-countdown-badge.active {
+  background: #ECFDF5;
+  color: #047857;
+}
+
+.lume-upcoming-time-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--lume-primary);
+}
+
+.lume-upcoming-item-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--lume-text-main);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.lume-upcoming-item-code {
+  font-size: 11.5px;
+  color: var(--lume-text-muted);
+  margin: 2px 0 0 0;
+}
+
+.lume-upcoming-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px dashed #E7DEC8;
+  padding-top: 10px;
+  margin-top: 2px;
+}
+
+.lume-upcoming-date {
+  font-size: 11.5px;
+  color: var(--lume-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lume-upcoming-btn {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: #FFFFFF;
+  border: 1px solid #D5C9B8;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--lume-text-main);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-upcoming-btn:hover {
+  background: var(--lume-primary);
+  color: white;
+  border-color: var(--lume-primary);
+}
+
+/* Card 2: Recent Orders Items */
+.lume-recent-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.lume-recent-order-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #F0ECE4;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.lume-recent-order-item:last-child {
+  border-bottom: none;
+}
+
+.lume-recent-order-item:hover .lume-order-title {
+  color: var(--lume-primary);
+}
+
+.lume-order-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding-right: 10px;
+}
+
+.lume-order-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lume-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+  transition: color 0.15s;
+}
+
+.lume-order-meta {
+  font-size: 11px;
+  color: var(--lume-text-muted);
+}
+
+.lume-order-status-badge {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.lume-recent-orders-view-all-btn {
+  width: 100%;
+  margin-top: 14px;
+  padding: 10px;
+  background: #FDF2F4;
+  color: var(--lume-primary);
+  border: 1px solid #F7D5DA;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.lume-recent-orders-view-all-btn:hover {
+  background: var(--lume-primary);
+  color: #FFFFFF;
+}
+
+/* Card 3: Spending & Chart */
+.lume-spending-amount-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.lume-spending-total {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--lume-text-main);
+}
+
+.lume-spending-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--lume-accent-green);
+  background: #ECFDF5;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* Bar Chart */
+.lume-spending-chart-wrapper {
+  margin: 16px 0 14px 0;
+  padding: 12px 6px 0 6px;
+  background: #FCFAF7;
+  border-radius: 12px;
+  border: 1px solid #F0ECE4;
+}
+
+.lume-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: 90px;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.lume-chart-bar-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  height: 100%;
+  justify-content: flex-end;
+  position: relative;
+}
+
+.lume-chart-bar {
+  width: 100%;
+  max-width: 14px;
+  background: #E8DFD3;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.4s ease, background 0.2s;
+  cursor: pointer;
+}
+
+.lume-chart-bar:hover,
+.lume-chart-bar.active {
+  background: var(--lume-primary);
+}
+
+.lume-chart-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--lume-text-muted);
+  margin-top: 6px;
+}
+
+/* Savings Callout Banner */
+.lume-savings-banner {
+  background: #FCF7EE;
+  border: 1px solid #F5E6CC;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.lume-savings-icon {
+  color: #D97706;
+  flex-shrink: 0;
+}
+
+.lume-savings-text {
+  font-size: 11.5px;
+  color: #8C6D1F;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* ==========================================================================
+   3. SPECIAL OFFERS SECTION (Ưu đãi dành riêng cho bạn)
+   ========================================================================== */
+
+.lume-offers-section {
+  background: var(--lume-surface);
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lume-offers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lume-offers-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--lume-text-main);
+  margin: 0;
+}
+
+.lume-offers-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .lume-offers-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-offer-card {
+  background: #FCFAF8;
+  border: 1px solid #EDE6DD;
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.lume-offer-card:hover {
+  border-color: #DBCFBF;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  transform: translateY(-2px);
+}
+
+.lume-offer-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.lume-offer-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--lume-primary-light);
+  color: var(--lume-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lume-offer-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.lume-offer-card-title {
+  font-size: 13.5px;
+  font-weight: 750;
+  color: var(--lume-text-main);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.lume-offer-card-desc {
+  font-size: 11.5px;
+  color: var(--lume-text-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.lume-offer-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px dashed #EBE4D8;
+  padding-top: 10px;
+}
+
+.lume-offer-expiry {
+  font-size: 11px;
+  color: var(--lume-text-muted);
+  font-weight: 500;
+}
+
+.lume-offer-action-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #FFFFFF;
+  border: 1.5px solid var(--lume-primary);
+  color: var(--lume-primary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.lume-offer-action-btn:hover {
+  background: var(--lume-primary);
+  color: #FFFFFF;
+}
+
+.lume-offer-action-btn.copied {
+  background: #10B981;
+  border-color: #10B981;
+  color: #FFFFFF;
+}
+
+/* ==========================================================================
+   4. PERSONAL INFO PAGE (Figma Node 212-440 Styles)
+   ========================================================================== */
+
+/* User Header Card */
+.lume-personal-header-card {
+  background: var(--lume-surface);
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 24px 28px 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+}
+
+.lume-personal-user-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.lume-personal-user-meta {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.lume-personal-avatar-wrapper {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.lume-personal-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #FFFFFF;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.lume-personal-avatar-btn {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--lume-primary);
+  color: #FFFFFF;
+  border: 2px solid #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.lume-personal-avatar-btn:hover {
+  background: var(--lume-primary-hover);
+  transform: scale(1.08);
+}
+
+.lume-personal-name-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lume-personal-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lume-personal-full-name {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--lume-text-main);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.lume-personal-role-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+  background: #F4EBE1;
+  color: #6E5D4F;
+  letter-spacing: 0.02em;
+}
+
+.lume-personal-join-date {
+  font-size: 12.5px;
+  color: var(--lume-text-muted);
+  margin: 0;
+}
+
+/* Horizontal Sub Navigation Tabs */
+.lume-personal-subnav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid #F0ECE4;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.lume-personal-subnav-btn {
+  padding: 12px 18px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--lume-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.lume-personal-subnav-btn:hover {
+  color: var(--lume-text-main);
+}
+
+.lume-personal-subnav-btn.active {
+  color: var(--lume-primary);
+  font-weight: 750;
+  border-bottom-color: var(--lume-primary);
+}
+
+/* 2-Column Personal Layout */
+.lume-personal-columns-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1060px) {
+  .lume-personal-columns-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Form Styles */
+.lume-form-card {
+  background: var(--lume-surface);
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.lume-form-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lume-form-card-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--lume-text-main);
+  margin: 0;
+}
+
+.lume-form-card-subtitle {
+  font-size: 12.5px;
+  color: var(--lume-text-muted);
+  margin: 0;
+}
+
+.lume-form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .lume-form-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lume-form-label {
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--lume-text-secondary);
+}
+
+.lume-form-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.lume-form-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #DED7CB;
+  background: #FFFFFF;
+  font-size: 13.5px;
+  color: var(--lume-text-main);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+
+.lume-form-input:focus {
+  border-color: var(--lume-primary);
+  box-shadow: 0 0 0 3px rgba(139, 30, 45, 0.08);
+}
+
+.lume-form-input-with-badge {
+  padding-right: 110px;
+}
+
+.lume-verified-badge {
+  position: absolute;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #ECFDF5;
+  color: #047857;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lume-form-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #DED7CB;
+  background: #FFFFFF;
+  font-size: 13.5px;
+  color: var(--lume-text-main);
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.lume-form-textarea:focus {
+  border-color: var(--lume-primary);
+  box-shadow: 0 0 0 3px rgba(139, 30, 45, 0.08);
+}
+
+.lume-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid #F0ECE4;
+  padding-top: 16px;
+  margin-top: 4px;
+}
+
+.lume-btn-cancel {
+  padding: 10px 20px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  border: 1px solid #DED7CB;
+  color: var(--lume-text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-btn-cancel:hover {
+  background: #F8F5F1;
+  color: var(--lume-text-main);
+}
+
+.lume-btn-save {
+  padding: 10px 24px;
+  border-radius: 10px;
+  background: var(--lume-primary);
+  border: none;
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(139, 30, 45, 0.25);
+  transition: all 0.15s;
+}
+
+.lume-btn-save:hover {
+  background: var(--lume-primary-hover);
+  transform: translateY(-1px);
+}
+
+/* Payment Methods List */
+.lume-payment-methods-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lume-payment-method-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid #ECE5DB;
+  background: #FCFAF7;
+  transition: border-color 0.15s;
+}
+
+.lume-payment-method-item:hover {
+  border-color: #DCCFBF;
+}
+
+.lume-payment-method-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.lume-payment-card-icon {
+  width: 44px;
+  height: 30px;
+  border-radius: 6px;
+  background: #1A1F71;
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.05em;
+}
+
+.lume-payment-card-icon.momo {
+  background: #A50064;
+}
+
+.lume-payment-card-title {
+  font-size: 13.5px;
+  font-weight: 750;
+  color: var(--lume-text-main);
+  margin: 0;
+}
+
+.lume-payment-card-expiry {
+  font-size: 11.5px;
+  color: var(--lume-text-muted);
+  margin: 2px 0 0 0;
+}
+
+.lume-payment-default-badge {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #FEF3E8;
+  color: #B45309;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+/* Recent Activities List */
+.lume-activities-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lume-activity-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #F0ECE4;
+  background: #FCFAF8;
+  transition: all 0.15s;
+}
+
+.lume-activity-item:hover {
+  border-color: #E2DACF;
+  background: #FAF6F1;
+}
+
+.lume-activity-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.lume-activity-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #FDF2F4;
+  color: var(--lume-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lume-activity-title {
+  font-size: 13px;
+  font-weight: 750;
+  color: var(--lume-text-main);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lume-activity-time {
+  font-size: 11px;
+  color: var(--lume-text-muted);
+  margin: 2px 0 0 0;
+}
+
+/* Membership Card (Gold Member) */
+.lume-membership-vip-card {
+  background: linear-gradient(145deg, #FAF4EB 0%, #F5E8D3 100%);
+  border: 1px solid #EADBBE;
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 4px 20px rgba(194, 142, 58, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lume-membership-tier-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lume-membership-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #231F20;
+  color: #F7D58C;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.lume-membership-progress-box {
+  background: #FFFFFF;
+  border-radius: 12px;
+  padding: 14px;
+  border: 1px solid #EAD8C3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lume-membership-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4A3F35;
+}
+
+.lume-progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: #EFE6D8;
+  overflow: hidden;
+}
+
+.lume-progress-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #D4AF37 0%, #B45309 100%);
+  transition: width 0.5s ease;
+}
+
+.lume-membership-benefits-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lume-membership-benefit-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #4A3F35;
+}
+
+.lume-membership-check-icon {
+  color: #B45309;
+  flex-shrink: 0;
+}
+
+/* Toggle Switch Styles */
+.lume-toggle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #F0ECE4;
+}
+
+.lume-toggle-item:last-child {
+  border-bottom: none;
+}
+
+.lume-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 12px;
+}
+
+.lume-toggle-title {
+  font-size: 13px;
+  font-weight: 750;
+  color: var(--lume-text-main);
+  margin: 0;
+}
+
+.lume-toggle-desc {
+  font-size: 11.5px;
+  color: var(--lume-text-muted);
+  margin: 0;
+}
+
+.lume-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.lume-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.lume-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #DED7CB;
+  transition: 0.2s;
+  border-radius: 999px;
+}
+
+.lume-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+input:checked + .lume-slider {
+  background-color: var(--lume-primary);
+}
+
+input:checked + .lume-slider:before {
+  transform: translateX(20px);
+}
+
+/* ==========================================================================
+   5. MY SCHEDULE PAGE (Figma Node 115-1062 Styles)
+   ========================================================================== */
+
+/* Schedule Header Card */
+.lume-schedule-header-card {
+  background: var(--lume-surface);
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+}
+
+.lume-schedule-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.lume-schedule-heading h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--lume-text-main);
+  margin: 0 0 4px 0;
+  letter-spacing: -0.01em;
+}
+
+.lume-schedule-heading p {
+  font-size: 13.5px;
+  color: var(--lume-text-muted);
+  margin: 0;
+}
+
+/* Status Filter Bar */
+.lume-schedule-stats-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.lume-filter-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: #F8F5F1;
+  border: 1px solid #EAE3D8;
+  color: var(--lume-text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.lume-filter-pill-btn:hover {
+  background: #F0ECE4;
+  color: var(--lume-text-main);
+}
+
+.lume-filter-pill-btn.active {
+  background: var(--lume-primary);
+  border-color: var(--lume-primary);
+  color: #FFFFFF;
+}
+
+.lume-filter-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.lume-filter-pill-btn.active .lume-filter-pill-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
+}
+
+/* Schedule Toolbar */
+.lume-schedule-toolbar {
+  background: var(--lume-surface);
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+}
+
+.lume-schedule-search-box {
+  position: relative;
+  flex: 1;
+  min-width: 260px;
+  display: flex;
+  align-items: center;
+}
+
+.lume-schedule-search-icon {
+  position: absolute;
+  left: 12px;
+  color: #8C827A;
+  pointer-events: none;
+}
+
+.lume-schedule-search-input {
+  width: 100%;
+  padding: 9px 12px 9px 38px;
+  border-radius: 10px;
+  border: 1px solid #DED7CB;
+  background: #FCFAF8;
+  font-size: 13px;
+  color: var(--lume-text-main);
+  outline: none;
+  box-sizing: border-box;
+  transition: all 0.15s;
+}
+
+.lume-schedule-search-input:focus {
+  border-color: var(--lume-primary);
+  background: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(139, 30, 45, 0.08);
+}
+
+.lume-schedule-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lume-schedule-type-toggle {
+  display: inline-flex;
+  background: #F4EFEA;
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.lume-schedule-type-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--lume-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-schedule-type-btn.active {
+  background: #FFFFFF;
+  color: var(--lume-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.lume-schedule-view-switcher {
+  display: inline-flex;
+  border: 1px solid #DED7CB;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #FFFFFF;
+}
+
+.lume-schedule-view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  background: transparent;
+  border: none;
+  color: var(--lume-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-schedule-view-btn.active {
+  background: var(--lume-primary);
+  color: #FFFFFF;
+}
+
+/* Schedule Card (Luxury Design) */
+.lume-schedule-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lume-schedule-card {
+  background: var(--lume-surface);
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.lume-schedule-card:hover {
+  border-color: #DCCFBF;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+  transform: translateY(-2px);
+}
+
+.lume-schedule-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #F0ECE4;
+  padding-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lume-schedule-code-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lume-schedule-code {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--lume-text-main);
+  letter-spacing: 0.02em;
+}
+
+.lume-schedule-type-badge {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.lume-schedule-type-badge.photo {
+  background: #F3E8FF;
+  color: #7E22CE;
+}
+
+.lume-schedule-type-badge.rental {
+  background: #FEF3C7;
+  color: #B45309;
+}
+
+.lume-schedule-date-created {
+  font-size: 12px;
+  color: var(--lume-text-muted);
+}
+
+/* Schedule Card Body */
+.lume-schedule-card-body {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+@media (max-width: 768px) {
+  .lume-schedule-card-body {
+    flex-direction: column;
+  }
+}
+
+.lume-schedule-thumbnail-wrapper {
+  width: 90px;
+  height: 110px;
+  min-width: 90px;
+  max-width: 90px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid #ECE5DB;
+  background: #F8F5F1;
+}
+
+.lume-schedule-thumbnail {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lume-schedule-card-main-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lume-schedule-item-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--lume-text-main);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.lume-schedule-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--lume-text-secondary);
+}
+
+.lume-schedule-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.lume-schedule-meta-item.highlight {
+  color: var(--lume-primary);
+  font-weight: 700;
+}
+
+.lume-schedule-price-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .lume-schedule-price-box {
+    align-items: flex-start;
+    width: 100%;
+    border-top: 1px dashed #ECE5DB;
+    padding-top: 10px;
+  }
+}
+
+.lume-schedule-total-price {
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--lume-primary);
+}
+
+.lume-schedule-pay-status {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Schedule Card Footer Actions */
+.lume-schedule-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid #F0ECE4;
+  padding-top: 14px;
+  flex-wrap: wrap;
+}
+
+.lume-schedule-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+
+.lume-schedule-action-btn.primary {
+  background: var(--lume-primary);
+  color: #FFFFFF;
+  border: none;
+}
+
+.lume-schedule-action-btn.primary:hover {
+  background: var(--lume-primary-hover);
+}
+
+.lume-schedule-action-btn.secondary {
+  background: #FFFFFF;
+  border: 1px solid #DED7CB;
+  color: var(--lume-text-secondary);
+}
+
+.lume-schedule-action-btn.secondary:hover {
+  background: #F8F5F1;
+  color: var(--lume-text-main);
+  border-color: #D2C7B8;
+}
+
+.lume-schedule-action-btn.blue {
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  color: #1D4ED8;
+}
+
+.lume-schedule-action-btn.blue:hover {
+  background: #1D4ED8;
+  color: #FFFFFF;
+}
+
+.lume-schedule-action-btn.danger {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  color: #DC2626;
+}
+
+.lume-schedule-action-btn.danger:hover {
+  background: #DC2626;
+  color: #FFFFFF;
+}
+
+/* Interactive Monthly Calendar View */
+.lume-schedule-calendar-card {
+  background: var(--lume-surface);
+  border-radius: 16px;
+  border: 1px solid var(--lume-card-border);
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.lume-calendar-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lume-calendar-month-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--lume-text-main);
+  margin: 0;
+}
+
+.lume-calendar-grid-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--lume-text-muted);
+  padding-bottom: 8px;
+  border-bottom: 1px solid #F0ECE4;
+}
+
+.lume-calendar-days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.lume-calendar-day-cell {
+  min-height: 80px;
+  border: 1px solid #ECE5DB;
+  border-radius: 10px;
+  padding: 8px;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-calendar-day-cell:hover {
+  border-color: var(--lume-primary);
+  background: #FCFAF7;
+}
+
+.lume-calendar-day-cell.selected {
+  border-color: var(--lume-primary);
+  background: var(--lume-primary-light);
+}
+
+.lume-calendar-day-number {
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--lume-text-main);
+}
+
+.lume-calendar-day-cell.other-month {
+  opacity: 0.35;
+  background: #FDFBF9;
+}
+
+.lume-calendar-day-pill {
+  font-size: 9.5px;
+  font-weight: 750;
+  padding: 2px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.lume-calendar-day-pill.photo {
+  background: #F3E8FF;
+  color: #7E22CE;
+}
+
+.lume-calendar-day-pill.rental {
+  background: #FEF3C7;
+  color: #B45309;
+}

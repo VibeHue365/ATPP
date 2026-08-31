@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ImagePlus, LoaderCircle, Plus, Trash2, AlertCircle, Info, UploadCloud } from 'lucide-react';
+import { ImagePlus, LoaderCircle, Trash2, AlertCircle, Info, UploadCloud } from 'lucide-react';
 import { Modal } from '../../../components/common/Modal';
 import { httpClient } from '../../../services/httpClient';
 import { getMediaUrl } from '../../../shared/media/mediaUrl';
@@ -30,7 +30,6 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<string[]>([]);
-  const [externalUrl, setExternalUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -46,27 +45,11 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
         setDescription('');
         setImages([]);
       }
-      setExternalUrl('');
       setError(null);
       setIsDragging(false);
     }
   }, [isOpen, initialValues]);
 
-  const addExternalUrl = () => {
-    const nextUrl = externalUrl.trim();
-    if (!nextUrl) return;
-    try {
-      new URL(nextUrl);
-    } catch {
-      setError('Đường dẫn ảnh chưa hợp lệ.');
-      return;
-    }
-    if (!images.includes(nextUrl)) {
-      setImages((current) => [...current, nextUrl]);
-    }
-    setExternalUrl('');
-    setError(null);
-  };
 
   const uploadFiles = async (files: FileList) => {
     if (!files.length) return;
@@ -133,7 +116,7 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
     <Modal isOpen={isOpen} onClose={onClose} title="Thêm tác phẩm portfolio" maxWidth="920px">
       <div className="portfolio-modal-wrapper">
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column' }}>
-          
+
           <div className="portfolio-info-banner">
             <Info size={18} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: 1 }} />
             <p>
@@ -172,32 +155,6 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
                   className="portfolio-input portfolio-textarea"
                 />
               </div>
-
-              <div className="portfolio-url-section">
-                <span className="portfolio-url-section-title">Hoặc dán URL ảnh</span>
-                <div className="portfolio-url-input-group">
-                  <input
-                    value={externalUrl}
-                    onChange={(event) => setExternalUrl(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        addExternalUrl();
-                      }
-                    }}
-                    placeholder="Nhập đường dẫn ảnh ngoài..."
-                    className="portfolio-url-input"
-                  />
-                  <button
-                    type="button"
-                    onClick={addExternalUrl}
-                    className="portfolio-url-btn"
-                    title="Thêm ảnh từ URL"
-                  >
-                    <Plus size={18} />
-                  </button>
-                </div>
-              </div>
             </div>
 
             <div className="portfolio-form-right">
@@ -210,7 +167,7 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
                 </div>
 
                 <input ref={inputRef} type="file" accept="image/*" multiple hidden onChange={uploadImages} />
-                
+
                 <div
                   className={`portfolio-dropzone ${isDragging ? 'dragging' : ''}`}
                   onDragOver={handleDragOver}

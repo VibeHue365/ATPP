@@ -1,9 +1,11 @@
 import { API_BASE_URL } from '../config/env';
 import { tokenStorage } from './tokenStorage';
+import { translateError } from '../utils/errorTranslator';
 
 class HttpClient {
   private isRefreshing = false;
   private refreshSubscribers: ((token: string | null) => void)[] = [];
+  private inFlightGets = new Map<string, Promise<unknown>>();
 
   private subscribeTokenRefresh(cb: (token: string | null) => void) {
     this.refreshSubscribers.push(cb);
@@ -29,9 +31,15 @@ class HttpClient {
       headers.set('Content-Type', 'application/json');
     }
 
+    const timeoutMs = options.method === 'GET' ? 10_000 : 20_000;
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, timeoutSignal])
+      : timeoutSignal;
     const config: RequestInit = {
       ...options,
       headers,
+      signal,
     };
 
     try {
@@ -57,17 +65,26 @@ class HttpClient {
 
   private async parseResponse<T>(response: Response): Promise<T> {
     const contentType = response.headers.get('content-type');
-    let data: any = {};
+    let data: any = null;
 
     if (contentType && contentType.includes('application/json')) {
-      data = await response.json().catch(() => ({}));
+      // Preserve null — backend may return literal null for "not found" cases
+      const raw = await response.text().catch(() => '');
+      try {
+        data = raw.length > 0 ? JSON.parse(raw) : null;
+      } catch {
+        data = {};
+      }
     } else {
-      data = { message: await response.text().catch(() => 'Response parsing failed') };
+      const text = await response.text().catch(() => 'Không thể đọc phản hồi từ máy chủ');
+      data = { message: text };
     }
 
     if (!response.ok) {
-      const errorMessage = data.message || `Request failed with status ${response.status}`;
-      throw new Error(errorMessage);
+      const errorMessage =
+        (data && typeof data === 'object' ? data.message : null) ||
+        `Request failed with status ${response.status}`;
+      throw new Error(translateError(errorMessage));
     }
 
     return data as T;
@@ -97,10 +114,11 @@ class HttpClient {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ refreshToken }),
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (!response.ok) {
-        throw new Error('Refresh token invalid');
+        throw new Error('Phiên đăng nhập không hợp lệ');
       }
 
       const data = await response.json();
@@ -115,7 +133,7 @@ class HttpClient {
 
       throw new Error('Tokens missing in refresh response');
     } catch (error) {
-      console.error('Failed to refresh authentication session:', error);
+      console.error('Không thể làm mới phiên đăng nhập:', error);
       this.onRefreshFinished(null);
       this.clearSessionAndRedirect();
       return null;
@@ -130,13 +148,37 @@ class HttpClient {
   }
 
   get<T>(path: string, options?: Omit<RequestInit, 'method'>): Promise<T> {
-    return this.request<T>(path, { ...options, method: 'GET' });
+    const canDeduplicate = !options?.signal && !options?.headers;
+    if (!canDeduplicate) {
+      return this.request<T>(path, { ...options, method: 'GET' });
+    }
+
+    const token = tokenStorage.getAccessToken() || '';
+    const key = `${token}:${path}`;
+    const existing = this.inFlightGets.get(key);
+    if (existing) return existing as Promise<T>;
+
+    const request = this.request<T>(path, { ...options, method: 'GET' });
+    this.inFlightGets.set(key, request);
+    request.then(
+      () => { if (this.inFlightGets.get(key) === request) this.inFlightGets.delete(key); },
+      () => { if (this.inFlightGets.get(key) === request) this.inFlightGets.delete(key); },
+    );
+    return request;
   }
 
   post<T>(path: string, body?: any, options?: Omit<RequestInit, 'method' | 'body'>): Promise<T> {
     return this.request<T>(path, {
       ...options,
       method: 'POST',
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    });
+  }
+
+  put<T>(path: string, body?: any, options?: Omit<RequestInit, 'method' | 'body'>): Promise<T> {
+    return this.request<T>(path, {
+      ...options,
+      method: 'PUT',
       body: body instanceof FormData ? body : JSON.stringify(body),
     });
   }

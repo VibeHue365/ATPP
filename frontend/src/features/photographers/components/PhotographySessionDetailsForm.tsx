@@ -8,6 +8,7 @@ interface PhotographySessionDetailsFormProps {
   concept: string;
   request: string;
   referenceFile: File | null;
+  radiusKm?: number | null;
   onLocationChange: (location: LocationSelection) => void;
   onConceptChange: (value: string) => void;
   onRequestChange: (value: string) => void;
@@ -19,6 +20,7 @@ export const PhotographySessionDetailsForm: React.FC<PhotographySessionDetailsFo
   concept,
   request,
   referenceFile,
+  radiusKm,
   onLocationChange,
   onConceptChange,
   onRequestChange,
@@ -33,7 +35,7 @@ export const PhotographySessionDetailsForm: React.FC<PhotographySessionDetailsFo
       </h2>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
-        <PhotographyLocationPicker value={selectedLocation} onSelect={onLocationChange} />
+        <PhotographyLocationPicker value={selectedLocation} onSelect={onLocationChange} radiusKm={radiusKm} />
       </div>
     </section>
     {/* BƯỚC 4: Concept & Ý tưởng */}

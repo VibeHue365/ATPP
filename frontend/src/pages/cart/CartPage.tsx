@@ -5,7 +5,6 @@ import type { CartItem } from '../../context/CartContext';
 import { httpClient } from '../../services/httpClient';
 import { 
   Trash2, 
-  CheckCircle, 
   ArrowRight, 
   Sparkles, 
   ShieldCheck, 
@@ -52,23 +51,24 @@ const CustomCheckbox: React.FC<{ checked: boolean; onChange: () => void }> = ({ 
   );
 };
 
-const normalizeCity = (city?: string | null) => {
-  if (!city) return '';
-  return city.toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/^(thanh pho|tp\.?|tinh)\s+/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-};
 
-const isSameCity = (city1?: string | null, city2?: string | null) => {
-  const c1 = normalizeCity(city1 || 'Thừa Thiên Huế');
-  const c2 = normalizeCity(city2 || 'Thừa Thiên Huế');
-  return c1.includes(c2) || c2.includes(c1);
-};
 
 const isMongoObjectId = (id?: string | null) => /^[a-f\d]{24}$/i.test(id || '');
+
+const getProductValidationIssues = (item: CartItem): string[] => {
+  const issues: string[] = [];
+  if (!isMongoObjectId(item.productId)) issues.push('sản phẩm không còn hợp lệ');
+  if (!item.size) issues.push('kích cỡ');
+  if (!item.color) issues.push('màu sắc');
+  if (!(item.rentalFrom || item.startDate)) issues.push('ngày bắt đầu thuê');
+  if ((item.rentalType || 'DAILY') === 'DAILY' && !(item.rentalTo || item.endDate)) {
+    issues.push('ngày trả');
+  }
+  if ((item.rentalType || 'DAILY') === 'HOURLY' && (!item.startTime || !item.endTime)) {
+    issues.push('khung giờ thuê');
+  }
+  return issues;
+};
 
 const productSlots = [
   { start: '07:00', end: '09:00', label: '07:00 - 09:00' },
@@ -99,12 +99,63 @@ export const CartPage: React.FC = () => {
   const { cart, removeFromCart, updateCartItemDate, updateCartItemTimeSlot, updateCartItemQuantity, updateCartItemSize, updateCartItemColor, updateCartItemDates } = useCart();
   const toast = useToast();
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-  const [isCheckoutSuccess, setIsCheckoutSuccess] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'MOMO' | 'BANK'>('BANK');
+  const [itemStocks, setItemStocks] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let active = true;
+    const fetchStocks = async () => {
+      const productItems = cart.filter(item => item.itemType === 'PRODUCT' && item.productId);
+      if (!productItems.length) return;
+
+      try {
+        const response = await httpClient.post<Array<{ key: string; stock: number }>>(
+          '/bookings/stock/batch',
+          {
+            items: productItems.map((item) => ({
+              key: item.id,
+              productId: item.productId,
+              size: item.size || '',
+              color: item.color || '',
+            })),
+          },
+        );
+        if (!active) return;
+        const stockByItemId = new Map(response.map((item) => [item.key, item.stock]));
+        const stockMap = Object.fromEntries(productItems.map((item) => {
+          return [item.id, stockByItemId.get(item.id) ?? 0];
+        }));
+        setItemStocks((prev) => ({ ...prev, ...stockMap }));
+      } catch (error) {
+        console.error('Error fetching stock batch:', error);
+        if (active) {
+          setItemStocks((prev) => ({
+            ...prev,
+            ...Object.fromEntries(productItems.map((item) => [item.id, 999])),
+          }));
+        }
+      }
+    };
+    
+    if (cart.length > 0) {
+      fetchStocks();
+    }
+    return () => {
+      active = false;
+    };
+  }, [cart]);
+
+  useEffect(() => {
+    cart.forEach(item => {
+      if (item.itemType === 'PRODUCT' && item.productId) {
+        const maxStock = itemStocks[item.id];
+        if (maxStock !== undefined && maxStock > 0 && item.quantity > maxStock) {
+          updateCartItemQuantity(item.id, maxStock);
+        }
+      }
+    });
+  }, [itemStocks, cart]);
   const [isLoading, setIsLoading] = useState(false);
   const [realProductList, setRealProductList] = useState<any[]>([]);
-  const [realPhotographersList, setRealPhotographersList] = useState<any[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   // New calendar and busy date/slot states
@@ -320,12 +371,6 @@ export const CartPage: React.FC = () => {
       } catch (e) {
         console.error('Failed to fetch real products for mapping', e);
       }
-      try {
-        const phs = await httpClient.get<any[]>('/api/photographers');
-        setRealPhotographersList(phs);
-      } catch (e) {
-        console.error('Failed to fetch real photographers for mapping', e);
-      }
     };
     fetchRealData();
   }, []);
@@ -412,13 +457,16 @@ export const CartPage: React.FC = () => {
           hours = Math.max((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60), 2);
         }
         
-        const hourlyRate = dbProduct.hourlyPrice || Math.round(dbProduct.basePrice * 0.3) || 80000;
-        const basePrice = item.rentalType === 'HOURLY' ? hourlyRate * hours : dbProduct.basePrice * days;
+        const discountedBasePrice = dbProduct.discountedPrice || dbProduct.basePrice;
+        const hourlyRate = dbProduct.hourlyPrice || Math.round(discountedBasePrice * 0.3) || 80000;
+        const basePrice = item.rentalType === 'HOURLY' ? hourlyRate * hours : discountedBasePrice * days;
+        const originalBasePrice = item.rentalType === 'HOURLY' ? (dbProduct.hourlyPrice || Math.round(dbProduct.basePrice * 0.3) || 80000) * hours : dbProduct.basePrice * days;
 
         return {
           ...item,
           depositAmount: dbProduct.depositAmount,
           basePrice,
+          originalPrice: originalBasePrice,
           providerCity: dbProduct.providerId?.address?.city || item.providerCity,
           providerAddress: dbProduct.providerId?.address?.addressLine || item.providerAddress,
         };
@@ -427,141 +475,53 @@ export const CartPage: React.FC = () => {
     return item;
   });
 
-  // Grouping logic for items (Combo 1, Combo 2, Others)
-  const checkedItems = enrichedCart.filter(item => selectedItemIds.includes(item.id));
-  const uncheckedItems = enrichedCart.filter(item => !selectedItemIds.includes(item.id));
+const getImageUrl = (url?: string | null) => {
+  if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600';
+  if (url.startsWith('http') || url.startsWith('blob:')) return url;
+  return `http://localhost:3000${url.startsWith('/') ? '' : '/'}${url}`;
+};
 
-  // Helper to find combos in a list of items
-  const findCombos = (itemsList: CartItem[], startIndex: number) => {
-    const listGroups: any[] = [];
-    const photographersList = itemsList.filter(item => item.itemType === 'PHOTOGRAPHY_PACKAGE');
-    const productsList = itemsList.filter(item => item.itemType === 'PRODUCT' && (item.rentalFrom || item.startDate));
-    const groupedIdsInList = new Set<string>();
+  // Group enrichedCart items into Combos vs Normal Items
+  const comboGroupsMap = new Map<string, CartItem[]>();
+  const normalCartItems: CartItem[] = [];
 
-    let idx = startIndex;
+  enrichedCart.forEach((item) => {
+    if (item.comboPromotionId) {
+      const list = comboGroupsMap.get(item.comboPromotionId) || [];
+      list.push(item);
+      comboGroupsMap.set(item.comboPromotionId, list);
+    } else {
+      normalCartItems.push(item);
+    }
+  });
 
-    // A. Match success combos (overlapping dates AND overlapping time slots if hourly, AND matching city location)
-    photographersList.forEach(photo => {
-      if (groupedIdsInList.has(photo.id)) return;
+  const comboGroupEntries = Array.from(comboGroupsMap.entries()).map(([comboId, items]) => {
+    const origTotal = items.reduce((sum, i) => sum + (i.basePrice || 0) * (i.quantity || 1), 0);
+    const discountPct = items[0]?.comboDiscountPercent || 50;
+    const comboPrice = Math.round(origTotal * (1 - discountPct / 100));
+    const depositAmt = items.filter(i => i.itemType === 'PRODUCT').reduce((sum, i) => sum + (i.depositAmount || 0) * (i.quantity || 1), 0);
 
-      const matchingProduct = productsList.find(prod => {
-        if (groupedIdsInList.has(prod.id)) return false;
-        
-        // City match check is mandatory for a successful combo
-        const isCityMatch = isSameCity(prod.providerCity, photo.photographerCity);
-        if (!isCityMatch) return false;
-        
-        const rentalFrom = prod.rentalFrom || prod.startDate;
-        const rentalTo = prod.rentalTo || prod.endDate;
-        const shootDate = photo.shootDate;
-        if (!rentalFrom || !rentalTo || !shootDate) return false;
-        
-        const start = new Date(rentalFrom);
-        const end = new Date(rentalTo);
-        const shoot = new Date(shootDate);
-        
-        // Date overlap check
-        const isDateOverlap = shoot >= start && shoot <= end;
-        if (!isDateOverlap) return false;
+    return {
+      comboId,
+      items,
+      origTotal,
+      discountPct,
+      comboPrice,
+      depositAmt,
+    };
+  });
 
-        // Time slot overlap check (only if hourly rental)
-        if (prod.startTime && prod.endTime && photo.shootTimeSlot) {
-          const parts = photo.shootTimeSlot.split('-');
-          const photoStart = parts[0]?.trim();
-          const photoEnd = parts[1]?.trim();
-          if (photoStart && photoEnd) {
-            // Check if photo is within prod rental period
-            const isTimeOverlap = photoStart >= prod.startTime && photoEnd <= prod.endTime;
-            return isTimeOverlap;
-          }
-        }
-        
-        return true;
-      });
+  const checkedGroups: any[] = [];
 
-      if (matchingProduct) {
-        listGroups.push({
-          id: `combo_${idx++}`,
-          title: `NHÓM COMBO ${idx - 1} - ĐỒNG BỘ THÀNH CÔNG`,
-          type: 'SUCCESS',
-          items: [matchingProduct, photo],
-          syncDate: matchingProduct.rentalFrom || matchingProduct.startDate
-        });
-        groupedIdsInList.add(photo.id);
-        groupedIdsInList.add(matchingProduct.id);
-      }
-    });
-
-    // B. Match mismatched combos
-    photographersList.forEach(photo => {
-      if (groupedIdsInList.has(photo.id)) return;
-
-      const matchingProduct = productsList.find(prod => !groupedIdsInList.has(prod.id));
-
-      if (matchingProduct) {
-        const rentalFrom = matchingProduct.rentalFrom || matchingProduct.startDate;
-        const shootDate = photo.shootDate;
-        const prodDateFormatted = getDayMonth(rentalFrom);
-        const photoDateFormatted = getDayMonth(shootDate);
-        const prodCity = matchingProduct.providerCity || 'Thừa Thiên Huế';
-        const photoCity = photo.photographerCity || 'Thừa Thiên Huế';
-        const isCityMatch = isSameCity(prodCity, photoCity);
-        
-        let warning = '';
-        let isCityMismatch = false;
-        
-        if (!isCityMatch) {
-          warning = `Không thể đi chung Combo: Áo dài nhận tại ${prodCity} nhưng Thợ ảnh hoạt động ở ${photoCity}.`;
-          isCityMismatch = true;
-        } else if (rentalFrom !== shootDate) {
-          warning = `Ngày thuê Áo dài (${prodDateFormatted}) và Ngày chụp (${photoDateFormatted}) đang không trùng khớp.`;
-        } else if (matchingProduct.startTime && matchingProduct.endTime && photo.shootTimeSlot) {
-          const parts = photo.shootTimeSlot.split('-');
-          const photoStart = parts[0]?.trim();
-          const photoEnd = parts[1]?.trim();
-          warning = `Khung giờ thuê Áo dài (${matchingProduct.startTime} - ${matchingProduct.endTime}) và Giờ chụp (${photoStart} - ${photoEnd}) đang không trùng khớp.`;
-        } else {
-          warning = `Khung giờ thuê Áo dài và Lịch chụp ảnh đang không trùng khớp.`;
-        }
-
-        listGroups.push({
-          id: `combo_${idx++}`,
-          title: isCityMismatch ? `NHÓM COMBO ${idx - 1} - LỆCH KHU VỰC ĐỊA LÝ` : `NHÓM COMBO ${idx - 1} - LỆCH LỊCH TRÌNH`,
-          type: 'MISMATCH',
-          items: [matchingProduct, photo],
-          warning,
-          isCityMismatch
-        });
-        groupedIdsInList.add(photo.id);
-        groupedIdsInList.add(matchingProduct.id);
-      }
-    });
-
-    // C. Standalone items
-    const remaining = itemsList.filter(item => !groupedIdsInList.has(item.id));
-
-    return { listGroups, remaining, nextIndex: idx };
-  };
-
-  // Run pairing for checked items
-  const { listGroups: checkedGroups, remaining: checkedRemaining, nextIndex: afterCheckedIdx } = findCombos(checkedItems, 1);
-
-  // Run pairing for unchecked items
-  const { listGroups: uncheckedGroups, remaining: uncheckedRemaining } = findCombos(uncheckedItems, afterCheckedIdx);
-
-  // Combine groups
-  const groups = [...checkedGroups, ...uncheckedGroups];
-
-  // Standalone/Others
-  const allRemaining = [...checkedRemaining, ...uncheckedRemaining];
-  if (allRemaining.length > 0) {
-    groups.push({
-      id: 'others',
-      title: 'SẢN PHẨM KHÁC',
+  // Combine groups for normal items (non-combo)
+  const groups: any[] = normalCartItems.length > 0 ? [
+    {
+      id: 'normal-items',
+      title: 'SẢN PHẨM & DỊCH VỤ THUÊ LẺ',
       type: 'OTHERS',
-      items: allRemaining
-    });
-  }
+      items: normalCartItems
+    }
+  ] : [];
 
   // Checkbox functions
   const isAllSelected = enrichedCart.length > 0 && selectedItemIds.length === enrichedCart.length;
@@ -600,75 +560,116 @@ export const CartPage: React.FC = () => {
   // Calculations for checkout (only selected items)
   const selectedItems = enrichedCart.filter(item => selectedItemIds.includes(item.id));
   
-  const totalProductRental = selectedItems
-    .filter(item => item.itemType === 'PRODUCT' && (item.rentalFrom || item.startDate))
-    .reduce((sum, item) => sum + (item.basePrice || 0) * item.quantity, 0);
+  const selectedComboIds = new Set(
+    selectedItems.filter(i => i.comboPromotionId).map(i => i.comboPromotionId!)
+  );
 
-  const totalProductDeposit = selectedItems
-    .filter(item => item.itemType === 'PRODUCT' && (item.rentalFrom || item.startDate))
-    .reduce((sum, item) => sum + (item.depositAmount || 0) * item.quantity, 0);
+  let totalComboPrice = 0;
+  let totalComboDeposit = 0;
 
-  const totalPhotographerFee = selectedItems
+  selectedComboIds.forEach(cId => {
+    const cItems = enrichedCart.filter(i => i.comboPromotionId === cId);
+    const origTotal = cItems.reduce((sum, i) => sum + (i.basePrice || 0) * (i.quantity || 1), 0);
+    const pct = cItems[0]?.comboDiscountPercent || 50;
+    const cPrice = Math.round(origTotal * (1 - pct / 100));
+    const cDeposit = cItems.filter(i => i.itemType === 'PRODUCT').reduce((sum, i) => sum + (i.depositAmount || 0) * (i.quantity || 1), 0);
+
+    totalComboPrice += cPrice;
+    totalComboDeposit += cDeposit;
+  });
+
+  const nonComboSelected = selectedItems.filter(i => !i.comboPromotionId);
+  const totalNonComboRental = nonComboSelected
+    .filter(item => item.itemType === 'PRODUCT')
+    .reduce((sum, item) => sum + (item.basePrice || 0) * (item.quantity || 1), 0);
+  const totalNonComboDeposit = nonComboSelected
+    .filter(item => item.itemType === 'PRODUCT')
+    .reduce((sum, item) => sum + (item.depositAmount || 0) * (item.quantity || 1), 0);
+  const totalNonComboPhoto = nonComboSelected
     .filter(item => item.itemType === 'PHOTOGRAPHY_PACKAGE')
-    .reduce((sum, item) => sum + (item.basePrice || 0) * item.quantity, 0);
+    .reduce((sum, item) => sum + (item.basePrice || 0) * (item.quantity || 1), 0);
 
-  const totalOthersFee = selectedItems
-    .filter(item => item.itemType === 'PRODUCT' && !(item.rentalFrom || item.startDate))
-    .reduce((sum, item) => sum + (item.basePrice || 0) * item.quantity, 0);
+  const totalProductRental = totalNonComboRental;
+  const totalProductDeposit = totalComboDeposit + totalNonComboDeposit;
+  const totalPhotographerFee = totalNonComboPhoto;
+  const comboDiscountTotal = Array.from(selectedComboIds).reduce((sum, cId) => {
+    const cItems = enrichedCart.filter(i => i.comboPromotionId === cId);
+    const origTotal = cItems.reduce((s, i) => s + (i.basePrice || 0) * (i.quantity || 1), 0);
+    const pct = cItems[0]?.comboDiscountPercent || 50;
+    return sum + Math.round(origTotal * (pct / 100));
+  }, 0);
 
-  // Removed platform service fee per user request
   const serviceFee = 0;
 
-  // Tính giảm giá Combo của các nhóm combo thành công trong selectedItems
-  const comboDiscountTotal = checkedGroups
-    .filter(group => group.type === 'SUCCESS')
-    .reduce((sum, group) => {
-      const prodItem = group.items.find((i: any) => i.itemType === 'PRODUCT');
-      const photoItem = group.items.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
-      
-      let prodDiscount = 0;
-      let photoDiscount = 0;
+  const grandTotal = totalComboPrice + totalNonComboRental + totalNonComboPhoto;
+  const depositToPayNow = totalComboPrice + totalComboDeposit + totalNonComboRental + totalNonComboDeposit + totalNonComboPhoto;
+  const remainingToPayLater = 0;
 
-      if (prodItem) {
-        const pct = prodItem.comboDiscountPercent !== undefined ? prodItem.comboDiscountPercent : 10;
-        prodDiscount = (prodItem.basePrice || 0) * prodItem.quantity * (pct / 100);
+  const resumePendingCheckout = async (): Promise<boolean> => {
+    const selectedIds = selectedItems.map((item) => item.id).sort().join('|');
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key?.startsWith('vh_pending_checkout_')) continue;
+      try {
+        const pending = JSON.parse(localStorage.getItem(key) || '{}') as {
+          cartItemIds?: string[];
+        };
+        if ((pending.cartItemIds || []).slice().sort().join('|') !== selectedIds) continue;
+        const paymentCode = key.replace('vh_pending_checkout_', '');
+        const status = await httpClient.get<{
+          paymentStatus: string;
+          bookingStatus: string;
+          checkoutUrl?: string | null;
+        }>(`/payments/${encodeURIComponent(paymentCode)}/status`);
+        if (
+          status.paymentStatus === 'PENDING' &&
+          status.bookingStatus === 'PENDING_PAYMENT' &&
+          status.checkoutUrl
+        ) {
+          toast.info('Bạn đang có một đơn giữ chỗ chờ thanh toán. Đang mở lại cổng thanh toán…');
+          window.location.href = status.checkoutUrl;
+          return true;
+        }
+        if (['FAILED', 'CANCELLED'].includes(status.paymentStatus) || status.bookingStatus === 'CANCELLED') {
+          localStorage.removeItem(key);
+        }
+      } catch {
+        // A stale local record must not block checkout of a new order.
       }
-      if (photoItem) {
-        const pct = photoItem.comboDiscountPercent !== undefined ? photoItem.comboDiscountPercent : 10;
-        photoDiscount = (photoItem.basePrice || 0) * photoItem.quantity * (pct / 100);
+    }
+
+    try {
+      const pending = await httpClient.get<
+        Array<{ paymentCode: string; checkoutUrl?: string | null }>
+      >('/payments/pending-checkouts');
+      if (pending.length === 1 && pending[0].checkoutUrl) {
+        toast.info('Bạn đang có một đơn chờ thanh toán. Đang mở lại cổng thanh toán…');
+        window.location.href = pending[0].checkoutUrl;
+        return true;
       }
-
-      return sum + prodDiscount + photoDiscount;
-    }, 0);
-
-  const totalPhotographerDeposit = Math.round(totalPhotographerFee * 0.3);
-  const totalPhotographerRemaining = totalPhotographerFee - totalPhotographerDeposit;
-
-  const grandTotal = Math.max(totalProductRental + totalPhotographerFee + totalOthersFee - comboDiscountTotal, 0);
-  const depositToPayNow = Math.max(totalProductRental + totalPhotographerDeposit + totalOthersFee + serviceFee + totalProductDeposit - comboDiscountTotal, 0);
-  const remainingToPayLater = totalPhotographerRemaining;
+    } catch {
+      // Do not prevent a new checkout if pending-payment lookup is unavailable.
+    }
+    return false;
+  };
 
   const handleCheckout = async () => {
     if (selectedItems.length === 0) return;
+    if (await resumePendingCheckout()) return;
     
-    const hasCityMismatch = checkedGroups.some(group => group.isCityMismatch);
-    if (hasCityMismatch) {
-      toast.error('Không thể tiến hành thanh toán do có sự lệch khu vực địa lý giữa Áo dài và Thợ ảnh trong giỏ hàng. Vui lòng kiểm tra lại!');
-      return;
-    }
+
     
-    const invalidProduct = selectedItems.find((item) =>
-      item.itemType === 'PRODUCT' && (
-        !isMongoObjectId(item.productId) ||
-        !item.size ||
-        !item.color ||
-        !(item.rentalFrom || item.startDate) ||
-        ((item.rentalType || 'DAILY') === 'DAILY' && !(item.rentalTo || item.endDate)) ||
-        ((item.rentalType || 'DAILY') === 'HOURLY' && (!item.startTime || !item.endTime))
-      )
+    const invalidProduct = selectedItems.find(
+      (item) =>
+        item.itemType === 'PRODUCT' && getProductValidationIssues(item).length > 0,
     );
     if (invalidProduct) {
-      toast.error('M?t s?n ph?m trong gi? thi?u th?ng tin thu? h?p l?. Vui l?ng ch?n l?i l?ch, size v? m?u.');
+      const issues = getProductValidationIssues(invalidProduct).join(', ');
+      toast.error(
+        'Áo dài "' +
+          (invalidProduct.name || invalidProduct.productName || 'trong giỏ hàng') +
+          '" đang thiếu: ' + issues + '. Vui lòng chỉnh lại sản phẩm này trước khi thanh toán.',
+      );
       return;
     }
     try {
@@ -676,13 +677,18 @@ export const CartPage: React.FC = () => {
         const from = item.rentalFrom || item.startDate || '';
         const to = item.rentalTo || item.endDate || from;
         const result = await checkProductAvailability(item.productId || '', item.size || '', item.color || '', from, to, item.quantity, item.rentalType || 'DAILY', item.startTime || undefined, item.endTime || undefined);
-        if (!result.available) throw new Error(`${item.name || item.productName || 'S?n ph?m'} kh?ng c?n ?? s? l??ng cho l?ch ?? ch?n.`);
+        if (!result.available) throw new Error(`${item.name || item.productName || 'Sản phẩm'} không còn đủ số lượng cho lịch đã chọn.`);
       }));
-    } catch (error: any) { toast.error(error.message || 'Kh?ng th? ki?m tra l?ch thu?.'); return; }
+    } catch (error: any) { toast.error(error.message || 'Không thể kiểm tra lịch thuê.'); return; }
     setIsLoading(true);
     try {
-      const itemsPayload = selectedItems.map(item => {
-        if (item.itemType === 'PRODUCT') {
+      const productItems = selectedItems.filter(item => item.itemType === 'PRODUCT');
+      const photoItems = selectedItems.filter(item => item.itemType === 'PHOTOGRAPHY_PACKAGE');
+      if (photoItems.length > 1) {
+        throw new Error('Vui lòng thanh toán từng gói chụp hoặc từng combo riêng biệt.');
+      }
+
+      const rentalItemsPayload = productItems.map(item => {
           let pId = item.productId || item.id;
           if (pId && !/^[0-9a-fA-F]{24}$/.test(pId)) {
             // Find a matching real product ID from database
@@ -715,66 +721,84 @@ export const CartPage: React.FC = () => {
             shootDate: item.startDate || item.rentalFrom || null,
             shootTimeSlot: item.shootTimeSlot || (item.startTime && item.endTime ? `${item.startTime}-${item.endTime}` : null),
           };
-        } else {
-          // PHOTOGRAPHY_PACKAGE
-          let pkgId = item.photographyPackageId;
-          if (pkgId && !/^[0-9a-fA-F]{24}$/.test(pkgId)) {
-            // Find first photographer's package
-            const firstPhoto = realPhotographersList.find(p => p.packages && p.packages.length > 0);
-            if (firstPhoto && firstPhoto.packages.length > 0) {
-              pkgId = firstPhoto.packages[0]._id;
-            }
-          }
-
-          const shootDate = item.shootDate || new Date(Date.now() + 24 * 3600 * 1000).toISOString().split('T')[0];
-          const shootTimeSlot = item.shootTimeSlot || '09:00-11:00';
-
-          return {
-            photographyPackageId: pkgId,
-            quantity: item.quantity || 1,
-            shootDate,
-            shootTimeSlot,
-            shootLocation: item.shootLocation || 'Đại Nội Huế',
-            concept: item.shootConcept || 'Cổ phục Huế',
-            customRequests: item.customRequests || '',
-            referenceImage: item.referenceImage || null,
-          };
-        }
       });
 
-      const hasProduct = selectedItems.some(i => i.itemType === 'PRODUCT');
-      const hasPhoto = selectedItems.some(i => i.itemType === 'PHOTOGRAPHY_PACKAGE');
-      let bookingType = 'COMBO';
-      if (hasProduct && !hasPhoto) {
-        bookingType = 'AODAI_RENTAL';
-      } else if (!hasProduct && hasPhoto) {
-        bookingType = 'PHOTOGRAPHY';
+      let bookingId: string;
+      let paymentPurpose: 'FULL_PAYMENT' | 'DEPOSIT_PAYMENT' = 'FULL_PAYMENT';
+      if (photoItems.length === 1) {
+        const photo = photoItems[0];
+        if (
+          !isMongoObjectId(photo.photographyPackageId) ||
+          !photo.shootDate ||
+          !photo.shootTimeSlot ||
+          !photo.shootLocation ||
+          !Number.isFinite(photo.shootLocationLatitude) ||
+          !Number.isFinite(photo.shootLocationLongitude)
+        ) {
+          throw new Error('Gói chụp thiếu địa chỉ hoặc tọa độ bản đồ. Vui lòng xóa gói và chọn lại địa điểm chụp.');
+        }
+        const [startTime, endTime] = photo.shootTimeSlot.split('-').map(value => value.trim());
+        if (!startTime || !endTime) {
+          throw new Error('Khung giờ chụp không hợp lệ. Vui lòng chọn lại lịch.');
+        }
+        const holdPayload = {
+          packageId: photo.photographyPackageId,
+          sessions: [{
+            clientId: photo.id,
+            startsAt: `${photo.shootDate}T${startTime}:00+07:00`,
+            endsAt: `${photo.shootDate}T${endTime}:00+07:00`,
+            locationAddress: photo.shootLocation,
+            locationLatitude: photo.shootLocationLatitude,
+            locationLongitude: photo.shootLocationLongitude,
+          }],
+          concept: photo.shootConcept || undefined,
+          customRequests: photo.customRequests || undefined,
+          referenceImage: photo.referenceImage || undefined,
+          ...(productItems.length > 0 ? {
+            aodaiItems: rentalItemsPayload.map(item => ({
+              productId: item.productId,
+              selectedSize: item.selectedSize,
+              selectedColor: item.selectedColor,
+              rentalFrom: item.rentalFrom,
+              rentalTo: item.rentalTo,
+              quantity: item.quantity,
+            })),
+          } : {}),
+        };
+        const holdEndpoint = productItems.length > 0
+          ? '/api/bookings/combo/photography-hold'
+          : '/api/bookings/photography/hold';
+        const idempotencyKey = `cart-hold-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const holdRes: any = await httpClient.post(holdEndpoint, holdPayload, {
+          headers: { 'Idempotency-Key': idempotencyKey },
+        });
+        bookingId = holdRes.bookingId;
+        paymentPurpose = 'DEPOSIT_PAYMENT';
+      } else {
+        const bookingRes: any = await httpClient.post('/bookings', {
+          bookingType: 'AODAI_RENTAL',
+          items: rentalItemsPayload,
+          travelFee: 0,
+          serviceFee,
+        });
+        bookingId = bookingRes._id;
       }
 
-      const bookingPayload = {
-        bookingType,
-        items: itemsPayload,
-        travelFee: 0,
-        serviceFee,
-      };
-
-      const bookingRes: any = await httpClient.post('/bookings', bookingPayload);
-      toast.success('Khởi tạo đơn hàng thành công!');
+      toast.info('Đơn đã được giữ tạm thời. Đang chuyển đến thanh toán…');
 
       const paymentRes: any = await httpClient.post('/payments/create-link', {
-        bookingId: bookingRes._id,
-        purpose: bookingType === 'AODAI_RENTAL' ? 'FULL_PAYMENT' : 'DEPOSIT_PAYMENT',
+        bookingId,
+        purpose: paymentPurpose,
       });
 
       if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
-        toast.info('Đang chuyển hướng tới cổng thanh toán PayOS Simulator...');
-        
-        // Clear selected items from cart
-        selectedItems.forEach(item => removeFromCart(item.id));
-        
+        localStorage.setItem(
+          `vh_pending_checkout_${paymentRes.paymentCode}`,
+          JSON.stringify({ bookingId, cartItemIds: selectedItems.map(item => item.id) }),
+        );
         setTimeout(() => {
           window.location.href = paymentRes.payos.checkoutUrl;
-        }, 1500);
+        }, 500);
       } else {
         throw new Error('Không thể khởi tạo liên kết thanh toán');
       }
@@ -783,91 +807,6 @@ export const CartPage: React.FC = () => {
       setIsLoading(false);
     }
   };
-
-  const handleConfirmPayment = async () => {
-    try {
-      // Loop through selected items and save them to backend database
-      for (const item of selectedItems) {
-        if (item.itemType === 'PRODUCT') {
-          if (!isMongoObjectId(item.productId)) {
-            throw new Error(`Sản phẩm "${item.name || item.productName || 'trong giỏ hàng'}" không còn hợp lệ. Vui lòng xóa khỏi giỏ và thêm lại từ trang sản phẩm.`);
-          }
-
-          const startDate = item.startDate || item.rentalFrom;
-          const endDate = item.endDate || item.rentalTo;
-          const rentalType = item.rentalType || 'DAILY';
-
-          if (!startDate || (rentalType === 'DAILY' && !endDate)) {
-            throw new Error(`Sản phẩm "${item.name || item.productName || 'trong giỏ hàng'}" thiếu ngày thuê. Vui lòng chọn lại lịch thuê.`);
-          }
-
-          await httpClient.post('/api/bookings', {
-            productId: item.productId,
-            rentalType,
-            startDate,
-            endDate,
-            startTime: item.startTime,
-            endTime: item.endTime,
-            size: item.size || 'M',
-            color: item.color || 'RED',
-            quantity: item.quantity || 1
-          });
-        } else if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
-          if (!isMongoObjectId(item.photographyPackageId)) {
-            throw new Error(`Gói chụp "${item.packageName || 'trong giỏ hàng'}" không còn hợp lệ. Vui lòng xóa khỏi giỏ và thêm lại từ trang nhiếp ảnh gia.`);
-          }
-
-          if (!item.shootDate || !item.shootTimeSlot || !item.shootLocation) {
-            throw new Error(`Gói chụp "${item.packageName || 'trong giỏ hàng'}" thiếu lịch chụp. Vui lòng chọn lại lịch chụp.`);
-          }
-
-          await httpClient.post('/api/bookings/photography', {
-            packageId: item.photographyPackageId,
-            shootDate: item.shootDate,
-            shootTimeSlot: item.shootTimeSlot,
-            shootLocation: item.shootLocation,
-            concept: item.shootConcept || 'Cổ phục Huế',
-            customRequests: item.customRequests || null,
-            referenceImage: item.referenceImage || null,
-          });
-        }
-      }
-      setShowPaymentModal(false);
-      setIsCheckoutSuccess(true);
-      // Clear only selected items from the cart
-      selectedItems.forEach(item => removeFromCart(item.id));
-      toast.success('Thành công! Lịch hẹn của bạn đã được ghi nhận.');
-    } catch (err: any) {
-      console.error('Lỗi khi lưu đơn đặt lịch:', err);
-      toast.error(err.message || 'Không thể lưu đơn đặt lịch lên hệ thống. Vui lòng thử lại!');
-    }
-  };
-
-
-  if (isCheckoutSuccess) {
-    return (
-      <div style={{ backgroundColor: '#FCF9F2', minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
-        <div style={{ maxWidth: '600px', width: '100%', textAlign: 'center', padding: '40px', backgroundColor: 'white', borderRadius: '16px', border: '1px solid #EAE1D4', boxShadow: 'var(--shadow-md)' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(39, 174, 96, 0.1)', color: '#27AE60', marginBottom: '24px' }}>
-            <CheckCircle size={40} />
-          </div>
-          <h2 className="font-header" style={{ fontSize: '28px', color: '#8B1E22', marginBottom: '16px' }}>Đặt lịch & Thuê đồ thành công!</h2>
-          <p style={{ fontSize: '15px', color: 'var(--color-text-secondary)', lineHeight: 1.6, marginBottom: '32px' }}>
-            Cảm ơn bạn đã lựa chọn Di sản Áo Dài. Đơn đặt hàng của bạn đã được ghi nhận. Vui lòng kiểm tra email để xem hóa đơn điện tử và chi tiết lịch trình.
-          </p>
-          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-            <Link to="/" className="vh-btn vh-btn-outline vh-btn-md" style={{ borderRadius: '10px', borderColor: '#8B1E22', color: '#8B1E22' }}>
-              Về Trang Chủ
-            </Link>
-            <Link to={ROUTES.PHOTOGRAPHERS} className="vh-btn vh-btn-primary vh-btn-md" style={{ borderRadius: '10px', backgroundColor: '#8B1E22', borderColor: '#8B1E22' }}>
-              Xem Thợ Chụp Khác
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={{ backgroundColor: '#FCF9F2', minHeight: '90vh', padding: '40px 0 80px 0', fontFamily: 'var(--font-body)' }}>
       <div style={{ maxWidth: '1280px', width: '100%', margin: '0 auto', padding: '0 24px' }}>
@@ -920,6 +859,107 @@ export const CartPage: React.FC = () => {
             
             {/* Left Column: Cart groups and items */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              {comboGroupEntries.map(entry => {
+                const isComboSelected = entry.items.every(i => selectedItemIds.includes(i.id));
+
+                return (
+                  <div
+                    key={entry.comboId}
+                    style={{
+                      backgroundColor: '#FFFDF9',
+                      borderRadius: '12px',
+                      border: '2px solid #D97706',
+                      boxShadow: '0 4px 12px rgba(217, 119, 6, 0.12)',
+                      padding: '20px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '16px',
+                    }}
+                  >
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed #FDE68A', paddingBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <CustomCheckbox
+                          checked={isComboSelected}
+                          onChange={() => {
+                            if (isComboSelected) {
+                              setSelectedItemIds(prev => prev.filter(id => !entry.items.some(i => i.id === id)));
+                            } else {
+                              setSelectedItemIds(prev => Array.from(new Set([...prev, ...entry.items.map(i => i.id)])));
+                            }
+                          }}
+                        />
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          backgroundColor: '#8B1E22',
+                          color: 'white',
+                          padding: '5px 12px',
+                          borderRadius: '16px',
+                          fontSize: '12px',
+                          fontWeight: 800,
+                          letterSpacing: '0.05em'
+                        }}>
+                          <Sparkles size={13} fill="#FFF" /> GÓI COMBO TRỌN GÓI (GIẢM {entry.discountPct}%)
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => entry.items.forEach(i => removeFromCart(i.id))}
+                        style={{ border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 700 }}
+                      >
+                        <Trash2 size={16} /> Xóa Combo
+                      </button>
+                    </div>
+
+                    {/* Items list inside Combo */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {entry.items.map((item) => {
+                        const itemImage = item.itemType === 'PRODUCT'
+                          ? (item.productImage || item.image)
+                          : (item.packageImage || item.photographerAvatar || item.image);
+
+                        return (
+                          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'white', padding: '14px 16px', borderRadius: '8px', border: '1px solid #FEF3C7' }}>
+                            <img
+                              src={getImageUrl(itemImage)}
+                              alt={item.productName || item.packageName || ''}
+                              style={{ width: '70px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1px solid rgba(0,0,0,0.06)' }}
+                            />
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ fontSize: '15px', fontWeight: 700, color: '#1E293B' }}>
+                                {item.itemType === 'PRODUCT' ? `Áo dài: ${item.productName || item.name}` : `Gói chụp: ${item.photographerName} | ${item.packageName}`}
+                              </div>
+                              {item.itemType === 'PRODUCT' ? (
+                                <div style={{ fontSize: '12.5px', color: '#64748B' }}>
+                                  Kích cỡ: <strong style={{ color: '#8B1E22' }}>{item.size}</strong> • Màu: <strong style={{ color: '#8B1E22' }}>{item.color}</strong> • Ngày thuê: <strong>{formatSingleDate(item.rentalFrom || item.startDate)}</strong>
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: '12.5px', color: '#64748B' }}>
+                                  Lịch chụp: <strong style={{ color: '#8B1E22' }}>{formatSingleDate(item.shootDate)} ({item.shootTimeSlot})</strong>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Footer combo summary */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #FDE68A', paddingTop: '12px' }}>
+                      <div style={{ fontSize: '12.5px', color: '#64748B' }}>
+                        Giá gốc 2 món: <span style={{ textDecoration: 'line-through' }}>{entry.origTotal.toLocaleString('vi-VN')}đ</span>
+                        {entry.depositAmt > 0 && <span style={{ marginLeft: '10px', color: '#D97706', fontWeight: 600 }}>(Cọc áo dài: +{entry.depositAmt.toLocaleString('vi-VN')}đ)</span>}
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '12px', color: '#8B1E22', fontWeight: 600 }}>Giá Combo ưu đãi: </span>
+                        <strong style={{ fontSize: '20px', color: '#8B1E22', fontWeight: 800 }}>{entry.comboPrice.toLocaleString('vi-VN')}đ</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
               {groups.map(group => (
                 <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   
@@ -1116,7 +1156,21 @@ export const CartPage: React.FC = () => {
                                                 {sizes.map(sz => (
                                                   <button
                                                     key={sz}
-                                                    onClick={() => updateCartItemSize(item.id, sz)}
+                                                    onClick={async () => {
+                                                      updateCartItemSize(item.id, sz);
+                                                      try {
+                                                        const res = await httpClient.get<{ stock: number }>(
+                                                          `/bookings/stock/product/${item.productId}?size=${encodeURIComponent(sz)}&color=${encodeURIComponent(item.color || '')}`
+                                                        );
+                                                        const newStock = res.stock || 0;
+                                                        setItemStocks(prev => ({ ...prev, [item.id]: newStock }));
+                                                        if (item.quantity > newStock && newStock > 0) {
+                                                          updateCartItemQuantity(item.id, newStock);
+                                                        }
+                                                      } catch (e) {
+                                                        console.error('Lỗi tải tồn kho:', e);
+                                                      }
+                                                    }}
                                                     style={{
                                                       padding: '5px 12px',
                                                       borderRadius: '4px',
@@ -1142,7 +1196,21 @@ export const CartPage: React.FC = () => {
                                                   {colors.map(cl => (
                                                     <button
                                                       key={cl}
-                                                      onClick={() => updateCartItemColor(item.id, cl)}
+                                                      onClick={async () => {
+                                                        updateCartItemColor(item.id, cl);
+                                                        try {
+                                                          const res = await httpClient.get<{ stock: number }>(
+                                                            `/bookings/stock/product/${item.productId}?size=${encodeURIComponent(item.size || '')}&color=${encodeURIComponent(cl)}`
+                                                          );
+                                                          const newStock = res.stock || 0;
+                                                          setItemStocks(prev => ({ ...prev, [item.id]: newStock }));
+                                                          if (item.quantity > newStock && newStock > 0) {
+                                                            updateCartItemQuantity(item.id, newStock);
+                                                          }
+                                                        } catch (e) {
+                                                          console.error('Lỗi tải tồn kho:', e);
+                                                        }
+                                                      }}
                                                       style={{
                                                         padding: '5px 12px',
                                                         borderRadius: '4px',
@@ -1385,6 +1453,11 @@ export const CartPage: React.FC = () => {
                                           <span>Kích cỡ: <strong>{item.size}</strong> {item.color && <> • Màu: <strong>{item.color}</strong></>}</span>
                                           <span>Ngày thuê: <strong>{formatDateRange(item.rentalFrom || item.startDate, item.rentalTo || item.endDate)}{item.startTime && item.endTime ? ` (${item.startTime} - ${item.endTime})` : ''}</strong></span>
                                           <span>Nơi nhận: <strong>{item.providerCity || 'Thừa Thiên Huế'}</strong></span>
+                                          {itemStocks[item.id] !== undefined && (
+                                            <span style={{ fontSize: '11px', color: '#8B1E22', fontWeight: 600, marginTop: '2px' }}>
+                                              (Còn lại {itemStocks[item.id]} sản phẩm trong kho)
+                                            </span>
+                                          )}
                                         </div>
                                         <button
                                           onClick={() => setEditingItemId(item.id)}
@@ -1424,8 +1497,15 @@ export const CartPage: React.FC = () => {
 
                             {/* Price and Quantity Selector */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', maxWidth: '350px' }}>
-                              <div style={{ fontSize: '16px', fontWeight: 700, color: '#2D2926' }}>
-                                {item.basePrice?.toLocaleString('vi-VN')}đ
+                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                <span style={{ fontSize: '16px', fontWeight: 700, color: '#8B1E22' }}>
+                                  {item.basePrice?.toLocaleString('vi-VN')}đ
+                                </span>
+                                {(item as any).originalPrice && (item as any).originalPrice > (item.basePrice || 0) && (
+                                  <span style={{ fontSize: '13px', textDecoration: 'line-through', color: '#9C9C9C', fontWeight: 500 }}>
+                                    {(item as any).originalPrice.toLocaleString('vi-VN')}đ
+                                  </span>
+                                )}
                               </div>
 
                               {/* Premium Quantity Selector */}
@@ -1461,20 +1541,29 @@ export const CartPage: React.FC = () => {
                                   {item.quantity}
                                 </span>
                                 <button
-                                  onClick={() => updateCartItemQuantity(item.id, item.quantity + 1)}
+                                  onClick={() => {
+                                    const maxStock = itemStocks[item.id] ?? 999;
+                                    if (item.quantity >= maxStock) {
+                                      toast.error(`Chỉ còn ${maxStock} sản phẩm khả dụng cho kích cỡ và màu sắc này.`);
+                                      return;
+                                    }
+                                    updateCartItemQuantity(item.id, item.quantity + 1);
+                                  }}
+                                  disabled={item.quantity >= (itemStocks[item.id] ?? 999)}
                                   style={{
                                     border: 'none',
                                     background: 'none',
                                     width: '28px',
                                     height: '28px',
-                                    cursor: 'pointer',
-                                    color: '#2D2926',
+                                    cursor: item.quantity >= (itemStocks[item.id] ?? 999) ? 'not-allowed' : 'pointer',
+                                    color: item.quantity >= (itemStocks[item.id] ?? 999) ? '#C5B39E' : '#2D2926',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     fontSize: '14px',
                                     fontWeight: 'bold',
-                                    transition: 'all 0.2s'
+                                    transition: 'all 0.2s',
+                                    opacity: item.quantity >= (itemStocks[item.id] ?? 999) ? 0.3 : 1
                                   }}
                                 >
                                   +
@@ -1537,18 +1626,35 @@ export const CartPage: React.FC = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#5D4037' }}>
-                    <span>Tổng tiền hàng ({selectedItems.length} mục)</span>
+                    <span>Tổng tiền dịch vụ ({selectedItems.length} mục)</span>
                     <span style={{ color: '#2D2926', fontWeight: 700 }}>
                       {grandTotal.toLocaleString('vi-VN')}đ
                     </span>
                   </div>
 
+                  {totalProductRental > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#5D4037' }}>
+                      <span>Tiền thuê Áo dài</span>
+                      <span style={{ color: '#2D2926', fontWeight: 600 }}>
+                        {totalProductRental.toLocaleString('vi-VN')}đ
+                      </span>
+                    </div>
+                  )}
 
                   {totalProductDeposit > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#5D4037' }}>
                       <span>Tiền cọc Áo dài</span>
-                      <span style={{ color: '#2D2926', fontWeight: 700 }}>
+                      <span style={{ color: '#2D2926', fontWeight: 600 }}>
                         {totalProductDeposit.toLocaleString('vi-VN')}đ
+                      </span>
+                    </div>
+                  )}
+
+                  {totalPhotographerFee > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#5D4037' }}>
+                      <span>Phí Thợ chụp ảnh</span>
+                      <span style={{ color: '#2D2926', fontWeight: 600 }}>
+                        {totalPhotographerFee.toLocaleString('vi-VN')}đ
                       </span>
                     </div>
                   )}
@@ -1599,10 +1705,12 @@ export const CartPage: React.FC = () => {
                 </div>
 
                 {/* Nested box for pay later */}
-                <div style={{ backgroundColor: '#F5EFE6', padding: '12px 16px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', color: '#5D4037' }}>
-                  <span>Tiền trả sau cho thợ chụp</span>
-                  <strong style={{ color: '#2D2926' }}>{remainingToPayLater.toLocaleString('vi-VN')}đ</strong>
-                </div>
+                {remainingToPayLater > 0 && (
+                  <div style={{ backgroundColor: '#F5EFE6', padding: '12px 16px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', color: '#5D4037', marginBottom: '16px' }}>
+                    <span>Tiền trả sau cho thợ chụp</span>
+                    <strong style={{ color: '#2D2926' }}>{remainingToPayLater.toLocaleString('vi-VN')}đ</strong>
+                  </div>
+                )}
 
                 {/* Warning message above checkout button */}
                 {selectedItems.some((item) => item.itemType === 'PRODUCT') && (
@@ -1714,106 +1822,6 @@ export const CartPage: React.FC = () => {
         )}
       </div>
 
-      {/* Payment Modal */}
-      {showPaymentModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 999,
-          padding: '20px'
-        }}>
-          <div style={{ backgroundColor: 'white', maxWidth: '500px', width: '100%', padding: '32px', borderRadius: '16px', border: '1px solid #EAE1D4', boxShadow: 'var(--shadow-lg)' }}>
-            <h3 className="font-header" style={{ fontSize: '22px', fontWeight: 700, color: '#8B1E22', marginBottom: '24px', textAlign: 'center' }}>
-              Thanh toán đơn hàng
-            </h3>
-
-            {/* Payment Method Selector */}
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
-              <button
-                onClick={() => setPaymentMethod('BANK')}
-                style={{
-                  flex: 1,
-                  padding: '14px',
-                  borderRadius: '10px',
-                  border: paymentMethod === 'BANK' ? '2px solid #8B1E22' : '1px solid #EAE1D4',
-                  backgroundColor: paymentMethod === 'BANK' ? 'rgba(139, 30, 34, 0.03)' : 'white',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <CreditCard size={18} color={paymentMethod === 'BANK' ? '#8B1E22' : '#7E6D5B'} />
-                <span>Chuyển khoản QR</span>
-              </button>
-              <button
-                onClick={() => setPaymentMethod('MOMO')}
-                style={{
-                  flex: 1,
-                  padding: '14px',
-                  borderRadius: '10px',
-                  border: paymentMethod === 'MOMO' ? '2px solid #8B1E22' : '1px solid #EAE1D4',
-                  backgroundColor: paymentMethod === 'MOMO' ? 'rgba(139, 30, 34, 0.03)' : 'white',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <div style={{ width: '18px', height: '18px', borderRadius: '4px', backgroundColor: '#A50064', color: 'white', fontSize: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>MoMo</div>
-                <span>Ví điện tử MoMo</span>
-              </button>
-            </div>
-
-            {/* QR Mockup */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', backgroundColor: '#FCF9F2', padding: '24px', borderRadius: '12px', marginBottom: '24px', border: '1px solid #EAE1D4' }}>
-              <span style={{ fontSize: '13px', color: '#7E6D5B' }}>Mã QR quét thanh toán</span>
-              <img
-                src={paymentMethod === 'BANK'
-                  ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=STB_tiendat5604_VIBEHUE_PAY_${depositToPayNow}`
-                  : `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Momo_0911122201_VIBEHUE_PAY_${depositToPayNow}`
-                }
-                alt="QR Code"
-                style={{ width: '150px', height: '150px', backgroundColor: 'white', padding: '6px', borderRadius: '6px', border: '1px solid rgba(0,0,0,0.1)' }}
-              />
-              <div style={{ textAlign: 'center' }}>
-                <span style={{ fontSize: '12px', color: '#7E6D5B', display: 'block' }}>Số tiền cần chuyển:</span>
-                <span style={{ fontSize: '24px', fontWeight: 800, color: '#8B1E22' }}>
-                  {depositToPayNow.toLocaleString('vi-VN')}đ
-                </span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => setShowPaymentModal(false)}
-                className="vh-btn vh-btn-outline"
-                style={{ flex: 1, borderRadius: '10px', padding: '10px', borderColor: '#EAE1D4', color: '#5D4037' }}
-              >
-                HỦY
-              </button>
-              <button
-                onClick={handleConfirmPayment}
-                className="vh-btn vh-btn-primary"
-                style={{ flex: 1, borderRadius: '10px', padding: '10px', backgroundColor: '#8B1E22', borderColor: '#8B1E22' }}
-              >
-                XÁC NHẬN ĐÃ CHUYỂN
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

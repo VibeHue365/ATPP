@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { PrivateEvidenceImage } from './PrivateEvidenceImage';
 import { httpClient } from '../../services/httpClient';
 import { Modal } from './Modal';
-import { ShieldAlert, User, Clock, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { ShieldAlert, User, Clock, FileText, CheckCircle, XCircle, Camera, Download, Scale } from 'lucide-react';
 import { CustomerRefundPanel } from './CustomerRefundPanel';
 import { RentalPickupReturnPanel } from '../../features/rentals/components/RentalPickupReturnPanel';
 import { RentalFulfillmentOperationsPanel } from '../../features/rentals/components/RentalFulfillmentOperationsPanel';
 import { API_BASE_URL } from '../../config/env';
+import { downloadPhotosAsZip, downloadSinglePhoto } from '../../utils/downloadUtils';
 
 interface BookingDetailModalProps {
   bookingId: string | null;
@@ -16,6 +17,101 @@ interface BookingDetailModalProps {
   viewerRole?: 'customer' | 'provider' | 'admin';
   onBookingChanged?: () => void;
   onWriteReview?: (itemDetails: { bookingId: string, itemId: string, productId?: string, photographyPackageId?: string }) => void;
+}
+
+function getPhotoshootStartTarget(rawShootDate?: any, timeSlotStr?: string, startsAtRaw?: any): Date | null {
+  if (startsAtRaw) {
+    const s = new Date(startsAtRaw);
+    if (!isNaN(s.getTime())) return s;
+  }
+  if (!rawShootDate) return null;
+  const d = new Date(rawShootDate);
+  if (isNaN(d.getTime())) return null;
+
+  let hours = 8;
+  let minutes = 0;
+  if (timeSlotStr && timeSlotStr !== 'Thỏa thuận') {
+    const startTimePart = timeSlotStr.split('-')[0]?.trim();
+    if (startTimePart) {
+      const match = startTimePart.match(/(\d{1,2}):(\d{2})/);
+      if (match) {
+        hours = parseInt(match[1], 10);
+        minutes = parseInt(match[2], 10);
+      }
+    }
+  }
+
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hours, minutes, 0, 0);
+}
+
+function getCountdownDisplay(targetDate: Date | null, bookingStatus?: string, currentTime: Date = new Date()) {
+  if (!targetDate) return null;
+  if (['COMPLETED', 'CANCELLED', 'RETURNED', 'REFUNDED'].includes(bookingStatus || '')) {
+    return null;
+  }
+
+  if (bookingStatus === 'IN_PROGRESS') {
+    return {
+      text: '⚡ ĐANG TÁC NGHIỆP TRỰC TIẾP',
+      subText: 'Buổi chụp ảnh đang diễn ra',
+      bgColor: '#ECFDF5',
+      borderColor: '#10B981',
+      textColor: '#047857',
+      icon: '📸',
+      badgeColor: '#10B981',
+      isUrgent: false,
+      isOverdue: false
+    };
+  }
+
+  const diffMs = targetDate.getTime() - currentTime.getTime();
+
+  if (diffMs > 0) {
+    const totalMinutes = Math.floor(diffMs / (1000 * 60));
+    const days = Math.floor(totalMinutes / (60 * 24));
+    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+    const mins = totalMinutes % 60;
+
+    let timeText = '';
+    if (days > 0) {
+      timeText = `${days} ngày ${hours}h ${mins}m`;
+    } else if (hours > 0) {
+      timeText = `${hours}h ${mins}m`;
+    } else {
+      timeText = `${mins} phút`;
+    }
+
+    const isUrgent = diffMs < 2 * 60 * 60 * 1000;
+
+    return {
+      text: `⏳ CÒN ${timeText.toUpperCase()} NỮA ĐẾN GIỜ CHỤP`,
+      subText: `Giờ bấm máy: ${targetDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} • ${targetDate.toLocaleDateString('vi-VN')}`,
+      bgColor: isUrgent ? '#FEF2F2' : '#FFFBEB',
+      borderColor: isUrgent ? '#FCA5A5' : '#FCD34D',
+      textColor: isUrgent ? '#DC2626' : '#B45309',
+      icon: isUrgent ? '🚨' : '⏳',
+      badgeColor: isUrgent ? '#EF4444' : '#F59E0B',
+      isUrgent,
+      isOverdue: false
+    };
+  } else {
+    const overdueMinutes = Math.floor(Math.abs(diffMs) / (1000 * 60));
+    const overdueHours = Math.floor(overdueMinutes / 60);
+    const mins = overdueMinutes % 60;
+    const overdueText = overdueHours > 0 ? `${overdueHours}h ${mins}m` : `${mins} phút`;
+
+    return {
+      text: `⚠️ ĐÃ ĐẾN GIỜ CHỤP (Quá ${overdueText})`,
+      subText: `Vui lòng khởi hành hoặc bấm "Bắt đầu buổi chụp" trong thao tác`,
+      bgColor: '#FEF2F2',
+      borderColor: '#F87171',
+      textColor: '#991B1B',
+      icon: '⏰',
+      badgeColor: '#EF4444',
+      isUrgent: false,
+      isOverdue: true
+    };
+  }
 }
 
 export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
@@ -35,6 +131,15 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   const [resolvingLocationChangeId, setResolvingLocationChangeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [incident, setIncident] = useState<any>(null);
+  const [now, setNow] = useState<Date>(new Date());
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && bookingId) {
@@ -109,7 +214,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
       CONFIRMED: { text: 'Đã xác nhận', bg: '#E0F2FE', color: '#0284C7' },
       PICKUP_PENDING: { text: 'Chờ nhận đồ', bg: '#EEF2F6', color: '#4B5563' },
       PICKED_UP: { text: 'Đang thuê', bg: '#F5F3FF', color: '#7C3AED' },
-      RETURN_PENDING: { text: 'Chờ duyệt sự cố', bg: '#FFF1F2', color: '#E11D48' },
+      RETURN_PENDING: incident
+        ? { text: 'Chờ duyệt sự cố', bg: '#FFF1F2', color: '#E11D48' }
+        : { text: 'Chờ kiểm tra đồ', bg: '#FAF6F0', color: '#7A6B58' },
       RETURNED: { text: 'Đã trả đồ', bg: '#ECFDF5', color: '#059669' },
       COMPLETED: { text: 'Đã hoàn thành', bg: '#D1FAE5', color: '#065F46' },
       CANCELLED: { text: 'Đã hủy', bg: '#FEE2E2', color: '#B91C1C' },
@@ -157,19 +264,25 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
     return new Date(dateStr).toLocaleDateString('vi-VN');
   };
 
-  // Tính toán thời hạn dịch vụ chung dựa trên các items
+  // Tính toán thời hạn dịch vụ chung dựa trên các items và booking root
   let startDate: string | null = null;
   let endDate: string | null = null;
   if (booking?.items && booking.items.length > 0) {
-    const dates = booking.items.map((item: any) => ({
-      from: item.rentalFrom || item.shootDate,
-      to: item.rentalTo || item.shootDate
-    })).filter((d: any) => d.from);
+    const dates = booking.items.map((item: any) => {
+      const fromVal = item.startDate || item.rentalFrom || item.shootDate || item.startsAt || booking?.startDate || booking?.shootDate;
+      const toVal = item.endDate || item.rentalTo || item.shootDate || item.endsAt || booking?.endDate || booking?.shootDate;
+      return {
+        from: fromVal,
+        to: toVal || fromVal
+      };
+    }).filter((d: any) => d.from);
     if (dates.length > 0) {
-      startDate = dates.reduce((min: string, d: any) => d.from < min ? d.from : min, dates[0].from);
-      endDate = dates.reduce((max: string, d: any) => d.to < max ? d.to : max, dates[0].to);
+      startDate = dates.reduce((min: string, d: any) => (d.from && d.from < min) ? d.from : min, dates[0].from);
+      endDate = dates.reduce((max: string, d: any) => (d.to && d.to > max) ? d.to : max, dates[0].to);
     }
   }
+  if (!startDate) startDate = booking?.startDate || booking?.shootDate || booking?.createdAt;
+  if (!endDate) endDate = booking?.endDate || booking?.shootDate || startDate;
 
   const renderRefundOrDisputeInfo = () => {
     if (!booking) return null;
@@ -258,13 +371,19 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
       infoText = `Đơn hàng đang trong trạng thái tranh chấp sự cố hỏng đồ. Ban quản trị đang tiến hành xác minh bằng chứng để đưa ra phán quyết cuối cùng.`;
     } else if (booking.status === 'RETURN_PENDING') {
       hasInfo = true;
-      titleText = 'Yêu cầu đền bù sự cố hỏng đồ';
-      bgColor = '#FFFBEB';
-      borderColor = '#FDE68A';
-      textColor = '#92400E';
-      infoText = incident
-        ? `Cửa hàng yêu cầu đền bù sự cố hỏng đồ với số tiền: ${formatCurrency(incident.requestedAmount)}.\nMô tả sự cố: "${incident.description || ''}".\nĐang chờ khách hàng phản hồi (Đồng ý đền bù hoặc Khiếu nại).`
-        : 'Đơn hàng đang chờ xác nhận sự cố hỏng đồ từ phía khách hàng.';
+      if (incident) {
+        titleText = 'Yêu cầu đền bù sự cố hỏng đồ';
+        bgColor = '#FFFBEB';
+        borderColor = '#FDE68A';
+        textColor = '#92400E';
+        infoText = `Cửa hàng yêu cầu đền bù sự cố hỏng đồ với số tiền: ${formatCurrency(incident.requestedAmount)}.\nMô tả sự cố: "${incident.description || ''}".\nĐang chờ khách hàng phản hồi (Đồng ý đền bù hoặc Khiếu nại).`;
+      } else {
+        titleText = 'Chờ kiểm tra đồ';
+        bgColor = '#FAF6F0';
+        borderColor = '#E8E2D5';
+        textColor = '#5F5A52';
+        infoText = 'Khách hàng đã trả đồ. Đơn hàng đang chờ nhà cung cấp kiểm tra tình trạng trang phục để hoàn tất cọc.';
+      }
     }
 
     if (!hasInfo) return null;
@@ -342,44 +461,644 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             <div>{getStatusBadge(booking.status)}</div>
           </div>
 
-          {/* Customer / Service Provider info */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={{ padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid #F3F4F6', paddingBottom: '6px' }}>
-                <User size={14} color="#B89047" />
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#4A0E17', textTransform: 'uppercase' }}>Khách hàng</span>
-              </div>
-              <div style={{ fontSize: '13px', fontWeight: 600 }}>
-                {onCustomerClick ? (
-                  <span 
-                    onClick={() => {
-                      const custId = booking.customerId?._id || booking.customerId;
-                      if (custId) onCustomerClick(custId);
-                    }}
-                    style={{ color: '#2563EB', textDecoration: 'underline', cursor: 'pointer', fontWeight: 750 }}
-                    title="Bấm để xem thông tin tín nhiệm khách hàng"
-                  >
-                    {booking.customerName || 'Khách hàng'}
+          {/* Critical Service Details Summary (Photography vs Rental) */}
+          {(() => {
+            const isRental = booking.bookingType === 'AODAI_RENTAL' || booking.items?.some((i: any) => i.itemType === 'PRODUCT' || i.rentalFrom || i.startDate) || booking.productName?.includes('Áo Dài') || booking.productName?.includes('Áo dài');
+            const isPhoto = !isRental && (booking.bookingType === 'PHOTOGRAPHY' || booking.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE'));
+            const photoItem = booking.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.shootDate) || booking.items?.[0] || {};
+
+            if (isPhoto) {
+              const matchedSchedule = booking.schedules?.find((s: any) => s.scheduleType === 'PHOTOSHOOT' || s.scheduleType === 'RENTAL_PERIOD');
+              const rawShootDate = photoItem.shootDate || matchedSchedule?.scheduledDate || matchedSchedule?.startsAt || booking.shootDate;
+              const shootDateStr = rawShootDate ? new Date(rawShootDate).toLocaleDateString('vi-VN') : (booking.createdAt ? new Date(booking.createdAt).toLocaleDateString('vi-VN') : '');
+              const rawTimeSlot = photoItem.shootTimeSlot || photoItem.timeSlot || matchedSchedule?.timeSlot || booking.shootTimeSlot || booking.timeSlot || '';
+              const derivedTimeSlot = (!rawTimeSlot && matchedSchedule?.startsAt && matchedSchedule?.endsAt)
+                ? `${new Date(matchedSchedule.startsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - ${new Date(matchedSchedule.endsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
+                : rawTimeSlot;
+              const timeSlotStr = derivedTimeSlot || '';
+
+              let startTimeOnly = '';
+              if (timeSlotStr && timeSlotStr !== 'Thỏa thuận') {
+                const match = timeSlotStr.split('-')[0]?.trim().match(/(\d{1,2}):(\d{2})/);
+                if (match) {
+                  startTimeOnly = `${match[1].padStart(2, '0')}:${match[2]}`;
+                }
+              }
+              if (!startTimeOnly && matchedSchedule?.startsAt) {
+                startTimeOnly = new Date(matchedSchedule.startsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+              }
+
+              const durationStr = photoItem.durationHours ? `${photoItem.durationHours} giờ` : (photoItem.photographyPackageSnapshot?.includedDurationMinutes ? `${photoItem.photographyPackageSnapshot.includedDurationMinutes / 60} giờ` : (photoItem.photographyPackageId?.includedDurationMinutes ? `${photoItem.photographyPackageId.includedDurationMinutes / 60} giờ` : (booking.durationHours ? `${booking.durationHours} giờ` : '')));
+              const locationStr = photoItem.shootLocation || photoItem.shootLocationSnapshot?.address || photoItem.location || photoItem.address || matchedSchedule?.locationAddress || booking.shootLocation || booking.location || booking.address || booking.deliveryAddress || booking.shippingAddress || '';
+              const conceptTheme = photoItem.shootConcept || photoItem.concept || booking.shootConcept || '';
+              const customNotes = photoItem.customRequests || photoItem.conceptNotes || photoItem.notes || photoItem.specialRequests || matchedSchedule?.customNotes || booking.customRequests || booking.notes || booking.customerNotes || booking.specialRequests || '';
+              const refImage = photoItem.referenceImage || photoItem.referencePhoto || photoItem.conceptImage || booking.referenceImage || booking.referencePhoto || null;
+              const refImageArray = Array.isArray(photoItem.referenceImages) ? photoItem.referenceImages : (refImage ? [refImage] : []);
+              const rescheduleReq = photoItem.rescheduleRequest || booking.rescheduleRequest;
+
+              const targetDate = getPhotoshootStartTarget(rawShootDate, timeSlotStr, matchedSchedule?.startsAt || photoItem.startsAt);
+              const countdown = getCountdownDisplay(targetDate, booking.status, now);
+
+              return (
+                <div style={{
+                  backgroundColor: '#F8FAFC',
+                  border: '2px solid #3B82F6',
+                  borderRadius: '12px',
+                  padding: '16px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.08)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E2E8F0', paddingBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '15px', color: '#1E40AF' }}>
+                      <span>📸 THÔNG TIN CHI TIẾT BUỔI CHỤP ẢNH</span>
+                    </div>
+                    <span style={{ fontSize: '12px', backgroundColor: '#DBEAFE', color: '#1E40AF', padding: '3px 10px', borderRadius: '20px', fontWeight: 700 }}>
+                      {photoItem.photographyPackageId?.name || photoItem.productName || booking.productName || 'Gói Nhiếp Ảnh'}
+                    </span>
+                  </div>
+
+                  {/* 0. Bộ đếm ngược thời gian đếm lùi */}
+                  {countdown && (
+                    <div style={{
+                      backgroundColor: countdown.bgColor,
+                      border: `1.5px solid ${countdown.borderColor}`,
+                      borderRadius: '10px',
+                      padding: '10px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '20px' }}>{countdown.icon}</span>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 800, color: countdown.textColor, letterSpacing: '0.01em' }}>
+                            {countdown.text}
+                          </div>
+                          <div style={{ fontSize: '11px', fontWeight: 600, color: countdown.textColor, opacity: 0.85, marginTop: '2px' }}>
+                            {countdown.subText}
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{
+                        backgroundColor: countdown.badgeColor,
+                        color: 'white',
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        fontSize: '10.5px',
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {countdown.isOverdue ? 'ĐÃ ĐẾN GIỜ' : countdown.isUrgent ? 'CẤP BÁCH' : 'ĐẾM NGƯỢC'}
+                      </span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', fontSize: '13px' }}>
+                    {/* 1. Ngày chụp */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#EFF6FF', padding: '8px 12px', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
+                      <span style={{ fontSize: '16px' }}>📅</span>
+                      <div>
+                        <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#1D4ED8', textTransform: 'uppercase' }}>NGÀY CHỤP</div>
+                        <div style={{ fontWeight: 800, color: '#1E3A8A', fontSize: '14px' }}>{shootDateStr || 'Chưa xếp ngày'}</div>
+                      </div>
+                    </div>
+
+                    {/* 2. Khung giờ & Thời lượng */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#EFF6FF', padding: '8px 12px', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
+                      <span style={{ fontSize: '16px' }}>⏰</span>
+                      <div>
+                        <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#1D4ED8', textTransform: 'uppercase' }}>KHUNG GIỜ & THỜI LƯỢNG</div>
+                        <div style={{ fontWeight: 800, color: '#1E3A8A', fontSize: '13.5px' }}>
+                          {timeSlotStr ? timeSlotStr.replace('-', ' - ') : 'Thỏa thuận'} {startTimeOnly && !timeSlotStr.includes(startTimeOnly) ? `(Bắt đầu: ${startTimeOnly})` : ''} {durationStr ? `• ${durationStr}` : ''}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Địa điểm chụp */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', backgroundColor: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #CBD5E1' }}>
+                    <span style={{ fontSize: '16px', color: '#E11D48', flexShrink: 0, marginTop: '2px' }}>📍</span>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>ĐỊA ĐIỂM TÁC NGHIỆP:</div>
+                      <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '13.5px', marginTop: '2px', lineHeight: 1.4 }}>
+                        {locationStr || 'Studio của Provider / Thỏa thuận trực tiếp với khách'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Yêu cầu Concept, Ghi chú & Ảnh mẫu đính kèm */}
+                  <div style={{ backgroundColor: '#FAF5FF', border: '1px solid #E9D5FF', borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#7E22CE', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>🎨 YÊU CẦU CONCEPT & GHI CHÚ CHUẨN BỊ:</span>
+                    </div>
+
+                    {/* Chủ đề Concept */}
+                    {conceptTheme && (
+                      <div style={{ fontSize: '13px', color: '#581C87', fontWeight: 700 }}>
+                        📌 Phong cách concept: <span style={{ color: '#7E22CE', fontWeight: 800 }}>{conceptTheme}</span>
+                      </div>
+                    )}
+
+                    {/* Ghi chú chi tiết */}
+                    {customNotes && (
+                      <div style={{ fontSize: '12.5px', color: '#4C1D95', backgroundColor: '#F3E8FF', padding: '8px 12px', borderRadius: '6px', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                        💬 <strong>Ghi chú từ khách hàng:</strong> "{customNotes}"
+                      </div>
+                    )}
+
+                    {!conceptTheme && !customNotes && (
+                      <div style={{ fontSize: '12.5px', color: '#6B21A8', fontStyle: 'italic' }}>
+                        Chụp theo phong cách tiêu chuẩn của gói dịch vụ.
+                      </div>
+                    )}
+
+                    {/* Ảnh mẫu concept đính kèm từ khách */}
+                    {refImageArray.length > 0 && (
+                      <div style={{ marginTop: '6px', borderTop: '1px dashed #E9D5FF', paddingTop: '8px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#7E22CE', textTransform: 'uppercase', marginBottom: '6px' }}>
+                          🖼️ ẢNH CONCEPT THAM KHẢO KHÁCH ĐẢM BẢO ĐÃ TẢI LÊN ({refImageArray.length}):
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                          {refImageArray.map((imgUrl: string, idx: number) => (
+                            <a
+                              key={idx}
+                              href={getEvidenceUrl(imgUrl)}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ display: 'inline-block', position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '2px solid #D8B4FE', boxShadow: '0 2px 8px rgba(126, 34, 206, 0.15)' }}
+                              title="Bấm để mở xem ảnh kích thước gốc"
+                            >
+                              <img
+                                src={getEvidenceUrl(imgUrl)}
+                                alt={`Ảnh concept ${idx + 1}`}
+                                style={{ width: '100px', height: '100px', objectFit: 'cover', display: 'block' }}
+                              />
+                              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(126,34,206,0.85)', color: 'white', fontSize: '9.5px', textAlign: 'center', padding: '2px 0', fontWeight: 700 }}>
+                                🔍 Xem ảnh gốc
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 5. Yêu cầu đổi lịch nếu có */}
+                  {rescheduleReq && (
+                    <div style={{
+                      backgroundColor: '#FFFBEB',
+                      border: '1px solid #FCD34D',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#B45309', textTransform: 'uppercase' }}>🔄 YÊU CẦU ĐỔI LỊCH MỚI ({rescheduleReq.status}):</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#DC2626', marginTop: '2px' }}>
+                          Ngày mới: {new Date(rescheduleReq.newShootDate || rescheduleReq.newRentalFrom).toLocaleDateString('vi-VN')} {rescheduleReq.newShootTimeSlot ? `(${rescheduleReq.newShootTimeSlot.replace('-', ' - ')})` : ''}
+                        </div>
+                        {rescheduleReq.customerReason && (
+                          <div style={{ fontSize: '12px', color: '#78350F', marginTop: '2px', fontStyle: 'italic' }}>
+                            Lý do: "{rescheduleReq.customerReason}"
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Nếu là đơn thuê Áo dài (Rental)
+            const rentalItem = booking.items?.find((i: any) => i.itemType === 'PRODUCT' || i.startDate || i.rentalFrom) || booking.items?.[0] || {};
+            const productName = booking.productName || rentalItem.productId?.name || rentalItem.productName || rentalItem.name || 'Áo dài cho thuê';
+            const sizeVal = rentalItem.selectedSize || rentalItem.size || rentalItem.variant?.size || rentalItem.variantAttributes?.size || '';
+            const colorVal = rentalItem.selectedColor || rentalItem.color || rentalItem.variant?.color || rentalItem.variantAttributes?.color || '';
+            const materialVal = rentalItem.selectedMaterial || rentalItem.material || rentalItem.variant?.material || rentalItem.variantAttributes?.material || '';
+
+            const rawFrom = rentalItem.startDate || rentalItem.rentalFrom || booking.startDate;
+            const rawTo = rentalItem.endDate || rentalItem.rentalTo || booking.endDate;
+            const fromDate = rawFrom ? new Date(rawFrom) : null;
+            const toDate = rawTo ? new Date(rawTo) : null;
+            const fromStr = fromDate ? fromDate.toLocaleDateString('vi-VN') : (formatDate(booking.createdAt));
+            const toStr = toDate ? toDate.toLocaleDateString('vi-VN') : '';
+
+            let rentalDays = rentalItem.rentalDays || 0;
+            if (fromDate && toDate) {
+              const fromDay = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+              const toDay = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+              const diffTime = Math.abs(toDay.getTime() - fromDay.getTime());
+              rentalDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            }
+
+            return (
+              <div style={{
+                backgroundColor: '#F0FDF4',
+                border: '2px solid #16A34A',
+                borderRadius: '12px',
+                padding: '16px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                boxShadow: '0 4px 12px rgba(22, 163, 74, 0.08)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #DCFCE7', paddingBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '15px', color: '#15803D' }}>
+                    <span>👘 THÔNG TIN CHI TIẾT THUÊ ÁO DÀI</span>
+                  </div>
+                  <span style={{ fontSize: '12px', backgroundColor: '#DCFCE7', color: '#166534', padding: '3px 10px', borderRadius: '20px', fontWeight: 700 }}>
+                    {productName}
                   </span>
-                ) : (
-                  booking.customerName || 'Khách vãng lai'
+                </div>
+
+                {/* Thuộc tính nhặt đồ trong kho */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {sizeVal && (
+                    <span style={{ backgroundColor: '#FFFFFF', color: '#334155', border: '1px solid #CBD5E1', borderRadius: '6px', padding: '5px 12px', fontSize: '12.5px', fontWeight: 700 }}>
+                      Kích cỡ (Size): {sizeVal}
+                    </span>
+                  )}
+                  {colorVal && (
+                    <span style={{ backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', borderRadius: '6px', padding: '5px 12px', fontSize: '12.5px', fontWeight: 700 }}>
+                      Màu sắc: {colorVal}
+                    </span>
+                  )}
+                  {materialVal && (
+                    <span style={{ backgroundColor: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0', borderRadius: '6px', padding: '5px 12px', fontSize: '12.5px', fontWeight: 700 }}>
+                      Chất liệu: {materialVal}
+                    </span>
+                  )}
+                </div>
+
+                {/* Thời gian thuê */}
+                <div style={{ backgroundColor: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #BBF7D0', color: '#15803D', fontWeight: 700, fontSize: '13.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📅 Thời gian thuê:</span>
+                  <span>{fromStr} {toStr ? `-> ${toStr}` : ''}</span>
+                  {rentalDays > 0 && (
+                    <span style={{ backgroundColor: '#DCFCE7', color: '#166534', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 800 }}>
+                      ({rentalDays} ngày)
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Pickup Damage Report */}
+          {booking.pickupDamageReport && (
+            <div style={{
+              backgroundColor: '#FEF9E7',
+              border: '1px solid #F5CBA7',
+              borderRadius: '10px',
+              padding: '14px 18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#B9770E', fontWeight: 700, fontSize: '13px' }}>
+                <ShieldAlert size={16} />
+                <span>BÁO CÁO LỖI LÚC NHẬN ĐỒ CỦA KHÁCH HÀNG</span>
+              </div>
+              <p style={{ fontSize: '13px', margin: 0, color: '#4E340E' }}>
+                <strong>Mô tả:</strong> {booking.pickupDamageReport.description || 'Không có mô tả'}
+              </p>
+              {booking.pickupDamageReport.evidencePhotos && booking.pickupDamageReport.evidencePhotos.length > 0 && (
+                <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                  {booking.pickupDamageReport.evidencePhotos.map((photo: string, index: number) => (
+                    <a key={index} href={getEvidenceUrl(photo)} target="_blank" rel="noreferrer" style={{ width: '60px', height: '60px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #F5D3A7' }}>
+                      <img src={getEvidenceUrl(photo)} alt="Damage report evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </a>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: '11px', color: '#9A6B24', fontStyle: 'italic', marginTop: '2px' }}>
+                Ghi nhận lúc: {new Date(booking.pickupDamageReport.reportedAt).toLocaleString('vi-VN')}
+              </div>
+            </div>
+          )}
+
+          {/* Shop Handover Photos */}
+          {booking.handoverPhotos && booking.handoverPhotos.length > 0 && (
+            <div style={{
+              backgroundColor: '#EDF9F2',
+              border: '1px solid #C2F0D7',
+              borderRadius: '10px',
+              padding: '14px 18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#27AE60', fontWeight: 700, fontSize: '13px' }}>
+                <CheckCircle size={16} />
+                <span>ẢNH BÀN GIAO SẢN PHẨM CỦA CỬA HÀNG</span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {booking.handoverPhotos.map((photo: string, index: number) => (
+                  <a key={index} href={getEvidenceUrl(photo)} target="_blank" rel="noreferrer" style={{ width: '60px', height: '60px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #C2F0D7' }}>
+                    <img src={getEvidenceUrl(photo)} alt="Shop handover evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Photography Delivered Photos */}
+          {(() => {
+            const photos = (booking.deliveredPhotos && booking.deliveredPhotos.length > 0)
+              ? booking.deliveredPhotos
+              : [];
+            const driveUrl = booking.deliveryDriveUrl;
+
+            if (photos.length === 0 && !driveUrl) return null;
+
+            return (
+              <div style={{
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                borderRadius: '10px',
+                padding: '14px 18px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1D4ED8', fontWeight: 700, fontSize: '13px' }}>
+                    <Camera size={16} />
+                    <span>📸 ẢNH KẾT QUẢ TỪ THỢ CHỤP</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {driveUrl && (
+                      <a
+                        href={driveUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          background: '#2563EB', color: 'white', border: 'none',
+                          borderRadius: '6px', padding: '6px 12px', fontSize: '12px',
+                          fontWeight: 700, textDecoration: 'none', transition: 'all 0.2s',
+                          boxShadow: '0 2px 4px rgba(37,99,235,0.2)'
+                        }}
+                      >
+                        🔗 Mở Kho Ảnh Gốc (Google Drive)
+                      </a>
+                    )}
+                    {photos.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const fullPhotoUrls = photos.map((p: string) => getEvidenceUrl(p));
+                          const zipName = `anh_chup_${booking.bookingCode || 'ket_qua'}.zip`;
+                          void downloadPhotosAsZip(fullPhotoUrls, zipName);
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          background: '#1D4ED8', color: 'white', border: 'none',
+                          borderRadius: '6px', padding: '5px 10px', fontSize: '11px',
+                          fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                        }}
+                      >
+                        <Download size={12} /> Tải tất cả ({photos.length})
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {photos.length > 0 && (
+                  <>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      {photos.map((photo: string, index: number) => (
+                        <div key={index} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #BFDBFE', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}>
+                          <a href={getEvidenceUrl(photo)} target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
+                            <img src={getEvidenceUrl(photo)} alt={`Ảnh kết quả ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => void downloadSinglePhoto(getEvidenceUrl(photo), `photo_${index + 1}.jpg`)}
+                            style={{
+                              position: 'absolute', bottom: '3px', right: '3px',
+                              background: 'rgba(29, 78, 216, 0.85)', color: 'white',
+                              border: 'none', borderRadius: '4px', padding: '3px', display: 'flex',
+                              alignItems: 'center', justifyContent: 'center',
+                              cursor: 'pointer', transition: 'all 0.2s',
+                            }}
+                            title="Tải xuống"
+                          >
+                            <Download size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <p style={{ fontSize: '11px', color: '#6B7280', margin: 0, lineHeight: 1.4 }}>
+                      Thợ chụp đã bàn giao {photos.length} ảnh. Bấm vào ảnh để xem hoặc nút ⬇ để tải về.
+                    </p>
+                  </>
                 )}
               </div>
-              <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>SĐT: {booking.customerPhone || '—'}</div>
+            );
+          })()}
+
+          {/* Cancellation Reason Display */}
+          {booking.status === 'CANCELLED' && booking.cancellation?.reason && (
+            <div style={{
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              borderRadius: '10px',
+              padding: '14px 18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontWeight: 700, fontSize: '13px' }}>
+                <XCircle size={16} />
+                <span>LÝ DO HỦY ĐƠN</span>
+              </div>
+              <p style={{ fontSize: '13px', color: '#7F1D1D', margin: 0, lineHeight: 1.5, fontWeight: 500 }}>
+                {booking.cancellation.reason}
+              </p>
+              {booking.cancellation.cancelledAt && (
+                <p style={{ fontSize: '11px', color: '#9CA3AF', margin: 0 }}>
+                  Thời gian hủy: {new Date(booking.cancellation.cancelledAt).toLocaleString('vi-VN')}
+                </p>
+              )}
             </div>
-            <div style={{ padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid #F3F4F6', paddingBottom: '6px' }}>
-                <Clock size={14} color="#B89047" />
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#4A0E17', textTransform: 'uppercase' }}>Thời hạn dịch vụ</span>
+          )}
+
+          {/* Admin Dispute Result Display */}
+          {(() => {
+            const resInput = booking.disputeResult || (() => {
+              const log = [...(booking.statusTimeline || [])].reverse().find((t: any) => t.note?.includes('Admin giải quyết tranh chấp'));
+              if (!log) return null;
+              return {
+                decisionLabel: log.note,
+                resolvedAt: log.changedAt,
+              };
+            })();
+
+            if (!resInput) return null;
+
+            let decisionText = resInput.decisionLabel || 'Admin đã phán quyết';
+            let adminNote = resInput.notes || '';
+            let refundAmt: any = resInput.refundAmount;
+            let compAmt: any = resInput.compensationAmount;
+
+            if (typeof decisionText === 'string' && decisionText.includes('Admin giải quyết tranh chấp.')) {
+              const raw = decisionText;
+              const decMatch = raw.match(/Quyết định:\s*([^.]+)/);
+              if (decMatch) decisionText = decMatch[1].trim();
+
+              const noteMatch = raw.match(/Ghi chú:\s*(.*)$/);
+              if (noteMatch && !adminNote) adminNote = noteMatch[1].trim();
+
+              const refMatch = raw.match(/Hoàn khách:\s*([\d.,\s]+đ)/);
+              if (refMatch && (refundAmt === undefined || refundAmt === null)) {
+                refundAmt = refMatch[1];
+              }
+              const compMatch = raw.match(/bồi thường provider:\s*([\d.,\s]+đ)/);
+              if (compMatch && (compAmt === undefined || compAmt === null)) {
+                compAmt = compMatch[1];
+              }
+            }
+
+            return (
+              <div style={{
+                backgroundColor: '#FFFBEB',
+                border: '1px solid #FCD34D',
+                borderRadius: '10px',
+                padding: '16px 18px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                boxShadow: '0 2px 8px rgba(217, 119, 6, 0.08)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#B45309', fontWeight: 750, fontSize: '14px' }}>
+                  <Scale size={18} />
+                  <span>⚖️ KẾT QUẢ GIẢI QUYẾT TRANH CHẤP TỪ ADMIN</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: '13px', borderTop: '1px solid #FDE68A', paddingTop: '10px' }}>
+                  <div>
+                    <span style={{ color: '#6B7280' }}>Quyết định: </span>
+                    <strong style={{ color: '#D97706', fontSize: '13.5px' }}>{decisionText}</strong>
+                  </div>
+                  {refundAmt !== undefined && refundAmt !== null && (
+                    <div>
+                      <span style={{ color: '#6B7280' }}>Hoàn tiền khách: </span>
+                      <strong style={{ color: '#059669' }}>
+                        {typeof refundAmt === 'number' ? `${refundAmt.toLocaleString('vi-VN')}đ` : refundAmt}
+                      </strong>
+                    </div>
+                  )}
+                  {compAmt !== undefined && compAmt !== null && (
+                    <div>
+                      <span style={{ color: '#6B7280' }}>Bồi thường shop/thợ: </span>
+                      <strong style={{ color: '#D97706' }}>
+                        {typeof compAmt === 'number' ? `${compAmt.toLocaleString('vi-VN')}đ` : compAmt}
+                      </strong>
+                    </div>
+                  )}
+                </div>
+
+                {adminNote && (
+                  <div style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #FDE68A',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    marginTop: '2px',
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#B45309', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      💬 Ghi chú phán quyết từ Admin:
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#1F2937', lineHeight: 1.5, whiteSpace: 'pre-wrap', fontWeight: 500 }}>
+                      "{adminNote}"
+                    </div>
+                  </div>
+                )}
+
+                {resInput.resolvedAt && (
+                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
+                    Thời gian phán quyết: {new Date(resInput.resolvedAt).toLocaleString('vi-VN')}
+                  </div>
+                )}
               </div>
-              <div style={{ fontSize: '12px', color: '#374151' }}>
-                Bắt đầu: <strong>{formatDate(startDate)}</strong>
+            );
+          })()}
+
+          {/* Customer / Service Provider info */}
+          {(() => {
+            const firstItem = booking.items?.[0] || {};
+            const prov = firstItem.productId?.providerId || firstItem.photographyPackageId?.providerId || firstItem.providerId || booking.providerId || {};
+            const pName = typeof prov === 'object' ? (prov.businessName || prov.fullName || prov.name || 'Đối tác VibeHue') : 'Đối tác VibeHue';
+            const pPhone = typeof prov === 'object' ? (prov.contact?.phone || prov.phone || '—') : '—';
+            const pAddrObj = typeof prov === 'object' ? prov.address : null;
+            const pAddr = pAddrObj ? `${pAddrObj.addressLine || ''}, ${pAddrObj.district || ''}, ${pAddrObj.city || ''}`.replace(/^,\s*/, '') : '';
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '12px' }}>
+                {/* 1. Khách hàng */}
+                <div style={{ padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid #F3F4F6', paddingBottom: '6px' }}>
+                    <User size={14} color="#B89047" />
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#4A0E17', textTransform: 'uppercase' }}>Khách hàng</span>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>
+                    {onCustomerClick ? (
+                      <span
+                        onClick={() => {
+                          const custId = booking.customerId?._id || booking.customerId;
+                          if (custId) onCustomerClick(custId);
+                        }}
+                        style={{ color: '#2563EB', textDecoration: 'underline', cursor: 'pointer', fontWeight: 750 }}
+                        title="Bấm để xem thông tin tín nhiệm khách hàng"
+                      >
+                        {booking.customerName || 'Khách hàng'}
+                      </span>
+                    ) : (
+                      booking.customerName || 'Khách vãng lai'
+                    )}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>SĐT: <strong>{booking.customerPhone || '—'}</strong></div>
+                </div>
+
+                {/* 2. Đối tác / Cửa hàng / Thợ ảnh */}
+                <div style={{ padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid #F3F4F6', paddingBottom: '6px' }}>
+                    <Camera size={14} color="#B89047" />
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#4A0E17', textTransform: 'uppercase' }}>Cửa hàng / Thợ chụp</span>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>{pName}</div>
+                  <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>SĐT: <strong>{pPhone}</strong></div>
+                  {pAddr && (
+                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', lineHeight: 1.3 }} title={pAddr}>
+                      {pAddr.length > 35 ? `${pAddr.slice(0, 35)}...` : pAddr}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Thời hạn dịch vụ */}
+                <div style={{ padding: '12px', border: '1px solid #E5E7EB', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid #F3F4F6', paddingBottom: '6px' }}>
+                    <Clock size={14} color="#B89047" />
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#4A0E17', textTransform: 'uppercase' }}>Thời hạn dịch vụ</span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151' }}>
+                    Bắt đầu: <strong>{formatDate(startDate)}</strong>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151', marginTop: '4px' }}>
+                    Kết thúc: <strong>{formatDate(endDate)}</strong>
+                  </div>
+                </div>
               </div>
-              <div style={{ fontSize: '12px', color: '#374151', marginTop: '4px' }}>
-                Kết thúc: <strong>{formatDate(endDate)}</strong>
-              </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* List Items */}
           <div>
@@ -404,10 +1123,18 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                   {booking.items && booking.items.length > 0 ? (
                     booking.items.map((item: any) => {
                       const isProduct = item.itemType === 'PRODUCT' || !!item.productId;
-                      const name = isProduct 
+                      const name = isProduct
                         ? (item.productId?.name || 'Sản phẩm áo dài')
                         : (item.photographyPackageId?.name || 'Gói chụp ảnh');
-                      
+
+                      const matchedItemSchedule = booking.schedules?.find((s: any) => s.scheduleType === 'PHOTOSHOOT' || s.scheduleType === 'RENTAL_PERIOD');
+                      const rawItemSlot = item.shootTimeSlot || item.timeSlot || matchedItemSchedule?.timeSlot || booking.shootTimeSlot || booking.timeSlot || '';
+                      const itemSlot = (!rawItemSlot && matchedItemSchedule?.startsAt && matchedItemSchedule?.endsAt)
+                        ? `${new Date(matchedItemSchedule.startsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - ${new Date(matchedItemSchedule.endsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
+                        : rawItemSlot;
+
+                      const itemShootDate = item.shootDate || matchedItemSchedule?.scheduledDate || matchedItemSchedule?.startsAt || booking.shootDate;
+
                       return (
                         <tr key={item._id} style={{ borderBottom: '1px solid #F3F4F6' }}>
                           <td style={{ padding: '10px 12px' }}>
@@ -416,9 +1143,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                               Loại: {isProduct ? 'Thuê áo dài' : 'Lịch chụp ảnh'}
                             </div>
                             <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
-                              {isProduct 
+                              {isProduct
                                 ? `Thời gian thuê: ${formatDate(item.rentalFrom)} - ${formatDate(item.rentalTo)}`
-                                : `Ngày chụp: ${formatDate(item.shootDate)}`
+                                : `Ngày chụp: ${formatDate(itemShootDate)} ${itemSlot ? `(Khung giờ: ${itemSlot})` : ''}`
                               }
                             </div>
                           </td>
@@ -426,7 +1153,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                             {isProduct ? (
                               <span>Size {item.selectedSize || '—'} • Màu {item.selectedColor || '—'}</span>
                             ) : (
-                              <span>Khung giờ: {item.shootTimeSlot || '—'}</span>
+                              <span style={{ fontWeight: 600, color: '#1E40AF' }}>
+                                Khung giờ: {itemSlot || 'Thỏa thuận'}
+                              </span>
                             )}
                           </td>
                           <td style={{ padding: '10px 12px', textAlign: 'right' }}>
@@ -541,7 +1270,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           {/* Refund / Dispute Decision Info */}
           {renderRefundOrDisputeInfo()}
 
-          {viewerRole === 'customer' && bookingId && <CustomerRefundPanel bookingId={bookingId} />}
+          {viewerRole === 'customer' && bookingId && !['RETURNED', 'COMPLETED', 'CANCELLED', 'DISPUTED'].includes(booking?.status) && (
+            <CustomerRefundPanel bookingId={bookingId} />
+          )}
 
           {/* Pricing & Billing Summary */}
           <div style={{
@@ -554,30 +1285,79 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             gap: '8px',
             fontSize: '13px'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#4B5563' }}>Tiền thuê dịch vụ:</span>
-              <span style={{ fontWeight: 600 }}>{formatCurrency(booking.paymentSummary?.subTotal || booking.pricingSummary?.subTotal)}</span>
-            </div>
+            {(() => {
+              const bType = booking.bookingType || 'PHOTOGRAPHY';
+              const depositTotal = booking.pricingSummary?.depositTotal ?? 0;
+              const grandTotalRaw = booking.pricingSummary?.grandTotal || booking.paymentSummary?.totalPaid || 0;
+              const subTotalRaw = booking.pricingSummary?.subTotal || grandTotalRaw;
+              const discountAmount = booking.pricingSummary?.discountAmount ?? 0;
+
+              const subTotal = Math.max(0, subTotalRaw - depositTotal);
+
+              if (bType === 'PHOTOGRAPHY') {
+                const photoBasePrice = grandTotalRaw || subTotal;
+                const photoDeposit = Math.round(photoBasePrice * 0.3);
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#4B5563' }}>Tiền gói dịch vụ chụp ảnh:</span>
+                      <span style={{ fontWeight: 600 }}>{formatCurrency(photoBasePrice)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#D97706', paddingLeft: '8px' }}>
+                      <span>• Trong đó: Cọc giữ lịch chụp (30%):</span>
+                      <span style={{ fontWeight: 600 }}>{formatCurrency(photoDeposit)}</span>
+                    </div>
+                  </>
+                );
+              }
+
+              return (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#4B5563' }}>{bType === 'AODAI_RENTAL' ? 'Tiền thuê áo dài:' : 'Tiền dịch vụ:'}</span>
+                    <span style={{ fontWeight: 600 }}>{formatCurrency(subTotal)}</span>
+                  </div>
+                  {depositTotal > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#4B5563' }}>Tiền cọc giữ đồ trang phục (Sẽ hoàn lại khi trả đồ):</span>
+                      <span style={{ fontWeight: 600, color: '#D97706' }}>{formatCurrency(depositTotal)}</span>
+                    </div>
+                  )}
+                  {discountAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#27AE60' }}>
+                      <span style={{ color: '#27AE60' }}>Giảm giá:</span>
+                      <span style={{ fontWeight: 600, color: '#27AE60' }}>-{formatCurrency(discountAmount)}</span>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             {booking.pricingSummary?.serviceFee > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#4B5563' }}>Phí dịch vụ Heritage:</span>
                 <span style={{ fontWeight: 600 }}>{formatCurrency(booking.pricingSummary.serviceFee)}</span>
               </div>
             )}
-            {booking.paymentSummary?.depositTotal > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#4B5563' }}>Tiền cọc giữ đồ (Sẽ hoàn lại khi trả đồ):</span>
-                <span style={{ fontWeight: 600, color: '#D97706' }}>{formatCurrency(booking.paymentSummary.depositTotal)}</span>
-              </div>
-            )}
             <div style={{ borderTop: '1px dashed #D1D5DB', margin: '6px 0' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 800 }}>
               <span style={{ color: '#4A0E17' }}>TỔNG CỘNG HÓA ĐƠN:</span>
-              <span style={{ color: '#4A0E17' }}>{formatCurrency(booking.pricingSummary?.grandTotal)}</span>
+              <span style={{ color: '#4A0E17' }}>
+                {formatCurrency(
+                  (booking.bookingType || 'PHOTOGRAPHY') === 'PHOTOGRAPHY'
+                    ? (booking.pricingSummary?.grandTotal || booking.paymentSummary?.totalPaid)
+                    : (Math.max(0, (booking.pricingSummary?.subTotal || booking.pricingSummary?.grandTotal || 0) - (booking.pricingSummary?.depositTotal ?? 0)) + (booking.pricingSummary?.depositTotal ?? 0) + (booking.pricingSummary?.serviceFee ?? 0) - (booking.pricingSummary?.discountAmount ?? 0))
+                )}
+              </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '4px' }}>
               <span style={{ color: '#047857', fontWeight: 700 }}>Số tiền đã thanh toán:</span>
-              <span style={{ color: '#047857', fontWeight: 800 }}>{formatCurrency(booking.paymentSummary?.totalPaid)}</span>
+              <span style={{ color: '#047857', fontWeight: 800 }}>
+                {formatCurrency(
+                  (booking.bookingType || 'PHOTOGRAPHY') === 'PHOTOGRAPHY'
+                    ? (booking.paymentSummary?.totalPaid || booking.pricingSummary?.grandTotal)
+                    : (Math.max(0, (booking.pricingSummary?.subTotal || booking.pricingSummary?.grandTotal || 0) - (booking.pricingSummary?.depositTotal ?? 0)) + (booking.pricingSummary?.depositTotal ?? 0) + (booking.pricingSummary?.serviceFee ?? 0) - (booking.pricingSummary?.discountAmount ?? 0))
+                )}
+              </span>
             </div>
           </div>
 

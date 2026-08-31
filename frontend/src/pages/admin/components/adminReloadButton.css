@@ -1,0 +1,43 @@
+.admin-reload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 16px;
+  background-color: #FAF6F0;
+  color: #4A0E17;
+  border: 1px solid #E8E2D5;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.admin-reload-btn:hover:not(:disabled) {
+  background-color: #4A0E17;
+  color: #FFFFFF;
+  border-color: #4A0E17;
+}
+
+.admin-reload-btn:hover:not(:disabled) svg {
+  color: #FFFFFF;
+}
+
+.admin-reload-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.admin-reload-btn__spin {
+  animation: admin-spin 0.8s linear infinite;
+}
+
+@keyframes admin-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

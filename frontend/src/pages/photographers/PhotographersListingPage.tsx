@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronDown, Map, Search, X } from 'lucide-react';
+import { CalendarDays, Camera, ChevronDown, Clock3, Map, MapPin, Search, SlidersHorizontal, Users } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { useToast } from '../../components/feedback/Toast';
 import { useCart } from '../../context/CartContext';
@@ -11,7 +11,7 @@ import type { Category } from '../../features/categories/types';
 import { PhotographerCard } from '../../features/photographers/components/PhotographerCard';
 import { usePhotographers } from '../../features/photographers/hooks/usePhotographers';
 import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
-import type { LocationSelection, PhotographerConcept, PhotographerDiscoverySort } from '../../features/photographers/types/photographer.types';
+import type { LocationSelection, PhotographerDiscoverySort, PhotographerPackageCategory } from '../../features/photographers/types/photographer.types';
 import './PhotographersListingPage.css';
 
 const sortOptions: Array<{ value: PhotographerDiscoverySort; label: string }> = [
@@ -32,6 +32,47 @@ const readNumber = (value: string | null): number | undefined => {
   return Number.isFinite(numberValue) ? numberValue : undefined;
 };
 
+
+const FilterGroup: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <section className="photo-filter-group"><h3>{title}</h3><div>{children}</div></section>
+);
+const FilterChoice: React.FC<{ label: string; checked: boolean; onChange: () => void }> = ({ label, checked, onChange }) => (
+  <label className="photo-filter-choice"><input type="checkbox" checked={checked} onChange={onChange} /><span>{label}</span></label>
+);interface PhotographyListingFilters {
+  packageCategoryCards: PhotographerPackageCategory[];
+  styleCategories: Category[];
+  eventCategories: Category[];
+}
+
+let photographyFiltersCache: { value: PhotographyListingFilters; expiresAt: number } | null = null;
+let photographyFiltersRequest: Promise<PhotographyListingFilters> | null = null;
+
+const loadPhotographyFilters = (): Promise<PhotographyListingFilters> => {
+  if (photographyFiltersCache && photographyFiltersCache.expiresAt > Date.now()) {
+    return Promise.resolve(photographyFiltersCache.value);
+  }
+  if (photographyFiltersRequest) return photographyFiltersRequest;
+
+  photographyFiltersRequest = Promise.all([
+    photographersApi.getPackageCategories(),
+    categoryService.getPublic({ type: 'STYLE' }),
+    categoryService.getPublic({ type: 'EVENT' }),
+  ])
+    .then(([packageCategoryResponse, styleCategories, eventCategories]) => {
+      const value = {
+        packageCategoryCards: packageCategoryResponse.data,
+        styleCategories,
+        eventCategories,
+      };
+      photographyFiltersCache = { value, expiresAt: Date.now() + 5 * 60 * 1000 };
+      return value;
+    })
+    .finally(() => {
+      photographyFiltersRequest = null;
+    });
+
+  return photographyFiltersRequest;
+};
 export const PhotographersListingPage: React.FC = () => {
   const toast = useToast();
   const navigate = useNavigate();
@@ -39,18 +80,18 @@ export const PhotographersListingPage: React.FC = () => {
   const { cart } = useCart();
   const { user, toggleFavorite: apiToggleFavorite } = useAuth();
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [concepts, setConcepts] = useState<PhotographerConcept[]>([]);
-  const [conceptsError, setConceptsError] = useState<string | null>(null);
+  const [filtersError, setFiltersError] = useState<string | null>(null);
   const [packageCategories, setPackageCategories] = useState<Category[]>([]);
-  const [conceptCategories, setConceptCategories] = useState<Category[]>([]);
+  const [packageCategoryCards, setPackageCategoryCards] = useState<PhotographerPackageCategory[]>([]);
   const [styleCategories, setStyleCategories] = useState<Category[]>([]);
   const [eventCategories, setEventCategories] = useState<Category[]>([]);
   const [searchInput, setSearchInput] = useState(searchParams.get('q') ?? '');
   const [compareList, setCompareList] = useState<string[]>([]);
-  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [customerLocation, setCustomerLocation] = useState<LocationSelection | null>(null);
   const [isDiscoveryMapOpen, setIsDiscoveryMapOpen] = useState(false);
   const [searchRadiusKm, setSearchRadiusKm] = useState(15);
+  const [shootDate, setShootDate] = useState('');
+  const [groupSize, setGroupSize] = useState('');
   const [isLocating, setIsLocating] = useState(false);
   const hasAoDaiInCart = cart.some((item) => item.itemType === 'PRODUCT');
   const queryString = searchParams.toString();
@@ -60,7 +101,6 @@ export const PhotographersListingPage: React.FC = () => {
     const sort = params.get('sort');
     return {
       q: params.get('q') || undefined,
-      concept: params.get('concept') || undefined,
       packageCategoryId: params.get('packageCategoryId') || undefined,
       conceptCategoryIds: readCategoryIds(params.get('conceptCategoryIds')),
       styleCategoryIds: readCategoryIds(params.get('styleCategoryIds')),
@@ -81,7 +121,6 @@ export const PhotographersListingPage: React.FC = () => {
   }, [queryString, customerLocation, searchRadiusKm]);
 
   const { photographers, meta, isLoading, error } = usePhotographers(discoveryParams);
-  const selectedConcept = discoveryParams.concept ?? '';
   const selectedPackageCategory = discoveryParams.packageCategoryId ?? '';
   const selectedConceptCategory = discoveryParams.conceptCategoryIds?.[0] ?? '';
   const selectedStyleCategory = discoveryParams.styleCategoryIds?.[0] ?? '';
@@ -97,27 +136,28 @@ export const PhotographersListingPage: React.FC = () => {
           : '';
 
   useEffect(() => {
-    const loadConcepts = async () => {
+    const loadFilters = async () => {
       try {
-        const [response, packageCategoryData, conceptCategoryData, styleCategoryData, eventCategoryData] = await Promise.all([
-          photographersApi.getConcepts(),
-          categoryService.getPublic({ type: 'PHOTOGRAPHY_CATEGORY' }),
-          categoryService.getPublic({ type: 'CONCEPT' }),
-          categoryService.getPublic({ type: 'STYLE' }),
-          categoryService.getPublic({ type: 'EVENT' }),
-        ]);
-        setConcepts(response.data);
-        setPackageCategories(packageCategoryData);
-        setConceptCategories(conceptCategoryData);
-        setStyleCategories(styleCategoryData);
-        setEventCategories(eventCategoryData);
-        setConceptsError(null);
+        const filters = await loadPhotographyFilters();
+        setPackageCategoryCards(filters.packageCategoryCards);
+        setPackageCategories(filters.packageCategoryCards.map(({ packageCount, metadata, ...category }) => ({
+          ...category,
+          metadata: metadata ? {
+            color: metadata.color ?? undefined,
+            occasion: metadata.occasion ?? undefined,
+            season: metadata.season ?? undefined,
+          } : undefined,
+        })));
+        setStyleCategories(filters.styleCategories);
+        setEventCategories(filters.eventCategories);
+        setFiltersError(null);
       } catch (requestError) {
-        setConcepts([]);
-        setConceptsError(requestError instanceof Error ? requestError.message : 'Không thể tải concept.');
+        setPackageCategoryCards([]);
+        setPackageCategories([]);
+        setFiltersError(requestError instanceof Error ? requestError.message : 'Không thể tải bộ lọc.');
       }
     };
-    void loadConcepts();
+    void loadFilters();
   }, []);
 
   useEffect(() => {
@@ -209,395 +249,163 @@ export const PhotographersListingPage: React.FC = () => {
     }
     setCompareList((current) => current.filter((item) => item !== id));
   };
-
-  const activeConcept = concepts.find((concept) => concept.code === selectedConcept);
+  const quickPackageCategories = packageCategoryCards.slice(0, 5);
+  const totalPackageCount = packageCategoryCards.reduce((total, category) => total + category.packageCount, 0);
+  const quickIcons = [Camera, Users, MapPin, CalendarDays, Clock3];
+  const today = new Date().toISOString().slice(0, 10);
+  const submitQuickSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    updateQuery({ q: searchInput.trim() || undefined });
+  };
   const hasActiveFilters = Boolean(
-    discoveryParams.q || selectedConcept || selectedPackageCategory || selectedConceptCategory || selectedStyleCategory || selectedEventCategory || discoveryParams.location || discoveryParams.minPrice !== undefined || discoveryParams.minRating !== undefined || Boolean(customerLocation),
+    discoveryParams.q || selectedPackageCategory || selectedConceptCategory || selectedStyleCategory || selectedEventCategory || discoveryParams.location || discoveryParams.minPrice !== undefined || discoveryParams.minRating !== undefined || Boolean(customerLocation),
   );
 
-  const renderCustomDropdown = (
-    id: string,
-    label: string,
-    currentValue: string | undefined,
-    options: Array<{ value: string; label: string }>,
-    onSelect: (val: string | undefined) => void,
-    Icon?: React.ComponentType<{ size: number; className?: string }>
-  ) => {
-    const isOpen = activeDropdown === id;
-    const selectedOption = options.find(opt => opt.value === currentValue);
-    const displayLabel = selectedOption ? `${label}: ${selectedOption.label}` : label;
-    const hasValue = !!currentValue;
-
-    return (
-      <div className="pl-h-filter-item-container" key={id}>
-        <button
-          type="button"
-          className={`pl-h-filter-btn ${hasValue ? 'active' : ''} ${isOpen ? 'open' : ''}`}
-          onClick={() => setActiveDropdown(isOpen ? null : id)}
-        >
-          {Icon && <Icon size={13} className="pl-h-filter-icon-inline" />}
-          <span>{displayLabel}</span>
-          <ChevronDown size={12} className="pl-chevron" />
-        </button>
-
-        {isOpen && (
-          <>
-            <div className="pl-dropdown-overlay" onClick={() => setActiveDropdown(null)} />
-            <div className="pl-h-dropdown-menu">
-              <button
-                type="button"
-                className={`pl-dropdown-item ${!currentValue ? 'selected' : ''}`}
-                onClick={() => {
-                  onSelect(undefined);
-                  setActiveDropdown(null);
-                }}
-              >
-                Tất cả
-              </button>
-              {options.map((opt) => {
-                const isSelected = opt.value === currentValue;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    className={`pl-dropdown-item ${isSelected ? 'selected' : ''}`}
-                    onClick={() => {
-                      onSelect(opt.value);
-                      setActiveDropdown(null);
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
-    );
-  };
+  const avgPhotographerRating = useMemo(() => {
+    const rated = photographers.filter((p) => p.rating && p.rating > 0);
+    if (!rated.length) return '4.9/5';
+    const sum = rated.reduce((acc, p) => acc + (p.rating || 0), 0);
+    return `${(sum / rated.length).toFixed(1)}/5`;
+  }, [photographers]);
 
   return (
-    <div className="pl-page-container">
-      <div className="pl-main-layout pl-horizontal-layout">
-        <div className="pl-horizontal-filters-container">
-          <div className="pl-horizontal-filters">
-            {/* Search */}
-            <div className="pl-h-filter-search-wrapper">
-              <Search size={14} className="pl-h-search-icon-inside" />
-              <input
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Tìm tên, phong cách..."
-                className="pl-h-search-input-field"
-              />
-            </div>
-
-            {/* Khu vực */}
-            {renderCustomDropdown(
-              'location',
-              'Khu vực',
-              discoveryParams.location,
-              [
-                { value: 'Huế', label: 'Huế' },
-                { value: 'Hội An', label: 'Hội An' },
-                { value: 'Đà Nẵng', label: 'Đà Nẵng' }
-              ],
-              (val) => updateQuery({ location: val }),
-              Map
-            )}
-             <div className="pl-h-filter-item-container" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-               <button type="button" className={'pl-h-filter-btn ' + (customerLocation ? 'active' : '')} onClick={useCustomerLocation} disabled={isLocating}>
-                 <Map size={13} className="pl-h-filter-icon-inline" />
-                 <span>{isLocating ? 'Đang lấy vị trí...' : customerLocation ? 'Gần tôi' : 'Dùng vị trí của tôi'}</span>
-               </button>
-               {customerLocation && <select aria-label="Bán kính tìm nhiếp ảnh gia" value={searchRadiusKm} onChange={(event) => setSearchRadiusKm(Number(event.target.value))} className="pl-sort-select" style={{ height: '34px', minWidth: '76px' }}>
-                 <option value={5}>5 km</option><option value={10}>10 km</option><option value={15}>15 km</option><option value={25}>25 km</option><option value={50}>50 km</option>
-               </select>}
-             </div>
-
-            {/* Concept */}
-            {renderCustomDropdown(
-              'concept',
-              'Concept',
-              selectedConcept,
-              concepts.map(c => ({ value: c.code, label: c.label })),
-              (val) => updateQuery({ concept: val })
-            )}
-
-            {/* Loại gói chụp */}
-            {renderCustomDropdown(
-              'package',
-              'Loại gói',
-              selectedPackageCategory,
-              packageCategories.map(c => ({ value: c.id, label: c.name })),
-              (val) => updateQuery({ packageCategoryId: val })
-            )}
-
-            {/* Concept theo danh mục */}
-            {renderCustomDropdown(
-              'conceptCategory',
-              'Danh mục',
-              selectedConceptCategory,
-              conceptCategories.map(c => ({ value: c.id, label: c.name })),
-              (val) => updateQuery({ conceptCategoryIds: val })
-            )}
-
-            {/* Phong cách */}
-            {renderCustomDropdown(
-              'style',
-              'Phong cách',
-              selectedStyleCategory,
-              styleCategories.map(c => ({ value: c.id, label: c.name })),
-              (val) => updateQuery({ styleCategoryIds: val })
-            )}
-
-            {/* Dịp / sự kiện */}
-            {renderCustomDropdown(
-              'event',
-              'Dịp',
-              selectedEventCategory,
-              eventCategories.map(c => ({ value: c.id, label: c.name })),
-              (val) => updateQuery({ eventCategoryIds: val })
-            )}
-
-            {/* Mức giá */}
-            {renderCustomDropdown(
-              'price',
-              'Mức giá',
-              selectedPriceRange,
-              [
-                { value: 'under2', label: 'Dưới 2 triệu' },
-                { value: '2to5', label: 'Từ 2 đến 5 triệu' },
-                { value: 'over5', label: 'Trên 5 triệu' }
-              ],
-              (val) => {
-                updateQuery(
-                  val === 'under2'
-                    ? { minPrice: undefined, maxPrice: '1999999' }
-                    : val === '2to5'
-                      ? { minPrice: '2000000', maxPrice: '5000000' }
-                      : val === 'over5'
-                        ? { minPrice: '5000001', maxPrice: undefined }
-                        : { minPrice: undefined, maxPrice: undefined }
-                );
-              }
-            )}
-
-            {/* Đánh giá */}
-            {renderCustomDropdown(
-              'rating',
-              'Đánh giá',
-              discoveryParams.minRating?.toString(),
-              [
-                { value: '4.5', label: 'Từ 4.5★ trở lên' },
-                { value: '4', label: 'Từ 4★ trở lên' },
-                { value: '3.5', label: 'Từ 3.5★ trở lên' }
-              ],
-              (val) => updateQuery({ minRating: val })
-            )}
-
-            {/* Xóa lọc */}
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="pl-h-clear-btn"
-                title="Xóa lọc"
-              >
-                <X size={14} />
-                <span>Xóa lọc</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-
-        {isDiscoveryMapOpen && (
-          <section className="pl-discovery-map-panel" aria-label="Tìm nhiếp ảnh gia theo vị trí">
-            <div className="pl-discovery-map-panel-header">
-              <div>
-                <h2>Tìm quanh địa điểm của bạn</h2>
-                <p>Chỉ pin của bạn và vòng tìm kiếm được hiển thị. Vị trí chính xác của photographer luôn được bảo mật.</p>
-              </div>
-              {customerLocation && <button type="button" className="pl-discovery-map-clear" onClick={() => setCustomerLocation(null)}>Bỏ vị trí</button>}
-            </div>
-            <PhotographyLocationPicker
-              value={customerLocation}
-              onSelect={setCustomerLocation}
-              title="Chọn vị trí để tìm photographer"
-              hint="Nhập địa chỉ, dùng vị trí hiện tại hoặc kéo pin. Danh sách sẽ tự lọc theo bán kính bên dưới."
-              radiusKm={searchRadiusKm}
-            />
-            <p className="pl-discovery-map-result-note">
-              {customerLocation ? `Đang tìm trong bán kính ${searchRadiusKm} km. ${isLoading ? 'Đang cập nhật kết quả...' : `Có ${meta.total} photographer phù hợp.`}` : 'Chọn một vị trí để bắt đầu lọc theo khoảng cách.'}
-            </p>
-          </section>
-        )}
-        <section className="pl-content-section">
-          <div className="pl-toolbar">
-            <div className="pl-concepts-track">
-              <span className="pl-concept-label">KHÁM PHÁ CONCEPT:</span>
-              <button
-                type="button"
-                onClick={() => updateQuery({ concept: undefined })}
-                className={`pl-concept-pill ${!selectedConcept ? 'active' : ''}`}
-              >
-                Tất cả
-              </button>
-              {concepts.slice(0, 6).map((concept) => {
-                const isActive = concept.code === selectedConcept;
-                return (
-                  <button
-                    key={concept.code}
-                    type="button"
-                    onClick={() => updateQuery({ concept: isActive ? undefined : concept.code })}
-                    title={`${concept.photographerCount} nhiếp ảnh gia`}
-                    className={`pl-concept-pill ${isActive ? 'active' : ''}`}
-                  >
-                    {concept.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="pl-sort-wrapper">
-              <span className="pl-sort-label">Sắp xếp:</span>
-              <select
-                value={selectedSort}
-                onChange={(event) => updateQuery({ sort: event.target.value })}
-                className="pl-sort-select"
-              >
-                {sortOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="pl-sort-chevron" />
-            </div>
-          </div>
-
-          {(activeConcept || discoveryParams.location || discoveryParams.q) && (
-            <div className="pl-active-filters-row">
-              <span className="pl-active-filters-label">Đang lọc:</span>
-              {activeConcept && (
-                <span className="pl-active-filter-badge">
-                  {activeConcept.label}
-                  <button
-                    type="button"
-                    onClick={() => updateQuery({ concept: undefined })}
-                    aria-label="Bỏ lọc concept"
-                    className="pl-active-filter-remove"
-                  >
-                    <X size={13} />
-                  </button>
-                </span>
-              )}
-              {discoveryParams.location && (
-                <span className="pl-active-filter-badge">
-                  {discoveryParams.location}
-                  <button
-                    type="button"
-                    onClick={() => updateQuery({ location: undefined })}
-                    aria-label="Bỏ lọc địa điểm"
-                    className="pl-active-filter-remove"
-                  >
-                    <X size={13} />
-                  </button>
-                </span>
-              )}
-            </div>
-          )}
-
-          {conceptsError && <p style={{ color: '#9c2d2d', fontSize: '13px' }}>{conceptsError}</p>}
-          {!isLoading && !error && (
-            <p className="pl-results-count">
-              Tìm thấy {meta.total} nhiếp ảnh gia phù hợp.
-            </p>
-          )}
-
-          {isLoading ? (
-            <div className="pl-loading-container">
-              <div className="vh-loading-spinner">
-                <div className="vh-loading-double-bounce1" />
-                <div className="vh-loading-double-bounce2" />
-              </div>
-              <span className="pl-loading-text">Đang tìm nhiếp ảnh gia...</span>
-            </div>
-          ) : error ? (
-            <div className="pl-error-container">
-              <h3 className="font-header">Không thể tải dữ liệu</h3>
-              <p>{error}</p>
-            </div>
-          ) : photographers.length === 0 ? (
-            <div className="pl-empty-container">
-              <Search size={48} className="pl-empty-icon" />
-              <h3 className="pl-empty-title">Không tìm thấy nhiếp ảnh gia phù hợp</h3>
-              <p className="pl-empty-subtitle">Hãy thử thay đổi từ khóa hoặc bộ lọc.</p>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="vh-btn vh-btn-outline"
-              >
-                Xóa bộ lọc
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="pl-grid">
-                {photographers.map((photographer) => (
-                  <PhotographerCard
-                    key={photographer.id}
-                    photographer={photographer}
-                    isFavorite={favorites.includes(photographer.id)}
-                    isCompared={compareList.includes(photographer.id)}
-                    hasAoDaiInCart={hasAoDaiInCart}
-                    onOpen={() => navigate(`/photographers/${photographer.providerId || photographer.id}`)}
-                    onCompareChange={(event) => handleCompareToggle(photographer.id, event)}
-                    onToggleFavorite={(event) => handleToggleFavorite(photographer.id, event)}
-                    onViewPortfolio={(event) => {
-                      event.stopPropagation();
-                      navigate(`/photographers/${photographer.providerId || photographer.id}`);
-                    }}
-                  />
-                ))}
-              </div>
-              {meta.totalPages > 1 && (
-                <nav aria-label="Phân trang nhiếp ảnh gia" className="pl-pagination">
-                  <button
-                    type="button"
-                    disabled={meta.page === 1}
-                    onClick={() => updateQuery({ page: String(meta.page - 1) })}
-                    className="vh-btn vh-btn-outline"
-                  >
-                    Trước
-                  </button>
-                  <span className="pl-pagination-info">
-                    Trang {meta.page}/{meta.totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={meta.page === meta.totalPages}
-                    onClick={() => updateQuery({ page: String(meta.page + 1) })}
-                    className="vh-btn vh-btn-outline"
-                  >
-                    Sau
-                  </button>
-                </nav>
-              )}
-            </>
-          )}
+    <div className="photo-listing-page">
+      <main className="photo-listing-shell">
+        <nav className="photo-listing-breadcrumb" aria-label="Điều hướng"><span>Trang chủ</span><b>/</b><span>Chụp ảnh</span></nav>
+        <section className="photo-listing-intro" aria-labelledby="photo-listing-title"><div><span className="photo-listing-eyebrow">GÓI CHỤP ẢNH</span><h1 id="photo-listing-title">Đặt lịch chụp ảnh theo cách của bạn</h1><p>Khám phá photographer, studio và concept phù hợp cho khoảnh khắc đáng nhớ.</p></div><div className="photo-listing-stats"><div><strong>{totalPackageCount}</strong><span>Gói chụp</span></div><div><strong>{packageCategories.length}</strong><span>Loại hình</span></div><div><strong>{avgPhotographerRating}</strong><span>Đánh giá</span></div></div></section>
+        <form className="photo-quick-search" onSubmit={submitQuickSearch}>
+          <label><span>LOẠI HÌNH CHỤP</span><select value={selectedPackageCategory} onChange={(event) => updateQuery({ packageCategoryId: event.target.value || undefined })}><option value="">Tất cả loại hình</option>{packageCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><ChevronDown size={17} /></label>
+          <label><span>ĐỊA ĐIỂM</span><select value={discoveryParams.location ?? ''} onChange={(event) => updateQuery({ location: event.target.value || undefined })}><option value="">Tất cả khu vực</option><option value="Huế">Huế</option><option value="Đà Nẵng">Đà Nẵng</option><option value="Hội An">Hội An</option></select><ChevronDown size={17} /></label>
+          <label><span>NGÀY CHỤP</span><input type="date" min={today} value={shootDate} onChange={(event) => setShootDate(event.target.value)} /><CalendarDays size={17} /></label>
+          <label><span>SỐ NGƯỜI</span><select value={groupSize} onChange={(event) => setGroupSize(event.target.value)}><option value="">Không giới hạn</option><option value="1">1 người</option><option value="2">2 người</option><option value="3-5">3–5 người</option><option value="6+">Từ 6 người</option></select><ChevronDown size={17} /></label>
+          <button type="submit"><Search size={18} />Tìm gói chụp</button>
+        </form>
+        <section className="photo-category-tabs" aria-label="Khám phá theo loại gói chụp">
+          <button type="button" onClick={() => updateQuery({ packageCategoryId: undefined })} className={!selectedPackageCategory ? 'is-active' : ''}>
+            <span className="photo-category-tabs__icon"><SlidersHorizontal size={16} /></span><strong>Tất cả</strong><small>{totalPackageCount} gói</small>
+          </button>
+          {quickPackageCategories.map((category, index) => {
+            const Icon = quickIcons[index];
+            const active = category.id === selectedPackageCategory;
+            return <button type="button" key={category.id} onClick={() => updateQuery({ packageCategoryId: active ? undefined : category.id })} className={active ? 'is-active' : ''}><span className="photo-category-tabs__icon"><Icon size={16} /></span><strong>{category.name}</strong><small>{category.packageCount} gói</small></button>;
+          })}
         </section>
-      </div>
-      <button
-        type="button"
-        onClick={() => setIsDiscoveryMapOpen((isOpen) => !isOpen)}
-        className={`pl-map-floating-btn ${isDiscoveryMapOpen ? 'active' : ''}`}
-        aria-expanded={isDiscoveryMapOpen}
-      >
-        <Map size={16} />
-        Xem bản đồ
-      </button>
+        {isDiscoveryMapOpen && <section className="photo-map-panel" aria-label="Tìm photographer theo vị trí"><div><h2>Tìm quanh địa điểm của bạn</h2><p>Chọn vị trí để xem những photographer phù hợp trong bán kính mong muốn.</p></div>{customerLocation && <button type="button" onClick={() => setCustomerLocation(null)}>Bỏ vị trí</button>}<PhotographyLocationPicker value={customerLocation} onSelect={setCustomerLocation} title="Chọn vị trí" hint="Nhập địa chỉ hoặc dùng vị trí hiện tại." radiusKm={searchRadiusKm} /></section>}
+        <div className="photo-listing-layout">
+          <aside className="photo-filter-panel"><div className="photo-filter-panel__header"><div><span>BỘ LỌC</span><h2>Tinh chỉnh kết quả</h2></div>{hasActiveFilters && <button type="button" onClick={clearFilters}>Xóa tất cả</button>}</div>
+            <FilterGroup title="Loại hình">{packageCategories.slice(0, 5).map((category) => <FilterChoice key={category.id} label={category.name} checked={selectedPackageCategory === category.id} onChange={() => updateQuery({ packageCategoryId: selectedPackageCategory === category.id ? undefined : category.id })} />)}</FilterGroup>
+            <FilterGroup title="Khu vực">{['Huế', 'Đà Nẵng', 'Hội An'].map((place) => <FilterChoice key={place} label={place} checked={discoveryParams.location === place} onChange={() => updateQuery({ location: discoveryParams.location === place ? undefined : place })} />)}<button type="button" className={`photo-nearby-button ${customerLocation ? 'is-active' : ''}`} onClick={useCustomerLocation} disabled={isLocating}><Map size={15} />{isLocating ? 'Đang lấy vị trí...' : customerLocation ? 'Đang tìm gần bạn' : 'Dùng vị trí của tôi'}</button>{customerLocation && <select className="photo-radius-select" value={searchRadiusKm} onChange={(event) => setSearchRadiusKm(Number(event.target.value))}><option value={5}>5 km</option><option value={10}>10 km</option><option value={15}>15 km</option><option value={25}>25 km</option></select>}</FilterGroup>
+            <FilterGroup title="Phong cách">{styleCategories.slice(0, 5).map((category) => <FilterChoice key={category.id} label={category.name} checked={selectedStyleCategory === category.id} onChange={() => updateQuery({ styleCategoryIds: selectedStyleCategory === category.id ? undefined : category.id })} />)}</FilterGroup>
+            <FilterGroup title="Dịp / sự kiện">{eventCategories.slice(0, 5).map((category) => <FilterChoice key={category.id} label={category.name} checked={selectedEventCategory === category.id} onChange={() => updateQuery({ eventCategoryIds: selectedEventCategory === category.id ? undefined : category.id })} />)}</FilterGroup>
+            <FilterGroup title="Khoảng giá">{[['under2','Dưới 2 triệu'], ['2to5','Từ 2 đến 5 triệu'], ['over5','Trên 5 triệu']].map(([value,label]) => <FilterChoice key={value} label={label} checked={selectedPriceRange === value} onChange={() => updateQuery(value === 'under2' ? { minPrice: undefined, maxPrice: '1999999' } : value === '2to5' ? { minPrice: '2000000', maxPrice: '5000000' } : selectedPriceRange === value ? { minPrice: undefined, maxPrice: undefined } : { minPrice: '5000001', maxPrice: undefined })} />)}</FilterGroup>
+          </aside>
+          <section className="photo-results" aria-label="Danh sách gói chụp">
+            <div className="photo-results__top">
+              <div>
+                <span>GÓI CHỤP ĐỀ XUẤT</span>
+                <h2>
+                  Gói chụp phù hợp
+                </h2>
+                <p>
+                  {isLoading
+                    ? 'Đang tìm gói chụp...'
+                    : `${meta.total} gói chụp được tìm thấy`}
+                </p>
+              </div>
+              <label className="photo-sort-select">
+                Sắp xếp
+                <select
+                  value={selectedSort}
+                  onChange={(event) => updateQuery({ sort: event.target.value })}
+                >
+                  {sortOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={15} />
+              </label>
+            </div>
+
+            {filtersError && <p className="photo-results__notice">{filtersError}</p>}
+
+            {isLoading ? (
+              <div className="photo-results__state">
+                <div className="vh-loading-spinner">
+                  <div className="vh-loading-double-bounce1" />
+                  <div className="vh-loading-double-bounce2" />
+                </div>
+                <span>Đang tải các gói chụp...</span>
+              </div>
+            ) : error ? (
+              <div className="photo-results__state is-error">
+                <h3>Không thể tải dữ liệu</h3>
+                <p>{error}</p>
+              </div>
+            ) : photographers.length === 0 ? (
+              <div className="photo-results__state">
+                <Search size={38} />
+                <h3>Chưa có gói chụp phù hợp</h3>
+                <p>Hãy thử thay đổi bộ lọc để xem thêm lựa chọn.</p>
+                <button type="button" onClick={clearFilters}>
+                  Xóa bộ lọc
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="photo-package-grid">
+                  {photographers.map((photographer) => (
+                    <PhotographerCard
+                      key={photographer.id}
+                      photographer={photographer}
+                      isFavorite={favorites.includes(photographer.id)}
+                      isCompared={compareList.includes(photographer.id)}
+                      hasAoDaiInCart={hasAoDaiInCart}
+                      onOpen={() =>
+                        navigate(`/photographers/${photographer.providerId || photographer.id}`)
+                      }
+                      onCompareChange={(event) =>
+                        handleCompareToggle(photographer.id, event)
+                      }
+                      onToggleFavorite={(event) =>
+                        handleToggleFavorite(photographer.id, event)
+                      }
+                      onViewPortfolio={(event) => {
+                        event.stopPropagation();
+                        navigate(`/photographers/${photographer.providerId || photographer.id}`);
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {meta.totalPages > 1 && (
+                  <nav className="photo-pagination" aria-label="Phân trang">
+                    <button
+                      type="button"
+                      disabled={meta.page === 1}
+                      onClick={() => updateQuery({ page: String(meta.page - 1) })}
+                    >
+                      Trước
+                    </button>
+                    <span>
+                      Trang {meta.page}/{meta.totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={meta.page === meta.totalPages}
+                      onClick={() => updateQuery({ page: String(meta.page + 1) })}
+                    >
+                      Sau
+                    </button>
+                  </nav>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+      </main>
+      <button type="button" onClick={() => setIsDiscoveryMapOpen((open) => !open)} className={`photo-map-toggle ${isDiscoveryMapOpen ? 'is-active' : ''}`}><Map size={17} />{isDiscoveryMapOpen ? 'Ẩn bản đồ' : 'Xem bản đồ'}</button>
     </div>
   );
 };

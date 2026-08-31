@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag, Layers, Camera, Plus, Download, Bell,
-  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, FileText, Trash2, Play, Pencil,Copy,Package, Eye,
-  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck
+  HelpCircle, MoreVertical, ChevronLeft, ChevronRight, CheckCircle, Trash2, Play, Pencil, Copy, Package, Eye, Shirt,
+  Upload, X, Award, Calendar, Tag, MessageSquare, Users, Save, Flag, Star, ArrowLeft, LogOut, BarChart3, DollarSign, Check, CheckCheck, Clock, ShieldCheck, AlertTriangle, Sparkles, Store, MapPinned, FileText
 } from 'lucide-react';
 import { BookingDetailModal } from '../../components/common/BookingDetailModal';
 import Swal from 'sweetalert2';
@@ -13,11 +13,16 @@ import { Modal } from '../../components/common/Modal';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { API_BASE_URL } from '../../config/env';
 import { SmartTagEditor } from '../../features/smart-tagging/components/SmartTagEditor';
+import { PrivateEvidenceImage } from '../../components/common/PrivateEvidenceImage';
 import { PortfolioItemFormModal, type PortfolioItemFormValues } from '../../features/photographers/components/PortfolioItemFormModal';
 import { PhotographyPackageManager } from '../../features/photography-packages/components/PhotographyPackageManager';
 import { categoryService } from '../../features/categories/services/categoryService';
 import type { Category } from '../../features/categories/types';
 import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
+import { NotificationsPage } from '../notifications/NotificationsPage';
+import { SectionLoading } from '../../components/feedback/AsyncState';
+import { useSocket } from '../../context/SocketContext';
+import './providerServiceProfile.css';
 
 interface Order {
   _id: string;
@@ -31,11 +36,58 @@ interface Order {
   status: string;
   totalAmount?: number;
   createdAt?: string;
+  rawOrderDate?: string;
+  photosApproved?: boolean;
   customerId?: any;
   items?: any[];
+  schedules?: Array<{ status?: string;[key: string]: any }>;
   depositTotal?: number;
+  startDate?: string;
   rawStatus?: string;
+  bookingType?: 'AODAI_RENTAL' | 'PHOTOGRAPHY' | 'COMBO' | string;
+  pickupDamageReport?: {
+    reportedAt: string;
+    description: string;
+    evidencePhotos: string[];
+  } | null;
 }
+
+const PHOTO_START_EARLY_MINUTES = 30;
+
+const getPhotoScheduleStartsAt = (schedule?: Record<string, any>): Date | null => {
+  if (schedule?.startsAt) {
+    const startsAt = new Date(schedule.startsAt);
+    if (!Number.isNaN(startsAt.getTime())) return startsAt;
+  }
+
+  const scheduledDate = schedule?.providerLocalDate
+    || (schedule?.scheduledDate
+      ? new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date(schedule.scheduledDate))
+      : null);
+  const startTime = String(schedule?.timeSlot || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!scheduledDate || !startTime) return null;
+
+  const legacyStartsAt = new Date(
+    `${scheduledDate}T${startTime[1].padStart(2, '0')}:${startTime[2]}:00+07:00`,
+  );
+  return Number.isNaN(legacyStartsAt.getTime()) ? null : legacyStartsAt;
+};
+
+const formatPhotoStartTime = (value: Date): string =>
+  new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour12: false,
+  }).format(value);
 
 interface Product {
   _id: string;
@@ -69,6 +121,42 @@ interface PortfolioItem {
   moderationStatus: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'HIDDEN';
   moderationReason?: string | null;
 }
+
+type CancellationRefundRule = {
+  noticeDays: number;
+  refundPercent: number;
+};
+
+const toLocalDateKey = (date: Date = new Date()): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const normalizeCancellationRefundRules = (rules: CancellationRefundRule[]) => rules
+  .filter((rule) => Number.isFinite(rule.noticeDays) && Number.isFinite(rule.refundPercent))
+  .map((rule) => ({
+    noticeDays: Math.max(0, Math.min(365, Number(rule.noticeDays))),
+    refundPercent: Math.max(0, Math.min(100, Number(rule.refundPercent))),
+  }))
+  .sort((left, right) => right.noticeDays - left.noticeDays);
+
+const buildCancellationPolicySummary = (rules: CancellationRefundRule[], additionalNotes: string) => {
+  const normalizedRules = normalizeCancellationRefundRules(rules);
+  const ruleLines = normalizedRules.map((rule, index) => {
+    const previousRule = normalizedRules[index - 1];
+    if (rule.noticeDays === 0 && previousRule) {
+      return `Hủy dưới ${previousRule.noticeDays} ngày: hoàn ${rule.refundPercent}% tiền cọc.`;
+    }
+    if (previousRule) {
+      return `Hủy từ ${rule.noticeDays} đến dưới ${previousRule.noticeDays} ngày: hoàn ${rule.refundPercent}% tiền cọc.`;
+    }
+    return `Hủy trước ít nhất ${rule.noticeDays} ngày: hoàn ${rule.refundPercent}% tiền cọc.`;
+  });
+  return [...ruleLines, additionalNotes.trim()].filter(Boolean).join(' ');
+};
+
 export const ProviderDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { logout, user, isAuthenticated } = useAuth();
@@ -91,12 +179,27 @@ export const ProviderDashboard: React.FC = () => {
   }, [user, isAuthenticated, navigate, toast]);
 
   // Views navigation state
-  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'photography-packages' | 'calendar' | 'vouchers' | 'inventory' | 'reviews' | 'trust' | 'analytics' | 'payouts' | 'rental-operations'>('analytics');
+  const [currentView, setCurrentView] = useState<'orders' | 'collections' | 'profile' | 'portfolio' | 'photography-packages' | 'calendar' | 'vouchers' | 'inventory' | 'reviews' | 'trust' | 'analytics' | 'payouts' | 'rental-operations' | 'role-management' | 'notifications'>('analytics');
   const [collectionTab, setCollectionTab] = useState<'products' | 'inventory'>('products');
 
   // Provider Specific States
   const [provider, setProvider] = useState<any>(null);
+  const providerDataLoadedRef = useRef(false);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [chartTimeRange, setChartTimeRange] = useState<'week' | 'month' | 'year'>('month');
+  const [hoveredPointIdx, setHoveredPointIdx] = useState<number | null>(null);
+
+  const handlePeriodChange = async (period: 'week' | 'month' | 'year') => {
+    setChartTimeRange(period);
+    try {
+      const res: any = await httpClient.get(`/providers/me/analytics?period=${period}`);
+      if (res && res.revenueGrowth) {
+        setAnalyticsData((prev: any) => (prev ? { ...prev, revenueGrowth: res.revenueGrowth } : res));
+      }
+    } catch (err) {
+      console.error('Lỗi khi tải biểu đồ theo thời gian:', err);
+    }
+  };
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
   const [isPortfolioFormOpen, setIsPortfolioFormOpen] = useState(false);
   const [isPortfolioSaving, setIsPortfolioSaving] = useState(false);
@@ -105,6 +208,7 @@ export const ProviderDashboard: React.FC = () => {
   const [previewPortfolioItem, setPreviewPortfolioItem] = useState<PortfolioItem | null>(null);
   const [previewImageIndex, setPreviewImageIndex] = useState<number>(0);
   const hasPhotographyCapability = Array.isArray(provider?.capabilities) && provider.capabilities.includes('PHOTOGRAPHY');
+  const hasAodaiCapability = Array.isArray(provider?.capabilities) && (provider.capabilities.includes('COSTUME_RENTAL') || provider.capabilities.includes('AODAI_RENTAL') || provider.capabilities.includes('RENTAL'));
   const [subTab, setSubTab] = useState<'shop' | 'photo'>('shop');
   // Product Search / Sort / Filter States
   const [prodSearch, setProdSearch] = useState('');
@@ -114,6 +218,7 @@ export const ProviderDashboard: React.FC = () => {
   const [prodTotal, setProdTotal] = useState(0);
   const [prodSizeFilter, setProdSizeFilter] = useState('');
   const [prodColorFilter, setProdColorFilter] = useState('');
+  const [debouncedProdSearch, setDebouncedProdSearch] = useState('');
 
   // Inventory Search / Sort / Filter / Pagination States
   const [invSearch, setInvSearch] = useState('');
@@ -124,6 +229,7 @@ export const ProviderDashboard: React.FC = () => {
   const [invSummaryPage, setInvSummaryPage] = useState(1);
   const [invLimit] = useState(10); // 10 items per page
   const [invTotal, setInvTotal] = useState(0);
+  const [debouncedInvSearch, setDebouncedInvSearch] = useState('');
 
   // Inventory States
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
@@ -164,14 +270,57 @@ export const ProviderDashboard: React.FC = () => {
 
   useEffect(() => {
     if (analyticsData) {
-      const isShop = analyticsData.capabilities?.includes('AODAI_RENTAL') || analyticsData.capabilities?.includes('RENTAL');
+      const isShop = analyticsData.capabilities?.includes('COSTUME_RENTAL') || analyticsData.capabilities?.includes('AODAI_RENTAL') || analyticsData.capabilities?.includes('RENTAL');
       if (!isShop) {
         setSubTab('photo');
       }
     }
   }, [analyticsData]);
+
+  useEffect(() => {
+    if (provider) {
+      if (!hasAodaiCapability && (currentView === 'rental-operations' || currentView === 'collections')) {
+        setCurrentView('analytics');
+      }
+      if (!hasPhotographyCapability && (currentView === 'portfolio' || currentView === 'photography-packages')) {
+        setCurrentView('analytics');
+      }
+    }
+  }, [provider, hasAodaiCapability, hasPhotographyCapability, currentView]);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
+  const [combos, setCombos] = useState<any[]>([]);
+  const [photoPackages, setPhotoPackages] = useState<any[]>([]);
+  const [cName, setCName] = useState('');
+  const [cDesc, setCDesc] = useState('');
+  const [cProductId, setCProductId] = useState('');
+  const [cPackageId, setCPackageId] = useState('');
+  const [cDiscount, setCDiscount] = useState<number | ''>(10);
+  const [cPrice, setCPrice] = useState('');
+
+  // Tự động tính toán giá combo hợp lý
+  useEffect(() => {
+    if (cProductId && cPackageId) {
+      const prod = myProductsList.find(p => p._id === cProductId);
+      const pkg = photoPackages.find(p => p._id === cPackageId);
+      if (prod && pkg) {
+        const discountPercent = Number(cDiscount) || 0;
+        const originalPrice = (prod.basePrice || 0) + (pkg.price || 0);
+        const calculatedPrice = Math.round(originalPrice * (1 - discountPercent / 100));
+        setCPrice(String(calculatedPrice));
+      }
+    }
+  }, [cProductId, cPackageId, cDiscount, myProductsList, photoPackages]);
+  const [cValidFrom, setCValidFrom] = useState('');
+  const [cValidTo, setCValidTo] = useState('');
+  const [cMaxUsage, setCMaxUsage] = useState<number | ''>(10);
+  const [cAoDaiQuantity, setCAoDaiQuantity] = useState<number | ''>(1);
+  const [cShootPeopleCount, setCShootPeopleCount] = useState<number | ''>(1);
+  const [isAoDaiModalOpen, setIsAoDaiModalOpen] = useState(false);
+  const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
+  const [aoDaiSearch, setAoDaiSearch] = useState('');
+  const [packageSearch, setPackageSearch] = useState('');
+  const [editingComboId, setEditingComboId] = useState<string | null>(null);
   const [reviewsData, setReviewsData] = useState<any>(null);
   const [bookingsState, setBookingsState] = useState<any[]>([]);
   const [payouts, setPayouts] = useState<any[]>([]);
@@ -184,7 +333,8 @@ export const ProviderDashboard: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [addressLine, setAddressLine] = useState('');
   const [city, setCity] = useState('');
-  const [cancellationPolicy, setCancellationPolicy] = useState('');
+  const [cancellationRefundRules, setCancellationRefundRules] = useState<CancellationRefundRule[]>([]);
+  const [cancellationAdditionalNotes, setCancellationAdditionalNotes] = useState('');
   const [comboDiscountPercent, setComboDiscountPercent] = useState(0);
   const [baseLatitude, setBaseLatitude] = useState('');
   const [baseLongitude, setBaseLongitude] = useState('');
@@ -193,6 +343,8 @@ export const ProviderDashboard: React.FC = () => {
   const [pickupAddressLine, setPickupAddressLine] = useState('');
   const [pickupLatitude, setPickupLatitude] = useState('');
   const [pickupLongitude, setPickupLongitude] = useState('');
+  const [profileSection, setProfileSection] = useState<'business' | 'location' | 'policy'>('business');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Form states - Voucher
   const [vCode, setVCode] = useState('');
@@ -208,6 +360,8 @@ export const ProviderDashboard: React.FC = () => {
   ]);
   const [editingScheduleDay, setEditingScheduleDay] = useState<number | null>(null);
   const [blockedDate, setBlockedDate] = useState('');
+  // Which service capability the current schedule edit applies to (null = all)
+  const [scheduleCapability, setScheduleCapability] = useState<'AODAI_RENTAL' | 'PHOTOGRAPHY' | null>(null);
 
   // Reply states
   const [replyingReviewId, setReplyingReviewId] = useState<string | null>(null);
@@ -306,7 +460,14 @@ export const ProviderDashboard: React.FC = () => {
       setPhone(pRes.contact?.phone || '');
       setAddressLine(pRes.address?.addressLine || '');
       setCity(pRes.address?.city || '');
-      setCancellationPolicy(pRes.policies?.cancellationPolicy || '');
+      const persistedCancellationConfig = pRes.policies?.cancellationPolicyConfig;
+      const legacyCancellationPolicy = pRes.policies?.cancellationPolicy || '';
+      setCancellationRefundRules(Array.isArray(persistedCancellationConfig?.refundRules)
+        ? normalizeCancellationRefundRules(persistedCancellationConfig.refundRules)
+        : []);
+      setCancellationAdditionalNotes(persistedCancellationConfig
+        ? (persistedCancellationConfig.additionalNotes || '')
+        : legacyCancellationPolicy);
       setComboDiscountPercent(pRes.comboDiscountPercent ?? 0);
       setBaseLatitude(pRes.address?.geo?.coordinates?.[1]?.toString() ?? '');
       setBaseLongitude(pRes.address?.geo?.coordinates?.[0]?.toString() ?? '');
@@ -316,27 +477,43 @@ export const ProviderDashboard: React.FC = () => {
       setPickupLatitude(pRes.rentalSettings?.pickupLocation?.geo?.coordinates?.[1]?.toString() ?? '');
       setPickupLongitude(pRes.rentalSettings?.pickupLocation?.geo?.coordinates?.[0]?.toString() ?? '');
 
-      if (Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY')) {
-        const portfolioRes: any = await httpClient.get('/providers/me/portfolio-items');
-        setPortfolioItems(Array.isArray(portfolioRes) ? portfolioRes : []);
-      } else {
-        setPortfolioItems([]);
+      const hasPhotography = Array.isArray(pRes.capabilities) && pRes.capabilities.includes('PHOTOGRAPHY');
+      const hasAodai = Array.isArray(pRes.capabilities) && (pRes.capabilities.includes('AODAI_RENTAL') || pRes.capabilities.includes('RENTAL'));
+      const view = currentView;
+      const shouldLoadPortfolio = view === 'portfolio';
+      const shouldLoadComboData = view === 'vouchers';
+      const shouldLoadCalendar = view === 'calendar';
+      const shouldLoadReviews = view === 'reviews';
+      const shouldLoadBookings = view === 'reviews' || view === 'trust';
+      const shouldLoadAnalytics = view === 'analytics';
+      const [portfolioRes, packagesRes, productsRes, summary, combosRes, schedulesRes, vouchersRes, reviewsRes, bookingsRes, analyticsRes] = await Promise.all([
+        shouldLoadPortfolio && hasPhotography ? httpClient.get('/providers/me/portfolio-items') : Promise.resolve(null),
+        shouldLoadComboData && hasPhotography ? httpClient.get('/providers/me/photography-packages') : Promise.resolve(null),
+        shouldLoadComboData && hasAodai ? httpClient.get('/products/my-listings?limit=200') : Promise.resolve(null),
+        shouldLoadComboData && hasAodai ? httpClient.get('/inventory/summary') : Promise.resolve(null),
+        shouldLoadComboData && hasAodai && hasPhotography ? httpClient.get('/combo-promotions/my') : Promise.resolve(null),
+        shouldLoadCalendar ? httpClient.get('/providers/me/schedules') : Promise.resolve(null),
+        view === 'vouchers' ? httpClient.get('/promotions/provider') : Promise.resolve(null),
+        shouldLoadReviews ? httpClient.get('/reviews/stats') : Promise.resolve(null),
+        shouldLoadBookings ? httpClient.get('/bookings/provider') : Promise.resolve(null),
+        shouldLoadAnalytics ? httpClient.get('/providers/me/analytics') : Promise.resolve(null),
+      ]) as any[];
+
+      if (shouldLoadPortfolio) setPortfolioItems(Array.isArray(portfolioRes) ? portfolioRes : []);
+      if (shouldLoadComboData) {
+        if (hasPhotography) setPhotoPackages(Array.isArray(packagesRes) ? packagesRes : []);
+        if (hasAodai) {
+          setMyProductsList(productsRes?.items || []);
+          setInventorySummary(Array.isArray(summary) ? summary : []);
+        }
+        if (hasAodai && hasPhotography) setCombos(Array.isArray(combosRes) ? combosRes : []);
+        setVouchers(Array.isArray(vouchersRes) ? vouchersRes : []);
       }
-
-      const sRes: any = await httpClient.get('/providers/me/schedules');
-      setSchedules(sRes);
-
-      const vRes: any = await httpClient.get('/promotions/provider');
-      setVouchers(vRes);
-
-      const rRes: any = await httpClient.get('/reviews/stats');
-      setReviewsData(rRes);
-
-      const bRes: any = await httpClient.get('/bookings/provider');
-      setBookingsState(bRes);
-
-      const aRes: any = await httpClient.get('/providers/me/analytics');
-      setAnalyticsData(aRes);
+      if (shouldLoadCalendar) setSchedules(Array.isArray(schedulesRes) ? schedulesRes : []);
+      if (shouldLoadReviews) setReviewsData(reviewsRes);
+      if (shouldLoadBookings) setBookingsState(Array.isArray(bookingsRes) ? bookingsRes : []);
+      if (shouldLoadAnalytics) setAnalyticsData(analyticsRes);
+      providerDataLoadedRef.current = true;
     } catch (err: any) {
       const msg = err.message || 'Không thể đồng bộ dữ liệu đối tác';
       toast.error(msg);
@@ -378,7 +555,7 @@ export const ProviderDashboard: React.FC = () => {
     const pageToLoad = options?.page ?? invPage;
     try {
       const res: any = await httpClient.get(
-        `/inventory?search=${encodeURIComponent(invSearch)}&status=${invStatusFilter}&conditionStatus=${invConditionFilter}&sortBy=${invSortBy}&page=${pageToLoad}&limit=${invLimit}`
+         `/inventory?search=${encodeURIComponent(debouncedInvSearch)}&status=${invStatusFilter}&conditionStatus=${invConditionFilter}&sortBy=${invSortBy}&page=${pageToLoad}&limit=${invLimit}`
       );
       setInventoryItems(res?.items || []);
       setInvTotal(res?.total || 0);
@@ -498,6 +675,14 @@ export const ProviderDashboard: React.FC = () => {
           confirmButtonColor: 'var(--color-primary)'
         });
       }
+    }
+  };
+
+  const fetchWalletData = async () => {
+    try {
+      await httpClient.get('/providers/me/wallet');
+    } catch (err: any) {
+      console.error('Không thể tải thông tin ví:', err);
     }
   };
 
@@ -621,8 +806,20 @@ export const ProviderDashboard: React.FC = () => {
 
   const fetchPayouts = async () => {
     try {
-      const res: any = await httpClient.get('/payments/settlement-transfers/provider');
-      setPayouts(res || []);
+      let data: any[] = [];
+      try {
+        const res: any = await httpClient.get('/provider/settlements');
+        if (res && Array.isArray(res.items)) {
+          data = res.items;
+        } else if (Array.isArray(res)) {
+          data = res;
+        }
+      } catch (_e) {
+        const res: any = await httpClient.get('/payments/settlement-transfers/provider');
+        if (Array.isArray(res)) data = res;
+      }
+      setPayouts(data);
+      fetchWalletData();
     } catch (err: any) {
       console.error('Không thể tải lịch sử quyết toán:', err);
     }
@@ -642,6 +839,22 @@ export const ProviderDashboard: React.FC = () => {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!businessName.trim() || !phone.trim() || !addressLine.trim() || !city.trim()) {
+      toast.error('Vui lòng hoàn thiện tên cửa hàng, số điện thoại, thành phố và địa chỉ trên bản đồ.');
+      return;
+    }
+    const normalizedCancellationRules = normalizeCancellationRefundRules(cancellationRefundRules);
+    const hasInvalidCancellationRule = cancellationRefundRules.some((rule) =>
+      !Number.isInteger(rule.noticeDays) || rule.noticeDays < 0 || rule.noticeDays > 365 ||
+      !Number.isFinite(rule.refundPercent) || rule.refundPercent < 0 || rule.refundPercent > 100,
+    );
+    const hasDuplicateNoticeDays = new Set(cancellationRefundRules.map((rule) => rule.noticeDays)).size !== cancellationRefundRules.length;
+    if (hasInvalidCancellationRule || hasDuplicateNoticeDays) {
+      toast.error('Mỗi mốc hủy cần có số ngày và tỷ lệ hoàn từ 0 đến 100%; không được trùng mốc ngày.');
+      return;
+    }
+    const cancellationPolicySummary = buildCancellationPolicySummary(normalizedCancellationRules, cancellationAdditionalNotes);
+    setIsSavingProfile(true);
     try {
       await httpClient.patch('/providers/me', {
         businessName,
@@ -649,15 +862,51 @@ export const ProviderDashboard: React.FC = () => {
         address: { ...provider?.address, addressLine, city, geo: baseLatitude && baseLongitude ? { type: 'Point', coordinates: [Number(baseLongitude), Number(baseLatitude)] } : null },
         rentalSettings: { useBusinessAddressForPickup, pickupLocation: useBusinessAddressForPickup ? null : { addressLine: pickupAddressLine, geo: pickupLatitude && pickupLongitude ? { type: 'Point', coordinates: [Number(pickupLongitude), Number(pickupLatitude)] } : null } },
         photographySettings: { serviceRadiusKm: serviceRadiusKm === '' ? null : Number(serviceRadiusKm) },
-        policies: { ...provider?.policies, cancellationPolicy },
+        policies: {
+          ...provider?.policies,
+          cancellationPolicy: cancellationPolicySummary || null,
+          cancellationPolicyConfig: {
+            refundRules: normalizedCancellationRules,
+            additionalNotes: cancellationAdditionalNotes.trim() || null,
+          },
+        },
         comboDiscountPercent: Number(comboDiscountPercent),
       });
       toast.success('Cập nhật thông tin dịch vụ thành công!');
       fetchProviderData();
     } catch (err: any) {
       toast.error('Cập nhật thất bại');
+    } finally {
+      setIsSavingProfile(false);
     }
   };
+
+  const normalizedCancellationRules = normalizeCancellationRefundRules(cancellationRefundRules);
+  const cancellationPolicySummary = buildCancellationPolicySummary(normalizedCancellationRules, cancellationAdditionalNotes);
+  const persistedCancellationConfig = provider?.policies?.cancellationPolicyConfig;
+  const persistedCancellationRules = Array.isArray(persistedCancellationConfig?.refundRules)
+    ? normalizeCancellationRefundRules(persistedCancellationConfig.refundRules)
+    : [];
+  const persistedCancellationNotes = persistedCancellationConfig
+    ? (persistedCancellationConfig.additionalNotes || '')
+    : (provider?.policies?.cancellationPolicy ?? '');
+
+  const profileHasUnsavedChanges = Boolean(provider) && (
+    businessName !== (provider?.businessName ?? '') ||
+    phone !== (provider?.contact?.phone ?? '') ||
+    addressLine !== (provider?.address?.addressLine ?? '') ||
+    city !== (provider?.address?.city ?? '') ||
+    cancellationPolicySummary !== (provider?.policies?.cancellationPolicy ?? '') ||
+    JSON.stringify(normalizedCancellationRules) !== JSON.stringify(persistedCancellationRules) ||
+    cancellationAdditionalNotes !== persistedCancellationNotes ||
+    baseLatitude !== (provider?.address?.geo?.coordinates?.[1]?.toString() ?? '') ||
+    baseLongitude !== (provider?.address?.geo?.coordinates?.[0]?.toString() ?? '') ||
+    serviceRadiusKm !== (provider?.photographySettings?.serviceRadiusKm?.toString() ?? '') ||
+    useBusinessAddressForPickup !== (provider?.rentalSettings?.useBusinessAddressForPickup !== false) ||
+    pickupAddressLine !== (provider?.rentalSettings?.pickupLocation?.addressLine ?? '') ||
+    pickupLatitude !== (provider?.rentalSettings?.pickupLocation?.geo?.coordinates?.[1]?.toString() ?? '') ||
+    pickupLongitude !== (provider?.rentalSettings?.pickupLocation?.geo?.coordinates?.[0]?.toString() ?? '')
+  );
 
   const handleAddVoucher = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -688,6 +937,130 @@ export const ProviderDashboard: React.FC = () => {
     } catch (err: any) {
       toast.error('Xóa voucher thất bại');
     }
+  };
+
+  const handleCreateOrUpdateCombo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cProductId || !cPackageId) {
+      toast.error('Vui lòng chọn cả áo dài và gói chụp ảnh');
+      return;
+    }
+
+    const selectedPkg = photoPackages.find(p => p._id === cPackageId);
+    if (selectedPkg) {
+      const maxPeopleAllowed = selectedPkg.maxPeople || 1;
+      if (Number(cShootPeopleCount || 1) > maxPeopleAllowed) {
+        toast.error(`Số người chụp trong combo (${cShootPeopleCount}) không được lớn hơn số người chụp tối đa của gói chụp ảnh (${maxPeopleAllowed} người)`);
+        return;
+      }
+    }
+
+    const selectedAoDaiStock = cProductId && inventorySummary
+      ? inventorySummary
+        .filter((item: any) => item.productId === cProductId)
+        .reduce((sum: number, item: any) => sum + (item.available || 0), 0)
+      : 0;
+    if (selectedAoDaiStock > 0 && Number(cAoDaiQuantity || 1) > selectedAoDaiStock) {
+      toast.error(`Số lượng áo dài trong combo (${cAoDaiQuantity}) không được vượt quá số lượng tồn kho khả dụng (${selectedAoDaiStock})`);
+      return;
+    }
+    if (!cName.trim()) {
+      toast.error('Vui lòng nhập tên combo');
+      return;
+    }
+    if (cDiscount === '' || cDiscount < 1 || cDiscount > 80) {
+      toast.error('Phần trăm giảm giá phải nằm trong khoảng 1 - 80%');
+      return;
+    }
+    if (!cValidFrom || !cValidTo) {
+      toast.error('Vui lòng chọn khoảng thời gian hiệu lực của combo');
+      return;
+    }
+    if (cValidFrom > cValidTo) {
+      toast.error('Ngày bắt đầu không được lớn hơn ngày kết thúc');
+      return;
+    }
+    if (cMaxUsage === '' || Number(cMaxUsage) < 1) {
+      toast.error('Số lượng giới hạn combo phải lớn hơn hoặc bằng 1');
+      return;
+    }
+
+    const payload: any = {
+      name: cName,
+      description: cDesc,
+      discountPercent: Number(cDiscount),
+      comboPrice: cPrice ? Number(cPrice) : undefined,
+      validFrom: new Date(cValidFrom).toISOString(),
+      validTo: new Date(cValidTo).toISOString(),
+      maxUsage: Number(cMaxUsage),
+      aoDaiQuantity: Number(cAoDaiQuantity || 1),
+      shootPeopleCount: Number(cShootPeopleCount || 1),
+    };
+
+    if (!editingComboId) {
+      payload.productId = cProductId;
+      payload.photographyPackageId = cPackageId;
+    }
+
+    try {
+      if (editingComboId) {
+        await httpClient.put(`/combo-promotions/${editingComboId}`, payload);
+        toast.success(`Cập nhật combo "${cName}" thành công!`);
+      } else {
+        await httpClient.post('/combo-promotions', payload);
+        toast.success(`Tạo combo "${cName}" thành công!`);
+      }
+      clearComboForm();
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error(err.message || 'Thao tác combo thất bại');
+    }
+  };
+
+  const handleEditCombo = (combo: any) => {
+    setEditingComboId(combo._id);
+    setCName(combo.name);
+    setCDesc(combo.description || '');
+    setCProductId(combo.productId?._id || combo.productId || '');
+    setCPackageId(combo.photographyPackageId?._id || combo.photographyPackageId || '');
+    setCDiscount(combo.discountPercent);
+    setCPrice(combo.comboPrice ? String(combo.comboPrice) : '');
+    setCMaxUsage(combo.maxUsage || 10);
+    setCAoDaiQuantity(combo.aoDaiQuantity || 1);
+    setCShootPeopleCount(combo.shootPeopleCount || 1);
+
+    if (combo.validFrom) {
+      setCValidFrom(toLocalDateKey(new Date(combo.validFrom)));
+    }
+    if (combo.validTo) {
+      setCValidTo(toLocalDateKey(new Date(combo.validTo)));
+    }
+  };
+
+  const handleDeleteCombo = async (id: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa combo khuyến mãi này?')) return;
+    try {
+      await httpClient.delete(`/combo-promotions/${id}`);
+      toast.success('Xóa combo thành công!');
+      fetchProviderData();
+    } catch (err: any) {
+      toast.error(err.message || 'Xóa combo thất bại');
+    }
+  };
+
+  const clearComboForm = () => {
+    setEditingComboId(null);
+    setCName('');
+    setCDesc('');
+    setCProductId('');
+    setCPackageId('');
+    setCDiscount(10);
+    setCPrice('');
+    setCValidFrom('');
+    setCValidTo('');
+    setCMaxUsage(10);
+    setCAoDaiQuantity(1);
+    setCShootPeopleCount(1);
   };
 
   const toggleScheduleDay = (day: number) => {
@@ -730,6 +1103,7 @@ export const ProviderDashboard: React.FC = () => {
       await httpClient.post('/providers/me/schedules/recurring/bulk', {
         dayOfWeeks: selectedScheduleDays,
         workingHours: sortedRanges,
+        capability: scheduleCapability,
       });
       toast.success(`Đã lưu lịch cho ${selectedScheduleDays.length} ngày làm việc.`);
       setEditingScheduleDay(null);
@@ -756,6 +1130,7 @@ export const ProviderDashboard: React.FC = () => {
         date: blockedDate,
         isOffDay: true,
         customSlots: [],
+        capability: scheduleCapability,
       });
       toast.success(`Đã chặn lịch bận ngày ${blockedDate}!`);
       setBlockedDate('');
@@ -922,6 +1297,7 @@ export const ProviderDashboard: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [orderTab, setOrderTab] = useState('Tất cả');
+  const [bookingTypeFilter, setBookingTypeFilter] = useState('Tất cả');
   const [activePage, setActivePage] = useState(1);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
 
@@ -929,9 +1305,30 @@ export const ProviderDashboard: React.FC = () => {
   const [reportingOrder, setReportingOrder] = useState<Order | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [incidentDesc, setIncidentDesc] = useState<string>('');
-  const [incidentEvidence, setIncidentEvidence] = useState<string>('');
+  const [incidentPhotos, setIncidentPhotos] = useState<string[]>([]);
   const [incidentAmount, setIncidentAmount] = useState<number>(0);
-  const [incidentActionType, setIncidentActionType] = useState<'CLEANING' | 'MAINTENANCE'>('CLEANING');
+  const [incidentActionType, setIncidentActionType] = useState<'CLEANING' | 'MAINTENANCE' | 'NO_SHOW' | 'VIOLATION'>('CLEANING');
+
+  const handleIncidentPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    toast.info('Đang tải ảnh lên...');
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append('images', files[i]);
+      }
+      const res: any = await httpClient.post('/api/disputes/incidents/upload-evidence', formData);
+      if (res.urls && Array.isArray(res.urls)) {
+        setIncidentPhotos(prev => [...prev, ...res.urls]);
+        toast.success('Tải ảnh thành công!');
+      } else {
+        toast.error('Tải ảnh thất bại: Phản hồi không hợp lệ từ máy chủ.');
+      }
+    } catch (err: any) {
+      toast.error('Tải ảnh thất bại: ' + (err.message || ''));
+    }
+  };
 
   const handleSendIncidentReport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -939,17 +1336,20 @@ export const ProviderDashboard: React.FC = () => {
       toast.error('Vui lòng chọn sản phẩm gặp sự cố!');
       return;
     }
+    if (incidentPhotos.length === 0) {
+      toast.error('Báo cáo sự cố bắt buộc phải có ít nhất 1 hình ảnh làm bằng chứng!');
+      return;
+    }
     if (incidentAmount > (reportingOrder.depositTotal || 0)) {
       toast.error(`Tiền đền bù không được vượt quá số tiền cọc (${(reportingOrder.depositTotal || 0).toLocaleString()}đ)`);
       return;
     }
     try {
-      const photos = incidentEvidence ? incidentEvidence.split(',').map(s => s.trim()).filter(Boolean) : [];
       await httpClient.post('/api/disputes/incidents', {
         bookingId: reportingOrder._id,
         bookingItemId: selectedItemId,
         description: incidentDesc,
-        evidencePhotos: photos,
+        evidencePhotos: incidentPhotos,
         requestedAmount: incidentAmount,
         actionType: incidentActionType,
       });
@@ -957,7 +1357,7 @@ export const ProviderDashboard: React.FC = () => {
       setReportingOrder(null);
       setSelectedItemId('');
       setIncidentDesc('');
-      setIncidentEvidence('');
+      setIncidentPhotos([]);
       setIncidentAmount(0);
       setIncidentActionType('CLEANING');
       fetchOrders();
@@ -966,8 +1366,8 @@ export const ProviderDashboard: React.FC = () => {
     }
   };
 
-  const fetchOrders = async () => {
-    setLoadingOrders(true);
+  const fetchOrders = async (silent = false, force = false) => {
+    if (!silent) setLoadingOrders(true);
     try {
       const bRes: any = await httpClient.get('/bookings/provider');
       const mapped: Order[] = (Array.isArray(bRes) ? bRes : []).map((b: any) => {
@@ -975,20 +1375,67 @@ export const ProviderDashboard: React.FC = () => {
         const custName = cust?.profile?.fullName || cust?.email?.split('@')[0] || 'Khách hàng';
         const custEmail = cust?.email || '';
         const initials = custName.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
-        const firstItem = b.items?.[0];
-        const productName = firstItem?.name || firstItem?.productId?.name || firstItem?.photographyPackageId?.name || 'Sản phẩm thuê';
-        const dateStr = b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : '';
+
+        const items = b.items || [];
+        let productName = 'Sản phẩm thuê';
+        if (items.length > 0) {
+          const isCombo = b.bookingType === 'COMBO' || (items.some((i: any) => i.itemType === 'PRODUCT' || i.productId) && items.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId));
+
+          if (isCombo) {
+            const explicitComboName = b.comboName || b.comboTitle || b.comboPromotionName || b.comboPromotionId?.name || b.comboId?.name ||
+              items.find((i: any) => i.comboName || i.comboPromotionId?.name)?.comboName ||
+              items.find((i: any) => i.comboPromotionId?.name)?.comboPromotionId?.name;
+
+            const photoItem = items.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId);
+            const photoName = photoItem?.name || photoItem?.photographyPackageId?.name || photoItem?.productName || b.productName || 'Gói Chụp Ảnh Combo';
+
+            const rawComboName = explicitComboName || photoName;
+            if (rawComboName.toLowerCase().includes('combo')) {
+              productName = rawComboName;
+            } else {
+              productName = `Combo: ${rawComboName}`;
+            }
+          } else {
+            const uniqueNames: string[] = [];
+            items.forEach((i: any) => {
+              const n = i?.name || i?.productId?.name || i?.photographyPackageId?.name;
+              if (n && !uniqueNames.includes(n)) uniqueNames.push(n);
+            });
+            if (uniqueNames.length === 1) {
+              const totalQty = items.reduce((sum: number, i: any) => sum + (i.quantity || 1), 0);
+              productName = totalQty > 1 ? `${uniqueNames[0]} (x${totalQty})` : uniqueNames[0];
+            } else if (uniqueNames.length > 1) {
+              productName = `${uniqueNames[0]} + ${uniqueNames.length - 1} sản phẩm khác`;
+            } else {
+              productName = (items.map((i: any) => i?.name || i?.productId?.name || i?.photographyPackageId?.name).filter(Boolean).join(' + ')) || 'Sản phẩm thuê';
+            }
+          }
+        }
+        const dateStr = b.createdAt
+          ? new Date(b.createdAt).toLocaleString('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          })
+          : '';
 
         let totalAmt = 0;
         if (b.items && b.items.length > 0) {
           totalAmt = b.items.reduce((sum: number, item: any) => {
-            const price = item.unitPrice ?? 0;
+            const price = Number(item.unitPrice ?? item.price ?? 0);
             const qty = item.quantity ?? 1;
-            return sum + (price * qty);
+            const discount = item.comboDiscountAmount ?? item.discountAmount ?? 0;
+            const lineTotal = Number(item.subtotal ?? item.totalPrice ?? 0);
+            return sum + Math.max(0, (lineTotal > 0 ? lineTotal : price * qty) - discount);
           }, 0);
         }
-        if (totalAmt === 0 && b.pricingSummary?.grandTotal) {
+        if (b.bookingType === 'COMBO' && b.pricingSummary?.grandTotal) {
           totalAmt = b.pricingSummary.grandTotal;
+        } else if (totalAmt === 0) {
+          totalAmt = Number(b.pricingSummary?.grandTotal ?? b.paymentSummary?.totalPaid ?? b.totalAmount ?? b.total ?? 0);
         }
 
         const statusMap: Record<string, string> = {
@@ -996,13 +1443,18 @@ export const ProviderDashboard: React.FC = () => {
           PENDING_PAYMENT: 'CHỜ THANH TOÁN',
           DEPOSIT_PAID: 'ĐÃ ĐẶT CỌC',
           CONFIRMED: 'ĐANG THỰC HIỆN',
+          IN_PROGRESS: 'ĐANG CHỤP',
+          AWAITING_REVIEW: 'CHỜ KHÁCH XÁC NHẬN ẢNH',
           PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
           PICKED_UP: 'ĐANG THUÊ',
+          COMBO_PHOTOS_APPROVED: 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ',
           RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
           RETURNED: 'ĐÃ TRẢ ĐỒ',
           COMPLETED: 'HOÀN THÀNH',
           CANCELLED: 'ĐÃ HỦY',
-          DISPUTED: 'TRANH CHẤP',
+          DISPUTED: 'ĐANG TRANH CHẤP',
+          PARTIALLY_REFUNDED: 'ĐÃ HOÀN TIỀN MỘT PHẦN',
+          REFUNDED: 'ĐÃ HOÀN TIỀN',
         };
         return {
           _id: b._id,
@@ -1012,19 +1464,46 @@ export const ProviderDashboard: React.FC = () => {
           customerInitials: initials,
           productName,
           orderDate: dateStr,
+          rawOrderDate: b.createdAt,
           total: `${totalAmt.toLocaleString('vi-VN')}đ`,
           status: statusMap[b.status] || b.status,
           totalAmount: totalAmt,
           items: b.items,
+          schedules: b.schedules,
           depositTotal: b.pricingSummary?.depositTotal || 0,
           rawStatus: b.status,
+          bookingType: b.bookingType,
+          photosApproved: Boolean(b.photosApproved),
         };
       });
-      setOrders(mapped);
+
+      const isOrdersChanged = (prev: Order[], next: Order[]) => {
+        if (prev.length !== next.length) return true;
+        for (let i = 0; i < prev.length; i++) {
+          if (prev[i]._id !== next[i]._id) return true;
+          if (prev[i].rawStatus !== next[i].rawStatus) return true;
+          if (prev[i].status !== next[i].status) return true;
+          if (prev[i].photosApproved !== next[i].photosApproved) return true;
+          const previousScheduleState = (prev[i].schedules || [])
+            .map((schedule) => `${schedule._id || ''}:${schedule.status || ''}:${schedule.startsAt || schedule.scheduledDate || ''}`)
+            .join('|');
+          const nextScheduleState = (next[i].schedules || [])
+            .map((schedule) => `${schedule._id || ''}:${schedule.status || ''}:${schedule.startsAt || schedule.scheduledDate || ''}`)
+            .join('|');
+          if (previousScheduleState !== nextScheduleState) return true;
+        }
+        return false;
+      };
+
+      setOrders(prevOrders => {
+        if (actionMenuId !== null && !force) return prevOrders;
+        const changed = isOrdersChanged(prevOrders, mapped);
+        return changed ? mapped : prevOrders;
+      });
     } catch (err: any) {
-      toast.error('Không thể tải danh sách đơn hàng');
+      if (!silent) toast.error('Không thể tải danh sách đơn hàng');
     } finally {
-      setLoadingOrders(false);
+      if (!silent) setLoadingOrders(false);
     }
   };
 
@@ -1092,7 +1571,7 @@ export const ProviderDashboard: React.FC = () => {
     setLoadingProducts(true);
     try {
       const res: any = await httpClient.get(
-        `/products/my-listings?search=${encodeURIComponent(prodSearch)}&sortBy=${prodSortBy}&page=${prodPage}&limit=${prodLimit}&sizes=${prodSizeFilter}&colors=${prodColorFilter}`
+         `/products/my-listings?search=${encodeURIComponent(debouncedProdSearch)}&sortBy=${prodSortBy}&page=${prodPage}&limit=${prodLimit}&sizes=${prodSizeFilter}&colors=${prodColorFilter}`
       );
       setProducts(res?.items || []);
       setProdTotal(res?.total || 0);
@@ -1143,8 +1622,8 @@ export const ProviderDashboard: React.FC = () => {
         const today = new Date();
         const nextWeek = new Date();
         nextWeek.setDate(today.getDate() + 7);
-        setCampaignStart(today.toISOString().split('T')[0]);
-        setCampaignEnd(nextWeek.toISOString().split('T')[0]);
+        setCampaignStart(toLocalDateKey(today));
+        setCampaignEnd(toLocalDateKey(nextWeek));
       }
     } catch (err) {
       console.error('Error fetching campaign:', err);
@@ -1155,7 +1634,6 @@ export const ProviderDashboard: React.FC = () => {
     if (currentView === 'orders' || currentView === 'rental-operations') {
       fetchOrders();
     } else if (currentView === 'collections') {
-      fetchProducts();
       fetchCategories();
       fetchServiceCategories();
       fetchActiveCampaign();
@@ -1163,16 +1641,41 @@ export const ProviderDashboard: React.FC = () => {
       fetchPayouts();
     } else if (currentView === 'inventory') {
       fetchInventoryData();
-    } else if (['profile', 'portfolio', 'calendar', 'vouchers', 'reviews', 'trust', 'analytics'].includes(currentView)) {
+    } else if (['profile', 'portfolio', 'calendar', 'vouchers', 'reviews', 'trust', 'analytics', 'role-management'].includes(currentView)) {
       fetchProviderData();
     }
   }, [currentView]);
 
+  // Real-time: auto-refresh orders when a booking is updated (by admin or customer)
+  const { socket } = useSocket();
+  const fetchOrdersRef = useRef(fetchOrders);
+  useEffect(() => { fetchOrdersRef.current = fetchOrders; });
   useEffect(() => {
-    if (currentView === 'collections') {
+    if (!socket) return;
+    const handler = (_payload: { bookingId: string; status: string }) => {
+      fetchOrdersRef.current(true);
+    };
+    socket.on('booking_updated', handler);
+    return () => { socket.off('booking_updated', handler); };
+  }, [socket]);
+
+
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedProdSearch(prodSearch.trim()), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [prodSearch]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedInvSearch(invSearch.trim()), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [invSearch]);
+
+  useEffect(() => {
+    if (currentView === 'collections' && collectionTab === 'products') {
       fetchProducts();
     }
-  }, [prodSearch, prodSortBy, prodPage, prodSizeFilter, prodColorFilter]);
+  }, [currentView, collectionTab, debouncedProdSearch, prodSortBy, prodPage, prodSizeFilter, prodColorFilter]);
 
   // Vào tab Tồn kho -> tải đầy đủ (có màn loading lần đầu)
   useEffect(() => {
@@ -1186,7 +1689,7 @@ export const ProviderDashboard: React.FC = () => {
     if (currentView === 'collections' && collectionTab === 'inventory') {
       fetchInventoryData({ silent: true, itemsOnly: true });
     }
-  }, [invSearch, invSortBy, invStatusFilter, invConditionFilter, invPage]);
+  }, [debouncedInvSearch, invSortBy, invStatusFilter, invConditionFilter, invPage]);
 
   const getImageUrl = (url: string) => {
     if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
@@ -1363,8 +1866,8 @@ export const ProviderDashboard: React.FC = () => {
       const today = new Date();
       const nextWeek = new Date();
       nextWeek.setDate(today.getDate() + 7);
-      setCampaignStart(today.toISOString().split('T')[0]);
-      setCampaignEnd(nextWeek.toISOString().split('T')[0]);
+      setCampaignStart(toLocalDateKey(today));
+      setCampaignEnd(toLocalDateKey(nextWeek));
       setIsCampaignModalOpen(false);
       fetchProducts();
     } catch (err: any) {
@@ -1644,6 +2147,7 @@ export const ProviderDashboard: React.FC = () => {
         .map(category => category.id);
       await httpClient.patch(`/products/${targetId}`, {
         ...buildBasePayload(),
+        status: 'ACTIVE',
         style: activeTagCodes.length ? (styleFromTags || prodStyle) : prodStyle,
         occasions: activeTagCodes.length ? occasionsFromTags : prodOccasions,
         styleCategoryIds: activeTagCodes.length ? styleIdsFromTags : prodStyleCategoryIds,
@@ -1714,17 +2218,29 @@ export const ProviderDashboard: React.FC = () => {
     return 'Khác';
   };
 
-  const tabs = React.useMemo(() => [
-    { label: 'Tất cả', count: orders.length },
-    { label: 'Chờ xử lý', count: orders.filter(o => getOrderGroup(o.status) === 'Chờ xử lý').length },
-    { label: 'Đang thực hiện', count: orders.filter(o => getOrderGroup(o.status) === 'Đang thực hiện').length },
-    { label: 'Hoàn thành', count: orders.filter(o => getOrderGroup(o.status) === 'Hoàn thành').length },
-    { label: 'Đã hủy', count: orders.filter(o => getOrderGroup(o.status) === 'Đã hủy').length },
-  ], [orders]);
+  const roleFilteredOrders = React.useMemo(() => {
+    if (hasAodaiCapability && !hasPhotographyCapability) {
+      return orders.filter(o => o.bookingType === 'AODAI_RENTAL');
+    }
+    if (hasPhotographyCapability && !hasAodaiCapability) {
+      return orders.filter(o => o.bookingType === 'PHOTOGRAPHY');
+    }
+    return orders;
+  }, [orders, hasAodaiCapability, hasPhotographyCapability]);
 
-  const filteredOrders = orderTab === 'Tất cả'
-    ? orders
-    : orders.filter(o => getOrderGroup(o.status) === orderTab);
+  const tabs = React.useMemo(() => [
+    { label: 'Tất cả', count: roleFilteredOrders.length },
+    { label: 'Chờ xử lý', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Chờ xử lý').length },
+    { label: 'Đang thực hiện', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Đang thực hiện').length },
+    { label: 'Hoàn thành', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Hoàn thành').length },
+    { label: 'Đã hủy', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Đã hủy').length },
+  ], [roleFilteredOrders]);
+
+  const filteredOrders = roleFilteredOrders.filter((order) => {
+    const matchesStatus = orderTab === 'Tất cả' || getOrderGroup(order.status) === orderTab;
+    const matchesType = (!hasAodaiCapability || !hasPhotographyCapability) ? true : (bookingTypeFilter === 'Tất cả' || order.bookingType === bookingTypeFilter);
+    return matchesStatus && matchesType;
+  });
 
   const rentalOperationItems = React.useMemo(() => orders.flatMap((order) =>
     (order.items || [])
@@ -1736,20 +2252,39 @@ export const ProviderDashboard: React.FC = () => {
     const now = new Date();
     return orders
       .filter(o => {
-        const d = o.orderDate ? new Date(o.orderDate.split('/').reverse().join('-')) : null;
-        return o.status === 'HOÀN THÀNH' && d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        let d: Date | null = o.rawOrderDate ? new Date(o.rawOrderDate) : null;
+        if (!d || isNaN(d.getTime())) {
+          const parts = (o.orderDate || '').split(' ');
+          const datePart = parts[parts.length - 1];
+          if (datePart && datePart.includes('/')) {
+            const [day, month, year] = datePart.split('/').map(Number);
+            if (day && month && year) {
+              d = new Date(year, month - 1, day);
+            }
+          }
+        }
+        const isCompleted = o.rawStatus === 'COMPLETED' || o.status === 'HOÀN THÀNH';
+        return isCompleted && d && !isNaN(d.getTime()) && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
       })
       .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
   }, [orders]);
 
   const statusBadgeStyle = (status: string): React.CSSProperties => {
-    const base: React.CSSProperties = { display: 'inline-block', padding: '4px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', color: 'white' };
+    const base: React.CSSProperties = { display: 'inline-block', padding: '4px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', color: 'white', whiteSpace: 'nowrap' };
     if (status === 'HOÀN THÀNH') return { ...base, backgroundColor: '#2e7d32' };
     if (status === 'CHỜ KHÁCH DUYỆT SỰ CỐ') return { ...base, backgroundColor: '#ed6c02' };
     if (status === 'TRANH CHẤP') return { ...base, backgroundColor: '#d32f2f' };
     if (status === 'ĐÃ HỦY') return { ...base, backgroundColor: '#757575' };
-    if (status === 'CHỜ XỬ LÝ' || status === 'CHỜ THANH TOÁN') return { ...base, backgroundColor: 'var(--color-primary)' };
-    if (status === 'ĐANG XỬ LÝ' || status === 'ĐANG THỰC HIỆN' || status === 'ĐANG THUÊ') return { ...base, backgroundColor: 'var(--color-gold)' };
+    if (status === 'CHỜ XỬ LÝ') return { ...base, backgroundColor: 'var(--color-primary)' };
+    if (status === 'CHỜ THANH TOÁN') return { ...base, backgroundColor: '#9C27B0' };
+    if (status === 'ĐÃ ĐẶT CỌC') return { ...base, backgroundColor: '#1565C0' };
+    if (status === 'ĐANG THỰC HIỆN') return { ...base, backgroundColor: 'var(--color-gold)' };
+    if (status === 'ĐANG CHỤP') return { ...base, backgroundColor: '#059669' };
+    if (status === 'CHỜ KHÁCH XÁC NHẬN') return { ...base, backgroundColor: '#0284C7' };
+    if (status === 'CHỜ NHẬN ĐỒ') return { ...base, backgroundColor: '#E67E22' };
+    if (status === 'ĐANG THUÊ') return { ...base, backgroundColor: '#27AE60' };
+    if (status === 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ') return { ...base, backgroundColor: '#15803D' };
+    if (status === 'ĐÃ TRẢ ĐỒ') return { ...base, backgroundColor: '#558B2F' };
     return { ...base, backgroundColor: '#ccc', color: '#555' };
   };
 
@@ -1757,30 +2292,503 @@ export const ProviderDashboard: React.FC = () => {
     display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', fontSize: '14px', fontWeight: 600,
     color: active ? 'var(--color-primary)' : 'rgba(255,255,255,0.5)', textDecoration: 'none', borderRadius: '8px',
     backgroundColor: active ? 'rgba(255,255,255,0.06)' : 'transparent', transition: 'var(--transition-smooth)', cursor: 'pointer',
-    borderRight: active ? '2px solid var(--color-primary)' : 'none',
     textAlign: 'left',
     width: '100%',
     border: 'none',
   });
 
-  // Map từ trạng thái tiếng Việt → BookingStatus enum value
-  const statusApiMap: Record<string, string> = {
-    'HOÀN THÀNH': 'COMPLETED',
-    'ĐANG XỬ LÝ': 'CONFIRMED',
-    'CHỜ XỬ LÝ': 'PENDING_PAYMENT',
-    'ĐÃ HỦY': 'CANCELLED',
+  // Map từ BookingStatus enum value → Trạng thái tiếng Việt hiển thị
+  const statusDisplayMap: Record<string, string> = {
+    PENDING: 'CHỜ XỬ LÝ',
+    PENDING_PAYMENT: 'CHỜ THANH TOÁN',
+    DEPOSIT_PAID: 'ĐÃ ĐẶT CỌC',
+    CONFIRMED: 'ĐANG THỰC HIỆN',
+    IN_PROGRESS: 'ĐANG CHỤP',
+    AWAITING_REVIEW: 'CHỜ KHÁCH XÁC NHẬN ẢNH',
+    PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
+    PICKED_UP: 'ĐANG THUÊ',
+    COMBO_PHOTOS_APPROVED: 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ',
+    RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
+    RETURNED: 'ĐÃ TRẢ ĐỒ',
+    COMPLETED: 'HOÀN THÀNH',
+    CANCELLED: 'ĐÃ HỦY',
+    DISPUTED: 'ĐANG TRANH CHẤP',
+    PARTIALLY_REFUNDED: 'ĐÃ HOÀN TIỀN MỘT PHẦN',
+    REFUNDED: 'ĐÃ HOÀN TIỀN',
   };
 
-  const changeOrderStatus = async (_id: string, s: string) => {
-    const apiStatus = statusApiMap[s] || s;
+  const changeOrderStatus = async (_id: string, apiStatus: string) => {
+    const order = orders.find(o => o._id === _id || o.id === _id);
+
+    // ===== PHOTOGRAPHY / COMBO: Bàn giao sản phẩm buổi chụp → AWAITING_REVIEW =====
+    const isPhotographyOrder = order?.bookingType === 'PHOTOGRAPHY' || order?.bookingType === 'COMBO' || order?.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+    if (apiStatus === 'AWAITING_REVIEW' && isPhotographyOrder) {
+      const result = await Swal.fire({
+        title: 'Bàn giao sản phẩm buổi chụp',
+        html: `
+          <div style="display: flex; flex-direction: column; gap: 14px; text-align: left; padding: 6px 0;">
+            <p style="font-size: 13px; color: #4B5563; margin: 0; line-height: 1.5;">
+              Nhập <strong>Link Kho Ảnh Gốc (Google Drive / Cloud)</strong> và/hoặc <strong>Tải lên ảnh xem trước</strong> để gửi cho khách hàng xem & xác nhận.
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label for="delivery-drive-url-input" style="font-size: 12.5px; font-weight: 700; color: #1E293B; display: flex; align-items: center; gap: 6px;">
+                🔗 Link Kho Ảnh Gốc (Google Drive / Cloud)
+              </label>
+              <input
+                type="url"
+                id="delivery-drive-url-input"
+                placeholder="https://drive.google.com/drive/folders/..."
+                style="
+                  width: 100%;
+                  padding: 10px 12px;
+                  border: 1.5px solid #CBD5E1;
+                  border-radius: 8px;
+                  font-size: 13px;
+                  box-sizing: border-box;
+                  outline: none;
+                "
+                value="${(order as any)?.deliveryDriveUrl || ''}"
+              />
+              <small style="font-size: 11px; color: #64748B;">Lưu ý: Bật quyền "Người có liên kết có thể xem" cho thư mục Drive.</small>
+            </div>
+
+            <div style="border-top: 1px dashed #E2E8F0; margin: 2px 0;"></div>
+
+            <div style="display: flex; flex-direction: column; gap: 6px; align-items: center;">
+              <label style="font-size: 12.5px; font-weight: 700; color: #1E293B; width: 100%; text-align: left;">
+                📸 Ảnh kết quả xem trước
+              </label>
+              <label for="delivered-photo-input" style="
+                width: 100%;
+                height: 100px;
+                border: 2px dashed #BFDBFE;
+                border-radius: 12px;
+                background-color: #EFF6FF;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s ease-in-out;
+                gap: 4px;
+                padding: 12px;
+                box-sizing: border-box;
+              "
+              onmouseover="this.style.borderColor='#1D4ED8'; this.style.backgroundColor='#DBEAFE';"
+              onmouseout="this.style.borderColor='#BFDBFE'; this.style.backgroundColor='#EFF6FF';"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span style="font-size: 12px; font-weight: 700; color: #1D4ED8;">Tải lên ảnh kết quả</span>
+                <span style="font-size: 11px; color: #6B7280;">Hỗ trợ nhiều hình ảnh JPG, PNG, WEBP</span>
+                <input type="file" id="delivered-photo-input" multiple accept="image/*" style="display: none;" />
+              </label>
+              <div id="delivered-photo-preview" style="
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+                justify-content: center;
+                margin-top: 10px;
+                width: 100%;
+              "></div>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#1D4ED8',
+        cancelButtonColor: '#9CA3AF',
+        confirmButtonText: '📸 Bàn giao ảnh cho khách hàng',
+        cancelButtonText: 'Hủy',
+        background: 'white',
+        didOpen: () => {
+          const fileInput = document.getElementById('delivered-photo-input') as HTMLInputElement;
+          const previewContainer = document.getElementById('delivered-photo-preview') as HTMLDivElement;
+          if (fileInput && previewContainer) {
+            fileInput.addEventListener('change', async (e: any) => {
+              const files = e.target.files;
+              if (!files || files.length === 0) return;
+              previewContainer.innerHTML = '<span style="font-size: 12px; color: #1D4ED8; font-weight: 600;">⏳ Đang tải ảnh...</span>';
+              const uploadedUrls: string[] = [];
+              try {
+                for (let i = 0; i < files.length; i++) {
+                  const formData = new FormData();
+                  formData.append('file', files[i]);
+                  const res: any = await httpClient.post('/api/bookings/upload-reference', formData);
+                  if (res.url) uploadedUrls.push(res.url);
+                }
+                previewContainer.innerHTML = '';
+                uploadedUrls.forEach(url => {
+                  const wrapper = document.createElement('div');
+                  wrapper.style.cssText = 'position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);border:2px solid #BFDBFE;';
+                  const img = document.createElement('img');
+                  img.src = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+                  img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+                  img.className = 'delivered-uploaded-img';
+                  img.dataset.url = url;
+                  wrapper.appendChild(img);
+                  previewContainer.appendChild(wrapper);
+                });
+              } catch (_err) {
+                previewContainer.innerHTML = '<span style="font-size: 12px; color: #C0392B; font-weight: 600;">❌ Tải ảnh thất bại!</span>';
+              }
+            });
+          }
+        },
+        preConfirm: () => {
+          const driveInput = document.getElementById('delivery-drive-url-input') as HTMLInputElement;
+          const driveUrl = driveInput?.value?.trim() || '';
+
+          const imgs = document.querySelectorAll('.delivered-uploaded-img');
+          const deliveredPhotos: string[] = [];
+          imgs.forEach((img: any) => {
+            if (img.dataset.url) deliveredPhotos.push(img.dataset.url);
+          });
+
+          if (!driveUrl && deliveredPhotos.length === 0) {
+            Swal.showValidationMessage('Vui lòng nhập Link Drive kho ảnh hoặc tải lên ít nhất 1 ảnh kết quả!');
+            return false;
+          }
+
+          if (driveUrl && !/^https?:\/\//i.test(driveUrl)) {
+            Swal.showValidationMessage('Đường dẫn Drive không hợp lệ! Vui lòng nhập URL hợp lệ (bắt đầu bằng http:// hoặc https://)');
+            return false;
+          }
+
+          return { deliveredPhotos, deliveryDriveUrl: driveUrl };
+        }
+      });
+
+      if (!result.isConfirmed || !result.value) {
+        setActionMenuId(null);
+        return;
+      }
+
+      const { deliveredPhotos, deliveryDriveUrl } = result.value;
+      try {
+        await httpClient.patch(`/bookings/${_id}/status`, {
+          status: apiStatus,
+          deliveredPhotos: deliveredPhotos.length > 0 ? deliveredPhotos : undefined,
+          deliveryDriveUrl: deliveryDriveUrl || undefined,
+        });
+        const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
+        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus, deliveredPhotos, deliveryDriveUrl } : o));
+        toast.success('Đã bàn giao sản phẩm ảnh cho khách hàng thành công!');
+      } catch (err: any) {
+        toast.error(err.message || 'Gửi ảnh thất bại');
+      }
+      setActionMenuId(null);
+      return;
+    }
+
+    // ===== PHOTOGRAPHY: Hủy/Từ chối lịch chụp → yêu cầu nhập lý do =====
+    if (apiStatus === 'CANCELLED' && order?.bookingType === 'PHOTOGRAPHY') {
+      const result = await Swal.fire({
+        title: 'Từ chối / Hủy toàn bộ booking',
+        html: `
+          <p style="font-size: 13px; color: #6B7280; margin-bottom: 14px; line-height: 1.5;">
+            Vui lòng cho khách hàng biết lý do bạn từ chối hoặc hủy lịch chụp này.
+            Lý do sẽ được gửi trực tiếp đến khách hàng.
+          </p>
+        `,
+        input: 'textarea',
+        inputLabel: 'Lý do hủy (bắt buộc)',
+        inputPlaceholder: 'VD: Tôi bận lịch vào ngày này / Thời tiết không phù hợp / ...',
+        inputAttributes: {
+          'aria-label': 'Lý do hủy',
+          style: 'font-size: 13px; min-height: 80px;',
+        },
+        showCancelButton: true,
+        confirmButtonColor: '#d32f2f',
+        cancelButtonColor: '#9CA3AF',
+        confirmButtonText: 'Xác nhận hủy đơn',
+        cancelButtonText: 'Quay lại',
+        background: 'white',
+        inputValidator: (value) => {
+          if (!value || !value.trim()) {
+            return 'Bạn phải nhập lý do hủy để khách hàng biết!';
+          }
+          return null;
+        },
+      });
+
+      if (!result.isConfirmed || !result.value) {
+        setActionMenuId(null);
+        return;
+      }
+
+      const reason = result.value.trim();
+      try {
+        await httpClient.post(`/bookings/${_id}/cancel`, { reason });
+        const displayStatus = statusDisplayMap['CANCELLED'] || 'Đã hủy';
+        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: 'CANCELLED' } : o));
+        toast.success('Đã hủy lịch chụp. Lý do đã được gửi cho khách hàng.');
+      } catch (err: any) {
+        toast.error(err.message || 'Hủy đơn thất bại');
+      }
+      setActionMenuId(null);
+      return;
+    }
+
+    // ===== PHOTOGRAPHY: Báo khách vắng mặt (No-Show) với Ảnh bằng chứng =====
+    if (apiStatus === 'NO_SHOW') {
+      let uploadedProofUrls: string[] = [];
+
+      const result = await Swal.fire({
+        title: '📸 Báo khách vắng mặt (No-Show)',
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 6px 0; text-align: left;">
+            <p style="font-size: 13px; color: #4B5563; margin-bottom: 14px; line-height: 1.5; width: 100%;">
+              Vui lòng nhập mô tả chi tiết và tải ảnh bằng chứng (ảnh cuộc gọi, tin nhắn, ảnh check-in điểm hẹn) để đối soát khi khách vắng mặt. Tiền cọc sẽ được chuyển bồi thường cho bạn.
+            </p>
+
+            <label style="font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 6px; width: 100%;">Lý do / Mô tả chi tiết (bắt buộc):</label>
+            <textarea id="noshow-reason-input" style="width: 100%; height: 80px; padding: 8px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 13px; margin-bottom: 14px; box-sizing: border-box;" placeholder="VD: Đã đứng chờ lúc 08:00 tại Chùa Linh Ứng đến 08:45 nhưng khách không tới, gọi 5 cuộc không nghe máy..."></textarea>
+
+            <label style="font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 6px; width: 100%;">Tải ảnh bằng chứng (ảnh màn hình cuộc gọi, tin nhắn, vị trí check-in):</label>
+            <input type="file" id="noshow-proof-files" multiple accept="image/*" style="width: 100%; font-size: 12px; margin-bottom: 6px;" />
+            <div id="noshow-upload-status" style="font-size: 11px; color: #059669; font-weight: 600; margin-top: 2px; width: 100%;"></div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#d32f2f',
+        cancelButtonColor: '#9CA3AF',
+        confirmButtonText: 'Gửi báo cáo & Thu cọc',
+        cancelButtonText: 'Quay lại',
+        didOpen: () => {
+          const fileInput = document.getElementById('noshow-proof-files') as HTMLInputElement;
+          const statusDiv = document.getElementById('noshow-upload-status') as HTMLDivElement;
+          if (fileInput) {
+            fileInput.onchange = async () => {
+              const files = fileInput.files;
+              if (!files || files.length === 0) return;
+              statusDiv.innerText = '⏳ Đang tải ảnh bằng chứng...';
+              uploadedProofUrls = [];
+              for (let i = 0; i < files.length; i++) {
+                const formData = new FormData();
+                formData.append('file', files[i]);
+                try {
+                  const res: any = await httpClient.post('/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                  if (res.data?.url) {
+                    uploadedProofUrls.push(res.data.url);
+                  }
+                } catch (e) { console.error('Upload proof err', e); }
+              }
+              statusDiv.innerText = `✓ Đã tải lên ${uploadedProofUrls.length} ảnh bằng chứng thành công!`;
+            };
+          }
+        },
+        preConfirm: () => {
+          const reasonInput = (document.getElementById('noshow-reason-input') as HTMLTextAreaElement)?.value || '';
+          if (!reasonInput.trim()) {
+            Swal.showValidationMessage('Vui lòng nhập mô tả / lý do báo cáo vắng mặt!');
+            return false;
+          }
+          return { reason: reasonInput.trim(), photos: uploadedProofUrls };
+        }
+      });
+
+      if (!result.isConfirmed || !result.value) {
+        setActionMenuId(null);
+        return;
+      }
+
+      const { reason, photos } = result.value;
+      try {
+        await httpClient.post(`/bookings/${_id}/cancel`, {
+          reason: `[KHÁCH VẮNG MẶT - NO SHOW] ${reason}`,
+          reportPhotos: photos
+        });
+        const displayStatus = statusDisplayMap['CANCELLED'] || 'Đã hủy';
+        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: 'CANCELLED' } : o));
+        toast.success('Đã gửi báo cáo Khách vắng mặt thành công kèm ảnh bằng chứng. Tiền cọc sẽ được bồi thường cho bạn!');
+      } catch (err: any) {
+        toast.error(err.message || 'Báo cáo thất bại');
+      }
+      setActionMenuId(null);
+      return;
+    }
+
+    if (apiStatus === 'PICKUP_PENDING') {
+      const result = await Swal.fire({
+        title: 'Bàn giao trang phục',
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0;">
+            <p style="font-size: 13px; color: #6B7280; margin-bottom: 18px; text-align: center; line-height: 1.5; max-width: 360px;">
+              Ảnh chụp rõ nét tình trạng tổng thể, cổ áo, tà áo và các chi tiết quan trọng lúc giao hàng làm bằng chứng đối soát.
+            </p>
+            <label for="handover-file-input" style="
+              width: 100%;
+              max-width: 320px;
+              height: 130px;
+              border: 2px dashed #D1D5DB;
+              border-radius: 12px;
+              background-color: #F9FAFB;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              cursor: pointer;
+              transition: all 0.2s ease-in-out;
+              gap: 8px;
+              padding: 16px;
+              box-sizing: border-box;
+            "
+            onmouseover="this.style.borderColor='var(--color-primary-dark)'; this.style.backgroundColor='#FFFDF9';"
+            onmouseout="this.style.borderColor='#D1D5DB'; this.style.backgroundColor='#F9FAFB';"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8C827A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span style="font-size: 13px; font-weight: 700; color: #4B5563; margin-top: 4px;">Tải lên ảnh bàn giao</span>
+              <span style="font-size: 11px; color: #9CA3AF;">Hỗ trợ nhiều hình ảnh JPG, PNG, WEBP</span>
+              <input type="file" id="handover-file-input" multiple accept="image/*" style="display: none;" />
+            </label>
+            <div id="handover-preview-container" style="
+              display: flex;
+              gap: 10px;
+              flex-wrap: wrap;
+              justify-content: center;
+              margin-top: 20px;
+              width: 100%;
+              max-width: 360px;
+            "></div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: 'var(--color-primary-dark)',
+        cancelButtonColor: '#9CA3AF',
+        confirmButtonText: 'Xác nhận Bàn giao',
+        cancelButtonText: 'Hủy',
+        background: 'white',
+        didOpen: () => {
+          const fileInput = document.getElementById('handover-file-input') as HTMLInputElement;
+          const previewContainer = document.getElementById('handover-preview-container') as HTMLDivElement;
+          if (fileInput && previewContainer) {
+            fileInput.addEventListener('change', async (e: any) => {
+              const files = e.target.files;
+              if (!files || files.length === 0) return;
+              previewContainer.innerHTML = '<span style="font-size: 12px; color: #8C827A; font-weight: 600;">⏳ Đang tải ảnh...</span>';
+
+              const uploadedUrls: string[] = [];
+              try {
+                for (let i = 0; i < files.length; i++) {
+                  const formData = new FormData();
+                  formData.append('file', files[i]);
+                  const res: any = await httpClient.post('/api/bookings/upload-reference', formData);
+                  if (res.url) uploadedUrls.push(res.url);
+                }
+
+                previewContainer.innerHTML = '';
+                uploadedUrls.forEach(url => {
+                  const wrapper = document.createElement('div');
+                  wrapper.style.position = 'relative';
+                  wrapper.style.width = '64px';
+                  wrapper.style.height = '64px';
+                  wrapper.style.borderRadius = '8px';
+                  wrapper.style.overflow = 'hidden';
+                  wrapper.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)';
+                  wrapper.style.border = '1px solid #E5E7EB';
+
+                  const img = document.createElement('img');
+                  img.src = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+                  img.style.width = '100%';
+                  img.style.height = '100%';
+                  img.style.objectFit = 'cover';
+                  img.className = 'handover-uploaded-img';
+                  img.dataset.url = url;
+
+                  wrapper.appendChild(img);
+                  previewContainer.appendChild(wrapper);
+                });
+              } catch (err) {
+                previewContainer.innerHTML = '<span style="font-size: 12px; color: #C0392B; font-weight: 600;">❌ Tải ảnh thất bại!</span>';
+              }
+            });
+          }
+        },
+        preConfirm: () => {
+          const imgs = document.querySelectorAll('.handover-uploaded-img');
+          const urls: string[] = [];
+          imgs.forEach((img: any) => {
+            if (img.dataset.url) urls.push(img.dataset.url);
+          });
+          if (urls.length === 0) {
+            Swal.showValidationMessage('Vui lòng tải lên ít nhất 1 hình ảnh bàn giao!');
+            return false;
+          }
+          return urls;
+        }
+      });
+
+      if (!result.isConfirmed || !result.value) {
+        setActionMenuId(null);
+        return;
+      }
+
+      const handoverPhotos = result.value;
+      try {
+        await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus, handoverPhotos });
+        const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
+        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus, handoverPhotos } : o));
+        toast.success(`Đã bàn giao và cập nhật trạng thái đơn hàng thành "${displayStatus}"!`);
+      } catch (err: any) {
+        toast.error(err.message || 'Cập nhật trạng thái thất bại');
+      }
+      setActionMenuId(null);
+      return;
+    }
+
+    if (apiStatus === 'SESSION_START' || apiStatus === 'SESSION_COMPLETE') {
+      try {
+        await httpClient.patch(`/bookings/${_id}/status`, { status: 'IN_PROGRESS' });
+        await fetchOrders(true, true);
+        toast.success(
+          apiStatus === 'SESSION_START'
+            ? 'Đã bắt đầu buổi chụp.'
+            : 'Đã hoàn tất buổi chụp. Bạn có thể bắt đầu buổi kế tiếp.',
+        );
+      } catch (err: any) {
+        toast.error(err.message || 'Cập nhật buổi chụp thất bại');
+      }
+      setActionMenuId(null);
+      return;
+    }
     try {
       await httpClient.patch(`/bookings/${_id}/status`, { status: apiStatus });
-      setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: s } : o));
-      toast.success(`Đã cập nhật trạng thái đơn hàng thành "${s}"!`);
+      const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
+      setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus } : o));
+      toast.success(`Đã cập nhật trạng thái đơn hàng thành "${displayStatus}"!`);
     } catch (err: any) {
       toast.error(err.message || 'Cập nhật trạng thái thất bại');
     }
     setActionMenuId(null);
+  };
+
+  const resolveRescheduleRequest = async (order: Order, item: any, approved: boolean) => {
+    const result = await Swal.fire({
+      title: approved ? 'Duyệt yêu cầu đổi lịch?' : 'Từ chối yêu cầu đổi lịch?',
+      text: approved
+        ? 'Lịch chỉ được cập nhật nếu thời gian đề xuất vẫn còn trống tại thời điểm duyệt.'
+        : 'Bạn có thể ghi chú để khách hiểu lý do từ chối.',
+      input: 'textarea',
+      inputLabel: approved ? 'Ghi chú cho khách (không bắt buộc)' : 'Lý do từ chối (không bắt buộc)',
+      inputPlaceholder: 'Nhập ghi chú...',
+      showCancelButton: true,
+      confirmButtonText: approved ? 'Duyệt đổi lịch' : 'Từ chối yêu cầu',
+      cancelButtonText: 'Hủy',
+      confirmButtonColor: approved ? '#1E7A46' : '#C0392B',
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      await httpClient.patch(`/bookings/${order._id}/items/${item._id}/reschedule-requests/resolve`, {
+        approved,
+        note: typeof result.value === 'string' && result.value.trim() ? result.value.trim() : undefined,
+      });
+      toast.success(approved ? 'Đã duyệt yêu cầu đổi lịch.' : 'Đã từ chối yêu cầu đổi lịch.');
+      setActionMenuId(null);
+      await fetchOrders();
+    } catch (error: any) {
+      toast.error(error?.message || 'Không thể xử lý yêu cầu đổi lịch.');
+    }
   };
 
   const handleLogoutClick = async () => {
@@ -1821,14 +2829,169 @@ export const ProviderDashboard: React.FC = () => {
     const isShop = analyticsData.capabilities?.includes('AODAI_RENTAL') || analyticsData.capabilities?.includes('RENTAL');
     const isPhoto = analyticsData.capabilities?.includes('PHOTOGRAPHY');
 
-    const renderShopAnalytics = () => {
-      const maxRev = Math.max(...analyticsData.revenueGrowth.map((r: any) => r.value), 1000000);
-      const points = analyticsData.revenueGrowth.map((r: any, idx: number) => {
-        const x = 50 + idx * 80;
-        const y = 260 - (r.value / maxRev) * 200;
-        return `${x},${y}`;
-      }).join(' ');
+    const renderProviderRevenueChart = (chartTitle: string) => {
+      const series = analyticsData?.revenueGrowth || [];
+      const maxVal = Math.max(...series.map((s: any) => s.value || 0), 1000000);
+      const step = Math.ceil(maxVal / 4);
+      const ticks = [step * 4, step * 3, step * 2, step * 1, 0];
 
+      const chartWidth = 520;
+      const chartHeight = 220;
+      const topMargin = 28;
+      const bottomMargin = 175;
+      const drawHeight = bottomMargin - topMargin;
+      const leftMargin = 55;
+      const rightMargin = 25;
+
+      const getX = (idx: number) => {
+        if (series.length <= 1) return (leftMargin + chartWidth - rightMargin) / 2;
+        return leftMargin + idx * ((chartWidth - leftMargin - rightMargin) / (series.length - 1));
+      };
+
+      const getY = (val: number) => topMargin + drawHeight * (1 - val / maxVal);
+
+      const points = series.map((s: any, idx: number) => {
+        const x = getX(idx);
+        const y = getY(s.value || 0);
+        return { ...s, x, y };
+      });
+
+      const pointsString = points.map((p: any) => `${p.x},${p.y}`).join(' ');
+      const areaPathD = points.length > 1
+        ? `M ${points[0].x} ${bottomMargin} L ${pointsString} L ${points[points.length - 1].x} ${bottomMargin} Z`
+        : '';
+
+      const gradientId = `grad-${chartTitle.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+      return (
+        <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', position: 'relative' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>{chartTitle}</h3>
+
+            {/* Filter buttons matching Admin dashboard style */}
+            <div style={{ display: 'flex', gap: '4px', backgroundColor: '#FAF6F0', padding: '3px', borderRadius: '6px', border: '1px solid #E8E2D5' }}>
+              {(['week', 'month', 'year'] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => handlePeriodChange(r)}
+                  style={{
+                    padding: '4px 12px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    backgroundColor: chartTimeRange === r ? 'var(--color-primary)' : 'transparent',
+                    color: chartTimeRange === r ? 'white' : '#7A7A7A',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {r === 'week' ? 'Tuần' : r === 'month' ? 'Tháng' : 'Năm'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ width: '100%', position: 'relative' }}>
+            <svg viewBox={`0 0 ${chartWidth} ${chartHeight + 15}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+              <defs>
+                <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+
+              {/* Grid lines and Y-axis tick values */}
+              {ticks.map((tVal) => {
+                const y = getY(tVal);
+                return (
+                  <g key={tVal}>
+                    <line x1={leftMargin} y1={y} x2={chartWidth - rightMargin} y2={y} stroke="#E8E2D5" strokeDasharray="4 4" />
+                    <text x={leftMargin - 8} y={y + 4} fontSize="10" fill="#7A7A7A" fontWeight="600" textAnchor="end">
+                      {(tVal / 1000000).toFixed(tVal % 1000000 === 0 ? 0 : 1)}M
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* Axis vertical line */}
+              <line x1={leftMargin} y1={topMargin} x2={leftMargin} y2={bottomMargin} stroke="#E8E2D5" strokeWidth="1.2" />
+
+              {/* Area Fill */}
+              {areaPathD && (
+                <path d={areaPathD} fill={`url(#${gradientId})`} />
+              )}
+
+              {/* Line Curve */}
+              {points.length > 1 && (
+                <polyline fill="none" stroke="var(--color-primary)" strokeWidth="3" points={pointsString} strokeLinecap="round" strokeLinejoin="round" />
+              )}
+
+              {/* Nodes and Labels */}
+              {points.map((p: any, idx: number) => {
+                const displayLabel = p.shortLabel || (p.label ? p.label.replace('Tháng ', 'T') : '');
+                const isHovered = hoveredPointIdx === idx;
+                return (
+                  <g
+                    key={idx}
+                    onMouseEnter={() => setHoveredPointIdx(idx)}
+                    onMouseLeave={() => setHoveredPointIdx(null)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {/* Hit target circle */}
+                    <circle cx={p.x} cy={p.y} r="14" fill="transparent" />
+
+                    {/* Main node circle */}
+                    <circle cx={p.x} cy={p.y} r={isHovered ? 7 : 5} fill="var(--color-primary)" stroke="white" strokeWidth="2" style={{ transition: 'all 0.15s ease' }} />
+
+                    {/* Point Value label above dot */}
+                    <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fill="#2A2A2A" fontWeight="700">
+                      {((p.value || 0) / 1000000).toFixed(1)}M
+                    </text>
+
+                    {/* X-axis Label */}
+                    <text x={p.x} y={bottomMargin + 20} textAnchor="middle" fontSize="11" fill="#7A7A7A" fontWeight="600">
+                      {displayLabel}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+
+            {/* Sleek Tooltip on hover */}
+            {hoveredPointIdx !== null && points[hoveredPointIdx] && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${(points[hoveredPointIdx].x / chartWidth) * 100}%`,
+                  top: `${(points[hoveredPointIdx].y / (chartHeight + 15)) * 100}%`,
+                  transform: 'translate(-50%, -120%)',
+                  backgroundColor: 'rgba(74, 14, 23, 0.95)',
+                  color: '#FFF',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none',
+                  zIndex: 20,
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '3px',
+                  alignItems: 'center',
+                }}
+              >
+                <span style={{ fontWeight: 800, color: '#FFE699' }}>{points[hoveredPointIdx].label}</span>
+                <span>Doanh thu: <strong>{(points[hoveredPointIdx].value || 0).toLocaleString('vi-VN')} đ</strong></span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const renderShopAnalytics = () => {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1846,54 +3009,21 @@ export const ProviderDashboard: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
             {[
-              { label: 'Doanh thu cửa hàng', val: `${(analyticsData.totalRevenue || 0).toLocaleString('vi-VN')} đ`, desc: 'Tổng doanh thu thực', color: 'var(--color-primary)', bg: '#FAF6F0' },
-              { label: 'Tỷ lệ thành công', val: `${analyticsData.successRate}%`, desc: 'Booking hoàn thành', color: '#166534', bg: '#F0FDF4' },
-              { label: 'Tỷ lệ hủy lịch', val: `${analyticsData.cancelRate}%`, desc: 'Lịch khách hủy', color: '#991B1B', bg: '#FEE2E2' },
-              { label: 'Tổng sản phẩm', val: `${String(analyticsData.totalProducts).padStart(2, '0')} Item`, desc: 'Đồ đang hoạt động', color: 'var(--color-gold-dark)', bg: '#FAF6F0' },
-              { label: 'Thời gian thuê tb', val: analyticsData.averageRentalDuration, desc: 'Thời gian mỗi đơn', color: '#15803D', bg: '#F0FDF4' }
+              { label: 'Doanh thu cửa hàng', val: `${(analyticsData.totalRevenue || 0).toLocaleString('vi-VN')} đ` },
+              { label: 'Tỷ lệ thành công', val: `${analyticsData.successRate || 0}%` },
+              { label: 'Tỷ lệ hủy lịch', val: `${analyticsData.cancelRate || 0}%` },
+              { label: 'Tổng sản phẩm', val: `${String(analyticsData.totalProducts || 0).padStart(2, '0')} Item` },
+              { label: 'Thời gian thuê tb', val: analyticsData.averageRentalDuration || '2.0 ngày' }
             ].map((m, idx) => (
-              <div key={idx} style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '120px' }}>
-                <div>
-                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</span>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: idx === 0 ? 'var(--color-primary)' : 'var(--color-text-primary)', marginTop: '6px', wordBreak: 'break-all' }}>{m.val}</div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #F0ECE4', paddingTop: '8px' }}>
-                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{m.desc}</span>
-                  <div style={{ width: '20px', height: '20px', borderRadius: '50%', backgroundColor: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: m.color, fontWeight: 700, fontSize: '10px' }}>
-                    {idx === 0 ? '💰' : idx === 1 ? '✓' : idx === 2 ? '✕' : idx === 3 ? '📦' : '⏱'}
-                  </div>
-                </div>
+              <div key={idx} style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</span>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: idx === 0 ? 'var(--color-primary)' : 'var(--color-text-primary)', marginTop: '8px', wordBreak: 'break-all' }}>{m.val}</div>
               </div>
             ))}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Doanh thu Áo dài</h3>
-              <div style={{ height: '300px', width: '100%' }}>
-                <svg viewBox="0 0 500 300" style={{ width: '100%', height: '100%' }}>
-                  {[0, 0.25, 0.5, 0.75, 1].map((p, idx) => {
-                    const y = 40 + p * 200;
-                    return (
-                      <line key={idx} x1="40" y1={y} x2="480" y2={y} stroke="#F0ECE4" strokeDasharray="3 3" />
-                    );
-                  })}
-                  <polyline fill="none" stroke="var(--color-primary)" strokeWidth="3" points={points} />
-                  {analyticsData.revenueGrowth.map((r: any, idx: number) => {
-                    const x = 50 + idx * 80;
-                    const y = 260 - (r.value / maxRev) * 200;
-                    return (
-                      <g key={idx}>
-                        <circle cx={x} cy={y} r="5" fill="var(--color-primary)" />
-                        <circle cx={x} cy={y} r="2" fill="white" />
-                        <text x={x} y={y - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--color-text-primary)">{(r.value/1000000).toFixed(1)}M</text>
-                        <text x={x} y="285" textAnchor="middle" fontSize="10" fontWeight="600" fill="var(--color-text-secondary)">{r.label.replace('Tháng ', 'T')}</text>
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
-            </div>
+            {renderProviderRevenueChart('Doanh thu Áo dài')}
 
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
               <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Top Phổ biến</h3>
@@ -1920,46 +3050,11 @@ export const ProviderDashboard: React.FC = () => {
               </div>
             </div>
           </div>
-
-          <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', overflow: 'hidden' }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-light-border)' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Báo cáo hàng tồn kho & Bảo trì</h3>
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TÊN SẢN PHẨM</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TRẠNG THÁI</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>SỐ LƯỢNG</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>CHI TIẾT</th>
-                </tr>
-              </thead>
-              <tbody>
-                {analyticsData.inventoryStatus.map((item: any, idx: number) => (
-                  <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
-                    <td style={{ padding: '16px 24px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.name}</td>
-                    <td style={{ padding: '16px 24px', textAlign: 'center' }}>
-                      <span style={{
-                        padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
-                        backgroundColor: item.color === 'rental' ? '#EBF8FF' : '#FEF3C7',
-                        color: item.color === 'rental' ? '#2B6CB0' : '#D69E2E'
-                      }}>
-                        {item.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '16px 24px', textAlign: 'center', fontWeight: 600 }}>{item.count}</td>
-                    <td style={{ padding: '16px 24px', color: 'var(--color-text-secondary)' }}>{item.detail}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       );
     };
 
     const renderPhotoAnalytics = () => {
-      const maxVal = Math.max(...analyticsData.revenueGrowth.map((r: any) => r.value), 1000000);
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1978,12 +3073,12 @@ export const ProviderDashboard: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
               <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Doanh thu nhiếp ảnh</span>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-primary)', marginTop: '8px' }}>{(analyticsData.totalRevenue || 84250000).toLocaleString('vi-VN')} VND</div>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-primary)', marginTop: '8px' }}>{(analyticsData.totalRevenue ?? 0).toLocaleString('vi-VN')} VND</div>
               <span style={{ fontSize: '12px', color: '#166534', marginTop: '6px', display: 'block', fontWeight: 600 }}>↑ Tăng trưởng tốt trong mùa lễ</span>
             </div>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Phí hoa hồng hệ thống (15%)</span>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: '#B89047', marginTop: '8px' }}>{(analyticsData.commissionFee || 12800000).toLocaleString('vi-VN')} VND</div>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Phí hoa hồng hệ thống</span>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: '#B89047', marginTop: '8px' }}>{(analyticsData.commissionFee ?? 0).toLocaleString('vi-VN')} VND</div>
               <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '6px', display: 'block' }}>Thu phí tự động hàng tuần</span>
             </div>
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1999,21 +3094,7 @@ export const ProviderDashboard: React.FC = () => {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' }}>
-            <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Doanh thu theo thời gian</h3>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '280px', paddingTop: '20px' }}>
-                {analyticsData.revenueGrowth.map((r: any, idx: number) => {
-                  const barHeight = (r.value / maxVal) * 220;
-                  return (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
-                      <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{(r.value/1000000).toFixed(1)}M</span>
-                      <div style={{ width: '32px', height: `${barHeight}px`, backgroundColor: 'var(--color-primary)', borderRadius: '4px 4px 0 0', transition: 'height 0.3s ease' }} />
-                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)' }}>{r.label.replace('Tháng ', 'T')}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            {renderProviderRevenueChart('Doanh thu theo thời gian')}
 
             <div style={{ backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '12px', padding: '24px' }}>
               <h3 style={{ margin: '0 0 20px 0', fontSize: '15px', fontWeight: 750, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Lịch chụp sắp tới</h3>
@@ -2164,95 +3245,95 @@ export const ProviderDashboard: React.FC = () => {
                 <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>Chưa có biến thể áo dài nào trong kho.</div>
               ) : (
                 <>
-                <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SIZE</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU SẮC</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LIỆU</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TỔNG KHO</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>KHẢ DỤNG</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>ĐANG THUÊ</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>GIẶT / BẢO TRÌ</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>THAO TÁC</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pagedSummary.map((item, idx) => (
-                        <tr key={`${item.productId}-${item.size}-${item.color}-${item.material || ''}-${idx}`} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
-                          <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.productName}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{colorLabels[item.color] || item.color}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{materialLabels[item.material] || item.material || '—'}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>
-                            {item.total > 0 ? item.total : (
-                              <span style={{ padding: '3px 8px', borderRadius: '999px', fontSize: '10.5px', fontWeight: 800, backgroundColor: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' }}>
-                                HẾT HÀNG
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{item.available}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>{item.rented}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>{item.maintenance}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                              <button
-                                disabled={variantBusy}
-                                onClick={() => { setVariantEditRow(item); setVariantEditQty(String(item.total)); }}
-                                style={{
-                                  padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
-                                  backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer',
-                                  fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1
-                                }}
-                              >
-                                Sửa số lượng
-                              </button>
-                              <button
-                                disabled={variantBusy}
-                                onClick={() => handleRemoveVariant(item)}
-                                style={{
-                                  padding: '6px 12px', border: '1px solid #FECACA', borderRadius: '4px',
-                                  backgroundColor: '#FEF2F2', cursor: variantBusy ? 'not-allowed' : 'pointer',
-                                  fontWeight: 700, fontSize: '11px', color: '#DC2626', opacity: variantBusy ? 0.5 : 1
-                                }}
-                              >
-                                Xoá biến thể
-                              </button>
-                            </div>
-                          </td>
+                  <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>KÍCH CỠ</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU SẮC</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LIỆU</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TỔNG KHO</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>KHẢ DỤNG</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>ĐANG THUÊ</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>GIẶT / BẢO TRÌ</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>THAO TÁC</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {inventorySummary.length > invSummaryLimit && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '16px', fontSize: '13px' }}>
-                    <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                      Hiển thị {pagedSummary.length} trên tổng số {inventorySummary.length} biến thể
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        disabled={invSummaryCurrent <= 1}
-                        onClick={() => setInvSummaryPage(p => Math.max(1, p - 1))}
-                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invSummaryCurrent > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                      >
-                        Trang trước
-                      </button>
-                      <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
-                        {invSummaryCurrent} / {invSummaryTotalPages}
-                      </span>
-                      <button
-                        disabled={invSummaryCurrent >= invSummaryTotalPages}
-                        onClick={() => setInvSummaryPage(p => Math.min(invSummaryTotalPages, p + 1))}
-                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invSummaryCurrent < invSummaryTotalPages ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                      >
-                        Trang sau
-                      </button>
-                    </div>
+                      </thead>
+                      <tbody>
+                        {pagedSummary.map((item, idx) => (
+                          <tr key={`${item.productId}-${item.size}-${item.color}-${item.material || ''}-${idx}`} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
+                            <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.productName}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{colorLabels[item.color] || item.color}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{materialLabels[item.material] || item.material || '—'}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>
+                              {item.total > 0 ? item.total : (
+                                <span style={{ padding: '3px 8px', borderRadius: '999px', fontSize: '10.5px', fontWeight: 800, backgroundColor: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' }}>
+                                  HẾT HÀNG
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{item.available}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#1D4ED8' }}>{item.rented}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#B45309' }}>{item.maintenance}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                <button
+                                  disabled={variantBusy}
+                                  onClick={() => { setVariantEditRow(item); setVariantEditQty(String(item.total)); }}
+                                  style={{
+                                    padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
+                                    backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer',
+                                    fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1
+                                  }}
+                                >
+                                  Sửa số lượng
+                                </button>
+                                <button
+                                  disabled={variantBusy}
+                                  onClick={() => handleRemoveVariant(item)}
+                                  style={{
+                                    padding: '6px 12px', border: '1px solid #FECACA', borderRadius: '4px',
+                                    backgroundColor: '#FEF2F2', cursor: variantBusy ? 'not-allowed' : 'pointer',
+                                    fontWeight: 700, fontSize: '11px', color: '#DC2626', opacity: variantBusy ? 0.5 : 1
+                                  }}
+                                >
+                                  Xoá biến thể
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                )}
+                  {inventorySummary.length > invSummaryLimit && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '16px', fontSize: '13px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                        Hiển thị {pagedSummary.length} trên tổng số {inventorySummary.length} biến thể
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          disabled={invSummaryCurrent <= 1}
+                          onClick={() => setInvSummaryPage(p => Math.max(1, p - 1))}
+                          style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invSummaryCurrent > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                        >
+                          Trang trước
+                        </button>
+                        <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
+                          {invSummaryCurrent} / {invSummaryTotalPages}
+                        </span>
+                        <button
+                          disabled={invSummaryCurrent >= invSummaryTotalPages}
+                          onClick={() => setInvSummaryPage(p => Math.min(invSummaryTotalPages, p + 1))}
+                          style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invSummaryCurrent < invSummaryTotalPages ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                        >
+                          Trang sau
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -2267,116 +3348,116 @@ export const ProviderDashboard: React.FC = () => {
               ) : (
                 <>
                   <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
-                        <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SKU</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SIZE</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LƯỢNG</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TRẠNG THÁI</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GHI CHÚ</th>
-                        <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>THAO TÁC</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inventoryItems.map((item: any) => {
-                        const isRetired = item.conditionStatus === 'RETIRED';
-                        return (
-                          <tr key={item._id} style={{ borderBottom: '1px solid var(--color-light-border)', opacity: isRetired ? 0.6 : 1 }}>
-                            <td style={{ padding: '16px 20px', fontWeight: 700, color: 'var(--color-primary)' }}>{item.sku}</td>
-                            <td style={{ padding: '16px 20px', fontWeight: 700 }}>{item.productId?.name || 'Sản phẩm lỗi'}</td>
-                            <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
-                            <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.color}</td>
-                            <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                              <span style={{
-                                padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
-                                backgroundColor: item.conditionStatus === 'NEW' ? '#EEF2F6' : item.conditionStatus === 'GOOD' ? '#F0FDF4' : item.conditionStatus === 'MINOR_DAMAGE' ? '#FFFBEB' : item.conditionStatus === 'LOCKED' ? '#FEF2F2' : '#F4F4F5',
-                                color: item.conditionStatus === 'NEW' ? '#475569' : item.conditionStatus === 'GOOD' ? '#166534' : item.conditionStatus === 'MINOR_DAMAGE' ? '#B45309' : item.conditionStatus === 'LOCKED' ? '#991B1B' : '#71717A'
-                              }}>
-                                {item.conditionStatus === 'NEW' ? 'Mới (New)' : item.conditionStatus === 'GOOD' ? 'Tốt (Good)' : item.conditionStatus === 'MINOR_DAMAGE' ? 'Hỏng nhẹ' : item.conditionStatus === 'LOCKED' ? 'Khóa (Locked)' : 'Thanh lý (Retired)'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                              <span style={{
-                                padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
-                                backgroundColor: item.status === 'AVAILABLE' ? '#ECFDF5' : item.status === 'RENTED' ? '#EFF6FF' : '#FFF7ED',
-                                color: item.status === 'AVAILABLE' ? '#047857' : item.status === 'RENTED' ? '#1D4ED8' : '#C2410C'
-                              }}>
-                                {item.status === 'AVAILABLE' ? 'Sẵn sàng' : item.status === 'RENTED' ? 'Đang thuê' : item.status === 'CLEANING' ? 'Đang giặt' : 'Bảo trì'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>{item.notes || '—'}</td>
-                            <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                              {!isRetired && (
-                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                                  <button
-                                    disabled={variantBusy}
-                                    onClick={() => {
-                                      setEditInvItem(item);
-                                      setEditInvStatus(item.status);
-                                      setEditInvCondition(item.conditionStatus);
-                                      setEditInvNotes(item.notes || '');
-                                      setIsEditInventoryOpen(true);
-                                    }}
-                                    style={{
-                                      padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
-                                      backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px',
-                                      color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1
-                                    }}
-                                  >
-                                    Cập nhật
-                                  </button>
-                                  <button
-                                    disabled={variantBusy}
-                                    onClick={() => handleDeleteInventoryItem(item._id)}
-                                    style={{
-                                      padding: '6px 12px', border: 'none', borderRadius: '4px',
-                                      backgroundColor: '#FEE2E2', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px',
-                                      color: '#991B1B', opacity: variantBusy ? 0.5 : 1
-                                    }}
-                                  >
-                                    Thanh lý
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Inventory pagination controls */}
-                {invTotal > invLimit && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '16px', fontSize: '13px' }}>
-                    <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                      Hiển thị {inventoryItems.length} trên tổng số {invTotal} hiện vật
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        disabled={invPage <= 1}
-                        onClick={() => setInvPage(p => Math.max(1, p - 1))}
-                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                      >
-                        Trang trước
-                      </button>
-                      <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
-                        {invPage} / {Math.ceil(invTotal / invLimit)}
-                      </span>
-                      <button
-                        disabled={invPage >= Math.ceil(invTotal / invLimit)}
-                        onClick={() => setInvPage(p => p + 1)}
-                        style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage < Math.ceil(invTotal / invLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                      >
-                        Trang sau
-                      </button>
-                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
+                          <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SKU</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN SẢN PHẨM</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>KÍCH CỠ</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÀU</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHẤT LƯỢNG</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TRẠNG THÁI</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GHI CHÚ</th>
+                          <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)' }}>THAO TÁC</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventoryItems.map((item: any) => {
+                          const isRetired = item.conditionStatus === 'RETIRED';
+                          return (
+                            <tr key={item._id} style={{ borderBottom: '1px solid var(--color-light-border)', opacity: isRetired ? 0.6 : 1 }}>
+                              <td style={{ padding: '16px 20px', fontWeight: 700, color: 'var(--color-primary)' }}>{item.sku}</td>
+                              <td style={{ padding: '16px 20px', fontWeight: 700 }}>{item.productId?.name || 'Sản phẩm lỗi'}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.size}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600 }}>{item.color}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                                  backgroundColor: item.conditionStatus === 'NEW' ? '#EEF2F6' : item.conditionStatus === 'GOOD' ? '#F0FDF4' : item.conditionStatus === 'MINOR_DAMAGE' ? '#FFFBEB' : item.conditionStatus === 'LOCKED' ? '#FEF2F2' : '#F4F4F5',
+                                  color: item.conditionStatus === 'NEW' ? '#475569' : item.conditionStatus === 'GOOD' ? '#166534' : item.conditionStatus === 'MINOR_DAMAGE' ? '#B45309' : item.conditionStatus === 'LOCKED' ? '#991B1B' : '#71717A'
+                                }}>
+                                  {item.conditionStatus === 'NEW' ? 'Mới (New)' : item.conditionStatus === 'GOOD' ? 'Tốt (Good)' : item.conditionStatus === 'MINOR_DAMAGE' ? 'Hỏng nhẹ' : item.conditionStatus === 'LOCKED' ? 'Khóa (Locked)' : 'Thanh lý (Retired)'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                                  backgroundColor: item.status === 'AVAILABLE' ? '#ECFDF5' : item.status === 'RENTED' ? '#EFF6FF' : '#FFF7ED',
+                                  color: item.status === 'AVAILABLE' ? '#047857' : item.status === 'RENTED' ? '#1D4ED8' : '#C2410C'
+                                }}>
+                                  {item.status === 'AVAILABLE' ? 'Sẵn sàng' : item.status === 'RENTED' ? 'Đang thuê' : item.status === 'CLEANING' ? 'Đang giặt' : 'Bảo trì'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>{item.notes || '—'}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                                {!isRetired && (
+                                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                    <button
+                                      disabled={variantBusy}
+                                      onClick={() => {
+                                        setEditInvItem(item);
+                                        setEditInvStatus(item.status);
+                                        setEditInvCondition(item.conditionStatus);
+                                        setEditInvNotes(item.notes || '');
+                                        setIsEditInventoryOpen(true);
+                                      }}
+                                      style={{
+                                        padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '4px',
+                                        backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px',
+                                        color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1
+                                      }}
+                                    >
+                                      Cập nhật
+                                    </button>
+                                    <button
+                                      disabled={variantBusy}
+                                      onClick={() => handleDeleteInventoryItem(item._id)}
+                                      style={{
+                                        padding: '6px 12px', border: 'none', borderRadius: '4px',
+                                        backgroundColor: '#FEE2E2', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px',
+                                        color: '#991B1B', opacity: variantBusy ? 0.5 : 1
+                                      }}
+                                    >
+                                      Thanh lý
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-              </>)}
+
+                  {/* Inventory pagination controls */}
+                  {invTotal > invLimit && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '16px', fontSize: '13px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                        Hiển thị {inventoryItems.length} trên tổng số {invTotal} hiện vật
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          disabled={invPage <= 1}
+                          onClick={() => setInvPage(p => Math.max(1, p - 1))}
+                          style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                        >
+                          Trang trước
+                        </button>
+                        <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
+                          {invPage} / {Math.ceil(invTotal / invLimit)}
+                        </span>
+                        <button
+                          disabled={invPage >= Math.ceil(invTotal / invLimit)}
+                          onClick={() => setInvPage(p => p + 1)}
+                          style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: invPage < Math.ceil(invTotal / invLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                        >
+                          Trang sau
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>)}
             </div>
           </>
         )}
@@ -2391,25 +3472,35 @@ export const ProviderDashboard: React.FC = () => {
         <div>
           <div style={{ marginBottom: '40px' }}>
             <h1 style={{ fontFamily: 'var(--font-header)', fontSize: '22px', fontWeight: 800, color: 'white', margin: 0 }}>Silk & Stone</h1>
-            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 600 }}>Rental Marketplace</p>
+            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 600 }}>Sàn cho thuê</p>
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <button onClick={() => setCurrentView('analytics')} style={navItemStyle(currentView === 'analytics')}><BarChart3 size={18} /> Thống kê & Hiệu suất</button>
             <button onClick={() => setCurrentView('orders')} style={navItemStyle(currentView === 'orders')}><ShoppingBag size={18} /> Đơn hàng</button>
-            <button onClick={() => setCurrentView('rental-operations')} style={navItemStyle(currentView === 'rental-operations')}><Package size={18} /> Giao & nhận áo dài</button>
-            <button onClick={() => { setCurrentView('collections'); setCollectionTab('products'); }} style={navItemStyle(currentView === 'collections' && collectionTab === 'products')}><Layers size={18} /> Bộ sưu tập</button>
+            {hasAodaiCapability && (
+              <button onClick={() => setCurrentView('rental-operations')} style={navItemStyle(currentView === 'rental-operations')}><Package size={18} /> Giao & nhận áo dài</button>
+            )}
+            {hasAodaiCapability && (
+              <button onClick={() => { setCurrentView('collections'); setCollectionTab('products'); }} style={navItemStyle(currentView === 'collections' && collectionTab === 'products')}><Layers size={18} /> Bộ sưu tập</button>
+            )}
             <button onClick={() => setCurrentView('profile')} style={navItemStyle(currentView === 'profile')}><Award size={18} /> Thông tin dịch vụ</button>
             {hasPhotographyCapability && (
-            <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio</button>
+              <button onClick={() => setCurrentView('portfolio')} style={navItemStyle(currentView === 'portfolio')}><Camera size={18} /> Quản lý Portfolio</button>
             )}
             {hasPhotographyCapability && (
               <button onClick={() => setCurrentView('photography-packages')} style={navItemStyle(currentView === 'photography-packages')}><Package size={18} /> Gói chụp ảnh</button>
             )}
-            <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn</button>
-            <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi</button>
+            {hasPhotographyCapability && (
+              <button onClick={() => setCurrentView('calendar')} style={navItemStyle(currentView === 'calendar')}><Calendar size={18} /> Lịch làm việc & Chặn</button>
+            )}
+            <button onClick={() => setCurrentView('vouchers')} style={navItemStyle(currentView === 'vouchers')}><Tag size={18} /> Mã khuyến mãi & Combo</button>
             <button onClick={() => setCurrentView('reviews')} style={navItemStyle(currentView === 'reviews')}><MessageSquare size={18} /> Đánh giá & Phản hồi</button>
             <button onClick={() => setCurrentView('trust')} style={navItemStyle(currentView === 'trust')}><Users size={18} /> Đánh giá khách hàng</button>
             <button onClick={() => setCurrentView('payouts')} style={navItemStyle(currentView === 'payouts')}><DollarSign size={18} /> Lịch sử quyết toán</button>
+            <button onClick={() => setCurrentView('notifications')} style={navItemStyle(currentView === 'notifications')}><Bell size={18} /> Tất cả thông báo</button>
+            <button onClick={() => navigate('/chat')} style={navItemStyle(false)}><MessageSquare size={18} /> Tin nhắn & Chat</button>
+            <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
+            <button onClick={() => setCurrentView('role-management')} style={navItemStyle(currentView === 'role-management')}><ShieldCheck size={18} /> Quản lý vai trò</button>
           </nav>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
@@ -2571,6 +3662,28 @@ export const ProviderDashboard: React.FC = () => {
                     )}
                   </div>
 
+                  {/* Footer */}
+                  {notifications.length > 0 && (
+                    <div style={{
+                      padding: '10px 18px', borderTop: '1px solid var(--color-light-border)',
+                      textAlign: 'center', backgroundColor: '#FAF6F0'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => { setIsNotiOpen(false); setCurrentView('notifications'); }}
+                        style={{
+                          background: 'none', border: 'none', color: 'var(--color-primary)',
+                          fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                          padding: '4px 12px', borderRadius: '4px', transition: 'all 0.15s'
+                        }}
+                        onMouseOver={e => { e.currentTarget.style.color = '#380B12'; }}
+                        onMouseOut={e => { e.currentTarget.style.color = 'var(--color-primary)'; }}
+                      >
+                        Xem tất cả thông báo →
+                      </button>
+                    </div>
+                  )}
+
                   <style>{`
                     @keyframes noti-slide-in {
                       from { opacity: 0; transform: translateY(-6px); }
@@ -2585,7 +3698,7 @@ export const ProviderDashboard: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.2 }}>{provider?.businessName || 'Provider'}</div>
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>PROVIDER</div>
+                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>NHÀ CUNG CẤP</div>
               </div>
               {provider?.avatar || provider?.logoUrl ? (
                 <img src={getImageUrl(provider.avatar || provider.logoUrl)} alt="Avatar" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--color-light-border)' }} />
@@ -2599,6 +3712,12 @@ export const ProviderDashboard: React.FC = () => {
         </header>
 
         {/* CONTENT SWITCH PANEL */}
+        {currentView === 'notifications' && (
+          <main style={{ flex: 1, padding: '24px 32px', overflowY: 'auto' }}>
+            <NotificationsPage hideBreadcrumb variant="provider" />
+          </main>
+        )}
+
         {currentView === 'analytics' && (
           <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
             {renderAnalyticsView()}
@@ -2616,7 +3735,7 @@ export const ProviderDashboard: React.FC = () => {
                 display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', border: '1px solid var(--color-light-border)',
                 padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
                 color: 'var(--color-text-primary)', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
-              }}><Download size={14} /> Export CSV</button>
+              }}><Download size={14} /> Xuất tệp CSV</button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginBottom: '32px' }}>
@@ -2632,6 +3751,19 @@ export const ProviderDashboard: React.FC = () => {
                     }}>{t.label} ({t.count})</button>
                   ))}
                 </div>
+                {hasAodaiCapability && hasPhotographyCapability && (
+                  <div style={{ borderTop: '1px dashed var(--color-light-border)', paddingTop: '16px', marginTop: '16px' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '12px' }}>Loại đơn hàng:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {[
+                        { label: 'Tất cả', type: 'Tất cả', count: orders.length },
+                        { label: 'Áo dài', type: 'AODAI_RENTAL', count: orders.filter(o => o.bookingType === 'AODAI_RENTAL').length },
+                        { label: 'Thợ chụp', type: 'PHOTOGRAPHY', count: orders.filter(o => o.bookingType === 'PHOTOGRAPHY').length },
+                        { label: 'Combo', type: 'COMBO', count: orders.filter(o => o.bookingType === 'COMBO').length },
+                      ].map(t => <button key={t.type} onClick={() => setBookingTypeFilter(t.type)} style={{ padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: bookingTypeFilter === t.type ? 'var(--color-primary)' : 'var(--color-light-bg)', color: bookingTypeFilter === t.type ? 'white' : 'var(--color-text-secondary)' }}>{t.label} ({t.count})</button>)}
+                    </div>
+                  </div>
+                )}
               </div>
               <div style={{
                 backgroundColor: 'var(--color-primary-trans)', border: '1px solid rgba(161,30,34,0.12)', borderRadius: 'var(--radius-md)',
@@ -2639,13 +3771,13 @@ export const ProviderDashboard: React.FC = () => {
               }}>
                 <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Doanh thu tháng này</div>
                 <div style={{ fontFamily: 'var(--font-header)', fontSize: '28px', fontWeight: 700, color: 'var(--color-primary)' }}>
-                  {monthlyRevenue > 0 ? `${monthlyRevenue.toLocaleString('vi-VN')}đ` : '—'}
+                  {`${(monthlyRevenue || 0).toLocaleString('vi-VN')}đ`}
                 </div>
                 <div style={{ position: 'absolute', right: '16px', bottom: '8px', opacity: 0.06, pointerEvents: 'none', color: 'var(--color-primary)' }}><ShoppingBag size={80} /></div>
               </div>
             </div>
 
-            <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
+            <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', boxShadow: 'var(--shadow-sm)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--color-light-border)', backgroundColor: 'var(--color-light-bg)' }}>
@@ -2659,76 +3791,477 @@ export const ProviderDashboard: React.FC = () => {
                     <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải đơn hàng...</td></tr>
                   ) : filteredOrders.length === 0 ? (
                     <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Không có đơn hàng nào.</td></tr>
-                  ) : filteredOrders.map(o => {
-                    const hasRentalLifecycle = Array.isArray(o.items) && o.items.some((item: any) => Boolean(item.rentalFulfillment));
-                    return (
-                    <tr key={o._id} style={{ borderBottom: '1px solid var(--color-light-border)', transition: 'var(--transition-smooth)' }}>
-                      <td style={{ padding: '16px 20px', fontWeight: 700 }}>{o.id}</td>
-                      <td style={{ padding: '16px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--color-light-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '11px', color: 'var(--color-text-secondary)', border: '1px solid var(--color-light-border)' }}>{o.customerInitials}</div>
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: '13px' }}>{o.customerName}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{o.customerEmail}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '16px 20px', fontWeight: 600 }}>{o.productName}</td>
-                      <td style={{ padding: '16px 20px', color: 'var(--color-text-secondary)' }}>{o.orderDate}</td>
-                      <td style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'right' }}>{o.total}</td>
-                      <td style={{ padding: '16px 20px', textAlign: 'center' }}><span style={statusBadgeStyle(o.status)}>{o.status}</span></td>
-                      <td style={{ padding: '16px 20px', textAlign: 'center', position: 'relative' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                          {hasRentalLifecycle && (
-                            <button type="button" onClick={() => { setSelectedBookingId(o._id); setIsDetailModalOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', background: '#FFF7F7', borderRadius: '6px', padding: '6px 9px', cursor: 'pointer', fontSize: '11px', fontWeight: 750, whiteSpace: 'nowrap' }}>
-                              <Package size={14} /> Vận hành áo dài
-                            </button>
-                          )}
-                          <button aria-label="Thao tác khác" onClick={() => setActionMenuId(actionMenuId === o._id ? null : o._id)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}><MoreVertical size={16} /></button>
-                        </div>
-                        {actionMenuId === o._id && (
-                          <div style={{ position: 'absolute', right: '20px', top: '40px', width: '180px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}>
-                            {hasRentalLifecycle ? (
-                              <button onClick={() => {
-                                setSelectedBookingId(o._id);
-                                setIsDetailModalOpen(true);
-                                setActionMenuId(null);
-                              }} style={{
-                                width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
-                                fontWeight: 700, textAlign: 'left',
-                              }}><FileText size={14} /> Vận hành áo dài</button>
-                            ) : [
-                              { label: 'Hoàn thành', status: 'HOÀN THÀNH', icon: <CheckCircle size={14} />, color: '#2e7d32' },
-                              { label: 'Đang xử lý', status: 'ĐANG XỬ LÝ', icon: <Play size={14} />, color: 'var(--color-gold)' },
-                              { label: 'Chờ xử lý', status: 'CHỜ XỬ LÝ', icon: <FileText size={14} />, color: 'var(--color-primary)' },
-                            ].map(a => (
-                              <button key={a.label} onClick={() => changeOrderStatus(o._id, a.status)} style={{
-                                width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: a.color,
-                                fontWeight: 500, textAlign: 'left',
-                              }}>{a.icon} {a.label}</button>
-                            ))}                            {!hasRentalLifecycle && (o.rawStatus === 'CONFIRMED' || o.rawStatus === 'COMPLETED' || o.rawStatus === 'PICKED_UP' || o.rawStatus === 'RETURNED' || o.rawStatus === 'RETURN_PENDING' || o.rawStatus === 'DISPUTED') && (
-                              <button onClick={() => {
-                                setReportingOrder(o);
-                                setSelectedItemId(o.items?.[0]?._id || '');
-                                setIncidentDesc('');
-                                setIncidentEvidence('');
-                                setIncidentAmount(o.depositTotal || 0);
-                                setIncidentActionType('CLEANING');
-                                setActionMenuId(null);
-                              }} style={{
-                                width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-                                fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
-                                fontWeight: 700, textAlign: 'left', borderTop: '1px solid var(--color-light-border)'
-                              }}><Flag size={14} /> Báo cáo hỏng đồ</button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                  })}
+                  ) : (
+                    filteredOrders.map(o => {
+                      const hasRentalLifecycle = Array.isArray(o.items) && o.items.some((item: any) => Boolean(item.rentalFulfillment));
+                      void hasRentalLifecycle;
+
+                      // Compute countdown badge for Photography bookings
+                      const photoItem = o.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.shootDate) || o.items?.[0] || {};
+                      const rawShootDate = photoItem.shootDate || (o as any).shootDate;
+                      const timeSlotStr = photoItem.shootTimeSlot || photoItem.timeSlot || (o as any).shootTimeSlot || '';
+
+                      let countdownBadge: { text: string; bg: string; textCol: string; border: string } | null = null;
+                      if (o.bookingType === 'PHOTOGRAPHY' && rawShootDate) {
+                        const d = new Date(rawShootDate);
+                        if (!isNaN(d.getTime())) {
+                          let startHours = 8;
+                          let startMinutes = 0;
+                          let endHours = 23;
+                          let endMinutes = 59;
+                          if (timeSlotStr) {
+                            const [startPart, endPart] = timeSlotStr.split('-');
+                            const startMatch = startPart?.match(/(\d{1,2}):(\d{2})/);
+                            const endMatch = endPart?.match(/(\d{1,2}):(\d{2})/);
+                            if (startMatch) {
+                              startHours = parseInt(startMatch[1], 10);
+                              startMinutes = parseInt(startMatch[2], 10);
+                            }
+                            if (endMatch) {
+                              endHours = parseInt(endMatch[1], 10);
+                              endMinutes = parseInt(endMatch[2], 10);
+                            }
+                          }
+                          const targetStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), startHours, startMinutes);
+                          const targetEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), endHours, endMinutes);
+                          const nowMs = Date.now();
+                          const diffMs = targetStart.getTime() - nowMs;
+
+                          if (o.rawStatus === 'IN_PROGRESS') {
+                            countdownBadge = { text: '⚡ Đang tác nghiệp', bg: '#ECFDF5', textCol: '#047857', border: '#A7F3D0' };
+                          } else if (['CONFIRMED', 'DEPOSIT_PAID'].includes(o.rawStatus || '')) {
+                            if (diffMs > 0) {
+                              const totalMins = Math.floor(diffMs / 60000);
+                              const hoursLeft = Math.floor(totalMins / 60);
+                              const minsLeft = totalMins % 60;
+                              const timeText = hoursLeft > 24 ? `${Math.floor(hoursLeft / 24)}d ${hoursLeft % 24}h` : (hoursLeft > 0 ? `${hoursLeft}h ${minsLeft}m` : `${minsLeft}m`);
+                              const isUrgent = diffMs < 2 * 3600000;
+                              countdownBadge = {
+                                text: `⏳ Còn ${timeText}`,
+                                bg: isUrgent ? '#FEF2F2' : '#FFFBEB',
+                                textCol: isUrgent ? '#DC2626' : '#B45309',
+                                border: isUrgent ? '#FCA5A5' : '#FCD34D'
+                              };
+                            } else if (nowMs <= targetEnd.getTime()) {
+                              countdownBadge = {
+                                text: '📷 Đang trong giờ chụp',
+                                bg: '#ECFDF5',
+                                textCol: '#047857',
+                                border: '#A7F3D0'
+                              };
+                            } else {
+                              const overdueMins = Math.floor((nowMs - targetEnd.getTime()) / 60000);
+                              const overdueText = overdueMins > 60 ? `${Math.floor(overdueMins / 60)}h ${overdueMins % 60}m` : `${overdueMins}m`;
+                              countdownBadge = {
+                                text: `⚠️ Đến giờ (Quá ${overdueText})`,
+                                bg: '#FEF2F2',
+                                textCol: '#991B1B',
+                                border: '#F87171'
+                              };
+                            }
+                          }
+                        }
+                      }
+
+                      return (
+                        <tr
+                          key={o._id}
+                          onClick={() => {
+                            setSelectedBookingId(o._id);
+                            setIsDetailModalOpen(true);
+                          }}
+                          style={{ borderBottom: '1px solid var(--color-light-border)', transition: 'var(--transition-smooth)', cursor: 'pointer' }}
+                        >
+                          <td style={{ padding: '12px 20px', fontWeight: 700 }}>{o.id}</td>
+                          <td style={{ padding: '12px 20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--color-light-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '11px', color: 'var(--color-text-secondary)', border: '1px solid var(--color-light-border)' }}>{o.customerInitials}</div>
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: '13px' }}>{o.customerName}</div>
+                                <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{o.customerEmail}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 20px', minWidth: '220px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{
+                                  width: '28px',
+                                  height: '28px',
+                                  borderRadius: '6px',
+                                  backgroundColor: o.bookingType === 'PHOTOGRAPHY' ? '#EFF6FF' : '#F0FDF4',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                  border: o.bookingType === 'PHOTOGRAPHY' ? '1px solid #BFDBFE' : '1px solid #BBF7D0'
+                                }}>
+                                  {o.bookingType === 'PHOTOGRAPHY' ? (
+                                    <Camera size={14} color="#2563EB" />
+                                  ) : (
+                                    <Shirt size={14} color="#16A34A" />
+                                  )}
+                                </div>
+                                <span style={{ fontWeight: 700, fontSize: '13.5px', color: '#0F172A' }}>
+                                  {o.productName}
+                                </span>
+                              </div>
+                              {countdownBadge && (
+                                <div style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: 700,
+                                  backgroundColor: countdownBadge.bg,
+                                  color: countdownBadge.textCol,
+                                  border: `1px solid ${countdownBadge.border}`,
+                                  borderRadius: '4px',
+                                  padding: '2px 7px',
+                                  width: 'fit-content',
+                                  marginLeft: '36px'
+                                }}>
+                                  {countdownBadge.text}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 20px', color: 'var(--color-text-secondary)' }}>{o.orderDate}</td>
+                          <td style={{ padding: '12px 20px', fontWeight: 700, textAlign: 'right' }}>{o.total}</td>
+                          <td style={{ padding: '12px 20px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                              <span style={statusBadgeStyle(o.status)}>{o.status}</span>
+                              {o.pickupDamageReport && (
+                                <span style={{
+                                  fontSize: '9px',
+                                  fontWeight: 700,
+                                  backgroundColor: '#FEF9E7',
+                                  color: '#D35400',
+                                  border: '1px solid #F5CBA7',
+                                  borderRadius: '4px',
+                                  padding: '2px 6px',
+                                  display: 'inline-block',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  ⚠️ KHÁCH BÁO LỖI
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 20px', textAlign: 'center', position: 'relative' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedBookingId(o._id);
+                                  setIsDetailModalOpen(true);
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '5px 9px',
+                                  borderRadius: '6px',
+                                  fontSize: '11.5px',
+                                  fontWeight: 600,
+                                  backgroundColor: '#F8FAFC',
+                                  color: '#334155',
+                                  border: '1px solid #CBD5E1',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EFF6FF'; e.currentTarget.style.borderColor = '#93C5FD'; e.currentTarget.style.color = '#1D4ED8'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.color = '#334155'; }}
+                                title="Xem chi tiết đơn hàng"
+                              >
+                                <Eye size={13} />
+                                <span>Chi tiết</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionMenuId(actionMenuId === o._id ? null : o._id);
+                                }}
+                                style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px', borderRadius: '50%' }}
+                                title="Thao tác khác"
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+                            </div>
+                            {actionMenuId === o._id && (() => {
+                              const isComboOrder = o.bookingType === 'COMBO' || (o.items?.some((i: any) => i.itemType === 'PRODUCT') && o.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE'));
+                              const isPhotoOrder = o.bookingType === 'PHOTOGRAPHY';
+                              type OrderAction = { label: string; apiStatus: string; icon: React.ReactNode; color: string; disabled?: boolean; title?: string };
+                              const photoSchedules = Array.isArray(o.schedules) ? o.schedules : [];
+                              const activePhotoSchedule = photoSchedules.find((schedule) => schedule.status === 'IN_PROGRESS');
+                              const nextPhotoSchedule = photoSchedules.find((schedule) => schedule.status === 'CONFIRMED');
+                              const nextPhotoStartsAt = getPhotoScheduleStartsAt(nextPhotoSchedule);
+                              const nextPhotoDateKey = nextPhotoStartsAt
+                                ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(nextPhotoStartsAt)
+                                : null;
+                              const photoDayStartsAt = nextPhotoDateKey
+                                ? new Date(`${nextPhotoDateKey}T00:00:00+07:00`)
+                                : null;
+                              const photoCanStartAt = nextPhotoStartsAt && photoDayStartsAt
+                                ? new Date(Math.max(
+                                  photoDayStartsAt.getTime(),
+                                  nextPhotoStartsAt.getTime() - PHOTO_START_EARLY_MINUTES * 60 * 1000,
+                                ))
+                                : null;
+                              const isPhotoStartLocked = Boolean(photoCanStartAt && Date.now() < photoCanStartAt.getTime());
+                              const photoStartAction: OrderAction = nextPhotoSchedule
+                                ? (!nextPhotoStartsAt || !photoCanStartAt
+                                  ? { label: 'Lịch chụp thiếu giờ bắt đầu', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true, title: 'Hãy cập nhật ngày và khung giờ chụp trước.' }
+                                  : isPhotoStartLocked
+                                    ? { label: `Có thể bắt đầu từ ${formatPhotoStartTime(photoCanStartAt)}`, apiStatus: 'SESSION_START', icon: <Clock size={14} />, color: '#D97706', disabled: true, title: `Lịch chụp bắt đầu lúc ${formatPhotoStartTime(nextPhotoStartsAt)}. Chỉ được bắt đầu sớm tối đa ${PHOTO_START_EARLY_MINUTES} phút.` }
+                                    : { label: 'Bắt đầu buổi chụp', apiStatus: 'SESSION_START', icon: <Play size={14} />, color: '#2e7d32' })
+                                : { label: 'Bắt đầu buổi chụp', apiStatus: 'SESSION_START', icon: <Play size={14} />, color: '#2e7d32' };
+                              const hasUnconfirmedPhotoSchedule = photoSchedules.some((schedule) => ['HELD', 'SCHEDULED'].includes(String(schedule.status)));
+                              const photoSessionSteps: OrderAction[] = activePhotoSchedule
+                                ? [
+                                  { label: 'Hoàn tất buổi chụp đang diễn ra', apiStatus: 'SESSION_COMPLETE', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                  { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                ]
+                                : hasUnconfirmedPhotoSchedule
+                                  ? [{ label: 'Lịch chụp chưa được xác nhận', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }]
+                                  : [
+                                    { label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' },
+                                  ];
+                              const nextStepsMap: Record<string, OrderAction[]> = isComboOrder
+                                ? {
+                                  PENDING_PAYMENT: [
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  DEPOSIT_PAID: [
+                                    { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  CONFIRMED: [
+                                    { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  PICKUP_PENDING: [
+                                    { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  PICKED_UP: o.photosApproved ? [
+                                    { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                  ] : [
+                                    photoStartAction,
+                                    { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                  ],
+                                  IN_PROGRESS: o.photosApproved ? [
+                                    { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                  ] : [
+                                    ...photoSessionSteps,
+                                  ],
+                                  AWAITING_REVIEW: o.photosApproved ? [
+                                    { label: '✓ Khách đã duyệt ảnh • Chờ trả áo dài', apiStatus: '', icon: <CheckCircle size={14} />, color: '#059669', disabled: true },
+                                  ] : [
+                                    { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                  ],
+                                  COMBO_PHOTOS_APPROVED: [
+                                    { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                    { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                  ],
+                                  RETURN_PENDING: [
+                                    { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                  ],
+                                  RETURNED: [
+                                    { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                  ],
+                                }
+                                : isPhotoOrder
+                                  ? {
+                                    PENDING_PAYMENT: [
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    DEPOSIT_PAID: [
+                                      { label: 'Chấp nhận lịch chụp', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                      { label: 'Từ chối lịch chụp', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    CONFIRMED: [
+                                      photoStartAction,
+                                      { label: 'Hủy toàn bộ booking', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    IN_PROGRESS: [
+                                      ...photoSessionSteps,
+                                    ],
+                                    AWAITING_REVIEW: [
+                                      { label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                    ],
+                                  }
+                                  : {
+                                    PENDING_PAYMENT: [
+                                      { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    DEPOSIT_PAID: [
+                                      { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
+                                      { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    CONFIRMED: [
+                                      { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: 'var(--color-gold)' },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    PICKUP_PENDING: [
+                                      { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                      { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
+                                    ],
+                                    PICKED_UP: [
+                                      { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
+                                      { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: 'var(--color-gold)' },
+                                    ],
+                                    RETURN_PENDING: [
+                                      { label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+                                    ],
+                                    RETURNED: [
+                                      { label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' },
+                                    ],
+                                  };
+                              const rawStatus = (o.rawStatus || '') as string;
+                              const steps: OrderAction[] = (nextStepsMap[rawStatus] || []).filter((step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED'));
+                              const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStatus);
+                              const pendingReschedule = o.items?.find((item: any) => item?.rescheduleRequest?.status === 'PENDING');
+                              if (steps.length === 0 && !canReport && !pendingReschedule) return null;
+                              return (
+                                <>
+                                  <div
+                                    onClick={(e) => { e.stopPropagation(); setActionMenuId(null); }}
+                                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 39, cursor: 'default' }}
+                                  />
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ position: 'absolute', right: '20px', top: '40px', width: '225px', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: '4px 0', zIndex: 40 }}
+                                  >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid #EAEAE8', fontSize: '11px', fontWeight: 700, color: '#8C827A' }}>
+                                      <span>Chọn thao tác</span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setActionMenuId(null); }}
+                                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#8C827A', padding: '2px', display: 'flex', alignItems: 'center' }}
+                                        title="Đóng menu"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActionMenuId(null);
+                                        setSelectedBookingId(o._id);
+                                        setIsDetailModalOpen(true);
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        padding: '8px 12px',
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                        color: '#1E293B',
+                                        border: 'none',
+                                        background: 'none',
+                                        cursor: 'pointer',
+                                        textAlign: 'left',
+                                        borderBottom: '1px solid #F1F5F9'
+                                      }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                    >
+                                      <Eye size={14} color="#2563EB" />
+                                      <span>Xem chi tiết đơn</span>
+                                    </button>
+                                    {pendingReschedule && (
+                                      <div style={{ padding: '8px 12px', borderBottom: steps.length > 0 || canReport ? '1px solid var(--color-light-border)' : 'none' }}>
+                                        <div style={{ fontSize: '10px', fontWeight: 700, color: '#9A6700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Yêu cầu đổi lịch</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', lineHeight: 1.4, marginBottom: '7px' }}>
+                                          {pendingReschedule.rescheduleRequest.newShootDate
+                                            ? `${pendingReschedule.rescheduleRequest.newShootDate} • ${pendingReschedule.rescheduleRequest.newShootTimeSlot}`
+                                            : `${new Date(pendingReschedule.rescheduleRequest.newRentalFrom).toLocaleDateString('vi-VN')} - ${new Date(pendingReschedule.rescheduleRequest.newRentalTo).toLocaleDateString('vi-VN')}`}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                          <button type={'button'} onClick={(e) => { e.stopPropagation(); setActionMenuId(null); void resolveRescheduleRequest(o, pendingReschedule, true); }} style={{ flex: 1, border: 'none', borderRadius: '5px', padding: '6px', background: '#E8F5E9', color: '#1E7A46', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Duyệt</button>
+                                          <button type={'button'} onClick={(e) => { e.stopPropagation(); setActionMenuId(null); void resolveRescheduleRequest(o, pendingReschedule, false); }} style={{ flex: 1, border: 'none', borderRadius: '5px', padding: '6px', background: '#FDECEC', color: '#C0392B', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Từ chối</button>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {steps.length > 0 && (
+                                      <div style={{ padding: '6px 12px 2px', fontSize: '10px', fontWeight: 700, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        Cập nhật trạng thái
+                                      </div>
+                                    )}
+                                    {steps.map((a: OrderAction) => {
+                                      let isDisabled = !!a.disabled;
+                                      return (
+                                        <button
+                                          key={a.apiStatus || a.label}
+                                          disabled={isDisabled}
+                                          onClick={() => !isDisabled && a.apiStatus && changeOrderStatus(o._id, a.apiStatus)}
+                                          style={{
+                                            width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                            fontSize: '12px', border: 'none', background: 'none',
+                                            cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                            color: isDisabled ? (a.disabled ? a.color : '#CCCCCC') : a.color,
+                                            opacity: isDisabled ? 0.85 : 1,
+                                            fontWeight: 600, textAlign: 'left',
+                                          }}
+                                          title={isDisabled ? (a.title || a.label) : ""}
+                                        >
+                                          {a.icon} {a.label}
+                                        </button>
+                                      );
+                                    })}
+                                    {canReport && (() => {
+                                      const isCombo = isComboOrder;
+                                      const isPhoto = isPhotoOrder;
+                                      return (
+                                        <>
+                                          {(isCombo || !isPhoto) && (
+                                            <button onClick={() => {
+                                              setReportingOrder(o);
+                                              const productItem = o.items?.find((i: any) => i.itemType === 'PRODUCT') || o.items?.[0];
+                                              setSelectedItemId(productItem?._id || '');
+                                              setIncidentDesc('');
+                                              setIncidentPhotos([]);
+                                              setIncidentAmount(o.depositTotal || 0);
+                                              setIncidentActionType('CLEANING');
+                                              setActionMenuId(null);
+                                            }} style={{
+                                              width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                              fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-primary)',
+                                              fontWeight: 700, textAlign: 'left', borderTop: steps.length > 0 ? '1px solid var(--color-light-border)' : 'none'
+                                            }}><Flag size={14} /> Báo cáo hỏng đồ (Áo dài)</button>
+                                          )}
+                                          {(isCombo || isPhoto) && (
+                                            <button onClick={() => {
+                                              setReportingOrder(o);
+                                              const photoItem = o.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE') || o.items?.[0];
+                                              setSelectedItemId(photoItem?._id || '');
+                                              setIncidentDesc('');
+                                              setIncidentPhotos([]);
+                                              setIncidentAmount(o.depositTotal || 0);
+                                              setIncidentActionType('NO_SHOW');
+                                              setActionMenuId(null);
+                                            }} style={{
+                                              width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                                              fontSize: '12px', border: 'none', background: 'none', cursor: 'pointer', color: '#D97706',
+                                              fontWeight: 700, textAlign: 'left', borderTop: (steps.length > 0 || !isPhoto) ? '1px solid var(--color-light-border)' : 'none'
+                                            }}><Flag size={14} /> Báo khách không đến / sự cố</button>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      );
+                    }))}
                 </tbody>
               </table>
               <div style={{ borderTop: '1px solid var(--color-light-border)', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-light-bg)', fontSize: '12px' }}>
@@ -2804,20 +4337,11 @@ export const ProviderDashboard: React.FC = () => {
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
                 {collectionTab === 'products' ? (
-                  <>
-                    <button onClick={openCampaignModal} style={{
-                      display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: activeCampaign ? '#B91C1C' : '#EF4444',
-                      padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                      color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
-                    }}>
-                      <Tag size={14} /> {activeCampaign ? `Khuyến mãi (-${activeCampaign.discountPercent}%)` : 'Khuyến mãi'}
-                    </button>
-                    <button onClick={openAddModal} style={{
-                      display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--color-primary)',
-                      padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                      color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
-                    }}><Plus size={14} /> Thêm Áo Dài mới</button>
-                  </>
+                  <button onClick={openAddModal} style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--color-primary)',
+                    padding: '10px 18px', borderRadius: 'var(--radius-sm)', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                    color: 'white', border: 'none', boxShadow: 'var(--shadow-sm)', transition: 'var(--transition-smooth)',
+                  }}><Plus size={14} /> Thêm Áo Dài mới</button>
                 ) : null}
               </div>
             </div>
@@ -2835,189 +4359,189 @@ export const ProviderDashboard: React.FC = () => {
             </div>
 
             {collectionTab === 'products' && (
-            <>
-            {/* Search and Sort controls */}
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '24px', backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
-              <input
-                type="text"
-                placeholder="Tìm kiếm áo dài theo tên..."
-                value={prodSearch}
-                onChange={(e) => { setProdSearch(e.target.value); setProdPage(1); }}
-                style={{ flex: 1, minWidth: '200px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none' }}
-              />
-              <select
-                value={prodSizeFilter}
-                onChange={(e) => { setProdSizeFilter(e.target.value); setProdPage(1); }}
-                style={{ width: '130px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
-              >
-                <option value="">Tất cả Size</option>
-                <option value="S">Size S</option>
-                <option value="M">Size M</option>
-                <option value="L">Size L</option>
-                <option value="XL">Size XL</option>
-                <option value="XXL">Size XXL</option>
-              </select>
-              <select
-                value={prodColorFilter}
-                onChange={(e) => { setProdColorFilter(e.target.value); setProdPage(1); }}
-                style={{ width: '140px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
-              >
-                <option value="">Tất cả Màu</option>
-                <option value="RED">Đỏ (Red)</option>
-                <option value="WHITE">Trắng (White)</option>
-                <option value="GOLD">Vàng (Gold)</option>
-                <option value="BLACK">Đen (Black)</option>
-                <option value="PINK">Hồng (Pink)</option>
-                <option value="BLUE">Xanh dương</option>
-                <option value="GREEN">Xanh lá</option>
-                <option value="BROWN">Nâu</option>
-              </select>
-              <select
-                value={prodSortBy}
-                onChange={(e) => { setProdSortBy(e.target.value); setProdPage(1); }}
-                style={{ width: '180px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
-              >
-                <option value="newest">Mới nhất (Newest)</option>
-                <option value="price_asc">Giá thuê: Thấp - Cao</option>
-                <option value="price_desc">Giá thuê: Cao - Thấp</option>
-              </select>
-            </div>
-
-            {loadingProducts ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                Đang tải dữ liệu sản phẩm...
-              </div>
-            ) : products.length === 0 ? (
-              <div style={{ padding: '100px 40px', textAlign: 'center', backgroundColor: 'white', border: '1px dashed var(--color-light-border)', borderRadius: 'var(--radius-md)' }}>
-                <Layers size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5, marginBottom: '16px', margin: '0 auto' }} />
-                <h4 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Bộ sưu tập của bạn đang trống</h4>
-                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '6px', marginBottom: '20px' }}>Bắt đầu bằng việc thêm sản phẩm đầu tiên để tiếp cận hàng ngàn khách hàng.</p>
-                <button onClick={openAddModal} className="vh-btn vh-btn-primary" style={{ padding: '10px 20px', borderRadius: '6px' }}>Thêm Áo Dài đầu tiên</button>
-              </div>
-            ) : (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
-                {products.map((p) => (
-                  <div key={p._id} style={{
-                    backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)',
-                    boxShadow: 'var(--shadow-sm)', overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'all 0.2s ease',
-                  }}>
-                    {/* Image */}
-                    <div style={{ height: '220px', overflow: 'hidden', position: 'relative', backgroundColor: 'var(--color-light-bg)' }}>
-                      <img
-                        src={getImageUrl(p.images?.[0])}
-                        alt={p.name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                      <span style={{
-                        position: 'absolute', top: '12px', right: '12px',
-                        padding: '4px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: 700,
-                        backgroundColor: p.status === 'ACTIVE' ? 'var(--color-dark-bg)' : p.status === 'DRAFT' ? 'var(--color-gold)' : '#999',
-                        color: 'white',
-                      }}>
-                        {p.status === 'ACTIVE' ? 'ĐANG BÁN' : p.status === 'DRAFT' ? 'DỰ THẢO' : 'ẨN'}
-                      </span>
-                    </div>
-
-                    {/* Meta */}
-                    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        {typeof p.categoryId === 'object' ? p.categoryId.name : 'Áo dài'}
-                      </span>
-                      <h4 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0, lineHeight: 1.4 }}>
-                        {p.name}
-                      </h4>
-                      <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: 0, lineClamp: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '36px' }}>
-                        {p.description || 'Không có mô tả sản phẩm.'}
-                      </p>
-
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
-                        {p.sizes?.map(s => (
-                          <span key={s} style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', border: '1px solid var(--color-light-border)', borderRadius: '4px', backgroundColor: 'var(--color-light-bg)' }}>{s}</span>
-                        ))}
-                      </div>
-
-                      <div style={{ borderTop: '1px solid var(--color-light-border)', paddingTop: '12px', marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>GIÁ THUÊ / NGÀY</div>
-                          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>{(p.basePrice ?? (p as any).price ?? 0).toLocaleString('vi-VN')}đ</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600, textAlign: 'right' }}>TIỀN ĐẶT CỌC</div>
-                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'right' }}>{(p.depositAmount ?? 0).toLocaleString('vi-VN')}đ</div>
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '12px', borderTop: '1px solid var(--color-light-border)', paddingTop: '12px' }}>
-                        <button
-                          onClick={() => openEditModal(p)}
-                          style={{
-                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                            backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '8px',
-                            borderRadius: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)',
-                            cursor: 'pointer', transition: 'all 0.2s',
-                          }}
-                        >
-                          <Pencil size={12} /> Chỉnh sửa
-                        </button>
-                        <button
-                          onClick={() => handleDuplicateProduct(p)}
-                          style={{
-                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                            backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '8px',
-                            borderRadius: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)',
-                            cursor: 'pointer', transition: 'all 0.2s',
-                          }}
-                        >
-                          <Copy size={12} /> Nhân bản
-                        </button>
-                        <button
-                          onClick={() => handleDeleteProduct(p._id, p.name)}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px',
-                            backgroundColor: 'white', border: '1px solid #FCA5A5', borderRadius: '4px',
-                            color: '#EF4444', cursor: 'pointer', transition: 'all 0.2s',
-                          }}
-                          title="Xóa sản phẩm"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Product list pagination bar */}
-              {prodTotal > prodLimit && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '24px', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                    Hiển thị {products.length} trên tổng số {prodTotal} thiết kế
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button
-                      disabled={prodPage <= 1}
-                      onClick={() => setProdPage(p => Math.max(1, p - 1))}
-                      style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                    >
-                      Trang trước
-                    </button>
-                    <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
-                      {prodPage} / {Math.ceil(prodTotal / prodLimit)}
-                    </span>
-                    <button
-                      disabled={prodPage >= Math.ceil(prodTotal / prodLimit)}
-                      onClick={() => setProdPage(p => p + 1)}
-                      style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage < Math.ceil(prodTotal / prodLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
-                    >
-                      Trang sau
-                    </button>
-                  </div>
+                {/* Search and Sort controls */}
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '24px', backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid var(--color-light-border)' }}>
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm áo dài theo tên..."
+                    value={prodSearch}
+                    onChange={(e) => { setProdSearch(e.target.value); setProdPage(1); }}
+                    style={{ flex: 1, minWidth: '200px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none' }}
+                  />
+                  <select
+                    value={prodSizeFilter}
+                    onChange={(e) => { setProdSizeFilter(e.target.value); setProdPage(1); }}
+                    style={{ width: '130px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+                  >
+                    <option value="">Tất cả Size</option>
+                    <option value="S">Kích cỡ S</option>
+                    <option value="M">Kích cỡ M</option>
+                    <option value="L">Kích cỡ L</option>
+                    <option value="XL">Kích cỡ XL</option>
+                    <option value="XXL">Kích cỡ XXL</option>
+                  </select>
+                  <select
+                    value={prodColorFilter}
+                    onChange={(e) => { setProdColorFilter(e.target.value); setProdPage(1); }}
+                    style={{ width: '140px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+                  >
+                    <option value="">Tất cả Màu</option>
+                    <option value="RED">Đỏ (Red)</option>
+                    <option value="WHITE">Trắng (White)</option>
+                    <option value="GOLD">Vàng (Gold)</option>
+                    <option value="BLACK">Đen (Black)</option>
+                    <option value="PINK">Hồng (Pink)</option>
+                    <option value="BLUE">Xanh dương</option>
+                    <option value="GREEN">Xanh lá</option>
+                    <option value="BROWN">Nâu</option>
+                  </select>
+                  <select
+                    value={prodSortBy}
+                    onChange={(e) => { setProdSortBy(e.target.value); setProdPage(1); }}
+                    style={{ width: '180px', padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13.5px', outline: 'none', backgroundColor: 'white' }}
+                  >
+                    <option value="newest">Mới nhất (Newest)</option>
+                    <option value="price_asc">Giá thuê: Thấp - Cao</option>
+                    <option value="price_desc">Giá thuê: Cao - Thấp</option>
+                  </select>
                 </div>
-              )}
-            </>)}
-            </>
+
+                {loadingProducts ? (
+                  <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                    Đang tải dữ liệu sản phẩm...
+                  </div>
+                ) : products.length === 0 ? (
+                  <div style={{ padding: '100px 40px', textAlign: 'center', backgroundColor: 'white', border: '1px dashed var(--color-light-border)', borderRadius: 'var(--radius-md)' }}>
+                    <Layers size={48} style={{ color: 'var(--color-text-secondary)', opacity: 0.5, marginBottom: '16px', margin: '0 auto' }} />
+                    <h4 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Bộ sưu tập của bạn đang trống</h4>
+                    <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '6px', marginBottom: '20px' }}>Bắt đầu bằng việc thêm sản phẩm đầu tiên để tiếp cận hàng ngàn khách hàng.</p>
+                    <button onClick={openAddModal} className="vh-btn vh-btn-primary" style={{ padding: '10px 20px', borderRadius: '6px' }}>Thêm Áo Dài đầu tiên</button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
+                      {products.map((p) => (
+                        <div key={p._id} style={{
+                          backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)',
+                          boxShadow: 'var(--shadow-sm)', overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'all 0.2s ease',
+                        }}>
+                          {/* Image */}
+                          <div style={{ height: '220px', overflow: 'hidden', position: 'relative', backgroundColor: 'var(--color-light-bg)' }}>
+                            <img
+                              src={getImageUrl(p.images?.[0])}
+                              alt={p.name}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <span style={{
+                              position: 'absolute', top: '12px', right: '12px',
+                              padding: '4px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: 700,
+                              backgroundColor: p.status === 'ACTIVE' ? 'var(--color-dark-bg)' : p.status === 'DRAFT' ? 'var(--color-gold)' : '#999',
+                              color: 'white',
+                            }}>
+                              {p.status === 'ACTIVE' ? 'ĐANG BÁN' : p.status === 'DRAFT' ? 'DỰ THẢO' : 'ẨN'}
+                            </span>
+                          </div>
+
+                          {/* Meta */}
+                          <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              {typeof p.categoryId === 'object' ? p.categoryId.name : 'Áo dài'}
+                            </span>
+                            <h4 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0, lineHeight: 1.4 }}>
+                              {p.name}
+                            </h4>
+                            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: 0, lineClamp: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '36px' }}>
+                              {p.description || 'Không có mô tả sản phẩm.'}
+                            </p>
+
+                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                              {p.sizes?.map(s => (
+                                <span key={s} style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', border: '1px solid var(--color-light-border)', borderRadius: '4px', backgroundColor: 'var(--color-light-bg)' }}>{s}</span>
+                              ))}
+                            </div>
+
+                            <div style={{ borderTop: '1px solid var(--color-light-border)', paddingTop: '12px', marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div>
+                                <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>GIÁ THUÊ / NGÀY</div>
+                                <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>{(p.basePrice ?? (p as any).price ?? 0).toLocaleString('vi-VN')}đ</div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600, textAlign: 'right' }}>TIỀN ĐẶT CỌC</div>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'right' }}>{(p.depositAmount ?? 0).toLocaleString('vi-VN')}đ</div>
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '12px', borderTop: '1px solid var(--color-light-border)', paddingTop: '12px' }}>
+                              <button
+                                onClick={() => openEditModal(p)}
+                                style={{
+                                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                  backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '8px',
+                                  borderRadius: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)',
+                                  cursor: 'pointer', transition: 'all 0.2s',
+                                }}
+                              >
+                                <Pencil size={12} /> Chỉnh sửa
+                              </button>
+                              <button
+                                onClick={() => handleDuplicateProduct(p)}
+                                style={{
+                                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                  backgroundColor: 'white', border: '1px solid var(--color-light-border)', padding: '8px',
+                                  borderRadius: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)',
+                                  cursor: 'pointer', transition: 'all 0.2s',
+                                }}
+                              >
+                                <Copy size={12} /> Nhân bản
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProduct(p._id, p.name)}
+                                style={{
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px',
+                                  backgroundColor: 'white', border: '1px solid #FCA5A5', borderRadius: '4px',
+                                  color: '#EF4444', cursor: 'pointer', transition: 'all 0.2s',
+                                }}
+                                title="Xóa sản phẩm"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Product list pagination bar */}
+                    {prodTotal > prodLimit && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', border: '1px solid var(--color-light-border)', borderRadius: '8px', padding: '14px 20px', marginTop: '24px', fontSize: '13px' }}>
+                        <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                          Hiển thị {products.length} trên tổng số {prodTotal} thiết kế
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            disabled={prodPage <= 1}
+                            onClick={() => setProdPage(p => Math.max(1, p - 1))}
+                            style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage > 1 ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                          >
+                            Trang trước
+                          </button>
+                          <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white' }}>
+                            {prodPage} / {Math.ceil(prodTotal / prodLimit)}
+                          </span>
+                          <button
+                            disabled={prodPage >= Math.ceil(prodTotal / prodLimit)}
+                            onClick={() => setProdPage(p => p + 1)}
+                            style={{ padding: '6px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', background: 'white', cursor: prodPage < Math.ceil(prodTotal / prodLimit) ? 'pointer' : 'not-allowed', color: 'var(--color-text-secondary)' }}
+                          >
+                            Trang sau
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>)}
+              </>
             )}
             {collectionTab === 'inventory' && (
               <div>{renderInventoryView()}</div>
@@ -3026,120 +4550,142 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {currentView === 'profile' && (
-          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+          <main className="provider-service-page">
+            <div className="provider-service-header">
               <div>
-                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Thông tin dịch vụ</h2>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Thiết lập thông tin thương hiệu, showroom nhận đồ và chính sách hủy dịch vụ.</p>
+                <p className="provider-service-eyebrow">THIẾT LẬP NHÀ CUNG CẤP</p>
+                <h2>Thông tin dịch vụ</h2>
+                <p>Hoàn thiện từng phần thay vì điền một biểu mẫu dài. Địa chỉ chính xác chỉ dùng nội bộ để phục vụ đặt lịch và giao nhận.</p>
               </div>
+              <span className={`provider-service-status${profileHasUnsavedChanges ? ' is-dirty' : ''}`}>
+                <CheckCircle size={16} /> {profileHasUnsavedChanges ? 'Có thay đổi chưa lưu' : 'Đã lưu'}
+              </span>
             </div>
 
-            {isLoadingProvider ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải thông tin dịch vụ...</div>
-            ) : (
-              <form onSubmit={handleUpdateProfile} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '32px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TÊN THƯƠNG HIỆU / CỬA HÀNG</label>
-                    <input
-                      type="text"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
+            {isLoadingProvider ? <SectionLoading message="Đang tải thông tin dịch vụ…" /> : (
+              <form onSubmit={handleUpdateProfile} className="provider-service-form">
+                <div className="provider-service-tabs" role="tablist" aria-label="Các phần thông tin dịch vụ">
+                  <button type="button" role="tab" aria-selected={profileSection === 'business'} className={`provider-service-tab${profileSection === 'business' ? ' is-active' : ''}`} onClick={() => setProfileSection('business')}>
+                    <Store size={20} /><span>Cửa hàng<small>Thương hiệu & liên hệ</small></span>
+                  </button>
+                  <button type="button" role="tab" aria-selected={profileSection === 'location'} className={`provider-service-tab${profileSection === 'location' ? ' is-active' : ''}`} onClick={() => setProfileSection('location')}>
+                    <MapPinned size={20} /><span>Địa điểm & phạm vi<small>Pin bản đồ, bán kính, giao nhận</small></span>
+                  </button>
+                  <button type="button" role="tab" aria-selected={profileSection === 'policy'} className={`provider-service-tab${profileSection === 'policy' ? ' is-active' : ''}`} onClick={() => setProfileSection('policy')}>
+                    <FileText size={20} /><span>Chính sách<small>Hủy dịch vụ & hoàn cọc</small></span>
+                  </button>
+                </div>
+
+                {profileSection === 'business' && <section className="provider-service-panel" role="tabpanel">
+                  <div className="provider-service-panel-heading">
+                    <h3>Thông tin cửa hàng</h3>
+                    <p>Đây là thông tin khách hàng nhìn thấy khi tìm đến dịch vụ của bạn.</p>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>SỐ ĐIỆN THOẠI LIÊN HỆ</label>
-                    <input
-                      type="text"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
+                  <div className="provider-service-field-grid">
+                    <div className="provider-service-field">
+                      <label htmlFor="provider-business-name">Tên thương hiệu / cửa hàng</label>
+                      <input id="provider-business-name" type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Ví dụ: Áo Dài Cổ Phong Vibe" required />
+                      <p className="provider-service-field-note">Dùng tên nhất quán trên trang sản phẩm và đơn đặt.</p>
+                    </div>
+                    <div className="provider-service-field">
+                      <label htmlFor="provider-phone">Số điện thoại liên hệ</label>
+                      <input id="provider-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ví dụ: 0901 234 567" required />
+                      <p className="provider-service-field-note">Dùng để hỗ trợ khách khi phát sinh đơn đặt.</p>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>ĐỊA CHỈ SHOWROOM / ĐỊA ĐIỂM NHẬN ĐỒ</label>
-                    <input
-                      type="text"
-                      value={addressLine}
-                      onChange={(e) => setAddressLine(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
+                </section>}
+
+                {profileSection === 'location' && <section className="provider-service-panel" role="tabpanel">
+                  <div className="provider-service-panel-heading">
+                    <h3>Địa điểm và phạm vi phục vụ</h3>
+                    <p>Tìm địa chỉ, chọn pin trên bản đồ rồi thiết lập phạm vi phù hợp. Tọa độ được ẩn trong phần nâng cao để biểu mẫu dễ dùng hơn.</p>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>THÀNH PHỐ</label>
-                    <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>TỶ LỆ GIẢM GIÁ COMBO (%)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={comboDiscountPercent}
-                      onChange={(e) => setComboDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                      required
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>CHÍNH SÁCH HỦY DỊCH VỤ / HOÀN CỌC</label>
-                    <textarea
-                      value={cancellationPolicy}
-                      onChange={(e) => setCancellationPolicy(e.target.value)}
-                      rows={3}
-                      style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'none', fontFamily: 'inherit' }}
-                    />
-                  </div>
-                  <div style={{ gridColumn: 'span 2', borderTop: '1px solid var(--color-light-border)', paddingTop: '20px', marginTop: '4px' }}>
-                    <h3 style={{ margin: '0 0 8px', fontSize: '16px', color: 'var(--color-text-primary)' }}>Địa điểm và phạm vi phục vụ</h3>
-                    <p style={{ margin: '0 0 14px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Pin nội bộ này dùng để kiểm tra bán kính. Tọa độ chính xác không hiển thị công khai cho khách.</p>
+                  <div className="provider-service-location-stack">
+                    <div className="provider-service-field" style={{ maxWidth: 420 }}>
+                      <label htmlFor="provider-city">Thành phố</label>
+                      <input id="provider-city" type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ví dụ: Thành phố Huế" required />
+                    </div>
                     <PhotographyLocationPicker
+                      compact
                       value={baseLatitude !== '' && baseLongitude !== '' ? { address: addressLine, latitude: Number(baseLatitude), longitude: Number(baseLongitude) } : null}
                       onSelect={(location) => {
                         setAddressLine(location.address);
                         setBaseLatitude(location.latitude.toString());
                         setBaseLongitude(location.longitude.toString());
                       }}
-                      title="Pin địa chỉ kinh doanh / điểm xuất phát"
-                      hint="Kéo pin để chọn vị trí chính xác. Đây là tâm để kiểm tra bán kính phục vụ chụp ảnh."
+                      title="Địa chỉ kinh doanh / điểm xuất phát"
+                      hint="Tìm địa chỉ hoặc kéo pin. Đây là vị trí nội bộ dùng để kiểm tra lịch và bán kính phục vụ."
                       radiusKm={hasPhotographyCapability && serviceRadiusKm !== '' ? Number(serviceRadiusKm) : null}
                     />
-                    {hasPhotographyCapability && <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '14px', maxWidth: '280px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>BÁN KÍNH PHỤC VỤ CHỤP (KM)</label>
-                      <input type="number" min={0} max={500} step="0.1" value={serviceRadiusKm} onChange={(e) => setServiceRadiusKm(e.target.value)} placeholder="Ví dụ: 15" style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }} />
+
+                    {hasPhotographyCapability && <div className="provider-service-radius">
+                      <div className="provider-service-radius-header"><strong>Bán kính phục vụ chụp ảnh</strong><span className="provider-service-radius-value">{serviceRadiusKm || 0} km</span></div>
+                      <div className="provider-service-radius-presets">
+                        {[5, 10, 20, 50].map((radius) => <button type="button" key={radius} className={Number(serviceRadiusKm) === radius ? 'is-selected' : ''} onClick={() => setServiceRadiusKm(String(radius))}>{radius} km</button>)}
+                      </div>
+                      <div className="provider-service-radius-controls">
+                        <input type="range" min="1" max="100" value={Math.min(100, Math.max(1, Number(serviceRadiusKm) || 1))} onChange={(e) => setServiceRadiusKm(e.target.value)} aria-label="Bán kính phục vụ chụp ảnh" />
+                        <input type="number" min="1" max="500" step="1" value={serviceRadiusKm} onChange={(e) => setServiceRadiusKm(e.target.value)} placeholder="Số km" aria-label="Nhập bán kính phục vụ" />
+                      </div>
+                    </div>}
+
+                    {hasAodaiCapability && <div className="provider-service-pickup">
+                      <label className="provider-service-pickup-toggle">
+                        <input type="checkbox" checked={useBusinessAddressForPickup} onChange={(e) => setUseBusinessAddressForPickup(e.target.checked)} />
+                        <span><strong>Dùng địa chỉ kinh doanh cho nhận và trả áo dài</strong><span>Chỉ tắt lựa chọn này nếu điểm giao nhận khác với cửa hàng.</span></span>
+                      </label>
+                      {!useBusinessAddressForPickup && <PhotographyLocationPicker
+                        compact
+                        value={pickupLatitude !== '' && pickupLongitude !== '' ? { address: pickupAddressLine, latitude: Number(pickupLatitude), longitude: Number(pickupLongitude) } : null}
+                        onSelect={(location) => {
+                          setPickupAddressLine(location.address);
+                          setPickupLatitude(location.latitude.toString());
+                          setPickupLongitude(location.longitude.toString());
+                        }}
+                        title="Điểm nhận và trả áo dài"
+                        hint="MVP hiện dùng một điểm chung cho cả nhận và trả."
+                      />}
                     </div>}
                   </div>
-                  <div style={{ gridColumn: 'span 2', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: useBusinessAddressForPickup ? 0 : '14px' }}><input type="checkbox" checked={useBusinessAddressForPickup} onChange={(e) => setUseBusinessAddressForPickup(e.target.checked)} /> Dùng địa chỉ kinh doanh cho cả nhận và trả áo dài</label>
-                    {!useBusinessAddressForPickup && <PhotographyLocationPicker
-                      value={pickupLatitude !== '' && pickupLongitude !== '' ? { address: pickupAddressLine, latitude: Number(pickupLatitude), longitude: Number(pickupLongitude) } : null}
-                      onSelect={(location) => {
-                        setPickupAddressLine(location.address);
-                        setPickupLatitude(location.latitude.toString());
-                        setPickupLongitude(location.longitude.toString());
-                      }}
-                      title="Pin điểm nhận và trả áo dài"
-                      hint="MVP dùng cùng một điểm cho cả nhận và trả áo dài."
-                    />}
+                </section>}
+
+                {profileSection === 'policy' && <section className="provider-service-panel" role="tabpanel">
+                  <div className="provider-service-panel-heading">
+                    <h3>Chính sách hủy dịch vụ và hoàn cọc</h3>
+                    <p>Thiết lập từng mốc hủy và tỷ lệ hoàn cọc. Hệ thống sẽ tự viết thành chính sách rõ ràng cho khách.</p>
                   </div>
+                  <div className="provider-policy-builder">
+                    <div className="provider-policy-builder-header">
+                      <div><strong>Mốc hoàn cọc</strong><span>Nhập số ngày trước lịch hẹn và phần trăm hoàn tiền cọc tương ứng.</span></div>
+                      <div className="provider-policy-builder-actions">
+                        <button type="button" className="provider-policy-secondary-action" onClick={() => setCancellationRefundRules([{ noticeDays: 7, refundPercent: 100 }, { noticeDays: 3, refundPercent: 50 }, { noticeDays: 0, refundPercent: 0 }])}>Dùng mẫu phổ biến</button>
+                        <button type="button" className="provider-policy-primary-action" onClick={() => setCancellationRefundRules((rules) => [...rules, { noticeDays: 0, refundPercent: 0 }])}><Plus size={15} /> Thêm mốc</button>
+                      </div>
+                    </div>
+                    {cancellationRefundRules.length === 0 ? <div className="provider-policy-empty"><strong>Chưa có mốc hoàn cọc.</strong><span>Chọn “Dùng mẫu phổ biến” hoặc thêm mốc theo chính sách của cửa hàng.</span></div> : <div className="provider-policy-rules">
+                      <div className="provider-policy-rule-labels"><span>Hủy trước lịch</span><span>Tỷ lệ hoàn cọc</span><span /></div>
+                      {cancellationRefundRules.map((rule, index) => <div className="provider-policy-rule" key={index}>
+                        <label><input type="number" min="0" max="365" step="1" value={rule.noticeDays} onChange={(event) => setCancellationRefundRules((rules) => rules.map((item, itemIndex) => itemIndex === index ? { ...item, noticeDays: Number(event.target.value) } : item))} /><span>ngày</span></label>
+                        <label><input type="number" min="0" max="100" step="1" value={rule.refundPercent} onChange={(event) => setCancellationRefundRules((rules) => rules.map((item, itemIndex) => itemIndex === index ? { ...item, refundPercent: Number(event.target.value) } : item))} /><span>% hoàn</span></label>
+                        <button type="button" className="provider-policy-remove" onClick={() => setCancellationRefundRules((rules) => rules.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Xóa mốc hủy ${rule.noticeDays} ngày`}><Trash2 size={16} /></button>
+                      </div>)}
+                    </div>}
+                  </div>
+                  <div className="provider-service-field provider-policy-notes">
+                    <label htmlFor="provider-cancellation-notes">Ghi chú thêm (không bắt buộc)</label>
+                    <textarea id="provider-cancellation-notes" value={cancellationAdditionalNotes} onChange={(e) => setCancellationAdditionalNotes(e.target.value)} placeholder="Ví dụ: Phí chuyển khoản không được hoàn; khách cần liên hệ shop để xác nhận yêu cầu hủy." />
+                  </div>
+                  <div className="provider-service-policy-preview"><strong>Xem trước hiển thị với khách:</strong><p>{cancellationPolicySummary || 'Chưa thiết lập chính sách hủy và hoàn cọc.'}</p></div>
+                </section>}
+
+                <div className="provider-service-savebar">
+                  <div className={`provider-service-savebar-copy${profileHasUnsavedChanges ? ' is-dirty' : ''}`}>
+                    <CheckCircle size={17} /> {profileHasUnsavedChanges ? 'Bạn có thay đổi chưa được lưu.' : 'Thông tin đang được đồng bộ.'}
+                  </div>
+                  <button type="submit" disabled={isSavingProfile}>
+                    <Save size={16} /> {isSavingProfile ? 'Đang lưu…' : 'Lưu thay đổi'}
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  style={{ alignSelf: 'flex-start', padding: '10px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-sm)' }}
-                >
-                  <Save size={14} />
-                  Lưu thay đổi
-                </button>
               </form>
             )}
           </main>
@@ -3417,6 +4963,35 @@ export const ProviderDashboard: React.FC = () => {
                     {editingScheduleDay !== null && <span style={{ padding: '6px 10px', backgroundColor: '#FFF7ED', color: '#9A3412', borderRadius: '999px', fontWeight: 700, fontSize: '12px' }}>Đang sửa {daysOfWeekVn[editingScheduleDay]}</span>}
                   </div>
 
+                  {/* Capability selector — only shown when provider has BOTH roles */}
+                  {hasAodaiCapability && hasPhotographyCapability && (
+                    <div style={{ marginBottom: '18px', padding: '14px 16px', backgroundColor: '#FAF6F0', borderRadius: '10px', border: '1px solid #E8E2D5' }}>
+                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#4A0E17', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lịch này áp dụng cho dịch vụ nào?</p>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {[
+                          { key: null, label: '🔗 Cả hai dịch vụ', desc: 'Áo dài & Nhiếp ảnh' },
+                          { key: 'AODAI_RENTAL', label: '👘 Cho thuê Áo dài', desc: 'Chỉ áp dụng cho lịch thuê' },
+                          { key: 'PHOTOGRAPHY', label: '📷 Chụp ảnh', desc: 'Chỉ áp dụng cho lịch chụp' },
+                        ].map(({ key, label, desc }) => (
+                          <button
+                            key={String(key)}
+                            type="button"
+                            onClick={() => setScheduleCapability(key as any)}
+                            style={{
+                              padding: '8px 14px', borderRadius: '8px', border: scheduleCapability === key ? '2px solid #4A0E17' : '1px solid #E8E2D5',
+                              backgroundColor: scheduleCapability === key ? '#4A0E17' : 'white',
+                              color: scheduleCapability === key ? 'white' : '#4A0E17',
+                              fontWeight: 700, fontSize: '12px', cursor: 'pointer', textAlign: 'left',
+                            }}
+                          >
+                            <div>{label}</div>
+                            <div style={{ fontSize: '10px', opacity: 0.75, fontWeight: 500, marginTop: '2px' }}>{desc}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
                     <span style={{ fontSize: '12px', fontWeight: 750, color: 'var(--color-text-secondary)' }}>CHỌN NGÀY LÀM VIỆC</span>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -3467,7 +5042,7 @@ export const ProviderDashboard: React.FC = () => {
                         type="date"
                         value={blockedDate}
                         onChange={(e) => setBlockedDate(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]}
+                        min={toLocalDateKey()}
                         style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
                       />
                     </div>
@@ -3492,15 +5067,39 @@ export const ProviderDashboard: React.FC = () => {
                       {schedules.filter((schedule) => schedule.scheduleType === 'RECURRING').sort((a, b) => Number(a.dayOfWeek) - Number(b.dayOfWeek)).map((schedule) => (
                         <div key={schedule._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', flexWrap: 'wrap', padding: '14px 16px', backgroundColor: 'var(--color-light-bg)', border: '1px solid var(--color-light-border)', borderRadius: '8px' }}>
                           <div>
-                            <strong style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-primary)' }}>{daysOfWeekVn[Number(schedule.dayOfWeek)]}</strong>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <strong style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-primary)' }}>{daysOfWeekVn[Number(schedule.dayOfWeek)]}</strong>
+                              {schedule.capability === 'AODAI_RENTAL' && (
+                                <span style={{ padding: '2px 8px', backgroundColor: '#FEF3C7', color: '#D97706', borderRadius: '4px', fontWeight: 700, fontSize: '10px' }}>👘 Áo dài</span>
+                              )}
+                              {schedule.capability === 'PHOTOGRAPHY' && (
+                                <span style={{ padding: '2px 8px', backgroundColor: '#E0F2FE', color: '#0369A1', borderRadius: '4px', fontWeight: 700, fontSize: '10px' }}>📷 Nhiếp ảnh</span>
+                              )}
+                              {!schedule.capability && hasAodaiCapability && hasPhotographyCapability && (
+                                <span style={{ padding: '2px 8px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '4px', fontWeight: 700, fontSize: '10px' }}>🔗 Cả hai</span>
+                              )}
+                            </div>
                             <span style={{ display: 'block', marginTop: '4px', fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>{schedule.workingHours?.map((range: any) => `${range.start} - ${range.end}`).join(' · ') || 'Chưa có ca làm việc'}</span>
                           </div>
                           <button type="button" onClick={() => handleEditRecurringSchedule(schedule)} style={{ padding: '8px 12px', border: '1px solid var(--color-primary)', borderRadius: '6px', backgroundColor: 'white', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Pencil size={14} /> Sửa</button>
                         </div>
                       ))}
                       {schedules.filter((schedule) => schedule.scheduleType !== 'RECURRING').map((schedule) => (
-                        <div key={schedule._id} style={{ padding: '14px 16px', backgroundColor: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '8px' }}>
-                          <strong style={{ fontSize: '14px', color: '#9A3412' }}>Đã chặn ngày {schedule.specificDate ? new Date(schedule.specificDate).toLocaleDateString('vi-VN') : 'không xác định'}</strong>
+                        <div key={schedule._id} style={{ padding: '14px 16px', backgroundColor: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <strong style={{ fontSize: '14px', color: '#9A3412' }}>Đã chặn ngày {schedule.specificDate ? new Date(schedule.specificDate).toLocaleDateString('vi-VN') : 'không xác định'}</strong>
+                            <div style={{ marginTop: '2px' }}>
+                              {schedule.capability === 'AODAI_RENTAL' && (
+                                <span style={{ padding: '2px 6px', backgroundColor: '#FEF3C7', color: '#D97706', borderRadius: '4px', fontWeight: 700, fontSize: '9px' }}>👘 Chỉ chặn Áo dài</span>
+                              )}
+                              {schedule.capability === 'PHOTOGRAPHY' && (
+                                <span style={{ padding: '2px 6px', backgroundColor: '#E0F2FE', color: '#0369A1', borderRadius: '4px', fontWeight: 700, fontSize: '9px' }}>📷 Chỉ chặn Nhiếp ảnh</span>
+                              )}
+                              {!schedule.capability && hasAodaiCapability && hasPhotographyCapability && (
+                                <span style={{ padding: '2px 6px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '4px', fontWeight: 700, fontSize: '9px' }}>🔗 Chặn cả hai</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -3524,6 +5123,50 @@ export const ProviderDashboard: React.FC = () => {
               <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải danh sách voucher...</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                {/* CHIẾN DỊCH GIẢM GIÁ ÁO DÀI */}
+                {hasAodaiCapability && (
+                  <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '12px' }}>
+                      <div>
+                        <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0 }}>CHIẾN DỊCH GIẢM GIÁ SẢN PHẨM ÁO DÀI</h3>
+                        <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>Tạo chương trình giảm giá toàn bộ sản phẩm theo % cho dịp lễ/sự kiện đặc biệt.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={openCampaignModal}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: activeCampaign ? '#B91C1C' : 'var(--color-primary)',
+                          padding: '10px 18px', borderRadius: '6px', fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                          color: 'white', border: 'none', transition: 'var(--transition-smooth)',
+                        }}
+                      >
+                        <Tag size={16} /> {activeCampaign ? `Đang chạy: ${activeCampaign.occasion} (-${activeCampaign.discountPercent}%)` : 'Tạo chiến dịch giảm giá'}
+                      </button>
+                    </div>
+
+                    {activeCampaign ? (
+                      <div style={{ padding: '14px 18px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ fontWeight: 800, fontSize: '14px', color: '#B91C1C' }}>🎉 {activeCampaign.occasion} (-{activeCampaign.discountPercent}%)</span>
+                          <div style={{ fontSize: '12px', color: '#991B1B', marginTop: '4px' }}>
+                            Áp dụng từ: {new Date(activeCampaign.startDate).toLocaleDateString('vi-VN')} đến {new Date(activeCampaign.endDate).toLocaleDateString('vi-VN')}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleDeactivateCampaign}
+                          disabled={submittingCampaign}
+                          style={{ padding: '8px 14px', backgroundColor: '#EF4444', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+                        >
+                          Hủy chiến dịch (Về giá gốc)
+                        </button>
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: 0 }}>Chưa có chiến dịch giảm giá sản phẩm nào đang diễn ra.</p>
+                    )}
+                  </div>
+                )}
+
                 <form onSubmit={handleAddVoucher} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>TẠO MÃ KHUYẾN MÃI MỚI</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -3606,6 +5249,408 @@ export const ProviderDashboard: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {/* COMBO PROMOTION SECTION */}
+                {hasPhotographyCapability && hasAodaiCapability && (
+                  <div style={{ borderTop: '2px dashed var(--color-light-border)', paddingTop: '40px', marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--color-primary-dark)', margin: 0 }}>Quản lý Combo Khuyến Mãi (Áo Dài + Photographer)</h3>
+                      <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '6px' }}>
+                        Tạo gói combo kết hợp thuê áo dài và thuê thợ chụp ảnh để được hưởng mức chiết khấu hấp dẫn hơn.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', alignItems: 'start' }}>
+                      {/* Form Create/Edit Combo */}
+                      <form onSubmit={handleCreateOrUpdateCombo} style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <h4 style={{ fontSize: '15px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: 0, borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px', textTransform: 'uppercase' }}>
+                          {editingComboId ? 'CẬP NHẬT COMBO' : 'TẠO COMBO MỚI'}
+                        </h4>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TÊN COMBO KHUYẾN MÃI</span>
+                          <input
+                            type="text"
+                            placeholder="Ví dụ: Combo Tràng An - Lưu giữ khoảnh khắc"
+                            value={cName}
+                            onChange={(e) => setCName(e.target.value)}
+                            style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                            required
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÔ TẢ COMBO (MÔ TẢ NGẮN)</span>
+                          <textarea
+                            placeholder="Mô tả quyền lợi combo, ví dụ: Bao gồm 1 bộ áo dài và 2 tiếng chụp hình ngoại cảnh..."
+                            value={cDesc}
+                            onChange={(e) => setCDesc(e.target.value)}
+                            rows={2}
+                            style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'none', fontFamily: 'inherit' }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHỌN ÁO DÀI</span>
+                            {cProductId ? (
+                              (() => {
+                                const prod = myProductsList.find(p => p._id === cProductId);
+                                return (
+                                  <div style={{ display: 'flex', gap: '10px', padding: '8px', border: '1px solid var(--color-primary)', borderRadius: '8px', backgroundColor: 'var(--color-primary-trans)', alignItems: 'center' }}>
+                                    <img src={prod?.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'} alt={prod?.name} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prod?.name}</div>
+                                      <div style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600 }}>{prod?.basePrice?.toLocaleString('vi-VN')}đ</div>
+                                    </div>
+                                    <button type="button" onClick={() => setIsAoDaiModalOpen(true)} style={{ border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Đổi</button>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setIsAoDaiModalOpen(true)}
+                                style={{ padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '6px', fontSize: '13px', fontWeight: 600, color: '#64748B', backgroundColor: '#F8FAFC', cursor: 'pointer', textAlign: 'center' }}
+                              >
+                                + Chọn Áo Dài
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>CHỌN GÓI CHỤP ẢNH</span>
+                            {cPackageId ? (
+                              (() => {
+                                const pkg = photoPackages.find(p => p._id === cPackageId);
+                                return (
+                                  <div style={{ display: 'flex', gap: '10px', padding: '8px', border: '1px solid var(--color-primary)', borderRadius: '8px', backgroundColor: 'var(--color-primary-trans)', alignItems: 'center' }}>
+                                    <img src={pkg?.images?.[0] || 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb'} alt={pkg?.name} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pkg?.name}</div>
+                                      <div style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600 }}>{pkg?.price?.toLocaleString('vi-VN')}đ ({pkg?.durationHours}h)</div>
+                                    </div>
+                                    <button type="button" onClick={() => setIsPackageModalOpen(true)} style={{ border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>Đổi</button>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setIsPackageModalOpen(true)}
+                                style={{ padding: '10px', border: '1px dashed #CBD5E1', borderRadius: '6px', fontSize: '13px', fontWeight: 600, color: '#64748B', backgroundColor: '#F8FAFC', cursor: 'pointer', textAlign: 'center' }}
+                              >
+                                + Chọn Gói Chụp
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>PHẦN TRĂM GIẢM GIÁ (%)</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={80}
+                              value={cDiscount}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '') {
+                                  setCDiscount('');
+                                } else {
+                                  const num = Number(val);
+                                  if (!isNaN(num)) {
+                                    setCDiscount(num);
+                                  }
+                                }
+                              }}
+                              onBlur={() => {
+                                if (cDiscount === '' || cDiscount < 1) {
+                                  setCDiscount(1);
+                                } else if (cDiscount > 80) {
+                                  setCDiscount(80);
+                                }
+                              }}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>GIÁ COMBO TỰ ĐỊNH NGHĨA (Đ - TÙY CHỌN)</span>
+                            <input
+                              type="number"
+                              placeholder="Để trống nếu tính theo %"
+                              value={cPrice}
+                              onChange={(e) => setCPrice(e.target.value)}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY BẮT ĐẦU COMBO</span>
+                            <input
+                              type="date"
+                              value={cValidFrom}
+                              onChange={(e) => setCValidFrom(e.target.value)}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NGÀY KẾT THÚC COMBO</span>
+                            <input
+                              type="date"
+                              value={cValidTo}
+                              onChange={(e) => setCValidTo(e.target.value)}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SỐ LƯỢNG COMBO GIỚI HẠN (STOCK)</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={cMaxUsage}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setCMaxUsage(val === '' ? '' : Number(val));
+                              }}
+                              style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                              required
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SỐ LƯỢNG NGƯỜI CHỤP TRONG COMBO</span>
+                            {(() => {
+                              const selectedPkg = photoPackages.find(p => p._id === cPackageId);
+                              const maxPeopleAllowed = selectedPkg ? (selectedPkg.maxPeople || 1) : 1;
+                              return (
+                                <>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={maxPeopleAllowed}
+                                    value={cShootPeopleCount}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const num = val === '' ? '' : Number(val);
+                                      if (num !== '' && num > maxPeopleAllowed) {
+                                        setCShootPeopleCount(maxPeopleAllowed);
+                                      } else {
+                                        setCShootPeopleCount(num);
+                                      }
+                                    }}
+                                    style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                                    required
+                                  />
+                                  {selectedPkg && (
+                                    <small style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                                      Số người chụp tối đa của gói: <strong style={{ color: 'var(--color-primary)' }}>{maxPeopleAllowed}</strong> người
+                                    </small>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SỐ LƯỢNG ÁO DÀI THUÊ TRONG COMBO</span>
+                            {(() => {
+                              const selectedAoDaiStock = cProductId && inventorySummary
+                                ? inventorySummary
+                                  .filter((item: any) => item.productId === cProductId)
+                                  .reduce((sum: number, item: any) => sum + (item.available || 0), 0)
+                                : 0;
+                              return (
+                                <>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={selectedAoDaiStock || 1}
+                                    value={cAoDaiQuantity}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const num = val === '' ? '' : Number(val);
+                                      if (num !== '' && num > selectedAoDaiStock && selectedAoDaiStock > 0) {
+                                        setCAoDaiQuantity(selectedAoDaiStock);
+                                      } else {
+                                        setCAoDaiQuantity(num);
+                                      }
+                                    }}
+                                    style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                                    required
+                                  />
+                                  <small style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                                    Tồn kho áo dài khả dụng: <strong style={{ color: 'var(--color-primary)' }}>{selectedAoDaiStock}</strong> sản phẩm
+                                  </small>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                          <button
+                            type="submit"
+                            style={{ padding: '11px 24px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
+                          >
+                            {editingComboId ? 'Cập nhật Combo' : 'Tạo Combo ngay'}
+                          </button>
+                          {editingComboId && (
+                            <button
+                              type="button"
+                              onClick={clearComboForm}
+                              style={{ padding: '11px 24px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13px', fontWeight: 700, backgroundColor: 'white', color: 'var(--color-text-primary)', cursor: 'pointer' }}
+                            >
+                              Hủy bỏ
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Modal chọn Áo Dài */}
+                        {isAoDaiModalOpen && (
+                          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                            <div style={{ backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} onClick={(e) => e.stopPropagation()}>
+                              <div style={{ padding: '20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>Chọn Áo Dài Cho Combo</h3>
+                                <button type="button" onClick={() => setIsAoDaiModalOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}><X size={20} /></button>
+                              </div>
+                              <div style={{ padding: '16px', borderBottom: '1px solid #E2E8F0' }}>
+                                <input
+                                  type="text"
+                                  placeholder="Tìm kiếm áo dài theo tên..."
+                                  value={aoDaiSearch}
+                                  onChange={(e) => setAoDaiSearch(e.target.value)}
+                                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
+                                />
+                              </div>
+                              <div style={{ padding: '20px', overflowY: 'auto', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {myProductsList.filter(p => p.name.toLowerCase().includes(aoDaiSearch.toLowerCase())).map((prod) => (
+                                  <div
+                                    key={prod._id}
+                                    onClick={() => { setCProductId(prod._id); setIsAoDaiModalOpen(false); }}
+                                    style={{ display: 'flex', gap: '12px', padding: '12px', border: cProductId === prod._id ? '2px solid var(--color-primary)' : '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', backgroundColor: cProductId === prod._id ? 'var(--color-primary-trans)' : 'white', transition: 'all 0.2s', alignItems: 'center' }}
+                                  >
+                                    <img src={prod.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'} alt={prod.name} style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1 }}>
+                                      <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{prod.name}</strong>
+                                      <div style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 700, marginTop: '2px' }}>{prod.basePrice?.toLocaleString('vi-VN')}đ</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Modal chọn Gói chụp ảnh */}
+                        {isPackageModalOpen && (
+                          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                            <div style={{ backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} onClick={(e) => e.stopPropagation()}>
+                              <div style={{ padding: '20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>Chọn Gói Chụp Cho Combo</h3>
+                                <button type="button" onClick={() => setIsPackageModalOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}><X size={20} /></button>
+                              </div>
+                              <div style={{ padding: '16px', borderBottom: '1px solid #E2E8F0' }}>
+                                <input
+                                  type="text"
+                                  placeholder="Tìm kiếm gói chụp theo tên..."
+                                  value={packageSearch}
+                                  onChange={(e) => setPackageSearch(e.target.value)}
+                                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
+                                />
+                              </div>
+                              <div style={{ padding: '20px', overflowY: 'auto', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {photoPackages.filter(p => p.name.toLowerCase().includes(packageSearch.toLowerCase())).map((pkg) => (
+                                  <div
+                                    key={pkg._id}
+                                    onClick={() => { setCPackageId(pkg._id); setIsPackageModalOpen(false); }}
+                                    style={{ display: 'flex', gap: '12px', padding: '12px', border: cPackageId === pkg._id ? '2px solid var(--color-primary)' : '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', backgroundColor: cPackageId === pkg._id ? 'var(--color-primary-trans)' : 'white', transition: 'all 0.2s', alignItems: 'center' }}
+                                  >
+                                    <img src={pkg.images?.[0] || 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb'} alt={pkg.name} style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+                                    <div style={{ flex: 1 }}>
+                                      <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{pkg.name}</strong>
+                                      <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>Thời lượng: {pkg.durationHours}h</div>
+                                      <div style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 700, marginTop: '2px' }}>{pkg.price?.toLocaleString('vi-VN')}đ</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </form>
+
+                      {/* Danh sách Combo */}
+                      <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+                        <h4 style={{ fontSize: '15px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 16px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px', textTransform: 'uppercase' }}>
+                          DANH SÁCH COMBO ĐANG CHẠY
+                        </h4>
+                        {combos.length === 0 ? (
+                          <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', margin: 'auto' }}>Chưa có combo khuyến mãi nào được tạo.</p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', maxHeight: '480px' }}>
+                            {combos.map((cb) => (
+                              <div key={cb._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+                                <div style={{ flex: 1, marginRight: '16px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ padding: '2px 8px', backgroundColor: 'var(--color-primary)', color: 'white', borderRadius: '4px', fontWeight: 700, fontSize: '11px' }}>
+                                      -{cb.discountPercent}%
+                                    </span>
+                                    <h5 style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{cb.name}</h5>
+                                  </div>
+                                  {cb.description && (
+                                    <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 8px 0' }}>{cb.description}</p>
+                                  )}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--color-text-primary)', marginTop: '8px' }}>
+                                    <div><strong>Áo dài:</strong> {cb.productId?.name || 'Sản phẩm đã bị xóa'}</div>
+                                    <div><strong>Gói chụp:</strong> {cb.photographyPackageId?.name || 'Gói chụp đã bị xóa'}</div>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                                  <div style={{ textAlign: 'right' }}>
+                                    <div style={{ textDecoration: 'line-through', color: '#94A3B8', fontSize: '11px' }}>
+                                      {((cb.productId?.basePrice || 0) + (cb.photographyPackageId?.price || 0)).toLocaleString('vi-VN')}đ
+                                    </div>
+                                    <div style={{ color: '#EF4444', fontWeight: 700, fontSize: '15px' }}>
+                                      {cb.comboPrice ? cb.comboPrice.toLocaleString('vi-VN') : Math.round(((cb.productId?.basePrice || 0) + (cb.photographyPackageId?.price || 0)) * (1 - cb.discountPercent / 100)).toLocaleString('vi-VN')}đ
+                                    </div>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                                    <button
+                                      onClick={() => handleEditCombo(cb)}
+                                      style={{ padding: '6px 10px', border: '1px solid var(--color-primary)', borderRadius: '4px', backgroundColor: 'white', color: 'var(--color-primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      Sửa
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteCombo(cb._id)}
+                                      style={{ padding: '6px 10px', border: '1px solid #EF4444', borderRadius: '4px', backgroundColor: 'white', color: '#EF4444', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      Xóa
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </main>
@@ -3744,10 +5789,10 @@ export const ProviderDashboard: React.FC = () => {
                         <div key={booking._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'white' }}>
                           <div>
                             <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>{booking.bookingCode}</strong>
-                            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>Mã khách hàng: {booking.customerId}</p>
+                            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>Mã khách hàng: {booking.customerId?._id || booking.customerId?.id || String(booking.customerId || '—')}</p>
                           </div>
                           <button
-                            onClick={() => setRatingBooking({ bookingId: booking._id, customerId: booking.customerId })}
+                            onClick={() => setRatingBooking({ bookingId: booking._id, customerId: booking.customerId?._id || booking.customerId?.id || String(booking.customerId || '') })}
                             style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}
                           >
                             Đánh giá khách hàng
@@ -3775,6 +5820,8 @@ export const ProviderDashboard: React.FC = () => {
               <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải dữ liệu quyết toán...</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+
+
                 <div style={{ backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 750, color: 'var(--color-primary-dark)', margin: '0 0 20px 0', borderBottom: '1px solid var(--color-light-border)', paddingBottom: '8px' }}>DANH SÁCH CÁC KHOẢN QUYẾT TOÁN</h3>
                   {payouts.length === 0 ? (
@@ -3788,18 +5835,19 @@ export const ProviderDashboard: React.FC = () => {
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
                           <tr style={{ backgroundColor: 'var(--color-light-bg)', borderBottom: '1px solid var(--color-light-border)' }}>
+                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ ĐƠN HÀNG</th>
                             <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ QUYẾT TOÁN</th>
                             <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>MÃ BOOKING</th>
                             <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>SỐ TIỀN THỰC NHẬN</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TÀI KHOẢN NHẬN</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>TRẠNG THÁI</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>DOANH THU GỐC</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>PHÍ NỀN TẢNG</th>
                             <th style={{ padding: '14px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '11px' }}>NGÀY THỰC HIỆN</th>
                           </tr>
                         </thead>
                         <tbody>
                           {payouts.map((p: any) => (
                             <tr
-                              key={p.id}
+                              key={p._id || p.settlementCode}
                               onClick={() => {
                                 const bId = p.bookingId?._id || p.bookingId;
                                 if (bId) {
@@ -3810,23 +5858,26 @@ export const ProviderDashboard: React.FC = () => {
                               style={{ borderBottom: '1px solid var(--color-light-border)', cursor: 'pointer' }}
                               className="hover:bg-stone-50 transition"
                             >
-                              <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.id}</td>
-                              <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingCode || '—'}</td>
-                              <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.amount || 0).toLocaleString('vi-VN')}đ</td>
-                              <td style={{ padding: '16px 20px' }}>
-                                <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{p.bank}</span>
-                                <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{p.account} • {p.accountHolder}</span>
+                              <td style={{ padding: '16px 20px', fontWeight: 700, color: '#1F2937' }}>{(() => { const bId = p.bookingId?._id || (typeof p.bookingId === 'string' ? p.bookingId : (p.bookingId?.id || null)); return bId ? `#${String(bId).slice(-6).toUpperCase()}` : '—'; })()}</td>
+                              <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.settlementCode || p.id}</td>
+                              <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingId?.bookingCode || p.bookingCode || '—'}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.payableAmount ?? p.netAmount ?? p.amount ?? 0).toLocaleString('vi-VN')}đ</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'right', color: 'var(--color-text-secondary)' }}>
+                                {(p.grossAmount ?? 0).toLocaleString('vi-VN')}đ
                               </td>
-                              <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                                <span style={{
-                                  padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
-                                  backgroundColor: p.status === 'SUCCESS' ? '#F0FDF4' : p.status === 'PENDING' ? '#FEF3C7' : '#FEE2E2',
-                                  color: p.status === 'SUCCESS' ? '#166534' : p.status === 'PENDING' ? '#92400E' : '#991B1B'
-                                }}>
-                                  {p.status === 'SUCCESS' ? 'Thành công' : p.status === 'PENDING' ? 'Đang xử lý' : 'Thất bại'}
-                                </span>
+                              <td style={{ padding: '16px 20px', textAlign: 'right' }}>
+                                {(() => {
+                                  const fee = (p.commissionAmount ?? 0) + (p.allocatedPlatformFee ?? p.fixedPlatformFee ?? 0);
+                                  const rate = p.commissionRate ? `${(p.commissionRate * 100).toFixed(0)}%` : null;
+                                  return (
+                                    <span>
+                                      <span style={{ fontWeight: 700, color: '#DC2626' }}>-{fee.toLocaleString('vi-VN')}đ</span>
+                                      {rate && <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)' }}>HH: {rate}</span>}
+                                    </span>
+                                  );
+                                })()}
                               </td>
-                              <td style={{ padding: '16px 20px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>{p.date}</td>
+                              <td style={{ padding: '16px 20px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>{new Date(p.settledAt || p.createdAt || p.date).toLocaleDateString('vi-VN')}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -3840,6 +5891,168 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {/* Footer */}
+        {/* ==================== ROLE MANAGEMENT VIEW ==================== */}
+        {currentView === 'role-management' && (
+          <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, margin: 0 }}>Quản lý vai trò dịch vụ</h2>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '8px', maxWidth: '520px' }}>Xem và quản lý các loại dịch vụ bạn đang cung cấp. Bạn có thể đăng ký thêm vai trò mới để mở rộng kinh doanh.</p>
+              </div>
+            </div>
+
+            {isLoadingProvider ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải dữ liệu...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Current Capabilities */}
+                <div style={{ background: 'var(--color-light-card)', borderRadius: '16px', border: '1px solid var(--color-light-border)', padding: '28px' }}>
+                  <h3 style={{ fontFamily: 'var(--font-header)', fontSize: '18px', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <ShieldCheck size={20} style={{ color: 'var(--color-primary)' }} />
+                    Vai trò hiện tại
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                    {/* AODAI_RENTAL capability card */}
+                    {(() => {
+                      const hasAodai = hasAodaiCapability;
+                      const hasPhoto = hasPhotographyCapability;
+                      const allCapabilities = [
+                        {
+                          key: 'AODAI_RENTAL',
+                          label: 'Cho thuê Áo dài',
+                          description: 'Quản lý cửa hàng áo dài, bộ sưu tập sản phẩm, tồn kho và đơn hàng cho thuê.',
+                          icon: <Layers size={24} />,
+                          active: hasAodai,
+                          gradient: 'linear-gradient(135deg, #FDF2F8 0%, #FCE7F3 100%)',
+                          borderColor: '#F9A8D4',
+                          iconBg: '#FBD5E8',
+                          iconColor: '#BE185D',
+                        },
+                        {
+                          key: 'PHOTOGRAPHY',
+                          label: 'Thợ chụp ảnh',
+                          description: 'Quản lý portfolio ảnh, tạo các gói chụp ảnh chuyên nghiệp và nhận đơn đặt lịch.',
+                          icon: <Camera size={24} />,
+                          active: hasPhoto,
+                          gradient: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+                          borderColor: '#93C5FD',
+                          iconBg: '#BFDBFE',
+                          iconColor: '#1D4ED8',
+                        },
+                      ];
+                      return allCapabilities.map((cap) => (
+                        <div key={cap.key} style={{
+                          background: cap.active ? cap.gradient : '#F9FAFB',
+                          borderRadius: '14px',
+                          border: `2px solid ${cap.active ? cap.borderColor : '#E5E7EB'}`,
+                          padding: '24px',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          opacity: cap.active ? 1 : 0.65,
+                          transition: 'all 0.3s ease',
+                        }}>
+                          {cap.active && (
+                            <div style={{
+                              position: 'absolute', top: '12px', right: '12px',
+                              background: '#10B981', color: 'white',
+                              borderRadius: '20px', padding: '3px 12px', fontSize: '11px', fontWeight: 700,
+                              display: 'flex', alignItems: 'center', gap: '4px',
+                            }}>
+                              <CheckCircle size={12} /> Đang hoạt động
+                            </div>
+                          )}
+                          <div style={{
+                            width: '48px', height: '48px', borderRadius: '12px',
+                            background: cap.active ? cap.iconBg : '#E5E7EB',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: cap.active ? cap.iconColor : '#9CA3AF',
+                            marginBottom: '16px',
+                          }}>
+                            {cap.icon}
+                          </div>
+                          <h4 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 6px 0', color: cap.active ? 'var(--color-text-primary)' : '#9CA3AF' }}>{cap.label}</h4>
+                          <p style={{ fontSize: '13px', color: cap.active ? 'var(--color-text-secondary)' : '#D1D5DB', margin: 0, lineHeight: '1.5' }}>{cap.description}</p>
+                          {!cap.active && (
+                            <button
+                              onClick={() => navigate(`/provider/register?upgrade=${cap.key}`)}
+                              style={{
+                                marginTop: '16px', width: '100%', padding: '10px 16px',
+                                background: 'var(--color-primary)', color: 'white',
+                                border: 'none', borderRadius: '10px', fontWeight: 700,
+                                fontSize: '13px', cursor: 'pointer', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', gap: '8px',
+                                transition: 'all 0.2s ease',
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(184,144,71,0.3)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                            >
+                              <Plus size={16} /> Đăng ký thêm vai trò này
+                            </button>
+                          )}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+
+                {/* Benefits info */}
+                <div style={{ background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)', borderRadius: '16px', border: '1px solid #FDE68A', padding: '24px' }}>
+                  <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Sparkles size={18} style={{ color: '#D97706' }} />
+                    Lợi ích khi kết hợp nhiều vai trò
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                    {[
+                      { icon: '📦', text: 'Tạo combo ưu đãi "Áo dài + Chụp ảnh" thu hút khách hàng' },
+                      { icon: '💰', text: 'Tăng doanh thu từ đa nguồn dịch vụ trên cùng một nền tảng' },
+                      { icon: '⭐', text: 'Nâng cao uy tín thương hiệu với portfolio đa dạng' },
+                      { icon: '🎯', text: 'Được đề xuất ưu tiên trong kết quả tìm kiếm' },
+                    ].map((item, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '13px', color: '#78350F', lineHeight: '1.5' }}>
+                        <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.icon}</span>
+                        <span>{item.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* How it works */}
+                <div style={{ background: 'var(--color-light-card)', borderRadius: '16px', border: '1px solid var(--color-light-border)', padding: '28px' }}>
+                  <h3 style={{ fontFamily: 'var(--font-header)', fontSize: '16px', fontWeight: 700, marginBottom: '16px', color: 'var(--color-text-primary)' }}>
+                    Quy trình đăng ký thêm vai trò
+                  </h3>
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    {[
+                      { step: '1', title: 'Chọn vai trò', desc: 'Bấm nút "Đăng ký thêm" ở vai trò bạn muốn' },
+                      { step: '2', title: 'Bổ sung hồ sơ', desc: 'Điền thông tin nghiệp vụ và tải tài liệu cần thiết' },
+                      { step: '3', title: 'Chờ phê duyệt', desc: 'Admin sẽ xét duyệt hồ sơ trong 1-3 ngày làm việc' },
+                      { step: '4', title: 'Bắt đầu hoạt động', desc: 'Vai trò mới được kích hoạt sau khi phê duyệt' },
+                    ].map((s, idx) => (
+                      <div key={idx} style={{
+                        flex: '1 1 200px', display: 'flex', gap: '12px', alignItems: 'flex-start',
+                        padding: '16px', borderRadius: '12px', background: '#F9FAFB',
+                      }}>
+                        <div style={{
+                          width: '28px', height: '28px', borderRadius: '50%',
+                          background: 'var(--color-primary)', color: 'white',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '13px', fontWeight: 800, flexShrink: 0,
+                        }}>
+                          {s.step}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '2px' }}>{s.title}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: '1.4' }}>{s.desc}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+        )}
+
         <footer style={{ borderTop: '1px solid var(--color-light-border)', padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
             <CheckCircle size={14} style={{ color: 'var(--color-primary)' }} />
@@ -3976,389 +6189,389 @@ export const ProviderDashboard: React.FC = () => {
           </div>
 
           {wizardStep === 1 && (
-          <>
+            <>
 
-          {/* Name */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TÊN ÁO DÀI *</label>
-            <input
-              type="text"
-              value={prodName}
-              onChange={e => setProdName(e.target.value)}
-              placeholder="Ví dụ: Áo Dài Gấm Hoa Đỏ Hỷ Sự"
-              style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-              required
-            />
-          </div>
-
-          {/* Category & Status */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DANH MỤC *</label>
-              <select
-                value={prodCategoryId}
-                onChange={e => setProdCategoryId(e.target.value)}
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
-                required
-              >
-                {categories.map(c => (
-                  <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TRẠNG THÁI HIỂN THỊ</label>
-              <select
-                value={prodStatus}
-                onChange={e => setProdStatus(e.target.value as any)}
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
-              >
-                <option value="ACTIVE">Đang hoạt động (Bán)</option>
-                <option value="DRAFT">Bản nháp (Ẩn)</option>
-                <option value="INACTIVE">Ngừng kinh doanh</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Prices */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>GIÁ THUÊ (VNĐ / NGÀY) *</label>
-              <input
-                type="number"
-                value={prodBasePrice}
-                onChange={e => setProdBasePrice(e.target.value)}
-                placeholder="Ví dụ: 350000"
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                required
-              />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TIỀN ĐẶT CỌC ĐỒ (VNĐ) *</label>
-              <input
-                type="number"
-                value={prodDepositAmount}
-                onChange={e => setProdDepositAmount(e.target.value)}
-                placeholder="Ví dụ: 500000"
-                style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
-                required
-              />
-            </div>
-          </div>
-
-          {/* Description */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>MÔ TẢ SẢN PHẨM</label>
-            <textarea
-              value={prodDescription}
-              onChange={e => setProdDescription(e.target.value)}
-              placeholder="Chất liệu lụa, độ co giãn, lưu ý giặt là..."
-              rows={3}
-              style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'vertical' }}
-            />
-          </div>
-
-          {/* Image Upload Component */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>HÌNH ẢNH SẢN PHẨM *</label>
-
-            {/* Drag & Drop Area */}
-            <div
-              style={{
-                border: '2px dashed var(--color-light-border)',
-                borderRadius: '8px',
-                padding: '24px',
-                textAlign: 'center',
-                backgroundColor: 'var(--color-light-bg)',
-                cursor: 'pointer',
-                transition: 'var(--transition-smooth)',
-                position: 'relative'
-              }}
-              onClick={() => document.getElementById('product-image-upload')?.click()}
-            >
-              <input
-                id="product-image-upload"
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handleImageChange}
-                style={{ display: 'none' }}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                <Upload size={28} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                  {uploadingImages ? 'Đang tải ảnh lên máy chủ...' : 'Click hoặc Kéo thả nhiều ảnh từ máy của bạn'}
-                </span>
-                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Hỗ trợ JPG, PNG, WEBP (Tối đa 10MB)</span>
+              {/* Name */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TÊN ÁO DÀI *</label>
+                <input
+                  type="text"
+                  value={prodName}
+                  onChange={e => setProdName(e.target.value)}
+                  placeholder="Ví dụ: Áo Dài Gấm Hoa Đỏ Hỷ Sự"
+                  style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                  required
+                />
               </div>
-            </div>
 
-            {/* Uploaded Images Preview */}
-            {prodImages.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '12px', marginTop: '8px' }}>
-                {prodImages.map((imgUrl, index) => (
-                  <div key={index} style={{ width: '80px', height: '80px', borderRadius: '6px', overflow: 'hidden', position: 'relative', border: '1px solid var(--color-light-border)' }}>
-                    <img
-                      src={getImageUrl(imgUrl)}
-                      alt={`preview-${index}`}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeImage(index)}
-                      style={{
-                        position: 'absolute', top: '2px', right: '2px',
-                        width: '18px', height: '18px', borderRadius: '50%',
-                        backgroundColor: 'rgba(0,0,0,0.6)', color: 'white',
-                        border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', fontSize: '10px'
-                      }}
-                      title="Xóa hình này"
-                    >
-                      <X size={10} />
-                    </button>
+              {/* Category & Status */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>DANH MỤC *</label>
+                  <select
+                    value={prodCategoryId}
+                    onChange={e => setProdCategoryId(e.target.value)}
+                    style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
+                    required
+                  >
+                    {categories.map(c => (
+                      <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TRẠNG THÁI HIỂN THỊ</label>
+                  <select
+                    value={prodStatus}
+                    onChange={e => setProdStatus(e.target.value as any)}
+                    style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', outline: 'none' }}
+                  >
+                    <option value="ACTIVE">Đang hoạt động (Bán)</option>
+                    <option value="DRAFT">Bản nháp (Ẩn)</option>
+                    <option value="INACTIVE">Ngừng kinh doanh</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Prices */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>GIÁ THUÊ (VNĐ / NGÀY) *</label>
+                  <input
+                    type="number"
+                    value={prodBasePrice}
+                    onChange={e => setProdBasePrice(e.target.value)}
+                    placeholder="Ví dụ: 350000"
+                    style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>TIỀN ĐẶT CỌC ĐỒ (VNĐ) *</label>
+                  <input
+                    type="number"
+                    value={prodDepositAmount}
+                    onChange={e => setProdDepositAmount(e.target.value)}
+                    placeholder="Ví dụ: 500000"
+                    style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>MÔ TẢ SẢN PHẨM</label>
+                <textarea
+                  value={prodDescription}
+                  onChange={e => setProdDescription(e.target.value)}
+                  placeholder="Chất liệu lụa, độ co giãn, lưu ý giặt là..."
+                  rows={3}
+                  style={{ padding: '10px 14px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', resize: 'vertical' }}
+                />
+              </div>
+
+              {/* Image Upload Component */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>HÌNH ẢNH SẢN PHẨM *</label>
+
+                {/* Drag & Drop Area */}
+                <div
+                  style={{
+                    border: '2px dashed var(--color-light-border)',
+                    borderRadius: '8px',
+                    padding: '24px',
+                    textAlign: 'center',
+                    backgroundColor: 'var(--color-light-bg)',
+                    cursor: 'pointer',
+                    transition: 'var(--transition-smooth)',
+                    position: 'relative'
+                  }}
+                  onClick={() => document.getElementById('product-image-upload')?.click()}
+                >
+                  <input
+                    id="product-image-upload"
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <Upload size={28} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                      {uploadingImages ? 'Đang tải ảnh lên máy chủ...' : 'Click hoặc Kéo thả nhiều ảnh từ máy của bạn'}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Hỗ trợ JPG, PNG, WEBP (Tối đa 10MB)</span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
 
-          {/* Video Upload (tuỳ chọn) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>VIDEO GIỚI THIỆU (TÙY CHỌN)</label>
-            <div
-              style={{
-                border: '2px dashed var(--color-light-border)',
-                borderRadius: '8px',
-                padding: '16px',
-                textAlign: 'center',
-                backgroundColor: 'var(--color-light-bg)',
-                cursor: 'pointer',
-                transition: 'var(--transition-smooth)',
-              }}
-              onClick={() => document.getElementById('product-video-upload')?.click()}
-            >
-              <input
-                id="product-video-upload"
-                type="file"
-                multiple
-                accept="video/mp4,video/webm,video/quicktime"
-                onChange={handleVideoChange}
-                style={{ display: 'none' }}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                <Play size={22} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                  {uploadingVideos ? 'Đang tải video lên máy chủ...' : 'Click để chọn video từ máy của bạn'}
-                </span>
-                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Hỗ trợ MP4, WEBM, MOV (Tối đa 50MB / video · tối đa 2 video)</span>
-              </div>
-            </div>
-
-            {prodVideos.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', marginTop: '8px' }}>
-                {prodVideos.map((videoUrl, index) => (
-                  <div key={index} style={{ position: 'relative', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-light-border)', backgroundColor: '#000' }}>
-                    <video
-                      src={getImageUrl(videoUrl)}
-                      controls
-                      preload="metadata"
-                      style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block' }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeVideo(index)}
-                      style={{
-                        position: 'absolute', top: '4px', right: '4px',
-                        width: '20px', height: '20px', borderRadius: '50%',
-                        backgroundColor: 'rgba(0,0,0,0.65)', color: 'white',
-                        border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', zIndex: 2,
-                      }}
-                      title="Xóa video này"
-                    >
-                      <X size={11} />
-                    </button>
+                {/* Uploaded Images Preview */}
+                {prodImages.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '12px', marginTop: '8px' }}>
+                    {prodImages.map((imgUrl, index) => (
+                      <div key={index} style={{ width: '80px', height: '80px', borderRadius: '6px', overflow: 'hidden', position: 'relative', border: '1px solid var(--color-light-border)' }}>
+                        <img
+                          src={getImageUrl(imgUrl)}
+                          alt={`preview-${index}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          style={{
+                            position: 'absolute', top: '2px', right: '2px',
+                            width: '18px', height: '18px', borderRadius: '50%',
+                            backgroundColor: 'rgba(0,0,0,0.6)', color: 'white',
+                            border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer', fontSize: '10px'
+                          }}
+                          title="Xóa hình này"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>
 
-          </>
+              {/* Video Upload (tuỳ chọn) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>VIDEO GIỚI THIỆU (TÙY CHỌN)</label>
+                <div
+                  style={{
+                    border: '2px dashed var(--color-light-border)',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    textAlign: 'center',
+                    backgroundColor: 'var(--color-light-bg)',
+                    cursor: 'pointer',
+                    transition: 'var(--transition-smooth)',
+                  }}
+                  onClick={() => document.getElementById('product-video-upload')?.click()}
+                >
+                  <input
+                    id="product-video-upload"
+                    type="file"
+                    multiple
+                    accept="video/mp4,video/webm,video/quicktime"
+                    onChange={handleVideoChange}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                    <Play size={22} style={{ color: 'var(--color-text-secondary)', opacity: 0.7 }} />
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                      {uploadingVideos ? 'Đang tải video lên máy chủ...' : 'Click để chọn video từ máy của bạn'}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Hỗ trợ MP4, WEBM, MOV (Tối đa 50MB / video · tối đa 2 video)</span>
+                  </div>
+                </div>
+
+                {prodVideos.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', marginTop: '8px' }}>
+                    {prodVideos.map((videoUrl, index) => (
+                      <div key={index} style={{ position: 'relative', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-light-border)', backgroundColor: '#000' }}>
+                        <video
+                          src={getImageUrl(videoUrl)}
+                          controls
+                          preload="metadata"
+                          style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeVideo(index)}
+                          style={{
+                            position: 'absolute', top: '4px', right: '4px',
+                            width: '20px', height: '20px', borderRadius: '50%',
+                            backgroundColor: 'rgba(0,0,0,0.65)', color: 'white',
+                            border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer', zIndex: 2,
+                          }}
+                          title="Xóa video này"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </>
           )}
 
           {wizardStep === 2 && (
-          <>
-          {editingProduct ? (
-            <div style={{ padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Biến thể & tồn kho hiện có</p>
-                <button type="button" onClick={() => { setAddInvProductId(editingProduct._id); setIsAddInventoryOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}>
-                  <Plus size={13} /> Nhập thêm hàng
-                </button>
-              </div>
-              {editInvSummary.length === 0 ? (
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {(prodSizes || []).map(sz => (<span key={'s' + sz} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{sz}</span>))}
-                  {(prodColors || []).map(c => (<span key={'c' + c} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{colorLabels[c] || c}</span>))}
-                  {(prodMaterials || []).map(m => (<span key={'m' + m} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{materialLabels[m] || m}</span>))}
+            <>
+              {editingProduct ? (
+                <div style={{ padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Biến thể & tồn kho hiện có</p>
+                    <button type="button" onClick={() => { setAddInvProductId(editingProduct._id); setIsAddInventoryOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, backgroundColor: 'var(--color-primary)', color: 'white', cursor: 'pointer' }}>
+                      <Plus size={13} /> Nhập thêm hàng
+                    </button>
+                  </div>
+                  {editInvSummary.length === 0 ? (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {(prodSizes || []).map(sz => (<span key={'s' + sz} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{sz}</span>))}
+                      {(prodColors || []).map(c => (<span key={'c' + c} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{colorLabels[c] || c}</span>))}
+                      {(prodMaterials || []).map(m => (<span key={'m' + m} style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white', fontSize: '11px', fontWeight: 700 }}>{materialLabels[m] || m}</span>))}
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid var(--color-light-border)', color: 'var(--color-text-secondary)' }}>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>KÍCH CỠ</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>MÀU</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>CHẤT LIỆU</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>TỔNG</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>KHẢ DỤNG</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>THAO TÁC</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {editInvSummary.map((row: any, idx: number) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
+                              <td style={{ padding: '8px 12px', fontWeight: 600 }}>{row.size}</td>
+                              <td style={{ padding: '8px 12px', fontWeight: 600 }}>{colorLabels[row.color] || row.color}</td>
+                              <td style={{ padding: '8px 12px' }}>{materialLabels[row.material] || row.material || '—'}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>{row.total}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{row.available}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                  <button
+                                    type="button"
+                                    disabled={variantBusy}
+                                    onClick={() => { setVariantEditRow(row); setVariantEditQty(String(row.total)); }}
+                                    style={{ padding: '5px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1 }}
+                                  >
+                                    Sửa số lượng
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={variantBusy}
+                                    onClick={() => handleRemoveVariant(row)}
+                                    style={{ padding: '5px 10px', border: '1px solid #FECACA', borderRadius: '4px', backgroundColor: '#FEF2F2', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px', color: '#DC2626', opacity: variantBusy ? 0.5 : 1 }}
+                                  >
+                                    Xoá
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                    Nhập thêm hàng và sửa/xoá biến thể là thao tác trên KHO — có hiệu lực ngay, không chờ bấm "Lưu thay đổi". Nhập nhầm thì bấm Xoá ngay tại dòng đó.
+                    Trạng thái giặt / bảo trì / thanh lý của từng chiếc quản lý ở tab Tồn kho.
+                  </p>
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto', borderRadius: '6px', border: '1px solid var(--color-light-border)', backgroundColor: 'white' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--color-light-border)', color: 'var(--color-text-secondary)' }}>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>SIZE</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>MÀU</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>CHẤT LIỆU</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>TỔNG</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>KHẢ DỤNG</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>THAO TÁC</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {editInvSummary.map((row: any, idx: number) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
-                          <td style={{ padding: '8px 12px', fontWeight: 600 }}>{row.size}</td>
-                          <td style={{ padding: '8px 12px', fontWeight: 600 }}>{colorLabels[row.color] || row.color}</td>
-                          <td style={{ padding: '8px 12px' }}>{materialLabels[row.material] || row.material || '—'}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>{row.total}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{row.available}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                              <button
-                                type="button"
-                                disabled={variantBusy}
-                                onClick={() => { setVariantEditRow(row); setVariantEditQty(String(row.total)); }}
-                                style={{ padding: '5px 10px', border: '1px solid var(--color-light-border)', borderRadius: '4px', backgroundColor: 'white', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px', color: 'var(--color-primary)', opacity: variantBusy ? 0.5 : 1 }}
-                              >
-                                Sửa số lượng
-                              </button>
-                              <button
-                                type="button"
-                                disabled={variantBusy}
-                                onClick={() => handleRemoveVariant(row)}
-                                style={{ padding: '5px 10px', border: '1px solid #FECACA', borderRadius: '4px', backgroundColor: '#FEF2F2', cursor: variantBusy ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '11px', color: '#DC2626', opacity: variantBusy ? 0.5 : 1 }}
-                              >
-                                Xoá
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div>
+                  <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '0 0 10px' }}>Mỗi dòng là một biến thể (khác màu / chất liệu / số lượng). Kho sẽ tự sinh theo số lượng.</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', fontSize: '10.5px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', padding: '0 2px 6px' }}>
+                    <span>Kích cỡ</span><span>Màu</span><span>Chất liệu</span><span>SL</span><span>Tình trạng</span><span></span>
+                  </div>
+                  {variants.map((v, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                      <select value={v.size} onChange={e => updateVariantRow(idx, 'size', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                        {sizesOptions.map(sz => (<option key={sz} value={sz}>{sz}</option>))}
+                      </select>
+                      <select value={v.color} onChange={e => updateVariantRow(idx, 'color', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                        {colorsOptions.map(c => (<option key={c} value={c}>{colorLabels[c] || c}</option>))}
+                      </select>
+                      <select value={v.material} onChange={e => updateVariantRow(idx, 'material', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                        {materialsOptions.map(m => (<option key={m} value={m}>{materialLabels[m] || m}</option>))}
+                      </select>
+                      <input type="number" min={1} value={v.quantity} onChange={e => updateVariantRow(idx, 'quantity', Math.max(1, Number(e.target.value) || 1))} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }} />
+                      <select value={v.condition} onChange={e => updateVariantRow(idx, 'condition', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
+                        {conditionOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                      </select>
+                      <button type="button" onClick={() => removeVariantRow(idx)} title="Xóa dòng" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                    <button type="button" onClick={addVariantRow} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px dashed var(--color-primary)', background: 'white', color: 'var(--color-primary)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
+                      <Plus size={14} /> Thêm dòng biến thể
+                    </button>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Tổng kho: {variants.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)} chiếc · {variants.length} biến thể</span>
+                  </div>
                 </div>
               )}
-              <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                Nhập thêm hàng và sửa/xoá biến thể là thao tác trên KHO — có hiệu lực ngay, không chờ bấm "Lưu thay đổi". Nhập nhầm thì bấm Xoá ngay tại dòng đó.
-                Trạng thái giặt / bảo trì / thanh lý của từng chiếc quản lý ở tab Tồn kho.
-              </p>
-            </div>
-          ) : (
-            <div>
-              <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '0 0 10px' }}>Mỗi dòng là một biến thể (khác màu / chất liệu / số lượng). Kho sẽ tự sinh theo số lượng.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', fontSize: '10.5px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', padding: '0 2px 6px' }}>
-                <span>Size</span><span>Màu</span><span>Chất liệu</span><span>SL</span><span>Tình trạng</span><span></span>
-              </div>
-              {variants.map((v, idx) => (
-                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr 0.7fr 1.2fr 30px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
-                  <select value={v.size} onChange={e => updateVariantRow(idx, 'size', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
-                    {sizesOptions.map(sz => (<option key={sz} value={sz}>{sz}</option>))}
-                  </select>
-                  <select value={v.color} onChange={e => updateVariantRow(idx, 'color', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
-                    {colorsOptions.map(c => (<option key={c} value={c}>{colorLabels[c] || c}</option>))}
-                  </select>
-                  <select value={v.material} onChange={e => updateVariantRow(idx, 'material', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
-                    {materialsOptions.map(m => (<option key={m} value={m}>{materialLabels[m] || m}</option>))}
-                  </select>
-                  <input type="number" min={1} value={v.quantity} onChange={e => updateVariantRow(idx, 'quantity', Math.max(1, Number(e.target.value) || 1))} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }} />
-                  <select value={v.condition} onChange={e => updateVariantRow(idx, 'condition', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none', backgroundColor: 'white', width: '100%' }}>
-                    {conditionOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
-                  </select>
-                  <button type="button" onClick={() => removeVariantRow(idx)} title="Xóa dòng" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <X size={16} />
-                  </button>
-                </div>
-              ))}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-                <button type="button" onClick={addVariantRow} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px dashed var(--color-primary)', background: 'white', color: 'var(--color-primary)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
-                  <Plus size={14} /> Thêm dòng biến thể
-                </button>
-                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Tổng kho: {variants.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)} chiếc · {variants.length} biến thể</span>
-              </div>
-            </div>
-          )}
 
-          {/* Ảnh theo màu — mỗi màu khác nhau một ô, không phụ thuộc size nên không phải tải lặp */}
-          {colorsNeedingImages().length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
-              <div>
-                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>ẢNH THEO MÀU</p>
-                <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                  Khách đổi màu ở trang sản phẩm thì ảnh đổi theo. Màu nào bỏ trống sẽ dùng ảnh chung ở bước 1.
-                </p>
-              </div>
-
-              {colorsNeedingImages().map(color => {
-                const shots = prodColorImages[color] || [];
-                const busy = uploadingColor === color;
-                return (
-                  <div key={`ci-${color}`} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', borderRadius: '8px', border: '1px solid var(--color-light-border)', backgroundColor: 'white' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', fontWeight: 700 }}>
-                        <span style={{ width: '14px', height: '14px', borderRadius: '50%', border: '1px solid var(--color-light-border)', backgroundColor: colorSwatches[color] || '#D4D4D8' }} />
-                        {colorLabels[color] || color}
-                        {shots.length === 0 && (
-                          <span style={{ fontSize: '11px', fontWeight: 600, color: '#B45309' }}>— chưa có ảnh riêng</span>
-                        )}
-                      </span>
-                      <label style={{ padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700, color: 'var(--color-primary)', backgroundColor: 'white', cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
-                        {busy ? 'Đang tải...' : '+ Thêm ảnh'}
-                        <input type="file" accept="image/*" multiple hidden disabled={busy} onChange={e => handleColorImageChange(color, e)} />
-                      </label>
-                    </div>
-
-                    {shots.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {shots.map((url, idx) => (
-                          <div key={`${color}-${url}-${idx}`} style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-light-border)' }}>
-                            <img src={getImageUrl(url)} alt={`${color} ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            <button
-                              type="button"
-                              onClick={() => removeColorImage(color, idx)}
-                              style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', border: 'none', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '11px', lineHeight: 1, cursor: 'pointer' }}
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+              {/* Ảnh theo màu — mỗi màu khác nhau một ô, không phụ thuộc size nên không phải tải lặp */}
+              {colorsNeedingImages().length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: 'var(--color-light-bg)' }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>ẢNH THEO MÀU</p>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                      Khách đổi màu ở trang sản phẩm thì ảnh đổi theo. Màu nào bỏ trống sẽ dùng ảnh chung ở bước 1.
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          )}
-          </>
+
+                  {colorsNeedingImages().map(color => {
+                    const shots = prodColorImages[color] || [];
+                    const busy = uploadingColor === color;
+                    return (
+                      <div key={`ci-${color}`} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', borderRadius: '8px', border: '1px solid var(--color-light-border)', backgroundColor: 'white' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', fontWeight: 700 }}>
+                            <span style={{ width: '14px', height: '14px', borderRadius: '50%', border: '1px solid var(--color-light-border)', backgroundColor: colorSwatches[color] || '#D4D4D8' }} />
+                            {colorLabels[color] || color}
+                            {shots.length === 0 && (
+                              <span style={{ fontSize: '11px', fontWeight: 600, color: '#B45309' }}>— chưa có ảnh riêng</span>
+                            )}
+                          </span>
+                          <label style={{ padding: '6px 12px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700, color: 'var(--color-primary)', backgroundColor: 'white', cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+                            {busy ? 'Đang tải...' : '+ Thêm ảnh'}
+                            <input type="file" accept="image/*" multiple hidden disabled={busy} onChange={e => handleColorImageChange(color, e)} />
+                          </label>
+                        </div>
+
+                        {shots.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {shots.map((url, idx) => (
+                              <div key={`${color}-${url}-${idx}`} style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-light-border)' }}>
+                                <img src={getImageUrl(url)} alt={`${color} ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <button
+                                  type="button"
+                                  onClick={() => removeColorImage(color, idx)}
+                                  style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', border: 'none', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '11px', lineHeight: 1, cursor: 'pointer' }}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
 
           {wizardStep === 3 && (
-          <>
-          <SmartTagEditor
-            productId={editingProduct?._id ?? createdDraftId ?? undefined}
-            initialDecisionVersion={editingProduct?.taggingDecisionVersion}
-            onActiveTagsChange={setActiveTagCodes}
-          />
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
-            {editingProduct
-              ? 'Trường phái & dịp lễ của sản phẩm được suy tự động từ các thẻ đã chọn.'
-              : 'Bấm "Tạo gợi ý", chọn thẻ phù hợp (cần ít nhất 1 thẻ). Trường phái & dịp lễ sẽ được suy tự động từ thẻ.'}
-          </p>
-          </>
+            <>
+              <SmartTagEditor
+                productId={editingProduct?._id ?? createdDraftId ?? undefined}
+                initialDecisionVersion={editingProduct?.taggingDecisionVersion}
+                onActiveTagsChange={setActiveTagCodes}
+              />
+              <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
+                {editingProduct
+                  ? 'Trường phái & dịp lễ của sản phẩm được suy tự động từ các thẻ đã chọn.'
+                  : 'Bấm "Tạo gợi ý", chọn thẻ phù hợp (cần ít nhất 1 thẻ). Trường phái & dịp lễ sẽ được suy tự động từ thẻ.'}
+              </p>
+            </>
           )}
 
           {/* Dieu huong wizard */}
@@ -4424,112 +6637,247 @@ export const ProviderDashboard: React.FC = () => {
       )}
 
       {/* Report incident modal popup */}
-      {reportingOrder && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-          <form onSubmit={handleSendIncidentReport} style={{ width: '100%', maxWidth: '500px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
-            <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>BÁO CÁO SỰ CỐ / HỎNG ĐỒ</h4>
-              <button type="button" onClick={() => setReportingOrder(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
-            </div>
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '80vh', overflowY: 'auto' }}>
+      {reportingOrder && (() => {
+        const isReportingPhotoOrder = reportingOrder.bookingType === 'PHOTOGRAPHY' || reportingOrder.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+            <form onSubmit={handleSendIncidentReport} style={{ width: '100%', maxWidth: '500px', backgroundColor: 'white', borderRadius: '16px', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}>
+              <div style={{ padding: '16px 24px', backgroundColor: 'var(--color-dark-bg)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '15px', fontWeight: 700, margin: 0 }}>{isReportingPhotoOrder ? 'BÁO CÁO KHÁCH HÀNG' : 'BÁO CÁO SỰ CỐ / HỎNG ĐỒ'}</h4>
+                <button type="button" onClick={() => setReportingOrder(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+              </div>
+              <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '80vh', overflowY: 'auto' }}>
 
-              {/* Chọn sản phẩm bị hỏng */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>SẢN PHẨM GẶP SỰ CỐ *</span>
-                <select
-                  value={selectedItemId}
-                  onChange={(e) => setSelectedItemId(e.target.value)}
-                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none' }}
-                  required
+                {/* Pickup Damage Report Warning */}
+                {!isReportingPhotoOrder && reportingOrder.pickupDamageReport && (
+                  <div style={{
+                    backgroundColor: '#FEF9E7',
+                    border: '1px solid #F5CBA7',
+                    borderRadius: '10px',
+                    padding: '12px 16px',
+                    fontSize: '13px',
+                    color: '#7E5109',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                      <AlertTriangle size={15} style={{ color: '#D35400' }} />
+                      <span>Chú ý: Khách hàng đã báo lỗi khi nhận đồ!</span>
+                    </div>
+                    <div style={{ fontSize: '12px' }}>
+                      <strong>Mô tả của khách:</strong> {reportingOrder.pickupDamageReport.description}
+                    </div>
+                    {reportingOrder.pickupDamageReport.evidencePhotos && reportingOrder.pickupDamageReport.evidencePhotos.length > 0 && (
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                        {reportingOrder.pickupDamageReport.evidencePhotos.map((photo: string, index: number) => (
+                          <a key={index} href={photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`} target="_blank" rel="noreferrer" style={{ width: '45px', height: '45px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #F5CBA7' }}>
+                            <img src={photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`} alt="Evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    <strong style={{ fontSize: '11px', color: '#C0392B', marginTop: '4px' }}>
+                      * Vui lòng đối soát kỹ và không phạt tiền đối với các vết bẩn/hỏng hóc khách hàng đã khai báo ở trên.
+                    </strong>
+                  </div>
+                )}
+
+                {/* Chọn sản phẩm / Gói chụp */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{isReportingPhotoOrder ? 'GÓI CHỤP GẶP SỰ CỐ *' : 'SẢN PHẨM GẶP SỰ CỐ *'}</span>
+                  <select
+                    value={selectedItemId}
+                    onChange={(e) => setSelectedItemId(e.target.value)}
+                    style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', outline: 'none' }}
+                    required
+                  >
+                    <option value="">{isReportingPhotoOrder ? '-- Chọn gói chụp trong đơn hàng --' : '-- Chọn sản phẩm trong đơn hàng --'}</option>
+                    {(reportingOrder.items || []).map((item: any) => (
+                      <option key={item._id} value={item._id}>
+                        {item.name || 'Gói chụp / Sản phẩm'} ({item.quantity}x - {item.unitPrice?.toLocaleString()}đ)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Loại xử lý */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>HÌNH THỨC XỬ LÝ *</span>
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    {isReportingPhotoOrder ? (
+                      <>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                          <input
+                            type="radio"
+                            name="actionType"
+                            value="NO_SHOW"
+                            checked={incidentActionType === 'NO_SHOW'}
+                            onChange={() => setIncidentActionType('NO_SHOW')}
+                          />
+                          Khách vắng mặt / Không đến (NO_SHOW)
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                          <input
+                            type="radio"
+                            name="actionType"
+                            value="VIOLATION"
+                            checked={incidentActionType === 'VIOLATION'}
+                            onChange={() => setIncidentActionType('VIOLATION')}
+                          />
+                          Vi phạm quy định / Tranh chấp (VIOLATION)
+                        </label>
+                      </>
+                    ) : (
+                      <>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                          <input
+                            type="radio"
+                            name="actionType"
+                            value="CLEANING"
+                            checked={incidentActionType === 'CLEANING'}
+                            onChange={() => setIncidentActionType('CLEANING')}
+                          />
+                          Giặt là vết bẩn (CLEANING)
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                          <input
+                            type="radio"
+                            name="actionType"
+                            value="MAINTENANCE"
+                            checked={incidentActionType === 'MAINTENANCE'}
+                            onChange={() => setIncidentActionType('MAINTENANCE')}
+                          />
+                          Sửa chữa / Đền bù rách, hỏng (MAINTENANCE)
+                        </label>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Mô tả chi tiết */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{isReportingPhotoOrder ? 'MÔ TẢ CHI TIẾT SỰ CỐ TỪ KHÁCH HÀNG *' : 'MÔ TẢ CHI TIẾT SỰ CỐ *'}</span>
+                  <textarea
+                    style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none', resize: 'none', height: '80px', fontFamily: 'inherit' }}
+                    placeholder={isReportingPhotoOrder ? 'Nhập chi tiết sự cố từ phía khách hàng (không xuất hiện, trễ giờ quá quy định, hủy ngang...)...' : 'Nhập chi tiết vết bẩn hoặc vị trí rách hỏng của sản phẩm...'}
+                    value={incidentDesc}
+                    onChange={(e) => setIncidentDesc(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {/* Ảnh bằng chứng */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{isReportingPhotoOrder ? 'ẢNH CHỤP BẰNG CHỨNG (NẾU CÓ)' : 'ẢNH CHỤP BẰNG CHỨNG HỎNG HÓC *'}</span>
+
+                  <label htmlFor="incident-photo-file" style={{
+                    border: '2px dashed #D1D5DB',
+                    borderRadius: '12px',
+                    backgroundColor: '#F9FAFB',
+                    padding: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    gap: '8px',
+                    transition: 'all 0.2s ease-in-out'
+                  }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--color-primary-dark)';
+                      e.currentTarget.style.backgroundColor = '#FFFDF9';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.borderColor = '#D1D5DB';
+                      e.currentTarget.style.backgroundColor = '#F9FAFB';
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8C827A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#4B5563' }}>Tải ảnh bằng chứng lên</span>
+                    <span style={{ fontSize: '11px', color: '#9CA3AF' }}>{isReportingPhotoOrder ? 'Chọn ảnh bằng chứng (tin nhắn, lịch sử gọi...)' : 'Chọn một hoặc nhiều hình ảnh vết bẩn, rách'}</span>
+                    <input
+                      id="incident-photo-file"
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleIncidentPhotoUpload}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+
+                  {incidentPhotos.length > 0 && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px', padding: '8px', backgroundColor: '#F3F4F6', borderRadius: '8px' }}>
+                      {incidentPhotos.map((photo, index) => {
+                        const url = photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`;
+                        return (
+                          <div key={index} style={{ position: 'relative', width: '56px', height: '56px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #D1D5DB' }}>
+                            <PrivateEvidenceImage
+                              reference={photo}
+                              legacyUrl={url}
+                              alt="Incident preview"
+                              linkStyle={{ display: 'block', width: '100%', height: '100%' }}
+                              imageStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setIncidentPhotos(prev => prev.filter((_, i) => i !== index))}
+                              style={{
+                                position: 'absolute',
+                                top: '2px',
+                                right: '2px',
+                                width: '16px',
+                                height: '16px',
+                                borderRadius: '50%',
+                                backgroundColor: 'rgba(0,0,0,0.6)',
+                                color: 'white',
+                                border: 'none',
+                                fontSize: '10px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: 0
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Số tiền yêu cầu đền bù */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{isReportingPhotoOrder ? 'SỐ TIỀN YÊU CẦU BỒI THƯỜNG (NẾU CÓ)' : 'TIỀN ĐỀN BÙ YÊU CẦU *'}</span>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)' }}>Tối đa cọc: {reportingOrder.depositTotal?.toLocaleString()}đ</span>
+                  </div>
+                  <input
+                    type="number"
+                    style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none' }}
+                    placeholder="Nhập số tiền yêu cầu đền bù..."
+                    value={incidentAmount}
+                    onChange={(e) => setIncidentAmount(Number(e.target.value))}
+                    min={0}
+                    max={reportingOrder.depositTotal}
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em', marginTop: '8px' }}
                 >
-                  <option value="">-- Chọn sản phẩm trong đơn hàng --</option>
-                  {(reportingOrder.items || []).map((item: any) => (
-                    <option key={item._id} value={item._id}>
-                      {item.name || 'Sản phẩm'} ({item.quantity}x - {item.unitPrice?.toLocaleString()}đ)
-                    </option>
-                  ))}
-                </select>
+                  {isReportingPhotoOrder ? 'GỬI BÁO CÁO KHÁCH HÀNG' : 'GỬI BÁO CÁO SỰ CỐ'}
+                </button>
               </div>
-
-              {/* Loại xử lý */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>HÌNH THỨC XỬ LÝ *</span>
-                <div style={{ display: 'flex', gap: '16px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                    <input
-                      type="radio"
-                      name="actionType"
-                      value="CLEANING"
-                      checked={incidentActionType === 'CLEANING'}
-                      onChange={() => setIncidentActionType('CLEANING')}
-                    />
-                    Giặt là vết bẩn (CLEANING)
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                    <input
-                      type="radio"
-                      name="actionType"
-                      value="MAINTENANCE"
-                      checked={incidentActionType === 'MAINTENANCE'}
-                      onChange={() => setIncidentActionType('MAINTENANCE')}
-                    />
-                    Sửa chữa / Đền bù rách, hỏng (MAINTENANCE)
-                  </label>
-                </div>
-              </div>
-
-              {/* Mô tả chi tiết */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>MÔ TẢ CHI TIẾT SỰ CỐ *</span>
-                <textarea
-                  style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none', resize: 'none', height: '80px', fontFamily: 'inherit' }}
-                  placeholder="Nhập chi tiết vết bẩn hoặc vị trí rách hỏng của sản phẩm..."
-                  value={incidentDesc}
-                  onChange={(e) => setIncidentDesc(e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* Ảnh bằng chứng */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>ẢNH CHỤP BẰNG CHỨNG (CÁCH NHAU BẰNG DẤU PHẨY)</span>
-                <input
-                  type="text"
-                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '13px', outline: 'none' }}
-                  placeholder="Link ảnh bằng chứng 1, Link ảnh bằng chứng 2..."
-                  value={incidentEvidence}
-                  onChange={(e) => setIncidentEvidence(e.target.value)}
-                />
-              </div>
-
-              {/* Số tiền yêu cầu đền bù */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>TIỀN ĐỀN BÙ YÊU CẦU *</span>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)' }}>Tối đa cọc giữ đồ: {reportingOrder.depositTotal?.toLocaleString()}đ</span>
-                </div>
-                <input
-                  type="number"
-                  style={{ padding: '10px', borderRadius: '6px', border: '1px solid var(--color-light-border)', fontSize: '14px', outline: 'none' }}
-                  placeholder="Nhập số tiền yêu cầu đền bù..."
-                  value={incidentAmount}
-                  onChange={(e) => setIncidentAmount(Number(e.target.value))}
-                  min={0}
-                  max={reportingOrder.depositTotal}
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                style={{ width: '100%', padding: '12px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em', marginTop: '8px' }}
-              >
-                GỬI BÁO CÁO SỰ CỐ
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+            </form>
+          </div>
+        );
+      })()}
 
       {/* Rate customer modal popup */}
       {ratingBooking && (
