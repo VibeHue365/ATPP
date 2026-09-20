@@ -1,0 +1,2 @@
+import { useEffect,useState } from 'react';import { photographerApi } from '@/apis/photographerApi';import type { Photographer } from '@/types/photographer';
+export function useFeaturedPhotographers(limit=2){const [items,setItems]=useState<Photographer[]>([]);const [loading,setLoading]=useState(true);useEffect(()=>{let active=true;photographerApi.list({page:1,limit,sort:'rating_desc'}).then(value=>{if(active)setItems(value.data??[])}).catch(()=>{}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[limit]);return{items,loading}}
