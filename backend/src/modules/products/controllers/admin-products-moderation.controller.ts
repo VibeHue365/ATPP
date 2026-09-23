@@ -30,9 +30,7 @@ export class AdminProductsModerationController {
   @Get('moderation')
   @Permissions('moderation:read')
   findQueue(@Query() query: QueryModerationProductsDto) {
-    return this.productsService.getModerationQueue(
-      query.status ?? ProductModerationStatus.PendingReview,
-    );
+    return this.productsService.getEnhancedModerationList(query);
   }
 
   @Patch(':id/moderation')

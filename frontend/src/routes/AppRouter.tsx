@@ -84,9 +84,6 @@ export const AppRouter: React.FC = () => {
   return (
     <Suspense fallback={<PageFallbackLoader />}>
       <Routes>
-        {/* Onboarding Page */}
-        <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
-
         {/* Provider Dashboard */}
         <Route path={ROUTES.PROVIDER_DASHBOARD} element={<ProviderDashboard />} />
 
@@ -125,6 +122,8 @@ export const AppRouter: React.FC = () => {
 
         {/* Private Profile Pages guarded by ProtectedRoute under MainLayout */}
         <Route element={<ProtectedRoute />}>
+          {/* Onboarding is account-specific and saves preferences to /users/me. */}
+          <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
           <Route element={<MainLayout />}>
             {/* Redirect /dashboard to /dashboard/profile */}
             <Route path={ROUTES.DASHBOARD} element={<Navigate to={ROUTES.PROFILE} replace />} />
@@ -138,9 +137,10 @@ export const AppRouter: React.FC = () => {
           </Route>
           {/* Admin Dashboard Page (No MainLayout header/footer) */}
           <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardRefactored />} />
-          {/* Parallel preview route: legacy dashboard remains the production route during refactor. */}
-          <Route path={ROUTES.ADMIN_DASHBOARD_REFACTORED} element={<AdminDashboardRefactored />} />
         </Route>
+
+        {/* Parallel preview route: allows previewing redesign directly */}
+        <Route path={ROUTES.ADMIN_DASHBOARD_REFACTORED} element={<AdminDashboardRefactored />} />
 
         {/* 404 Route Fallback */}
         <Route path="*" element={<NotFoundPage />} />

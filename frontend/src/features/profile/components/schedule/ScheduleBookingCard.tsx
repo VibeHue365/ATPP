@@ -57,19 +57,25 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
 
   // Status info
   const statusConfig: Record<string, { label: string; bg: string; color: string }> = {
-    CONFIRMED: { label: 'SẮP DIỄN RA', bg: '#EFF6FF', color: '#1D4ED8' },
-    DEPOSIT_PAID: { label: 'ĐÃ ĐẶT CỌC', bg: '#EBF5FB', color: '#2980B9' },
-    PENDING_PAYMENT: { label: 'CHỜ THANH TOÁN', bg: '#FEF3C7', color: '#B45309' },
+    CONFIRMED: { label: isPhoto ? 'SẮP CHỤP' : 'SẮP NHẬN', bg: '#EFF6FF', color: '#1D4ED8' },
+    DEPOSIT_PAID: { label: 'CHỜ DUYỆT', bg: '#FFFBEB', color: '#B45309' },
+    PENDING_PAYMENT: { label: 'CHỜ CỌC', bg: '#FEF3C7', color: '#B45309' },
     PICKUP_PENDING: { label: 'CHỜ NHẬN ĐỒ', bg: '#F5EEF8', color: '#8E44AD' },
-    PICKED_UP: { label: 'ĐANG THUÊ', bg: '#ECFDF5', color: '#047857' },
+    PICKED_UP: { label: isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ', bg: '#ECFDF5', color: '#047857' },
+    IN_PROGRESS: { label: isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ', bg: '#ECFDF5', color: '#047857' },
+    AWAITING_REVIEW: { label: 'CHỜ DUYỆT ẢNH', bg: '#FEF3C7', color: '#B45309' },
+    COMBO_PHOTOS_APPROVED: { label: 'ĐÃ DUYỆT ẢNH', bg: '#E0F2FE', color: '#0369A1' },
     RETURN_PENDING: { label: 'CHỜ TRẢ ĐỒ', bg: '#FEF9E7', color: '#F39C12' },
-    RETURNED: { label: 'ĐÃ TRẢ ĐỒ', bg: '#F2F4F4', color: '#574D4F' },
-    COMPLETED: { label: 'HOÀN THÀNH', bg: '#E8F8F5', color: '#27AE60' },
-    CANCELLED: { label: 'ĐÃ HỦY', bg: '#FDEDEC', color: '#C0392B' }
+    RETURNED: { label: isPhoto ? 'HOÀN TẤT' : 'ĐÃ TRẢ', bg: '#F2F4F4', color: '#574D4F' },
+    COMPLETED: { label: isPhoto ? 'HOÀN TẤT' : 'ĐÃ TRẢ', bg: '#E8F8F5', color: '#27AE60' },
+    CANCELLED: { label: 'ĐÃ HỦY', bg: '#FDEDEC', color: '#C0392B' },
+    DISPUTED: { label: 'TRANH CHẤP', bg: '#FEF2F2', color: '#DC2626' },
+    PARTIALLY_REFUNDED: { label: 'ĐÃ HOÀN TIỀN', bg: '#F3F4F6', color: '#4B5563' },
+    REFUNDED: { label: 'ĐÃ HOÀN TIỀN', bg: '#F3F4F6', color: '#4B5563' }
   };
 
   const currentStatus = statusConfig[booking.status] || {
-    label: booking.status,
+    label: booking.status || 'ĐANG XỬ LÝ',
     bg: '#F2F4F4',
     color: '#574D4F'
   };

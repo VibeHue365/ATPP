@@ -311,3 +311,5 @@ BookingSchema.index(
   },
 );
 BookingSchema.index({ providerIds: 1, status: 1, createdAt: -1 });
+BookingSchema.index({ createdAt: 1 });
+BookingSchema.index({ status: 1, createdAt: -1 });

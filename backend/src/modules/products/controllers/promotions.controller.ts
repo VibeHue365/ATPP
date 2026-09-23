@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -133,6 +134,20 @@ export class PromotionsController {
     const provider = await this.getProviderForUser(user.sub, user.email);
     await this.promotionsService.deletePromotion(id, provider._id.toString());
     return { success: true };
+  }
+
+  @Put(':id')
+  async update(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: Partial<CreatePromotionDto>,
+  ) {
+    const provider = await this.getProviderForUser(user.sub, user.email);
+    return this.promotionsService.updatePromotion(
+      id,
+      provider._id.toString(),
+      dto,
+    );
   }
 
   @Get('provider-promotions/:providerId')

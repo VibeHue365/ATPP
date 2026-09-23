@@ -88,7 +88,13 @@ export class RefundWorkflowService {
   }
 
   async listAdmin(status?: RefundStatus) {
-    return this.refundModel.find(status ? { status } : {}).sort({ createdAt: -1 }).populate('bookingId', 'bookingCode customerId').populate('requestedBy', 'fullName email').lean();
+    return this.refundModel
+      .find(status ? { status } : {})
+      .select('code amount status type version reason adminNotes bookingId requestedBy createdAt')
+      .sort({ createdAt: -1 })
+      .populate('bookingId', 'bookingCode customerId')
+      .populate('requestedBy', 'profile.fullName auth.email')
+      .lean();
   }
 
   async getMine(refundId: string, userId: string) {

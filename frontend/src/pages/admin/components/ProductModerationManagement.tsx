@@ -27,6 +27,12 @@ interface ProductItem {
   status: string;
   moderationStatus: ModerationStatus;
   moderationReason?: string | null;
+  customTags?: Array<{
+    label: string;
+    normalizedLabel: string;
+    status: "PENDING" | "APPROVED" | "REJECTED";
+    mappedTagCode?: string | null;
+  }>;
   updatedAt: string;
   categoryId?: { name?: string };
   providerId?: {
@@ -58,6 +64,7 @@ export const ProductModerationManagement: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
   const [preview, setPreview] = useState<ProductItem | null>(null);
+  const [approvedCustomTags, setApprovedCustomTags] = useState<string[]>([]);
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
 
   const fetchQueue = async (nextStatus = status) => {
@@ -83,6 +90,14 @@ export const ProductModerationManagement: React.FC = () => {
   useEffect(() => {
     void fetchQueue();
   }, [status]);
+
+  useEffect(() => {
+    setApprovedCustomTags(
+      (preview?.customTags || [])
+        .filter((tag) => tag.status !== "REJECTED")
+        .map((tag) => tag.normalizedLabel),
+    );
+  }, [preview]);
 
   const moderate = async (
     item: ProductItem,
@@ -120,6 +135,7 @@ export const ProductModerationManagement: React.FC = () => {
     try {
       await httpClient.patch(`/admin/products/${item._id}/moderation`, {
         action,
+        ...(action === "APPROVED" ? { approvedCustomTags } : {}),
         ...(requiresReason ? { reason: result.value.trim() } : {}),
       });
       toast.success("Đã cập nhật trạng thái kiểm duyệt");
@@ -986,6 +1002,47 @@ export const ProductModerationManagement: React.FC = () => {
             </div>
 
             <AdminSmartTagPanel entityType="PRODUCT" entityId={preview._id} />
+
+            {(preview.customTags?.length || 0) > 0 && (
+              <section style={{ borderTop: "1px solid #E8E2D5", paddingTop: "14px" }}>
+                <strong style={{ fontSize: "13px", color: "#44403c" }}>
+                  Tag do Provider đề xuất
+                </strong>
+                <p style={{ margin: "5px 0 10px", fontSize: "12px", lineHeight: 1.45, color: "#78716c" }}>
+                  Tag được chọn sẽ được duyệt cùng sản phẩm. Bỏ chọn để từ chối tag nhưng vẫn có thể duyệt sản phẩm.
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {preview.customTags!.map((tag) => {
+                    const checked = approvedCustomTags.includes(tag.normalizedLabel);
+                    return (
+                      <label
+                        key={tag.normalizedLabel}
+                        style={{ display: "inline-flex", alignItems: "center", gap: "7px", padding: "7px 10px", border: `1px solid ${checked ? "#86efac" : "#d6d3d1"}`, borderRadius: "999px", background: checked ? "#f0fdf4" : "white", color: checked ? "#166534" : "#57534e", fontSize: "12px", fontWeight: 700, cursor: preview.moderationStatus === "PENDING_REVIEW" ? "pointer" : "default" }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={preview.moderationStatus !== "PENDING_REVIEW"}
+                          onChange={() => {
+                            setApprovedCustomTags((current) =>
+                              checked
+                                ? current.filter((label) => label !== tag.normalizedLabel)
+                                : [...current, tag.normalizedLabel],
+                            );
+                          }}
+                        />
+                        {tag.label}
+                        {tag.status !== "PENDING" && (
+                          <span style={{ fontSize: "10px", color: tag.status === "APPROVED" ? "#166534" : "#991b1b" }}>
+                            {tag.status === "APPROVED" ? "Đã duyệt" : "Đã từ chối"}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             {/* Quick action buttons in modal */}
             {preview.moderationStatus === "PENDING_REVIEW" && (

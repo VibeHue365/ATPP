@@ -4,6 +4,8 @@ import {
   Get,
   Param,
   Patch,
+  Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -35,8 +37,33 @@ export class AdminProviderVerificationsController {
   ) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.providerVerificationService.adminList(user);
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('capability') capability?: string,
+    @Query('province') province?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.providerVerificationService.adminList(user, {
+      status,
+      search,
+      capability,
+      province,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Post(':id/notes')
+  @Permissions('provider:manage')
+  addNote(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body('content') content: string,
+  ) {
+    return this.providerVerificationService.addInternalNote(user, id, content);
   }
 
   @Get(':id')

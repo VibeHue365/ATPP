@@ -1,0 +1,4 @@
+import { type Href, Redirect, useGlobalSearchParams, usePathname } from 'expo-router';
+import { LoadingState } from '@/components/ui/ScreenState';
+import { useAuth } from '@/contexts/AuthContext';
+export function RequireAuth({children}:{children:React.ReactNode}){const {loading,isAuthenticated}=useAuth();const pathname=usePathname();const params=useGlobalSearchParams<Record<string,string|string[]>>();const query=new URLSearchParams();Object.entries(params).forEach(([key,value])=>{if(key!=='returnTo'&&value!==undefined)query.set(key,Array.isArray(value)?value[0]:value)});const returnTo=`${pathname}${query.size?`?${query.toString()}`:''}`;if(loading)return <LoadingState label="Đang kiểm tra phiên đăng nhập..."/>;if(!isAuthenticated)return <Redirect href={`/(auth)/login?returnTo=${encodeURIComponent(returnTo)}` as Href}/>;return children}

@@ -66,6 +66,7 @@ export interface UserProfile {
 export interface UserPreferences {
   stylePreferences: string[];
   favoriteColors: string[];
+  preferredMaterials: string[];
   preferredAoDaiStyles: string[];
   preferredPhotographyStyles: string[];
   sizeInfo: {
@@ -152,6 +153,9 @@ export class User {
   })
   auth: UserAuth;
 
+  @Prop({ type: String, trim: true, sparse: true, index: true })
+  userCode?: string;
+
   @Prop({ type: [String], default: ['CUSTOMER'], index: true })
   roles: string[];
 
@@ -183,6 +187,7 @@ export class User {
     type: {
       stylePreferences: { type: [String], default: [] },
       favoriteColors: { type: [String], default: [] },
+      preferredMaterials: { type: [String], default: [] },
       preferredAoDaiStyles: { type: [String], default: [] },
       preferredPhotographyStyles: { type: [String], default: [] },
       sizeInfo: {

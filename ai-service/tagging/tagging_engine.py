@@ -1,110 +1,150 @@
-import json
 import os
+import threading
 import time
-
-from google import genai
-from google.genai import types
+from typing import Protocol
 
 from .schemas import TaggingRequest, TaggingResponse, TagSuggestion
 
 
-PROMPT_VERSION = "smart-tag-v1"
-DEFAULT_GEMINI_TIMEOUT_MS = 6000
-MIN_CONFIDENCE = 0.65
+TAGGING_VERSION = "local-embedding-v2"
+DEFAULT_MODEL = "intfloat/multilingual-e5-small"
+DEFAULT_MIN_SIMILARITY = 0.87
+DEFAULT_TOP_K = 3
+
+
+class EmbeddingModel(Protocol):
+    def encode(self, sentences: list[str], **kwargs): ...
+
+
+_model: EmbeddingModel | None = None
+_model_name: str | None = None
+_model_lock = threading.Lock()
 
 
 def suggest_tags(request: TaggingRequest) -> TaggingResponse:
-    api_key = os.environ.get("GEMINI_API_KEY")
-    model = os.environ.get("SMART_TAG_GEMINI_MODEL", "gemini-3.5-flash")
-    if not api_key:
-        return TaggingResponse(
-            status="UNAVAILABLE",
-            suggestions=[],
-            model=model,
-            prompt_version=PROMPT_VERSION,
-            latency_ms=0,
-            error_code="MISSING_API_KEY",
-        )
-
-    allowed_codes = {tag.code for tag in request.allowed_tags}
-    prompt = build_prompt(request)
+    """Suggest allowlisted tags using only the entity title and description."""
     started = time.monotonic()
+    model_name = get_model_name()
+    product_text = normalize_text(f"{request.title}. {request.description}")
+    if not product_text:
+        return TaggingResponse(
+            status="SUCCESS",
+            suggestions=[],
+            model=model_name,
+            prompt_version=TAGGING_VERSION,
+            latency_ms=elapsed_ms(started),
+        )
+
     try:
-        client = genai.Client(
-            api_key=api_key,
-            http_options=types.HttpOptions(timeout=get_timeout_ms()),
+        model = get_model(model_name)
+        query = f"query: {product_text}"
+        passages = [
+            f"passage: {normalize_text(tag.description)}" for tag in request.allowed_tags
+        ]
+        vectors = model.encode(
+            [query, *passages],
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+            show_progress_bar=False,
         )
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
-        )
-        parsed = json.loads(response.text or "{}")
+        query_vector = vectors[0]
+        tag_vectors = vectors[1:]
+        scores = tag_vectors @ query_vector
     except Exception as error:
-        # Do not expose request content or API credentials in logs or responses.
-        print(f"[smart-tagging] Gemini request failed: {type(error).__name__}")
+        print(f"[smart-tagging] Local embedding unavailable: {type(error).__name__}")
         return TaggingResponse(
             status="UNAVAILABLE",
             suggestions=[],
-            model=model,
-            prompt_version=PROMPT_VERSION,
+            model=model_name,
+            prompt_version=TAGGING_VERSION,
             latency_ms=elapsed_ms(started),
-            error_code="GEMINI_REQUEST_FAILED",
+            error_code="LOCAL_EMBEDDING_UNAVAILABLE",
         )
 
-    suggestions: list[TagSuggestion] = []
-    for item in parsed.get("suggestions", []):
-        if not isinstance(item, dict):
+    ranked = sorted(
+        zip(request.allowed_tags, scores, strict=True),
+        key=lambda item: float(item[1]),
+        reverse=True,
+    )
+    threshold = get_min_similarity()
+    # Keep only the strongest semantic match in each taxonomy group. This
+    # prevents mutually exclusive style tags (for example TRUYEN_THONG and
+    # CACH_TAN) from being suggested together merely because their wording is
+    # similar. Ungrouped tags remain independently eligible for compatibility.
+    selected = []
+    selected_groups: set[str] = set()
+    for tag, score in ranked:
+        if float(score) < threshold:
             continue
-        code = item.get("code")
-        if not isinstance(code, str) or code not in allowed_codes:
+        if tag.group and tag.group in selected_groups:
             continue
-        try:
-            confidence = max(0.0, min(1.0, float(item.get("confidence", 0))))
-        except (TypeError, ValueError):
-            continue
-        if confidence < MIN_CONFIDENCE:
-            continue
-        suggestions.append(
-            TagSuggestion(
-                code=code,
-                confidence=confidence,
-                explanation=str(item.get("explanation", "AI suggestion"))[:500],
-            )
+        selected.append((tag, score))
+        if tag.group:
+            selected_groups.add(tag.group)
+        if len(selected) >= get_top_k():
+            break
+
+    suggestions = [
+        TagSuggestion(
+            code=tag.code,
+            confidence=round(max(0.0, min(1.0, float(score))), 4),
+            explanation=(
+                "Tên và mô tả sản phẩm có mức tương đồng ngữ nghĩa "
+                f"{max(0.0, min(1.0, float(score))):.2f} với thẻ {tag.code}."
+            ),
         )
+        for tag, score in selected
+    ]
 
     return TaggingResponse(
         status="SUCCESS",
         suggestions=suggestions,
-        model=model,
-        prompt_version=PROMPT_VERSION,
+        model=model_name,
+        prompt_version=TAGGING_VERSION,
         latency_ms=elapsed_ms(started),
     )
 
 
-def build_prompt(request: TaggingRequest) -> str:
-    return (
-        "Return JSON only: {\"suggestions\":[{\"code\":string,\"confidence\":number,"
-        "\"explanation\":string}]}. Select only codes from the provided allowlist. "
-        "Never infer sensitive attributes, pricing, or financial information.\n"
-        f"Entity: {request.entity_type}\n"
-        f"Title: {request.title}\n"
-        f"Description: {request.description}\n"
-        "Structured attributes: "
-        f"{json.dumps(request.structured_attributes, ensure_ascii=False)}\n"
-        "Allowed tags: "
-        f"{json.dumps([tag.model_dump() for tag in request.allowed_tags], ensure_ascii=False)}"
-    )
+def get_model(model_name: str) -> EmbeddingModel:
+    global _model, _model_name
+    if _model is not None and _model_name == model_name:
+        return _model
+
+    with _model_lock:
+        if _model is not None and _model_name == model_name:
+            return _model
+        from sentence_transformers import SentenceTransformer
+
+        local_only = os.environ.get("SMART_TAG_LOCAL_FILES_ONLY", "false").lower() == "true"
+        _model = SentenceTransformer(model_name, local_files_only=local_only)
+        _model_name = model_name
+        return _model
 
 
-def get_timeout_ms() -> int:
+def get_model_name() -> str:
+    return os.environ.get("SMART_TAG_EMBEDDING_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+
+
+def get_min_similarity() -> float:
     try:
-        configured = int(
-            os.environ.get("SMART_TAG_GEMINI_TIMEOUT_MS", DEFAULT_GEMINI_TIMEOUT_MS)
+        value = float(
+            os.environ.get("SMART_TAG_MIN_SIMILARITY", DEFAULT_MIN_SIMILARITY)
         )
     except ValueError:
-        return DEFAULT_GEMINI_TIMEOUT_MS
-    return min(max(configured, 1000), 30000)
+        return DEFAULT_MIN_SIMILARITY
+    return max(0.0, min(1.0, value))
+
+
+def get_top_k() -> int:
+    try:
+        value = int(os.environ.get("SMART_TAG_TOP_K", DEFAULT_TOP_K))
+    except ValueError:
+        return DEFAULT_TOP_K
+    return max(1, min(10, value))
+
+
+def normalize_text(value: str) -> str:
+    return " ".join(value.split()).strip()
 
 
 def elapsed_ms(started: float) -> int:

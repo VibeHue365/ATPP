@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, ForbiddenException, Query, Param, Patch } from '@nestjs/common';
+import { Controller, Get, UseGuards, ForbiddenException, Query, Param, Patch, Body } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -49,9 +49,24 @@ export class AdminStatsController {
     @CurrentUser() user: AuthUser,
     @Query('page') page = 1,
     @Query('limit') limit = 10,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('bookingType') bookingType?: string,
+    @Query('city') city?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
     this.checkAdminRole(user);
-    return this.adminStatsService.getAllBookings(+page, +limit);
+    return this.adminStatsService.getAllBookings(
+      +page,
+      +limit,
+      search,
+      status,
+      bookingType,
+      city,
+      startDate,
+      endDate,
+    );
   }
 
   @Get('transactions')
@@ -82,6 +97,17 @@ export class AdminStatsController {
   ) {
     this.checkAdminRole(user);
     return this.adminStatsService.unbanCustomer(id);
+  }
+
+  @Patch('bookings/:id/status')
+  async updateBookingStatus(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body('status') status: string,
+    @Body('note') note?: string,
+  ) {
+    this.checkAdminRole(user);
+    return this.adminStatsService.updateBookingStatus(id, status, note);
   }
 
   private checkAdminRole(user: AuthUser) {

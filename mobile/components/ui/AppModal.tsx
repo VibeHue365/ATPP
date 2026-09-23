@@ -1,0 +1,5 @@
+import { Modal, Pressable, StyleSheet, Text, View, type ModalProps } from 'react-native';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
+interface Props extends ModalProps { title:string; onClose:()=>void; }
+export function AppModal({title,onClose,children,...props}:Props){return <Modal transparent animationType="fade" onRequestClose={onClose} {...props}><View style={s.overlay}><Pressable style={StyleSheet.absoluteFill} onPress={onClose}/><View style={s.sheet}><View style={s.head}><Text style={s.title}>{title}</Text><Pressable onPress={onClose}><Text style={s.close}>✕</Text></Pressable></View>{children}</View></View></Modal>}
+const s=StyleSheet.create({overlay:{flex:1,justifyContent:'flex-end',backgroundColor:'#00000066'},sheet:{backgroundColor:Colors.surface,borderTopLeftRadius:Radius.xl,borderTopRightRadius:Radius.xl,padding:Spacing.xl,maxHeight:'88%'},head:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:Spacing.lg},title:{fontFamily:FontFamily.display,fontSize:21,color:Colors.text},close:{fontFamily:FontFamily.bodyMedium,fontSize:18,color:Colors.textSecondary}});

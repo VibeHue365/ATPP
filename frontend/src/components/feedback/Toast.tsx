@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 export interface ToastItem {
   id: string;
@@ -14,6 +14,7 @@ interface ToastContextType {
   error: (msg: string) => void;
   info: (msg: string) => void;
   remove: (id: string) => void;
+  show: (msg: string, type?: ToastType) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -44,10 +45,11 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const success = useCallback((msg: string) => add('success', msg), [add]);
   const error = useCallback((msg: string) => add('error', msg), [add]);
   const info = useCallback((msg: string) => add('info', msg), [add]);
+  const show = useCallback((msg: string, type: ToastType = 'info') => add(type, msg), [add]);
 
   const value = useMemo(
-    () => ({ success, error, info, remove }),
-    [success, error, info, remove],
+    () => ({ success, error, info, remove, show }),
+    [success, error, info, remove, show],
   );
 
   return (

@@ -44,8 +44,8 @@ describe('AiTaggingClientService', () => {
       ok: true,
       json: async () => ({
         status: 'SUCCESS',
-        model: 'gemini-test',
-        prompt_version: 'v1',
+        model: 'intfloat/multilingual-e5-small',
+        prompt_version: 'local-embedding-v1',
         latency_ms: 12,
         suggestions: [
           { code: 'TRUYEN_THONG', confidence: 1.2, explanation: 'matched' },
@@ -61,7 +61,14 @@ describe('AiTaggingClientService', () => {
 
     expect(result.status).toBe(SmartTagSourceStatus.Success);
     expect(result.suggestions).toEqual([
-      expect.objectContaining({ tagCode: 'TRUYEN_THONG', confidence: 1 }),
+      expect.objectContaining({
+        tagCode: 'TRUYEN_THONG',
+        confidence: 1,
+        modelMetadata: expect.objectContaining({
+          provider: 'local_embedding',
+          model: 'intfloat/multilingual-e5-small',
+        }),
+      }),
     ]);
   });
 

@@ -91,6 +91,12 @@ export class AuthController {
     return this.authService.logout(user.sub, user.sessionId);
   }
 
+  @Get('me/permissions')
+  @UseGuards(JwtAuthGuard)
+  getMePermissions(@CurrentUser() user: AuthUser): Promise<Record<string, unknown>> {
+    return this.authService.getPermissions(user.sub);
+  }
+
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
   changePassword(

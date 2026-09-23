@@ -403,7 +403,7 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
                             </button>
                           )}
 
-                          {row.booking.status === 'COMPLETED' && (
+                          {['COMPLETED', 'RETURNED'].includes(row.booking.status) && (
                             <button
                               type="button"
                               onClick={() => {

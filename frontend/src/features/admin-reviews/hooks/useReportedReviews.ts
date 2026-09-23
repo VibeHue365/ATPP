@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { adminReportedReviewsApi } from '../api/adminReportedReviewsApi';
-import type { ReportedReview } from '../types';
+import type { ReportedReview, ReportMetrics } from '../types';
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'Không thể tải báo cáo review.';
@@ -8,6 +8,7 @@ const getErrorMessage = (error: unknown) =>
 export function useReportedReviews() {
   const requestId = useRef(0);
   const [items, setItems] = useState<ReportedReview[]>([]);
+  const [metrics, setMetrics] = useState<ReportMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -17,8 +18,16 @@ export function useReportedReviews() {
     setError(null);
 
     try {
-      const reviews = await adminReportedReviewsApi.list();
-      if (currentRequestId === requestId.current) setItems(reviews);
+      const res = await adminReportedReviewsApi.list();
+      if (currentRequestId === requestId.current) {
+        if (Array.isArray(res)) {
+          setItems(res);
+        } else if (res && typeof res === 'object') {
+          const payload = res as any;
+          setItems(Array.isArray(payload.reviews) ? payload.reviews : []);
+          if (payload.metrics) setMetrics(payload.metrics);
+        }
+      }
     } catch (requestError) {
       if (currentRequestId === requestId.current) setError(getErrorMessage(requestError));
     } finally {
@@ -30,5 +39,5 @@ export function useReportedReviews() {
     void refresh();
   }, [refresh]);
 
-  return { error, items, loading, refresh };
+  return { error, items, metrics, loading, refresh };
 }

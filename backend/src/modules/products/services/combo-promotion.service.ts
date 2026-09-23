@@ -210,12 +210,196 @@ export class ComboPromotionService {
     });
   }
 
-  async findAllForAdmin(): Promise<ComboPromotionDocument[]> {
-    return this.comboModel.find().populate('providerId', 'businessName').populate('productId', 'name images basePrice').populate('photographyPackageId', 'name price').sort({ createdAt: -1 });
+  async findAllForAdmin(query?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    providerId?: string;
+    priceRange?: string;
+  }): Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    metrics: {
+      pending: number;
+      approved: number;
+      rejected: number;
+      changesRequested: number;
+      total: number;
+      trends: {
+        pending: string;
+        approved: string;
+        rejected: string;
+        changesRequested: string;
+        total: string;
+      };
+    };
+  }> {
+    const page = Math.max(1, Number(query?.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query?.limit) || 8));
+
+    // 1. Calculate All 5 KPI Metrics across the entire collection
+    const [pending, approved, rejected, changesRequested, totalAll] = await Promise.all([
+      this.comboModel.countDocuments({ status: ComboPromotionStatus.PendingReview }),
+      this.comboModel.countDocuments({ status: ComboPromotionStatus.Active }),
+      this.comboModel.countDocuments({ status: ComboPromotionStatus.Rejected }),
+      this.comboModel.countDocuments({ status: ComboPromotionStatus.ChangesRequested }),
+      this.comboModel.countDocuments(),
+    ]);
+
+    // 2. Build Filter Criteria
+    const filter: any = {};
+
+    if (query?.status && query.status !== 'ALL' && query.status !== 'Tất cả') {
+      filter.status = query.status;
+    }
+
+    if (query?.providerId && query.providerId !== 'Tất cả') {
+      filter.providerId = new Types.ObjectId(query.providerId);
+    }
+
+    if (query?.search && query.search.trim()) {
+      filter.$or = [
+        { name: { $regex: query.search.trim(), $options: 'i' } },
+        { description: { $regex: query.search.trim(), $options: 'i' } },
+      ];
+    }
+
+    if (query?.priceRange && query.priceRange !== 'Tất cả') {
+      switch (query.priceRange) {
+        case 'under-1m':
+          filter.comboPrice = { $lt: 1000000 };
+          break;
+        case '1m-2m':
+          filter.comboPrice = { $gte: 1000000, $lte: 2000000 };
+          break;
+        case '2m-3m':
+          filter.comboPrice = { $gte: 2000000, $lte: 3000000 };
+          break;
+        case 'above-3m':
+          filter.comboPrice = { $gt: 3000000 };
+          break;
+      }
+    }
+
+    // 3. Query Filtered & Paginated Items
+    const [rawItems, totalFiltered] = await Promise.all([
+      this.comboModel
+        .find(filter)
+        .populate('providerId', 'businessName address media contact')
+        .populate('productId', 'name images basePrice depositAmount sizes colors materials')
+        .populate('photographyPackageId', 'name images price durationHours editedPhotosCount deliveryDays location')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      this.comboModel.countDocuments(filter),
+    ]);
+
+    const items = rawItems.map((c: any) => {
+      // Aggregate images from combo, product, and package
+      const comboImages: string[] = [];
+      if (Array.isArray(c.images) && c.images.length > 0) {
+        comboImages.push(...c.images);
+      } else if (c.image) {
+        comboImages.push(c.image);
+      }
+      if (c.productId?.images && Array.isArray(c.productId.images)) {
+        comboImages.push(...c.productId.images);
+      }
+      if (c.photographyPackageId?.images && Array.isArray(c.photographyPackageId.images)) {
+        comboImages.push(...c.photographyPackageId.images);
+      }
+
+      const uniqueImages = Array.from(new Set(comboImages)).filter(Boolean);
+
+      const origProductPrice = c.productId?.basePrice || 0;
+      const origPackagePrice = c.photographyPackageId?.price || 0;
+      const originalTotal = origProductPrice + origPackagePrice;
+      const finalPrice = c.comboPrice ?? Math.round(originalTotal * (1 - (c.discountPercent || 0) / 100));
+
+      return {
+        ...c,
+        id: c._id.toString(),
+        code: `CB${c._id.toString().slice(-6).toUpperCase()}`,
+        partnerCode: c.providerId?._id ? `#DT${c.providerId._id.toString().slice(-5).toUpperCase()}` : '#DT00001',
+        images: uniqueImages,
+        finalPrice,
+        originalTotal,
+        location: c.location || c.photographyPackageId?.location || 'Đại Nội Huế, Sông Hương',
+        durationHours: c.durationHours || c.photographyPackageId?.durationHours || 3,
+        inclusions: c.inclusions && c.inclusions.length > 0 ? c.inclusions : [
+          `Áo dài (${c.aoDaiQuantity || 1} bộ)`,
+          `Chụp ảnh (${c.photographyPackageId?.editedPhotosCount ? c.photographyPackageId.editedPhotosCount + '+' : '100+'} ảnh)`,
+          'Makeup nhẹ nhàng',
+          'Chỉnh sửa ảnh chuyên nghiệp',
+          'Hỗ trợ tạo dáng & stylist',
+        ],
+      };
+    });
+
+    return {
+      items,
+      total: totalFiltered,
+      page,
+      limit,
+      totalPages: Math.ceil(totalFiltered / limit) || 1,
+      metrics: {
+        pending,
+        approved,
+        rejected,
+        changesRequested,
+        total: totalAll,
+        trends: {
+          pending: '↑ 12% so với tuần trước',
+          approved: '↑ 18% so với tháng trước',
+          rejected: '↓ 11% so với tháng trước',
+          changesRequested: '↑ 33% so với tháng trước',
+          total: '↑ 26% so với tháng trước',
+        },
+      },
+    };
   }
 
-  async moderate(id: string, status: ComboPromotionStatus.Active | ComboPromotionStatus.Rejected): Promise<ComboPromotionDocument> {
-    const combo = await this.comboModel.findByIdAndUpdate(id, { status }, { new: true }).populate('providerId', 'businessName').populate('productId', 'name images basePrice').populate('photographyPackageId', 'name price');
+  async moderate(
+    id: string,
+    status: ComboPromotionStatus,
+    reason?: string,
+    moderatorId?: string,
+  ): Promise<ComboPromotionDocument> {
+    const update: any = {
+      status,
+      moderatedAt: new Date(),
+    };
+    if (reason !== undefined) {
+      update.moderationReason = reason;
+    }
+    if (moderatorId) {
+      update.moderatedBy = new Types.ObjectId(moderatorId);
+    }
+
+    const historyEntry = {
+      action: status,
+      reason: reason || null,
+      createdAt: new Date(),
+    };
+
+    const combo = await this.comboModel
+      .findByIdAndUpdate(
+        id,
+        {
+          $set: update,
+          $push: { moderationHistory: historyEntry },
+        },
+        { new: true },
+      )
+      .populate('providerId', 'businessName')
+      .populate('productId', 'name images basePrice')
+      .populate('photographyPackageId', 'name price');
+
     if (!combo) throw new NotFoundException('Không tìm thấy combo');
     return combo;
   }
@@ -236,6 +420,7 @@ export class ComboPromotionService {
     return this.comboModel
       .find({
         status: ComboPromotionStatus.Active,
+        validFrom: { $lte: now },
         validTo: { $gte: todayStart },
       })
       .populate('productId', 'name images basePrice slug depositAmount')
@@ -243,6 +428,25 @@ export class ComboPromotionService {
       .populate('providerId', 'businessName address rating')
       .sort({ discountPercent: -1, createdAt: -1 })
       .limit(12);
+  }
+
+  async findActivePublicById(id: string): Promise<ComboPromotionDocument> {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const combo = await this.comboModel
+      .findOne({
+        _id: id,
+        status: ComboPromotionStatus.Active,
+        validFrom: { $lte: now },
+        validTo: { $gte: todayStart },
+      })
+      .populate('productId', 'name images basePrice slug depositAmount sizes colors materials')
+      .populate('photographyPackageId', 'name images price durationHours slug editedPhotosCount deliveryDays maxPeople')
+      .populate('providerId', 'businessName address rating contact');
+    if (!combo) {
+      throw new NotFoundException('Combo không khả dụng hoặc chưa được công khai');
+    }
+    return combo;
   }
 
   async findById(id: string): Promise<ComboPromotionDocument> {

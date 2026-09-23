@@ -79,12 +79,16 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
 
     bookings.forEach((b) => {
       (b.items || []).forEach((item: any, idx: number) => {
-        const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE';
-        const isCombo = item.itemType === 'COMBO' || (b.items && b.items.length > 1);
+        const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
+        const isCombo =
+          b.bookingType === 'COMBO' ||
+          item.itemType === 'COMBO' ||
+          (b.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
+            b.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
 
         // Check if matches activeCategory
-        if (activeCategory === 'RENTAL' && isPhoto) return;
-        if (activeCategory === 'PHOTOSHOOT' && !isPhoto) return;
+        if (activeCategory === 'RENTAL' && (isPhoto || isCombo)) return;
+        if (activeCategory === 'PHOTOSHOOT' && (!isPhoto || isCombo)) return;
         if (activeCategory === 'COMBO' && !isCombo) return;
 
         const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
@@ -133,13 +137,18 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
         }
 
         // Status configuration tailored by booking category
-        let statusLabel = 'HOÀN TẤT';
-        let statusSubtext = 'Đã hoàn tất';
+        let statusLabel = b.status || 'ĐANG XỬ LÝ';
+        let statusSubtext = 'Đang cập nhật';
         let statusBg = '#F2F4F4';
         let statusColor = '#574D4F';
 
         if (isPhoto) {
-          if (b.status === 'DEPOSIT_PAID') {
+          if (b.status === 'PENDING_PAYMENT') {
+            statusLabel = 'CHỜ CỌC';
+            statusSubtext = 'Chưa thanh toán cọc';
+            statusBg = '#FEF3C7';
+            statusColor = '#B45309';
+          } else if (b.status === 'DEPOSIT_PAID') {
             statusLabel = 'CHỜ DUYỆT';
             statusSubtext = 'Chờ thợ chụp xác nhận';
             statusBg = '#FFFBEB';
@@ -169,14 +178,24 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             statusSubtext = 'Đơn đã hủy';
             statusBg = '#FDEDEC';
             statusColor = '#C0392B';
-          } else if (b.status === 'PENDING_PAYMENT') {
+          } else if (b.status === 'DISPUTED') {
+            statusLabel = 'TRANH CHẤP';
+            statusSubtext = 'Đang xử lý khiếu nại';
+            statusBg = '#FEF2F2';
+            statusColor = '#DC2626';
+          } else if (b.status === 'REFUNDED' || b.status === 'PARTIALLY_REFUNDED') {
+            statusLabel = 'ĐÃ HOÀN TIỀN';
+            statusSubtext = 'Đã hoàn tiền đơn';
+            statusBg = '#F3F4F6';
+            statusColor = '#4B5563';
+          }
+        } else if (isCombo) {
+          if (b.status === 'PENDING_PAYMENT') {
             statusLabel = 'CHỜ CỌC';
             statusSubtext = 'Chưa thanh toán cọc';
             statusBg = '#FEF3C7';
             statusColor = '#B45309';
-          }
-        } else if (isCombo) {
-          if (b.status === 'DEPOSIT_PAID') {
+          } else if (b.status === 'DEPOSIT_PAID') {
             statusLabel = 'CHỜ DUYỆT';
             statusSubtext = 'Chờ đối tác xác nhận';
             statusBg = '#FFFBEB';
@@ -186,16 +205,31 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             statusSubtext = getDaysDiffText(rawStart, 'Bắt đầu sau') || 'Đã xác nhận lịch';
             statusBg = '#EFF6FF';
             statusColor = '#1D4ED8';
+          } else if (b.status === 'PICKUP_PENDING') {
+            statusLabel = 'CHỜ NHẬN ĐỒ';
+            statusSubtext = 'Trang phục sẵn sàng, chờ nhận';
+            statusBg = '#F5EEF8';
+            statusColor = '#8E44AD';
           } else if (b.status === 'IN_PROGRESS' || b.status === 'PICKED_UP') {
             statusLabel = 'ĐANG TRẢI NGHIỆM';
-            statusSubtext = 'Đang trong lịch trình';
+            statusSubtext = 'Đang trong lịch trình combo';
             statusBg = '#ECFDF5';
             statusColor = '#047857';
+          } else if (b.status === 'RETURN_PENDING') {
+            statusLabel = 'CHỜ TRẢ ĐỒ';
+            statusSubtext = 'Đang kiểm tra trả đồ combo';
+            statusBg = '#FEF9E7';
+            statusColor = '#F39C12';
           } else if (b.status === 'AWAITING_REVIEW') {
             statusLabel = 'CHỜ DUYỆT ẢNH';
             statusSubtext = 'Đã có ảnh, vui lòng duyệt';
             statusBg = '#FEF3C7';
             statusColor = '#B45309';
+          } else if (b.status === 'COMBO_PHOTOS_APPROVED') {
+            statusLabel = 'ĐÃ DUYỆT ẢNH';
+            statusSubtext = 'Chờ hoàn tất trả đồ';
+            statusBg = '#E0F2FE';
+            statusColor = '#0369A1';
           } else if (b.status === 'COMPLETED' || b.status === 'RETURNED') {
             statusLabel = 'HOÀN TẤT';
             statusSubtext = 'Đã hoàn tất trải nghiệm';
@@ -206,15 +240,25 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             statusSubtext = 'Đơn đã hủy';
             statusBg = '#FDEDEC';
             statusColor = '#C0392B';
-          } else if (b.status === 'PENDING_PAYMENT') {
+          } else if (b.status === 'DISPUTED') {
+            statusLabel = 'TRANH CHẤP';
+            statusSubtext = 'Đang xử lý khiếu nại';
+            statusBg = '#FEF2F2';
+            statusColor = '#DC2626';
+          } else if (b.status === 'REFUNDED' || b.status === 'PARTIALLY_REFUNDED') {
+            statusLabel = 'ĐÃ HOÀN TIỀN';
+            statusSubtext = 'Đã hoàn tiền đơn';
+            statusBg = '#F3F4F6';
+            statusColor = '#4B5563';
+          }
+        } else {
+          // RENTAL (Thuê áo dài)
+          if (b.status === 'PENDING_PAYMENT') {
             statusLabel = 'CHỜ CỌC';
             statusSubtext = 'Chưa thanh toán cọc';
             statusBg = '#FEF3C7';
             statusColor = '#B45309';
-          }
-        } else {
-          // RENTAL (Thuê áo dài)
-          if (b.status === 'DEPOSIT_PAID') {
+          } else if (b.status === 'DEPOSIT_PAID') {
             statusLabel = 'CHỜ DUYỆT';
             statusSubtext = 'Chờ cửa hàng xác nhận';
             statusBg = '#FFFBEB';
@@ -225,8 +269,8 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             statusBg = '#EFF6FF';
             statusColor = '#1D4ED8';
           } else if (b.status === 'PICKUP_PENDING') {
-            statusLabel = 'SẴN SÀNG';
-            statusSubtext = 'Đã chuẩn bị đồ';
+            statusLabel = 'CHỜ NHẬN ĐỒ';
+            statusSubtext = 'Đã chuẩn bị đồ, chờ nhận';
             statusBg = '#F5EEF8';
             statusColor = '#8E44AD';
           } else if (b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS') {
@@ -235,8 +279,8 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             statusBg = '#ECFDF5';
             statusColor = '#047857';
           } else if (b.status === 'RETURN_PENDING') {
-            statusLabel = 'CHỜ TRẢ';
-            statusSubtext = 'Đang kiểm tra đồ';
+            statusLabel = 'CHỜ TRẢ ĐỒ';
+            statusSubtext = 'Đang kiểm tra trả đồ';
             statusBg = '#FEF9E7';
             statusColor = '#F39C12';
           } else if (b.status === 'RETURNED' || b.status === 'COMPLETED') {
@@ -249,11 +293,16 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             statusSubtext = 'Đơn đã hủy';
             statusBg = '#FDEDEC';
             statusColor = '#C0392B';
-          } else if (b.status === 'PENDING_PAYMENT') {
-            statusLabel = 'CHỜ CỌC';
-            statusSubtext = 'Chưa thanh toán cọc';
-            statusBg = '#FEF3C7';
-            statusColor = '#B45309';
+          } else if (b.status === 'DISPUTED') {
+            statusLabel = 'TRANH CHẤP';
+            statusSubtext = 'Đang xử lý khiếu nại';
+            statusBg = '#FEF2F2';
+            statusColor = '#DC2626';
+          } else if (b.status === 'REFUNDED' || b.status === 'PARTIALLY_REFUNDED') {
+            statusLabel = 'ĐÃ HOÀN TIỀN';
+            statusSubtext = 'Đã hoàn tiền đơn';
+            statusBg = '#F3F4F6';
+            statusColor = '#4B5563';
           }
         }
 
@@ -298,7 +347,7 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
     } else if (activeStatus === 'DUE_SOON') {
       list = list.filter((r) => r.status === 'PICKED_UP' || r.status === 'AWAITING_REVIEW');
     } else if (activeStatus === 'RETURNED') {
-      list = list.filter((r) => r.status === 'RETURNED' || r.status === 'COMPLETED');
+      list = list.filter((r) => r.status === 'RETURNED' || r.status === 'COMPLETED' || r.status === 'RETURN_PENDING');
     }
 
     if (searchQuery.trim()) {
@@ -417,14 +466,18 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
         const isPickedUp = b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS';
 
         (b.items || []).forEach((item: any) => {
-          const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE';
-          const isCombo = item.itemType === 'COMBO' || (b.items && b.items.length > 1);
+          const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
+          const isCombo =
+            b.bookingType === 'COMBO' ||
+            item.itemType === 'COMBO' ||
+            (b.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
+              b.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
 
           if (isCombo && (isConfirmed || isPickedUp)) {
             upcomingCombos++;
           } else if (isPhoto && (isConfirmed || isPickedUp)) {
             upcomingShoots++;
-          } else if (!isPhoto && isPickedUp) {
+          } else if (!isPhoto && !isCombo && isPickedUp) {
             activeRentals++;
           }
         });
@@ -452,23 +505,27 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
     if (bookings && bookings.length > 0) {
       bookings.forEach((b) => {
         (b.items || []).forEach((item: any) => {
-          const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE';
-          const isCombo = item.itemType === 'COMBO' || (b.items && b.items.length > 1);
+          const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
+          const isCombo =
+            b.bookingType === 'COMBO' ||
+            item.itemType === 'COMBO' ||
+            (b.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
+              b.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
 
           if (isCombo) combos++;
           else if (isPhoto) photoshoots++;
           else rentals++;
 
           const matchesCategory =
-            (activeCategory === 'RENTAL' && !isPhoto) ||
-            (activeCategory === 'PHOTOSHOOT' && isPhoto) ||
+            (activeCategory === 'RENTAL' && !isPhoto && !isCombo) ||
+            (activeCategory === 'PHOTOSHOOT' && isPhoto && !isCombo) ||
             (activeCategory === 'COMBO' && isCombo);
 
           if (matchesCategory) {
             subAll++;
             if (b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS' || b.status === 'AWAITING_REVIEW') subRenting++;
             if (b.status === 'PICKUP_PENDING' || b.status === 'CONFIRMED' || b.status === 'DEPOSIT_PAID') subPickupSoon++;
-            if (b.status === 'RETURNED' || b.status === 'COMPLETED') subReturned++;
+            if (b.status === 'RETURNED' || b.status === 'COMPLETED' || b.status === 'RETURN_PENDING') subReturned++;
           }
         });
       });

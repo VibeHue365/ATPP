@@ -1,0 +1,10 @@
+export interface UserAddress { id?:string; label:string; recipientName?:string|null; phone?:string|null; addressLine:string; ward?:string|null; district?:string|null; city?:string|null; note?:string|null; isDefault:boolean; }
+export interface UserPreferences { preferredAoDaiStyles?:string[]; favoriteColors?:string[]; preferredOccasions?:string[]; sizeInfo?:{preferredSize?:string|null;height?:number|null;weight?:number|null;bodyShape?:string|null}; }
+export interface BackendUser { id:string; email:string; phone?:string; phoneVerified?:boolean; emailVerified?:boolean; isEmailVerified?:boolean; status?:string; roles?:string[]; favorites?:unknown[]; addresses?:UserAddress[]; preferences?:UserPreferences; profile?:{fullName?:string;phone?:string;gender?:'MALE'|'FEMALE'|'OTHER';dateOfBirth?:string;avatarUrl?:string|null}|null; }
+export interface SessionUser { id:string; email:string; fullName:string; phone?:string; phoneVerified:boolean; gender?:'MALE'|'FEMALE'|'OTHER'; dateOfBirth?:string; avatarUrl?:string|null; isEmailVerified:boolean; roles:string[]; favorites:unknown[]; addresses:UserAddress[]; }
+export interface UserFavorite { targetType:string; targetId:string; addedAt?:string; }
+export interface LoginPayload { email:string; password:string; }
+export interface RegisterPayload { email:string; phone:string; password:string; fullName:string; }
+export interface LoginResponse { accessToken:string; refreshToken:string; expiresIn:number; user:BackendUser; roles:string[]; permissions:string[]; }
+export interface MessageResponse { message:string; }
+export const mapSessionUser=(user:BackendUser,roles:string[]=[]):SessionUser=>({id:user.id,email:user.email,fullName:user.profile?.fullName??user.email,phone:user.phone??user.profile?.phone,phoneVerified:Boolean(user.phoneVerified),gender:user.profile?.gender,dateOfBirth:user.profile?.dateOfBirth,avatarUrl:user.profile?.avatarUrl,isEmailVerified:Boolean(user.isEmailVerified??user.emailVerified),roles:user.roles??roles,favorites:user.favorites??[],addresses:user.addresses??[]});

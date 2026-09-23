@@ -781,17 +781,125 @@ export class ProviderVerificationService {
     };
   }
 
-  async adminList(actor: AuthUser): Promise<Record<string, unknown>> {
+  async adminList(
+    actor: AuthUser,
+    query?: {
+      status?: string;
+      search?: string;
+      capability?: string;
+      province?: string;
+      page?: number;
+      limit?: number;
+    },
+  ): Promise<Record<string, unknown>> {
     this.requireAdmin(actor);
+
+    const [total, submitted, underReview, needsChanges, approved, rejected] =
+      await Promise.all([
+        this.verificationModel.countDocuments({}),
+        this.verificationModel.countDocuments({
+          status: VerificationStatus.Submitted,
+        }),
+        this.verificationModel.countDocuments({
+          status: VerificationStatus.UnderReview,
+        }),
+        this.verificationModel.countDocuments({
+          status: VerificationStatus.NeedsChanges,
+        }),
+        this.verificationModel.countDocuments({
+          status: VerificationStatus.Approved,
+        }),
+        this.verificationModel.countDocuments({
+          status: VerificationStatus.Rejected,
+        }),
+      ]);
+
+    const filter: Record<string, any> = {};
+
+    if (query?.status && query.status !== 'ALL') {
+      filter.status = query.status;
+    }
+
+    if (query?.capability && query.capability !== 'ALL') {
+      filter.requestedCapabilities = query.capability;
+    }
+
+    if (query?.province && query.province !== 'ALL') {
+      filter['businessProfile.province'] = new RegExp(query.province, 'i');
+    }
+
+    if (query?.search && query.search.trim()) {
+      const q = query.search.trim();
+      const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escaped, 'i');
+      filter.$or = [
+        { 'businessProfile.businessName': regex },
+        { partnerCode: regex },
+        { 'businessProfile.ownerName': regex },
+        { 'businessProfile.phone': regex },
+        { 'businessProfile.taxCode': regex },
+        { 'businessProfile.email': regex },
+      ];
+    }
+
+    const page = Math.max(1, query?.page || 1);
+    const limit = Math.max(1, query?.limit || 8);
+    const skip = (page - 1) * limit;
+
+    const filteredTotal = await this.verificationModel.countDocuments(filter);
     const verifications = await this.verificationModel
-      .find({})
-      .sort({ createdAt: -1 })
-      .limit(100);
+      .find(filter)
+      .sort({ submittedAt: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     return {
       items: verifications.map((verification) =>
         this.toListItemResponse(verification),
       ),
+      total: filteredTotal,
+      page,
+      limit,
+      totalPages: Math.ceil(filteredTotal / limit) || 1,
+      metrics: {
+        total,
+        submitted,
+        underReview,
+        needsChanges,
+        approved,
+        rejected,
+      },
+    };
+  }
+
+  async addInternalNote(
+    actor: AuthUser,
+    id: string,
+    content: string,
+  ): Promise<Record<string, unknown>> {
+    this.requireAdmin(actor);
+    const verification = await this.loadVerification(id);
+    if (!content || !content.trim()) {
+      throw new BadRequestException('Nội dung ghi chú không được để trống.');
+    }
+
+    const newNote = {
+      adminName: actor.email?.split('@')[0] || 'System Admin',
+      avatar: '/hoang_minh.webp',
+      createdAt: new Date(),
+      content: content.trim(),
+    };
+
+    if (!(verification as any).internalNotes) {
+      (verification as any).internalNotes = [];
+    }
+    (verification as any).internalNotes.unshift(newNote);
+    verification.markModified('internalNotes');
+    await verification.save();
+
+    return {
+      success: true,
+      internalNotes: (verification as any).internalNotes,
     };
   }
 
@@ -1738,6 +1846,8 @@ export class ProviderVerificationService {
 
     return {
       verificationId: verification._id,
+      userId: verification.userId,
+      partnerCode: (verification as any).partnerCode || null,
       status: verification.status,
       verificationType: verification.verificationType,
       verificationRevision: verification.verificationRevision,
@@ -1758,6 +1868,8 @@ export class ProviderVerificationService {
       ocrWarnings: this.ocrWarnings(verification),
       review: verification.review,
       statusTimeline: verification.statusTimeline,
+      internalNotes: (verification as any).internalNotes || [],
+      submittedAt: verification.submittedAt ?? null,
       createdAt: verification.get('createdAt'),
       updatedAt: verification.get('updatedAt'),
     };
@@ -1766,14 +1878,52 @@ export class ProviderVerificationService {
   private toListItemResponse(
     verification: ProviderVerificationDocument,
   ): Record<string, unknown> {
+    const validCount = verification.documents
+      ? verification.documents.filter((d) => {
+          const cur = d.versions?.find((v) => v.isCurrent);
+          const st = String(cur?.ocrStatus || '');
+          return (
+            cur &&
+            (st === 'MATCH' ||
+              st === (OcrStatus.Passed as string) ||
+              cur.uploadStatus === DocumentUploadStatus.Uploaded)
+          );
+        }).length
+      : 0;
+    const attentionCount = verification.documents
+      ? verification.documents.filter((d) => {
+          const cur = d.versions?.find((v) => v.isCurrent);
+          const st = String(cur?.ocrStatus || '');
+          return (
+            cur &&
+            (st === 'MISMATCH' ||
+              st === 'SUSPICIOUS' ||
+              st === (OcrStatus.MismatchDetected as string) ||
+              st === (OcrStatus.NeedsManualReview as string) ||
+              st === (OcrStatus.LowConfidence as string) ||
+              (cur.ocr?.warningCodes && cur.ocr.warningCodes.length > 0))
+          );
+        }).length
+      : 0;
+
     return {
       verificationId: verification._id,
       userId: verification.userId,
+      partnerCode: (verification as any).partnerCode || null,
       status: verification.status,
       verificationType: verification.verificationType,
       verificationRevision: verification.verificationRevision,
       requestedCapabilities: verification.requestedCapabilities,
       businessName: verification.businessProfile?.businessName ?? null,
+      businessProfile: verification.businessProfile,
+      aodaiInfo: verification.aodaiInfo,
+      photographyInfo: verification.photographyInfo,
+      documentsCount: verification.documents?.length || 0,
+      documentsValid: validCount,
+      documentsAttention: attentionCount,
+      internalNotes: (verification as any).internalNotes || [],
+      review: verification.review,
+      statusTimeline: verification.statusTimeline,
       submittedAt: verification.submittedAt ?? null,
       createdAt: verification.get('createdAt'),
       updatedAt: verification.get('updatedAt'),

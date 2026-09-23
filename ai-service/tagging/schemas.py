@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 class AllowedTag(BaseModel):
     code: str = Field(pattern=r"^[A-Z0-9_]+$")
     description: str = Field(max_length=500)
+    group: Literal["STYLE", "OCCASION"] | None = None
 
 
 class TaggingRequest(BaseModel):

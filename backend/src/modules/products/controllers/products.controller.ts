@@ -24,6 +24,7 @@ import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
 import { PublicMediaService } from '../../storage/services/public-media.service';
 import { ProductAvailabilityService } from '../services/product-availability.service';
+import { PersonalizedProductRecommendationService } from '../services/personalized-product-recommendation.service';
 
 @Controller(['products', 'api/products'])
 export class ProductsController {
@@ -31,6 +32,7 @@ export class ProductsController {
     private readonly productsService: ProductsService,
     private readonly publicMedia: PublicMediaService,
     private readonly availabilityService: ProductAvailabilityService,
+    private readonly recommendationService: PersonalizedProductRecommendationService,
   ) {}
 
   @Get()
@@ -98,6 +100,36 @@ export class ProductsController {
     );
   }
 
+  @Get('personalized')
+  @UseGuards(JwtAuthGuard)
+  async getPersonalized(
+    @CurrentUser() user: AuthUser,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('colors') colors?: string,
+    @Query('sizes') sizes?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('providerLocation') providerLocation?: string,
+    @Query('types') types?: string,
+  ) {
+    const parsedPage = Number.parseInt(page || '1', 10);
+    const parsedLimit = Number.parseInt(limit || '12', 10);
+    return this.recommendationService.recommendForUser(
+      user.sub,
+      Number.isFinite(parsedPage) ? parsedPage : 1,
+      Number.isFinite(parsedLimit) ? parsedLimit : 12,
+      {
+        maxPrice: maxPrice ? Number(maxPrice) : undefined,
+        colors: colors?.split(',').map((value) => value.trim()).filter(Boolean),
+        sizes: sizes?.split(',').map((value) => value.trim()).filter(Boolean),
+        categoryId,
+        providerLocation,
+        productTypes: types?.split(',').map((value) => value.trim()).filter(Boolean),
+      },
+    );
+  }
+
   @Get(':id/availability')
   async getAvailability(@Param('id') id: string, @Query('size') size: string, @Query('color') color: string, @Query('rentalFrom') rentalFrom: string, @Query('rentalTo') rentalTo: string, @Query('quantity') quantity?: string, @Query('rentalType') rentalType?: string, @Query('startTime') startTime?: string, @Query('endTime') endTime?: string) {
     return this.availabilityService.check(id, size, color, rentalFrom, rentalTo, quantity ? Number(quantity) : 1, rentalType, startTime, endTime);
@@ -126,6 +158,24 @@ export class ProductsController {
     @Body() dto: CreateProductDto,
   ): Promise<ProductDocument> {
     return this.productsService.createProduct(user.sub, dto);
+  }
+
+  @Get('my-listings/:id/price-history')
+  @UseGuards(JwtAuthGuard)
+  async getMyProductPriceHistory(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedPage = Number.parseInt(page ?? '1', 10);
+    const parsedLimit = Number.parseInt(limit ?? '10', 10);
+    return this.productsService.getMyProductPriceHistory(
+      user.sub,
+      id,
+      Number.isFinite(parsedPage) ? parsedPage : 1,
+      Number.isFinite(parsedLimit) ? parsedLimit : 10,
+    );
   }
 
   @Patch(':id')

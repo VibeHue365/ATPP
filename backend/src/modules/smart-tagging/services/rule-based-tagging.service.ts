@@ -9,10 +9,6 @@ import { SmartTagSignalSource } from '../constants/smart-tag.constants';
 export interface ProductTaggingInput {
   name: string;
   description?: string | null;
-  colors: string[];
-  materials: string[];
-  style?: string | null;
-  occasions: string[];
 }
 
 export interface RuleBasedTagSuggestion {
@@ -32,18 +28,8 @@ export class RuleBasedTaggingService {
     const suggestions = new Map<string, SmartTagSignalEvidence>();
 
     for (const definition of definitions) {
-      const matchedFields: string[] = [];
       const matchedKeywords: string[] = [];
       const config = definition.ruleConfig || {};
-
-      if (matchesValue(input.style, config.styles)) matchedFields.push('style');
-      if (matchesAny(input.occasions, config.occasions)) {
-        matchedFields.push('occasions');
-      }
-      if (matchesAny(input.materials, config.materials)) {
-        matchedFields.push('materials');
-      }
-      if (matchesAny(input.colors, config.colors)) matchedFields.push('colors');
 
       for (const keyword of config.keywords || []) {
         if (normalizedText.includes(normalizeText(keyword))) {
@@ -51,32 +37,20 @@ export class RuleBasedTaggingService {
         }
       }
 
-      if (matchedFields.length === 0 && matchedKeywords.length === 0) continue;
+      if (matchedKeywords.length === 0) continue;
 
-      suggestions.set(definition.code, { matchedFields, matchedKeywords });
+      suggestions.set(definition.code, { matchedKeywords });
     }
 
     return Array.from(suggestions.entries()).map(([tagCode, evidence]) => ({
       tagCode,
       signal: {
         source: SmartTagSignalSource.Rule,
-        confidence: evidence.matchedFields?.length
-          ? 1
-          : keywordConfidence(evidence),
+        confidence: keywordConfidence(evidence),
         evidence,
       },
     }));
   }
-}
-
-function matchesValue(value: string | null | undefined, allowed?: string[]) {
-  if (!value || !allowed?.length) return false;
-  return allowed.some((item) => item.toLowerCase() === value.toLowerCase());
-}
-
-function matchesAny(values: string[] | undefined, allowed?: string[]) {
-  if (!values?.length || !allowed?.length) return false;
-  return values.some((value) => matchesValue(value, allowed));
 }
 
 function keywordConfidence(evidence: SmartTagSignalEvidence): number {

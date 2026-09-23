@@ -299,8 +299,9 @@ export class ProvidersService {
   ): Promise<PortfolioItemDocument[]> {
     return this.portfolioItemModel
       .find({ moderationStatus: status })
+      .select('title description images moderationStatus moderationReason providerId updatedAt')
       .sort({ updatedAt: 1 })
-      .populate('providerId')
+      .populate('providerId', 'businessName')
       .exec();
   }
 

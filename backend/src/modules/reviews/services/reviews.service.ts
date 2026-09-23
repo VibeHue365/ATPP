@@ -455,21 +455,39 @@ export class ReviewsService {
     );
   }
 
-  async getReportedReviewsForAdmin(): Promise<Review[]> {
-    return this.reviewModel
+  async getReportedReviewsForAdmin(): Promise<any> {
+    const reviews = await this.reviewModel
       .find({ isReported: true })
-      .populate('customerId')
-      .populate('providerId')
-      .populate('bookingId')
-      .sort({ reportedAt: -1 })
+      .populate('customerId', 'profile.fullName auth.email profile.avatarUrl')
+      .populate('providerId', 'businessName partnerCode profile.avatarUrl')
+      .populate('bookingId', 'bookingCode createdAt customerId')
+      .populate('bookingItemId', 'name coverImage')
+      .sort({ reportedAt: -1, createdAt: -1 })
       .exec();
+
+    const total = reviews.length;
+    const pending = reviews.filter((r) => !r.reportStatus || r.reportStatus === 'PENDING').length;
+    const underReview = reviews.filter((r) => r.reportStatus === 'UNDER_REVIEW').length;
+    const resolved = reviews.filter((r) => r.reportStatus === 'RESOLVED' || r.reportStatus === 'DISMISSED').length;
+    const hidden = reviews.filter((r) => r.isHidden === true).length;
+
+    return {
+      metrics: {
+        total,
+        pending,
+        underReview,
+        resolved,
+        hidden,
+      },
+      reviews,
+    };
   }
 
   async handleReportedReview(
     reviewIdStr: string,
-    action: 'DELETE' | 'DISMISS',
-    reason: string,
-  ): Promise<{ success: boolean }> {
+    action: 'DELETE' | 'DISMISS' | 'HIDE' | 'UNDER_REVIEW' | 'CONFIRM',
+    reason?: string,
+  ): Promise<{ success: boolean; review: Review }> {
     const reviewId = new Types.ObjectId(reviewIdStr);
     const review = await this.reviewModel
       .findById(reviewId)
@@ -495,83 +513,74 @@ export class ReviewsService {
       providerUserIdStr = provider.userId?.toString();
     }
 
-    if (action === 'DELETE') {
-      // 1. Delete review
-      await this.reviewModel.findByIdAndDelete(reviewId);
+    if (!review.historyTimeline) {
+      review.historyTimeline = [];
+    }
 
-      // 2. Set booking item isReviewed to false so they can review again
-      if (review.bookingItemId) {
-        await this.bookingItemModel.findByIdAndUpdate(review.bookingItemId, {
-          isReviewed: false,
-        });
-      }
+    const effectiveReason = reason?.trim() || 'Xử lý bởi quản trị viên hệ thống';
 
-      // 3. Recalculate average ratings
+    if (action === 'DELETE' || action === 'HIDE' || action === 'CONFIRM') {
+      review.isHidden = true;
+      review.reportStatus = 'RESOLVED';
+      review.historyTimeline.push({
+        timestamp: new Date(),
+        title: action === 'CONFIRM' ? 'Admin xác nhận vi phạm' : 'Admin đã ẩn/gỡ đánh giá',
+        description: effectiveReason,
+      });
+      await review.save();
+
+      // Recalculate average ratings
       await this.updateProviderRating(review.providerId);
-      if (review.bookingItemId) {
-        const item = await this.bookingItemModel.findById(review.bookingItemId);
-        if (item) {
-          if (item.productId) {
-            await this.updateProductRating(item.productId);
-          } else if (item.photographyPackageId) {
-            await this.updatePhotoPackageRating(item.photographyPackageId);
-          }
-        }
-      }
 
-      // 4. Send Notifications
-      // To Customer
+      // Send Notifications
       if (customer && customer._id) {
         await this.notificationsService.createNotification(
           customer._id.toString(),
-          'Đánh giá của bạn đã bị gỡ bỏ do vi phạm',
-          `Đơn thuê #${bookingCode}: Đánh giá của bạn đối với dịch vụ đã bị gỡ bỏ bởi quản trị viên hệ thống. Lý do: ${reason}`,
+          'Đánh giá của bạn đã bị ẩn do vi phạm tiêu chuẩn',
+          `Đơn thuê #${bookingCode}: Đánh giá của bạn đã bị ẩn bởi quản trị viên hệ thống. Lý do: ${effectiveReason}`,
           NotificationType.System,
           { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() },
         );
       }
 
-      // To Provider
       if (providerUserIdStr) {
         await this.notificationsService.createNotification(
           providerUserIdStr,
           'Báo cáo vi phạm đánh giá đã được xử lý',
-          `Đơn thuê #${bookingCode}: Báo cáo của bạn về đánh giá spam/vi phạm đã được Admin chấp nhận. Đánh giá của khách hàng đã được gỡ bỏ khỏi hệ thống. Lý do: ${reason}`,
+          `Đơn thuê #${bookingCode}: Báo cáo của bạn về đánh giá vi phạm đã được Admin chấp nhận. Đánh giá đã bị ẩn. Lý do: ${effectiveReason}`,
           NotificationType.System,
           { bookingId: review.bookingId?.toString() },
         );
       }
     } else if (action === 'DISMISS') {
-      // Dismiss flag
-      review.isReported = false;
-      review.reportReason = null;
-      review.reportedAt = null;
+      review.reportStatus = 'RESOLVED';
+      review.isHidden = false;
+      review.historyTimeline.push({
+        timestamp: new Date(),
+        title: 'Admin bỏ qua báo cáo',
+        description: effectiveReason || 'Báo cáo không vi phạm tiêu chuẩn, giữ nguyên đánh giá.',
+      });
       await review.save();
 
-      // Send Notifications
-      // To Provider
       if (providerUserIdStr) {
         await this.notificationsService.createNotification(
           providerUserIdStr,
           'Kết quả kiểm duyệt báo cáo đánh giá',
-          `Đơn thuê #${bookingCode}: Báo cáo của bạn về đánh giá của khách hàng đã được Admin kiểm duyệt. Hệ thống xác nhận đánh giá này không vi phạm chính sách cộng đồng và sẽ tiếp tục được hiển thị. Lý do: ${reason}`,
+          `Đơn thuê #${bookingCode}: Báo cáo của bạn đã được kiểm duyệt. Đánh giá được xác nhận hợp lệ và tiếp tục hiển thị. Lý do: ${effectiveReason}`,
           NotificationType.System,
           { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() },
         );
       }
-
-      // To Customer
-      if (customer && customer._id) {
-        await this.notificationsService.createNotification(
-          customer._id.toString(),
-          'Đánh giá của bạn đã được duyệt hợp lệ',
-          `Đơn thuê #${bookingCode}: Đánh giá của bạn đã được kiểm duyệt và xác nhận phù hợp với quy chuẩn cộng đồng. Trân trọng cảm ơn đóng góp của bạn!`,
-          NotificationType.System,
-          { reviewId: reviewIdStr, bookingId: review.bookingId?.toString() },
-        );
-      }
+    } else if (action === 'UNDER_REVIEW') {
+      review.reportStatus = 'UNDER_REVIEW';
+      review.historyTimeline.push({
+        timestamp: new Date(),
+        title: 'Admin chuyển sang trạng thái đang xem xét',
+        description: effectiveReason || 'Đang tiến hành đối soát và xác minh nội dung báo cáo.',
+      });
+      await review.save();
     }
 
-    return { success: true };
+    return { success: true, review };
   }
 }

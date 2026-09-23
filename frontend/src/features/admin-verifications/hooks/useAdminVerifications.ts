@@ -30,7 +30,7 @@ export function useAdminVerifications() {
 
     try {
       const nextItems = await adminVerificationApi.list();
-      if (requestId === listRequestId.current) setItems(nextItems);
+      if (requestId === listRequestId.current) setItems(Array.isArray(nextItems) ? nextItems : nextItems.items);
     } catch (requestError) {
       if (requestId === listRequestId.current) setError(getErrorMessage(requestError));
     } finally {

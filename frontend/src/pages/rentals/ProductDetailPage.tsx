@@ -62,6 +62,11 @@ interface ProductDetail {
   } | null;
   discountedPrice?: number;
   badges?: PublicSmartTagBadge[];
+  customTags?: Array<{
+    label: string;
+    normalizedLabel: string;
+    mappedTagCode?: string | null;
+  }>;
 }
 
 const timeSlots = [
@@ -1594,6 +1599,18 @@ export const ProductDetailPage: React.FC = () => {
               <div style={{ marginTop: "10px" }}>
                 <SmartTagList badges={product.badges} />
               </div>
+              {product.customTags && product.customTags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {product.customTags.map((tag) => (
+                    <span
+                      key={tag.normalizedLabel}
+                      className="rounded-full border border-stone-300 bg-stone-50 px-3 py-1 text-xs font-medium text-stone-600"
+                    >
+                      {tag.label}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/* Star rating summary */}
               <div

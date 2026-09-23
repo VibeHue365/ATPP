@@ -1,8 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ImagePlus, LoaderCircle, Trash2, AlertCircle, Info, UploadCloud } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AlertCircle,
+  Eye,
+  ImagePlus,
+  Info,
+  Lightbulb,
+  LoaderCircle,
+  Trash2,
+  UploadCloud,
+} from 'lucide-react';
 import { Modal } from '../../../components/common/Modal';
 import { httpClient } from '../../../services/httpClient';
 import { getMediaUrl } from '../../../shared/media/mediaUrl';
+import { PortfolioCard } from '../../provider-dashboard/portfolio/components/PortfolioCard';
+import type { PortfolioItem } from '../../provider-dashboard/types';
 import './PortfolioItemFormModal.css';
 
 export interface PortfolioItemFormValues {
@@ -50,7 +61,6 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
     }
   }, [isOpen, initialValues]);
 
-
   const uploadFiles = async (files: FileList) => {
     if (!files.length) return;
     setIsUploading(true);
@@ -60,8 +70,9 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
       Array.from(files).forEach((file) => formData.append('images', file));
       const response = await httpClient.post<{ urls: string[] }>('/products/upload', formData);
       setImages((current) => [...new Set([...current, ...(response.urls || [])])]);
-    } catch (uploadError: any) {
-      setError(uploadError?.message || 'Không thể tải ảnh lên.');
+    } catch (uploadError: unknown) {
+      const message = uploadError instanceof Error ? uploadError.message : 'Không thể tải ảnh lên.';
+      setError(message);
     } finally {
       setIsUploading(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -101,7 +112,7 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
       return;
     }
     if (!images.length) {
-      setError('Thêm ít nhất một ảnh cho tác phẩm.');
+      setError('Vui lòng tải lên ít nhất một bức ảnh cho tác phẩm này.');
       return;
     }
     setError(null);
@@ -112,30 +123,52 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
     });
   };
 
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Thêm tác phẩm portfolio" maxWidth="920px">
-      <div className="portfolio-modal-wrapper">
-        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column' }}>
+  // Real-time Artwork Card Preview computation
+  const previewItem: PortfolioItem = useMemo(() => {
+    return {
+      _id: 'preview-artwork-id',
+      title: title.trim() || 'Tên tác phẩm (Ví dụ: Nắng Thu Hoàng Thành)',
+      description:
+        description.trim() ||
+        'Concept chụp áo dài truyền thống tại Cố Đô Huế, kết hợp ánh sáng tự nhiên...',
+      images,
+      moderationStatus: 'APPROVED',
+    };
+  }, [title, description, images]);
 
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={initialValues ? 'Chỉnh sửa tác phẩm Portfolio' : 'Thêm tác phẩm Portfolio mới'}
+      maxWidth="1000px"
+    >
+      <div className="portfolio-modal-wrapper">
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Top Intro Notice */}
           <div className="portfolio-info-banner">
-            <Info size={18} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: 1 }} />
+            <Info size={18} style={{ color: 'var(--pf-primary)', flexShrink: 0, marginTop: 1 }} />
             <p>
-              Tác phẩm sẽ được gửi duyệt trước khi hiển thị công khai trên hồ sơ nhiếp ảnh gia.
+              Tác phẩm chất lượng cao là minh chứng thuyết phục nhất cho phong cách và tay nghề của bạn. Tác phẩm mới sẽ được gửi duyệt trước khi hiển thị công khai.
             </p>
           </div>
 
-          <div className="portfolio-form-grid">
+          {/* 2-Column Grid (Option 1) */}
+          <div className="portfolio-form-grid" style={{ gridTemplateColumns: '1.15fr 0.85fr', gap: '28px' }}>
+            {/* ================= LEFT COLUMN: INPUTS & TIPS ================= */}
             <div className="portfolio-form-left">
               <div className="portfolio-form-group">
                 <label className="portfolio-label">
-                  <span>Tiêu đề tác phẩm <span style={{ color: 'var(--color-error)' }}>*</span></span>
+                  <span>
+                    Tiêu đề tác phẩm <span style={{ color: '#DC2626' }}>*</span>
+                  </span>
                   <span className="portfolio-char-counter">{title.length}/120</span>
                 </label>
                 <input
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   maxLength={120}
-                  placeholder="Ví dụ: Concept áo dài bên sông Hương"
+                  placeholder="Ví dụ: Nắng Chiều Hoàng Thành Huế"
                   className="portfolio-input"
                   required
                 />
@@ -143,7 +176,7 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
 
               <div className="portfolio-form-group">
                 <label className="portfolio-label">
-                  <span>Mô tả ngắn <span style={{ color: 'var(--color-text-secondary)', fontWeight: 400 }}>(không bắt buộc)</span></span>
+                  <span>Mô tả bối cảnh & phong cách</span>
                   <span className="portfolio-char-counter">{description.length}/1000</span>
                 </label>
                 <textarea
@@ -151,16 +184,42 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
                   onChange={(event) => setDescription(event.target.value)}
                   maxLength={1000}
                   rows={4}
-                  placeholder="Bối cảnh, phong cách, cảm hứng hoặc thông tin khách hàng cần biết…"
+                  placeholder="Bối cảnh chụp, thiết bị sử dụng, cảm xúc hoặc concept truyền cảm hứng…"
                   className="portfolio-input portfolio-textarea"
                 />
               </div>
+
+              {/* Optimization Tips Box */}
+              <div
+                style={{
+                  background: '#FFFDF9',
+                  border: '1px solid #EBE4D8',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#B45309', fontWeight: 700, fontSize: '12.5px' }}>
+                  <Lightbulb size={16} />
+                  <span>Mẹo xây dựng Portfolio thu hút:</span>
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#6B7280', lineHeight: 1.6 }}>
+                  <li>Chọn ảnh có ánh sáng và màu sắc tiêu biểu cho phong cách thương hiệu của bạn.</li>
+                  <li>Tải lên từ <strong>3 đến 8 ảnh</strong> cho mỗi bộ tác phẩm để khách hàng chiêm ngưỡng trọn vẹn.</li>
+                  <li>Tiêu đề giàu cảm xúc giúp tăng 40% khả năng khách nhấn vào xem chi tiết hồ sơ.</li>
+                </ul>
+              </div>
             </div>
 
+            {/* ================= RIGHT COLUMN: UPLOAD & LIVE PREVIEW ================= */}
             <div className="portfolio-form-right">
               <div className="portfolio-form-group">
                 <div className="portfolio-upload-header">
-                  <span className="portfolio-upload-title">Ảnh tác phẩm <span style={{ color: 'var(--color-error)' }}>*</span></span>
+                  <span className="portfolio-upload-title">
+                    Hình ảnh tác phẩm <span style={{ color: '#DC2626' }}>*</span>
+                  </span>
                   <span className="portfolio-upload-badge">
                     Đã chọn: <strong className="portfolio-upload-count-highlight">{images.length}</strong> ảnh
                   </span>
@@ -174,41 +233,45 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onClick={() => inputRef.current?.click()}
-                  style={{ pointerEvents: isUploading ? 'none' : 'auto' }}
+                  style={{ pointerEvents: isUploading ? 'none' : 'auto', minHeight: '140px', padding: '20px' }}
                 >
-                  <div className="portfolio-dropzone-icon-box">
+                  <div className="portfolio-dropzone-icon-box" style={{ width: '42px', height: '42px' }}>
                     {isUploading ? (
-                      <LoaderCircle size={22} className="portfolio-spin" />
+                      <LoaderCircle size={20} className="portfolio-spin" />
                     ) : (
-                      <UploadCloud size={22} />
+                      <UploadCloud size={20} />
                     )}
                   </div>
                   <div>
-                    <div className="portfolio-dropzone-title">
-                      {isUploading ? 'Đang tải ảnh lên…' : 'Chọn hoặc kéo thả nhiều ảnh từ máy'}
+                    <div className="portfolio-dropzone-title" style={{ fontSize: '13px' }}>
+                      {isUploading ? 'Đang tải ảnh lên…' : 'Kéo thả hoặc chọn nhiều ảnh từ máy'}
                     </div>
-                    <div className="portfolio-dropzone-desc">
-                      Hỗ trợ tệp tin định dạng JPG, PNG, WEBP. Tải lên nhiều ảnh cùng lúc.
+                    <div className="portfolio-dropzone-desc" style={{ fontSize: '11px' }}>
+                      Hỗ trợ JPG, PNG, WebP. Ảnh đầu tiên sẽ làm ảnh đại diện.
                     </div>
                   </div>
                 </div>
               </div>
 
+              {/* Thumbnails grid */}
               {images.length > 0 && (
                 <div className="portfolio-preview-container">
-                  <span className="portfolio-preview-label">Ảnh đã chọn xem trước</span>
-                  <div className="portfolio-preview-grid">
+                  <span className="portfolio-preview-label">Ảnh đã chọn ({images.length})</span>
+                  <div className="portfolio-preview-grid" style={{ maxHeight: '160px' }}>
                     {images.map((image, index) => (
                       <div key={image} className="portfolio-image-card">
                         <img src={getMediaUrl(image)} alt={`Ảnh tác phẩm ${index + 1}`} />
                         <div className="portfolio-image-overlay">
-                          <span className="portfolio-image-overlay-badge">#{index + 1}</span>
+                          <span className="portfolio-image-overlay-badge">
+                            {index === 0 ? 'Bìa' : `#${index + 1}`}
+                          </span>
                         </div>
                         <button
                           type="button"
                           aria-label={`Xóa ảnh ${index + 1}`}
                           onClick={() => setImages((current) => current.filter((_, imageIndex) => imageIndex !== index))}
                           className="portfolio-image-delete-btn"
+                          title="Xóa ảnh"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -217,6 +280,22 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Live Artwork Card Preview */}
+              <div style={{ marginTop: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--pf-primary-dark)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Eye size={14} /> Xem trước hiển thị thực tế
+                  </span>
+                  <span style={{ fontSize: '10.5px', fontWeight: 750, color: 'var(--pf-primary)', background: 'var(--pf-primary-light)', padding: '2px 7px', borderRadius: '999px' }}>
+                    Live Preview
+                  </span>
+                </div>
+
+                <div style={{ background: '#FAF8F5', border: '1px dashed #EBE4D8', borderRadius: '12px', padding: '10px' }}>
+                  <PortfolioCard portfolioItem={previewItem} previewMode />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -227,21 +306,20 @@ export const PortfolioItemFormModal: React.FC<PortfolioItemFormModalProps> = ({
             </div>
           )}
 
+          {/* Modal Actions */}
           <div className="portfolio-actions">
             <button
               type="button"
               onClick={onClose}
               disabled={isSaving || isUploading}
-              className="vh-btn vh-btn-sm vh-btn-text"
-              style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)' }}
+              className="portfolio-button portfolio-button--secondary"
             >
               Hủy
             </button>
             <button
               type="submit"
               disabled={isSaving || isUploading}
-              className="vh-btn vh-btn-sm vh-btn-primary"
-              style={{ padding: '10px 22px', borderRadius: 'var(--radius-md)' }}
+              className="portfolio-button portfolio-button--primary"
             >
               {isSaving ? (
                 <>

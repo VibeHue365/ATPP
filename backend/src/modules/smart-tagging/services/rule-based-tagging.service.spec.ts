@@ -10,13 +10,13 @@ describe('RuleBasedTaggingService', () => {
   const definitions = [
     {
       code: 'TRUYEN_THONG',
-      ruleConfig: { styles: ['traditional'], keywords: ['cung dinh'] },
+      ruleConfig: { keywords: ['truyen thong', 'cung dinh'] },
       status: SmartTagDefinitionStatus.Active,
       entityTypes: [SmartTagEntityType.Product],
     },
     {
-      code: 'CHAT_LIEU_LUA',
-      ruleConfig: { materials: ['SILK'] },
+      code: 'PHU_HOP_LE_CUOI',
+      ruleConfig: { keywords: ['dam cuoi', 'le cuoi'] },
       status: SmartTagDefinitionStatus.Active,
       entityTypes: [SmartTagEntityType.Product],
     },
@@ -28,15 +28,11 @@ describe('RuleBasedTaggingService', () => {
     },
   ] as any;
 
-  it('matches structured data with full confidence', () => {
+  it('uses only product name and description as tagging input', () => {
     const suggestions = service.suggestForProduct(
       {
         name: 'Áo dài truyền thống',
         description: '',
-        colors: [],
-        materials: ['silk'],
-        style: 'TRADITIONAL',
-        occasions: [],
       },
       definitions,
     );
@@ -45,11 +41,7 @@ describe('RuleBasedTaggingService', () => {
       expect.arrayContaining([
         expect.objectContaining({
           tagCode: 'TRUYEN_THONG',
-          signal: expect.objectContaining({ confidence: 1 }),
-        }),
-        expect.objectContaining({
-          tagCode: 'CHAT_LIEU_LUA',
-          signal: expect.objectContaining({ confidence: 1 }),
+          signal: expect.objectContaining({ confidence: 0.75 }),
         }),
       ]),
     );
@@ -60,10 +52,6 @@ describe('RuleBasedTaggingService', () => {
       {
         name: 'Ao dai co do Hue',
         description: 'Trang phuc cung dinh',
-        colors: [],
-        materials: [],
-        style: null,
-        occasions: [],
       },
       definitions,
     );

@@ -41,6 +41,12 @@ export class AdminUsersController {
     return this.usersService.adminListUsers(query);
   }
 
+  @Get('metrics')
+  @Permissions('user:read')
+  metrics() {
+    return this.usersService.adminGetMetrics();
+  }
+
   @Get(':id')
   @Permissions('user:read')
   detail(@Param('id') id: string) {

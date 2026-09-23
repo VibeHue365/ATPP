@@ -1,0 +1,9 @@
+/* Styles for legacy AnalyticsPanel */
+.pa-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 400px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #6B7280);
+}

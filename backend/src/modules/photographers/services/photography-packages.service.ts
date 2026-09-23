@@ -145,6 +145,14 @@ export class PhotographyPackagesService {
     return this.update(userId, packageId, { status: PackageStatus.Inactive });
   }
 
+  async delete(userId: string, packageId: string): Promise<{ success: boolean }> {
+    const provider = await this.getProvider(userId);
+    const photographyPackage = await this.findOwnedPackage(provider._id, packageId);
+    await this.packageModel.deleteOne({ _id: photographyPackage._id });
+    return { success: true };
+  }
+
+
   private assertSchedulingPolicy(input: {
     durationHours?: number;
     includedDurationMinutes?: number | null;

@@ -1,15 +1,13 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from db.connection import users_col, services_col, bookings_col, db, products_col
-from recommendation.style_engine import StyleMatchingEngine
+from db.connection import db, products_col
 from chatbot.chatbot_engine import ChatbotEngine
 from chatbot.normalization import extract_age_and_range, extract_gender
 from tagging.schemas import TaggingRequest, TaggingResponse
 from tagging.tagging_engine import suggest_tags
 
 app    = FastAPI(title="AI Style Matching", version="2.0")
-engine = StyleMatchingEngine()
 chatbot = ChatbotEngine()
 
 app.add_middleware(
@@ -67,64 +65,6 @@ async def _get_product_context(limit: int = 10) -> str:
 @app.get("/")
 async def root():
     return {"message": "AI Style Matching API đang chạy ✅"}
-
-
-# ════════════════════════════════════════════════════════════════
-# RECOMMENDATION ENDPOINTS (UC-X04)
-# ════════════════════════════════════════════════════════════════
-
-@app.get("/recommend/{user_id}")
-async def recommend(user_id: str, top_k: int = 5):
-    user = await users_col.find_one({"_id": user_id})
-    if not user:
-        raise HTTPException(status_code=404, detail=f"Không tìm thấy user: {user_id}")
-
-    cursor   = bookings_col.find({"user_id": user_id}).sort("booked_at", -1).limit(10)
-    bookings = await cursor.to_list(length=10)
-
-    svc_cursor = services_col.find({"status": "active"})
-    services   = await svc_cursor.to_list(length=500)
-
-    profile = engine.build_user_profile(user["preferences"], bookings)
-    results = engine.recommend(profile, services, top_k)
-
-    return {
-        "user_id":   user_id,
-        "user_name": user.get("name"),
-        "recommendations": results
-    }
-
-
-@app.get("/recommend/{user_id}/ao-dai")
-async def recommend_ao_dai(user_id: str, top_k: int = 5):
-    user = await users_col.find_one({"_id": user_id})
-    if not user:
-        raise HTTPException(status_code=404, detail="Không tìm thấy user")
-
-    cursor     = bookings_col.find({"user_id": user_id}).sort("booked_at", -1).limit(10)
-    bookings   = await cursor.to_list(length=10)
-    svc_cursor = services_col.find({"status": "active", "service_type": "ao_dai"})
-    services   = await svc_cursor.to_list(length=500)
-
-    profile = engine.build_user_profile(user["preferences"], bookings)
-    results = engine.recommend(profile, services, top_k)
-    return {"user_id": user_id, "recommendations": results}
-
-
-@app.get("/recommend/{user_id}/photographer")
-async def recommend_photographer(user_id: str, top_k: int = 5):
-    user = await users_col.find_one({"_id": user_id})
-    if not user:
-        raise HTTPException(status_code=404, detail="Không tìm thấy user")
-
-    cursor     = bookings_col.find({"user_id": user_id}).sort("booked_at", -1).limit(10)
-    bookings   = await cursor.to_list(length=10)
-    svc_cursor = services_col.find({"status": "active", "service_type": "photographer"})
-    services   = await svc_cursor.to_list(length=500)
-
-    profile = engine.build_user_profile(user["preferences"], bookings)
-    results = engine.recommend(profile, services, top_k)
-    return {"user_id": user_id, "recommendations": results}
 
 
 # ════════════════════════════════════════════════════════════════

@@ -243,7 +243,10 @@ export class RolesService implements OnModuleInit {
   }
 
   async listRoles(): Promise<Record<string, unknown>> {
-    const roles = await this.roleModel.find({}).sort({ code: 1 }).lean();
+    const [roles, userCounts] = await Promise.all([
+      this.roleModel.find({}).sort({ code: 1 }).lean(),
+      this.usersRepository.countUsersByRoles(),
+    ]);
 
     return {
       items: roles.map((role) => ({
@@ -251,6 +254,7 @@ export class RolesService implements OnModuleInit {
         name: role.name,
         description: role.description ?? null,
         permissions: role.permissions,
+        userCount: userCounts[role.code] || 0,
         status: role.status,
         createdAt: role.createdAt,
         updatedAt: role.updatedAt,
