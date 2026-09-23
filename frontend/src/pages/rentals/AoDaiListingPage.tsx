@@ -53,7 +53,13 @@ interface ProductFromDb {
     averageRating: number;
     totalReviews: number;
   };
-  providerId?: any;
+  providerId?: string | {
+    _id?: string;
+    businessName?: string;
+    brandName?: string;
+    city?: string;
+    address?: { city?: string };
+  };
   badges?: Array<{ code: string; label: string; tone?: string }>;
   activeCampaign?: {
     occasion: string;
@@ -61,6 +67,16 @@ interface ProductFromDb {
     endDate?: string;
   } | null;
   discountedPrice?: number;
+  recommendation?: {
+    score: number;
+    matchPercent: number;
+    reasons: string[];
+  };
+}
+
+interface FavoriteEntry {
+  targetType: string;
+  targetId: string | { toString(): string };
 }
 
 interface ProductPageResponse {
@@ -131,11 +147,13 @@ export const AoDaiListingPage: React.FC = () => {
   // Sync favorites with user context
   useEffect(() => {
     if (user?.favorites) {
-      const favIds = user.favorites
+      const favIds = (user.favorites as FavoriteEntry[])
         .filter(
-          (f: any) => f.targetType === "PRODUCT" || f.targetType === "Product"
+          (f) => f.targetType === "PRODUCT" || f.targetType === "Product"
         )
-        .map((f: any) => f.targetId.toString());
+        .map((f) => f.targetId.toString());
+      // Mirror favorites from the authenticated user context into editable UI state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFavorites(favIds);
     } else {
       setFavorites([]);
@@ -179,18 +197,21 @@ export const AoDaiListingPage: React.FC = () => {
         }
         params.append('page', currentPage.toString());
         params.append('limit', ITEMS_PER_PAGE.toString());
-        params.append(
-          'sort',
-          sortOption === 'price-asc'
-            ? 'price_asc'
-            : sortOption === 'price-desc'
-              ? 'price_desc'
-              : sortOption === 'rating'
-                ? 'rating_desc'
-                : 'newest',
-        );
+        const usePersonalizedRanking = sortOption === 'recommended' && Boolean(user?.id);
+        if (!usePersonalizedRanking) {
+          params.append(
+            'sort',
+            sortOption === 'price-asc'
+              ? 'price_asc'
+              : sortOption === 'price-desc'
+                ? 'price_desc'
+                : sortOption === 'rating'
+                  ? 'rating_desc'
+                  : 'newest',
+          );
+        }
         const response = await httpClient.get<ProductPageResponse>(
-          '/products?' + params.toString(),
+          `${usePersonalizedRanking ? '/products/personalized' : '/products'}?${params.toString()}`,
           { signal: controller.signal },
         );
         if (active) {
@@ -223,6 +244,7 @@ export const AoDaiListingPage: React.FC = () => {
     activeTab,
     currentPage,
     sortOption,
+    user?.id,
   ]);
 
   // 1. Dynamic statistics computed directly from live product data
@@ -874,13 +896,17 @@ export const AoDaiListingPage: React.FC = () => {
                 {paginatedProducts.map((product, index) => {
                   const isFavorited = favorites.includes(product._id);
                   const badgeText = getCardBadge(product, index);
+                  const provider =
+                    typeof product.providerId === "object"
+                      ? product.providerId
+                      : undefined;
                   const storeName =
-                    product.providerId?.businessName ||
-                    product.providerId?.brandName ||
+                    provider?.businessName ||
+                    provider?.brandName ||
                     "LUMÉ ÁO DÀI";
                   const city =
-                    product.providerId?.address?.city ||
-                    product.providerId?.city ||
+                    provider?.address?.city ||
+                    provider?.city ||
                     "Huế";
                   const ratingVal =
                     product.rating?.averageRating?.toFixed(1) || "4.9";
@@ -964,8 +990,13 @@ export const AoDaiListingPage: React.FC = () => {
                           </span>
                         </div>
 
-                        <p className="lume-card-hint">
-                          Chọn thời gian để kiểm tra lịch
+                        <p
+                          className="lume-card-hint"
+                          title={product.recommendation?.reasons.join(' · ')}
+                        >
+                          {product.recommendation
+                            ? `${product.recommendation.matchPercent}% phù hợp · ${product.recommendation.reasons[0] || 'Đề xuất cho bạn'}`
+                            : 'Chọn thời gian để kiểm tra lịch'}
                         </p>
 
                         <div className="lume-card-footer">

@@ -109,8 +109,24 @@ interface Product {
   occasions?: string[];
   styleCategoryIds?: Array<string | { _id?: string; id?: string }>;
   eventCategoryIds?: Array<string | { _id?: string; id?: string }>;
+  customTags?: Array<{
+    label: string;
+    normalizedLabel: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    mappedTagCode?: string | null;
+  }>;
   status: 'ACTIVE' | 'DRAFT' | 'INACTIVE';
   taggingDecisionVersion?: number;
+}
+
+interface ProductPriceHistoryItem {
+  id: string;
+  price: number;
+  depositAmount: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  isCurrent: boolean;
+  note: string | null;
 }
 
 interface PortfolioItem {
@@ -1539,6 +1555,12 @@ export const ProviderDashboard: React.FC = () => {
   const [eventCategories, setEventCategories] = useState<Category[]>([]);
   const [prodStyleCategoryIds, setProdStyleCategoryIds] = useState<string[]>([]);
   const [prodEventCategoryIds, setProdEventCategoryIds] = useState<string[]>([]);
+  const [prodCustomTags, setProdCustomTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState('');
+  const [priceHistory, setPriceHistory] = useState<ProductPriceHistoryItem[]>([]);
+  const [priceHistoryOpen, setPriceHistoryOpen] = useState(false);
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
+  const [priceHistoryLoadedFor, setPriceHistoryLoadedFor] = useState<string | null>(null);
 
   // Onboarding wizard (3 steps) + variant table + hidden-draft lifecycle
   type VariantRow = { size: string; color: string; material: string; quantity: number; condition: string };
@@ -1716,6 +1738,11 @@ export const ProviderDashboard: React.FC = () => {
     setProdOccasions([]);
     setProdStyleCategoryIds([]);
     setProdEventCategoryIds([]);
+    setProdCustomTags([]);
+    setCustomTagInput('');
+    setPriceHistory([]);
+    setPriceHistoryOpen(false);
+    setPriceHistoryLoadedFor(null);
     setVariants([emptyVariant()]);
     setWizardStep(1);
     setCreatedDraftId(null);
@@ -1741,6 +1768,30 @@ export const ProviderDashboard: React.FC = () => {
       .map(item => typeof item === 'string' ? item : item._id || item.id || '')
       .filter(Boolean);
 
+  const loadPriceHistory = async (productId: string) => {
+    setPriceHistoryLoading(true);
+    try {
+      const response: any = await httpClient.get(
+        `/products/my-listings/${productId}/price-history?page=1&limit=10`,
+      );
+      setPriceHistory(Array.isArray(response?.data) ? response.data : []);
+      setPriceHistoryLoadedFor(productId);
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể tải lịch sử giá');
+    } finally {
+      setPriceHistoryLoading(false);
+    }
+  };
+
+  const togglePriceHistory = () => {
+    if (!editingProduct) return;
+    const nextOpen = !priceHistoryOpen;
+    setPriceHistoryOpen(nextOpen);
+    if (nextOpen && priceHistoryLoadedFor !== editingProduct._id) {
+      void loadPriceHistory(editingProduct._id);
+    }
+  };
+
   const openEditModal = (p: Product) => {
     setEditingProduct(p);
     setProdName(p.name);
@@ -1764,6 +1815,11 @@ export const ProviderDashboard: React.FC = () => {
     setProdOccasions(p.occasions || []);
     setProdStyleCategoryIds(normalizeCategoryIds(p.styleCategoryIds));
     setProdEventCategoryIds(normalizeCategoryIds(p.eventCategoryIds));
+    setProdCustomTags((p.customTags || []).map(tag => tag.label));
+    setCustomTagInput('');
+    setPriceHistory([]);
+    setPriceHistoryOpen(false);
+    setPriceHistoryLoadedFor(null);
     setVariants([]);
     setWizardStep(1);
     setCreatedDraftId(null);
@@ -1790,6 +1846,11 @@ export const ProviderDashboard: React.FC = () => {
     setProdOccasions(p.occasions || []);
     setProdStyleCategoryIds(normalizeCategoryIds(p.styleCategoryIds));
     setProdEventCategoryIds(normalizeCategoryIds(p.eventCategoryIds));
+    setProdCustomTags((p.customTags || []).map(tag => tag.label));
+    setCustomTagInput('');
+    setPriceHistory([]);
+    setPriceHistoryOpen(false);
+    setPriceHistoryLoadedFor(null);
     // Sao chép biến thể từ áo gốc (số lượng đặt lại = 1 để provider tự nhập).
     const dupSizes = p.sizes && p.sizes.length ? p.sizes : ['M'];
     const dupColors = p.colors && p.colors.length ? p.colors : ['RED'];
@@ -2063,7 +2124,30 @@ export const ProviderDashboard: React.FC = () => {
     occasions: prodOccasions,
     styleCategoryIds: prodStyleCategoryIds,
     eventCategoryIds: prodEventCategoryIds,
+    customTags: prodCustomTags,
   });
+
+  const addCustomTag = () => {
+    const label = customTagInput.trim().replace(/\s+/g, ' ');
+    if (label.length < 2 || label.length > 30) {
+      toast.error('Tag đề xuất phải dài từ 2 đến 30 ký tự.');
+      return;
+    }
+    if (prodCustomTags.length >= 3) {
+      toast.error('Mỗi sản phẩm được đề xuất tối đa 3 tag mới.');
+      return;
+    }
+    if (prodCustomTags.some(tag => tag.localeCompare(label, 'vi', { sensitivity: 'base' }) === 0)) {
+      toast.error('Tag này đã được thêm.');
+      return;
+    }
+    setProdCustomTags(tags => [...tags, label]);
+    setCustomTagInput('');
+  };
+
+  const removeCustomTag = (label: string) => {
+    setProdCustomTags(tags => tags.filter(tag => tag !== label));
+  };
 
   const validateWizardStep1 = () => {
     if (!prodName || !prodCategoryId || !prodBasePrice || !prodDepositAmount) {
@@ -2167,6 +2251,8 @@ export const ProviderDashboard: React.FC = () => {
     setEditingProduct(null);
     setCreatedDraftId(null);
     setActiveTagCodes([]);
+    setProdCustomTags([]);
+    setCustomTagInput('');
     setWizardStep(1);
     setProdImages([]);
     setProdColorImages({});
@@ -6261,6 +6347,67 @@ export const ProviderDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {editingProduct && (
+                <div style={{ border: '1px solid var(--color-light-border)', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'white' }}>
+                  <button
+                    type="button"
+                    onClick={togglePriceHistory}
+                    aria-expanded={priceHistoryOpen}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '11px 14px', border: 'none', backgroundColor: 'var(--color-light-bg)', color: 'var(--color-text-primary)', cursor: 'pointer', fontSize: '12.5px', fontWeight: 700, textAlign: 'left' }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px' }}>
+                      <Clock size={15} /> Lịch sử giá gần đây
+                    </span>
+                    <ChevronRight size={16} style={{ transform: priceHistoryOpen ? 'rotate(90deg)' : 'none', transition: 'transform 160ms ease' }} />
+                  </button>
+
+                  {priceHistoryOpen && (
+                    <div style={{ padding: '12px 14px' }}>
+                      {priceHistoryLoading ? (
+                        <div style={{ padding: '10px 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Đang tải lịch sử giá...</div>
+                      ) : priceHistory.length === 0 ? (
+                        <div style={{ padding: '10px 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Chưa có phiên bản giá nào.</div>
+                      ) : (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', minWidth: '560px', borderCollapse: 'collapse', fontSize: '12px' }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1px solid var(--color-light-border)', color: 'var(--color-text-secondary)' }}>
+                                <th style={{ padding: '7px 8px', textAlign: 'left' }}>Thời điểm áp dụng</th>
+                                <th style={{ padding: '7px 8px', textAlign: 'right' }}>Giá thuê/ngày</th>
+                                <th style={{ padding: '7px 8px', textAlign: 'right' }}>Tiền cọc</th>
+                                <th style={{ padding: '7px 8px', textAlign: 'center' }}>Trạng thái</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {priceHistory.map(version => (
+                                <tr key={version.id} style={{ borderBottom: '1px solid var(--color-light-border)' }}>
+                                  <td style={{ padding: '9px 8px', whiteSpace: 'nowrap' }}>
+                                    {new Intl.DateTimeFormat('vi-VN', {
+                                      day: '2-digit', month: '2-digit', year: 'numeric',
+                                      hour: '2-digit', minute: '2-digit', hour12: false,
+                                    }).format(new Date(version.effectiveFrom))}
+                                  </td>
+                                  <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 700 }}>{Number(version.price).toLocaleString('vi-VN')}đ</td>
+                                  <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 700 }}>{Number(version.depositAmount).toLocaleString('vi-VN')}đ</td>
+                                  <td style={{ padding: '9px 8px', textAlign: 'center' }}>
+                                    <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '999px', fontSize: '10.5px', fontWeight: 700, color: version.isCurrent ? '#166534' : 'var(--color-text-secondary)', backgroundColor: version.isCurrent ? '#DCFCE7' : 'var(--color-light-bg)' }}>
+                                      {version.isCurrent ? 'Hiện tại' : 'Đã kết thúc'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      <p style={{ margin: '9px 0 0', fontSize: '11px', lineHeight: 1.45, color: 'var(--color-text-secondary)' }}>
+                        Booking đã tạo vẫn giữ mức giá tại thời điểm đặt; thay đổi ở đây chỉ áp dụng cho booking mới.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Description */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>MÔ TẢ SẢN PHẨM</label>
@@ -6571,6 +6718,50 @@ export const ProviderDashboard: React.FC = () => {
                   ? 'Trường phái & dịp lễ của sản phẩm được suy tự động từ các thẻ đã chọn.'
                   : 'Bấm "Tạo gợi ý", chọn thẻ phù hợp (cần ít nhất 1 thẻ). Trường phái & dịp lễ sẽ được suy tự động từ thẻ.'}
               </p>
+
+              <section style={{ marginTop: '14px', padding: '14px', border: '1px solid var(--color-light-border)', borderRadius: '8px', backgroundColor: '#fffdf9' }}>
+                <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>Đề xuất tag khác</strong>
+                <p style={{ margin: '4px 0 10px', fontSize: '12px', lineHeight: 1.45, color: 'var(--color-text-secondary)' }}>
+                  Tag tự nhập cần được Admin duyệt và không thay thế tag chuẩn. Tối đa 3 tag, mỗi tag từ 2–30 ký tự.
+                </p>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={customTagInput}
+                    maxLength={30}
+                    disabled={prodCustomTags.length >= 3}
+                    placeholder={prodCustomTags.length >= 3 ? 'Đã đạt giới hạn 3 tag' : 'Ví dụ: Nàng thơ xứ Huế'}
+                    onChange={event => setCustomTagInput(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        addCustomTag();
+                      }
+                    }}
+                    style={{ flex: 1, minWidth: 0, padding: '9px 11px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '13px', outline: 'none', backgroundColor: prodCustomTags.length >= 3 ? 'var(--color-light-bg)' : 'white' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomTag}
+                    disabled={!customTagInput.trim() || prodCustomTags.length >= 3}
+                    style={{ padding: '9px 13px', border: '1px solid var(--color-primary)', borderRadius: '6px', backgroundColor: 'white', color: 'var(--color-primary)', fontSize: '12px', fontWeight: 700, cursor: !customTagInput.trim() || prodCustomTags.length >= 3 ? 'not-allowed' : 'pointer', opacity: !customTagInput.trim() || prodCustomTags.length >= 3 ? 0.55 : 1 }}
+                  >
+                    Thêm tag
+                  </button>
+                </div>
+                {prodCustomTags.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px', marginTop: '10px' }}>
+                    {prodCustomTags.map(tag => (
+                      <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 8px', border: '1px solid #d6d3d1', borderRadius: '999px', backgroundColor: 'white', color: '#57534e', fontSize: '12px', fontWeight: 700 }}>
+                        {tag}
+                        <button type="button" aria-label={`Xóa tag ${tag}`} onClick={() => removeCustomTag(tag)} style={{ display: 'inline-flex', padding: 0, border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer' }}>
+                          <X size={13} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </section>
             </>
           )}
 

@@ -1,5 +1,11 @@
 import type { PublicSmartTagBadge } from '../../smart-tagging/types/smartTag.types';
 
+export interface PublicCustomTag {
+  label: string;
+  normalizedLabel: string;
+  mappedTagCode?: string | null;
+}
+
 export interface ProductFromDb {
   _id: string;
   name: string;
@@ -11,6 +17,7 @@ export interface ProductFromDb {
   materials: string[];
   status: string;
   badges?: PublicSmartTagBadge[];
+  customTags?: PublicCustomTag[];
 }
 
 export interface AoDaiItem {
@@ -21,4 +28,5 @@ export interface AoDaiItem {
   status: 'AVAILABLE' | 'RESERVED';
   image: string;
   badges?: PublicSmartTagBadge[];
+  customTags?: PublicCustomTag[];
 }

@@ -19,8 +19,12 @@ import traditionalImg from '../../assets/images/onboarding_traditional.webp';
 import modernImg from '../../assets/images/onboarding_modern.webp';
 import edgyImg from '../../assets/images/onboarding_edgy.webp';
 
+type StylePreference = 'traditional' | 'modern' | 'edgy';
+type MaterialPreference = 'SILK' | 'VELVET' | 'BROCADE' | 'ORGANZA' | 'LINEN';
+type OccasionPreference = 'graduation' | 'wedding' | 'festival' | 'event';
+
 interface Step1Data {
-  style: 'traditional' | 'modern' | 'edgy' | null;
+  styles: StylePreference[];
 }
 
 interface Step2Data {
@@ -28,10 +32,43 @@ interface Step2Data {
   size: 'S' | 'M' | 'L' | 'XL' | 'XXL' | null;
   height: string;
   weight: string;
+  materials: MaterialPreference[];
 }
 
 interface Step3Data {
-  purpose: 'graduation' | 'wedding' | 'festival' | 'event' | null;
+  purposes: OccasionPreference[];
+}
+
+interface OnboardingPreferences {
+  preferredAoDaiStyles?: unknown[];
+  favoriteColors?: unknown[];
+  preferredMaterials?: unknown[];
+  preferredOccasions?: unknown[];
+  sizeInfo?: {
+    preferredSize?: unknown;
+    height?: unknown;
+    weight?: unknown;
+  };
+}
+
+interface CurrentUserResponse {
+  preferences?: OnboardingPreferences;
+}
+
+interface OnboardingUpdatePayload {
+  hasCompletedOnboarding: true;
+  preferences?: {
+    preferredOccasions: string[];
+    favoriteColors: string[];
+    preferredMaterials: MaterialPreference[];
+    preferredAoDaiStyles: string[];
+    sizeInfo: {
+      preferredSize: Step2Data['size'];
+      height: number | null;
+      weight: number | null;
+    };
+    preferredLocations: string[];
+  };
 }
 
 export const OnboardingPage: React.FC = () => {
@@ -39,11 +76,11 @@ export const OnboardingPage: React.FC = () => {
   const { updatePreferences } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
-  const [step1, setStep1] = useState<Step1Data>({ style: null });
+  const [step1, setStep1] = useState<Step1Data>({ styles: [] });
   const [step2, setStep2] = useState<Step2Data>({
-    colorTone: null, size: null, height: '', weight: '',
+    colorTone: null, size: null, height: '', weight: '', materials: [],
   });
-  const [step3, setStep3] = useState<Step3Data>({ purpose: null });
+  const [step3, setStep3] = useState<Step3Data>({ purposes: [] });
 
   const [submitting, setSubmitting] = useState(false);
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
@@ -54,46 +91,54 @@ export const OnboardingPage: React.FC = () => {
   // Nếu người dùng đã có sở thích -> nạp lại để CHỈNH SỬA (không bắt làm lại từ đầu)
   useEffect(() => {
     let active = true;
-    httpClient.get<any>('/users/me').then((me) => {
+    httpClient.get<CurrentUserResponse>('/users/me').then((me) => {
       if (!active) return;
       const p = me?.preferences;
-      const hasData = p && (p.preferredAoDaiStyles?.length || p.favoriteColors?.length || p.sizeInfo?.preferredSize || p.preferredOccasions?.length);
+      const hasData = p && (p.preferredAoDaiStyles?.length || p.favoriteColors?.length || p.preferredMaterials?.length || p.sizeInfo?.preferredSize || p.preferredOccasions?.length);
       if (!hasData) return;
       setIsEditing(true);
-      if (p.preferredAoDaiStyles?.[0]) {
-        setStep1({ style: String(p.preferredAoDaiStyles[0]).toLowerCase() as Step1Data['style'] });
-      }
+      setStep1({
+        styles: (p.preferredAoDaiStyles || []).map((value: unknown) =>
+          String(value).toLowerCase() as StylePreference,
+        ),
+      });
       setStep2({
         colorTone: (p.favoriteColors?.[0] ? String(p.favoriteColors[0]).toLowerCase() : null) as Step2Data['colorTone'],
         size: (p.sizeInfo?.preferredSize ?? null) as Step2Data['size'],
         height: p.sizeInfo?.height != null ? String(p.sizeInfo.height) : '',
         weight: p.sizeInfo?.weight != null ? String(p.sizeInfo.weight) : '',
+        materials: (p.preferredMaterials || []).map((value: unknown) =>
+          String(value).toUpperCase() as MaterialPreference,
+        ),
       });
-      if (p.preferredOccasions?.[0]) {
-        setStep3({ purpose: String(p.preferredOccasions[0]).toLowerCase() as Step3Data['purpose'] });
-      }
+      setStep3({
+        purposes: (p.preferredOccasions || []).map((value: unknown) =>
+          String(value).toLowerCase() as OccasionPreference,
+        ),
+      });
     }).catch(() => { /* khách mới / lỗi mạng -> để trống như cũ */ });
     return () => { active = false; };
   }, []);
 
   const canProceed =
-    (step === 1 && step1.style !== null) ||
+    (step === 1 && step1.styles.length > 0) ||
     (step === 2 && step2.size !== null) ||
-    (step === 3 && step3.purpose !== null);
+    (step === 3 && step3.purposes.length > 0);
 
   const savePreferences = async (isSkipped = false) => {
     setSubmitting(true);
     setErrorMsg(null);
     try {
-      const payload: any = {
+      const payload: OnboardingUpdatePayload = {
         hasCompletedOnboarding: true,
       };
       
       if (!isSkipped) {
         payload.preferences = {
-          preferredOccasions: step3.purpose ? [step3.purpose.toUpperCase()] : [],
+          preferredOccasions: step3.purposes.map((purpose) => purpose.toUpperCase()),
           favoriteColors: step2.colorTone ? [step2.colorTone.toUpperCase()] : [],
-          preferredAoDaiStyles: step1.style ? [step1.style.toUpperCase()] : [],
+          preferredMaterials: step2.materials,
+          preferredAoDaiStyles: step1.styles.map((style) => style.toUpperCase()),
           sizeInfo: {
             preferredSize: step2.size || null,
             height: step2.height ? Number(step2.height) : null,
@@ -130,6 +175,11 @@ export const OnboardingPage: React.FC = () => {
     backgroundColor: isSelected ? 'var(--color-light-bg)' : 'white',
     boxShadow: isSelected ? '0 8px 24px rgba(161,30,34,0.08)' : 'var(--shadow-sm)',
   });
+
+  const toggleValue = <T extends string>(values: T[], value: T): T[] =>
+    values.includes(value)
+      ? values.filter((existing) => existing !== value)
+      : [...values, value];
 
   return (
     <div style={{
@@ -198,15 +248,18 @@ export const OnboardingPage: React.FC = () => {
           {step === 1 && (
             <div>
               <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, color: 'var(--color-text-primary)', margin: '0 0 32px 0' }}>Chọn trường phái Áo Dài yêu thích</h2>
+              <p style={{ margin: '-22px 0 24px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>Bạn có thể chọn nhiều phong cách.</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
                 {[
                   { key: 'traditional', img: traditionalImg, label: 'Truyền Thống' },
                   { key: 'modern', img: modernImg, label: 'Cách Tân' },
                   { key: 'edgy', img: edgyImg, label: 'Phá Cách' },
                 ].map((item) => (
-                  <div key={item.key} onClick={() => setStep1({ style: item.key as any })} style={{
+                  <div key={item.key} onClick={() => setStep1((previous) => ({
+                    styles: toggleValue(previous.styles, item.key as StylePreference),
+                  }))} style={{
                     cursor: 'pointer', borderRadius: 'var(--radius-md)', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-                    transition: 'var(--transition-smooth)', ...selectedCardStyle(step1.style === item.key),
+                    transition: 'var(--transition-smooth)', ...selectedCardStyle(step1.styles.includes(item.key as StylePreference)),
                   }}>
                     <div style={{ height: '260px', overflow: 'hidden', backgroundColor: 'var(--color-light-bg)' }}>
                       <img src={item.img} alt={item.label} style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }} />
@@ -231,7 +284,7 @@ export const OnboardingPage: React.FC = () => {
                   { key: 'dark', color: '#1F2937', label: 'Tone trầm sang trọng', tooltip: 'Bao gồm: Đen, Xám, Nâu, Xanh dương' },
                   { key: 'colorful', color: 'linear-gradient(135deg, #10B981 0%, #F59E0B 100%)', label: 'Hoa văn sặc sỡ', tooltip: 'Bao gồm: Vàng, Xanh lá, Hồng, Xanh dương, Đỏ' },
                 ].map((c) => (
-                  <div key={c.key} onClick={() => setStep2(p => ({ ...p, colorTone: c.key as any }))} style={{
+                  <div key={c.key} onClick={() => setStep2(p => ({ ...p, colorTone: c.key as Step2Data['colorTone'] }))} style={{
                     cursor: 'pointer', padding: '18px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
                     transition: 'var(--transition-smooth)', position: 'relative', ...selectedCardStyle(step2.colorTone === c.key),
                   }}>
@@ -296,6 +349,38 @@ export const OnboardingPage: React.FC = () => {
                 ))}
               </div>
 
+              <h3 style={{ fontFamily: 'var(--font-header)', fontSize: '24px', fontWeight: 700, margin: '28px 0 8px' }}>Chất liệu yêu thích</h3>
+              <p style={{ margin: '0 0 14px', color: 'var(--color-text-secondary)', fontSize: '12px' }}>Không bắt buộc. Bạn có thể chọn nhiều chất liệu hoặc để trống nếu chưa có ưu tiên.</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '28px' }}>
+                {([
+                  ['SILK', 'Lụa'],
+                  ['VELVET', 'Nhung'],
+                  ['BROCADE', 'Gấm'],
+                  ['ORGANZA', 'Organza'],
+                  ['LINEN', 'Linen'],
+                ] as Array<[MaterialPreference, string]>).map(([value, label]) => {
+                  const selected = step2.materials.includes(value);
+                  return (
+                    <button
+                      type="button"
+                      key={value}
+                      onClick={() => setStep2((previous) => ({
+                        ...previous,
+                        materials: toggleValue(previous.materials, value),
+                      }))}
+                      style={{
+                        padding: '9px 16px', borderRadius: '999px', cursor: 'pointer', fontWeight: 700, fontSize: '12px',
+                        border: selected ? '2px solid var(--color-primary)' : '1px solid var(--color-light-border)',
+                        backgroundColor: selected ? 'var(--color-light-bg)' : 'white',
+                        color: selected ? 'var(--color-primary)' : 'var(--color-text-primary)',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
               <h3 style={{ fontFamily: 'var(--font-header)', fontSize: '24px', fontWeight: 700, margin: '32px 0 16px 0' }}>Kích thước & Số đo</h3>
               <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '12px' }}>Size tiêu chuẩn</span>
               <div style={{ display: 'flex', gap: '12px', marginBottom: '32px' }}>
@@ -355,6 +440,7 @@ export const OnboardingPage: React.FC = () => {
           {step === 3 && (
             <div>
               <h2 style={{ fontFamily: 'var(--font-header)', fontSize: '32px', fontWeight: 700, color: 'var(--color-text-primary)', margin: '0 0 32px 0' }}>Mục đích thuê & Cá nhân hóa</h2>
+              <p style={{ margin: '-22px 0 24px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>Chọn một hoặc nhiều dịp bạn thường quan tâm.</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '32px' }}>
                 {[
                   { key: 'graduation', icon: <GraduationCap size={20} />, label: 'Chụp ảnh kỷ yếu' },
@@ -362,9 +448,11 @@ export const OnboardingPage: React.FC = () => {
                   { key: 'festival', icon: <PartyPopper size={20} />, label: 'Lễ hội truyền thống' },
                   { key: 'event', icon: <Sparkles size={20} />, label: 'Biểu diễn/Sự kiện' },
                 ].map((p) => (
-                  <div key={p.key} onClick={() => setStep3(prev => ({ ...prev, purpose: p.key as any }))} style={{
+                  <div key={p.key} onClick={() => setStep3((previous) => ({
+                    purposes: toggleValue(previous.purposes, p.key as OccasionPreference),
+                  }))} style={{
                     cursor: 'pointer', padding: '20px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '16px',
-                    transition: 'var(--transition-smooth)', ...selectedCardStyle(step3.purpose === p.key),
+                    transition: 'var(--transition-smooth)', ...selectedCardStyle(step3.purposes.includes(p.key as OccasionPreference)),
                   }}>
                     <div style={{ padding: '10px', backgroundColor: 'var(--color-light-bg)', color: 'var(--color-primary)', borderRadius: '8px', border: '1px solid var(--color-light-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{p.icon}</div>
                     <span style={{ fontWeight: 600, color: 'var(--color-text-primary)', fontSize: '14px' }}>{p.label}</span>

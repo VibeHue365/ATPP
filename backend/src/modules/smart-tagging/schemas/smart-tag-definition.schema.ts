@@ -3,6 +3,7 @@ import { HydratedDocument, Types } from 'mongoose';
 import {
   SmartTagDefinitionStatus,
   SmartTagEntityType,
+  SmartTagGroup,
 } from '../constants/smart-tag.constants';
 
 export type SmartTagDefinitionDocument = HydratedDocument<SmartTagDefinition>;
@@ -14,10 +15,6 @@ export interface SmartTagDisplayConfig {
 }
 
 export interface SmartTagRuleConfig {
-  styles?: string[];
-  occasions?: string[];
-  materials?: string[];
-  colors?: string[];
   keywords?: string[];
 }
 
@@ -31,6 +28,14 @@ export class SmartTagDefinition {
 
   @Prop({ required: true, trim: true, maxlength: 500 })
   description: string;
+
+  @Prop({
+    type: String,
+    enum: Object.values(SmartTagGroup),
+    default: null,
+    index: true,
+  })
+  group?: SmartTagGroup | null;
 
   @Prop({
     type: [String],
@@ -65,10 +70,6 @@ export class SmartTagDefinition {
 
   @Prop({
     type: {
-      styles: { type: [String], default: [] },
-      occasions: { type: [String], default: [] },
-      materials: { type: [String], default: [] },
-      colors: { type: [String], default: [] },
       keywords: { type: [String], default: [] },
     },
     default: {},

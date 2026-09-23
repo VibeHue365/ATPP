@@ -377,6 +377,9 @@ export class UsersRepository {
       if (prefs.favoriteColors !== undefined) {
         updateQuery['preferences.favoriteColors'] = prefs.favoriteColors;
       }
+      if (prefs.preferredMaterials !== undefined) {
+        updateQuery['preferences.preferredMaterials'] = prefs.preferredMaterials;
+      }
       if (prefs.preferredAoDaiStyles !== undefined) {
         updateQuery['preferences.preferredAoDaiStyles'] = prefs.preferredAoDaiStyles;
       }

@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   IsArray,
   ArrayUnique,
   IsEnum,
@@ -8,6 +9,8 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
+  MinLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -119,6 +122,15 @@ export class CreateProductDto {
   @IsArray()
   @IsString({ each: true })
   occasions?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3)
+  @ArrayUnique((tag: string) => tag.trim().toLocaleLowerCase('vi-VN'))
+  @IsString({ each: true })
+  @MinLength(2, { each: true })
+  @MaxLength(30, { each: true })
+  customTags?: string[];
 
   @IsOptional()
   @IsEnum(ProductStatus)

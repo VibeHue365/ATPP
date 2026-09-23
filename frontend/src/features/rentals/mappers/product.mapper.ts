@@ -19,4 +19,5 @@ export const mapProductToAoDaiItem = (p: ProductFromDb): AoDaiItem => ({
   status: 'AVAILABLE',
   image: p.images?.[0] || DEFAULT_PRODUCT_IMAGE_FALLBACK,
   badges: p.badges,
+  customTags: p.customTags,
 });

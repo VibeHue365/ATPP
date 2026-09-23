@@ -3,6 +3,8 @@ import * as path from 'path';
 
 interface SmartTagSeedDefinition {
   code: string;
+  group?: 'STYLE' | 'OCCASION' | null;
+  status: 'ACTIVE' | 'INACTIVE';
   entityTypes: string[];
   displayConfig: { color: string; backgroundColor: string };
 }
@@ -22,6 +24,16 @@ describe('default smart tag taxonomy seed data', () => {
     expect(new Set(codes).size).toBe(definitions.length);
     expect(
       definitions.every((definition) => definition.entityTypes.length > 0),
+    ).toBe(true);
+    const activeDefinitions = definitions.filter(
+      (definition) => definition.status === 'ACTIVE',
+    );
+    expect(activeDefinitions).toHaveLength(7);
+    expect(
+      activeDefinitions.every(
+        (definition) =>
+          definition.group === 'STYLE' || definition.group === 'OCCASION',
+      ),
     ).toBe(true);
     expect(
       definitions.every(

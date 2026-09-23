@@ -109,6 +109,22 @@ export const AoDaiCard: React.FC<AoDaiCardProps> = ({ item }) => {
               <SmartTagList badges={item.badges} limit={2} />
             </div>
           )}
+          {item.customTags && item.customTags.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {item.customTags.slice(0, 2).map((tag) => (
+                <span
+                  key={tag.normalizedLabel}
+                  className="rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                  style={{
+                    borderColor: 'var(--landing-border)',
+                    color: 'var(--landing-text-muted)',
+                  }}
+                >
+                  {tag.label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Price & Action Row */}

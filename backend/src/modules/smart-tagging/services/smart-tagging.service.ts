@@ -98,10 +98,6 @@ export class SmartTaggingService {
       {
         name: product.name,
         description: product.description,
-        colors: product.colors,
-        materials: product.materials,
-        style: product.style,
-        occasions: product.occasions,
       },
       taxonomy.definitions,
     );
@@ -109,12 +105,7 @@ export class SmartTaggingService {
       entityType: SmartTagEntityType.Product,
       title: product.name,
       description: product.description,
-      structuredAttributes: {
-        colors: product.colors,
-        materials: product.materials,
-        style: product.style,
-        occasions: product.occasions,
-      },
+      structuredAttributes: {},
       definitions: taxonomy.definitions,
       taxonomyVersion: taxonomy.revision,
     });
@@ -245,10 +236,6 @@ export class SmartTaggingService {
       {
         name: item.title,
         description: item.description,
-        colors: [],
-        materials: [],
-        style: null,
-        occasions: [],
       },
       taxonomy.definitions,
     );

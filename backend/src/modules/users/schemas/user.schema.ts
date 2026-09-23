@@ -66,6 +66,7 @@ export interface UserProfile {
 export interface UserPreferences {
   stylePreferences: string[];
   favoriteColors: string[];
+  preferredMaterials: string[];
   preferredAoDaiStyles: string[];
   preferredPhotographyStyles: string[];
   sizeInfo: {
@@ -183,6 +184,7 @@ export class User {
     type: {
       stylePreferences: { type: [String], default: [] },
       favoriteColors: { type: [String], default: [] },
+      preferredMaterials: { type: [String], default: [] },
       preferredAoDaiStyles: { type: [String], default: [] },
       preferredPhotographyStyles: { type: [String], default: [] },
       sizeInfo: {

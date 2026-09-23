@@ -6,11 +6,14 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Connection, Types } from 'mongoose';
+import { InjectModel } from '@nestjs/mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import { ProductsRepository } from '../repositories/products.repository';
 import { UsersRepository } from '../../users/repositories/users.repository';
 import {
   Product,
+  ProductCustomTag,
+  ProductCustomTagStatus,
   ProductDocument,
   ProductModerationStatus,
   ProductStatus,
@@ -26,6 +29,10 @@ import { SmartTaggingService } from '../../smart-tagging/services/smart-tagging.
 import { SmartTagEntityType } from '../../smart-tagging/constants/smart-tag.constants';
 import { PublicMediaService } from '../../storage/services/public-media.service';
 import { normalizeColor } from '../utils/color.util';
+import {
+  PriceTargetType,
+  PriceVersion,
+} from '../schemas/price-version.schema';
 
 @Injectable()
 export class ProductsService implements OnModuleInit {
@@ -38,6 +45,8 @@ export class ProductsService implements OnModuleInit {
     @InjectConnection() private readonly connection: Connection,
     private readonly campaignService: DiscountCampaignService,
     private readonly publicMedia: PublicMediaService,
+    @InjectModel(PriceVersion.name)
+    private readonly priceVersionModel: Model<PriceVersion>,
   ) {}
 
   async onModuleInit() {
@@ -55,9 +64,34 @@ export class ProductsService implements OnModuleInit {
     }
   }
 
-  private publicProductsCache = new Map<string, { data: any[]; expiresAt: number }>();
-  private publicProductPagesCache = new Map<string, { data: any; expiresAt: number }>();
+  private publicProductsCache = new Map<
+    string,
+    { data: any[]; expiresAt: number }
+  >();
+  private publicProductPagesCache = new Map<
+    string,
+    { data: any; expiresAt: number }
+  >();
   private publicProductPagesInFlight = new Map<string, Promise<any>>();
+
+  /** Public APIs must never expose pending/rejected provider-proposed tags. */
+  private projectPublicCustomTags(product: any): any {
+    const plain =
+      typeof product?.toObject === 'function'
+        ? product.toObject()
+        : { ...product };
+    plain.customTags = (plain.customTags ?? [])
+      .filter(
+        (tag: ProductCustomTag) =>
+          tag.status === ProductCustomTagStatus.Approved,
+      )
+      .map((tag: ProductCustomTag) => ({
+        label: tag.label,
+        normalizedLabel: tag.normalizedLabel,
+        mappedTagCode: tag.mappedTagCode ?? null,
+      }));
+    return plain;
+  }
 
   async getAllActiveProducts(options?: {
     search?: string;
@@ -85,17 +119,26 @@ export class ProductsService implements OnModuleInit {
     const products = await this.productsRepository.findAllActive(options);
     // Badge projection and campaign lookup are independent remote queries.
     // Run them together so their latency does not stack on public listing.
-    const providerIds = [...new Set(products.map(p => {
-      return typeof p.providerId === 'object' && p.providerId ? (p.providerId as any)._id : p.providerId;
-    }))];
+    const providerIds = [
+      ...new Set(
+        products.map((p) => {
+          return typeof p.providerId === 'object' && p.providerId
+            ? (p.providerId as any)._id
+            : p.providerId;
+        }),
+      ),
+    ];
     const [productsWithBadges, campaigns] = await Promise.all([
       this.attachPublicBadges(products),
       this.campaignService.getActiveCampaignsForProviders(providerIds),
     ]);
 
     const result = productsWithBadges.map((product: any) => {
-      const plain = typeof product.toObject === 'function' ? product.toObject() : { ...product };
-      const pId = typeof plain.providerId === 'object' && plain.providerId ? plain.providerId._id.toString() : plain.providerId.toString();
+      const plain = this.projectPublicCustomTags(product);
+      const pId =
+        typeof plain.providerId === 'object' && plain.providerId
+          ? plain.providerId._id.toString()
+          : plain.providerId.toString();
       const campaign = campaigns[pId];
       if (campaign) {
         plain.activeCampaign = {
@@ -103,7 +146,9 @@ export class ProductsService implements OnModuleInit {
           discountPercent: campaign.discountPercent,
           endDate: campaign.endDate,
         };
-        plain.discountedPrice = Math.round(plain.basePrice * (1 - campaign.discountPercent / 100));
+        plain.discountedPrice = Math.round(
+          plain.basePrice * (1 - campaign.discountPercent / 100),
+        );
       } else {
         plain.activeCampaign = null;
         plain.discountedPrice = plain.basePrice;
@@ -111,16 +156,28 @@ export class ProductsService implements OnModuleInit {
       return plain;
     });
 
-    this.publicProductsCache.set(cacheKey, { data: result, expiresAt: now + 5 * 60 * 1000 }); // 5 mins TTL
+    this.publicProductsCache.set(cacheKey, {
+      data: result,
+      expiresAt: now + 5 * 60 * 1000,
+    }); // 5 mins TTL
     return result;
   }
 
   async getActiveProductsPage(
     options: {
-      search?: string; minPrice?: number; maxPrice?: number; minRating?: number;
-      colors?: string[]; sizes?: string[]; materials?: string[]; categoryId?: string;
-      styleCategoryIds?: string[]; eventCategoryIds?: string[]; providerId?: string;
-      providerLocation?: string; productTypes?: string[];
+      search?: string;
+      minPrice?: number;
+      maxPrice?: number;
+      minRating?: number;
+      colors?: string[];
+      sizes?: string[];
+      materials?: string[];
+      categoryId?: string;
+      styleCategoryIds?: string[];
+      eventCategoryIds?: string[];
+      providerId?: string;
+      providerLocation?: string;
+      productTypes?: string[];
     },
     page: number,
     limit: number,
@@ -136,11 +193,16 @@ export class ProductsService implements OnModuleInit {
     this.publicProductPagesInFlight.set(cacheKey, request);
     request.then(
       (data) => {
-        this.publicProductPagesCache.set(cacheKey, { data, expiresAt: Date.now() + 5 * 60 * 1000 });
-        if (this.publicProductPagesInFlight.get(cacheKey) === request) this.publicProductPagesInFlight.delete(cacheKey);
+        this.publicProductPagesCache.set(cacheKey, {
+          data,
+          expiresAt: Date.now() + 5 * 60 * 1000,
+        });
+        if (this.publicProductPagesInFlight.get(cacheKey) === request)
+          this.publicProductPagesInFlight.delete(cacheKey);
       },
       () => {
-        if (this.publicProductPagesInFlight.get(cacheKey) === request) this.publicProductPagesInFlight.delete(cacheKey);
+        if (this.publicProductPagesInFlight.get(cacheKey) === request)
+          this.publicProductPagesInFlight.delete(cacheKey);
       },
     );
     return request;
@@ -148,33 +210,56 @@ export class ProductsService implements OnModuleInit {
 
   private async loadActiveProductsPage(
     options: {
-      search?: string; minPrice?: number; maxPrice?: number; minRating?: number;
-      colors?: string[]; sizes?: string[]; materials?: string[]; categoryId?: string;
-      styleCategoryIds?: string[]; eventCategoryIds?: string[]; providerId?: string;
-      providerLocation?: string; productTypes?: string[];
+      search?: string;
+      minPrice?: number;
+      maxPrice?: number;
+      minRating?: number;
+      colors?: string[];
+      sizes?: string[];
+      materials?: string[];
+      categoryId?: string;
+      styleCategoryIds?: string[];
+      eventCategoryIds?: string[];
+      providerId?: string;
+      providerLocation?: string;
+      productTypes?: string[];
     },
     page: number,
     limit: number,
     sort: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc',
   ) {
-    const result = await this.productsRepository.findActivePage(options, page, limit, sort);
-    const providerIds = [...new Set(result.items.map((product) =>
-      typeof product.providerId === 'object' && product.providerId
-        ? (product.providerId as any)._id
-        : product.providerId,
-    ))];
+    const result = await this.productsRepository.findActivePage(
+      options,
+      page,
+      limit,
+      sort,
+    );
+    const providerIds = [
+      ...new Set(
+        result.items.map((product) =>
+          typeof product.providerId === 'object' && product.providerId
+            ? (product.providerId as any)._id
+            : product.providerId,
+        ),
+      ),
+    ];
     const [productsWithBadges, campaigns] = await Promise.all([
       this.attachPublicBadges(result.items),
       this.campaignService.getActiveCampaignsForProviders(providerIds),
     ]);
     const data = productsWithBadges.map((product: any) => {
-      const plain = { ...product } as any;
-      const providerId = typeof plain.providerId === 'object' && plain.providerId
-        ? plain.providerId._id.toString()
-        : plain.providerId.toString();
+      const plain = this.projectPublicCustomTags(product);
+      const providerId =
+        typeof plain.providerId === 'object' && plain.providerId
+          ? plain.providerId._id.toString()
+          : plain.providerId.toString();
       const campaign = campaigns[providerId];
       plain.activeCampaign = campaign
-        ? { occasion: campaign.occasion, discountPercent: campaign.discountPercent, endDate: campaign.endDate }
+        ? {
+            occasion: campaign.occasion,
+            discountPercent: campaign.discountPercent,
+            endDate: campaign.endDate,
+          }
         : null;
       plain.discountedPrice = campaign
         ? Math.round(plain.basePrice * (1 - campaign.discountPercent / 100))
@@ -195,7 +280,12 @@ export class ProductsService implements OnModuleInit {
   }
 
   private publicFacetsCache: {
-    data: { colors: string[]; sizes: string[]; materials: string[]; categoryCounts: Array<{ categoryId: string; count: number }> };
+    data: {
+      colors: string[];
+      sizes: string[];
+      materials: string[];
+      categoryCounts: Array<{ categoryId: string; count: number }>;
+    };
     expiresAt: number;
   } | null = null;
 
@@ -223,7 +313,12 @@ export class ProductsService implements OnModuleInit {
     // Reuse the warmed public page cache instead of creating a cold limit=8
     // cache entry for the landing page.
     const cacheLimit = Math.max(limit, 24);
-    const result = await this.getActiveProductsPage({}, 1, cacheLimit, 'newest');
+    const result = await this.getActiveProductsPage(
+      {},
+      1,
+      cacheLimit,
+      'newest',
+    );
     return result.data.slice(0, limit);
   }
 
@@ -236,11 +331,16 @@ export class ProductsService implements OnModuleInit {
       throw new NotFoundException('ID nhà cung cấp không hợp lệ');
     }
     const providerModel = this.connection.model('Provider');
-    const provider: any = await providerModel.findById(providerId).lean().exec();
+    const provider: any = await providerModel
+      .findById(providerId)
+      .lean()
+      .exec();
     if (!provider) {
       throw new NotFoundException('Không tìm thấy nhà cung cấp');
     }
-    const campaign = await this.campaignService.getActiveCampaign(new Types.ObjectId(providerId));
+    const campaign = await this.campaignService.getActiveCampaign(
+      new Types.ObjectId(providerId),
+    );
     return {
       _id: provider._id,
       userId: provider.userId,
@@ -265,10 +365,15 @@ export class ProductsService implements OnModuleInit {
 
   async getProductById(productId: string): Promise<any | null> {
     if (!Types.ObjectId.isValid(productId)) return null;
-    const product = await this.productsRepository.findPublicById(new Types.ObjectId(productId));
+    const product = await this.productsRepository.findPublicById(
+      new Types.ObjectId(productId),
+    );
     if (!product) return null;
-    const plain = product.toObject() as any;
-    const pId = typeof plain.providerId === 'object' && plain.providerId ? plain.providerId._id : plain.providerId;
+    const plain = this.projectPublicCustomTags(product);
+    const pId =
+      typeof plain.providerId === 'object' && plain.providerId
+        ? plain.providerId._id
+        : plain.providerId;
     const campaign = await this.campaignService.getActiveCampaign(pId);
     if (campaign) {
       plain.activeCampaign = {
@@ -276,7 +381,9 @@ export class ProductsService implements OnModuleInit {
         discountPercent: campaign.discountPercent,
         endDate: campaign.endDate,
       };
-      plain.discountedPrice = Math.round(plain.basePrice * (1 - campaign.discountPercent / 100));
+      plain.discountedPrice = Math.round(
+        plain.basePrice * (1 - campaign.discountPercent / 100),
+      );
     } else {
       plain.activeCampaign = null;
       plain.discountedPrice = plain.basePrice;
@@ -295,17 +402,29 @@ export class ProductsService implements OnModuleInit {
     sizes?: string,
     colors?: string,
   ): Promise<{ items: any[]; total: number }> {
-    const user = await this.usersRepository.findUserById(new Types.ObjectId(userId));
+    const user = await this.usersRepository.findUserById(
+      new Types.ObjectId(userId),
+    );
     if (!user || !user.provider || !user.provider.providerId) {
       throw new BadRequestException(
         'User is not a provider or lacks provider ID',
       );
     }
-    const result = await this.productsRepository.findByProvider(user.provider.providerId, search, sortBy, page, limit, sizes, colors);
-    
-    const campaign = await this.campaignService.getActiveCampaign(user.provider.providerId);
+    const result = await this.productsRepository.findByProvider(
+      user.provider.providerId,
+      search,
+      sortBy,
+      page,
+      limit,
+      sizes,
+      colors,
+    );
 
-    const items = result.items.map(product => {
+    const campaign = await this.campaignService.getActiveCampaign(
+      user.provider.providerId,
+    );
+
+    const items = result.items.map((product) => {
       const plain = product.toObject() as any;
       if (campaign) {
         plain.activeCampaign = {
@@ -313,7 +432,9 @@ export class ProductsService implements OnModuleInit {
           discountPercent: campaign.discountPercent,
           endDate: campaign.endDate,
         };
-        plain.discountedPrice = Math.round(plain.basePrice * (1 - campaign.discountPercent / 100));
+        plain.discountedPrice = Math.round(
+          plain.basePrice * (1 - campaign.discountPercent / 100),
+        );
       } else {
         plain.activeCampaign = null;
         plain.discountedPrice = plain.basePrice;
@@ -324,6 +445,75 @@ export class ProductsService implements OnModuleInit {
     return { items, total: result.total };
   }
 
+  async getMyProductPriceHistory(
+    userId: string,
+    productId: string,
+    requestedPage = 1,
+    requestedLimit = 10,
+  ) {
+    if (!Types.ObjectId.isValid(productId)) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const user = await this.usersRepository.findUserById(
+      new Types.ObjectId(userId),
+    );
+    if (!user?.provider?.providerId) {
+      throw new BadRequestException('User is not a provider');
+    }
+
+    const product = await this.productsRepository.findById(
+      new Types.ObjectId(productId),
+    );
+    if (!product) throw new NotFoundException('Product not found');
+
+    const ownerId =
+      product.providerId &&
+      typeof product.providerId === 'object' &&
+      '_id' in product.providerId
+        ? (product.providerId as any)._id
+        : product.providerId;
+    if (ownerId.toString() !== user.provider.providerId.toString()) {
+      throw new BadRequestException('You do not own this product');
+    }
+
+    await this.ensureCurrentProductPriceVersion(product);
+
+    const page = Math.max(1, requestedPage || 1);
+    const limit = Math.min(50, Math.max(1, requestedLimit || 10));
+    const filter = {
+      targetType: PriceTargetType.Product,
+      targetId: product._id,
+    };
+    const [versions, total] = await Promise.all([
+      this.priceVersionModel
+        .find(filter)
+        .sort({ effectiveFrom: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.priceVersionModel.countDocuments(filter).exec(),
+    ]);
+
+    return {
+      data: versions.map((version: any) => ({
+        id: version._id,
+        price: version.price,
+        depositAmount: version.depositAmount,
+        effectiveFrom: version.effectiveFrom,
+        effectiveTo: version.effectiveTo ?? null,
+        isCurrent: version.effectiveTo == null,
+        note: version.note ?? null,
+      })),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
+  }
 
   /**
    * Giữ bất biến: `colorImages` chỉ được chứa URL đã có trong `images`.
@@ -351,6 +541,141 @@ export class ProductsService implements OnModuleInit {
     return Array.from(merged.entries())
       .filter(([, urls]) => urls.length > 0)
       .map(([color, urls]) => ({ color, images: urls }));
+  }
+
+  private normalizeCustomTagLabel(label: string): string {
+    return label
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .toLocaleLowerCase('vi-VN')
+      .replace(/\s+/g, ' ');
+  }
+
+  private buildCustomTags(
+    labels: string[] = [],
+    existing: ProductCustomTag[] = [],
+  ): ProductCustomTag[] {
+    const existingByLabel = new Map(
+      existing.map((tag) => [tag.normalizedLabel, tag]),
+    );
+    const seen = new Set<string>();
+
+    return labels.flatMap((rawLabel) => {
+      const label = rawLabel.trim().replace(/\s+/g, ' ');
+      const normalizedLabel = this.normalizeCustomTagLabel(label);
+      if (!normalizedLabel || seen.has(normalizedLabel)) return [];
+      seen.add(normalizedLabel);
+
+      const previous = existingByLabel.get(normalizedLabel);
+      return [
+        {
+          label,
+          normalizedLabel,
+          status: previous?.status ?? ProductCustomTagStatus.Pending,
+          mappedTagCode: previous?.mappedTagCode ?? null,
+        },
+      ];
+    });
+  }
+
+  private async createInitialPriceVersion(product: ProductDocument) {
+    await this.priceVersionModel.create({
+      targetType: PriceTargetType.Product,
+      targetId: product._id,
+      price: product.basePrice,
+      depositAmount: product.depositAmount,
+      effectiveFrom: (product as any).createdAt ?? new Date(),
+      effectiveTo: null,
+      note: 'Giá khởi tạo khi tạo sản phẩm',
+    });
+  }
+
+  /**
+   * Close the current version and append the new provider price. For legacy
+   * products that have no reliable current version, preserve the pre-edit
+   * product price first so the first edit does not erase its history.
+   */
+  private async recordProductPriceChange(
+    product: ProductDocument,
+    nextPrice: number,
+    nextDepositAmount: number,
+  ) {
+    const changedAt = new Date();
+    const current = await this.priceVersionModel
+      .findOne({
+        targetType: PriceTargetType.Product,
+        targetId: product._id,
+        effectiveTo: null,
+      })
+      .sort({ effectiveFrom: -1 })
+      .exec();
+
+    if (current) {
+      current.effectiveTo = changedAt;
+      await current.save();
+    }
+
+    const currentMatchesOldProduct =
+      current?.price === product.basePrice &&
+      current?.depositAmount === product.depositAmount;
+    if (!currentMatchesOldProduct) {
+      await this.priceVersionModel.create({
+        targetType: PriceTargetType.Product,
+        targetId: product._id,
+        price: product.basePrice,
+        depositAmount: product.depositAmount,
+        effectiveFrom: (product as any).createdAt ?? changedAt,
+        effectiveTo: changedAt,
+        note: 'Khôi phục giá trước lần cập nhật đầu tiên',
+      });
+    }
+
+    await this.priceVersionModel.create({
+      targetType: PriceTargetType.Product,
+      targetId: product._id,
+      price: nextPrice,
+      depositAmount: nextDepositAmount,
+      effectiveFrom: changedAt,
+      effectiveTo: null,
+      note: 'Provider cập nhật giá sản phẩm',
+    });
+  }
+
+  /** Lazily repairs legacy booking-created versions that do not represent the
+   * product's current per-day price. This runs once when the owner opens price
+   * history; subsequent reads see the matching open version and do no writes. */
+  private async ensureCurrentProductPriceVersion(product: ProductDocument) {
+    const current = await this.priceVersionModel
+      .findOne({
+        targetType: PriceTargetType.Product,
+        targetId: product._id,
+        effectiveTo: null,
+      })
+      .sort({ effectiveFrom: -1 })
+      .exec();
+    if (
+      current?.price === product.basePrice &&
+      current?.depositAmount === product.depositAmount
+    ) {
+      return;
+    }
+
+    const synchronizedAt = new Date();
+    if (current) {
+      current.effectiveTo = synchronizedAt;
+      await current.save();
+    }
+    await this.priceVersionModel.create({
+      targetType: PriceTargetType.Product,
+      targetId: product._id,
+      price: product.basePrice,
+      depositAmount: product.depositAmount,
+      effectiveFrom: (product as any).updatedAt ?? synchronizedAt,
+      effectiveTo: null,
+      note: 'Đồng bộ giá hiện hành cho dữ liệu cũ',
+    });
   }
 
   async createProduct(
@@ -416,8 +741,12 @@ export class ProductsService implements OnModuleInit {
     const product = await this.productsRepository.create({
       providerId: user.provider.providerId,
       categoryId: new Types.ObjectId(dto.categoryId),
-      styleCategoryIds: (dto.styleCategoryIds ?? []).map((id) => new Types.ObjectId(id)),
-      eventCategoryIds: (dto.eventCategoryIds ?? []).map((id) => new Types.ObjectId(id)),
+      styleCategoryIds: (dto.styleCategoryIds ?? []).map(
+        (id) => new Types.ObjectId(id),
+      ),
+      eventCategoryIds: (dto.eventCategoryIds ?? []).map(
+        (id) => new Types.ObjectId(id),
+      ),
       name: dto.name,
       slug,
       description: dto.description || '',
@@ -434,10 +763,13 @@ export class ProductsService implements OnModuleInit {
       moderationReason: null,
       style: dto.style || null,
       occasions: dto.occasions || [],
+      customTags: this.buildCustomTags(dto.customTags),
       taggingRevision: 1,
       taggingDecisionVersion: 0,
       rating: { averageRating: 0, totalReviews: 0 },
     });
+
+    await this.createInitialPriceVersion(product);
 
     // Create real inventory items only from the provider's declared variants.
     // No variants => no stock is fabricated (the old default-of-2 behaviour is
@@ -518,25 +850,46 @@ export class ProductsService implements OnModuleInit {
 
     const updateData: any = {};
     const sameStringArray = (left: string[] = [], right: string[] = []) =>
-      left.length === right.length && left.every((value, index) => value === right[index]);
+      left.length === right.length &&
+      left.every((value, index) => value === right[index]);
 
     const taggingInputChanged =
       (dto.name !== undefined && dto.name !== product.name) ||
-      (dto.categoryId !== undefined && dto.categoryId !== product.categoryId.toString()) ||
-      (dto.description !== undefined && dto.description !== product.description) ||
-      (dto.images !== undefined && !sameStringArray(dto.images, product.images)) ||
-      (dto.colors !== undefined && !sameStringArray(dto.colors, product.colors)) ||
-      (dto.materials !== undefined && !sameStringArray(dto.materials, product.materials)) ||
+      (dto.categoryId !== undefined &&
+        dto.categoryId !== product.categoryId.toString()) ||
+      (dto.description !== undefined &&
+        dto.description !== product.description) ||
+      (dto.images !== undefined &&
+        !sameStringArray(dto.images, product.images)) ||
+      (dto.colors !== undefined &&
+        !sameStringArray(dto.colors, product.colors)) ||
+      (dto.materials !== undefined &&
+        !sameStringArray(dto.materials, product.materials)) ||
       (dto.style !== undefined && dto.style !== product.style) ||
-      (dto.occasions !== undefined && !sameStringArray(dto.occasions, product.occasions)) ||
-      (dto.styleCategoryIds !== undefined && !sameStringArray(dto.styleCategoryIds, (product.styleCategoryIds ?? []).map((id) => id.toString()))) ||
-      (dto.eventCategoryIds !== undefined && !sameStringArray(dto.eventCategoryIds, (product.eventCategoryIds ?? []).map((id) => id.toString())));
+      (dto.occasions !== undefined &&
+        !sameStringArray(dto.occasions, product.occasions)) ||
+      (dto.styleCategoryIds !== undefined &&
+        !sameStringArray(
+          dto.styleCategoryIds,
+          (product.styleCategoryIds ?? []).map((id) => id.toString()),
+        )) ||
+      (dto.eventCategoryIds !== undefined &&
+        !sameStringArray(
+          dto.eventCategoryIds,
+          (product.eventCategoryIds ?? []).map((id) => id.toString()),
+        ));
     const productChanged =
       taggingInputChanged ||
       (dto.basePrice !== undefined && dto.basePrice !== product.basePrice) ||
-      (dto.depositAmount !== undefined && dto.depositAmount !== product.depositAmount) ||
+      (dto.depositAmount !== undefined &&
+        dto.depositAmount !== product.depositAmount) ||
+      (dto.customTags !== undefined &&
+        JSON.stringify(
+          this.buildCustomTags(dto.customTags, product.customTags || []),
+        ) !== JSON.stringify(product.customTags || [])) ||
       (dto.sizes !== undefined && !sameStringArray(dto.sizes, product.sizes)) ||
-      (dto.videos !== undefined && !sameStringArray(dto.videos, product.videos || [])) ||
+      (dto.videos !== undefined &&
+        !sameStringArray(dto.videos, product.videos || [])) ||
       // Thiếu dòng này thì lần sửa nào CHỈ đổi ảnh-theo-màu sẽ trả 200 nhưng không lưu gì,
       // vì hàm thoát sớm ngay bên dưới.
       (dto.colorImages !== undefined &&
@@ -547,6 +900,11 @@ export class ProductsService implements OnModuleInit {
           ),
         ) !== JSON.stringify(product.colorImages || [])) ||
       (dto.status !== undefined && dto.status !== product.status);
+
+    const priceChanged =
+      (dto.basePrice !== undefined && dto.basePrice !== product.basePrice) ||
+      (dto.depositAmount !== undefined &&
+        dto.depositAmount !== product.depositAmount);
 
     if (!productChanged) {
       return product;
@@ -604,6 +962,12 @@ export class ProductsService implements OnModuleInit {
     if (dto.status !== undefined) updateData.status = dto.status;
     if (dto.style !== undefined) updateData.style = dto.style;
     if (dto.occasions !== undefined) updateData.occasions = dto.occasions;
+    if (dto.customTags !== undefined) {
+      updateData.customTags = this.buildCustomTags(
+        dto.customTags,
+        product.customTags || [],
+      );
+    }
 
     // Only an actual provider change must be reviewed again.
     updateData.moderationStatus = ProductModerationStatus.PendingReview;
@@ -619,16 +983,31 @@ export class ProductsService implements OnModuleInit {
     if (!updated) {
       throw new NotFoundException('Failed to update product');
     }
+    if (priceChanged) {
+      await this.recordProductPriceChange(
+        product,
+        dto.basePrice ?? product.basePrice,
+        dto.depositAmount ?? product.depositAmount,
+      );
+    }
     if (dto.images !== undefined) {
-      const removedImages = product.images.filter((image) => !dto.images!.includes(image));
+      const removedImages = product.images.filter(
+        (image) => !dto.images!.includes(image),
+      );
       await Promise.all(
-        removedImages.map((image) => this.publicMedia.deleteByUrl(image).catch(() => undefined)),
+        removedImages.map((image) =>
+          this.publicMedia.deleteByUrl(image).catch(() => undefined),
+        ),
       );
     }
     if (dto.videos !== undefined) {
-      const removedVideos = (product.videos || []).filter((video) => !dto.videos!.includes(video));
+      const removedVideos = (product.videos || []).filter(
+        (video) => !dto.videos!.includes(video),
+      );
       await Promise.all(
-        removedVideos.map((video) => this.publicMedia.deleteByUrl(video).catch(() => undefined)),
+        removedVideos.map((video) =>
+          this.publicMedia.deleteByUrl(video).catch(() => undefined),
+        ),
       );
     }
     if (taggingInputChanged) {
@@ -696,9 +1075,37 @@ export class ProductsService implements OnModuleInit {
 
     if (dto.action === ProductModerationStatus.Approved) {
       updateData.status = ProductStatus.Active;
+      const approvedLabels = new Set(
+        (dto.approvedCustomTags ?? [])
+          .map((label) => this.normalizeCustomTagLabel(label))
+          .filter(Boolean),
+      );
+      const currentLabels = new Set(
+        (product.customTags || []).map((tag) => tag.normalizedLabel),
+      );
+      const hasUnknownLabel = [...approvedLabels].some(
+        (label) => !currentLabels.has(label),
+      );
+      if (hasUnknownLabel) {
+        throw new BadRequestException(
+          'Approved custom tags must belong to this product',
+        );
+      }
+      updateData.customTags = (product.customTags || []).map((tag) => ({
+        label: tag.label,
+        normalizedLabel: tag.normalizedLabel,
+        status: approvedLabels.has(tag.normalizedLabel)
+          ? ProductCustomTagStatus.Approved
+          : ProductCustomTagStatus.Rejected,
+        mappedTagCode: tag.mappedTagCode ?? null,
+      }));
     }
 
-    const updated = await this.productsRepository.moderate(id, expectedStatus, updateData);
+    const updated = await this.productsRepository.moderate(
+      id,
+      expectedStatus,
+      updateData,
+    );
 
     if (!updated) {
       throw new ConflictException(
@@ -795,9 +1202,8 @@ export class ProductsService implements OnModuleInit {
     const badgesByProductId =
       await this.smartTagPublicProjectionService.projectProductBadges(products);
     return products.map((product) => {
-      const plain = typeof product.toObject === 'function'
-        ? product.toObject()
-        : product;
+      const plain =
+        typeof product.toObject === 'function' ? product.toObject() : product;
       return {
         ...plain,
         badges: badgesByProductId.get(product._id.toString()) || [],
@@ -805,4 +1211,3 @@ export class ProductsService implements OnModuleInit {
     });
   }
 }
-
