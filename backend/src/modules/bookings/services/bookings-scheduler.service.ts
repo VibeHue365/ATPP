@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { Injectable, Logger } from '@nestjs/common';
@@ -614,25 +613,24 @@ export class BookingsSchedulerService {
       // Resolve photographer User ID
       let photographerUserId: string | null = null;
       if (item.providerId) {
-        const provQuery = this.providerModel.findById(item.providerId);
-        const prov =
-          typeof (provQuery as any)?.select === 'function'
-            ? await (provQuery as any).select('userId').lean()
-            : await provQuery;
-        if (prov && (prov as any).userId) {
-          photographerUserId = (prov as any).userId.toString();
+        const prov = await this.providerModel
+          .findById(item.providerId)
+          .select('userId')
+          .lean();
+        if (prov?.userId) {
+          photographerUserId = prov.userId.toString();
         }
       }
 
       // 24h Photoshoot reminder (18h to 30h window)
       if (hoursUntilShoot >= 18 && hoursUntilShoot <= 30) {
         const key = `photo_24h_${item._id}`;
-        const exists = await this.notificationModel.findOne({
+        const customerReminderExists = await this.notificationModel.findOne({
           userId: new Types.ObjectId(customerId),
           'metadata.reminderKey': key,
         });
-        if (!exists) {
-          const slotStr = item.shootTimeSlot || '';
+        const slotStr = item.shootTimeSlot || '';
+        if (!customerReminderExists) {
           await this.notificationsService.createNotification(
             customerId,
             'Nhắc nhở: Lịch chụp ảnh ngày mai',
@@ -640,14 +638,21 @@ export class BookingsSchedulerService {
             NotificationType.Booking,
             { bookingId: booking._id, reminderKey: key },
           );
+        }
 
-          if (photographerUserId) {
+        if (photographerUserId) {
+          const providerKey = `prov_${key}`;
+          const providerReminderExists = await this.notificationModel.findOne({
+            userId: new Types.ObjectId(photographerUserId),
+            'metadata.reminderKey': providerKey,
+          });
+          if (!providerReminderExists) {
             await this.notificationsService.createNotification(
               photographerUserId,
               'Nhắc nhở: Lịch chụp ảnh với khách hàng ngày mai',
               `Bạn có lịch chụp ảnh cho đơn hàng ${booking.bookingCode} vào lúc ${slotStr} ngày ${shootStartTime.toLocaleDateString('vi-VN')}. Vui lòng chuẩn bị thiết bị đúng giờ!`,
               NotificationType.Booking,
-              { bookingId: booking._id, reminderKey: `prov_${key}` },
+              { bookingId: booking._id, reminderKey: providerKey },
             );
           }
         }
@@ -656,12 +661,12 @@ export class BookingsSchedulerService {
       // 2h Photoshoot reminder (1h to 3h window)
       if (hoursUntilShoot >= 1.0 && hoursUntilShoot <= 3.0) {
         const key = `photo_2h_${item._id}`;
-        const exists = await this.notificationModel.findOne({
+        const customerReminderExists = await this.notificationModel.findOne({
           userId: new Types.ObjectId(customerId),
           'metadata.reminderKey': key,
         });
-        if (!exists) {
-          const slotStr = item.shootTimeSlot || '';
+        const slotStr = item.shootTimeSlot || '';
+        if (!customerReminderExists) {
           await this.notificationsService.createNotification(
             customerId,
             'Nhắc nhở: Sắp đến giờ chụp ảnh (còn 2 tiếng)',
@@ -669,14 +674,21 @@ export class BookingsSchedulerService {
             NotificationType.Booking,
             { bookingId: booking._id, reminderKey: key },
           );
+        }
 
-          if (photographerUserId) {
+        if (photographerUserId) {
+          const providerKey = `prov_${key}`;
+          const providerReminderExists = await this.notificationModel.findOne({
+            userId: new Types.ObjectId(photographerUserId),
+            'metadata.reminderKey': providerKey,
+          });
+          if (!providerReminderExists) {
             await this.notificationsService.createNotification(
               photographerUserId,
               'Nhắc nhở: Sắp đến giờ chụp ảnh với khách hàng (còn 2 tiếng)',
               `Chỉ còn 2 tiếng nữa là đến buổi chụp ảnh đơn ${booking.bookingCode} (${slotStr}). Vui lòng kiểm tra địa điểm và thiết bị!`,
               NotificationType.Booking,
-              { bookingId: booking._id, reminderKey: `prov_${key}` },
+              { bookingId: booking._id, reminderKey: providerKey },
             );
           }
         }
