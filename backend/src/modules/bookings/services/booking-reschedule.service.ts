@@ -21,6 +21,10 @@ import {
   InventoryReservation,
   ReservationStatus,
 } from '../../products/schemas/inventory-reservation.schema';
+import {
+  Provider,
+  ProviderDocument,
+} from '../../providers/schemas/provider.schema';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/schemas/notification.schema';
 import { BookingsRepository } from '../repositories/bookings.repository';
@@ -31,6 +35,8 @@ export class BookingRescheduleService {
     private readonly bookingsRepository: BookingsRepository,
     @InjectModel(InventoryReservation.name)
     private readonly inventoryReservationModel: Model<InventoryReservation>,
+    @InjectModel(Provider.name)
+    private readonly providerModel: Model<ProviderDocument>,
     private readonly notificationsService: NotificationsService,
   ) {}
 
@@ -530,14 +536,46 @@ export class BookingRescheduleService {
         );
       }
 
+      let newScheduleDetails = '';
+      if (itemType === BookingItemType.Product) {
+        if (bookingItem.rentalType === 'HOURLY') {
+          newScheduleDetails = `ngày ${dto.newShootDate || dto.newRentalFrom} (khung giờ ${dto.newShootTimeSlot})`;
+        } else {
+          newScheduleDetails = `từ ngày ${dto.newRentalFrom} đến ngày ${dto.newRentalTo}`;
+        }
+      } else {
+        newScheduleDetails = `ngày ${dto.newShootDate}${dto.newShootTimeSlot ? ` (khung giờ ${dto.newShootTimeSlot})` : ''}`;
+      }
+
       try {
+        const customerId = this.getCustomerIdStr(booking);
         await this.notificationsService.createNotification(
-          this.getCustomerIdStr(booking),
+          customerId,
           'Đổi lịch thành công',
-          `Đơn hàng ${booking.bookingCode} đã được đổi lịch thành công.`,
+          `Đơn hàng ${booking.bookingCode} đã được đổi lịch thành công sang ${newScheduleDetails}.`,
           NotificationType.Booking,
           { bookingId: booking._id },
         );
+
+        // Notify provider(s)
+        if (booking.providerIds && booking.providerIds.length > 0) {
+          const providers = await this.providerModel
+            .find({ _id: { $in: booking.providerIds } })
+            .select('userId')
+            .lean();
+
+          for (const prov of providers) {
+            if (prov.userId) {
+              await this.notificationsService.createNotification(
+                prov.userId.toString(),
+                'Khách hàng đã đổi lịch đơn hàng',
+                `Khách hàng đã thay đổi lịch cho đơn hàng ${booking.bookingCode} sang ${newScheduleDetails}. Vui lòng kiểm tra và chuẩn bị theo lịch mới!`,
+                NotificationType.Booking,
+                { bookingId: booking._id },
+              );
+            }
+          }
+        }
       } catch {
         /* ignore notification error */
       }
