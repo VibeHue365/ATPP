@@ -25,4 +25,8 @@ backend/uploads/
 .DS_Store
 Thumbs.db
 *.log
-/docs/
+# Documentation / Local baselines
+docs/
+
+/.agent/mcp_config.json
+/backend/seed-reviews-atlas.js

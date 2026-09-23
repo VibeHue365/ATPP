@@ -34,12 +34,39 @@ export const ScheduleMasterTabs: React.FC<ScheduleMasterTabsProps> = ({
     { key: 'COMBO' as MasterCategoryType, label: 'Combo', icon: <Package size={16} />, count: counts.combos }
   ];
 
+  const getSubFilterLabels = () => {
+    if (activeCategory === 'PHOTOSHOOT') {
+      return {
+        renting: 'Đang chụp',
+        pickupSoon: 'Sắp chụp',
+        dueSoon: 'Chờ duyệt ảnh',
+        returned: 'Đã hoàn tất',
+      };
+    }
+    if (activeCategory === 'COMBO') {
+      return {
+        renting: 'Đang diễn ra',
+        pickupSoon: 'Sắp diễn ra',
+        dueSoon: 'Sắp đến hạn',
+        returned: 'Đã hoàn tất',
+      };
+    }
+    return {
+      renting: 'Đang thuê',
+      pickupSoon: 'Sắp nhận',
+      dueSoon: 'Sắp đến hạn',
+      returned: 'Đã trả',
+    };
+  };
+
+  const labels = getSubFilterLabels();
+
   const subFilters = [
     { key: 'ALL' as SubStatusFilterType, label: 'Tất cả', count: counts.subAll },
-    { key: 'RENTING' as SubStatusFilterType, label: 'Đang thuê', count: counts.subRenting },
-    { key: 'PICKUP_SOON' as SubStatusFilterType, label: 'Sắp nhận', count: counts.subPickupSoon },
-    { key: 'DUE_SOON' as SubStatusFilterType, label: 'Sắp đến hạn', count: counts.subDueSoon },
-    { key: 'RETURNED' as SubStatusFilterType, label: 'Đã trả', count: counts.subReturned }
+    { key: 'RENTING' as SubStatusFilterType, label: labels.renting, count: counts.subRenting },
+    { key: 'PICKUP_SOON' as SubStatusFilterType, label: labels.pickupSoon, count: counts.subPickupSoon },
+    { key: 'DUE_SOON' as SubStatusFilterType, label: labels.dueSoon, count: counts.subDueSoon },
+    { key: 'RETURNED' as SubStatusFilterType, label: labels.returned, count: counts.subReturned }
   ];
 
   return (

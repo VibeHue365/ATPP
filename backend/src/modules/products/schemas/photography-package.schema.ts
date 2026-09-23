@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { ProductModerationStatus } from './product.schema';
 
 export type PhotographyPackageDocument = HydratedDocument<PhotographyPackage>;
 
@@ -123,6 +124,42 @@ export class PhotographyPackage {
     default: { averageRating: 0, totalReviews: 0 },
   })
   rating: PackageRating;
+
+  @Prop({
+    type: String,
+    enum: Object.values(ProductModerationStatus),
+    default: ProductModerationStatus.PendingReview,
+    index: true,
+  })
+  moderationStatus: ProductModerationStatus;
+
+  @Prop({ type: String, default: null, trim: true })
+  moderationReason?: string | null;
+
+  @Prop({ type: Date, default: null })
+  moderatedAt?: Date | null;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  moderatedBy?: Types.ObjectId | null;
+
+  @Prop({
+    type: [
+      {
+        _id: false,
+        action: { type: String, required: true },
+        reason: { type: String, default: null },
+        moderatedBy: { type: Types.ObjectId, ref: 'User' },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
+    default: [],
+  })
+  moderationHistory?: Array<{
+    action: string;
+    reason?: string | null;
+    moderatedBy?: Types.ObjectId;
+    createdAt?: Date;
+  }>;
 }
 
 export const PhotographyPackageSchema =

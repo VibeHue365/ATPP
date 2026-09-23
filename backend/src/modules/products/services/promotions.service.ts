@@ -76,6 +76,36 @@ export class PromotionsService {
     }
   }
 
+  async updatePromotion(
+    promotionIdStr: string,
+    providerIdStr: string,
+    dto: Partial<CreatePromotionDto>,
+  ): Promise<PromotionDocument> {
+    const promotionId = new Types.ObjectId(promotionIdStr);
+    const providerId = new Types.ObjectId(providerIdStr);
+
+    const updateData: Record<string, any> = { ...dto };
+    if (dto.code) {
+      updateData.code = dto.code.toUpperCase();
+    }
+    if (dto.startDate) {
+      updateData.startDate = new Date(dto.startDate);
+    }
+    if (dto.endDate) {
+      updateData.endDate = new Date(dto.endDate);
+    }
+
+    const updated = await this.promotionModel.findOneAndUpdate(
+      { _id: promotionId, providerId },
+      { $set: updateData },
+      { new: true },
+    );
+    if (!updated) {
+      throw new NotFoundException('Voucher not found or unauthorized');
+    }
+    return updated;
+  }
+
   async validatePromotion(
     code: string,
     orderValue: number,

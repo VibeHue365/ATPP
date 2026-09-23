@@ -20,7 +20,7 @@ import { UpdateProductDto } from '../dto/update-product.dto';
 import { DiscountCampaignService } from './discount-campaign.service';
 import { CategoriesService } from '../../categories/services/categories.service';
 import { ServiceCategoryType } from '../../categories/schemas/category.schema';
-import { ModerateProductDto } from '../dto/product-moderation.dto';
+import { ModerateProductDto, QueryModerationProductsDto } from '../dto/product-moderation.dto';
 import { SmartTagPublicProjectionService } from '../../smart-tagging/services/smart-tag-public-projection.service';
 import { SmartTaggingService } from '../../smart-tagging/services/smart-tagging.service';
 import { SmartTagEntityType } from '../../smart-tagging/constants/smart-tag.constants';
@@ -649,6 +649,11 @@ export class ProductsService implements OnModuleInit {
     return this.productsRepository.findModerationQueue(status);
   }
 
+  async getEnhancedModerationList(query: QueryModerationProductsDto) {
+    await this.productsRepository.moveLegacyProductsToPendingReview();
+    return this.productsRepository.findEnhancedModerationList(query);
+  }
+
   async moderateProduct(
     adminId: string,
     productId: string,
@@ -664,45 +669,45 @@ export class ProductsService implements OnModuleInit {
       throw new NotFoundException('Product not found');
     }
 
-    const expectedStatus =
-      dto.action === ProductModerationStatus.Hidden
-        ? ProductModerationStatus.Approved
-        : ProductModerationStatus.PendingReview;
-    const allowedAction =
-      dto.action === ProductModerationStatus.Approved ||
-      dto.action === ProductModerationStatus.Rejected ||
-      dto.action === ProductModerationStatus.Hidden;
+    const allowedActions = [
+      ProductModerationStatus.Approved,
+      ProductModerationStatus.Rejected,
+      ProductModerationStatus.ChangesRequested,
+      ProductModerationStatus.Hidden,
+    ];
 
-    if (!allowedAction) {
+    if (!allowedActions.includes(dto.action)) {
       throw new BadRequestException('Unsupported moderation action');
     }
 
-    if (product.moderationStatus !== expectedStatus) {
-      throw new ConflictException(
-        'Product moderation state was already changed',
-      );
-    }
-
-    const updateData: Partial<Product> = {
-      moderationStatus: dto.action,
-      moderationReason:
-        dto.action === ProductModerationStatus.Rejected ||
-        dto.action === ProductModerationStatus.Hidden
-          ? dto.reason!.trim()
-          : null,
-      moderatedBy: new Types.ObjectId(adminId),
-      moderatedAt: new Date(),
+    const updateData: any = {
+      $set: {
+        moderationStatus: dto.action,
+        moderationReason:
+          dto.action === ProductModerationStatus.Rejected ||
+          dto.action === ProductModerationStatus.ChangesRequested ||
+          dto.action === ProductModerationStatus.Hidden
+            ? dto.reason?.trim() || null
+            : null,
+        moderatedBy: new Types.ObjectId(adminId),
+        moderatedAt: new Date(),
+        status: dto.action === ProductModerationStatus.Approved ? ProductStatus.Active : ProductStatus.Draft,
+      },
+      $push: {
+        moderationHistory: {
+          adminId: new Types.ObjectId(adminId),
+          action: dto.action,
+          reason: dto.reason?.trim() || null,
+          createdAt: new Date(),
+        },
+      },
     };
 
-    if (dto.action === ProductModerationStatus.Approved) {
-      updateData.status = ProductStatus.Active;
-    }
-
-    const updated = await this.productsRepository.moderate(id, expectedStatus, updateData);
+    const updated = await this.productsRepository.moderate(id, updateData);
 
     if (!updated) {
       throw new ConflictException(
-        'Product moderation state was already changed',
+        'Product moderation state could not be updated',
       );
     }
 

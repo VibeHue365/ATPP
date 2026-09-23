@@ -1,0 +1,847 @@
+/* ==========================================================================
+   LUMÉ ADMIN DASHBOARD - OVERVIEW PANEL (FIGMA NODE 248:2)
+   Theme: Burgundy / Deep Wine (#4A121A), Soft Cream / Gray Background (#F8F9FA)
+   ========================================================================== */
+
+:root {
+  --lume-primary: #4A121A;
+  --lume-primary-hover: #3B0D15;
+  --lume-primary-light: #F9ECEE;
+  --lume-wine: #6B1D2F;
+  --lume-wine-dark: #350A11;
+  --lume-coral: #E06D75;
+  --lume-pink: #F4A6AC;
+  --lume-gold: #B89047;
+  --lume-gold-light: #FDF8EE;
+  --lume-bg: #F8F9FA;
+  --lume-card-bg: #FFFFFF;
+  --lume-border: #EAEAEA;
+  --lume-border-hover: #D5D5D5;
+  --lume-text-main: #111827;
+  --lume-text-muted: #6B7280;
+  --lume-text-sub: #9CA3AF;
+  --lume-success: #10B981;
+  --lume-success-bg: #ECFDF5;
+  --lume-danger: #EF4444;
+  --lume-danger-bg: #FEF2F2;
+  --lume-warning: #F59E0B;
+  --lume-warning-bg: #FFFBEB;
+  --lume-blue: #3B82F6;
+  --lume-blue-bg: #EFF6FF;
+}
+
+.lume-overview-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  color: var(--lume-text-main);
+  font-family: inherit;
+}
+
+/* --------------------------------------------------------------------------
+   Top Bar / Sub-Header inside Overview
+   -------------------------------------------------------------------------- */
+.lume-overview-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 4px;
+}
+
+.lume-overview-header__title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lume-overview-header__title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-overview-header__title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--lume-primary);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.lume-overview-header__subtitle {
+  font-size: 13.5px;
+  color: var(--lume-text-muted);
+  margin: 0;
+}
+
+.lume-overview-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-daterange-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #FFFFFF;
+  border: 1px solid var(--lume-border);
+  padding: 8px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lume-daterange-picker:hover {
+  border-color: var(--lume-primary);
+  color: var(--lume-primary);
+}
+
+.lume-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #FFFFFF;
+  border: 1px solid var(--lume-border);
+  padding: 8px 14px;
+  border-radius: 9999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--lume-text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lume-refresh-btn:hover {
+  background: var(--lume-primary-light);
+  color: var(--lume-primary);
+  border-color: rgba(74, 18, 26, 0.2);
+}
+
+.lume-refresh-btn.is-loading svg {
+  animation: lume-spin 1s linear infinite;
+}
+
+@keyframes lume-spin {
+  100% { transform: rotate(360deg); }
+}
+
+.lume-updated-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--lume-text-sub);
+  background: #F3F4F6;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   6 KPI Cards Grid
+   -------------------------------------------------------------------------- */
+.lume-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1400px) {
+  .lume-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .lume-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .lume-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-kpi-card {
+  background: var(--lume-card-bg);
+  border: 1px solid var(--lume-border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.lume-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(74, 18, 26, 0.06);
+  border-color: #E2D3D6;
+}
+
+.lume-kpi-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lume-kpi-card__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lume-text-muted);
+}
+
+.lume-kpi-card__icon-bubble {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lume-kpi-card__value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--lume-text-main);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.lume-kpi-card__footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+}
+
+.lume-kpi-card__trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 700;
+  border-radius: 4px;
+}
+
+.lume-kpi-card__trend--up-green {
+  color: #059669;
+}
+
+.lume-kpi-card__trend--up-red {
+  color: #DC2626;
+}
+
+.lume-kpi-card__trend-desc {
+  color: var(--lume-text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lume-kpi-card__breakdown {
+  color: #DC2626;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
+/* --------------------------------------------------------------------------
+   Charts Split Section (Combo Chart + Donut Chart)
+   -------------------------------------------------------------------------- */
+.lume-charts-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1100px) {
+  .lume-charts-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-chart-card {
+  background: var(--lume-card-bg);
+  border: 1px solid var(--lume-border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+}
+
+.lume-chart-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.lume-chart-card__title-group h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 750;
+  color: var(--lume-primary);
+  letter-spacing: -0.01em;
+}
+
+.lume-chart-card__title-group p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--lume-text-muted);
+}
+
+.lume-chart-card__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lume-pill-tabs {
+  display: flex;
+  align-items: center;
+  background: #F3F4F6;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.lume-pill-tab {
+  background: transparent;
+  border: none;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lume-text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lume-pill-tab.is-active {
+  background: #FFFFFF;
+  color: var(--lume-primary);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.lume-dropdown-trigger {
+  background: #FFFFFF;
+  border: 1px solid var(--lume-border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lume-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lume-chart-summary-badges {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.lume-chart-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lume-chart-summary-item__label {
+  font-size: 11.5px;
+  color: var(--lume-text-muted);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lume-chart-summary-item__label i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.lume-chart-summary-item__value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.lume-chart-summary-item__number {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--lume-text-main);
+  letter-spacing: -0.01em;
+}
+
+.lume-chart-summary-item__trend {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #059669;
+}
+
+/* Dual Axis Chart Graphic Area */
+.lume-combo-chart-wrapper {
+  position: relative;
+  width: 100%;
+  height: 270px;
+}
+
+.lume-combo-chart-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Chart Tooltip */
+.lume-chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(17, 24, 39, 0.95);
+  color: #FFFFFF;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translate(-50%, -115%);
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.lume-chart-tooltip strong {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: #F9ECEE;
+}
+
+.lume-chart-tooltip div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+/* Service Donut Chart */
+.lume-donut-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  flex: 1;
+  padding: 10px 0;
+}
+
+@media (max-width: 600px) {
+  .lume-donut-content {
+    flex-direction: column;
+    gap: 20px;
+  }
+}
+
+.lume-donut-svg-box {
+  position: relative;
+  width: 170px;
+  height: 170px;
+  flex-shrink: 0;
+}
+
+.lume-donut-center-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.lume-donut-center-label span {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--lume-text-muted);
+}
+
+.lume-donut-center-label strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--lume-primary);
+  margin-top: 1px;
+}
+
+.lume-donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.lume-donut-legend__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+}
+
+.lume-donut-legend__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lume-donut-legend__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.lume-donut-legend__name {
+  color: #374151;
+  font-weight: 500;
+}
+
+.lume-donut-legend__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lume-donut-legend__count {
+  font-weight: 700;
+  color: var(--lume-text-main);
+}
+
+.lume-donut-legend__pct {
+  font-size: 11.5px;
+  color: var(--lume-text-muted);
+  min-width: 42px;
+  text-align: right;
+}
+
+.lume-donut-footer-note {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #F3F4F6;
+  font-size: 11.5px;
+  color: var(--lume-text-muted);
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   4 Action & Alert Widgets Grid (Bottom Section)
+   -------------------------------------------------------------------------- */
+.lume-widgets-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1300px) {
+  .lume-widgets-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .lume-widgets-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-widget-card {
+  background: var(--lume-card-bg);
+  border: 1px solid var(--lume-border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+}
+
+.lume-widget-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.lume-widget-card__title {
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--lume-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lume-widget-card__view-all {
+  background: none;
+  border: none;
+  color: var(--lume-primary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+  padding: 2px 4px;
+}
+
+.lume-widget-card__view-all:hover {
+  color: var(--lume-coral);
+  transform: translateX(2px);
+}
+
+.lume-widget-card__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+/* 1. Actionable Tasks Items */
+.lume-task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #FAFAFA;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lume-task-row:hover {
+  background: var(--lume-primary-light);
+  border-color: rgba(74, 18, 26, 0.12);
+}
+
+.lume-task-row__text {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.lume-task-row__badge {
+  font-size: 11.5px;
+  font-weight: 750;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  min-width: 22px;
+  text-align: center;
+}
+
+.lume-task-row__badge--red {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.lume-task-row__badge--amber {
+  background: #FEF3C7;
+  color: #D97706;
+}
+
+/* 2. Top Partners Ranking */
+.lume-partner-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.lume-partner-row:hover {
+  background: #F9FAFB;
+}
+
+.lume-partner-row__info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lume-rank-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.lume-rank-badge--1 {
+  background: #FEF08A;
+  color: #854D0E;
+  box-shadow: 0 0 0 1px #FACC15;
+}
+
+.lume-rank-badge--2 {
+  background: #E5E7EB;
+  color: #374151;
+  box-shadow: 0 0 0 1px #9CA3AF;
+}
+
+.lume-rank-badge--3 {
+  background: #FED7AA;
+  color: #9A3412;
+  box-shadow: 0 0 0 1px #FB923C;
+}
+
+.lume-rank-badge--other {
+  background: #F3F4F6;
+  color: #6B7280;
+}
+
+.lume-partner-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #E5E7EB;
+}
+
+.lume-partner-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1F2937;
+}
+
+.lume-partner-bookings {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--lume-primary);
+  background: #FDF2F4;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+/* 3. Activity Stream */
+.lume-activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 4px;
+}
+
+.lume-activity-icon-bubble {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.lume-activity-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.lume-activity-content strong {
+  font-weight: 600;
+  color: #1F2937;
+}
+
+.lume-activity-time {
+  font-size: 11px;
+  color: var(--lume-text-sub);
+}
+
+/* 4. System Alerts */
+.lume-alert-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.lume-alert-section__title {
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lume-alert-section__title--amber {
+  color: #D97706;
+}
+
+.lume-alert-section__title--red {
+  color: #DC2626;
+}
+
+.lume-alert-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.lume-alert-item--amber {
+  background: #FFFBEB;
+  color: #92400E;
+}
+
+.lume-alert-item--red {
+  background: #FEF2F2;
+  color: #991B1B;
+}
+
+.lume-alert-item strong {
+  font-weight: 750;
+  font-size: 12.5px;
+}

@@ -11,4 +11,5 @@ export const photographyPackagesApi = {
     httpClient.patch<PhotographyPackage>(`${basePath}/${id}`, payload),
   publish: (id: string) => httpClient.post<PhotographyPackage>(`${basePath}/${id}/publish`),
   unpublish: (id: string) => httpClient.post<PhotographyPackage>(`${basePath}/${id}/unpublish`),
+  delete: (id: string) => httpClient.delete<{ success: boolean }>(`${basePath}/${id}`),
 };

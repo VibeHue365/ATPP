@@ -1,5 +1,6 @@
 import {
   Component,
+  lazy,
   Suspense,
   useCallback,
   useEffect,
@@ -11,28 +12,29 @@ import {
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Activity,
-  AlertTriangle,
-  Ban,
+  AlertOctagon,
+  ArrowLeft,
   BarChart3,
   Bell,
   Calendar,
-  CheckSquare,
   ChevronDown,
-  ChevronUp,
-  DollarSign,
-  FileCheck,
+  ChevronRight,
+  CircleDollarSign,
+  FileText,
   Folder,
   Home,
-  Layers,
-  LayoutDashboard,
+  Image,
   LogOut,
-  RotateCcw,
+  MessageSquare,
+  Package,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
   Settings,
-  ShieldAlert,
   ShieldCheck,
   Store,
-  TrendingUp,
-  Users,
+  User,
+  UserCheck,
 } from 'lucide-react';
 import { ROUTES } from '../../config/routes';
 import { adminDisputesApi } from '../../features/admin-disputes/api/adminDisputesApi';
@@ -68,12 +70,11 @@ type TabDefinition = {
   icon: ComponentType<{ size?: number; color?: string }>;
 };
 
-type MenuGroup = {
+interface NavGroupDef {
   id: string;
   label: string;
-  icon: ComponentType<{ size?: number; color?: string }>;
-  items: AdminTab[];
-};
+  items: TabDefinition[];
+}
 
 type AttentionItem = {
   id: string;
@@ -84,74 +85,83 @@ type AttentionItem = {
   type: 'verification' | 'dispute' | 'review';
 };
 
-import { OverviewPanel } from '../../features/admin-dashboard/components/OverviewPanel';
-import { DirectoryPanel } from '../../features/admin-directory/components/DirectoryPanel';
-import { CategoryManagement } from './components/CategoryManagement';
-import { SettlementManagement } from './components/SettlementManagement';
-import { RefundManagement } from './components/RefundManagement';
-import { RevenuePanel } from '../../features/admin-dashboard/components/RevenuePanel';
-import { VerificationWorkspace } from '../../features/admin-verifications/components/VerificationWorkspace';
-import { DisputesPanel } from '../../features/admin-disputes/components/DisputesPanel';
-import { BehaviorPanel } from '../../features/admin-dashboard/components/BehaviorPanel';
-import { ProductModerationManagement } from './components/ProductModerationManagement';
-import { PortfolioModerationManagement } from './components/PortfolioModerationManagement';
-import { ComboModerationManagement } from './components/ComboModerationManagement';
-import { ReportedReviewsPanel } from '../../features/admin-reviews/components/ReportedReviewsPanel';
-import { PolicyManagement } from './components/PolicyManagement';
-import { AccessControl } from './components/AccessControl';
-import { NotificationsPage } from '../notifications/NotificationsPage';
+const OverviewPanel = lazy(() => import('../../features/admin-dashboard/components/OverviewPanel'));
+const CustomerManagementPanel = lazy(() => import('./components/CustomerManagementPanel').then((module) => ({ default: module.CustomerManagementPanel })));
+const PartnerManagementPanel = lazy(() => import('./components/PartnerManagementPanel').then((module) => ({ default: module.PartnerManagementPanel })));
+const BookingManagementPanel = lazy(() => import('./components/BookingManagementPanel').then((module) => ({ default: module.BookingManagementPanel })));
+const CategoryManagement = lazy(() => import('./components/CategoryManagement').then((module) => ({ default: module.CategoryManagement })));
+const SettlementManagement = lazy(() => import('./components/SettlementManagement').then((module) => ({ default: module.SettlementManagement })));
+const RefundManagement = lazy(() => import('./components/RefundManagement').then((module) => ({ default: module.RefundManagement })));
+const RevenuePanel = lazy(() => import('../../features/admin-dashboard/components/RevenuePanel').then((module) => ({ default: module.RevenuePanel })));
+const PartnerVerificationManagement = lazy(() => import('./components/PartnerVerificationManagement').then((module) => ({ default: module.PartnerVerificationManagement })));
+const DisputesPanel = lazy(() => import('../../features/admin-disputes/components/DisputesPanel').then((module) => ({ default: module.DisputesPanel })));
+const BehaviorPanel = lazy(() => import('../../features/admin-dashboard/components/BehaviorPanel').then((module) => ({ default: module.BehaviorPanel })));
+const ProductModerationPanel = lazy(() => import('./components/ProductModerationPanel').then((module) => ({ default: module.ProductModerationPanel })));
+const ComboModerationManagement = lazy(() => import('./components/ComboModerationManagement'));
+const ReportedReviewsPanel = lazy(() => import('../../features/admin-reviews/components/ReportedReviewsPanel').then((module) => ({ default: module.ReportedReviewsPanel })));
+const PolicyManagement = lazy(() => import('./components/PolicyManagement').then((module) => ({ default: module.PolicyManagement })));
+const AccessControl = lazy(() => import('./components/AccessControl').then((module) => ({ default: module.AccessControl })));
+const NotificationsPage = lazy(() => import('../notifications/NotificationsPage'));
 
-const tabs: TabDefinition[] = [
-  { id: 'overview', label: 'Tổng quan hệ thống', title: 'Tổng quan hệ thống', icon: LayoutDashboard },
-  { id: 'customers', label: 'Khách hàng', title: 'Quản lý Khách hàng', icon: Users },
-  { id: 'providers', label: 'Đối tác', title: 'Quản lý Đối tác & Nhà cung cấp', icon: Store },
-  { id: 'categories', label: 'Danh mục', title: 'Quản lý Danh mục Dịch vụ', icon: Layers },
-  { id: 'bookings', label: 'Lịch trình & Đặt lịch', title: 'Quản lý Lịch trình & Booking', icon: Calendar },
-  { id: 'settlements', label: 'Đối soát & Quyết toán', title: 'Đối soát & Quyết toán Tài chính', icon: DollarSign },
-  { id: 'revenue', label: 'Báo cáo Doanh thu', title: 'Thống kê Doanh thu Hệ thống', icon: TrendingUp },
-  { id: 'verifications', label: 'Phê duyệt hồ sơ đối tác', title: 'Phê duyệt hồ sơ đăng ký đối tác', icon: FileCheck },
-  { id: 'disputes', label: 'Giải quyết tranh chấp', title: 'Giải quyết tranh chấp sự cố', icon: AlertTriangle },
-  { id: 'combo-moderation', label: 'Phê duyệt combo', title: 'Phê duyệt combo Áo dài + Chụp ảnh', icon: CheckSquare },
-  { id: 'product-moderation', label: 'Kiểm duyệt sản phẩm', title: 'Kiểm duyệt nội dung sản phẩm', icon: CheckSquare },
-  { id: 'reported-reviews', label: 'Báo cáo Đánh giá (Spam)', title: 'Báo cáo vi phạm & Spam Đánh giá', icon: Ban },
-  { id: 'policies', label: 'Cấu hình Chính sách', title: 'Cấu hình Chính sách Hệ thống', icon: Settings },
-  { id: 'users-roles', label: 'Tài khoản & Phân quyền', title: 'Tài khoản & Quản trị Phân quyền', icon: ShieldCheck },
-  { id: 'behavior', label: 'Phân tích hành vi', title: 'Phân tích hành vi người dùng', icon: BarChart3 },
-  { id: 'refunds', label: 'Quản lý hoàn tiền', title: 'Quản lý hoàn tiền', icon: RotateCcw },
-  { id: 'notifications', label: 'Thông báo hệ thống', title: 'Tất cả thông báo hệ thống', icon: Bell },
-];
-
-const menuGroups: MenuGroup[] = [
+export const navGroups: NavGroupDef[] = [
   {
     id: 'group-objects',
-    label: 'Quản lý đối tượng',
-    icon: Folder,
-    items: ['customers', 'providers', 'categories'],
+    label: 'QUẢN LÝ ĐỐI TƯỢNG',
+    items: [
+      { id: 'customers', label: 'Khách hàng', title: 'Quản lý Khách hàng', icon: User },
+      { id: 'providers', label: 'Đối tác', title: 'Quản lý Đối tác & Nhà cung cấp', icon: Store },
+      { id: 'categories', label: 'Danh mục', title: 'Quản lý Danh mục Dịch vụ', icon: Folder },
+    ],
   },
   {
     id: 'group-operations',
-    label: 'Vận hành & Giao dịch',
-    icon: Activity,
-    items: ['bookings', 'product-moderation', 'combo-moderation'],
+    label: 'VẬN HÀNH & GIAO DỊCH',
+    items: [
+      { id: 'bookings', label: 'Đơn đặt lịch', title: 'Quản lý Lịch trình & Booking', icon: Calendar },
+      { id: 'product-moderation', label: 'Sản phẩm chờ duyệt', title: 'Kiểm duyệt nội dung sản phẩm', icon: Package },
+      { id: 'combo-moderation', label: 'Phê duyệt combo', title: 'Phê duyệt combo Áo dài + Chụp ảnh', icon: Image },
+    ],
   },
   {
     id: 'group-finance',
-    label: 'Tài chính & Doanh thu',
-    icon: DollarSign,
-    items: ['settlements', 'refunds', 'revenue'],
+    label: 'TÀI CHÍNH & DOANH THU',
+    items: [
+      { id: 'settlements', label: 'Đối soát & Quyết toán', title: 'Đối soát & Quyết toán Tài chính', icon: FileText },
+      { id: 'refunds', label: 'Quản lý hoàn tiền', title: 'Quản lý hoàn tiền', icon: CircleDollarSign },
+      { id: 'revenue', label: 'Báo cáo doanh thu', title: 'Thống kê Doanh thu Hệ thống', icon: BarChart3 },
+    ],
   },
   {
     id: 'group-moderation',
-    label: 'Kiểm duyệt & Trợ giúp',
-    icon: ShieldAlert,
-    items: ['verifications', 'disputes', 'reported-reviews'],
+    label: 'KIỂM DUYỆT & TRỢ GIÚP',
+    items: [
+      { id: 'verifications', label: 'Phê duyệt hồ sơ đối tác', title: 'Phê duyệt hồ sơ đăng ký đối tác', icon: ShieldCheck },
+      { id: 'disputes', label: 'Giải quyết tranh chấp', title: 'Giải quyết tranh chấp sự cố', icon: MessageSquare },
+      { id: 'reported-reviews', label: 'Báo cáo đánh giá (Spam)', title: 'Báo cáo vi phạm & Spam Đánh giá', icon: AlertOctagon },
+    ],
   },
   {
     id: 'group-system',
-    label: 'Hệ thống & Cấu hình',
-    icon: Settings,
-    items: ['policies', 'users-roles', 'behavior', 'notifications'],
+    label: 'HỆ THỐNG & CẤU HÌNH',
+    items: [
+      { id: 'policies', label: 'Cấu hình chính sách', title: 'Cấu hình Chính sách Hệ thống', icon: Settings },
+      { id: 'users-roles', label: 'Tài khoản & Phân quyền', title: 'Tài khoản & Quản trị Phân quyền', icon: UserCheck },
+      { id: 'behavior', label: 'Phân tích hành vi', title: 'Phân tích hành vi người dùng', icon: Activity },
+      { id: 'notifications', label: 'Thông báo hệ thống', title: 'Tất cả thông báo hệ thống', icon: Bell },
+    ],
   },
+];
+
+export const standaloneTab: TabDefinition = {
+  id: 'overview',
+  label: 'Tổng quan hệ thống',
+  title: 'Tổng quan hệ thống',
+  icon: Home,
+};
+
+const tabs: TabDefinition[] = [
+  standaloneTab,
+  ...navGroups.flatMap((g) => g.items),
 ];
 
 const adminTabIds = new Set<AdminTab>(tabs.map((tab) => tab.id));
@@ -201,21 +211,27 @@ class AdminPanelErrorBoundary extends Component<
   }
 }
 
-function TabPanel({ tab }: { tab: AdminTab }) {
+function TabPanel({
+  tab,
+  onNavigateTab,
+}: {
+  tab: AdminTab;
+  onNavigateTab?: (t: AdminTab) => void;
+}) {
   switch (tab) {
-    case 'overview': return <OverviewPanel />;
-    case 'customers': return <DirectoryPanel key="customers" kind="customers" />;
-    case 'providers': return <DirectoryPanel key="providers" kind="providers" />;
+    case 'overview': return <OverviewPanel onNavigateTab={onNavigateTab as any} />;
+    case 'customers': return <CustomerManagementPanel />;
+    case 'providers': return <PartnerManagementPanel />;
     case 'categories': return <CategoryManagement />;
-    case 'bookings': return <DirectoryPanel key="bookings" kind="bookings" />;
+    case 'bookings': return <BookingManagementPanel />;
     case 'settlements': return <SettlementManagement />;
     case 'refunds': return <RefundManagement />;
     case 'revenue': return <RevenuePanel />;
-    case 'verifications': return <VerificationWorkspace />;
+    case 'verifications': return <PartnerVerificationManagement />;
     case 'disputes': return <DisputesPanel />;
     case 'behavior': return <BehaviorPanel />;
     case 'combo-moderation': return <ComboModerationManagement />;
-    case 'product-moderation': return <><ProductModerationManagement /><PortfolioModerationManagement /></>;
+    case 'product-moderation': return <ProductModerationPanel />;
     case 'reported-reviews': return <ReportedReviewsPanel />;
     case 'policies': return <PolicyManagement />;
     case 'users-roles': return <AccessControl />;
@@ -230,26 +246,21 @@ export default function AdminDashboardRefactored() {
   const { logout, user } = useAuth();
   const requestedTab = searchParams.get('tab');
   const activeTab: AdminTab = isAdminTab(requestedTab) ? requestedTab : 'overview';
-  const [isOverviewExpanded, setIsOverviewExpanded] = useState<boolean>(activeTab !== 'overview');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {
-      'group-objects': false,
-      'group-operations': false,
-      'group-finance': false,
-      'group-moderation': false,
-      'group-system': false,
-    };
-    const activeGroup = menuGroups.find((g) => g.items.includes(activeTab));
-    if (activeGroup) {
-      initial[activeGroup.id] = true;
-    }
-    return initial;
+  const [searchQuery, setSearchQuery] = useState('');
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    'group-objects': true,
+    'group-operations': true,
+    'group-finance': true,
+    'group-moderation': true,
+    'group-system': true,
   });
   const [isLoadingAttention, setIsLoadingAttention] = useState(false);
   const [attentionError, setAttentionError] = useState<string | null>(null);
   const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
-  const activeDefinition = tabs.find((tab) => tab.id === activeTab)!;
+  const [visitedTabs, setVisitedTabs] = useState<Set<AdminTab>>(() => new Set([activeTab]));
+  const activeDefinition = tabs.find((tab) => tab.id === activeTab) || standaloneTab;
   const avatar = user?.avatar || user?.avatarUrl || '/avatar_hanna.webp';
   const isAdmin = user?.roles?.some((role) => role.toUpperCase() === 'ADMIN') ?? false;
 
@@ -264,9 +275,15 @@ export default function AdminDashboardRefactored() {
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
+    setVisitedTabs((previous) => {
+      if (previous.has(activeTab)) return previous;
+      const next = new Set(previous);
+      next.add(activeTab);
+      return next;
+    });
+
     if (activeTab !== 'overview') {
-      setIsOverviewExpanded(true);
-      const matchingGroup = menuGroups.find((g) => g.items.includes(activeTab));
+      const matchingGroup = navGroups.find((g) => g.items.some((i) => i.id === activeTab));
       if (matchingGroup) {
         setOpenGroups((prev) => ({ ...prev, [matchingGroup.id]: true }));
       }
@@ -298,13 +315,16 @@ export default function AdminDashboardRefactored() {
 
     const nextItems: AttentionItem[] = [];
     if (verificationResult.status === 'fulfilled') {
-      verificationResult.value
-        .filter((item) => item.status === 'SUBMITTED' || item.status === 'UNDER_REVIEW')
-        .forEach((item) => nextItems.push({
+      const vItems = Array.isArray(verificationResult.value)
+        ? verificationResult.value
+        : (verificationResult.value as any)?.items || [];
+      vItems
+        .filter((item: any) => item.status === 'SUBMITTED' || item.status === 'UNDER_REVIEW')
+        .forEach((item: any) => nextItems.push({
           id: `verification-${item.verificationId}`,
           tab: 'verifications',
           type: 'verification',
-          title: item.businessProfile.businessName || 'Hồ sơ đối tác',
+          title: item.businessProfile?.businessName || 'Hồ sơ đối tác',
           description: `Hồ sơ đang ở trạng thái ${item.status}.`,
           occurredAt: item.createdAt,
         }));
@@ -350,121 +370,121 @@ export default function AdminDashboardRefactored() {
 
   return (
     <div className="admin-refactor-shell">
-      <aside className="admin-refactor-sidebar">
+      <aside className={`admin-refactor-sidebar ${isSidebarCollapsed ? 'admin-refactor-sidebar--collapsed' : ''}`}>
         <div className="admin-refactor-sidebar__top">
+          {/* Brand */}
           <div className="admin-refactor-brand">
-            <strong>Di sản Áo Dài</strong>
-            <span>CURATING ELEGANCE • ADMIN</span>
+            <div
+              className="admin-brand-left"
+              onClick={() => isSidebarCollapsed && setIsSidebarCollapsed(false)}
+              style={{ cursor: isSidebarCollapsed ? 'pointer' : 'default' }}
+            >
+              <div className="admin-brand-logo">L</div>
+              <div className="admin-brand-text">
+                <strong>LUMÉ</strong>
+                <span>ÁO DÀI & CHỤP ẢNH</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="admin-sidebar-toggle-btn"
+              title={isSidebarCollapsed ? 'Mở rộng menu (240px)' : 'Thu gọn menu (76px)'}
+              onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+            >
+              {isSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            </button>
           </div>
 
-          <div className="admin-refactor-profile admin-refactor-profile--sidebar">
+          {/* Profile */}
+          <div className="admin-refactor-profile--sidebar" title="System Admin - Quản trị viên hệ thống">
             <img src={avatar} alt="Admin" />
-            <div>
-              <strong>{user?.fullName || 'Hanna Nguyễn'}</strong>
-              <span>Quản Trị Viên Hệ Thống</span>
+            <div className="admin-profile-info">
+              <strong>{user?.fullName || 'System Admin'}</strong>
+              <span>Quản trị viên hệ thống</span>
             </div>
           </div>
 
+          {/* Navigation */}
           <nav className="admin-refactor-nav" aria-label="Điều hướng quản trị">
-            {/* 🏠 TOP STANDALONE: Tổng quan hệ thống */}
-            <button
-              type="button"
-              className={activeTab === 'overview' ? 'is-active' : ''}
-              aria-current={activeTab === 'overview' ? 'page' : undefined}
-              onClick={() => {
-                setActiveTab('overview');
-                setIsOverviewExpanded((prev) => !prev);
-              }}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <LayoutDashboard size={16} color={activeTab === 'overview' ? '#4A0E17' : '#B89047'} />
+            {/* Standalone item: Tổng quan hệ thống */}
+            <div className="admin-sidebar-standalone">
+              <button
+                type="button"
+                className={`admin-nav-item ${activeTab === 'overview' ? 'is-active' : ''}`}
+                aria-current={activeTab === 'overview' ? 'page' : undefined}
+                title="Tổng quan hệ thống"
+                onClick={() => setActiveTab('overview')}
+              >
+                <Home size={18} />
                 <span>Tổng quan hệ thống</span>
-              </div>
-              {isOverviewExpanded ? (
-                <ChevronUp size={14} color={activeTab === 'overview' ? '#4A0E17' : '#B89047'} />
-              ) : (
-                <ChevronDown size={14} color={activeTab === 'overview' ? '#4A0E17' : '#B89047'} />
-              )}
-            </button>
+              </button>
+            </div>
 
-            {/* 📁 5 MENU GROUPS - Shown when Overview is expanded */}
-            {isOverviewExpanded && (
-              <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: '6px', marginTop: '4px' }}>
-                {menuGroups.map((group) => {
-                  const GroupIcon = group.icon;
-                  const isGroupActive = group.items.includes(activeTab);
-                  const isOpen = openGroups[group.id] ?? false;
+            {/* 5 Menu Groups */}
+            {navGroups.map((group) => {
+              const isOpen = openGroups[group.id] ?? true;
 
-                  return (
-                    <div key={group.id} style={{ display: 'flex', flexDirection: 'column', marginTop: '4px' }}>
-                      <button
-                        type="button"
-                        className={isGroupActive ? 'is-active' : ''}
-                        onClick={() => toggleGroup(group.id)}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <GroupIcon size={16} color={isGroupActive ? '#4A0E17' : '#B89047'} />
-                          <span>{group.label}</span>
-                        </div>
-                        {isOpen ? (
-                          <ChevronUp size={14} color={isGroupActive ? '#4A0E17' : '#B89047'} />
-                        ) : (
-                          <ChevronDown size={14} color={isGroupActive ? '#4A0E17' : '#B89047'} />
-                        )}
-                      </button>
+              return (
+                <div key={group.id} className="admin-nav-group">
+                  {/* Group Header (only shown when expanded) */}
+                  <button
+                    type="button"
+                    className="admin-nav-group__header"
+                    onClick={() => toggleGroup(group.id)}
+                    title={group.label}
+                  >
+                    <span>{group.label}</span>
+                    {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </button>
 
-                      {isOpen && (
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '2px',
-                            paddingLeft: '16px',
-                            marginTop: '2px',
-                            marginBottom: '4px',
-                            borderLeft: '2px solid rgba(255, 255, 255, 0.15)',
-                            marginLeft: '12px',
-                          }}
-                        >
-                          {group.items.map((subId) => {
-                            const subTab = tabs.find((t) => t.id === subId);
-                            if (!subTab) return null;
-                            const SubIcon = subTab.icon;
-                            const isSubActive = activeTab === subId;
+                  {/* Group Items (always shown in collapsed mode, or when group isOpen in expanded mode) */}
+                  {(isOpen || isSidebarCollapsed) && (
+                    <div className="admin-nav-group__items">
+                      {group.items.map((item) => {
+                        const ItemIcon = item.icon;
+                        const isItemActive = activeTab === item.id;
 
-                            return (
-                              <button
-                                key={subId}
-                                type="button"
-                                className={isSubActive ? 'is-active' : ''}
-                                aria-current={isSubActive ? 'page' : undefined}
-                                onClick={() => setActiveTab(subId)}
-                                style={{ padding: '8px 12px', fontSize: '12.5px' }}
-                              >
-                                <SubIcon size={14} color={isSubActive ? '#4A0E17' : '#B89047'} />
-                                <span>{subTab.label}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`admin-nav-item ${isItemActive ? 'is-active' : ''}`}
+                            aria-current={isItemActive ? 'page' : undefined}
+                            title={item.label}
+                            onClick={() => setActiveTab(item.id)}
+                          >
+                            <ItemIcon size={18} />
+                            <span>{item.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  )}
+                </div>
+              );
+            })}
           </nav>
         </div>
 
+        {/* Footer */}
         <div className="admin-refactor-sidebar__footer">
-          <button type="button" aria-label="Trở về Trang chủ" onClick={() => navigate(ROUTES.LANDING)}>
-            <Home size={16} color="#B89047" />
-            <span>Trở về Trang chủ</span>
+          <button
+            type="button"
+            className="admin-footer-btn"
+            title="Trở về trang chủ"
+            onClick={() => navigate(ROUTES.LANDING)}
+          >
+            <ArrowLeft size={18} />
+            <span>Trở về trang chủ</span>
           </button>
-          <button className="admin-refactor-logout" type="button" aria-label="Đăng xuất" onClick={() => void handleLogout()}>
-            <LogOut size={16} color="#F87171" />
+          <button
+            type="button"
+            className="admin-footer-btn"
+            title="Đăng xuất"
+            onClick={() => void handleLogout()}
+          >
+            <LogOut size={18} />
             <span>Đăng xuất</span>
           </button>
         </div>
@@ -472,8 +492,48 @@ export default function AdminDashboardRefactored() {
 
       <main className="admin-refactor-main">
         <header className="admin-refactor-header">
-          <h1>{activeDefinition.title}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flex: 1, minWidth: 0 }}>
+            {activeTab !== 'overview' && activeTab !== 'customers' && <h1>{activeDefinition.title}</h1>}
+            <div className="admin-global-search">
+              <Search size={15} color="#9CA3AF" />
+              <input
+                type="text"
+                placeholder={
+                  activeTab === 'customers'
+                    ? 'Tìm kiếm khách hàng, email, số điện thoại, mã ID...'
+                    : activeTab === 'providers'
+                    ? 'Tìm kiếm đối tác, cửa hàng, chủ cơ sở, mã #DT...'
+                    : 'Tìm kiếm khách hàng, đơn hàng, đối tác, sản phẩm...'
+                }
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <kbd className="admin-search-kbd">⌘ K</kbd>
+            </div>
+          </div>
+
           <div className="admin-refactor-header__actions">
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                height: '34px',
+                padding: '0 12px',
+                background: '#FFFFFF',
+                border: '1px solid #E5E7EB',
+                borderRadius: '8px',
+                fontSize: '12px',
+                color: '#374151',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              <Calendar size={13} color="#881337" />
+              <span>01/07/2024 - 31/07/2024</span>
+              <ChevronDown size={13} color="#9CA3AF" />
+            </div>
+
             <div className="admin-refactor-notification">
               <button
                 className="admin-refactor-notification__trigger"
@@ -541,19 +601,26 @@ export default function AdminDashboardRefactored() {
             </div>
 
             <span className="admin-refactor-header__divider" />
-            <div className="admin-refactor-profile admin-refactor-profile--header">
-              <img src={avatar} alt="Admin" />
-              <strong>{user?.fullName || 'Admin'}</strong>
+            <div className="admin-refactor-profile admin-refactor-profile--header" style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+              <img src={avatar} alt="Admin" style={{ width: '34px', height: '34px', borderRadius: '50%' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+                <strong style={{ fontSize: '13px', color: '#111827', fontWeight: 700 }}>{user?.fullName || 'System Admin'}</strong>
+                <span style={{ fontSize: '11px', color: '#6B7280', fontWeight: 500 }}>Quản trị viên</span>
+              </div>
             </div>
           </div>
         </header>
 
-        <div className="admin-refactor-content">
-          <AdminPanelErrorBoundary resetKey={activeTab}>
-            <Suspense fallback={<p className="admin-refactor-loading">Đang tải chức năng…</p>}>
-              <TabPanel tab={activeTab} />
-            </Suspense>
-          </AdminPanelErrorBoundary>
+        <div className={`admin-refactor-content ${activeTab === 'customers' ? 'admin-refactor-content--customers' : activeTab === 'providers' ? 'admin-refactor-content--providers' : activeTab === 'categories' ? 'admin-refactor-content--categories' : activeTab === 'bookings' ? 'admin-refactor-content--bookings' : ''}`}>
+          {Array.from(visitedTabs.has(activeTab) ? visitedTabs : new Set([...visitedTabs, activeTab])).map((tab) => (
+            <div key={tab} style={{ display: tab === activeTab ? 'contents' : 'none' }}>
+              <AdminPanelErrorBoundary resetKey={tab}>
+                <Suspense fallback={<p className="admin-refactor-loading">Đang tải chức năng…</p>}>
+                  <TabPanel tab={tab} onNavigateTab={setActiveTab} />
+                </Suspense>
+              </AdminPanelErrorBoundary>
+            </div>
+          ))}
         </div>
       </main>
     </div>

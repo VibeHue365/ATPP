@@ -95,3 +95,4 @@ export class Payment {
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
 PaymentSchema.index({ 'payos.orderCode': 1 }, { unique: true, sparse: true });
+PaymentSchema.index({ status: 1, purpose: 1, createdAt: 1 });

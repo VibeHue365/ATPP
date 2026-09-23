@@ -1,0 +1,1371 @@
+/* ==========================================================================
+   LUMÉ COMBO MODERATION STYLESHEET (Figma Node 316-4062)
+   ========================================================================== */
+
+/* 1. Main Container */
+.lume-combo-mod-container {
+  display: flex;
+  flex-direction: column;
+  background: #fcfbf9;
+  min-height: 100%;
+  font-family: inherit;
+  color: #0f172a;
+  box-sizing: border-box;
+  padding: 24px 32px 40px;
+  gap: 20px;
+}
+
+/* 2. Breadcrumbs & Header */
+.lume-combo-mod-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.lume-combo-mod-breadcrumb .separator {
+  color: #cbd5e1;
+}
+
+.lume-combo-mod-breadcrumb .current {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.lume-combo-mod-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.lume-combo-mod-header-left h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.lume-combo-mod-header-left p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 680px;
+  line-height: 1.5;
+}
+
+.lume-combo-guideline-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #881337;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.lume-combo-guideline-btn:hover {
+  background: #fff1f2;
+  border-color: #fda4af;
+  color: #700f2b;
+}
+
+/* 3. 5 KPI Metric Cards */
+.lume-combo-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 1300px) {
+  .lume-combo-metrics-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .lume-combo-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 500px) {
+  .lume-combo-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-combo-metric-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.lume-combo-metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+}
+
+.lume-combo-metric-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-combo-metric-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lume-combo-metric-icon.pending {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.lume-combo-metric-icon.approved {
+  background: #ecfdf5;
+  color: #10b981;
+}
+
+.lume-combo-metric-icon.rejected {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.lume-combo-metric-icon.revision {
+  background: #fffbeb;
+  color: #f59e0b;
+}
+
+.lume-combo-metric-icon.total {
+  background: #f5f3ff;
+  color: #8b5cf6;
+}
+
+.lume-combo-metric-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.lume-combo-metric-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.lume-combo-metric-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.lume-combo-metric-trend {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.lume-combo-metric-trend.up {
+  color: #16a34a;
+}
+
+.lume-combo-metric-trend.up-red {
+  color: #dc2626;
+}
+
+.lume-combo-metric-trend.down {
+  color: #dc2626;
+}
+
+.lume-combo-metric-trend.amber {
+  color: #d97706;
+}
+
+/* 4. Filter & Search Bar */
+.lume-combo-filter-bar {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.lume-combo-search-wrap {
+  flex: 1;
+  min-width: 240px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.lume-combo-search-wrap svg {
+  position: absolute;
+  left: 12px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.lume-combo-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.15s;
+  background: #f8fafc;
+}
+
+.lume-combo-search-input:focus {
+  border-color: #881337;
+  background: #ffffff;
+}
+
+.lume-combo-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lume-combo-filter-label {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lume-combo-filter-select {
+  padding: 7px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #0f172a;
+  background: #ffffff;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.lume-combo-filter-select:focus {
+  border-color: #881337;
+}
+
+.lume-combo-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  align-self: flex-end;
+  transition: all 0.15s;
+}
+
+.lume-combo-filter-btn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+/* 5. Status Tabs Bar */
+.lume-combo-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 2px;
+  margin-top: 4px;
+  overflow-x: auto;
+}
+
+.lume-combo-tab-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 8px 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+
+.lume-combo-tab-item:hover {
+  color: #0f172a;
+}
+
+.lume-combo-tab-item.active {
+  color: #881337;
+}
+
+.lume-combo-tab-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2.5px;
+  background: #881337;
+  border-radius: 2px;
+}
+
+.lume-combo-tab-count {
+  font-size: 12px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 2px 7px;
+  border-radius: 12px;
+}
+
+.lume-combo-tab-item.active .lume-combo-tab-count {
+  background: #fff1f2;
+  color: #881337;
+}
+
+/* 6. Workspace Layout (Full width table) */
+.lume-combo-workspace {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.lume-combo-table-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.lume-combo-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  user-select: none;
+  cursor: grab;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.lume-combo-table-scroll:active {
+  cursor: grabbing;
+}
+
+.lume-combo-table-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.lume-combo-table-scroll::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+.lume-combo-table-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+.lume-combo-table {
+  width: 100%;
+  min-width: 1100px;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.lume-combo-table thead {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.lume-combo-table th {
+  padding: 12px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.lume-combo-table tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.lume-combo-table tbody tr:hover {
+  background: #fafaf9;
+}
+
+.lume-combo-table tbody tr.selected {
+  background: #fff1f2;
+}
+
+.lume-combo-table td {
+  padding: 12px 14px;
+  color: #334155;
+  vertical-align: middle;
+}
+
+/* Thumbnail Column */
+.lume-combo-thumb-cell {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  flex-shrink: 0;
+}
+
+.lume-combo-name-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+.lume-combo-name-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.lume-combo-code-sub {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Category Badge */
+.lume-combo-cat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Partner Column */
+.lume-combo-partner-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+  max-width: 220px;
+}
+
+.lume-combo-partner-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.3;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.lume-combo-partner-code {
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* Price Cell */
+.lume-combo-price-cell {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+/* Status Badges */
+.lume-combo-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lume-combo-status-pill.pending {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fef3c7;
+}
+
+.lume-combo-status-pill.approved {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #d1fae5;
+}
+
+.lume-combo-status-pill.rejected {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fee2e2;
+}
+
+.lume-combo-status-pill.revision {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #ffedd5;
+}
+
+.lume-combo-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.lume-combo-status-pill.pending .lume-combo-status-dot {
+  background: #d97706;
+}
+
+.lume-combo-status-pill.approved .lume-combo-status-dot {
+  background: #059669;
+}
+
+.lume-combo-status-pill.rejected .lume-combo-status-dot {
+  background: #dc2626;
+}
+
+.lume-combo-status-pill.revision .lume-combo-status-dot {
+  background: #ea580c;
+}
+
+/* Table Pagination Footer */
+.lume-combo-mod-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 12px;
+  color: #64748b;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.lume-combo-mod-pagination {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lume-combo-page-btn {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-combo-page-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.lume-combo-page-btn.active {
+  background: #881337;
+  border-color: #881337;
+  color: #ffffff;
+}
+
+.lume-combo-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 7. Spacious Slide-Over Inspection Drawer (980px - 1380px) */
+.lume-combo-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 998;
+  animation: lumeDrawerFade 0.2s ease-out;
+}
+
+@keyframes lumeDrawerFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.lume-combo-detail-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(980px, 94vw);
+  background: #ffffff;
+  z-index: 999;
+  box-shadow: -12px 0 45px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  animation: lumeDrawerSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lume-combo-detail-drawer.maximized {
+  width: min(1380px, 98vw);
+}
+
+@keyframes lumeDrawerSlideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.lume-combo-drawer-header {
+  padding: 16px 28px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.lume-combo-drawer-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.lume-combo-drawer-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lume-combo-drawer-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.lume-combo-drawer-nav-btn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.lume-combo-drawer-nav-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.lume-combo-drawer-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lume-combo-drawer-icon-btn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-combo-drawer-icon-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+/* 2-Column Spacious Body */
+.lume-combo-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px 32px;
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 28px;
+  align-items: start;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+@media (max-width: 960px) {
+  .lume-combo-drawer-body {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+}
+
+.lume-combo-drawer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Left Column: Visual Showcase */
+.lume-combo-showcase-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+  height: 320px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+}
+
+.lume-combo-showcase-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.lume-combo-showcase-badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.lume-combo-showcase-counter {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lume-combo-thumbs-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.lume-combo-thumb-item {
+  width: 68px;
+  height: 68px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  background: #f1f5f9;
+}
+
+.lume-combo-thumb-item:hover {
+  transform: translateY(-2px);
+  border-color: #fecdd3;
+}
+
+.lume-combo-thumb-item.active {
+  border-color: #881337;
+  box-shadow: 0 2px 8px rgba(136, 19, 55, 0.25);
+}
+
+.lume-combo-thumb-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Card: Description */
+.lume-combo-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.lume-combo-card-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lume-combo-desc-text {
+  margin: 0;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.7;
+}
+
+/* Inclusions Grid (2 columns on wide screens) */
+.lume-combo-inclusions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .lume-combo-inclusions-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-combo-inc-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  transition: all 0.15s;
+}
+
+.lume-combo-inc-card:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.lume-combo-inc-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #881337;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Right Column: Pricing & Quick Highlights */
+.lume-combo-pricing-ribbon {
+  background: linear-gradient(135deg, #fff1f2 0%, #ffffff 100%);
+  border: 1px solid #fecdd3;
+  border-radius: 14px;
+  padding: 18px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.lume-combo-price-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.lume-combo-price-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #881337;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lume-combo-price-amount {
+  font-size: 26px;
+  font-weight: 800;
+  color: #881337;
+  line-height: 1.2;
+}
+
+.lume-combo-price-orig-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.lume-combo-price-orig {
+  font-size: 13px;
+  color: #94a3b8;
+  text-decoration: line-through;
+}
+
+.lume-combo-discount-badge {
+  background: #881337;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.lume-combo-meta-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lume-combo-meta-chip {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Subtabs in Right Column */
+.lume-combo-drawer-subtabs {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 2px solid #f1f5f9;
+  padding-bottom: 2px;
+}
+
+.lume-combo-dsubtab-btn {
+  background: transparent;
+  border: none;
+  padding: 10px 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+
+.lume-combo-dsubtab-btn:hover {
+  color: #0f172a;
+}
+
+.lume-combo-dsubtab-btn.active {
+  color: #881337;
+}
+
+.lume-combo-dsubtab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2.5px;
+  background: #881337;
+  border-radius: 2px;
+}
+
+/* Info Grid in Subtab */
+.lume-combo-spec-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.lume-combo-spec-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  font-size: 13px;
+  gap: 12px;
+}
+
+.lume-combo-spec-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.lume-combo-spec-val {
+  color: #0f172a;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Partner Card in Detail */
+.lume-combo-partner-profile-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.lume-combo-partner-profile-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-combo-partner-profile-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #fecdd3;
+}
+
+.lume-combo-partner-profile-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.lume-combo-partner-profile-code {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Fixed Bottom Action Bar */
+.lume-combo-drawer-footer {
+  padding: 16px 28px;
+  border-top: 1px solid #f1f5f9;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 16px;
+  box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.03);
+}
+
+.lume-combo-drawer-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.lume-combo-drawer-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-combo-btn-reject {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #dc2626;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-combo-btn-reject:hover {
+  background: #fef2f2;
+}
+
+.lume-combo-btn-revision-full {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ea580c;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-combo-btn-revision-full:hover {
+  background: #fff7ed;
+}
+
+.lume-combo-btn-approve {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #881337;
+  border: 1px solid #881337;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(136, 19, 55, 0.25);
+  transition: all 0.15s;
+}
+
+.lume-combo-btn-approve:hover {
+  background: #700f2b;
+  border-color: #700f2b;
+}
+
+/* Modals */
+.lume-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  backdrop-filter: blur(3px);
+  padding: 20px;
+}
+
+.lume-modal-box {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-width: 100%;
+  width: 100%;
+  animation: lumeModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes lumeModalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.lume-modal-box.size-md {
+  width: 520px;
+}
+
+.lume-modal-box.size-lg {
+  width: 680px;
+}
+
+.lume-modal-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lume-modal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-modal-header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lume-modal-header-icon.red {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.lume-modal-header-icon.revision {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.lume-modal-header-icon.wine {
+  background: #fff1f2;
+  color: #881337;
+}
+
+.lume-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.lume-modal-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.lume-modal-close-btn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.lume-modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.lume-modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  background: #fafaf9;
+}
+
+.lume-btn-ghost {
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+}
+
+.lume-btn-primary {
+  background: #881337;
+  border: 1px solid #881337;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+}

@@ -91,11 +91,11 @@ export class RateCustomerDto {
 export class HandleReportDto {
   @IsString()
   @IsNotEmpty()
-  action: 'DELETE' | 'DISMISS';
+  action: 'DELETE' | 'DISMISS' | 'HIDE' | 'UNDER_REVIEW' | 'CONFIRM';
 
   @IsString()
-  @IsNotEmpty()
-  reason: string;
+  @IsOptional()
+  reason?: string;
 }
 
 @Controller('reviews')

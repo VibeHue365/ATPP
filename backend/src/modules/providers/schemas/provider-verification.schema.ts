@@ -90,6 +90,16 @@ export interface ProviderVerificationBusinessProfile {
   address?: string | null;
   province?: string | null;
   description?: string | null;
+  taxCode?: string | null;
+  businessType?: string | null;
+  avatar?: string | null;
+}
+
+export interface ProviderVerificationInternalNote {
+  adminName: string;
+  avatar?: string | null;
+  createdAt: Date;
+  content: string;
 }
 
 export interface ProviderVerificationAodaiInfo {
@@ -236,6 +246,9 @@ export class ProviderVerification {
   @Prop({ type: Number, default: 0 })
   verificationRevision: number;
 
+  @Prop({ type: String, default: null, trim: true, index: true })
+  partnerCode?: string;
+
   @Prop({
     type: {
       businessName: { type: String, default: null, trim: true },
@@ -245,6 +258,9 @@ export class ProviderVerification {
       address: { type: String, default: null, trim: true },
       province: { type: String, default: null, trim: true },
       description: { type: String, default: null, trim: true },
+      taxCode: { type: String, default: null, trim: true },
+      businessType: { type: String, default: null, trim: true },
+      avatar: { type: String, default: null, trim: true },
     },
     default: {},
   })
@@ -424,6 +440,20 @@ export class ProviderVerification {
     default: [],
   })
   statusTimeline: ProviderVerificationStatusTimeline[];
+
+  @Prop({
+    type: [
+      {
+        _id: false,
+        adminName: { type: String, default: 'Admin' },
+        avatar: { type: String, default: null },
+        createdAt: { type: Date, default: Date.now },
+        content: { type: String, required: true },
+      },
+    ],
+    default: [],
+  })
+  internalNotes?: ProviderVerificationInternalNote[];
 
   @Prop({ type: Date, default: null })
   submittedAt?: Date | null;

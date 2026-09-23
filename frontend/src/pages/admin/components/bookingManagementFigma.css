@@ -1,0 +1,1486 @@
+/* ==========================================================================
+   LUMÉ V11 — EXACT FIGMA BOOKING MANAGEMENT STYLESHEET (Node-id: 298-2)
+   Admin Dashboard "Đơn đặt lịch" Pixel-Perfect Implementation
+   ========================================================================== */
+
+.lume-booking-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px 28px 32px 28px;
+  background: #FAF6F0;
+  min-height: 100%;
+  font-family: inherit;
+  color: #1e293b;
+}
+
+@media (max-width: 1024px) {
+  .lume-booking-container {
+    padding: 16px;
+  }
+}
+
+/* 1. Breadcrumb & Header */
+.lume-booking-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.lume-booking-breadcrumb span.current {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.lume-booking-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lume-booking-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.lume-booking-subtitle {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* 2. 6 KPI Cards Grid */
+.lume-booking-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 1360px) {
+  .lume-booking-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .lume-booking-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.lume-booking-kpi-card {
+  background: #ffffff;
+  border: 1px solid #efe9e1;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.lume-booking-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+}
+
+.lume-booking-kpi-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lume-booking-kpi-icon-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lume-booking-kpi-icon-wrap.blue {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.lume-booking-kpi-icon-wrap.orange {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.lume-booking-kpi-icon-wrap.green {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.lume-booking-kpi-icon-wrap.red {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.lume-booking-kpi-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.lume-booking-kpi-val {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.15;
+  margin-top: 4px;
+  margin-left: 2px;
+}
+
+.lume-booking-kpi-trend {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 2px;
+}
+
+.lume-booking-kpi-trend.green {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.lume-booking-kpi-trend.red {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.lume-booking-kpi-trend span.trend-sub {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+/* 3. Main Workspace: Content Area */
+.lume-booking-workspace {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+  width: 100%;
+}
+
+.lume-booking-workspace.with-detail {
+  grid-template-columns: minmax(0, 1fr) 395px;
+}
+
+.lume-booking-workspace.without-detail {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 1200px) {
+  .lume-booking-workspace.with-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 4. Left/Main Table Panel */
+.lume-booking-table-panel {
+  background: #ffffff;
+  border: 1px solid #efe9e1;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+}
+
+/* Toolbar & Filters */
+.lume-booking-toolbar {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.lume-booking-search-row {
+  width: 100%;
+}
+
+.lume-booking-search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.lume-booking-search-input-wrap:focus-within {
+  border-color: #881337;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(136, 19, 55, 0.08);
+}
+
+.lume-booking-search-input-wrap input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: #1e293b;
+  width: 100%;
+}
+
+.lume-booking-filter-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lume-booking-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.lume-booking-filter-group label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: none;
+}
+
+.lume-booking-filter-group select,
+.lume-booking-date-btn {
+  height: 38px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: #334155;
+  outline: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.lume-booking-filter-group select:focus,
+.lume-booking-date-btn:focus {
+  border-color: #881337;
+}
+
+.lume-booking-export-btn {
+  height: 38px;
+  background: #881337;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  transition: background-color 0.15s, transform 0.1s;
+  box-shadow: 0 1px 3px rgba(136, 19, 55, 0.2);
+}
+
+.lume-booking-export-btn:hover {
+  background: #700f2b;
+}
+
+.lume-booking-export-btn:active {
+  transform: scale(0.98);
+}
+
+/* Drag to Scroll Table */
+.lume-booking-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  user-select: none;
+  cursor: grab;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.lume-booking-table-scroll:active {
+  cursor: grabbing;
+}
+
+.lume-booking-table-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.lume-booking-table-scroll::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+.lume-booking-table-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+.lume-booking-table {
+  width: 100%;
+  min-width: 960px;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+
+.lume-booking-table thead {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.lume-booking-table th {
+  padding: 12px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.lume-booking-table tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.12s;
+  cursor: pointer;
+}
+
+.lume-booking-table tbody tr:hover {
+  background-color: #fcfbf9;
+}
+
+.lume-booking-table tbody tr.selected {
+  background-color: #fff1f2;
+}
+
+.lume-booking-table td {
+  padding: 13px 14px;
+  vertical-align: middle;
+  color: #334155;
+  white-space: nowrap;
+}
+
+/* Table Cells Formatting */
+.booking-code-cell {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.customer-cell,
+.provider-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name-main {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.sub-meta {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.schedule-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.price-cell {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* Badges */
+.lume-badge-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.lume-badge-dot.paid {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.lume-badge-dot.unpaid {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.lume-badge-dot.dot-circle::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+.lume-status-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.lume-status-pill.upcoming {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.lume-status-pill.completed {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.lume-status-pill.pending {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.lume-status-pill.cancelled {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.lume-status-pill.disputed {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.issue-tag-red {
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.issue-tag-none {
+  color: #94a3b8;
+}
+
+/* Action button in table */
+.action-cell-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-dot-btn {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.15s;
+}
+
+.action-dot-btn:hover,
+.action-dot-btn.active {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.lume-action-menu-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+  min-width: 180px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 999;
+  animation: lumeDropdownFadeIn 0.12s ease-out;
+}
+
+@keyframes lumeDropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lume-action-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #1e293b;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.12s;
+}
+
+.lume-action-menu-item:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.lume-action-menu-item.danger {
+  color: #dc2626;
+}
+
+.lume-action-menu-item.danger:hover {
+  background: #fef2f2;
+}
+
+.lume-action-menu-divider {
+  height: 1px;
+  background: #f1f5f9;
+  margin: 3px 0;
+}
+
+/* Table Footer & Pagination */
+.lume-booking-footer {
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #f1f5f9;
+  font-size: 12px;
+  color: #64748b;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.lume-booking-pagination {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lume-pagination-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-pagination-btn:hover:not(:disabled) {
+  border-color: #881337;
+  color: #881337;
+}
+
+.lume-pagination-btn.active {
+  background: #881337;
+  color: #ffffff;
+  border-color: #881337;
+  font-weight: 700;
+}
+
+.lume-pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lume-perpage-select {
+  height: 28px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: #334155;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+/* 5. Right Docked Detail Panel (Chi tiết booking) */
+.lume-booking-detail-panel {
+  background: #ffffff;
+  border: 1px solid #efe9e1;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+  animation: lumeSlideInRight 0.18s ease-out;
+}
+
+@keyframes lumeSlideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.lume-booking-detail-panel::-webkit-scrollbar {
+  width: 5px;
+}
+
+.lume-booking-detail-panel::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+/* Detail Header */
+.lume-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 14px;
+}
+
+.lume-detail-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lume-detail-title-row h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.lume-detail-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.lume-detail-close-btn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.lume-detail-code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lume-detail-code {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.lume-detail-time-sub {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* Detail Section Common */
+.lume-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 14px;
+}
+
+.lume-detail-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  text-transform: none;
+  margin: 0;
+}
+
+/* Customer & Partner Info Cards */
+.lume-detail-user-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.lume-detail-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid #e2e8f0;
+}
+
+.lume-detail-user-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.lume-detail-user-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.lume-detail-user-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.lume-detail-user-code {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.lume-detail-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.lume-detail-contact-item svg {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.lume-partner-profile-link {
+  font-size: 11px;
+  font-weight: 600;
+  color: #881337;
+  background: #fff1f2;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.lume-partner-profile-link:hover {
+  background: #ffe4e6;
+}
+
+/* Service Info */
+.lume-detail-service-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.lume-detail-service-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid #e2e8f0;
+}
+
+.lume-detail-service-img-placeholder {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lume-detail-service-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.lume-detail-service-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.lume-detail-service-pkg {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.lume-detail-service-spec {
+  font-size: 11px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.lume-detail-service-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.lume-detail-pill-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #334155;
+}
+
+.lume-detail-pill-item svg {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+/* Financials 4-Box Grid */
+.lume-financial-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.lume-financial-box {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lume-financial-box-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.lume-financial-box-val {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.lume-financial-box-val.green {
+  color: #16a34a;
+}
+
+.lume-financial-box-val.red {
+  color: #dc2626;
+}
+
+.lume-financial-box-unit {
+  font-size: 10px;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-left: 2px;
+}
+
+/* Detail Tabs */
+.lume-detail-tabs-bar {
+  display: flex;
+  border-bottom: 1px solid #e2e8f0;
+  gap: 16px;
+  padding-bottom: 2px;
+}
+
+.lume-detail-tab-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+}
+
+.lume-detail-tab-btn:hover {
+  color: #0f172a;
+}
+
+.lume-detail-tab-btn.active {
+  color: #881337;
+}
+
+.lume-detail-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #881337;
+  border-radius: 2px;
+}
+
+.lume-detail-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.lume-detail-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.lume-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lume-summary-item label {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.lume-summary-item span {
+  font-size: 12px;
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.lume-customer-note-block {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lume-customer-note-block label {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.lume-customer-note-block p {
+  margin: 0;
+  font-size: 12px;
+  color: #334155;
+  background: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #f1f5f9;
+}
+
+/* Action Buttons 2x2 */
+.lume-detail-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.lume-detail-action-outline-btn {
+  background: #ffffff;
+  border: 1px solid #fecdd3;
+  color: #881337;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.lume-detail-action-outline-btn:hover {
+  background: #fff1f2;
+}
+
+.lume-detail-action-solid-btn {
+  background: #881337;
+  color: #ffffff;
+  border: 1px solid #881337;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.lume-detail-action-solid-btn:hover {
+  background: #700f2b;
+}
+
+/* ==========================================================================
+   MODERN CUSTOM MODALS FOR BOOKING MANAGEMENT (LUMÉ DESIGN SYSTEM)
+   ========================================================================== */
+
+/* 1. Backdrop Overlay */
+.lume-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: lumeModalFadeIn 0.2s ease-out;
+}
+
+@keyframes lumeModalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 2. Modal Container */
+.lume-modal-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: lumeModalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes lumeModalScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.lume-modal-box.size-sm {
+  max-width: 440px;
+}
+
+.lume-modal-box.size-md {
+  max-width: 520px;
+}
+
+.lume-modal-box.size-lg {
+  max-width: 720px;
+}
+
+/* Modal Header */
+.lume-modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+}
+
+.lume-modal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-modal-header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lume-modal-header-icon.wine {
+  background: #fff1f2;
+  color: #881337;
+}
+
+.lume-modal-header-icon.blue {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.lume-modal-header-icon.red {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.lume-modal-header-icon.green {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.lume-modal-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.lume-modal-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.lume-modal-close-btn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-modal-close-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Modal Body */
+.lume-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.lume-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.lume-modal-body::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+/* Modal Footer */
+.lume-modal-footer {
+  padding: 14px 24px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  background: #fcfbf9;
+}
+
+/* Buttons in Modals */
+.lume-btn-ghost {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-btn-ghost:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.lume-btn-primary {
+  background: #881337;
+  border: 1px solid #881337;
+  border-radius: 8px;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 1px 3px rgba(136, 19, 55, 0.25);
+  transition: all 0.15s;
+}
+
+.lume-btn-primary:hover {
+  background: #700f2b;
+  border-color: #700f2b;
+}
+
+.lume-btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* Status Select Radio Cards */
+.lume-status-radio-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lume-status-radio-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: #ffffff;
+}
+
+.lume-status-radio-card:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.lume-status-radio-card.active {
+  border-color: #881337;
+  background: #fff1f2;
+}
+
+.lume-status-card-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-status-card-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.lume-status-card-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lume-status-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.lume-status-card-desc {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.lume-status-radio-indicator {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.lume-status-radio-card.active .lume-status-radio-indicator {
+  border-color: #881337;
+  background: #881337;
+}
+
+.lume-status-radio-indicator::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+  display: none;
+}
+
+.lume-status-radio-card.active .lume-status-radio-indicator::after {
+  display: block;
+}
+
+/* Detail Modal Sections */
+.lume-modal-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 640px) {
+  .lume-modal-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-modal-card-block {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lume-modal-block-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0;
+}
+
+/* Dispute Modal Banner */
+.lume-dispute-alert-banner {
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.lume-dispute-alert-banner.resolved {
+  background: #ecfdf5;
+  border-color: #d1fae5;
+}
+
+.lume-empty-state-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px 16px 12px;
+  gap: 12px;
+}
+
+.lume-empty-state-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #ecfdf5;
+  color: #059669;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.15);
+}
+
+.lume-empty-state-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.lume-empty-state-desc {
+  font-size: 13px;
+  color: #64748b;
+  max-width: 320px;
+  margin: 0;
+  line-height: 1.5;
+}

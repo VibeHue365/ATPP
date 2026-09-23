@@ -96,6 +96,7 @@ export class UsersRepository {
     if (filters.keyword) {
       const keyword = filters.keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
+        { userCode: { $regex: keyword, $options: 'i' } },
         { 'profile.fullName': { $regex: keyword, $options: 'i' } },
         { 'auth.email': { $regex: keyword, $options: 'i' } },
         { 'auth.phone': { $regex: keyword, $options: 'i' } },
@@ -106,13 +107,43 @@ export class UsersRepository {
     const [items, total] = await Promise.all([
       this.userModel
         .find(query)
-        .sort({ createdAt: -1 })
+        .sort({ userCode: 1, createdAt: -1 })
         .skip(skip)
         .limit(filters.limit),
       this.userModel.countDocuments(query),
     ]);
 
     return { items, total };
+  }
+
+  async getUserMetrics(): Promise<{
+    totalUsers: number;
+    customers: number;
+    providers: number;
+    admins: number;
+  }> {
+    const [totalUsers, customers, providers, admins] = await Promise.all([
+      this.userModel.countDocuments({ deletedAt: null }),
+      this.userModel.countDocuments({ roles: 'CUSTOMER', deletedAt: null }),
+      this.userModel.countDocuments({ roles: 'PROVIDER', deletedAt: null }),
+      this.userModel.countDocuments({ roles: { $in: ['ADMIN', 'SUPPORT'] }, deletedAt: null }),
+    ]);
+
+    return { totalUsers, customers, providers, admins };
+  }
+
+  async countUsersByRoles(): Promise<Record<string, number>> {
+    const pipeline = [
+      { $match: { deletedAt: null } },
+      { $unwind: '$roles' },
+      { $group: { _id: '$roles', count: { $sum: 1 } } },
+    ];
+    const results = await this.userModel.aggregate(pipeline);
+    const counts: Record<string, number> = {};
+    results.forEach((r: any) => {
+      counts[r._id] = r.count;
+    });
+    return counts;
   }
 
   async updateRoles(

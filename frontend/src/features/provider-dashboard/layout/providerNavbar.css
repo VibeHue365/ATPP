@@ -1,0 +1,504 @@
+/* Provider Navbar (Sidebar & Top Header) Styling - Figma Node 338:2 Theme */
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* Sidebar Tokens */
+  --p-sb-bg: #460D1D;
+  --p-sb-border: rgba(52, 10, 21, 0.4);
+  --p-sb-active-bg: rgba(117, 24, 52, 0.85);
+  --p-sb-active-border: rgba(255, 255, 255, 0.1);
+  --p-sb-text-inactive: rgba(255, 228, 230, 0.8);
+  --p-sb-text-active: #FFFFFF;
+  --p-sb-badge-red: #EF4444;
+  
+  /* Header Tokens */
+  --p-hd-bg: #FFFFFF;
+  --p-hd-border: #F1F5F9;
+  --p-hd-search-bg: #F8FAFC;
+  --p-hd-search-border: #E2E8F0;
+  --p-hd-text-title: #1E293B;
+  --p-hd-text-muted: #64748B;
+  --p-hd-text-subtle: #94A3B8;
+  --p-hd-logout-red: #E11D48;
+}
+
+/* ==================== 1. SIDEBAR NAVBAR ==================== */
+.p-sidebar-aside {
+  width: 280px;
+  background-color: var(--p-sb-bg);
+  color: var(--p-sb-text-active);
+  border-right: 1px solid var(--p-sb-border);
+  box-shadow: 0px 8px 10px -6px rgba(0, 0, 0, 0.1), 0px 20px 25px -5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+  font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.p-sidebar-aside::-webkit-scrollbar {
+  display: none;
+}
+
+/* Brand Header */
+.p-brand-header {
+  padding: 20px 24px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.p-brand-logo-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 16px;
+  background: linear-gradient(45deg, #C43256 0%, #F47291 100%);
+  box-shadow: 0px 2px 4px -2px rgba(52, 10, 21, 0.5), 0px 4px 6px -1px rgba(52, 10, 21, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  flex-shrink: 0;
+}
+
+.p-brand-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.p-brand-title {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 25px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+  margin: 0;
+}
+
+.p-brand-subtitle {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  color: rgba(254, 205, 211, 0.7);
+  margin: 0;
+}
+
+/* Navigation List */
+.p-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 14px;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.p-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--p-sb-text-inactive);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 20.25px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.p-nav-item:hover {
+  background: rgba(117, 24, 52, 0.45);
+  color: var(--p-sb-text-active);
+}
+
+.p-nav-item.active {
+  background: var(--p-sb-active-bg);
+  border-color: var(--p-sb-active-border);
+  box-shadow: inset 0px 2px 4px 1px rgba(0, 0, 0, 0.05);
+  color: var(--p-sb-text-active);
+  font-weight: 600;
+  padding: 10px 14px;
+}
+
+.p-nav-item-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.p-nav-badge-red {
+  background: var(--p-sb-badge-red);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16.5px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+}
+
+.p-nav-chevron {
+  opacity: 0.7;
+}
+
+.p-nav-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 6px 0;
+}
+
+/* Support Help Widget at Bottom */
+.p-sidebar-support {
+  padding: 14px;
+}
+
+.p-support-card {
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(2px);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.p-support-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.p-support-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  flex-shrink: 0;
+}
+
+.p-support-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.p-support-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  color: #FFFFFF;
+  margin: 0;
+}
+
+.p-support-desc {
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 18px;
+  color: rgba(254, 205, 211, 0.8);
+  margin: 0;
+}
+
+.p-support-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #FFFFFF;
+  color: var(--p-sb-bg);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0px 1px 2px -1px rgba(0, 0, 0, 0.1), 0px 1px 3px 0px rgba(0, 0, 0, 0.1);
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.p-support-btn:hover {
+  background: #FFF1F2;
+}
+
+/* ==================== 2. TOP HEADER NAVBAR ==================== */
+.p-header-bar {
+  height: 64px;
+  background: var(--p-hd-bg);
+  border-bottom: 1px solid var(--p-hd-border);
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+  box-sizing: border-box;
+}
+
+/* Search Bar Container */
+.p-search-wrapper {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+}
+
+.p-search-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--p-hd-text-subtle);
+  pointer-events: none;
+}
+
+.p-search-input {
+  width: 100%;
+  height: 38px;
+  padding: 9px 56px 9px 40px;
+  background: var(--p-hd-search-bg);
+  border: 1px solid var(--p-hd-search-border);
+  border-radius: 12px;
+  box-shadow: inset 0px 2px 4px 1px rgba(0, 0, 0, 0.05);
+  font-size: 14px;
+  color: var(--p-hd-text-title);
+  outline: none;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.p-search-input:focus {
+  border-color: #851C33;
+  background: #FFFFFF;
+  box-shadow: 0px 0px 0px 3px rgba(133, 28, 51, 0.1);
+}
+
+.p-search-input::placeholder {
+  color: var(--p-hd-text-subtle);
+  font-size: 14px;
+}
+
+.p-search-shortcut-badge {
+  position: absolute;
+  right: 10px;
+  padding: 2px 6px;
+  background: #FFFFFF;
+  border: 1px solid var(--p-hd-search-border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16.5px;
+  color: var(--p-hd-text-subtle);
+  pointer-events: none;
+}
+
+/* Right Actions */
+.p-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  position: relative;
+}
+
+.p-noti-btn {
+  background: transparent;
+  border: none;
+  padding: 8px;
+  border-radius: 12px;
+  color: var(--p-hd-text-muted);
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+}
+
+.p-noti-btn:hover {
+  background: #F1F5F9;
+  color: var(--p-hd-text-title);
+}
+
+.p-noti-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--p-sb-badge-red);
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  box-shadow: 0px 0px 0px 2px #FFFFFF;
+}
+
+.p-header-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--p-hd-search-border);
+}
+
+/* User Profile Trigger */
+.p-profile-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 6px;
+  border-radius: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  font-family: inherit;
+}
+
+.p-profile-trigger:hover,
+.p-profile-trigger.active {
+  background: #F8FAFC;
+}
+
+.p-profile-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  object-fit: cover;
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.05), 0px 0px 0px 2px #F1F5F9;
+  flex-shrink: 0;
+}
+
+.p-profile-avatar-fallback {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background: #FFF1F2;
+  color: #851C33;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.05), 0px 0px 0px 2px #F1F5F9;
+  flex-shrink: 0;
+}
+
+.p-profile-info {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.p-profile-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 17px;
+  color: var(--p-hd-text-title);
+  margin: 0;
+}
+
+.p-profile-role {
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 17px;
+  color: var(--p-hd-text-muted);
+  margin: 0;
+}
+
+.p-profile-chevron {
+  color: var(--p-hd-text-subtle);
+  transition: transform 0.2s ease;
+}
+
+.p-profile-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+/* ==================== 3. USER PROFILE DROPDOWN MENU ==================== */
+.p-profile-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 240px;
+  background: #FFFFFF;
+  border: 1px solid var(--p-hd-border);
+  border-radius: 16px;
+  box-shadow: 0px 1px 3px 0px rgba(0, 0, 0, 0.06), 0px 15px 40px 0px rgba(0, 0, 0, 0.12);
+  padding: 8px 0;
+  z-index: 1000;
+  animation: p-dropdown-slide 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes p-dropdown-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.p-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 20px;
+  color: #334155;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.p-dropdown-item:hover {
+  background: #F8FAFC;
+  color: var(--p-hd-text-title);
+}
+
+.p-dropdown-item.logout {
+  color: var(--p-hd-logout-red);
+  font-weight: 600;
+}
+
+.p-dropdown-item.logout:hover {
+  background: #FFF1F2;
+  color: #BE123C;
+}
+
+.p-dropdown-divider {
+  height: 1px;
+  background: var(--p-hd-border);
+  margin: 6px 0;
+}

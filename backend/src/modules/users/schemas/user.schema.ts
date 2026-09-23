@@ -152,6 +152,9 @@ export class User {
   })
   auth: UserAuth;
 
+  @Prop({ type: String, trim: true, sparse: true, index: true })
+  userCode?: string;
+
   @Prop({ type: [String], default: ['CUSTOMER'], index: true })
   roles: string[];
 

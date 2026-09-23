@@ -10,6 +10,12 @@ import { BookingItem, BookingItemSchema } from '../bookings/schemas/booking-item
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { RefreshToken, RefreshTokenSchema } from '../auth/schemas/refresh-token.schema';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import {
+  ProviderVerification,
+  ProviderVerificationSchema,
+} from '../providers/schemas/provider-verification.schema';
+import { Dispute, DisputeSchema } from '../disputes/schemas/dispute.schema';
+import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
 
 @Module({
   imports: [
@@ -21,6 +27,9 @@ import { AnalyticsModule } from '../analytics/analytics.module';
       { name: BookingItem.name, schema: BookingItemSchema },
       { name: Payment.name, schema: PaymentSchema },
       { name: RefreshToken.name, schema: RefreshTokenSchema },
+      { name: ProviderVerification.name, schema: ProviderVerificationSchema },
+      { name: Dispute.name, schema: DisputeSchema },
+      { name: Review.name, schema: ReviewSchema },
     ]),
     AnalyticsModule,
   ],

@@ -18,17 +18,50 @@ export interface Customer {
   spent: number;
 }
 
+export interface ProviderProduct {
+  id: string;
+  name: string;
+  price: number;
+  image: string;
+  status: string;
+}
+
+export interface ProviderReview {
+  id: string;
+  customerName: string;
+  avatar: string;
+  rating: number;
+  comment: string;
+  date: string;
+}
+
 export interface Provider {
   id: string;
   businessName: string;
   ownerName: string;
+  avatar?: string;
   email: string;
   phone: string;
+  website?: string;
+  address?: string;
   capability?: string[];
   status?: string;
+  taxCode?: string;
+  bankAccount?: string;
+  bankName?: string;
+  createdAt?: string;
   rating: number;
   totalProducts: number;
+  completedBookings?: number;
+  totalBookings?: number;
+  completionRate?: number;
   totalEarnings: number;
+  isVerified?: boolean;
+  hasIdCard?: boolean;
+  hasBusinessLicense?: boolean;
+  hasStudioProof?: boolean;
+  products?: ProviderProduct[];
+  reviews?: ProviderReview[];
 }
 
 export interface Booking {

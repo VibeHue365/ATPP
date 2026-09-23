@@ -19,6 +19,7 @@ export enum UserRole {
   Customer = 'CUSTOMER',
   Provider = 'PROVIDER',
   Admin = 'ADMIN',
+  Support = 'SUPPORT',
 }
 
 export class AdminListUsersQueryDto {

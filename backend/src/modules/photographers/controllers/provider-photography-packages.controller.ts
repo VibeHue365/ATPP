@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
@@ -42,5 +42,10 @@ export class ProviderPhotographyPackagesController {
   @Post(':id/unpublish')
   unpublish(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.photographyPackagesService.unpublish(user.sub, id);
+  }
+
+  @Delete(':id')
+  delete(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.photographyPackagesService.delete(user.sub, id);
   }
 }

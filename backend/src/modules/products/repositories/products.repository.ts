@@ -8,6 +8,8 @@ import {
   ProductStatus,
 } from '../schemas/product.schema';
 import { Provider, ProviderStatus } from '../../providers/schemas/provider.schema';
+import { QueryModerationProductsDto } from '../dto/product-moderation.dto';
+import { PhotographyPackage } from '../schemas/photography-package.schema';
 
 @Injectable()
 export class ProductsRepository {
@@ -22,6 +24,7 @@ export class ProductsRepository {
   constructor(
     @InjectModel(Product.name) private readonly productModel: Model<Product>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
+    @InjectModel(PhotographyPackage.name) private readonly packageModel: Model<PhotographyPackage>,
   ) {}
 
   /**
@@ -373,9 +376,10 @@ export class ProductsRepository {
   ): Promise<ProductDocument[]> {
     return this.productModel
       .find({ moderationStatus: status })
+      .select('name description images basePrice depositAmount status moderationStatus moderationReason updatedAt categoryId providerId taggingRevision')
       .sort({ updatedAt: 1 })
-      .populate('categoryId')
-      .populate('providerId')
+      .populate('categoryId', 'name')
+      .populate('providerId', 'businessName userId')
       .exec();
   }
 
@@ -398,20 +402,202 @@ export class ProductsRepository {
     );
   }
 
+  async findEnhancedModerationList(query: QueryModerationProductsDto) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.max(1, Math.min(50, Number(query.limit) || 8));
+    const skip = (page - 1) * limit;
+
+    // Self-healing legacy packages without moderationStatus
+    await this.packageModel.updateMany(
+      { moderationStatus: { $exists: false } },
+      { $set: { moderationStatus: ProductModerationStatus.PendingReview } },
+    );
+
+    const [
+      pendingAodai,
+      approvedAodai,
+      rejectedAodai,
+      changesRequestedAodai,
+      totalAodai,
+      pendingPhotography,
+      approvedPhotography,
+      rejectedPhotography,
+      changesRequestedPhotography,
+      totalPhotography,
+    ] = await Promise.all([
+      this.productModel.countDocuments({ moderationStatus: ProductModerationStatus.PendingReview }).exec(),
+      this.productModel.countDocuments({ moderationStatus: ProductModerationStatus.Approved }).exec(),
+      this.productModel.countDocuments({ moderationStatus: ProductModerationStatus.Rejected }).exec(),
+      this.productModel.countDocuments({ moderationStatus: ProductModerationStatus.ChangesRequested }).exec(),
+      this.productModel.countDocuments().exec(),
+
+      this.packageModel.countDocuments({ moderationStatus: ProductModerationStatus.PendingReview }).exec(),
+      this.packageModel.countDocuments({ moderationStatus: ProductModerationStatus.Approved }).exec(),
+      this.packageModel.countDocuments({ moderationStatus: ProductModerationStatus.Rejected }).exec(),
+      this.packageModel.countDocuments({ moderationStatus: ProductModerationStatus.ChangesRequested }).exec(),
+      this.packageModel.countDocuments().exec(),
+    ]);
+
+    const totalPending = pendingAodai + pendingPhotography;
+    const totalApproved = approvedAodai + approvedPhotography;
+    const totalRejected = rejectedAodai + rejectedPhotography;
+    const totalChangesRequested = changesRequestedAodai + changesRequestedPhotography;
+    const grandTotal = totalAodai + totalPhotography;
+
+    const filter: Record<string, any> = {};
+
+    if (query.status && query.status !== 'ALL' && query.status !== 'Tất cả') {
+      filter.moderationStatus = query.status;
+    }
+
+    if (query.categoryId && query.categoryId !== 'ALL' && query.categoryId !== 'Tất cả') {
+      if (Types.ObjectId.isValid(query.categoryId)) {
+        filter.categoryId = new Types.ObjectId(query.categoryId);
+      }
+    }
+
+    if (query.providerId && query.providerId !== 'ALL' && query.providerId !== 'Tất cả') {
+      if (Types.ObjectId.isValid(query.providerId)) {
+        filter.providerId = new Types.ObjectId(query.providerId);
+      }
+    }
+
+    if (query.search && query.search.trim()) {
+      const searchRegex = new RegExp(query.search.trim(), 'i');
+      filter.$or = [
+        { name: searchRegex },
+        { description: searchRegex },
+        { slug: searchRegex },
+      ];
+    }
+
+    if (query.startDate || query.endDate) {
+      filter.createdAt = {};
+      if (query.startDate) filter.createdAt.$gte = new Date(query.startDate);
+      if (query.endDate) filter.createdAt.$lte = new Date(query.endDate);
+    }
+
+    const includeAodai = query.itemType !== 'PHOTOGRAPHY';
+    const includePhoto = query.itemType !== 'AODAI';
+
+    const [aodaiItems, photoItems, aodaiCount, photoCount] = await Promise.all([
+      includeAodai
+        ? this.productModel
+            .find(filter)
+            .sort({ updatedAt: -1, createdAt: -1 })
+            .populate('categoryId', 'name slug')
+            .populate('providerId', 'businessName contact userId address media')
+            .lean()
+            .exec()
+        : Promise.resolve([]),
+      includePhoto
+        ? this.packageModel
+            .find(filter)
+            .sort({ updatedAt: -1, createdAt: -1 })
+            .populate('categoryId', 'name slug')
+            .populate('providerId', 'businessName contact userId address media')
+            .lean()
+            .exec()
+        : Promise.resolve([]),
+      includeAodai ? this.productModel.countDocuments(filter).exec() : Promise.resolve(0),
+      includePhoto ? this.packageModel.countDocuments(filter).exec() : Promise.resolve(0),
+    ]);
+
+    const totalCount = aodaiCount + photoCount;
+
+    const formattedAodai = aodaiItems.map((p: any) => {
+      const idStr = p._id.toString();
+      const code = `SP${idStr.slice(-7).toUpperCase()}`;
+      const providerIdStr = p.providerId?._id?.toString() || '';
+      const partnerCode = providerIdStr ? `#DT${providerIdStr.slice(-5).toUpperCase()}` : '—';
+      return {
+        ...p,
+        id: idStr,
+        itemType: 'AODAI',
+        itemTypeLabel: 'Áo dài',
+        code,
+        partnerCode,
+        price: p.basePrice,
+        depositAmount: p.depositAmount || 0,
+        quantity: p.sizes?.length ? p.sizes.length : 1,
+      };
+    });
+
+    const formattedPhoto = photoItems.map((pkg: any) => {
+      const idStr = pkg._id.toString();
+      const code = `SP${idStr.slice(-7).toUpperCase()}`;
+      const providerIdStr = pkg.providerId?._id?.toString() || '';
+      const partnerCode = providerIdStr ? `#DT${providerIdStr.slice(-5).toUpperCase()}` : '—';
+      return {
+        ...pkg,
+        id: idStr,
+        itemType: 'PHOTOGRAPHY',
+        itemTypeLabel: 'Chụp ảnh',
+        code,
+        partnerCode,
+        price: pkg.price,
+        basePrice: pkg.price,
+        depositAmount: Math.round((pkg.price || 0) * 0.3),
+        durationHours: pkg.durationHours || 2,
+        editedPhotosCount: pkg.editedPhotosCount || 50,
+        rawPhotosCount: pkg.rawPhotosCount || 200,
+        deliveryDays: pkg.deliveryDays || 3,
+        maxPeople: pkg.maxPeople || 2,
+        location: pkg.location || 'Đại Nội Huế',
+      };
+    });
+
+    const combinedItems = [...formattedAodai, ...formattedPhoto].sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+
+    const paginatedItems = combinedItems.slice(skip, skip + limit);
+
+    return {
+      items: paginatedItems,
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit) || 1,
+      metrics: {
+        total: grandTotal,
+        totalPending,
+        totalApproved,
+        totalRejected,
+        totalChangesRequested,
+        pendingAodai,
+        pendingPhotography,
+        trends: {
+          totalPending: `${totalPending} chờ duyệt`,
+          totalApproved: `${totalApproved} đã duyệt`,
+          totalRejected: `${totalRejected} đã từ chối`,
+          totalChangesRequested: `${totalChangesRequested} cần bổ sung`,
+          pendingAodai: `${pendingAodai} áo dài`,
+          pendingPhotography: `${pendingPhotography} gói chụp`,
+        },
+      },
+    };
+  }
+
   async moderate(
     id: Types.ObjectId,
-    expectedStatus: ProductModerationStatus,
-    data: Partial<Product>,
-  ): Promise<ProductDocument | null> {
-    return this.productModel
-      .findOneAndUpdate(
-        { _id: id, moderationStatus: expectedStatus },
-        { $set: data },
-        { new: true },
-      )
+    data: any,
+  ): Promise<any | null> {
+    const prod = await this.productModel
+      .findByIdAndUpdate(id, data, { new: true })
       .populate('categoryId')
       .populate('providerId')
       .exec();
+    if (prod) return prod;
+
+    const pkg = await this.packageModel
+      .findByIdAndUpdate(id, data, { new: true })
+      .populate('categoryId')
+      .populate('providerId')
+      .exec();
+    return pkg;
   }
 
   async delete(id: Types.ObjectId): Promise<ProductDocument | null> {

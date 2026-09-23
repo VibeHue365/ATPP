@@ -1,0 +1,1363 @@
+/* ==========================================================================
+   LUMÉ PRODUCT MODERATION STYLESHEET (Figma Node 307-2483)
+   ========================================================================== */
+
+/* 1. Main Container */
+.lume-product-mod-container {
+  display: flex;
+  flex-direction: column;
+  background: #fcfbf9;
+  min-height: 100%;
+  font-family: inherit;
+  color: #0f172a;
+  box-sizing: border-box;
+  padding: 24px 32px 40px;
+  gap: 20px;
+}
+
+/* 2. Breadcrumbs & Header */
+.lume-product-mod-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.lume-product-mod-breadcrumb .separator {
+  color: #cbd5e1;
+}
+
+.lume-product-mod-breadcrumb .current {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.lume-product-mod-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.lume-product-mod-header-left h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.lume-product-mod-header-left p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 680px;
+  line-height: 1.5;
+}
+
+.lume-mod-guideline-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #881337;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.lume-mod-guideline-btn:hover {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #700f2b;
+}
+
+/* 3. Six Metric Summary Cards */
+.lume-product-mod-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 1400px) {
+  .lume-product-mod-metrics {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .lume-product-mod-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 500px) {
+  .lume-product-mod-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-mod-metric-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.lume-mod-metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+}
+
+.lume-mod-metric-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-mod-metric-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lume-mod-metric-icon.pending {
+  background: #fff7ed;
+  color: #f97316;
+}
+
+.lume-mod-metric-icon.approved {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.lume-mod-metric-icon.rejected {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.lume-mod-metric-icon.revision {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.lume-mod-metric-icon.aodai {
+  background: #fdf2f8;
+  color: #db2777;
+}
+
+.lume-mod-metric-icon.photography {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.lume-mod-metric-icon.total {
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+
+.lume-mod-metric-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.lume-mod-metric-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.lume-mod-metric-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.lume-mod-metric-trend {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.lume-mod-metric-trend.up {
+  color: #16a34a;
+}
+
+.lume-mod-metric-trend.up-red {
+  color: #dc2626;
+}
+
+.lume-mod-metric-trend.down {
+  color: #d97706;
+}
+
+.lume-mod-metric-trend .subtext {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+/* 4. Filter & Search Bar - 2 Rows */
+.lume-mod-filter-bar {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.lume-mod-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.lume-mod-filter-row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.lume-mod-search-wrap {
+  flex: 1;
+  min-width: 260px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.lume-mod-search-wrap svg {
+  position: absolute;
+  left: 12px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.lume-mod-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.15s;
+  background: #f8fafc;
+}
+
+.lume-mod-search-input:focus {
+  border-color: #881337;
+  background: #ffffff;
+}
+
+.lume-mod-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lume-mod-filter-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.lume-mod-filter-select {
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #0f172a;
+  background: #ffffff;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.lume-mod-filter-select:focus {
+  border-color: #881337;
+}
+
+.lume-mod-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-mod-filter-btn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+/* 5. Status Tabs Bar */
+.lume-mod-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 2px;
+  margin-top: 4px;
+  overflow-x: auto;
+}
+
+.lume-mod-tab-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 8px 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+
+.lume-mod-tab-item:hover {
+  color: #0f172a;
+}
+
+.lume-mod-tab-item.active {
+  color: #881337;
+}
+
+.lume-mod-tab-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2.5px;
+  background: #881337;
+  border-radius: 2px;
+}
+
+.lume-mod-tab-count {
+  font-size: 12px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 2px 7px;
+  border-radius: 12px;
+}
+
+.lume-mod-tab-item.active .lume-mod-tab-count {
+  background: #fff1f2;
+  color: #881337;
+}
+
+/* 6. Workspace Layout (Full width table) */
+.lume-product-mod-workspace {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.lume-product-mod-table-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.lume-product-mod-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  user-select: none;
+  cursor: grab;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.lume-product-mod-table-scroll:active {
+  cursor: grabbing;
+}
+
+.lume-product-mod-table-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.lume-product-mod-table-scroll::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+.lume-product-mod-table-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+.lume-product-mod-table {
+  width: 100%;
+  min-width: 1100px;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.lume-product-mod-table thead {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.lume-product-mod-table th {
+  padding: 12px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.lume-product-mod-table tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.lume-product-mod-table tbody tr:hover {
+  background: #fafaf9;
+}
+
+.lume-product-mod-table tbody tr.selected {
+  background: #fff1f2;
+}
+
+.lume-product-mod-table td {
+  padding: 12px 14px;
+  color: #334155;
+  vertical-align: middle;
+}
+
+/* Thumbnail Column */
+.lume-product-thumb-cell {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  flex-shrink: 0;
+}
+
+.lume-product-name-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+.lume-product-name-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.lume-product-code-sub {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Partner Column */
+.lume-partner-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+  max-width: 220px;
+}
+
+.lume-partner-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.3;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.lume-partner-code {
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* Price Cell */
+.lume-price-cell {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* Status Badges */
+.lume-mod-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lume-mod-status-pill.pending {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fef3c7;
+}
+
+.lume-mod-status-pill.approved {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #d1fae5;
+}
+
+.lume-mod-status-pill.rejected {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fee2e2;
+}
+
+.lume-mod-status-pill.revision {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #ffedd5;
+}
+
+.lume-mod-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.lume-mod-status-pill.pending .lume-mod-status-dot {
+  background: #d97706;
+}
+
+.lume-mod-status-pill.approved .lume-mod-status-dot {
+  background: #059669;
+}
+
+.lume-mod-status-pill.rejected .lume-mod-status-dot {
+  background: #dc2626;
+}
+
+.lume-mod-status-pill.revision .lume-mod-status-dot {
+  background: #ea580c;
+}
+
+/* Table Pagination Footer */
+.lume-product-mod-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 12px;
+  color: #64748b;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.lume-product-mod-pagination {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lume-mod-page-btn {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-mod-page-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.lume-mod-page-btn.active {
+  background: #881337;
+  border-color: #881337;
+  color: #ffffff;
+}
+
+.lume-mod-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 7. Spacious Slide-Over Inspection Drawer (960px - 1380px) */
+.lume-product-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 998;
+  animation: lumeProdDrawerFade 0.2s ease-out;
+}
+
+@keyframes lumeProdDrawerFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.lume-product-detail-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(960px, 94vw);
+  background: #ffffff;
+  z-index: 999;
+  box-shadow: -12px 0 45px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  animation: lumeProdDrawerSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lume-product-detail-drawer.maximized {
+  width: min(1380px, 98vw);
+}
+
+@keyframes lumeProdDrawerSlideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.lume-product-drawer-header {
+  padding: 16px 28px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.lume-product-drawer-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.lume-product-drawer-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lume-product-drawer-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.lume-product-drawer-nav-btn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.lume-product-drawer-nav-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.lume-product-drawer-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lume-product-drawer-icon-btn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-product-drawer-icon-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+/* 2-Column Spacious Body */
+.lume-product-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px 32px;
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 28px;
+  align-items: start;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+@media (max-width: 960px) {
+  .lume-product-drawer-body {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+}
+
+.lume-product-drawer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Left Column: Showcase & Media */
+.lume-product-showcase-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+  height: 320px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+}
+
+.lume-product-showcase-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.lume-product-showcase-badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.lume-product-showcase-counter {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lume-product-thumbs-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.lume-product-thumb-item {
+  width: 68px;
+  height: 68px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  background: #f1f5f9;
+}
+
+.lume-product-thumb-item:hover {
+  transform: translateY(-2px);
+  border-color: #fecdd3;
+}
+
+.lume-product-thumb-item.active {
+  border-color: #881337;
+  box-shadow: 0 2px 8px rgba(136, 19, 55, 0.25);
+}
+
+.lume-product-thumb-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Cards */
+.lume-product-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.lume-product-card-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lume-product-desc-text {
+  margin: 0;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.7;
+}
+
+/* Inclusions Grid */
+.lume-product-inclusions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .lume-product-inclusions-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lume-product-inc-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  transition: all 0.15s;
+}
+
+.lume-product-inc-card:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.lume-product-inc-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #881337;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Right Column: Pricing & Quick Highlights */
+.lume-product-pricing-ribbon {
+  background: linear-gradient(135deg, #fff1f2 0%, #ffffff 100%);
+  border: 1px solid #fecdd3;
+  border-radius: 14px;
+  padding: 18px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.lume-product-price-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.lume-product-price-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #881337;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lume-product-price-amount {
+  font-size: 26px;
+  font-weight: 800;
+  color: #881337;
+  line-height: 1.2;
+}
+
+.lume-product-meta-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lume-product-meta-chip {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Subtabs in Right Column */
+.lume-product-drawer-subtabs {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 2px solid #f1f5f9;
+  padding-bottom: 2px;
+}
+
+.lume-product-dsubtab-btn {
+  background: transparent;
+  border: none;
+  padding: 10px 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+
+.lume-product-dsubtab-btn:hover {
+  color: #0f172a;
+}
+
+.lume-product-dsubtab-btn.active {
+  color: #881337;
+}
+
+.lume-product-dsubtab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2.5px;
+  background: #881337;
+  border-radius: 2px;
+}
+
+/* Specifications Grid */
+.lume-product-spec-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.lume-product-spec-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  font-size: 13px;
+  gap: 12px;
+}
+
+.lume-product-spec-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.lume-product-spec-val {
+  color: #0f172a;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Partner Card */
+.lume-product-partner-profile-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.lume-product-partner-profile-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-product-partner-profile-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #fecdd3;
+}
+
+.lume-product-partner-profile-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.lume-product-partner-profile-code {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Fixed Bottom Action Bar */
+.lume-product-drawer-footer {
+  padding: 16px 28px;
+  border-top: 1px solid #f1f5f9;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 16px;
+  box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.03);
+}
+
+.lume-product-drawer-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.lume-product-drawer-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lume-product-btn-reject {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #dc2626;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-product-btn-reject:hover {
+  background: #fef2f2;
+}
+
+.lume-product-btn-revision {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ea580c;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lume-product-btn-revision:hover {
+  background: #fff7ed;
+}
+
+.lume-product-btn-approve {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #881337;
+  border: 1px solid #881337;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(136, 19, 55, 0.25);
+  transition: all 0.15s;
+}
+
+.lume-product-btn-approve:hover {
+  background: #700f2b;
+  border-color: #700f2b;
+}
+
+.lume-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.lume-type-badge.aodai {
+  background: #fdf2f8;
+  color: #db2777;
+  border: 1px solid #fbcfe8;
+}
+
+.lume-type-badge.photography {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+/* Gallery Showcase with Counter & Thumbnails Strip */
+.lume-dock-gallery-wrap {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0f172a;
+}
+
+.lume-dock-gallery-main-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lume-dock-gallery-counter {
+  position: absolute;
+  bottom: 10px;
+  right: 12px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.lume-dock-gallery-thumbs-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.lume-dock-gallery-thumb-btn {
+  width: 54px;
+  height: 54px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  background: #f1f5f9;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.lume-dock-gallery-thumb-btn.active {
+  border-color: #881337;
+}
+
+.lume-dock-gallery-thumb-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Inclusions Grid ("Nội dung bao gồm") */
+.lume-dock-inclusions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.lume-dock-inclusion-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.lume-dock-inclusion-icon {
+  color: #16a34a;
+  flex-shrink: 0;
+}
+
+/* Criteria Checklist ("Hồ sơ kiểm duyệt") */
+.lume-dock-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lume-dock-checklist-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.lume-dock-checklist-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.lume-dock-checklist-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.lume-dock-checklist-badge.pass {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.lume-dock-checklist-badge.pending {
+  background: #fef3c7;
+  color: #d97706;
+}

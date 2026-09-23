@@ -33,5 +33,9 @@ export interface AdminStats {
   photographers?: AdminMetric;
   bookings?: AdminMetric;
   revenue?: AdminMetric;
+  operational?: {
+    pendingVerifications: number;
+    openDisputes: number;
+  };
   userBehavior?: AdminUserBehavior;
 }

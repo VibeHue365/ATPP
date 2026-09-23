@@ -1239,24 +1239,40 @@ export class DisputesService {
       .populate('customerId')
       .exec();
 
-    const mappedDisputedBookings = await Promise.all(
-      disputedBookings.map(async (b: any) => {
-        const item = await bookingItemModel
-          .findOne({ bookingId: b._id })
-          .populate('productId')
-          .populate('photographyPackageId')
-          .exec();
+    const disputedBookingIds = disputedBookings.map((booking: any) => booking._id);
+    const disputedProviderIds = disputedBookings
+      .map((booking: any) => booking.providerIds?.[0])
+      .filter(Boolean);
+    const [bookingItems, providers] = await Promise.all([
+      disputedBookingIds.length > 0
+        ? bookingItemModel
+            .find({ bookingId: { $in: disputedBookingIds } })
+            .populate('productId')
+            .populate('photographyPackageId')
+            .exec()
+        : [],
+      disputedProviderIds.length > 0
+        ? providerModel.find({ _id: { $in: disputedProviderIds } }).exec()
+        : [],
+    ]);
+    const itemByBookingId = new Map(
+      bookingItems.map((item: any) => [item.bookingId.toString(), item]),
+    );
+    const providerById = new Map(
+      providers.map((provider: any) => [provider._id.toString(), provider]),
+    );
 
+    const mappedDisputedBookings = disputedBookings.map((b: any) => {
+        const item = itemByBookingId.get(b._id.toString());
         const lastTimeline = [...(b.statusTimeline || [])]
           .reverse()
           .find((t: any) => t.status === BookingStatus.Disputed);
         const reason = lastTimeline?.note || 'Khách hàng gửi khiếu nại đơn hàng';
 
         const providerId = b.providerIds?.[0] || null;
-        let providerDoc = null;
-        if (providerId) {
-          providerDoc = await providerModel.findById(providerId).exec();
-        }
+        const providerDoc = providerId
+          ? providerById.get(providerId.toString()) ?? null
+          : null;
 
         const isResolved = Boolean(b.disputeResult) || b.status !== BookingStatus.Disputed;
 
@@ -1281,8 +1297,7 @@ export class DisputesService {
           isBookingDisputeOnly: true,
           createdAt: b.createdAt,
         };
-      })
-    );
+      });
 
     return [...mappedIncidents, ...mappedDisputes, ...mappedDisputedBookings];
   }

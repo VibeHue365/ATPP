@@ -7,16 +7,47 @@ export class ModerateProductDto {
 
   @ValidateIf((dto: ModerateProductDto) =>
     dto.action === ProductModerationStatus.Rejected ||
-    dto.action === ProductModerationStatus.Hidden,
+    dto.action === ProductModerationStatus.Hidden ||
+    dto.action === ProductModerationStatus.ChangesRequested,
   )
   @IsString()
   @IsNotEmpty()
-  @MaxLength(300)
+  @MaxLength(500)
   reason?: string;
 }
 
 export class QueryModerationProductsDto {
   @IsOptional()
-  @IsEnum(ProductModerationStatus)
-  status?: ProductModerationStatus;
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsString()
+  itemType?: string;
+
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
+  @IsOptional()
+  @IsString()
+  providerId?: string;
+
+  @IsOptional()
+  page?: number;
+
+  @IsOptional()
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsString()
+  endDate?: string;
 }

@@ -13,6 +13,7 @@ export enum ProductModerationStatus {
   PendingReview = 'PENDING_REVIEW',
   Approved = 'APPROVED',
   Rejected = 'REJECTED',
+  ChangesRequested = 'CHANGES_REQUESTED',
   Hidden = 'HIDDEN',
 }
 
@@ -34,6 +35,7 @@ export class Product {
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Category' }], default: [] })
   eventCategoryIds: Types.ObjectId[];
+
   @Prop({ required: true, trim: true })
   name: string;
 
@@ -54,10 +56,6 @@ export class Product {
 
   /**
    * Ảnh gắn theo từng màu, để khách đổi màu thì ảnh đổi theo.
-   * CHỈ LÀ CHỈ MỤC: mọi URL ở đây BẮT BUỘC cũng phải nằm trong `images` — `images` vẫn là
-   * kho ảnh hợp nhất và `images[0]` vẫn là ảnh bìa. Nhờ vậy toàn bộ code cũ đọc `images`
-   * chạy y nguyên, và phép so sánh xoá file khi cập nhật vẫn đúng.
-   * Màu nào không có mục ở đây thì tự dùng ảnh chung.
    */
   @Prop({
     type: [
@@ -133,6 +131,24 @@ export class Product {
   moderatedAt?: Date | null;
 
   @Prop({
+    type: [
+      {
+        adminId: { type: Types.ObjectId, ref: 'User' },
+        action: { type: String, required: true },
+        reason: { type: String, default: null },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
+    default: [],
+  })
+  moderationHistory?: Array<{
+    adminId?: Types.ObjectId;
+    action: string;
+    reason?: string | null;
+    createdAt?: Date;
+  }>;
+
+  @Prop({
     type: {
       averageRating: { type: Number, default: 0 },
       totalReviews: { type: Number, default: 0 },
@@ -146,5 +162,6 @@ export const ProductSchema = SchemaFactory.createForClass(Product);
 ProductSchema.index({ status: 1, moderationStatus: 1, categoryId: 1, basePrice: 1 });
 ProductSchema.index({ status: 1, moderationStatus: 1, providerId: 1, createdAt: -1 });
 ProductSchema.index({ status: 1, moderationStatus: 1, 'rating.averageRating': -1, createdAt: -1 });
+ProductSchema.index({ moderationStatus: 1, updatedAt: 1 });
 ProductSchema.index({ styleCategoryIds: 1 });
 ProductSchema.index({ eventCategoryIds: 1 });

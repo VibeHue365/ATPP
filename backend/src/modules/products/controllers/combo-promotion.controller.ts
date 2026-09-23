@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -71,21 +72,40 @@ export class ComboPromotionController {
 
   @Get('admin/all')
   @UseGuards(JwtAuthGuard)
-  async getAllForAdmin(@CurrentUser() user: AuthUser) {
+  async getAllForAdmin(
+    @CurrentUser() user: AuthUser,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('providerId') providerId?: string,
+    @Query('priceRange') priceRange?: string,
+  ) {
     if (!user.roles?.some((role) => role.toUpperCase() === 'ADMIN')) throw new ForbiddenException('Admin only');
-    return this.comboService.findAllForAdmin();
+    return this.comboService.findAllForAdmin({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      search,
+      status,
+      providerId,
+      priceRange,
+    });
   }
 
   @Patch('admin/:id/moderation')
   @UseGuards(JwtAuthGuard)
-  async moderate(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { status: 'ACTIVE' | 'REJECTED' }) {
+  async moderate(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { status: ComboPromotionStatus; reason?: string },
+  ) {
     if (!user.roles?.some((role) => role.toUpperCase() === 'ADMIN')) throw new ForbiddenException('Admin only');
-    return this.comboService.moderate(id, body.status === 'ACTIVE' ? ComboPromotionStatus.Active : ComboPromotionStatus.Rejected);
+    return this.comboService.moderate(id, body.status, body.reason, user.sub);
   }
 
   @Get(':id')
   async getComboById(@Param('id') id: string) {
-    return this.comboService.findById(id);
+    return this.comboService.findActivePublicById(id);
   }
 
   @Put(':id')

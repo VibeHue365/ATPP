@@ -58,5 +58,10 @@ export function usePhotographyPackages(enabled = true) {
     return updated;
   }, []);
 
-  return { packages, isLoading, error, refresh, create, update, publish, unpublish };
+  const remove = useCallback(async (id: string) => {
+    await photographyPackagesApi.delete(id);
+    setPackages((current) => current.filter((item) => item._id !== id));
+  }, []);
+
+  return { packages, isLoading, error, refresh, create, update, publish, unpublish, remove };
 }

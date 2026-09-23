@@ -234,13 +234,16 @@ export class UsersService {
   ): Promise<Record<string, unknown>> {
     const page = Math.max(Number(query.page ?? 1), 1);
     const limit = Math.min(Math.max(Number(query.limit ?? 20), 1), 100);
-    const { items, total } = await this.usersRepository.listUsersForAdmin({
-      keyword: query.keyword,
-      role: query.role,
-      status: query.status,
-      page,
-      limit,
-    });
+    const [{ items, total }, metrics] = await Promise.all([
+      this.usersRepository.listUsersForAdmin({
+        keyword: query.keyword,
+        role: query.role,
+        status: query.status,
+        page,
+        limit,
+      }),
+      this.usersRepository.getUserMetrics(),
+    ]);
 
     return {
       items: items.map((user) => this.toAdminUserResponse(user)),
@@ -250,7 +253,12 @@ export class UsersService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+      metrics,
     };
+  }
+
+  async adminGetMetrics(): Promise<Record<string, unknown>> {
+    return this.usersRepository.getUserMetrics();
   }
 
   async adminGetUser(userId: string): Promise<Record<string, unknown>> {
@@ -587,6 +595,7 @@ export class UsersService {
   ): Record<string, unknown> {
     const base = {
       id: user._id.toString(),
+      userCode: user.userCode || `USR${user._id.toString().slice(-3).toUpperCase()}`,
       email: user.auth.email,
       phone: user.auth.phone ?? null,
       fullName: user.profile.fullName,

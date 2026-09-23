@@ -1,0 +1,4 @@
+# Preserve immutable provider references and their unchanged live stylesheet.
+docs/refactor-baselines/provider-dashboard-2026-09-21/ProviderDashboard.tsx -text
+docs/refactor-baselines/provider-dashboard-2026-09-21/providerServiceProfile.css -text
+frontend/src/pages/providerdashboard/providerServiceProfile.css -text
