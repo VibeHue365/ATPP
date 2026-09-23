@@ -542,13 +542,31 @@ export class BookingStatusService {
       const savedBooking = await booking.save({ session });
 
       try {
+        const customerId = this.getCustomerIdStr(booking);
         await this.notificationsService.createNotification(
-          this.getCustomerIdStr(booking),
+          customerId,
           `Đơn hàng đã hủy`,
-          `Đơn hàng ${booking.bookingCode} của bạn đã bị hủy. Lý do: ${reason}`,
+          `Đơn hàng ${booking.bookingCode} của bạn đã bị hủy.${isFreeCancel ? ` Hoàn lại 100% tiền (${refundAmount.toLocaleString('vi-VN')}đ).` : ` Hoàn lại ${refundAmount.toLocaleString('vi-VN')}đ sau trừ phí phạt cọc.`} Lý do: ${reason}`,
           NotificationType.Booking,
-          { bookingId: booking._id },
+          { bookingId: booking._id, refundAmount },
         );
+
+        if (booking.providerIds && booking.providerIds.length > 0) {
+          const query = this.providerModel.find({ _id: { $in: booking.providerIds } });
+          const providers = (typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query) || [];
+
+          for (const prov of providers as any[]) {
+            if (prov?.userId) {
+              await this.notificationsService.createNotification(
+                prov.userId.toString(),
+                'Đơn hàng đã hủy',
+                `Đơn hàng ${booking.bookingCode} đã bị hủy (${isCustomer ? 'Bởi khách hàng' : isProvider ? 'Bởi nhà cung cấp' : 'Bởi hệ thống'}). Lý do: ${reason}`,
+                NotificationType.Booking,
+                { bookingId: booking._id },
+              );
+            }
+          }
+        }
       } catch (e) {
         console.error('Failed to create cancelBooking notification:', e);
       }
@@ -831,14 +849,72 @@ export class BookingStatusService {
           .session(session);
       }
 
+      const getStatusLabel = (s: BookingStatus): string => {
+        switch (s) {
+          case BookingStatus.Confirmed:
+            return 'Đã xác nhận';
+          case BookingStatus.DepositPaid:
+            return 'Đã đặt cọc';
+          case BookingStatus.PickupPending:
+            return 'Đang bàn giao nhận áo';
+          case BookingStatus.PickedUp:
+            return 'Đang thuê';
+          case BookingStatus.InProgress:
+            return 'Đang thực hiện';
+          case BookingStatus.ReturnPending:
+            return 'Đang bàn giao trả áo';
+          case BookingStatus.Returned:
+            return 'Đã trả áo';
+          case BookingStatus.AwaitingReview:
+            return 'Chờ xác nhận hoàn tất';
+          case BookingStatus.ComboPhotosApproved:
+            return 'Đã duyệt ảnh';
+          case BookingStatus.Completed:
+            return 'Hoàn thành';
+          case BookingStatus.Cancelled:
+            return 'Đã hủy';
+          case BookingStatus.Disputed:
+            return 'Tranh chấp';
+          default:
+            return s;
+        }
+      };
+
       try {
+        const customerId = this.getCustomerIdStr(booking);
+        const statusLabel = getStatusLabel(nextStatus);
+
+        let customerMsg = `Đơn hàng ${booking.bookingCode} của bạn đã chuyển sang trạng thái: ${statusLabel}.`;
+        if (nextStatus === BookingStatus.Confirmed) {
+          customerMsg = `Nhà cung cấp đã tiếp nhận và xác nhận đơn hàng ${booking.bookingCode}. Vui lòng theo dõi lịch hẹn!`;
+        } else if (nextStatus === BookingStatus.Returned) {
+          customerMsg = `Đơn hàng ${booking.bookingCode} đã hoàn tất trả đồ. Tiền cọc giữ đồ sẽ được hoàn lại vào tài khoản của bạn.`;
+        }
+
         await this.notificationsService.createNotification(
-          this.getCustomerIdStr(booking),
-          `Cập nhật trạng thái đơn hàng`,
-          `Đơn hàng ${booking.bookingCode} của bạn đã chuyển sang trạng thái: ${newStatus}`,
+          customerId,
+          `Cập nhật đơn hàng: ${statusLabel}`,
+          customerMsg,
           NotificationType.Booking,
-          { bookingId: booking._id },
+          { bookingId: booking._id, newStatus: nextStatus },
         );
+
+        if (booking.providerIds && booking.providerIds.length > 0) {
+          const query = this.providerModel.find({ _id: { $in: booking.providerIds } });
+          const providers = (typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query) || [];
+
+          for (const prov of providers as any[]) {
+            if (prov?.userId) {
+              await this.notificationsService.createNotification(
+                prov.userId.toString(),
+                `Cập nhật đơn hàng: ${statusLabel}`,
+                `Đơn hàng ${booking.bookingCode} đã chuyển sang trạng thái: ${statusLabel}.`,
+                NotificationType.Booking,
+                { bookingId: booking._id, newStatus: nextStatus },
+              );
+            }
+          }
+        }
       } catch (e) {
         console.error('Failed to create updateBookingStatus notification:', e);
       }

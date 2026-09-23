@@ -548,16 +548,24 @@ export class PaymentsService {
             { bookingId: updatedBooking._id },
           );
 
-          for (const providerId of updatedBooking.providerIds) {
-            await this.notificationsService.createNotification(
-              providerId.toString(),
-              'Lịch đặt mới được thanh toán',
-              'Đơn đặt lịch ' +
-                updatedBooking.bookingCode +
-                ' đã được khách hàng thanh toán cọc thành công.',
-              NotificationType.Booking,
-              { bookingId: updatedBooking._id },
-            );
+          if (updatedBooking.providerIds && updatedBooking.providerIds.length > 0) {
+            const providers = await this.bookingModel.db
+              .model('Provider')
+              .find({ _id: { $in: updatedBooking.providerIds } })
+              .select('userId')
+              .lean();
+
+            for (const prov of providers as any[]) {
+              if (prov.userId) {
+                await this.notificationsService.createNotification(
+                  prov.userId.toString(),
+                  'Lịch đặt mới được thanh toán',
+                  `Đơn đặt lịch ${updatedBooking.bookingCode} đã được khách hàng thanh toán cọc thành công.`,
+                  NotificationType.Booking,
+                  { bookingId: updatedBooking._id },
+                );
+              }
+            }
           }
         }
       } catch (e) {
@@ -644,8 +652,32 @@ export class PaymentsService {
             { session },
           );
       });
-      if (!result) throw new NotFoundException('Payment not found');
-      return result;
+      const finalPayment: PaymentDocument | null = result;
+      if (!finalPayment) throw new NotFoundException('Payment not found');
+
+      try {
+        const booking = await this.bookingModel
+          .findById((finalPayment as any).bookingId)
+          .select('customerId bookingCode')
+          .lean();
+        if (booking) {
+          const customerId =
+            ((booking.customerId as any)?._id || booking.customerId).toString();
+          await this.notificationsService.createNotification(
+            customerId,
+            status === PaymentStatus.Cancelled
+              ? 'Giao dịch thanh toán đã hủy'
+              : 'Thanh toán thất bại / hết hạn',
+            `Giao dịch thanh toán cho đơn hàng ${booking.bookingCode} đã bị ${status === PaymentStatus.Cancelled ? 'hủy' : 'hết hạn/thất bại'}. Các mục giữ chỗ đã được giải phóng.`,
+            NotificationType.Payment,
+            { bookingId: (finalPayment as any).bookingId },
+          );
+        }
+      } catch (e) {
+        this.logger.warn('Failed to send failPayment notification:', e);
+      }
+
+      return finalPayment;
     } finally {
       await session.endSession();
     }
@@ -835,6 +867,21 @@ export class PaymentsService {
       await escrow.save();
     }
 
+    try {
+      const customerId = (
+        (booking.customerId as any)?._id || booking.customerId
+      ).toString();
+      await this.notificationsService.createNotification(
+        customerId,
+        'Hoàn tiền cọc thành công',
+        `Hệ thống đã hoàn trả thành công số tiền cọc ${amountToRefund.toLocaleString('vi-VN')}đ cho đơn hàng ${booking.bookingCode}. Tiền sẽ về tài khoản của bạn theo quy định ngân hàng.`,
+        NotificationType.Refund,
+        { bookingId: booking._id, refundAmount: amountToRefund },
+      );
+    } catch (e) {
+      this.logger.warn('Failed to send refundDeposit notification:', e);
+    }
+
     return refundResult;
   }
 
@@ -932,9 +979,44 @@ export class PaymentsService {
     booking.statusTimeline.push({
       status: BookingStatus.Completed,
       changedAt: new Date(),
-      note: `Tranh chấp đã giải quyết bởi Admin. Hoàn khách: ${refundToCustomer}đ, trả shop: ${payToProvider}đ.`,
+      note: `Tranh chấp đã giải quyết bởi Admin. Hoàn khách: ${refundToCustomer.toLocaleString('vi-VN')}đ, trả shop: ${payToProvider.toLocaleString('vi-VN')}đ.`,
     });
     await booking.save();
+
+    try {
+      const customerId = (
+        (booking.customerId as any)?._id || booking.customerId
+      ).toString();
+      await this.notificationsService.createNotification(
+        customerId,
+        'Tranh chấp đã được xử lý',
+        `Tranh chấp đơn hàng ${booking.bookingCode} đã được giải quyết. Hoàn tiền: ${refundToCustomer.toLocaleString('vi-VN')}đ.`,
+        NotificationType.Dispute,
+        { bookingId: booking._id, refundToCustomer, payToProvider },
+      );
+
+      if (booking.providerIds && booking.providerIds.length > 0) {
+        const providers = await this.bookingModel.db
+          .model('Provider')
+          .find({ _id: { $in: booking.providerIds } })
+          .select('userId')
+          .lean();
+
+        for (const prov of providers as any[]) {
+          if (prov.userId) {
+            await this.notificationsService.createNotification(
+              prov.userId.toString(),
+              'Tranh chấp đã được xử lý',
+              `Tranh chấp đơn hàng ${booking.bookingCode} đã được Admin giải quyết xong. Quyết toán: ${payToProvider.toLocaleString('vi-VN')}đ.`,
+              NotificationType.Dispute,
+              { bookingId: booking._id, refundToCustomer, payToProvider },
+            );
+          }
+        }
+      }
+    } catch (e) {
+      this.logger.warn('Failed to send resolveDispute notification:', e);
+    }
 
     return {
       message: 'Dispute resolved successfully',
