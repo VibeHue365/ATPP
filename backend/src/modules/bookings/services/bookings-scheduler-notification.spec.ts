@@ -1,12 +1,20 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
 import { BookingsSchedulerService } from './bookings-scheduler.service';
-import { BookingSchedule, BookingScheduleStatus, BookingScheduleType } from '../schemas/booking-schedule.schema';
+import { BookingSchedule } from '../schemas/booking-schedule.schema';
 import { Booking, BookingStatus } from '../schemas/booking.schema';
 import { BookingItem, BookingItemType } from '../schemas/booking-item.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
-import { Notification, NotificationType } from '../../notifications/schemas/notification.schema';
+import {
+  Notification,
+  NotificationType,
+} from '../../notifications/schemas/notification.schema';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PhotographyHoldService } from './photography-hold.service';
 import { BookingStatusService } from './booking-status.service';
@@ -108,11 +116,15 @@ describe('BookingsSchedulerService - Notification & Reminders', () => {
     notificationsService = module.get(NotificationsService);
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   describe('handleRentalItemReminders', () => {
     it('should send 24h pickup reminder for rental booking starting tomorrow', async () => {
-      const now = new Date();
+      const now = new Date(2026, 0, 10, 8, 0, 0);
+      jest.useFakeTimers().setSystemTime(now);
       const pickupDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      pickupDate.setHours(8, 0, 0, 0);
 
       mockBookingScheduleModel.find.mockReturnValue({
         exec: jest.fn().mockResolvedValue([]),
@@ -160,9 +172,9 @@ describe('BookingsSchedulerService - Notification & Reminders', () => {
     });
 
     it('should send 24h return reminder for rental booking due tomorrow', async () => {
-      const now = new Date();
+      const now = new Date(2026, 0, 10, 20, 0, 0);
+      jest.useFakeTimers().setSystemTime(now);
       const returnDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      returnDate.setHours(20, 0, 0, 0);
 
       mockBookingScheduleModel.find.mockReturnValue({
         exec: jest.fn().mockResolvedValue([]),
@@ -210,7 +222,8 @@ describe('BookingsSchedulerService - Notification & Reminders', () => {
     });
 
     it('should send overdue return alert when return deadline has passed', async () => {
-      const now = new Date();
+      const now = new Date(2026, 0, 10, 20, 0, 0);
+      jest.useFakeTimers().setSystemTime(now);
       const returnDate = new Date(now.getTime() - 2 * 60 * 60 * 1000); // 2 hours ago
 
       mockBookingScheduleModel.find.mockReturnValue({
@@ -261,9 +274,9 @@ describe('BookingsSchedulerService - Notification & Reminders', () => {
 
   describe('handlePhotographyItemReminders', () => {
     it('should send 24h photoshoot reminder to both customer and photographer', async () => {
-      const now = new Date();
+      const now = new Date(2026, 0, 10, 9, 0, 0);
+      jest.useFakeTimers().setSystemTime(now);
       const shootDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      shootDate.setHours(9, 0, 0, 0);
 
       mockBookingScheduleModel.find.mockReturnValue({
         exec: jest.fn().mockResolvedValue([]),
@@ -328,6 +341,52 @@ describe('BookingsSchedulerService - Notification & Reminders', () => {
         expect.objectContaining({ bookingId: mockBookingId }),
       );
     });
+
+    it('should still notify the photographer when the customer reminder already exists', async () => {
+      const now = new Date(2026, 0, 10, 9, 0, 0);
+      const itemId = new Types.ObjectId();
+      const item = {
+        _id: itemId,
+        itemType: BookingItemType.PhotographyPackage,
+        providerId: mockProviderDocId,
+        shootDate: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        shootTimeSlot: '09:00 - 11:00',
+      };
+      const booking = {
+        _id: mockBookingId,
+        bookingCode: 'BKG-PHOTO-RECOVERY',
+      };
+
+      mockProviderModel.findById.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue({
+            _id: mockProviderDocId,
+            userId: mockPhotographerUserId,
+          }),
+        }),
+      });
+      mockNotificationModel.findOne
+        .mockResolvedValueOnce({ _id: new Types.ObjectId() })
+        .mockResolvedValueOnce(null);
+
+      await (service as any).handlePhotographyItemReminders(
+        item,
+        booking,
+        mockCustomerId,
+        now,
+      );
+
+      expect(notificationsService.createNotification).toHaveBeenCalledTimes(1);
+      expect(notificationsService.createNotification).toHaveBeenCalledWith(
+        mockPhotographerUserId,
+        'Nhắc nhở: Lịch chụp ảnh với khách hàng ngày mai',
+        expect.stringContaining('BKG-PHOTO-RECOVERY'),
+        NotificationType.Booking,
+        expect.objectContaining({
+          reminderKey: `prov_photo_24h_${itemId}`,
+        }),
+      );
+    });
   });
 });
 
@@ -361,8 +420,12 @@ describe('BookingRescheduleService - Notifications', () => {
   };
 
   const mockInventoryReservationModel = {
-    findOne: jest.fn().mockReturnValue({ session: jest.fn().mockResolvedValue(null) }),
-    updateOne: jest.fn().mockReturnValue({ session: jest.fn().mockResolvedValue({}) }),
+    findOne: jest
+      .fn()
+      .mockReturnValue({ session: jest.fn().mockResolvedValue(null) }),
+    updateOne: jest
+      .fn()
+      .mockReturnValue({ session: jest.fn().mockResolvedValue({}) }),
   };
 
   const mockProviderModel = {
@@ -402,7 +465,9 @@ describe('BookingRescheduleService - Notifications', () => {
       ],
     }).compile();
 
-    rescheduleService = module.get<BookingRescheduleService>(BookingRescheduleService);
+    rescheduleService = module.get<BookingRescheduleService>(
+      BookingRescheduleService,
+    );
     notificationsService = module.get(NotificationsService);
   });
 
@@ -426,18 +491,26 @@ describe('BookingRescheduleService - Notifications', () => {
     };
 
     mockBookingsRepository.findBookingById.mockResolvedValue(mockBooking);
-    mockBookingsRepository.findOneBookingItem.mockResolvedValue(mockBookingItem);
+    mockBookingsRepository.findOneBookingItem.mockResolvedValue(
+      mockBookingItem,
+    );
 
     mockProviderModel.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue([
-          { _id: mockProviderDocId, userId: mockProviderUserId },
-        ]),
+        lean: jest
+          .fn()
+          .mockResolvedValue([
+            { _id: mockProviderDocId, userId: mockProviderUserId },
+          ]),
       }),
     });
 
-    const newFrom = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const newTo = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const newFrom = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0];
+    const newTo = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0];
 
     await rescheduleService.rescheduleBooking(mockBookingId, mockCustomerId, {
       itemId: mockItemId,
