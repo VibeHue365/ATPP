@@ -1,11 +1,12 @@
 [
   {
     "code": "PHONG_CACH_HUE",
+    "group": null,
     "label": "Phong cách Huế",
     "description": "Nội dung có dấu hiệu đặc trưng văn hóa Huế.",
     "entityTypes": ["PRODUCT", "PORTFOLIO"],
     "isPublicBadge": true,
-    "status": "ACTIVE",
+    "status": "INACTIVE",
     "displayPriority": 10,
     "displayConfig": {
       "color": "#5A3A1A",
@@ -25,6 +26,7 @@
   },
   {
     "code": "TRUYEN_THONG",
+    "group": "STYLE",
     "label": "Truyền thống",
     "description": "Áo dài theo phong cách truyền thống.",
     "entityTypes": ["PRODUCT"],
@@ -36,10 +38,13 @@
       "backgroundColor": "#F7EFD9",
       "icon": null
     },
-    "ruleConfig": { "styles": ["traditional"] }
+    "ruleConfig": {
+      "keywords": ["truyen thong", "truyền thống", "co truyen", "cổ truyền", "ao dai xua", "áo dài xưa"]
+    }
   },
   {
     "code": "CACH_TAN",
+    "group": "STYLE",
     "label": "Cách tân",
     "description": "Áo dài có thiết kế cách tân.",
     "entityTypes": ["PRODUCT"],
@@ -51,10 +56,13 @@
       "backgroundColor": "#F7EFD9",
       "icon": null
     },
-    "ruleConfig": { "styles": ["modern"] }
+    "ruleConfig": {
+      "keywords": ["cach tan", "cách tân", "hien dai", "hiện đại", "tre trung", "trẻ trung"]
+    }
   },
   {
     "code": "PHA_CACH",
+    "group": "STYLE",
     "label": "Phá cách",
     "description": "Thiết kế sáng tạo hoặc phá cách.",
     "entityTypes": ["PRODUCT"],
@@ -66,10 +74,13 @@
       "backgroundColor": "#F7EFD9",
       "icon": null
     },
-    "ruleConfig": { "styles": ["edgy"] }
+    "ruleConfig": {
+      "keywords": ["pha cach", "phá cách", "doc dao", "độc đáo", "sang tao", "sáng tạo"]
+    }
   },
   {
     "code": "PHU_HOP_LE_CUOI",
+    "group": "OCCASION",
     "label": "Phù hợp lễ cưới",
     "description": "Phù hợp cưới, hỏi hoặc chụp ảnh cưới.",
     "entityTypes": ["PRODUCT"],
@@ -81,10 +92,13 @@
       "backgroundColor": "#F7EFD9",
       "icon": null
     },
-    "ruleConfig": { "occasions": ["wedding"] }
+    "ruleConfig": {
+      "keywords": ["le cuoi", "lễ cưới", "dam cuoi", "đám cưới", "cuoi hoi", "cưới hỏi", "an hoi", "ăn hỏi"]
+    }
   },
   {
     "code": "CHUP_ANH_KY_YEU",
+    "group": "OCCASION",
     "label": "Chụp ảnh kỷ yếu",
     "description": "Phù hợp chụp ảnh tốt nghiệp hoặc kỷ yếu.",
     "entityTypes": ["PRODUCT"],
@@ -96,10 +110,13 @@
       "backgroundColor": "#F7EFD9",
       "icon": null
     },
-    "ruleConfig": { "occasions": ["graduation"] }
+    "ruleConfig": {
+      "keywords": ["ky yeu", "kỷ yếu", "tot nghiep", "tốt nghiệp", "le tot nghiep", "lễ tốt nghiệp"]
+    }
   },
   {
     "code": "LE_HOI_TRUYEN_THONG",
+    "group": "OCCASION",
     "label": "Lễ hội truyền thống",
     "description": "Phù hợp lễ hội hoặc hoạt động văn hóa.",
     "entityTypes": ["PRODUCT"],
@@ -111,10 +128,13 @@
       "backgroundColor": "#F7EFD9",
       "icon": null
     },
-    "ruleConfig": { "occasions": ["festival"] }
+    "ruleConfig": {
+      "keywords": ["le hoi", "lễ hội", "tet", "tết", "trung thu", "mua xuan", "mùa xuân"]
+    }
   },
   {
     "code": "BIEU_DIEN_SU_KIEN",
+    "group": "OCCASION",
     "label": "Biểu diễn và sự kiện",
     "description": "Phù hợp biểu diễn hoặc sự kiện.",
     "entityTypes": ["PRODUCT"],
@@ -126,15 +146,18 @@
       "backgroundColor": "#F7EFD9",
       "icon": null
     },
-    "ruleConfig": { "occasions": ["event"] }
+    "ruleConfig": {
+      "keywords": ["bieu dien", "biểu diễn", "su kien", "sự kiện", "san khau", "sân khấu", "trinh dien", "trình diễn"]
+    }
   },
   {
     "code": "CHAT_LIEU_LUA",
+    "group": null,
     "label": "Chất liệu lụa",
     "description": "Sản phẩm sử dụng chất liệu lụa.",
     "entityTypes": ["PRODUCT"],
     "isPublicBadge": true,
-    "status": "ACTIVE",
+    "status": "INACTIVE",
     "displayPriority": 90,
     "displayConfig": {
       "color": "#5A3A1A",
@@ -145,11 +168,12 @@
   },
   {
     "code": "CHAT_LIEU_GAM",
+    "group": null,
     "label": "Chất liệu gấm",
     "description": "Sản phẩm sử dụng chất liệu gấm.",
     "entityTypes": ["PRODUCT"],
     "isPublicBadge": true,
-    "status": "ACTIVE",
+    "status": "INACTIVE",
     "displayPriority": 100,
     "displayConfig": {
       "color": "#5A3A1A",
@@ -160,11 +184,12 @@
   },
   {
     "code": "NGOAI_TROI",
+    "group": null,
     "label": "Phù hợp ngoại cảnh",
     "description": "Nội dung phù hợp chụp ngoại cảnh.",
     "entityTypes": ["PRODUCT", "PORTFOLIO"],
     "isPublicBadge": true,
-    "status": "ACTIVE",
+    "status": "INACTIVE",
     "displayPriority": 110,
     "displayConfig": {
       "color": "#5A3A1A",

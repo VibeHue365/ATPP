@@ -42,6 +42,7 @@ import { ComboPromotionController } from './controllers/combo-promotion.controll
 import { UsersModule } from '../users/users.module';
 import { SmartTaggingModule } from '../smart-tagging/smart-tagging.module';
 import { StorageModule } from '../storage/storage.module';
+import { PersonalizedProductRecommendationService } from './services/personalized-product-recommendation.service';
 
 export const productModels = MongooseModule.forFeature([
   { name: Product.name, schema: ProductSchema },
@@ -74,6 +75,7 @@ export const productModels = MongooseModule.forFeature([
     ProductAvailabilityService,
     DiscountCampaignService,
     ComboPromotionService,
+    PersonalizedProductRecommendationService,
   ],
   exports: [
     productModels,
@@ -82,6 +84,7 @@ export const productModels = MongooseModule.forFeature([
     InventoryService,
     DiscountCampaignService,
     ComboPromotionService,
+    PersonalizedProductRecommendationService,
   ],
 })
 export class ProductsModule {}

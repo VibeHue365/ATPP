@@ -17,6 +17,19 @@ export enum ProductModerationStatus {
   Hidden = 'HIDDEN',
 }
 
+export enum ProductCustomTagStatus {
+  Pending = 'PENDING',
+  Approved = 'APPROVED',
+  Rejected = 'REJECTED',
+}
+
+export interface ProductCustomTag {
+  label: string;
+  normalizedLabel: string;
+  status: ProductCustomTagStatus;
+  mappedTagCode?: string | null;
+}
+
 export interface ProductRating {
   averageRating: number;
   totalReviews: number;
@@ -95,6 +108,30 @@ export class Product {
 
   @Prop({ type: [String], default: [] })
   occasions: string[];
+
+  /** Provider-proposed descriptive tags, separate from canonical smart tags. */
+  @Prop({
+    type: [
+      {
+        _id: false,
+        label: { type: String, required: true, trim: true, maxlength: 30 },
+        normalizedLabel: { type: String, required: true, trim: true },
+        status: {
+          type: String,
+          enum: Object.values(ProductCustomTagStatus),
+          default: ProductCustomTagStatus.Pending,
+        },
+        mappedTagCode: {
+          type: String,
+          default: null,
+          trim: true,
+          uppercase: true,
+        },
+      },
+    ],
+    default: [],
+  })
+  customTags: ProductCustomTag[];
 
   @Prop({ type: Number, required: true, default: 1, min: 1 })
   taggingRevision: number;

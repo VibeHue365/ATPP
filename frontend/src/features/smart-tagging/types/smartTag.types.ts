@@ -12,6 +12,7 @@ export type SmartTagDecisionAction =
 
 export interface SmartTagDefinition {
   code: string;
+  group?: "STYLE" | "OCCASION" | null;
   label: string;
   description: string;
   displayPriority: number;

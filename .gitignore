@@ -7,6 +7,16 @@
 backend/dist/
 frontend/dist/
 
+# Python generated files and test caches
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
 # Runtime uploads
 backend/uploads/
 

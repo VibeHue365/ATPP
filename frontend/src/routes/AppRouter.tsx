@@ -84,9 +84,6 @@ export const AppRouter: React.FC = () => {
   return (
     <Suspense fallback={<PageFallbackLoader />}>
       <Routes>
-        {/* Onboarding Page */}
-        <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
-
         {/* Provider Dashboard */}
         <Route path={ROUTES.PROVIDER_DASHBOARD} element={<ProviderDashboard />} />
 
@@ -125,6 +122,8 @@ export const AppRouter: React.FC = () => {
 
         {/* Private Profile Pages guarded by ProtectedRoute under MainLayout */}
         <Route element={<ProtectedRoute />}>
+          {/* Onboarding is account-specific and saves preferences to /users/me. */}
+          <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
           <Route element={<MainLayout />}>
             {/* Redirect /dashboard to /dashboard/profile */}
             <Route path={ROUTES.DASHBOARD} element={<Navigate to={ROUTES.PROFILE} replace />} />

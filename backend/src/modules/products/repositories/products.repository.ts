@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
   Product,
+  ProductCustomTagStatus,
   ProductDocument,
   ProductModerationStatus,
   ProductStatus,
@@ -119,7 +120,18 @@ export class ProductsRepository {
     if (options.search) {
       const escaped = options.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(escaped, 'i');
-      query.$or = [{ name: regex }, { description: regex }];
+      query.$or = [
+        { name: regex },
+        { description: regex },
+        {
+          customTags: {
+            $elemMatch: {
+              status: ProductCustomTagStatus.Approved,
+              label: regex,
+            },
+          },
+        },
+      ];
     }
     if (options.minPrice !== undefined || options.maxPrice !== undefined) {
       query.basePrice = {};
@@ -139,7 +151,7 @@ export class ProductsRepository {
       : { createdAt: -1 };
     const [items, total] = await Promise.all([
       this.productModel.find(query)
-        .select('providerId categoryId styleCategoryIds eventCategoryIds name slug images basePrice depositAmount sizes colors materials style occasions taggingRevision rating status createdAt')
+        .select('providerId categoryId styleCategoryIds eventCategoryIds name slug images basePrice depositAmount sizes colors materials style occasions taggingRevision rating status customTags createdAt')
         .populate('categoryId', 'name slug')
         .populate('providerId', 'businessName status address.city address.district media rating')
         .sort(order as any).skip((safePage - 1) * safeLimit).limit(safeLimit).lean().exec(),
@@ -237,7 +249,18 @@ export class ProductsRepository {
     if (options?.search) {
       const escapedSearch = options.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const searchRegex = new RegExp(escapedSearch, 'i');
-      query.$or = [{ name: searchRegex }, { description: searchRegex }];
+      query.$or = [
+        { name: searchRegex },
+        { description: searchRegex },
+        {
+          customTags: {
+            $elemMatch: {
+              status: ProductCustomTagStatus.Approved,
+              label: searchRegex,
+            },
+          },
+        },
+      ];
     }
 
     if (options?.minPrice !== undefined || options?.maxPrice !== undefined) {
@@ -279,7 +302,9 @@ export class ProductsRepository {
       .sort({ createdAt: -1 });
 
     if (options?.limit) {
-      queryBuilder = queryBuilder.limit(Math.min(Math.max(options.limit, 1), 24));
+      // Internal recommendation ranking needs a wider candidate pool than one
+      // public page. Public paginated endpoints still enforce their own 24-item cap.
+      queryBuilder = queryBuilder.limit(Math.min(Math.max(options.limit, 1), 200));
     }
 
     return queryBuilder.lean().exec();

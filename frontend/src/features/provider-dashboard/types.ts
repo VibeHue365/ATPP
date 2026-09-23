@@ -56,6 +56,12 @@ export interface Product {
   occasions?: string[];
   styleCategoryIds?: Array<string | { _id?: string; id?: string }>;
   eventCategoryIds?: Array<string | { _id?: string; id?: string }>;
+  customTags?: Array<{
+    label: string;
+    normalizedLabel: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    mappedTagCode?: string | null;
+  }>;
   status: 'ACTIVE' | 'DRAFT' | 'INACTIVE';
   taggingDecisionVersion?: number;
 }

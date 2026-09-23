@@ -7,8 +7,9 @@ import {
 } from '../constants/smart-tag.constants';
 import { SmartTagDefinitionDocument } from '../schemas/smart-tag-definition.schema';
 
-const DEFAULT_TIMEOUT_MS = 8_000;
-const MIN_AI_CONFIDENCE = 0.65;
+// The first local-model request can include model warm-up time on CPU.
+const DEFAULT_TIMEOUT_MS = 15_000;
+const MIN_AI_CONFIDENCE = 0.87;
 
 export interface AiTagSuggestion {
   tagCode: string;
@@ -79,6 +80,7 @@ export class AiTaggingClientService {
             allowed_tags: input.definitions.map((definition) => ({
               code: definition.code,
               description: definition.description,
+              group: definition.group,
             })),
             taxonomy_version: input.taxonomyVersion,
           }),
@@ -114,7 +116,7 @@ export class AiTaggingClientService {
               explanation: String(suggestion.explanation || '').slice(0, 500),
               source: SmartTagSignalSource.AiText,
               modelMetadata: {
-                provider: 'gemini',
+                provider: 'local_embedding',
                 model: String(payload.model || 'unknown').slice(0, 100),
                 promptVersion: String(payload.prompt_version || 'unknown').slice(
                   0,

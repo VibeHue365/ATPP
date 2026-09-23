@@ -1,0 +1,6 @@
+import { createContext,useCallback,useContext,useMemo,useState,type PropsWithChildren } from 'react';
+import { StyleSheet,Text,View } from 'react-native';import { Colors,FontFamily,Radius,Shadow } from '@/constants/theme';
+type Tone='success'|'error'|'info';interface Value{show:(message:string,tone?:Tone)=>void}const Context=createContext<Value|null>(null);
+export function ToastProvider({children}:PropsWithChildren){const [toast,setToast]=useState<{message:string;tone:Tone}|null>(null);const show=useCallback((message:string,tone:Tone='info')=>{setToast({message,tone});setTimeout(()=>setToast(null),3000)},[]);const value=useMemo(()=>({show}),[show]);return <Context.Provider value={value}>{children}{toast&&<View style={[s.toast,s[toast.tone]]}><Text style={s.text}>{toast.message}</Text></View>}</Context.Provider>}
+export function useToast(){const value=useContext(Context);if(!value)throw new Error('useToast must be used inside ToastProvider');return value}
+const s=StyleSheet.create({toast:{position:'absolute',left:20,right:20,bottom:90,padding:14,borderRadius:Radius.md,...Shadow},success:{backgroundColor:Colors.success},error:{backgroundColor:Colors.error},info:{backgroundColor:Colors.text},text:{fontFamily:FontFamily.bodyMedium,fontSize:13,color:Colors.white,textAlign:'center'}});

@@ -1,4 +1,15 @@
-import { IsOptional, IsBoolean, IsObject, IsArray, IsString, IsNumber } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 class SizeInfoDto {
@@ -42,6 +53,14 @@ class UserPreferencesDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  @IsIn(['SILK', 'VELVET', 'BROCADE', 'ORGANZA', 'LINEN'], { each: true })
+  preferredMaterials?: string[];
+
+  @IsOptional()
+  @IsArray()
   @IsString({ each: true })
   preferredAoDaiStyles?: string[];
 
@@ -52,11 +71,13 @@ class UserPreferencesDto {
 
   @IsOptional()
   @IsObject()
+  @ValidateNested()
   @Type(() => SizeInfoDto)
   sizeInfo?: SizeInfoDto;
 
   @IsOptional()
   @IsObject()
+  @ValidateNested()
   @Type(() => BudgetRangeDto)
   budgetRange?: BudgetRangeDto;
 
@@ -78,6 +99,7 @@ export class UpdatePreferencesDto {
 
   @IsOptional()
   @IsObject()
+  @ValidateNested()
   @Type(() => UserPreferencesDto)
   preferences?: UserPreferencesDto;
 }

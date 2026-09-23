@@ -1,0 +1,10 @@
+import { type Href,router,useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { Text,View } from 'react-native';
+import { authApi } from '@/apis/authApi';
+import { AuthFrame,authStyles as s } from '@/components/auth/AuthFrame';
+import { AppButton } from '@/components/ui/AppButton';
+import { AppInput } from '@/components/ui/AppInput';
+import { getApiErrorMessage } from '@/utils/apiError';
+
+export default function ResetPassword(){const params=useLocalSearchParams<{token?:string}>();const[token,setToken]=useState(params.token??'');const[password,setPassword]=useState('');const[confirm,setConfirm]=useState('');const[loading,setLoading]=useState(false);const[error,setError]=useState('');const submit=async()=>{if(token.trim().length<20){setError('Liên kết hoặc mã khôi phục không hợp lệ.');return}if(password.length<8||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password)){setError('Mật khẩu cần ít nhất 8 ký tự, gồm chữ và số.');return}if(password!==confirm){setError('Mật khẩu xác nhận không trùng khớp.');return}setLoading(true);setError('');try{await authApi.resetPassword({token:token.trim(),newPassword:password});router.replace('/(auth)/login' as Href)}catch(e){setError(getApiErrorMessage(e,'Không thể đặt lại mật khẩu.'))}finally{setLoading(false)}};return <AuthFrame><View style={s.card}><Text style={s.eyebrow}>BẢO MẬT TÀI KHOẢN</Text><Text style={s.title}>Đặt mật khẩu mới</Text><Text style={s.subtitle}>Mật khẩu mới cần khác mật khẩu cũ và đủ mạnh để bảo vệ tài khoản.</Text><AppInput label="Mã khôi phục" value={token} onChangeText={setToken} autoCapitalize="none" hint="Được điền tự động khi mở liên kết khôi phục."/><AppInput label="Mật khẩu mới" value={password} onChangeText={setPassword} secureTextEntry/><AppInput label="Xác nhận mật khẩu" value={confirm} onChangeText={setConfirm} secureTextEntry/>{!!error&&<Text style={s.error}>{error}</Text>}<AppButton title="Đặt lại mật khẩu" loading={loading} onPress={()=>void submit()}/></View></AuthFrame>}
