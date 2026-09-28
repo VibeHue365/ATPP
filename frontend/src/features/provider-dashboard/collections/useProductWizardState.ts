@@ -25,6 +25,8 @@ export function useProductWizardState() {
   const [prodOccasions, setProdOccasions] = useState<string[]>([]);
   const [prodStyleCategoryIds, setProdStyleCategoryIds] = useState<string[]>([]);
   const [prodEventCategoryIds, setProdEventCategoryIds] = useState<string[]>([]);
+  const [prodCustomTags, setProdCustomTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState('');
   const [variants, setVariants] = useState<VariantRow[]>([]);
   const [wizardStep, setWizardStep] = useState(1);
   const [createdDraftId, setCreatedDraftId] = useState<string | null>(null);
@@ -41,6 +43,7 @@ export function useProductWizardState() {
     setUploadingImages, prodVideos, setProdVideos, uploadingVideos, setUploadingVideos, prodStyle,
     setProdStyle, prodOccasions, setProdOccasions, prodStyleCategoryIds, setProdStyleCategoryIds,
     prodEventCategoryIds, setProdEventCategoryIds, variants, setVariants, wizardStep, setWizardStep,
+    prodCustomTags, setProdCustomTags, customTagInput, setCustomTagInput,
     createdDraftId, setCreatedDraftId, activeTagCodes, setActiveTagCodes, editInvSummary,
     setEditInvSummary, savingDraft, setSavingDraft,
   };

@@ -609,16 +609,20 @@ export class ProductsRepository {
   async moderate(
     id: Types.ObjectId,
     data: any,
+    expectedStatus?: ProductModerationStatus,
   ): Promise<any | null> {
+    const filter = expectedStatus
+      ? { _id: id, moderationStatus: expectedStatus }
+      : { _id: id };
     const prod = await this.productModel
-      .findByIdAndUpdate(id, data, { new: true })
+      .findOneAndUpdate(filter, data, { new: true })
       .populate('categoryId')
       .populate('providerId')
       .exec();
     if (prod) return prod;
 
     const pkg = await this.packageModel
-      .findByIdAndUpdate(id, data, { new: true })
+      .findOneAndUpdate(filter, data, { new: true })
       .populate('categoryId')
       .populate('providerId')
       .exec();

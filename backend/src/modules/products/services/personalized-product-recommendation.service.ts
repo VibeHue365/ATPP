@@ -31,6 +31,7 @@ export class PersonalizedProductRecommendationService {
     requestedPage = 1,
     requestedLimit = 12,
     filters: {
+      search?: string;
       maxPrice?: number;
       colors?: string[];
       sizes?: string[];

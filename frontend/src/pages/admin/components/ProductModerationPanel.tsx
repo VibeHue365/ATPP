@@ -74,6 +74,12 @@ interface ModerationItem {
   sizes?: string[];
   colors?: string[];
   materials?: string[];
+  customTags?: Array<{
+    label: string;
+    normalizedLabel: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    mappedTagCode?: string | null;
+  }>;
 }
 
 interface ModerationMetrics {
@@ -146,6 +152,15 @@ export const ProductModerationPanel: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState<boolean>(false);
   const [detailSubtab, setDetailSubtab] = useState<'info' | 'standards' | 'terms' | 'reputation'>('info');
   const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
+  const [approvedCustomTags, setApprovedCustomTags] = useState<string[]>([]);
+
+  useEffect(() => {
+    setApprovedCustomTags(
+      (activeProduct?.customTags || [])
+        .filter((tag) => tag.status === 'APPROVED')
+        .map((tag) => tag.normalizedLabel),
+    );
+  }, [activeProduct?._id, activeProduct?.customTags]);
 
   // Sequential Navigation between products in the drawer
   const currentIndex = useMemo(() => {
@@ -435,20 +450,41 @@ export const ProductModerationPanel: React.FC = () => {
   };
 
   // Moderation Actions
-  const handleApprove = async (product: ModerationItem) => {
+  const handleApprove = async (product: ModerationItem, selectedCustomTags?: string[]) => {
+    if ((product.customTags?.length || 0) > 0 && selectedCustomTags === undefined) {
+      setActiveProduct(product);
+      setActiveGalleryIndex(0);
+      setDetailSubtab('info');
+      setIsDetailOpen(true);
+      toast.info('Vui lòng kiểm tra các thẻ riêng trước khi phê duyệt sản phẩm.');
+      return;
+    }
     setProcessingAction(true);
     try {
       await httpClient.patch(`/admin/products/${product._id || product.id}/moderation`, {
         action: 'APPROVED',
+        ...((product.customTags?.length || 0) > 0
+          ? { approvedCustomTags: selectedCustomTags || [] }
+          : {}),
       });
       toast.success(`Đã phê duyệt "${product.name}" thành công!`);
 
       // Optimistic update
+      const approvedSet = new Set(selectedCustomTags || []);
+      const approvedProduct: ModerationItem = {
+        ...product,
+        moderationStatus: 'APPROVED',
+        status: 'ACTIVE',
+        customTags: product.customTags?.map((tag) => ({
+          ...tag,
+          status: approvedSet.has(tag.normalizedLabel) ? 'APPROVED' : 'REJECTED',
+        })),
+      };
       setItems((prev) =>
-        prev.map((p) => (p._id === product._id ? { ...p, moderationStatus: 'APPROVED', status: 'ACTIVE' } : p))
+        prev.map((p) => (p._id === product._id ? approvedProduct : p))
       );
       if (activeProduct && (activeProduct._id === product._id || activeProduct.id === product.id)) {
-        setActiveProduct((prev) => (prev ? { ...prev, moderationStatus: 'APPROVED', status: 'ACTIVE' } : null));
+        setActiveProduct(approvedProduct);
       }
       setMetrics((prev) => ({
         ...prev,
@@ -1713,6 +1749,56 @@ export const ProductModerationPanel: React.FC = () => {
                       </div>
                     </div>
 
+                    {activeProduct.itemType === 'AODAI' && (activeProduct.customTags?.length || 0) > 0 && (
+                      <section className="lume-custom-tag-review">
+                        <div className="lume-custom-tag-review-heading">
+                          <div>
+                            <h4>Thẻ riêng do Provider đề xuất</h4>
+                            <p>Chọn những thẻ phù hợp để duyệt cùng sản phẩm. Thẻ không chọn sẽ bị từ chối.</p>
+                          </div>
+                          <span>{approvedCustomTags.length}/{activeProduct.customTags!.length} được chọn</span>
+                        </div>
+
+                        <div className="lume-custom-tag-review-list">
+                          {activeProduct.customTags!.map((tag) => {
+                            const checked = approvedCustomTags.includes(tag.normalizedLabel);
+                            const locked = activeProduct.moderationStatus === 'APPROVED';
+                            return (
+                              <label
+                                key={tag.normalizedLabel}
+                                className={`lume-custom-tag-review-item ${checked ? 'selected' : ''} ${locked ? 'locked' : ''}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={locked}
+                                  onChange={() => {
+                                    setApprovedCustomTags((current) =>
+                                      checked
+                                        ? current.filter((value) => value !== tag.normalizedLabel)
+                                        : [...current, tag.normalizedLabel],
+                                    );
+                                  }}
+                                />
+                                <span className="lume-custom-tag-checkbox">
+                                  {checked && <Check size={12} strokeWidth={3} />}
+                                </span>
+                                <span className="lume-custom-tag-label">{tag.label}</span>
+                                <span className={`lume-custom-tag-status ${tag.status.toLowerCase()}`}>
+                                  {tag.status === 'APPROVED' ? 'Đã duyệt' : tag.status === 'REJECTED' ? 'Đã từ chối' : 'Chờ duyệt'}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+
+                        <div className="lume-custom-tag-review-note">
+                          <ShieldCheck size={15} />
+                          Custom tag chỉ bổ sung khả năng mô tả và tìm kiếm; Smart Tag chuẩn vẫn là nguồn chính cho cá nhân hóa.
+                        </div>
+                      </section>
+                    )}
+
                     {/* Moderation Reason Alert if present */}
                     {activeProduct.moderationReason && (
                       <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 10, padding: '12px 16px' }}>
@@ -1861,7 +1947,7 @@ export const ProductModerationPanel: React.FC = () => {
                 <button
                   type="button"
                   className="lume-product-btn-approve"
-                  onClick={() => handleApprove(activeProduct)}
+                  onClick={() => handleApprove(activeProduct, approvedCustomTags)}
                   disabled={processingAction || activeProduct.moderationStatus === 'APPROVED'}
                 >
                   <CheckCircle size={16} />
