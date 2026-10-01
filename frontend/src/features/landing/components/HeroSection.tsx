@@ -33,8 +33,26 @@ interface TopComboData {
   image: string;
 }
 
+interface TopProductData {
+  id: string;
+  name: string;
+  providerName: string;
+  price?: number;
+  image: string;
+}
+
 const DEFAULT_PHOTO_IMG = 'https://images.unsplash.com/photo-1544005313-94ddf0286df2';
 const DEFAULT_COMBO_IMG = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
+
+const DEFAULT_FALLBACK_PACKAGE: TopPhotoshootData = {
+  id: 'pkg-default-1',
+  providerId: '',
+  name: 'Gói Chụp Ảnh Nghệ Thuật',
+  providerName: 'LUMÉ Heritage Photography',
+  price: 1500000,
+  image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&auto=format&fit=crop',
+  rating: 4.9,
+};
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
   banners,
@@ -44,12 +62,19 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const navigate = useNavigate();
   const activeBanner = banners[currentSlide] || banners[0];
 
-  const [topPackages, setTopPackages] = useState<TopPhotoshootData[]>([]);
+  const [topPackages, setTopPackages] = useState<TopPhotoshootData[]>([DEFAULT_FALLBACK_PACKAGE]);
   const [topCombos, setTopCombos] = useState<TopComboData[]>([]);
+  const [topProducts, setTopProducts] = useState<TopProductData[]>([]);
   const [packageIndex, setPackageIndex] = useState(0);
-  const [comboIndex, setComboIndex] = useState(0);
-  const topPackage = topPackages[packageIndex % Math.max(topPackages.length, 1)];
-  const topCombo = topCombos[comboIndex % Math.max(topCombos.length, 1)];
+  const [secondaryIndex, setSecondaryIndex] = useState(0);
+
+  const topPackage = (topPackages.length > 0 ? topPackages : [DEFAULT_FALLBACK_PACKAGE])[packageIndex % Math.max(topPackages.length || 1, 1)];
+
+  // Card 2: If live combos exist, show topCombo; otherwise show live topProduct (or second package)
+  const hasCombos = topCombos.length > 0;
+  const topCombo = hasCombos ? topCombos[secondaryIndex % topCombos.length] : null;
+  const topProduct = topProducts.length > 0 ? topProducts[secondaryIndex % topProducts.length] : null;
+  const secondPackage = topPackages.length > 1 ? topPackages[(packageIndex + 1) % topPackages.length] : null;
 
   useEffect(() => {
     let active = true;
@@ -57,7 +82,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     photographersApi
       .getAll({ sort: 'rating_desc', limit: 5 })
       .then((res: any) => {
-        if (!active || !Array.isArray(res?.data)) return;
+        if (!active || !Array.isArray(res?.data) || res.data.length === 0) return;
         const packages = res.data.slice(0, 5).map((item: any) => {
           const pkg = item.defaultPackage || item.packages?.[0];
           const rawImg = item.coverImage || pkg?.images?.[0] || item.media?.coverUrl || item.media?.images?.[0] || DEFAULT_PHOTO_IMG;
@@ -66,12 +91,14 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             providerId: item._id || item.providerId,
             name: pkg?.name || item.businessName || 'Gói chụp nghệ thuật',
             providerName: item.businessName || item.providerName || 'LUMÉ Studio',
-            price: pkg?.price || 500000,
+            price: pkg?.price || 1500000,
             image: getMediaUrl(rawImg) || rawImg,
             rating: item.rating?.averageRating || 4.9,
           };
         });
-        setTopPackages(packages);
+        if (packages.length > 0) {
+          setTopPackages(packages);
+        }
       })
       .catch((err) => console.warn('Lỗi tải gói chụp nổi bật cho Hero:', err));
 
@@ -82,19 +109,43 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         const sorted = data
           .filter((combo) => combo && (combo.productId || combo.photographyPackageId))
           .sort((a, b) => (b.discountPercent || 0) - (a.discountPercent || 0));
-        setTopCombos(sorted.slice(0, 5).map((combo) => {
-          const rawImg = combo.image || combo.productId?.images?.[0] || combo.photographyPackageId?.images?.[0] || DEFAULT_COMBO_IMG;
-          return {
-            id: combo._id,
-            name: combo.name || 'Áo dài + Studio',
-            providerName: combo.providerId?.businessName || 'Trang phục & Chụp ảnh',
-            discountPercent: combo.discountPercent || 20,
-            price: combo.comboPrice,
-            image: getMediaUrl(rawImg) || rawImg,
-          };
-        }));
+        if (sorted.length > 0) {
+          setTopCombos(sorted.slice(0, 5).map((combo) => {
+            const rawImg = combo.image || combo.productId?.images?.[0] || combo.photographyPackageId?.images?.[0] || DEFAULT_COMBO_IMG;
+            return {
+              id: combo._id,
+              name: combo.name || 'Combo Áo Dài + Studio',
+              providerName: combo.providerId?.businessName || 'Trang phục & Chụp ảnh',
+              discountPercent: combo.discountPercent || 20,
+              price: combo.comboPrice || 850000,
+              image: getMediaUrl(rawImg) || rawImg,
+            };
+          }));
+        } else {
+          setTopCombos([]);
+        }
       })
       .catch((err) => console.warn('Lỗi tải combo nổi bật cho Hero:', err));
+
+    httpClient
+      .get<any>('/products?limit=5&sort=newest')
+      .then((res) => {
+        if (!active) return;
+        const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+        if (list.length > 0) {
+          setTopProducts(list.slice(0, 5).map((p: any) => {
+            const rawImg = p.images?.[0] || p.coverImage || DEFAULT_PHOTO_IMG;
+            return {
+              id: p._id || p.id,
+              name: p.name || 'Áo dài truyền thống',
+              providerName: p.providerId?.businessName || 'Nhà may áo dài',
+              price: p.basePrice || p.price || 0,
+              image: getMediaUrl(rawImg) || rawImg,
+            };
+          }));
+        }
+      })
+      .catch((err) => console.warn('Lỗi tải sản phẩm nổi bật cho Hero:', err));
 
     return () => { active = false; };
   }, []);
@@ -102,10 +153,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (topPackages.length > 1) setPackageIndex((index) => (index + 1) % topPackages.length);
-      if (topCombos.length > 1) setComboIndex((index) => (index + 1) % topCombos.length);
+      const secondaryCount = topCombos.length || topProducts.length || (topPackages.length > 1 ? topPackages.length : 1);
+      if (secondaryCount > 1) setSecondaryIndex((index) => (index + 1) % secondaryCount);
     }, 4200);
     return () => window.clearInterval(timer);
-  }, [topPackages.length, topCombos.length]);
+  }, [topPackages.length, topCombos.length, topProducts.length]);
   const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId);
     if (element) {
@@ -125,26 +177,26 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       >
         {/* LEFT COLUMN: Text Content & CTAs & Qualitative Benefits (~34%) */}
         <div
-          className="lg:col-span-4 rounded-2xl p-6 md:p-7 flex flex-col justify-between gap-6 h-[460px] lg:h-[500px]"
+          className="lg:col-span-4 rounded-2xl p-6 md:p-8 flex flex-col justify-between h-[460px] lg:h-[500px]"
           style={{
             backgroundColor: 'var(--landing-surface)',
             border: '1px solid var(--landing-border)',
             boxShadow: 'var(--landing-shadow-sm)',
           }}
         >
-          <div className="flex flex-col gap-3.5">
+          <div className="flex flex-col gap-4">
             {/* Eyebrow */}
             <span
-              className="text-[10px] md:text-xs font-bold uppercase tracking-wider inline-block"
-              style={{ color: 'var(--landing-primary)' }}
+              className="text-xs font-bold uppercase tracking-wider inline-block"
+              style={{ color: '#B52B47' }}
             >
-              THUÊ ÁO DÀI & CHỤP ẢNH TRONG MỘN NƠI
+              THUÊ ÁO DÀI & CHỤP ẢNH TRỌN GÓI
             </span>
 
             {/* Headline H1 */}
             <h1
-              className="text-2xl md:text-3xl lg:text-4xl font-extrabold font-header tracking-tight leading-tight"
-              style={{ color: 'var(--landing-text-primary)' }}
+              className="text-3xl sm:text-4xl lg:text-[42px] font-black font-header tracking-tight leading-[1.14]"
+              style={{ color: '#292324' }}
             >
               Chọn áo dài.
               <br />
@@ -152,7 +204,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <br />
               <span
                 className="font-serif italic font-normal"
-                style={{ color: 'var(--landing-primary)' }}
+                style={{ color: '#B52B47' }}
               >
                 Tỏa sáng.
               </span>
@@ -160,82 +212,88 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
             {/* Supporting Description */}
             <p
-              className="text-xs md:text-sm leading-relaxed mt-0.5 line-clamp-3"
-              style={{ color: 'var(--landing-text-secondary)' }}
+              className="text-sm md:text-[15px] leading-relaxed mt-1 text-[#5C4F52]"
+              style={{ maxWidth: '360px' }}
             >
-              Tìm mẫu áo dài, photographer và concept phù hợp chỉ trong vài bước.
+              Nền tảng kết nối người yêu nét đẹp truyền thống với các nhà may áo dài tinh tế và nhiếp ảnh gia tài năng.
             </p>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-3 mt-2 flex-wrap">
+            <div className="flex items-center gap-3.5 mt-2 flex-wrap">
               <button
                 type="button"
                 onClick={() => scrollToSection('rentals')}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all cursor-pointer shadow-2xs hover:opacity-95 flex items-center gap-2 border-none"
-                style={{ backgroundColor: 'var(--landing-primary)' }}
+                className="rounded-xl text-sm font-bold text-white transition-all cursor-pointer hover:opacity-95 flex items-center gap-2 border-none shrink-0"
+                style={{
+                  backgroundColor: '#B52B47',
+                  color: '#FFFFFF',
+                  padding: '12px 24px',
+                  boxShadow: '0 4px 14px rgba(181, 43, 71, 0.28)',
+                }}
               >
-                <span>Khám phá ngay</span>
-                <ArrowRight size={14} />
+                <span style={{ color: '#FFFFFF' }}>Khám phá ngay</span>
+                <ArrowRight size={16} color="#FFFFFF" strokeWidth={2.4} />
               </button>
               <button
                 type="button"
                 onClick={() => scrollToSection('combos')}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border hover:bg-stone-50 bg-white"
+                className="rounded-xl text-sm font-semibold transition-all cursor-pointer border hover:bg-[#FFF5F7] hover:border-[#B52B47] hover:text-[#B52B47] bg-white shrink-0"
                 style={{
-                  color: 'var(--landing-text-primary)',
-                  borderColor: 'var(--landing-border)',
+                  color: '#292324',
+                  borderColor: '#E2CED1',
+                  padding: '12px 22px',
                 }}
               >
-                Xem combo
+                <span>Xem combo</span>
               </button>
             </div>
           </div>
 
           {/* Qualitative Benefits Row */}
           <div
-            className="pt-4 border-t grid grid-cols-3 gap-2 text-center"
+            className="pt-5 border-t grid grid-cols-3 gap-3 text-center"
             style={{ borderColor: 'var(--landing-border)' }}
           >
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1 text-left">
               <span
-                className="text-xs font-bold font-header"
-                style={{ color: 'var(--landing-text-primary)' }}
+                className="text-base md:text-lg font-black font-header leading-tight"
+                style={{ color: '#B52B47' }}
               >
-                Đa dạng
+                500+
               </span>
               <span
-                className="text-[10px] font-medium"
-                style={{ color: 'var(--landing-text-muted)' }}
+                className="text-xs font-semibold leading-tight"
+                style={{ color: '#746568' }}
               >
                 Mẫu áo dài
               </span>
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1 text-left">
               <span
-                className="text-xs font-bold font-header"
-                style={{ color: 'var(--landing-text-primary)' }}
+                className="text-base md:text-lg font-black font-header leading-tight"
+                style={{ color: '#B52B47' }}
               >
-                Trọn gói
+                100+
               </span>
               <span
-                className="text-[10px] font-medium"
-                style={{ color: 'var(--landing-text-muted)' }}
+                className="text-xs font-semibold leading-tight"
+                style={{ color: '#746568' }}
               >
-                Nhiếp ảnh
+                Nhiếp ảnh gia
               </span>
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1 text-left">
               <span
-                className="text-xs font-bold font-header"
-                style={{ color: 'var(--landing-text-primary)' }}
+                className="text-base md:text-lg font-black font-header leading-tight"
+                style={{ color: '#B52B47' }}
               >
-                Uy tín
+                100%
               </span>
               <span
-                className="text-[10px] font-medium"
-                style={{ color: 'var(--landing-text-muted)' }}
+                className="text-xs font-semibold leading-tight"
+                style={{ color: '#746568' }}
               >
-                Chất lượng
+                Cam kết uy tín
               </span>
             </div>
           </div>
@@ -308,10 +366,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         </div>
 
         {/* RIGHT COLUMN: Dynamic Promotional Concept Cards (~25%) */}
-        <div className={`lg:col-span-3 flex flex-col gap-4 justify-between h-[460px] lg:h-[500px] ${topCombos.length === 0 ? 'lume-promos-single' : ''}`}>
+        <div className="lg:col-span-3 flex flex-col gap-3.5 justify-between h-[460px] lg:h-[500px]">
           {/* Promo Card 1: Gói chụp phổ biến (Dynamic from Live DB) */}
           <div
-            key={`package-${packageIndex}`} className="lume-promo-swap flex-1 rounded-2xl p-4 md:p-5 flex items-center justify-between gap-3 transition-all border group cursor-pointer"
+            key={`package-${packageIndex}`}
+            className="lume-promo-swap flex-1 rounded-2xl p-4 md:p-5 flex items-center justify-between gap-3 transition-all border group cursor-pointer"
             style={{
               backgroundColor: 'var(--landing-surface-soft)',
               borderColor: 'var(--landing-border)',
@@ -322,33 +381,32 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 : navigate(ROUTES.PHOTOGRAPHERS)
             }
           >
-            <div className="flex flex-col justify-between flex-1 py-0.5 min-w-0">
+            <div className="flex flex-col justify-between flex-1 py-1 min-w-0">
               <div>
                 <span
-                  className="text-[9px] font-bold uppercase tracking-wider block"
-                  style={{ color: 'var(--landing-primary)' }}
+                  className="text-[10px] font-bold uppercase tracking-wider block"
+                  style={{ color: '#B52B47' }}
                 >
                   GÓI PHỔ BIẾN
                 </span>
                 <h4
-                  className="text-base font-bold font-header mt-0.5 line-clamp-1 group-hover:opacity-80 transition-opacity"
-                  style={{ color: 'var(--landing-text-primary)' }}
+                  className="text-base font-bold font-header mt-1 line-clamp-1 group-hover:opacity-80 transition-opacity"
+                  style={{ color: '#292324' }}
                   title={topPackage ? topPackage.name : 'Chụp kỷ yếu'}
                 >
                   {topPackage ? topPackage.name : 'Chụp kỷ yếu'}
                 </h4>
                 <p
-                  className="text-xs font-medium mt-1 line-clamp-1"
-                  style={{ color: 'var(--landing-text-secondary)' }}
+                  className="text-xs font-medium mt-1 line-clamp-1 text-[#746568]"
                 >
                   {topPackage ? topPackage.providerName : 'Nhiếp ảnh nghệ thuật'}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-2 mt-3">
                 <span
                   className="text-xs font-bold inline-flex items-center gap-1 hover:underline"
-                  style={{ color: 'var(--landing-primary)' }}
+                  style={{ color: '#B52B47' }}
                 >
                   <span>Xem gói</span>
                   <ArrowRight size={14} />
@@ -370,65 +428,130 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               />
             </div>
           </div>
-          {topCombos.length > 0 && (
-<div
-            key={`combo-${comboIndex}`} className="lume-promo-swap flex-1 rounded-2xl p-4 md:p-5 flex items-center justify-between gap-3 transition-all border group cursor-pointer"
-            style={{
-              backgroundColor: 'var(--landing-surface-soft)',
-              borderColor: 'var(--landing-border)',
-            }}
-            onClick={() =>
-              topCombo ? navigate(`/combos/${topCombo.id}`) : navigate(ROUTES.COMBOS)
-            }
-          >
-            <div className="flex flex-col justify-between flex-1 py-0.5 min-w-0">
-              <div>
-                <span
-                  className="text-[9px] font-bold uppercase tracking-wider block"
-                  style={{ color: 'var(--landing-primary)' }}
-                >
-                  COMBO TIẾT KIỆM {topCombo?.discountPercent ? `-${topCombo.discountPercent}%` : ''}
-                </span>
-                <h4
-                  className="text-base font-bold font-header mt-0.5 line-clamp-1 group-hover:opacity-80 transition-opacity"
-                  style={{ color: 'var(--landing-text-primary)' }}
-                  title={topCombo ? topCombo.name : 'Áo dài + Studio'}
-                >
-                  {topCombo ? topCombo.name : 'Áo dài + Studio'}
-                </h4>
-                <p
-                  className="text-xs font-medium mt-1 line-clamp-1"
-                  style={{ color: 'var(--landing-text-secondary)' }}
-                >
-                  {topCombo ? topCombo.providerName : 'Trang phục & Chụp ảnh'}
-                </p>
-              </div>
 
-              <div className="flex items-center gap-2 mt-2">
-                <span
-                  className="text-xs font-bold inline-flex items-center gap-1 hover:underline"
-                  style={{ color: 'var(--landing-primary)' }}
-                >
-                  <span>Xem combo</span>
-                  <ArrowRight size={14} />
-                </span>
-                {topCombo?.price ? (
-                  <span className="text-[11px] font-bold text-stone-600">
-                    • {topCombo.price.toLocaleString('vi-VN')}đ
+          {/* Promo Card 2: Combo tiết kiệm hoặc Áo dài nổi bật từ DB thật */}
+          {hasCombos && topCombo ? (
+            <div
+              key={`combo-${secondaryIndex}`}
+              className="lume-promo-swap flex-1 rounded-2xl p-4 md:p-5 flex items-center justify-between gap-3 transition-all border group cursor-pointer"
+              style={{
+                backgroundColor: 'var(--landing-surface-soft)',
+                borderColor: 'var(--landing-border)',
+              }}
+              onClick={() => navigate(`/combos/${topCombo.id}`)}
+            >
+              <div className="flex flex-col justify-between flex-1 py-1 min-w-0">
+                <div>
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider block"
+                    style={{ color: '#B52B47' }}
+                  >
+                    COMBO TIẾT KIỆM {topCombo.discountPercent ? `-${topCombo.discountPercent}%` : ''}
                   </span>
-                ) : null}
+                  <h4
+                    className="text-base font-bold font-header mt-1 line-clamp-1 group-hover:opacity-80 transition-opacity"
+                    style={{ color: '#292324' }}
+                    title={topCombo.name}
+                  >
+                    {topCombo.name}
+                  </h4>
+                  <p
+                    className="text-xs font-medium mt-1 line-clamp-1 text-[#746568]"
+                  >
+                    {topCombo.providerName}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 mt-3">
+                  <span
+                    className="text-xs font-bold inline-flex items-center gap-1 hover:underline"
+                    style={{ color: '#B52B47' }}
+                  >
+                    <span>Xem combo</span>
+                    <ArrowRight size={14} />
+                  </span>
+                  {topCombo.price ? (
+                    <span className="text-[11px] font-bold text-stone-600">
+                      • {topCombo.price.toLocaleString('vi-VN')}đ
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Thumbnail Box */}
+              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden shrink-0 bg-stone-200 border border-stone-200/80 shadow-2xs">
+                <img
+                  src={topCombo.image || DEFAULT_COMBO_IMG}
+                  alt={topCombo.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
               </div>
             </div>
+          ) : (
+            <div
+              key={`product-${secondaryIndex}`}
+              className="lume-promo-swap flex-1 rounded-2xl p-4 md:p-5 flex items-center justify-between gap-3 transition-all border group cursor-pointer"
+              style={{
+                backgroundColor: 'var(--landing-surface-soft)',
+                borderColor: 'var(--landing-border)',
+              }}
+              onClick={() => {
+                if (topProduct) {
+                  navigate(`/rentals/${topProduct.id}`);
+                } else if (secondPackage) {
+                  navigate(`/photographers/${secondPackage.providerId || secondPackage.id}`);
+                } else {
+                  navigate(ROUTES.RENTALS);
+                }
+              }}
+            >
+              <div className="flex flex-col justify-between flex-1 py-1 min-w-0">
+                <div>
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider block"
+                    style={{ color: '#B52B47' }}
+                  >
+                    {topProduct ? 'ÁO DÀI NỔI BẬT' : 'GÓI CHỤP ĐỀ XUẤT'}
+                  </span>
+                  <h4
+                    className="text-base font-bold font-header mt-1 line-clamp-1 group-hover:opacity-80 transition-opacity"
+                    style={{ color: '#292324' }}
+                    title={topProduct?.name || secondPackage?.name || 'Áo dài truyền thống'}
+                  >
+                    {topProduct?.name || secondPackage?.name || 'Áo dài truyền thống'}
+                  </h4>
+                  <p
+                    className="text-xs font-medium mt-1 line-clamp-1 text-[#746568]"
+                  >
+                    {topProduct?.providerName || secondPackage?.providerName || 'Nhà may áo dài'}
+                  </p>
+                </div>
 
-            {/* Thumbnail Box */}
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden shrink-0 bg-stone-200 border border-stone-200/80 shadow-2xs">
-              <img
-                src={topCombo?.image || DEFAULT_COMBO_IMG}
-                alt={topCombo ? topCombo.name : 'Áo dài + Studio'}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              />
+                <div className="flex items-center gap-2 mt-3">
+                  <span
+                    className="text-xs font-bold inline-flex items-center gap-1 hover:underline"
+                    style={{ color: '#B52B47' }}
+                  >
+                    <span>{topProduct ? 'Thuê ngay' : 'Xem gói'}</span>
+                    <ArrowRight size={14} />
+                  </span>
+                  {(topProduct?.price ?? secondPackage?.price) ? (
+                    <span className="text-[11px] font-bold text-stone-600">
+                      • {(topProduct?.price ?? secondPackage?.price)?.toLocaleString('vi-VN')}đ{topProduct ? '/ngày' : ''}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Thumbnail Box */}
+              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden shrink-0 bg-stone-200 border border-stone-200/80 shadow-2xs">
+                <img
+                  src={topProduct?.image || secondPackage?.image || DEFAULT_PHOTO_IMG}
+                  alt={topProduct?.name || secondPackage?.name || 'Áo dài'}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+              </div>
             </div>
-          </div>
           )}
         </div>
       </div>

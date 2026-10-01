@@ -280,16 +280,7 @@ export const PhotographersListingPage: React.FC = () => {
           <label><span>SỐ NGƯỜI</span><select value={groupSize} onChange={(event) => setGroupSize(event.target.value)}><option value="">Không giới hạn</option><option value="1">1 người</option><option value="2">2 người</option><option value="3-5">3–5 người</option><option value="6+">Từ 6 người</option></select><ChevronDown size={17} /></label>
           <button type="submit"><Search size={18} />Tìm gói chụp</button>
         </form>
-        <section className="photo-category-tabs" aria-label="Khám phá theo loại gói chụp">
-          <button type="button" onClick={() => updateQuery({ packageCategoryId: undefined })} className={!selectedPackageCategory ? 'is-active' : ''}>
-            <span className="photo-category-tabs__icon"><SlidersHorizontal size={16} /></span><strong>Tất cả</strong><small>{totalPackageCount} gói</small>
-          </button>
-          {quickPackageCategories.map((category, index) => {
-            const Icon = quickIcons[index];
-            const active = category.id === selectedPackageCategory;
-            return <button type="button" key={category.id} onClick={() => updateQuery({ packageCategoryId: active ? undefined : category.id })} className={active ? 'is-active' : ''}><span className="photo-category-tabs__icon"><Icon size={16} /></span><strong>{category.name}</strong><small>{category.packageCount} gói</small></button>;
-          })}
-        </section>
+
         {isDiscoveryMapOpen && <section className="photo-map-panel" aria-label="Tìm photographer theo vị trí"><div><h2>Tìm quanh địa điểm của bạn</h2><p>Chọn vị trí để xem những photographer phù hợp trong bán kính mong muốn.</p></div>{customerLocation && <button type="button" onClick={() => setCustomerLocation(null)}>Bỏ vị trí</button>}<PhotographyLocationPicker value={customerLocation} onSelect={setCustomerLocation} title="Chọn vị trí" hint="Nhập địa chỉ hoặc dùng vị trí hiện tại." radiusKm={searchRadiusKm} /></section>}
         <div className="photo-listing-layout">
           <aside className="photo-filter-panel"><div className="photo-filter-panel__header"><div><span>BỘ LỌC</span><h2>Tinh chỉnh kết quả</h2></div>{hasActiveFilters && <button type="button" onClick={clearFilters}>Xóa tất cả</button>}</div>

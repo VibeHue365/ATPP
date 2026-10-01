@@ -7,18 +7,18 @@ import { ROUTES } from '../../../config/routes';
 import { API_BASE_URL } from '../../../config/env';
 import '../../../pages/LandingPage.css';
 import { useHeaderScroll } from '../hooks/useHeaderScroll';
-import { 
+import {
   Bell,
   ShoppingBag,
-  User as UserIcon, 
-  LogOut, 
-  Settings, 
-  CheckCheck, 
+  User as UserIcon,
+  LogOut,
+  Settings,
+  CheckCheck,
   Check,
-  ShieldCheck, 
-  Sparkles, 
-  MessageSquare, 
-  Menu, 
+  ShieldCheck,
+  Sparkles,
+  MessageSquare,
+  Menu,
   X,
   Calendar,
   CreditCard,
@@ -27,20 +27,21 @@ import {
   AlertTriangle,
   Clock,
   ChevronRight,
-  Inbox
+  Inbox,
+  LogIn
 } from 'lucide-react';
 import { getTimeAgo } from '../../../features/notifications/hooks/useNotifications';
 
 export const LandingHeader: React.FC = () => {
   const { isAuthenticated, user, logout } = useAuth();
   const { cart } = useCart();
-  const { 
-    notifications, 
-    loading: loadingNoti, 
-    unreadCount, 
-    fetchNotifications, 
-    markAsRead, 
-    markAllAsRead 
+  const {
+    notifications,
+    loading: loadingNoti,
+    unreadCount,
+    fetchNotifications,
+    markAsRead,
+    markAllAsRead
   } = useNotifications();
 
   const navigate = useNavigate();
@@ -198,30 +199,30 @@ export const LandingHeader: React.FC = () => {
     <header className={`lume-header ${isScrolled ? 'is-scrolled' : ''}`}>
       <div className="lume-header__inner w-full max-w-[1440px] mx-auto">
         {/* Compact Moderate Rounded Container matching Target Screenshot */}
-        <div 
-          className="lume-header__content w-full flex items-center transition-all"
+        <div
+          className="lume-header__content w-full transition-all"
         >
           {/* Left: Logo Box & Subtitle */}
-          <Link 
-            to="/" 
+          <Link
+            to="/"
             aria-label="LUMÉ - Áo dài & Chụp ảnh"
             className="flex items-center gap-2.5 text-decoration-none group shrink-0"
           >
             {/* Near Circular Burgundy Icon */}
-            <div 
+            <div
               className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center font-serif font-black text-lg text-white shadow-2xs transition-transform group-hover:scale-105 shrink-0"
               style={{ backgroundColor: 'var(--landing-primary)' }}
             >
               L
             </div>
             <div className="flex flex-col shrink-0">
-              <span 
+              <span
                 className="font-header font-black text-base md:text-lg tracking-tight leading-none"
                 style={{ color: 'var(--landing-text-primary)' }}
               >
                 LUMÉ
               </span>
-              <span 
+              <span
                 className="text-[9px] font-bold tracking-widest uppercase mt-0.5"
                 style={{ color: 'var(--landing-text-muted)' }}
               >
@@ -231,49 +232,42 @@ export const LandingHeader: React.FC = () => {
           </Link>
 
           {/* Center: Desktop Navigation Links (Visible exclusively on lg: desktop) */}
-          <nav className="lume-header__nav hidden lg:flex items-center justify-center gap-6 lg:gap-8 font-body text-xs md:text-sm font-medium shrink-0">
-            <button 
-              type="button"
-              onClick={() => scrollToSection('service-finder')}
-              className="transition-colors hover:opacity-80 cursor-pointer bg-transparent border-none p-0 whitespace-nowrap"
-              style={{ color: 'var(--landing-text-primary)' }}
+          <nav className="lume-header__nav hidden lg:flex items-center justify-center gap-7 lg:gap-9 font-body shrink-0">
+            <Link
+              to={ROUTES.LANDING}
+              onClick={(e) => {
+                if (location.pathname === ROUTES.LANDING || location.pathname === '/') {
+                  e.preventDefault();
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+              className={`lume-header__nav-link transition-all text-decoration-none whitespace-nowrap ${(location.pathname === ROUTES.LANDING || location.pathname === '/') ? 'is-active' : ''}`}
             >
-              Dịch vụ
-            </button>
-            <Link 
-              to={ROUTES.RENTALS} 
-              className="transition-colors hover:opacity-80 text-decoration-none whitespace-nowrap"
-              style={{ color: location.pathname === ROUTES.RENTALS ? 'var(--landing-primary)' : 'var(--landing-text-primary)' }}
+              Trang chủ
+            </Link>
+            <Link
+              to={ROUTES.RENTALS}
+              className={`lume-header__nav-link transition-all text-decoration-none whitespace-nowrap ${location.pathname === ROUTES.RENTALS ? 'is-active' : ''}`}
             >
               Áo dài
             </Link>
-            <Link 
-              to={ROUTES.PHOTOGRAPHERS} 
-              className="transition-colors hover:opacity-80 text-decoration-none whitespace-nowrap"
-              style={{ color: location.pathname.startsWith('/photographers') ? 'var(--landing-primary)' : 'var(--landing-text-primary)' }}
+            <Link
+              to={ROUTES.PHOTOGRAPHERS}
+              className={`lume-header__nav-link transition-all text-decoration-none whitespace-nowrap ${location.pathname.startsWith('/photographers') ? 'is-active' : ''}`}
             >
               Chụp ảnh
             </Link>
-            <Link 
-              to={ROUTES.COMBOS} 
-              className="transition-colors hover:opacity-80 text-decoration-none whitespace-nowrap"
-              style={{ color: location.pathname === ROUTES.COMBOS ? 'var(--landing-primary)' : 'var(--landing-text-primary)' }}
+            <Link
+              to={ROUTES.COMBOS}
+              className={`lume-header__nav-link transition-all text-decoration-none whitespace-nowrap ${location.pathname === ROUTES.COMBOS ? 'is-active' : ''}`}
             >
               Combo
             </Link>
-            <button 
-              type="button"
-              onClick={() => scrollToSection('locations')}
-              className="transition-colors hover:opacity-80 cursor-pointer bg-transparent border-none p-0 whitespace-nowrap"
-              style={{ color: 'var(--landing-text-primary)' }}
-            >
-              Địa điểm
-            </button>
           </nav>
 
           {/* Right: Soft Utility Buttons & Action Controls */}
           <div className="lume-header__actions flex items-center gap-2 md:gap-3 shrink-0 whitespace-nowrap">
-            
+
             {/* Utility Icon 1: Notification Bell Button */}
             <div className="lume-header__utility lume-noti relative shrink-0" ref={notiRef}>
               <button
@@ -297,9 +291,9 @@ export const LandingHeader: React.FC = () => {
 
               {/* Notifications Dropdown Panel */}
               {isNotiOpen && (
-                <div 
+                <div
                   className="lume-noti__menu"
-                  role="region" 
+                  role="region"
                   aria-label="Bảng thông báo"
                 >
                   {/* Panel Header */}
@@ -314,9 +308,9 @@ export const LandingHeader: React.FC = () => {
                         )}
                       </div>
                       {unreadCount > 0 && (
-                        <button 
+                        <button
                           type="button"
-                          onClick={markAllAsRead} 
+                          onClick={markAllAsRead}
                           className="lume-noti__mark-all-btn"
                           title="Đánh dấu tất cả đã đọc"
                         >
@@ -382,15 +376,15 @@ export const LandingHeader: React.FC = () => {
                       displayedNotifications.map((n) => {
                         const visual = getNotificationVisual(n.type);
                         return (
-                          <div 
-                            key={n._id} 
+                          <div
+                            key={n._id}
                             onClick={() => handleNotificationClick(n)}
                             className={`lume-noti__item ${n.isRead ? 'is-read' : 'is-unread'}`}
                           >
                             {!n.isRead && <span className="lume-noti__unread-dot" />}
-                            
+
                             {/* Type Icon Badge */}
-                            <div 
+                            <div
                               className="lume-noti__icon-box"
                               style={{ backgroundColor: visual.bg }}
                             >
@@ -400,7 +394,7 @@ export const LandingHeader: React.FC = () => {
                             {/* Content */}
                             <div className="lume-noti__content">
                               <div className="lume-noti__meta">
-                                <span 
+                                <span
                                   className="lume-noti__type-tag"
                                   style={{ backgroundColor: visual.tagBg, color: visual.tagColor }}
                                 >
@@ -411,11 +405,11 @@ export const LandingHeader: React.FC = () => {
                                   {getTimeAgo(n.createdAt)}
                                 </span>
                               </div>
-                              
+
                               <div className="lume-noti__item-title">
                                 {n.title}
                               </div>
-                              
+
                               <p className="lume-noti__item-desc">
                                 {n.content}
                               </p>
@@ -466,14 +460,14 @@ export const LandingHeader: React.FC = () => {
               aria-label="Giỏ hàng"
               title="Giỏ hàng"
               className="lume-header__utility w-9 h-9 rounded-xl flex items-center justify-center transition-all text-decoration-none relative hover:opacity-90 shrink-0"
-              style={{ 
+              style={{
                 backgroundColor: 'var(--landing-surface-soft)',
                 color: 'var(--landing-text-secondary)',
               }}
             >
               <ShoppingBag size={16} />
               {cart.length > 0 && (
-                <span 
+                <span
                   className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center"
                   style={{ backgroundColor: 'var(--landing-primary)' }}
                 >
@@ -543,27 +537,23 @@ export const LandingHeader: React.FC = () => {
                     </button>
                   </div>
                 )}
-              </div>            ) : (
+              </div>) : (
               <Link
                 to={ROUTES.LOGIN}
-                className="lume-header__login text-xs md:text-sm font-semibold transition-all text-decoration-none px-2 py-1 hover:opacity-80 shrink-0 whitespace-nowrap"
+                className="lume-header__login-btn inline-flex items-center justify-center gap-2.5 text-sm font-bold text-white transition-all duration-200 cursor-pointer text-decoration-none shrink-0 whitespace-nowrap hover:opacity-95 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0"
                 style={{
-                  color: 'var(--landing-text-primary)',
+                  height: '40px',
+                  padding: '0 20px',
+                  borderRadius: '12px',
+                  backgroundColor: '#B52B47',
+                  color: '#FFFFFF',
+                  boxShadow: '0 4px 14px rgba(181, 43, 71, 0.35)',
                 }}
               >
-                Đăng nhập
+                <LogIn size={16} color="#FFFFFF" strokeWidth={2.4} className="shrink-0" />
+                <span style={{ color: '#FFFFFF', fontWeight: 700, lineHeight: 1 }}>Đăng nhập</span>
               </Link>
             )}
-
-            {/* Primary CTA Button: Đặt lịch (Compact rounded-xl) */}
-            <button
-              type="button"
-              onClick={() => scrollToSection('rentals')}
-              className="lume-header__cta px-4 md:px-5 py-2 text-xs md:text-sm font-bold text-white rounded-xl transition-all cursor-pointer shadow-2xs hover:opacity-95 border-none shrink-0 whitespace-nowrap"
-              style={{ backgroundColor: 'var(--landing-primary)' }}
-            >
-              Đặt lịch
-            </button>
 
             {/* Mobile Hamburger Toggle (Exclusively on lg:hidden) */}
             <button
@@ -583,54 +573,73 @@ export const LandingHeader: React.FC = () => {
 
       {/* Mobile Drawer Menu */}
       {isMobileMenuOpen && (
-        <nav 
+        <nav
           id="mobile-navigation-menu"
           className="lume-mobile-menu lg:hidden max-w-[1440px] mx-auto px-4 md:px-8 mt-3"
         >
-          <div 
-            className="p-4 rounded-2xl bg-white shadow-xl border flex flex-col gap-3 font-header text-sm font-semibold animate-in fade-in slide-in-from-top-2"
+          <div
+            className="p-4 rounded-2xl bg-white shadow-xl border flex flex-col gap-2 font-header text-sm font-semibold animate-in fade-in slide-in-from-top-2"
             style={{ borderColor: 'var(--landing-border)' }}
           >
-            <button 
-              type="button"
-              onClick={() => scrollToSection('service-finder')}
-              className="text-left py-2 border-b bg-transparent border-none p-0 cursor-pointer"
-              style={{ borderColor: 'var(--landing-border)', color: 'var(--landing-text-primary)' }}
+            <Link
+              to={ROUTES.LANDING}
+              onClick={(e) => {
+                setIsMobileMenuOpen(false);
+                if (location.pathname === ROUTES.LANDING || location.pathname === '/') {
+                  e.preventDefault();
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+              className="py-2.5 border-b text-decoration-none"
+              style={{ 
+                borderColor: 'var(--landing-border)', 
+                color: (location.pathname === ROUTES.LANDING || location.pathname === '/') ? 'var(--landing-primary)' : 'var(--landing-text-primary)' 
+              }}
             >
-              Dịch vụ
-            </button>
-            <Link 
+              Trang chủ
+            </Link>
+            <Link
               to={ROUTES.RENTALS}
               onClick={() => setIsMobileMenuOpen(false)}
-              className="py-2 border-b text-decoration-none"
+              className="py-2.5 border-b text-decoration-none"
               style={{ borderColor: 'var(--landing-border)', color: 'var(--landing-text-primary)' }}
             >
               Áo dài
             </Link>
-            <Link 
+            <Link
               to={ROUTES.PHOTOGRAPHERS}
               onClick={() => setIsMobileMenuOpen(false)}
-              className="py-2 border-b text-decoration-none"
+              className="py-2.5 border-b text-decoration-none"
               style={{ borderColor: 'var(--landing-border)', color: 'var(--landing-text-primary)' }}
             >
               Chụp ảnh
             </Link>
-            <Link 
+            <Link
               to={ROUTES.COMBOS}
               onClick={() => setIsMobileMenuOpen(false)}
-              className="py-2 border-b text-decoration-none"
-              style={{ borderColor: 'var(--landing-border)', color: 'var(--landing-text-primary)' }}
+              className="py-2.5 text-decoration-none"
+              style={{ color: 'var(--landing-text-primary)' }}
             >
               Combo
             </Link>
-            <button 
-              type="button"
-              onClick={() => scrollToSection('locations')}
-              className="text-left py-2 bg-transparent border-none p-0 cursor-pointer"
-              style={{ color: 'var(--landing-text-primary)' }}
-            >
-              Địa điểm
-            </button>
+
+            {!isAuthenticated && (
+              <div className="pt-2 border-t mt-1" style={{ borderColor: 'var(--landing-border)' }}>
+                <Link
+                  to={ROUTES.LOGIN}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="w-full py-2.5 px-4 rounded-xl text-center text-sm font-bold text-white flex items-center justify-center gap-2 text-decoration-none shadow-sm cursor-pointer"
+                  style={{
+                    backgroundColor: '#B52B47',
+                    color: '#FFFFFF',
+                    boxShadow: '0 4px 14px rgba(181, 43, 71, 0.35)',
+                  }}
+                >
+                  <LogIn size={16} color="#FFFFFF" strokeWidth={2.4} />
+                  <span style={{ color: '#FFFFFF', fontWeight: 700 }}>Đăng nhập</span>
+                </Link>
+              </div>
+            )}
           </div>
         </nav>
       )}

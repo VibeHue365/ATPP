@@ -542,32 +542,7 @@ export const AoDaiListingPage: React.FC = () => {
           </form>
         </section>
 
-        {/* 4. Category Quick Filter Pills (Dynamic from Database) */}
-        <section className="lume-category-pills">
-          {quickCategories.map((cat) => {
-            const Icon = cat.icon;
-            const isActive = activeTab === cat.id;
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                className={`lume-pill-btn ${isActive ? "is-active" : ""}`}
-                onClick={() => {
-                  setActiveTab(cat.id);
-                  setCurrentPage(1);
-                }}
-              >
-                <div className="lume-pill-icon-box">
-                  <Icon size={16} />
-                </div>
-                <div className="lume-pill-info">
-                  <span className="lume-pill-name">{cat.name}</span>
-                  <span className="lume-pill-count">{cat.count}</span>
-                </div>
-              </button>
-            );
-          })}
-        </section>
+
 
         {/* 5. Main 2-Column Section (Sidebar + Grid) */}
         <div className="lume-main-layout">
