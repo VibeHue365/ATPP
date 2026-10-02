@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ROUTES } from '../../config/routes';
-import { Compass, Send } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { useToast } from '../feedback/Toast';
 
 export const Footer: React.FC = () => {
@@ -23,9 +23,8 @@ export const Footer: React.FC = () => {
       <div className="vh-footer-container">
         {/* Brand Column */}
         <div className="vh-footer-brand">
-          <Link to={ROUTES.LANDING} className="vh-footer-logo">
-            <Compass size={24} className="vh-txt-gold" />
-            <span>Silk & Stone</span>
+          <Link to={ROUTES.LANDING} className="vh-footer-logo" style={{ textDecoration: 'none' }}>
+            <img src="/logo-transparent.png" alt="TàGo" style={{ height: '36px', width: 'auto', objectFit: 'contain' }} />
           </Link>
           <p>Tôn vinh vẻ đẹp di sản Việt thông qua công nghệ và tâm hồn nghệ thuật.</p>
         </div>

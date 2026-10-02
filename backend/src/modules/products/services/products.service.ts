@@ -1043,7 +1043,7 @@ export class ProductsService implements OnModuleInit {
     }
 
     const id = new Types.ObjectId(productId);
-    const product = await this.productsRepository.findById(id);
+    const product = await this.productsRepository.findModerationItemById(id);
     if (!product) {
       throw new NotFoundException('Product not found');
     }
@@ -1089,7 +1089,7 @@ export class ProductsService implements OnModuleInit {
           .filter(Boolean),
       );
       const currentLabels = new Set(
-        (product.customTags || []).map((tag) => tag.normalizedLabel),
+        (product.customTags || []).map((tag: any) => tag.normalizedLabel),
       );
       const hasUnknownLabel = [...approvedLabels].some(
         (label) => !currentLabels.has(label),
@@ -1099,7 +1099,7 @@ export class ProductsService implements OnModuleInit {
           'Approved custom tags must belong to this product',
         );
       }
-      updateData.$set.customTags = (product.customTags || []).map((tag) => ({
+      updateData.$set.customTags = (product.customTags || []).map((tag: any) => ({
         label: tag.label,
         normalizedLabel: tag.normalizedLabel,
         status: approvedLabels.has(tag.normalizedLabel)

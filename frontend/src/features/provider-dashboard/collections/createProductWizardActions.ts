@@ -131,11 +131,24 @@ export function createProductWizardActions({
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
 
+    const selectedFiles = Array.from(e.target.files);
+    const remainingSlots = 10 - prodImages.length;
+    if (remainingSlots <= 0) {
+      toast.error('Sản phẩm chỉ được phép có tối đa 10 ảnh.');
+      e.target.value = '';
+      return;
+    }
+    if (selectedFiles.length > remainingSlots) {
+      toast.error(`Bạn chỉ có thể tải thêm ${remainingSlots} ảnh.`);
+      e.target.value = '';
+      return;
+    }
+
     setUploadingImages(true);
     try {
       const formData = new FormData();
-      for (let i = 0; i < e.target.files.length; i++) {
-        formData.append('images', e.target.files[i]);
+      for (const file of selectedFiles) {
+        formData.append('images', file);
       }
       const res = await productsApi.uploadImages<{ urls: string[] }>(formData);
       setProdImages(prev => [...prev, ...res.urls]);
@@ -200,11 +213,29 @@ export function createProductWizardActions({
 
   const handleColorImageChange = async (color: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
+
+    const selectedFiles = Array.from(e.target.files);
+    const existingImageCount = new Set([
+      ...prodImages,
+      ...Object.values(prodColorImages).flat(),
+    ]).size;
+    const remainingSlots = 10 - existingImageCount;
+    if (remainingSlots <= 0) {
+      toast.error("Sản phẩm chỉ được phép có tối đa 10 ảnh.");
+      e.target.value = '';
+      return;
+    }
+    if (selectedFiles.length > remainingSlots) {
+      toast.error(`Bạn chỉ có thể tải thêm ${remainingSlots} ảnh.`);
+      e.target.value = '';
+      return;
+    }
+
     setUploadingColor(color);
     try {
       const formData = new FormData();
-      for (let i = 0; i < e.target.files.length; i++) {
-        formData.append('images', e.target.files[i]);
+      for (const file of selectedFiles) {
+        formData.append('images', file);
       }
       const res = await productsApi.uploadImages<{ urls: string[] }>(formData);
       setProdColorImages(prev => ({ ...prev, [color]: [...(prev[color] || []), ...res.urls] }));
@@ -341,7 +372,11 @@ export function createProductWizardActions({
         styleCategoryIds: activeTagCodes.length ? styleIdsFromTags : prodStyleCategoryIds,
         eventCategoryIds: activeTagCodes.length ? eventIdsFromTags : prodEventCategoryIds,
       });
-      toast.success(editingProduct ? `Cập nhật áo dài "${prodName}" thành công!` : `Đăng áo dài "${prodName}" thành công!`);
+      toast.success(
+        editingProduct
+          ? `Cập nhật áo dài "${prodName}" thành công! Sản phẩm đang chờ kiểm duyệt.`
+          : `Đăng áo dài "${prodName}" thành công! Sản phẩm đang chờ kiểm duyệt.`
+      );
       setIsModalOpen(false);
       resetProductForm();
       fetchProducts();

@@ -66,9 +66,13 @@ export const AoDaiCard: React.FC<AoDaiCardProps> = ({ item }) => {
           tabIndex={-1}
         >
           <img
-            src={item.image}
+            src={item.image || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600'}
             alt={item.name}
             loading="lazy"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600';
+            }}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         </Link>

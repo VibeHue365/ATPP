@@ -398,6 +398,24 @@
   border: 1px solid #A7F3D0;
 }
 
+.ps-badge-pending {
+  background-color: #FFFBEB;
+  color: #D97706;
+  border: 1px solid #FDE68A;
+}
+
+.ps-badge-changes {
+  background-color: #FFF7ED;
+  color: #EA580C;
+  border: 1px solid #FFEDD5;
+}
+
+.ps-badge-rejected {
+  background-color: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+}
+
 .ps-badge-draft {
   background-color: #FEF3C7;
   color: #B45309;

@@ -1996,7 +1996,8 @@ private isOcrApplicable(documentType: ProviderDocumentType): boolean {
   private ocrNextAction(version: ProviderVerificationDocumentVersion): string | null {
     const ocr = version.ocr;
     if (!ocr) return null;
-    if (ocr.executionStatus === 'NOT_STARTED' || ocr.executionStatus === 'PROCESSING' || ocr.executionStatus === 'TIMEOUT') return 'WAIT_FOR_OCR';
+    if (ocr.executionStatus === 'NOT_STARTED' || ocr.executionStatus === 'PROCESSING') return 'WAIT_FOR_OCR';
+    if (ocr.executionStatus === 'TIMEOUT') return 'RETRY_OCR';
     if (ocr.assessment === 'REUPLOAD_REQUIRED' || ocr.executionStatus === 'FAILED') return 'UPLOAD_AGAIN';
     return ocr.assessment === 'PASSED' ? 'READY_TO_SUBMIT' : 'SUBMIT_WITH_MANUAL_REVIEW';
   }

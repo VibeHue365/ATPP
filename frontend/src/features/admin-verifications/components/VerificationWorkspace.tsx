@@ -55,12 +55,28 @@ const ocrSupportedTypes = new Set<ProviderDocumentType>([
   'PROFESSIONAL_CERTIFICATE',
 ]);
 
+const adminWarningLabels: Record<string, string> = {
+  IMAGE_TOO_DARK: 'Ảnh quá tối',
+  IMAGE_TOO_BRIGHT: 'Ảnh quá sáng',
+  IMAGE_LOW_CONTRAST: 'Độ tương phản thấp',
+  IMAGE_BLURRY: 'Ảnh bị mờ',
+  OCR_TEXT_EMPTY: 'Không đọc được chữ',
+  OCR_ID_NUMBER_NOT_FOUND: 'Không thấy số định danh',
+  OWNER_NAME_UNCERTAIN: 'Tên có sai lệch nhỏ',
+  OWNER_NAME_MISMATCH: 'Tên không khớp',
+  OCR_LOW_CONFIDENCE: 'Độ tin cậy thấp',
+  ID_NUMBER_INCONSISTENT: 'Cấu trúc số định danh sai',
+  OCR_HEARTBEAT_TIMEOUT: 'Hết thời gian chờ',
+  PDF_OCR_REQUIRES_MANUAL_REVIEW: 'PDF cần duyệt thủ công',
+};
+
 const ocrNextActionLabel = (action?: string | null) => {
   const labels: Record<string, string> = {
     WAIT_FOR_OCR: 'Đang chờ kết quả OCR',
     UPLOAD_AGAIN: 'Cần tải lại tài liệu',
     READY_TO_SUBMIT: 'Sẵn sàng để duyệt',
     SUBMIT_WITH_MANUAL_REVIEW: 'Cần đối chiếu thủ công',
+    RETRY_OCR: 'Hết thời gian chờ, cần chạy lại',
   };
   return action ? labels[action] ?? action : null;
 };
@@ -102,8 +118,9 @@ function VerificationDocuments({ detail, disabled, onRunOcr }: {
         {(detail.documents ?? []).map((document) => {
           const version = currentDocumentVersion(document);
           const idNumber = ocrValue(version?.extractedFields?.idNumberMasked);
+          const fullName = ocrValue(version?.extractedFields?.fullName);
           const canRunOcr = ocrSupportedTypes.has(document.documentType);
-          const canRetryOcr = version?.ocrStatus === 'NOT_STARTED' || version?.ocrStatus === 'OCR_FAILED';
+          const canRetryOcr = Boolean(version && version.ocrStatus !== 'OCR_PROCESSING');
           const confidence = typeof version?.ocrConfidence === 'number'
             ? `${Math.round(version.ocrConfidence * 100)}%`
             : null;
@@ -130,17 +147,37 @@ function VerificationDocuments({ detail, disabled, onRunOcr }: {
                     ? `Số CCCD: ${idNumber}`
                     : version?.originalFileName ?? 'Chưa có tệp tải lên'}
                 </span>
+                {fullName && (
+                  <span style={{ fontSize: 11, color: '#047857', fontWeight: 600 }}>
+                    Họ tên: {fullName}
+                  </span>
+                )}
               </button>
               <div className="admin-verification-document__meta">
                 <span className={statusClass(version?.ocrStatus ?? 'NOT_STARTED')}>
                   {ocrStatusLabel(version?.ocrStatus)}
                 </span>
                 {confidence && <small className='admin-verification-document__confidence'>Tin cậy: {confidence}</small>}
-                {version?.mismatchFlags?.length ? (
-                  <small className='admin-verification-document__warning'>
-                    {version.mismatchFlags.length} cảnh báo cần đối chiếu
-                  </small>
-                ) : null}
+                {version?.mismatchFlags && version.mismatchFlags.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                    {version.mismatchFlags.map((flag) => (
+                      <span
+                        key={flag}
+                        style={{
+                          fontSize: 10,
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          backgroundColor: '#fffbeb',
+                          color: '#b45309',
+                          border: '1px solid #fef3c7',
+                          fontWeight: 500,
+                        }}
+                      >
+                        {adminWarningLabels[flag] || flag}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {nextAction && <small className='admin-verification-document__next-action'>{nextAction}</small>}
                 {canRunOcr && version && canRetryOcr && (
                   <button

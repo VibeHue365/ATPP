@@ -12,8 +12,12 @@ export interface ComboPricingSummary {
 
 export const resolveImageUrl = (url?: string, fallback: string = DEFAULT_AODAI_IMAGE_FALLBACK): string => {
   if (!url) return fallback;
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:')) return url;
-  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
+    const normalized = url.startsWith('/') ? url : `/${url}`;
+    return `${API_BASE_URL}${normalized}`;
+  }
+  return url.startsWith('/') ? url : `/${url}`;
 };
 
 export const calculateComboPricing = (combo: ComboDeal): ComboPricingSummary => {

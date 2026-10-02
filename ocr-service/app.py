@@ -70,31 +70,84 @@ async def run_ocr(file: UploadFile = File(...)) -> dict[str, object]:
 
 def parse_tesseract_tsv(tsv: str) -> dict[str, object]:
     lines = [line for line in tsv.splitlines() if line.strip()]
-    words: list[str] = []
-    confidences: list[float] = []
+    if len(lines) <= 1:
+        return {"text": "", "confidence": 0.0, "lines": []}
+
+    line_groups: dict[tuple[int, int, int], list[dict]] = {}
+    valid_confidences: list[float] = []
+    all_words: list[str] = []
 
     for line in lines[1:]:
         columns = line.split("\t")
         if len(columns) < 12:
             continue
 
-        text = columns[11].strip()
-        if text:
-            words.append(text)
-
         try:
-            confidence = float(columns[10])
+            level = int(columns[0])
+            block_num = int(columns[2])
+            par_num = int(columns[3])
+            line_num = int(columns[4])
+            left = int(columns[6])
+            top = int(columns[7])
+            width = int(columns[8])
+            height = int(columns[9])
+            conf = float(columns[10])
         except ValueError:
             continue
 
-        if confidence >= 0:
-            confidences.append(confidence / 100)
+        text = columns[11].strip()
+        if not text:
+            continue
 
-    average_confidence = (
-        sum(confidences) / len(confidences) if confidences else 0
-    )
+        # Level 5 in Tesseract TSV represents individual words
+        if level != 5:
+            continue
+
+        all_words.append(text)
+
+        word_info = {
+            "text": text,
+            "conf": conf,
+            "left": left,
+            "top": top,
+            "width": width,
+            "height": height,
+        }
+        key = (block_num, par_num, line_num)
+        if key not in line_groups:
+            line_groups[key] = []
+        line_groups[key].append(word_info)
+
+        # Filter noise for global confidence
+        if conf > 30 and len(text) >= 2:
+            valid_confidences.append(conf / 100.0)
+
+    formatted_lines: list[dict[str, object]] = []
+    for words in line_groups.values():
+        if not words:
+            continue
+        line_text = " ".join(w["text"] for w in words)
+        min_left = min(w["left"] for w in words)
+        min_top = min(w["top"] for w in words)
+        max_right = max(w["left"] + w["width"] for w in words)
+        max_bottom = max(w["top"] + w["height"] for w in words)
+        line_conf = sum(w["conf"] for w in words) / len(words)
+        formatted_lines.append({
+            "text": line_text,
+            "confidence": round(line_conf / 100.0, 2),
+            "bbox": [min_left, min_top, max_right - min_left, max_bottom - min_top],
+        })
+
+    if valid_confidences:
+        avg_conf = sum(valid_confidences) / len(valid_confidences)
+    elif all_words:
+        all_confs = [w["conf"] for words in line_groups.values() for w in words if w["conf"] >= 0]
+        avg_conf = (sum(all_confs) / len(all_confs) / 100.0) if all_confs else 0.0
+    else:
+        avg_conf = 0.0
 
     return {
-        "text": " ".join(words),
-        "confidence": round(average_confidence, 2),
+        "text": " ".join(all_words),
+        "confidence": round(avg_conf, 2),
+        "lines": formatted_lines,
     }

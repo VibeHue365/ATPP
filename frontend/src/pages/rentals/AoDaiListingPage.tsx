@@ -18,24 +18,31 @@ import { httpClient } from "../../services/httpClient";
 import { API_BASE_URL } from "../../config/env";
 import { useAuth } from "../../features/auth/hooks/useAuth";
 import { useToast } from "../../components/feedback/Toast";
+import { ROUTES } from "../../config/routes";
 import Swal from "sweetalert2";
 
 
 import "./AoDaiListingPage.css";
 
+const DEFAULT_AODAI_IMAGE = "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=600&q=80";
+
 const getImageUrl = (url?: string) => {
   if (!url) {
-    return "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=600&q=80";
+    return DEFAULT_AODAI_IMAGE;
+  }
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:") || url.startsWith("blob:")) {
+    return url;
   }
   if (url.includes("/public-media/legacy/")) {
     const parts = url.split("/public-media/legacy/");
     const filename = parts[parts.length - 1];
     return `${API_BASE_URL}/uploads/${filename}`;
   }
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    return url;
+  if (url.startsWith("/uploads/") || url.startsWith("uploads/")) {
+    const normalized = url.startsWith("/") ? url : `/${url}`;
+    return `${API_BASE_URL}${normalized}`;
   }
-  return `${API_BASE_URL}${url}`;
+  return url.startsWith("/") ? url : `/${url}`;
 };
 
 interface ProductFromDb {
@@ -135,6 +142,58 @@ export const AoDaiListingPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const ITEMS_PER_PAGE = 9;
   const [debouncedMaxPrice, setDebouncedMaxPrice] = useState(maxPrice);
+  const [isPersonalizedFilterActive, setIsPersonalizedFilterActive] = useState<boolean>(true);
+
+  // Onboarding user preferences extraction
+  const userPreferences = user?.preferences;
+  const userHasOnboarding = Boolean(user?.hasCompletedOnboarding && userPreferences);
+  const userPrefSize = (userPreferences?.sizeInfo?.preferredSize || '').toUpperCase();
+  const userPrefRawColor = userPreferences?.favoriteColors?.[0] || '';
+  const userPrefRawStyle = userPreferences?.preferredAoDaiStyles?.[0] || '';
+  const userPrefRawOccasion = userPreferences?.preferredOccasions?.[0] || '';
+
+  const formatColorName = (val?: string) => {
+    if (!val) return '';
+    const map: Record<string, string> = {
+      RED_GOLD: 'Đỏ · Vàng',
+      PASTEL: 'Pastel nhẹ',
+      DARK: 'Tông trầm',
+      COLORFUL: 'Rực rỡ',
+      WHITE: 'Trắng',
+      RED: 'Đỏ',
+      PINK: 'Hồng',
+      BLUE: 'Xanh',
+      BLACK: 'Đen',
+    };
+    return map[val.toUpperCase()] || val;
+  };
+
+  const formatStyleName = (val?: string) => {
+    if (!val) return '';
+    const map: Record<string, string> = {
+      TRADITIONAL: 'Truyền thống',
+      MODERN: 'Cách tân',
+      EDGY: 'Phá cách',
+    };
+    return map[val.toUpperCase()] || val;
+  };
+
+  const formatOccasionName = (val?: string) => {
+    if (!val) return '';
+    const map: Record<string, string> = {
+      GRADUATION: 'Kỷ yếu',
+      WEDDING: 'Cưới hỏi',
+      FESTIVAL: 'Lễ hội',
+      EVENT: 'Sự kiện',
+    };
+    return map[val.toUpperCase()] || val;
+  };
+
+  const isPersonalizedRanking =
+    isPersonalizedFilterActive &&
+    sortOption === 'recommended' &&
+    Boolean(user?.id) &&
+    userHasOnboarding;
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedMaxPrice(maxPrice), 250);
@@ -197,7 +256,11 @@ export const AoDaiListingPage: React.FC = () => {
         }
         params.append('page', currentPage.toString());
         params.append('limit', ITEMS_PER_PAGE.toString());
-        const usePersonalizedRanking = sortOption === 'recommended' && Boolean(user?.id);
+        const usePersonalizedRanking =
+          isPersonalizedFilterActive &&
+          sortOption === 'recommended' &&
+          Boolean(user?.id) &&
+          userHasOnboarding;
         if (!usePersonalizedRanking) {
           params.append(
             'sort',
@@ -245,6 +308,8 @@ export const AoDaiListingPage: React.FC = () => {
     currentPage,
     sortOption,
     user?.id,
+    isPersonalizedFilterActive,
+    userHasOnboarding,
   ]);
 
   // 1. Dynamic statistics computed directly from live product data
@@ -587,6 +652,71 @@ export const AoDaiListingPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Onboarding Personalized Filter Card */}
+            {userHasOnboarding && (
+              <div className="lume-onboarding-card">
+                <div className="lume-onboarding-card-header">
+                  <div className="lume-onboarding-card-badge">
+                    <Sparkles size={14} className="lume-sparkle-icon" />
+                    <span>HỒ SƠ CỦA BẠN</span>
+                  </div>
+                  <Link
+                    to={ROUTES.ONBOARDING}
+                    className="lume-onboarding-edit-link"
+                    title="Chỉnh sửa số đo & sở thích"
+                  >
+                    Đổi sở thích
+                  </Link>
+                </div>
+
+                <p className="lume-onboarding-card-subtitle">
+                  Đang áp dụng số đo & phong cách đã khảo sát:
+                </p>
+
+                <div className="lume-onboarding-chips">
+                  {userPrefSize && (
+                    <span className="lume-onboarding-chip">
+                      Size <strong>{userPrefSize}</strong>
+                    </span>
+                  )}
+                  {userPrefRawColor && (
+                    <span className="lume-onboarding-chip">
+                      Tông <strong>{formatColorName(userPrefRawColor)}</strong>
+                    </span>
+                  )}
+                  {userPrefRawStyle && (
+                    <span className="lume-onboarding-chip">
+                      Gu <strong>{formatStyleName(userPrefRawStyle)}</strong>
+                    </span>
+                  )}
+                  {userPrefRawOccasion && (
+                    <span className="lume-onboarding-chip">
+                      Dịp <strong>{formatOccasionName(userPrefRawOccasion)}</strong>
+                    </span>
+                  )}
+                </div>
+
+                <div className="lume-onboarding-toggle-row">
+                  <label className="lume-toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={isPersonalizedFilterActive}
+                      onChange={(e) => {
+                        setIsPersonalizedFilterActive(e.target.checked);
+                        setCurrentPage(1);
+                      }}
+                      className="lume-toggle-checkbox"
+                    />
+                    <span className="lume-toggle-text">
+                      {isPersonalizedFilterActive
+                        ? "Đang bật gợi ý cá nhân hóa"
+                        : "Tắt lọc (Xem toàn bộ kho)"}
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
+
             {/* Section 1: Loại áo dài (Dynamic live counts) */}
             <div className="lume-filter-section">
               <h3 className="lume-filter-heading">Loại áo dài</h3>
@@ -650,14 +780,21 @@ export const AoDaiListingPage: React.FC = () => {
               <div className="lume-size-options">
                 {SIZE_OPTIONS.map((size) => {
                   const isSelected = selectedSizes.includes(size);
+                  const isUserSize = userPrefSize === size.toUpperCase();
                   return (
                     <button
                       key={size}
                       type="button"
-                      className={`lume-size-btn ${isSelected ? "is-selected" : ""}`}
+                      className={`lume-size-btn ${isSelected ? "is-selected" : ""} ${isUserSize ? "is-user-preferred" : ""}`}
                       onClick={() => handleToggleSize(size)}
+                      title={isUserSize ? "Kích cỡ đề xuất theo số đo của bạn" : undefined}
                     >
-                      {size}
+                      <span>{size}</span>
+                      {isUserSize && (
+                        <span className="lume-size-star" title="Size đề xuất theo số đo của bạn">
+                          ★
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -773,10 +910,38 @@ export const AoDaiListingPage: React.FC = () => {
             <div className="lume-results-toolbar">
               <div className="lume-toolbar-left">
                 <span className="lume-toolbar-eyebrow">DANH SÁCH ÁO DÀI</span>
-                <h2 className="lume-toolbar-title">Mẫu áo dài phù hợp</h2>
-                <span className="lume-toolbar-count">
-                  {totalCount} kết quả được tìm thấy
-                </span>
+                <h2 className="lume-toolbar-title">
+                  {isPersonalizedRanking
+                    ? "Mẫu áo dài gợi ý theo hồ sơ của bạn"
+                    : "Mẫu áo dài cho thuê"}
+                </h2>
+                <div className="lume-toolbar-count-row">
+                  <span className="lume-toolbar-count">
+                    {isPersonalizedRanking ? (
+                      <>
+                        Tìm thấy <strong>{totalCount}</strong> mẫu phù hợp với vóc dáng & gu của bạn
+                      </>
+                    ) : (
+                      <>
+                        <strong>{totalCount}</strong> kết quả được tìm thấy
+                      </>
+                    )}
+                  </span>
+                  {userHasOnboarding && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPersonalizedFilterActive(!isPersonalizedFilterActive);
+                        setCurrentPage(1);
+                      }}
+                      className="lume-view-all-btn"
+                    >
+                      {isPersonalizedFilterActive && sortOption === "recommended"
+                        ? "Xem toàn bộ kho áo dài"
+                        : "Bật lại lọc theo hồ sơ của tôi"}
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="lume-sort-dropdown">
@@ -949,6 +1114,10 @@ export const AoDaiListingPage: React.FC = () => {
                             alt={product.name}
                             className="lume-card-img"
                             loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = DEFAULT_AODAI_IMAGE;
+                            }}
                           />
                         </div>
                       </div>

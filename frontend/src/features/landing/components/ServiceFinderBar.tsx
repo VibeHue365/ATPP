@@ -107,7 +107,7 @@ export const ServiceFinderBar: React.FC = () => {
         {/* Submit Button: Tìm dịch vụ */}
         <button
           type="submit"
-          className="w-full lg:w-auto h-full min-h-[44px] py-2.5 px-6 rounded-xl text-xs md:text-sm font-bold text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs hover:opacity-95 border-none shrink-0 whitespace-nowrap"
+          className="w-full sm:col-span-2 lg:col-span-1 h-full min-h-[44px] py-2.5 px-6 rounded-xl text-xs md:text-sm font-bold text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs hover:opacity-95 border-none shrink-0 whitespace-nowrap"
           style={{ backgroundColor: 'var(--landing-primary)' }}
         >
           <Search size={16} />

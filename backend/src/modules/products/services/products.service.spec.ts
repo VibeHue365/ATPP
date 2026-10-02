@@ -17,6 +17,7 @@ describe('ProductsService moderation', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findPublicById: jest.fn(),
+      findModerationItemById: jest.fn(),
       findByProvider: jest.fn(),
       findAllActive: jest.fn(),
       update: jest.fn(),
@@ -310,7 +311,7 @@ describe('ProductsService moderation', () => {
       moderationStatus: ProductModerationStatus.Approved,
     };
     const { service } = createService({
-      findById: jest.fn().mockResolvedValue(existing),
+      findModerationItemById: jest.fn().mockResolvedValue(existing),
     });
 
     await expect(
@@ -341,7 +342,7 @@ describe('ProductsService moderation', () => {
     };
     const moderated = { ...existing, moderationStatus: ProductModerationStatus.Approved };
     const { service, productsRepository } = createService({
-      findById: jest.fn().mockResolvedValue(existing),
+      findModerationItemById: jest.fn().mockResolvedValue(existing),
       moderate: jest.fn().mockResolvedValue(moderated),
     });
 
@@ -371,7 +372,7 @@ describe('ProductsService moderation', () => {
 
   it('rejects an approved custom tag that does not belong to the product', async () => {
     const { service } = createService({
-      findById: jest.fn().mockResolvedValue({
+      findModerationItemById: jest.fn().mockResolvedValue({
         _id: productId,
         moderationStatus: ProductModerationStatus.PendingReview,
         customTags: [],

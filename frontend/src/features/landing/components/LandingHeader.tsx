@@ -55,6 +55,10 @@ export const LandingHeader: React.FC = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notiRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
   const getNotificationVisual = (type: string) => {
     const t = (type || '').toUpperCase();
     if (t === 'BOOKING') {
@@ -201,33 +205,17 @@ export const LandingHeader: React.FC = () => {
         <div 
           className="lume-header__content w-full flex items-center transition-all"
         >
-          {/* Left: Logo Box & Subtitle */}
+          {/* Left: Brand Logo */}
           <Link 
             to="/" 
-            aria-label="LUMÉ - Áo dài & Chụp ảnh"
-            className="flex items-center gap-2.5 text-decoration-none group shrink-0"
+            aria-label="TàGo - Áo dài & Chụp ảnh"
+            className="flex items-center text-decoration-none group shrink-0"
           >
-            {/* Near Circular Burgundy Icon */}
-            <div 
-              className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center font-serif font-black text-lg text-white shadow-2xs transition-transform group-hover:scale-105 shrink-0"
-              style={{ backgroundColor: 'var(--landing-primary)' }}
-            >
-              L
-            </div>
-            <div className="flex flex-col shrink-0">
-              <span 
-                className="font-header font-black text-base md:text-lg tracking-tight leading-none"
-                style={{ color: 'var(--landing-text-primary)' }}
-              >
-                LUMÉ
-              </span>
-              <span 
-                className="text-[9px] font-bold tracking-widest uppercase mt-0.5"
-                style={{ color: 'var(--landing-text-muted)' }}
-              >
-                ÁO DÀI & CHỤP ẢNH
-              </span>
-            </div>
+            <img 
+              src="/logo-transparent.png" 
+              alt="TàGo - Áo dài & Chụp ảnh" 
+              className="h-9 md:h-11 w-auto object-contain transition-transform group-hover:scale-105"
+            />
           </Link>
 
           {/* Center: Desktop Navigation Links (Visible exclusively on lg: desktop) */}
@@ -523,6 +511,9 @@ export const LandingHeader: React.FC = () => {
                       <Link to={ROUTES.PROFILE} onClick={() => setIsDropdownOpen(false)} className="lume-account__item">
                         <UserIcon size={16} /><span>Trang cá nhân</span>
                       </Link>
+                      <Link to={ROUTES.ONBOARDING} onClick={() => setIsDropdownOpen(false)} className="lume-account__item">
+                        <Sparkles size={16} style={{ color: 'var(--landing-primary)' }} /><span>Khảo sát phong cách & Số đo</span>
+                      </Link>
                       <Link to={ROUTES.SETTINGS} onClick={() => setIsDropdownOpen(false)} className="lume-account__item">
                         <Settings size={16} /><span>Cài đặt</span>
                       </Link>
@@ -581,58 +572,149 @@ export const LandingHeader: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Drawer Menu */}
+      {/* Mobile Drawer Menu with Backdrop */}
       {isMobileMenuOpen && (
-        <nav 
-          id="mobile-navigation-menu"
-          className="lume-mobile-menu lg:hidden max-w-[1440px] mx-auto px-4 md:px-8 mt-3"
-        >
+        <>
           <div 
-            className="p-4 rounded-2xl bg-white shadow-xl border flex flex-col gap-3 font-header text-sm font-semibold animate-in fade-in slide-in-from-top-2"
-            style={{ borderColor: 'var(--landing-border)' }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 lg:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-hidden="true"
+          />
+          <nav 
+            id="mobile-navigation-menu"
+            className="lume-mobile-menu lg:hidden fixed top-[66px] inset-x-3 z-50 max-w-[480px] mx-auto"
           >
-            <button 
-              type="button"
-              onClick={() => scrollToSection('service-finder')}
-              className="text-left py-2 border-b bg-transparent border-none p-0 cursor-pointer"
-              style={{ borderColor: 'var(--landing-border)', color: 'var(--landing-text-primary)' }}
+            <div 
+              className="p-5 rounded-2xl bg-white shadow-2xl border flex flex-col gap-2 font-header text-sm font-semibold max-h-[calc(100vh-90px)] overflow-y-auto"
+              style={{ borderColor: 'var(--landing-border)' }}
             >
-              Dịch vụ
-            </button>
-            <Link 
-              to={ROUTES.RENTALS}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="py-2 border-b text-decoration-none"
-              style={{ borderColor: 'var(--landing-border)', color: 'var(--landing-text-primary)' }}
-            >
-              Áo dài
-            </Link>
-            <Link 
-              to={ROUTES.PHOTOGRAPHERS}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="py-2 border-b text-decoration-none"
-              style={{ borderColor: 'var(--landing-border)', color: 'var(--landing-text-primary)' }}
-            >
-              Chụp ảnh
-            </Link>
-            <Link 
-              to={ROUTES.COMBOS}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="py-2 border-b text-decoration-none"
-              style={{ borderColor: 'var(--landing-border)', color: 'var(--landing-text-primary)' }}
-            >
-              Combo
-            </Link>
-            <button 
-              type="button"
-              onClick={() => scrollToSection('locations')}
-              className="text-left py-2 bg-transparent border-none p-0 cursor-pointer"
-              style={{ color: 'var(--landing-text-primary)' }}
-            >
-              Địa điểm
-            </button>
-          </div>
-        </nav>
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  scrollToSection('service-finder');
+                }}
+                className="text-left py-2.5 px-3 rounded-lg hover:bg-stone-50 border-none bg-transparent cursor-pointer flex items-center justify-between"
+                style={{ color: 'var(--landing-text-primary)' }}
+              >
+                <span>Dịch vụ</span>
+                <ChevronRight size={16} className="text-stone-400" />
+              </button>
+
+              <Link 
+                to={ROUTES.RENTALS}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2.5 px-3 rounded-lg hover:bg-stone-50 text-decoration-none flex items-center justify-between"
+                style={{ color: 'var(--landing-text-primary)' }}
+              >
+                <span>Thuê áo dài</span>
+                <ChevronRight size={16} className="text-stone-400" />
+              </Link>
+
+              <Link 
+                to={ROUTES.PHOTOGRAPHERS}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2.5 px-3 rounded-lg hover:bg-stone-50 text-decoration-none flex items-center justify-between"
+                style={{ color: 'var(--landing-text-primary)' }}
+              >
+                <span>Nhiếp ảnh gia</span>
+                <ChevronRight size={16} className="text-stone-400" />
+              </Link>
+
+              <Link 
+                to={ROUTES.COMBOS}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2.5 px-3 rounded-lg hover:bg-stone-50 text-decoration-none flex items-center justify-between"
+                style={{ color: 'var(--landing-text-primary)' }}
+              >
+                <span>Combo trọn gói</span>
+                <ChevronRight size={16} className="text-stone-400" />
+              </Link>
+
+              <Link 
+                to={ROUTES.VIRTUAL_TRYON_3D}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2.5 px-3 rounded-lg hover:bg-stone-50 text-decoration-none flex items-center justify-between"
+                style={{ color: 'var(--landing-primary)' }}
+              >
+                <span className="flex items-center gap-2">
+                  <Sparkles size={16} />
+                  Thử đồ AI 3D
+                </span>
+                <ChevronRight size={16} className="text-stone-400" />
+              </Link>
+
+              <Link 
+                to={ROUTES.PROVIDER_REGISTER}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="py-2.5 px-3 rounded-lg hover:bg-stone-50 text-decoration-none flex items-center justify-between border-t mt-1 pt-3"
+                style={{ borderColor: 'var(--landing-border)', color: '#5D4037' }}
+              >
+                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+                  <ShieldCheck size={16} />
+                  Trở thành Đối tác
+                </span>
+                <ChevronRight size={16} className="text-stone-400" />
+              </Link>
+
+              {/* Mobile Auth Actions */}
+              <div className="border-t pt-3 mt-1 flex flex-col gap-2" style={{ borderColor: 'var(--landing-border)' }}>
+                {isAuthenticated ? (
+                  <>
+                    <Link
+                      to={ROUTES.PROFILE}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="py-2.5 px-3 rounded-lg bg-stone-50 text-decoration-none flex items-center gap-2.5 text-xs font-bold"
+                      style={{ color: 'var(--landing-text-primary)' }}
+                    >
+                      <UserIcon size={16} />
+                      <span>{user?.fullName || 'Tài khoản của tôi'}</span>
+                    </Link>
+                    <Link
+                      to={ROUTES.ONBOARDING}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="py-2.5 px-3 rounded-lg bg-stone-50 text-decoration-none flex items-center gap-2.5 text-xs font-semibold"
+                      style={{ color: 'var(--landing-primary)' }}
+                    >
+                      <Sparkles size={16} />
+                      <span>Khảo sát phong cách & Số đo</span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        handleLogout();
+                      }}
+                      className="py-2 px-3 rounded-lg text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 border-none bg-transparent cursor-pointer flex items-center gap-2"
+                    >
+                      <LogOut size={15} />
+                      <span>Đăng xuất</span>
+                    </button>
+                  </>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <Link
+                      to={ROUTES.LOGIN}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="py-2.5 text-center text-xs font-bold rounded-xl border text-decoration-none"
+                      style={{ color: 'var(--landing-text-primary)', borderColor: 'var(--landing-border)' }}
+                    >
+                      Đăng nhập
+                    </Link>
+                    <Link
+                      to={ROUTES.REGISTER}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="py-2.5 text-center text-xs font-bold text-white rounded-xl text-decoration-none shadow-2xs"
+                      style={{ backgroundColor: 'var(--landing-primary)' }}
+                    >
+                      Đăng ký
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          </nav>
+        </>
       )}
     </header>
   );

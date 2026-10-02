@@ -42,6 +42,7 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(10)
   @IsString({ each: true })
   images?: string[];
 

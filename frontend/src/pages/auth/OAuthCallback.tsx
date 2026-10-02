@@ -32,6 +32,8 @@ export const OAuthCallback: React.FC = () => {
             navigate(ROUTES.ADMIN_DASHBOARD, { replace: true });
           } else if (user?.roles?.includes('PROVIDER')) {
             navigate(ROUTES.PROVIDER_DASHBOARD, { replace: true });
+          } else if (user?.hasCompletedOnboarding === false) {
+            navigate(ROUTES.ONBOARDING, { replace: true });
           } else {
             navigate(ROUTES.LANDING, { replace: true });
           }

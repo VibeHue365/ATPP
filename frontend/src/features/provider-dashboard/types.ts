@@ -63,6 +63,8 @@ export interface Product {
     mappedTagCode?: string | null;
   }>;
   status: 'ACTIVE' | 'DRAFT' | 'INACTIVE';
+  moderationStatus?: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'HIDDEN';
+  moderationReason?: string | null;
   taggingDecisionVersion?: number;
 }
 

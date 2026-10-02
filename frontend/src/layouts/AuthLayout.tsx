@@ -79,12 +79,8 @@ export const AuthLayout: React.FC = () => {
 
           {/* Top Brand Badge & Slide Dots */}
           <div className="lume-auth-visual-top">
-            <Link to={ROUTES.LANDING} className="lume-auth-brand-badge text-decoration-none">
-              <div className="lume-auth-brand-badge-icon">L</div>
-              <div className="flex flex-col">
-                <span className="lume-auth-brand-badge-text">LUMÉ</span>
-                <span className="text-[8px] tracking-widest text-white/70 font-semibold uppercase">Áo dài & Chụp ảnh</span>
-              </div>
+            <Link to={ROUTES.LANDING} className="lume-auth-brand-badge text-decoration-none" style={{ background: '#FFFFFF', padding: '6px 14px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+              <img src="/logo-transparent.png" alt="TàGo" style={{ height: '28px', width: 'auto', objectFit: 'contain' }} />
             </Link>
 
             <div className="lume-auth-visual-dots">
@@ -159,10 +155,7 @@ export const AuthLayout: React.FC = () => {
 
               {/* Mobile Brand Logo */}
               <Link to={ROUTES.LANDING} className="lume-auth-mobile-logo text-decoration-none">
-                <div className="w-7 h-7 rounded-full bg-[#B52B47] text-white flex items-center justify-center font-bold text-xs">
-                  L
-                </div>
-                <span className="font-header font-black text-sm text-[#292324]">LUMÉ</span>
+                <img src="/logo-transparent.png" alt="TàGo" style={{ height: '32px', width: 'auto', objectFit: 'contain' }} />
               </Link>
             </div>
 
@@ -189,7 +182,7 @@ export const AuthLayout: React.FC = () => {
 
             {/* Bottom Copyright */}
             <div className="mt-6 pt-4 border-t border-[#E8DEDF]/60 text-center text-[11px] text-[#988B8D]">
-              © {new Date().getFullYear()} LUMÉ Heritage. Bảo mật và bản quyền được đảm bảo.
+              © {new Date().getFullYear()} TàGo. Bảo mật và bản quyền được đảm bảo.
             </div>
 
           </div>

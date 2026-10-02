@@ -1,15 +1,31 @@
 import React, { useEffect } from 'react';
 import {
   X,
-  Scissors,
+  Shirt,
   Camera,
   Layers,
   Info,
   Check,
   Search,
-  Calculator,
-  Calendar,
+  CalendarDays,
   Sparkles,
+  Clock,
+  Tag,
+  Flame,
+  Zap,
+  Users,
+  Package,
+  Eye,
+  Receipt,
+  CreditCard,
+  Gift,
+  TrendingDown,
+  Link2,
+  Combine,
+  SlidersHorizontal,
+  Coins,
+  Percent,
+  BadgePercent,
 } from 'lucide-react';
 import { Modal } from '../../../../components/common/Modal';
 import { getImageUrl } from '../../shared/mediaHelpers';
@@ -139,17 +155,77 @@ export const ComboModal: React.FC<ComboModalProps> = ({
 
   const selectedPackageMaxPeople = selectedPackage?.maxPeople ?? null;
 
-  // Dynamic Price Calculation
+  // Dynamic Price Calculation & 2-Way Sync
   const aoDaiBasePrice = selectedProduct?.basePrice || 0;
   const pkgBasePrice = selectedPackage?.price || 0;
   const totalOriginalPrice = aoDaiBasePrice + pkgBasePrice;
-  const effectiveDiscountPercent = Number(cDiscount) || 0;
 
-  const calculatedComboPrice = cPrice
-    ? Number(cPrice)
-    : Math.round(totalOriginalPrice * (1 - effectiveDiscountPercent / 100));
+  const calculatedComboPrice =
+    cPrice !== '' && cPrice !== undefined
+      ? Number(cPrice)
+      : totalOriginalPrice > 0
+      ? Math.round(totalOriginalPrice * (1 - (Number(cDiscount) || 0) / 100))
+      : 0;
 
   const customerSavings = Math.max(0, totalOriginalPrice - calculatedComboPrice);
+  const effectiveDiscountPercent =
+    totalOriginalPrice > 0
+      ? Math.round((customerSavings / totalOriginalPrice) * 100)
+      : Number(cDiscount) || 0;
+
+  const QUICK_DISCOUNTS = [10, 15, 20, 25, 30, 40, 50];
+
+  const handleDiscountChange = (val: number | '') => {
+    setCDiscount(val);
+    if (val === '' || totalOriginalPrice <= 0) {
+      setCPrice('');
+      return;
+    }
+    const num = Math.max(1, Math.min(80, Number(val)));
+    const newPrice = Math.round(totalOriginalPrice * (1 - num / 100));
+    setCPrice(String(newPrice));
+  };
+
+  const handlePriceChange = (val: string) => {
+    setCPrice(val);
+    if (!val || totalOriginalPrice <= 0) {
+      return;
+    }
+    const numPrice = Number(val);
+    if (numPrice <= 0) {
+      setCDiscount(80);
+      return;
+    }
+    if (numPrice >= totalOriginalPrice) {
+      setCDiscount(1);
+      return;
+    }
+    const savings = totalOriginalPrice - numPrice;
+    const computedPercent = Math.max(
+      1,
+      Math.min(80, Math.round((savings / totalOriginalPrice) * 100))
+    );
+    setCDiscount(computedPercent);
+  };
+
+  const handleQuickDuration = (days: number) => {
+    const fromDate = cValidFrom ? new Date(cValidFrom) : new Date();
+    const toDate = new Date(fromDate);
+    toDate.setDate(toDate.getDate() + days);
+    setCValidTo(toDate.toISOString().split('T')[0]);
+    if (!cValidFrom) {
+      setCValidFrom(fromDate.toISOString().split('T')[0]);
+    }
+  };
+
+  const handleEndOfYear = () => {
+    const now = new Date();
+    const endOfYear = new Date(now.getFullYear(), 11, 31);
+    setCValidTo(endOfYear.toISOString().split('T')[0]);
+    if (!cValidFrom) {
+      setCValidFrom(now.toISOString().split('T')[0]);
+    }
+  };
 
   const filteredAoDaiList = myProductsList.filter((prod: any) => {
     if (!aoDaiSearch.trim()) return true;
@@ -185,8 +261,8 @@ export const ComboModal: React.FC<ComboModalProps> = ({
           {/* Header */}
           <div className="cb-modal-header">
             <div className="cb-modal-title-group">
-              <div className="cb-modal-icon-box">
-                <Layers size={22} />
+              <div className="cb-modal-icon-box" style={{ background: 'linear-gradient(135deg, #881337 0%, #BE123C 100%)', color: '#FFFFFF', boxShadow: '0 4px 14px rgba(136, 19, 55, 0.28)' }}>
+                <Sparkles size={22} />
               </div>
               <div>
                 <h3 className="cb-modal-title">
@@ -210,12 +286,14 @@ export const ComboModal: React.FC<ComboModalProps> = ({
           {/* Form Body: 2 Wide Columns */}
           <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             <div className="cb-modal-body">
-              {/* ==================== CỘT TRÁI ==================== */}
-              <div className="cb-modal-col">
+              {/* ==================== CỘT TRÁI (FORM NHẬP LIỆU) ==================== */}
+              <div className="cb-modal-col-left">
                 {/* Section 1: Thông tin cơ bản */}
                 <div className="cb-form-section">
                   <h4 className="cb-section-title">
-                    <Sparkles size={14} color="var(--cb-primary)" />
+                    <span className="cb-sec-icon-pill" style={{ background: '#FFF1F2', color: '#BE123C' }}>
+                      <Sparkles size={14} />
+                    </span>
                     1. Thông tin cơ bản
                   </h4>
 
@@ -258,13 +336,16 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                 {/* Section 2: Chọn sản phẩm & dịch vụ */}
                 <div className="cb-form-section">
                   <h4 className="cb-section-title">
-                    <Layers size={14} color="var(--cb-primary)" />
+                    <span className="cb-sec-icon-pill" style={{ background: '#EFF6FF', color: '#2563EB' }}>
+                      <Combine size={14} />
+                    </span>
                     2. Sản phẩm & Dịch vụ ghép cặp
                   </h4>
 
                   {/* Áo dài áp dụng */}
                   <div className="cb-field-group">
                     <label className="cb-field-label">
+                      <Shirt size={13} style={{ verticalAlign: 'middle', marginRight: 4, color: '#BE123C' }} />
                       Áo dài áp dụng <span style={{ color: '#E11D48' }}>*</span>
                     </label>
 
@@ -274,7 +355,7 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                           {prodImg ? (
                             <img src={prodImg} alt={selectedProduct?.name} />
                           ) : (
-                            <Scissors size={24} />
+                            <Shirt size={22} color="var(--cb-text-muted)" />
                           )}
                         </div>
                         <div className="cb-picker-info">
@@ -313,9 +394,20 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Connector Badge */}
+                  <div className="cb-pair-connector">
+                    <span className="cb-pair-connector-line" />
+                    <span className="cb-pair-connector-badge">
+                      <Link2 size={12} color="var(--cb-primary)" />
+                      <span>Ghép đôi trọn gói</span>
+                    </span>
+                    <span className="cb-pair-connector-line" />
+                  </div>
+
                   {/* Gói chụp ảnh */}
                   <div className="cb-field-group">
                     <label className="cb-field-label">
+                      <Camera size={13} style={{ verticalAlign: 'middle', marginRight: 4, color: '#2563EB' }} />
                       Gói chụp ảnh <span style={{ color: '#E11D48' }}>*</span>
                     </label>
 
@@ -325,7 +417,7 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                           {pkgImg ? (
                             <img src={pkgImg} alt={selectedPackage?.name} />
                           ) : (
-                            <Camera size={24} />
+                            <Camera size={22} color="var(--cb-text-muted)" />
                           )}
                         </div>
                         <div className="cb-picker-info">
@@ -369,20 +461,20 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* ==================== CỘT PHẢI ==================== */}
-              <div className="cb-modal-col">
-                {/* Section 3: Giá và ưu đãi */}
+                {/* Section 3: Giá và ưu đãi chiết khấu */}
                 <div className="cb-form-section">
                   <h4 className="cb-section-title">
-                    <Calculator size={14} color="var(--cb-primary)" />
+                    <span className="cb-sec-icon-pill" style={{ background: '#FEF3C7', color: '#D97706' }}>
+                      <BadgePercent size={14} />
+                    </span>
                     3. Giá và ưu đãi chiết khấu
                   </h4>
 
                   <div className="cb-grid-2cols">
                     <div className="cb-field-group">
                       <label className="cb-field-label">
+                        <Percent size={12} style={{ verticalAlign: 'middle', marginRight: 4, color: '#D97706' }} />
                         Chiết khấu (%) <span style={{ color: '#E11D48' }}>*</span>
                       </label>
                       <div className="cb-input-with-suffix">
@@ -395,75 +487,48 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                           required
                           value={cDiscount}
                           onChange={(e) =>
-                            setCDiscount(e.target.value === '' ? '' : Number(e.target.value))
+                            handleDiscountChange(e.target.value === '' ? '' : Number(e.target.value))
                           }
                         />
                         <span className="cb-input-suffix">%</span>
                       </div>
-                      <span className="cb-field-hint">Từ 1% - 80%</span>
+                      <div className="cb-quick-chips">
+                        {QUICK_DISCOUNTS.map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            className={`cb-chip-btn ${cDiscount === d ? 'active' : ''}`}
+                            onClick={() => handleDiscountChange(d)}
+                          >
+                            {d >= 30 ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                <Flame size={11} color="#EF4444" /> {d}%
+                              </span>
+                            ) : (
+                              `${d}%`
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="cb-field-group">
-                      <label className="cb-field-label">Giá combo tự định nghĩa</label>
+                      <label className="cb-field-label">
+                        <Coins size={12} style={{ verticalAlign: 'middle', marginRight: 4, color: 'var(--cb-primary)' }} />
+                        Giá combo khách trả
+                      </label>
                       <div className="cb-input-with-suffix">
                         <input
                           type="number"
                           min="0"
                           className="cb-input-text"
-                          placeholder="Để trống nếu tính theo %"
+                          placeholder="Tự động tính theo %"
                           value={cPrice}
-                          onChange={(e) => setCPrice(e.target.value)}
+                          onChange={(e) => handlePriceChange(e.target.value)}
                         />
                         <span className="cb-input-suffix">đ</span>
                       </div>
-                      <span className="cb-field-hint">Giá cố định tùy chọn</span>
-                    </div>
-                  </div>
-
-                  {/* Bảng tính giá động */}
-                  <div className="cb-price-summary-box">
-                    <div className="cb-price-summary-header">
-                      <span>BẢNG TÍNH TOÁN GIÁ DỰ KIẾN</span>
-                      <span>TỰ ĐỘNG CẬP NHẬT</span>
-                    </div>
-
-                    <div className="cb-price-summary-row">
-                      <span>Giá Áo Dài + Gói Chụp:</span>
-                      <span>
-                        {aoDaiBasePrice > 0 || pkgBasePrice > 0
-                          ? `${aoDaiBasePrice.toLocaleString('vi-VN')}đ + ${pkgBasePrice.toLocaleString('vi-VN')}đ`
-                          : '—'}
-                      </span>
-                    </div>
-
-                    <div className="cb-price-summary-row" style={{ color: 'var(--cb-text-muted)' }}>
-                      <span>Tổng giá gốc niêm yết:</span>
-                      <span style={{ textDecoration: 'line-through' }}>
-                        {totalOriginalPrice > 0 ? `${totalOriginalPrice.toLocaleString('vi-VN')}đ` : '—'}
-                      </span>
-                    </div>
-
-                    <div className="cb-price-summary-row highlight">
-                      <span>Giá Combo Khách Thanh Toán:</span>
-                      <span>
-                        {calculatedComboPrice > 0
-                          ? `${calculatedComboPrice.toLocaleString('vi-VN')}đ`
-                          : '0đ'}
-                      </span>
-                    </div>
-
-                    {customerSavings > 0 && (
-                      <div className="cb-price-summary-row" style={{ color: '#BE123C', fontWeight: 600 }}>
-                        <span>Tiết kiệm cho khách hàng:</span>
-                        <span>-{customerSavings.toLocaleString('vi-VN')}đ ({effectiveDiscountPercent}%)</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="cb-info-box">
-                    <Info size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-                    <div>
-                      Hệ thống tự động tính: <code>(Giá Áo + Giá Gói Chụp) × (1 - % Giảm)</code> nếu bạn không nhập giá ghi đè.
+                      <span className="cb-field-hint">Tự động đồng bộ với % chiết khấu</span>
                     </div>
                   </div>
                 </div>
@@ -471,7 +536,9 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                 {/* Section 4: Thời gian áp dụng */}
                 <div className="cb-form-section">
                   <h4 className="cb-section-title">
-                    <Calendar size={14} color="var(--cb-primary)" />
+                    <span className="cb-sec-icon-pill" style={{ background: '#ECFDF5', color: '#059669' }}>
+                      <CalendarDays size={14} />
+                    </span>
                     4. Thời gian áp dụng
                   </h4>
 
@@ -502,18 +569,39 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                       />
                     </div>
                   </div>
+
+                  <div className="cb-quick-chips" style={{ marginTop: 2 }}>
+                    <span style={{ fontSize: 11, color: 'var(--cb-text-muted)', alignSelf: 'center', marginRight: 4, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                      <Zap size={11} color="#F59E0B" /> Chọn nhanh:
+                    </span>
+                    <button type="button" className="cb-chip-btn" onClick={() => handleQuickDuration(30)}>
+                      +30 ngày
+                    </button>
+                    <button type="button" className="cb-chip-btn" onClick={() => handleQuickDuration(60)}>
+                      +60 ngày
+                    </button>
+                    <button type="button" className="cb-chip-btn" onClick={() => handleQuickDuration(90)}>
+                      +90 ngày
+                    </button>
+                    <button type="button" className="cb-chip-btn" onClick={handleEndOfYear}>
+                      Hết năm {new Date().getFullYear()}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Section 5: Giới hạn số lượng */}
                 <div className="cb-form-section">
                   <h4 className="cb-section-title">
-                    <Layers size={14} color="var(--cb-primary)" />
+                    <span className="cb-sec-icon-pill" style={{ background: '#F5F3FF', color: '#7C3AED' }}>
+                      <SlidersHorizontal size={14} />
+                    </span>
                     5. Giới hạn số lượng & sức chứa
                   </h4>
 
                   <div className="cb-grid-3cols">
                     <div className="cb-field-group">
                       <label className="cb-field-label">
+                        <Package size={12} style={{ verticalAlign: 'middle', marginRight: 4, color: '#7C3AED' }} />
                         Số lượng (Stock) <span style={{ color: '#E11D48' }}>*</span>
                       </label>
                       <input
@@ -532,6 +620,7 @@ export const ComboModal: React.FC<ComboModalProps> = ({
 
                     <div className="cb-field-group">
                       <label className="cb-field-label">
+                        <Users size={12} style={{ verticalAlign: 'middle', marginRight: 4, color: '#2563EB' }} />
                         Số người tối đa <span style={{ color: '#E11D48' }}>*</span>
                       </label>
                       <input
@@ -554,6 +643,7 @@ export const ComboModal: React.FC<ComboModalProps> = ({
 
                     <div className="cb-field-group">
                       <label className="cb-field-label">
+                        <Shirt size={12} style={{ verticalAlign: 'middle', marginRight: 4, color: '#BE123C' }} />
                         Số áo thuê <span style={{ color: '#E11D48' }}>*</span>
                       </label>
                       <input
@@ -572,6 +662,169 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                           ? `Tồn: ${selectedProductStock}`
                           : 'Theo kho'}
                       </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ==================== CỘT PHẢI (STICKY PREVIEW & GIÁ TIỀN) ==================== */}
+              <div className="cb-modal-col-right">
+                {/* 1. Live Preview Card */}
+                <div className="cb-live-preview-wrapper">
+                  <div className="cb-live-preview-header">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <Eye size={13} color="var(--cb-primary)" />
+                      XEM TRƯỚC GIAO DIỆN (LIVE PREVIEW)
+                    </span>
+                    <span style={{ color: 'var(--cb-primary)', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Sparkles size={12} />
+                      COMBO
+                    </span>
+                  </div>
+
+                  {/* Dual Split Images Hero */}
+                  <div className="cb-live-preview-hero">
+                    {prodImg ? (
+                      <img src={prodImg} alt="Áo dài" className="cb-live-preview-img-half" />
+                    ) : (
+                      <div className="cb-live-preview-hero-fallback">
+                        <Shirt size={22} color="var(--cb-text-muted)" />
+                        <span>Chưa chọn áo</span>
+                      </div>
+                    )}
+
+                    {pkgImg ? (
+                      <img src={pkgImg} alt="Gói chụp" className="cb-live-preview-img-half" />
+                    ) : (
+                      <div className="cb-live-preview-hero-fallback">
+                        <Camera size={22} color="var(--cb-text-muted)" />
+                        <span>Chưa chọn gói</span>
+                      </div>
+                    )}
+
+                    {effectiveDiscountPercent > 0 && (
+                      <div className="cb-live-preview-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <Flame size={12} fill="#FFF" color="#FFF" />
+                        GIẢM {effectiveDiscountPercent}%
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preview Content */}
+                  <div className="cb-live-preview-content">
+                    <h5 className="cb-live-preview-title">
+                      {cName.trim() || 'Tên combo trọn gói mẫu'}
+                    </h5>
+
+                    <div className="cb-live-preview-items">
+                      <div className="cb-preview-item-row">
+                        <span className="cb-preview-tag-icon cb-tag-shirt"><Shirt size={12} /></span>
+                        <span><strong>Áo dài:</strong> {selectedProduct ? selectedProduct.name : 'Chưa chọn áo dài'}</span>
+                      </div>
+                      <div className="cb-preview-item-row">
+                        <span className="cb-preview-tag-icon cb-tag-camera"><Camera size={12} /></span>
+                        <span><strong>Gói chụp:</strong> {selectedPackage ? selectedPackage.name : 'Chưa chọn gói chụp'}</span>
+                      </div>
+                      {(cValidFrom || cValidTo) && (
+                        <div className="cb-preview-item-row">
+                          <span className="cb-preview-tag-icon cb-tag-cal"><CalendarDays size={12} /></span>
+                          <span style={{ fontSize: 11, color: 'var(--cb-text-light)' }}>
+                            Áp dụng: {cValidFrom || '...'} → {cValidTo || '...'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="cb-live-preview-pricing">
+                      <div className="cb-live-preview-price-left">
+                        <span className="cb-live-preview-current-price">
+                          {calculatedComboPrice > 0 ? `${calculatedComboPrice.toLocaleString('vi-VN')}đ` : '0đ'}
+                        </span>
+                        {totalOriginalPrice > 0 && calculatedComboPrice < totalOriginalPrice && (
+                          <span className="cb-live-preview-old-price">
+                            {totalOriginalPrice.toLocaleString('vi-VN')}đ
+                          </span>
+                        )}
+                      </div>
+                      {cMaxUsage && (
+                        <span style={{ fontSize: 11, color: 'var(--cb-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <Package size={11} color="var(--cb-text-muted)" />
+                          Còn: <strong>{cMaxUsage}</strong> suất
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Bảng tính toán giá chi tiết & Tiết kiệm */}
+                <div className="cb-price-summary-box">
+                  <div className="cb-price-summary-header">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <Receipt size={13} color="var(--cb-primary)" />
+                      BẢNG TÍNH TOÁN GIÁ DỰ KIẾN
+                    </span>
+                    <span style={{ color: 'var(--cb-primary)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                      <Zap size={11} />
+                      TỰ ĐỘNG
+                    </span>
+                  </div>
+
+                  <div className="cb-price-summary-row">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <Tag size={12} color="var(--cb-text-muted)" />
+                      Giá Áo Dài + Gói Chụp:
+                    </span>
+                    <span>
+                      {aoDaiBasePrice > 0 || pkgBasePrice > 0
+                        ? `${aoDaiBasePrice.toLocaleString('vi-VN')}đ + ${pkgBasePrice.toLocaleString('vi-VN')}đ`
+                        : '—'}
+                    </span>
+                  </div>
+
+                  <div className="cb-price-summary-row" style={{ color: 'var(--cb-text-muted)' }}>
+                    <span>Tổng giá gốc niêm yết:</span>
+                    <span style={{ textDecoration: 'line-through' }}>
+                      {totalOriginalPrice > 0 ? `${totalOriginalPrice.toLocaleString('vi-VN')}đ` : '—'}
+                    </span>
+                  </div>
+
+                  <div className="cb-price-summary-row highlight">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <CreditCard size={15} color="var(--cb-primary)" />
+                      Khách Thanh Toán:
+                    </span>
+                    <span style={{ color: 'var(--cb-primary)', fontSize: 18 }}>
+                      {calculatedComboPrice > 0
+                        ? `${calculatedComboPrice.toLocaleString('vi-VN')}đ`
+                        : '0đ'}
+                    </span>
+                  </div>
+
+                  {/* Box tiết kiệm cho khách hàng */}
+                  {customerSavings > 0 ? (
+                    <div className="cb-savings-card-highlight">
+                      <span className="cb-savings-card-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <Gift size={15} color="#059669" />
+                        Tiết kiệm cho khách:
+                      </span>
+                      <span className="cb-savings-card-val">
+                        +{customerSavings.toLocaleString('vi-VN')}đ
+                        <span className="cb-savings-card-pill">
+                          <TrendingDown size={11} style={{ verticalAlign: 'middle', marginRight: 2 }} />
+                          -{effectiveDiscountPercent}%
+                        </span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11.5, color: 'var(--cb-text-muted)', fontStyle: 'italic', textAlign: 'center', padding: '4px 0' }}>
+                      {totalOriginalPrice > 0 ? 'Giá combo bằng giá gốc' : 'Vui lòng chọn Áo dài & Gói chụp để tính giá'}
+                    </div>
+                  )}
+
+                  <div className="cb-info-box" style={{ marginTop: 2 }}>
+                    <Sparkles size={15} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
+                    <div>
+                      Hệ thống tự động đồng bộ giữa <code>% Chiết khấu</code> và <code>Giá combo</code>. Bạn có thể nhập 1 trong 2 ô, ô còn lại sẽ tự động tính toán.
                     </div>
                   </div>
                 </div>
@@ -679,7 +932,7 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
                         ) : (
-                          <Scissors size={20} color="var(--cb-text-muted)" />
+                          <Shirt size={20} color="var(--cb-text-muted)" />
                         )}
                       </div>
                       <div>
