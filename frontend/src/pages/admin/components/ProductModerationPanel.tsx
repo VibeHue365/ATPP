@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
+import { API_BASE_URL } from '../../../config/env';
 import './productModerationFigma.css';
 
 type ModerationStatus = 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
@@ -95,6 +96,16 @@ interface ModerationMetrics {
 
 const fallbackThumb =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' fill='none' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='4' fill='%23F1F5F9'/%3E%3Cpath d='M9 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2z' fill='%2394A3B8'/%3E%3Cpath d='m4 17 5-5 3 3 4-4 4 4' stroke='%2394A3B8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+
+const resolveImageUrl = (url?: string, fallback: string = fallbackThumb): string => {
+  if (!url) return fallback;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
+    const normalized = url.startsWith('/') ? url : `/${url}`;
+    return `${API_BASE_URL}${normalized}`;
+  }
+  return url.startsWith('/') ? url : `/${url}`;
+};
 
 export const ProductModerationPanel: React.FC = () => {
   const toast = useToast();
@@ -980,7 +991,8 @@ export const ProductModerationPanel: React.FC = () => {
                     const isSelected = activeProduct?._id === item._id && isDetailOpen;
                     const rowNumber = (page - 1) * limit + idx + 1;
                     const { date, time } = formatDateTime(item.createdAt);
-                    const thumbUrl = item.images && item.images.length > 0 ? item.images[0] : fallbackThumb;
+                    const rawThumb = item.images && item.images.length > 0 ? item.images[0] : '';
+                    const thumbUrl = resolveImageUrl(rawThumb, fallbackThumb);
 
                     return (
                       <tr
@@ -1339,7 +1351,7 @@ export const ProductModerationPanel: React.FC = () => {
                 <div className="lume-product-showcase-box">
                   {activeProduct.images && activeProduct.images.length > 0 ? (
                     <img
-                      src={activeProduct.images[activeGalleryIndex] || activeProduct.images[0]}
+                      src={resolveImageUrl(activeProduct.images[activeGalleryIndex] || activeProduct.images[0], fallbackThumb)}
                       alt={activeProduct.name}
                       className="lume-product-showcase-img"
                       onError={(e) => {
@@ -1380,7 +1392,7 @@ export const ProductModerationPanel: React.FC = () => {
                         onClick={() => setActiveGalleryIndex(idx)}
                       >
                         <img
-                          src={img}
+                          src={resolveImageUrl(img, fallbackThumb)}
                           alt={`Thumbnail ${idx + 1}`}
                           onError={(e) => {
                             (e.target as HTMLImageElement).src = fallbackThumb;

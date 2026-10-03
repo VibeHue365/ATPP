@@ -333,7 +333,10 @@
 
 /* --- Collapsed Mode Adaptations (76px) --- */
 .admin-refactor-sidebar--collapsed .admin-refactor-brand {
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
   padding: 0;
   position: relative;
 }
@@ -348,7 +351,17 @@
 }
 
 .admin-refactor-sidebar--collapsed .admin-sidebar-toggle-btn {
-  display: none;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #FFFFEF;
+}
+
+.admin-refactor-sidebar--collapsed .admin-sidebar-toggle-btn:hover {
+  background: #831D2A;
+  color: #FFFFFF;
 }
 
 .admin-refactor-sidebar--collapsed .admin-refactor-profile--sidebar {
@@ -429,6 +442,27 @@
   font-weight: 800;
   letter-spacing: .02em;
   text-transform: uppercase;
+}
+
+.admin-header-toggle-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  color: #4a0e17;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.admin-header-toggle-btn:hover {
+  background: #FDF2F4;
+  border-color: #FECDD3;
+  color: #BE123C;
 }
 
 .admin-global-search {

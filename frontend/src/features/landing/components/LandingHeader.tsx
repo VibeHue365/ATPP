@@ -56,6 +56,10 @@ export const LandingHeader: React.FC = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notiRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
   const getNotificationVisual = (type: string) => {
     const t = (type || '').toUpperCase();
     if (t === 'BOOKING') {
@@ -517,6 +521,9 @@ export const LandingHeader: React.FC = () => {
                       <Link to={ROUTES.PROFILE} onClick={() => setIsDropdownOpen(false)} className="lume-account__item">
                         <UserIcon size={16} /><span>Trang cá nhân</span>
                       </Link>
+                      <Link to={ROUTES.ONBOARDING} onClick={() => setIsDropdownOpen(false)} className="lume-account__item">
+                        <Sparkles size={16} style={{ color: 'var(--landing-primary)' }} /><span>Khảo sát phong cách & Số đo</span>
+                      </Link>
                       <Link to={ROUTES.SETTINGS} onClick={() => setIsDropdownOpen(false)} className="lume-account__item">
                         <Settings size={16} /><span>Cài đặt</span>
                       </Link>
@@ -571,7 +578,7 @@ export const LandingHeader: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Drawer Menu */}
+      {/* Mobile Drawer Menu with Backdrop */}
       {isMobileMenuOpen && (
         <nav
           id="mobile-navigation-menu"
@@ -591,9 +598,9 @@ export const LandingHeader: React.FC = () => {
                 }
               }}
               className="py-2.5 border-b text-decoration-none"
-              style={{ 
-                borderColor: 'var(--landing-border)', 
-                color: (location.pathname === ROUTES.LANDING || location.pathname === '/') ? 'var(--landing-primary)' : 'var(--landing-text-primary)' 
+              style={{
+                borderColor: 'var(--landing-border)',
+                color: (location.pathname === ROUTES.LANDING || location.pathname === '/') ? 'var(--landing-primary)' : 'var(--landing-text-primary)'
               }}
             >
               Trang chủ

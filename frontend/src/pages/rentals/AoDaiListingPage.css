@@ -1158,3 +1158,139 @@
     gap: 10px;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Onboarding Personalized Filter Card & Badges
+   -------------------------------------------------------------------------- */
+.lume-onboarding-card {
+  background: linear-gradient(135deg, rgba(251, 229, 233, 0.6) 0%, rgba(255, 248, 249, 0.95) 100%);
+  border: 1.5px solid #F0DADC;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 14px rgba(181, 43, 71, 0.05);
+}
+
+.lume-onboarding-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.lume-onboarding-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lume-primary);
+}
+
+.lume-onboarding-edit-link {
+  font-size: 12px;
+  font-weight: 700;
+  color: #8B5A2B;
+  text-decoration: underline;
+  transition: opacity 0.15s;
+}
+
+.lume-onboarding-edit-link:hover {
+  opacity: 0.8;
+}
+
+.lume-onboarding-card-subtitle {
+  font-size: 12px;
+  color: var(--lume-text-secondary);
+  margin: 0 0 10px 0;
+  line-height: 1.4;
+}
+
+.lume-onboarding-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.lume-onboarding-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  background: #FFFFFF;
+  border: 1px solid #EAD2D7;
+  color: #5D4037;
+  padding: 4px 10px;
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.lume-onboarding-chip strong {
+  color: var(--lume-primary);
+}
+
+.lume-onboarding-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px dashed #E8CCD1;
+  padding-top: 10px;
+}
+
+.lume-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lume-ink);
+  user-select: none;
+}
+
+.lume-toggle-checkbox {
+  accent-color: var(--lume-primary);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.lume-toolbar-count-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.lume-view-all-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--lume-primary);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.15s;
+}
+
+.lume-view-all-btn:hover {
+  opacity: 0.8;
+}
+
+.lume-size-btn.is-user-preferred {
+  border-color: var(--lume-primary);
+  color: var(--lume-primary);
+  font-weight: 750;
+  box-shadow: 0 0 0 1px var(--lume-primary);
+}
+
+.lume-size-star {
+  color: #D97706;
+  font-size: 10px;
+  margin-left: 3px;
+}

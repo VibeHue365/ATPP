@@ -18,6 +18,7 @@ import {
   DEFAULT_AODAI_IMAGE_FALLBACK,
   DEFAULT_PACKAGE_IMAGE_FALLBACK
 } from '../mappers/combo.mapper';
+import './ComboCard.css';
 
 export interface ComboCardProps {
   combo: ComboDeal;

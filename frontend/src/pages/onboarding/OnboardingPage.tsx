@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { ROUTES } from '../../config/routes';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import { useToast } from '../../components/feedback/Toast';
 import { calculateRecommendedSize } from '../../utils/sizeHelper';
 
 // Import images
@@ -74,6 +75,7 @@ interface OnboardingUpdatePayload {
 export const OnboardingPage: React.FC = () => {
   const navigate = useNavigate();
   const { updatePreferences } = useAuth();
+  const toast = useToast();
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   const [step1, setStep1] = useState<Step1Data>({ styles: [] });
@@ -150,8 +152,12 @@ export const OnboardingPage: React.FC = () => {
 
       await updatePreferences(payload);
       setSubmitting(false);
-      // Sửa xong -> về trang cá nhân; onboarding lần đầu -> ra trang thuê
-      navigate(isEditing ? ROUTES.PROFILE : ROUTES.RENTALS);
+      toast.success(
+        isEditing
+          ? 'Đã cập nhật sở thích & số đo cá nhân!'
+          : 'Khảo sát hoàn tất! Đang chuyển đến danh mục Áo Dài dành riêng cho bạn...',
+      );
+      navigate(ROUTES.RENTALS);
     } catch (err) {
       console.error('Failed to save onboarding preferences:', err);
       setErrorMsg('Không thể lưu thông tin. Vui lòng kiểm tra kết nối mạng và thử lại.');

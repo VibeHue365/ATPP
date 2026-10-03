@@ -10,6 +10,7 @@ import {
   Pause,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import type { useProviderCampaignState } from '../collections/useProviderCampaignState';
@@ -404,7 +405,7 @@ export const CombosPanel: React.FC<CombosPanelProps> = ({
           </button>
           {activeTab === 'combos' ? (
             <button type="button" className="cb-btn-create-combo" onClick={onOpenNewCombo}>
-              <Plus size={16} />
+              <Sparkles size={16} />
               <span>Tạo combo mới</span>
             </button>
           ) : (
@@ -600,7 +601,7 @@ export const CombosPanel: React.FC<CombosPanelProps> = ({
                     onClick={onOpenNewCombo}
                     style={{ marginTop: 8 }}
                   >
-                    <Plus size={16} />
+                    <Sparkles size={16} />
                     <span>Tạo combo mới</span>
                   </button>
                 </div>

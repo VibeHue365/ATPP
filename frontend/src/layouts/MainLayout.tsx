@@ -41,11 +41,11 @@ export const MainLayout: React.FC = () => {
       <footer className="vh-footer-redesigned">
         <div className="vh-footer-container-redesigned">
           <div className="vh-footer-left">
-            <Link to={ROUTES.LANDING} className="vh-footer-logo-redesigned font-header" style={{ textDecoration: 'none' }}>
-              Di sản Áo Dài
+            <Link to={ROUTES.LANDING} className="vh-footer-logo-redesigned" style={{ textDecoration: 'none' }}>
+              <img src="/logo-transparent.png" alt="TàGo" style={{ height: '36px', width: 'auto', objectFit: 'contain' }} />
             </Link>
             <p className="vh-footer-copy">
-              © {new Date().getFullYear()} Di sản Áo Dài. Curating Vietnamese Elegance through time and craftsmanship.
+              © {new Date().getFullYear()} TàGo. Curating Vietnamese Elegance through time and craftsmanship.
             </p>
           </div>
           

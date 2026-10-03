@@ -44,7 +44,8 @@ export type OcrNextAction =
   | "WAIT_FOR_OCR"
   | "UPLOAD_AGAIN"
   | "READY_TO_SUBMIT"
-  | "SUBMIT_WITH_MANUAL_REVIEW";
+  | "SUBMIT_WITH_MANUAL_REVIEW"
+  | "RETRY_OCR";
 export interface OcrV2Summary {
   executionStatus: OcrExecutionStatus;
   assessment: OcrAssessment;

@@ -322,6 +322,25 @@ export class ProductsRepository {
       .exec();
   }
 
+  /**
+   * The admin moderation queue combines Ao dai products and photography
+   * packages, so moderation must resolve an id against both collections.
+   */
+  async findModerationItemById(id: Types.ObjectId): Promise<any | null> {
+    const product = await this.productModel
+      .findById(id)
+      .populate('categoryId')
+      .populate('providerId')
+      .exec();
+    if (product) return product;
+
+    return this.packageModel
+      .findById(id)
+      .populate('categoryId')
+      .populate('providerId')
+      .exec();
+  }
+
   async findPublicById(id: Types.ObjectId): Promise<ProductDocument | null> {
     return this.productModel
       .findOne({

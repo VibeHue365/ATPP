@@ -94,7 +94,7 @@ export const ProviderDashboard: React.FC = () => {
     }
   }, [user, isAuthenticated, navigate, toast]);
 
-  const { currentView, setCurrentView, collectionTab, setCollectionTab } = useProviderNavigationState();
+  const { currentView, setCurrentView, collectionTab, setCollectionTab, isSidebarCollapsed, toggleSidebar } = useProviderNavigationState();
 
   const {
     provider, setProvider, selectedBookingId, setSelectedBookingId, isDetailModalOpen,
@@ -755,12 +755,12 @@ export const ProviderDashboard: React.FC = () => {
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-light-bg)' }}>
       {/* SIDEBAR */}
-      <ProviderSidebar {...{ setCurrentView, currentView, hasAodaiCapability, setCollectionTab, collectionTab, hasPhotographyCapability, navigate, handleLogoutClick }} />
+      <ProviderSidebar {...{ setCurrentView, currentView, hasAodaiCapability, setCollectionTab, collectionTab, hasPhotographyCapability, navigate, handleLogoutClick, isSidebarCollapsed, toggleSidebar }} />
 
       {/* MAIN CONTENT AREA */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh', overflowY: 'auto', backgroundColor: 'var(--color-light-bg)' }}>
         {/* TOP BAR */}
-        <ProviderHeader {...{ notiRef, setIsNotiOpen, isNotiOpen, fetchNotifications, providerUnreadCount, handleNotiMarkAllAsRead, loadingNoti, notifications, getNotiTypeStyle, handleNotiMarkAsRead, getNotiTimeAgo, setCurrentView, provider }} />
+        <ProviderHeader {...{ notiRef, setIsNotiOpen, isNotiOpen, fetchNotifications, providerUnreadCount, handleNotiMarkAllAsRead, loadingNoti, notifications, getNotiTypeStyle, handleNotiMarkAsRead, getNotiTimeAgo, setCurrentView, provider, isSidebarCollapsed, toggleSidebar }} />
 
         {/* CONTENT SWITCH PANEL */}
         {(currentView === 'overview' || currentView === 'analytics') && (

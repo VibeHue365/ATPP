@@ -246,7 +246,23 @@ export default function AdminDashboardRefactored() {
   const { logout, user } = useAuth();
   const requestedTab = searchParams.get('tab');
   const activeTab: AdminTab = isAdminTab(requestedTab) ? requestedTab : 'overview';
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('vibe_admin_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('vibe_admin_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
@@ -376,13 +392,37 @@ export default function AdminDashboardRefactored() {
           <div className="admin-refactor-brand">
             <div
               className="admin-brand-left"
-              onClick={() => isSidebarCollapsed && setIsSidebarCollapsed(false)}
+              onClick={() => isSidebarCollapsed && toggleSidebar()}
               style={{ cursor: isSidebarCollapsed ? 'pointer' : 'default' }}
+              title={isSidebarCollapsed ? 'TàGo - Nhấn để mở rộng menu' : 'TàGo'}
             >
-              <div className="admin-brand-logo">L</div>
+              <div 
+                className="admin-brand-logo"
+                style={{ 
+                  background: '#FFFFFF', 
+                  borderRadius: '10px', 
+                  width: '36px', 
+                  height: '36px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.25)',
+                  flexShrink: 0
+                }}
+              >
+                <img 
+                  src="/logo-icon.png" 
+                  alt="TàGo" 
+                  style={{ 
+                    width: '26px', 
+                    height: '26px', 
+                    objectFit: 'contain' 
+                  }} 
+                />
+              </div>
               <div className="admin-brand-text">
-                <strong>LUMÉ</strong>
-                <span>ÁO DÀI & CHỤP ẢNH</span>
+                <strong>TàGo</strong>
+                <span>HỆ THỐNG QUẢN TRỊ</span>
               </div>
             </div>
 
@@ -390,7 +430,7 @@ export default function AdminDashboardRefactored() {
               type="button"
               className="admin-sidebar-toggle-btn"
               title={isSidebarCollapsed ? 'Mở rộng menu (240px)' : 'Thu gọn menu (76px)'}
-              onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+              onClick={toggleSidebar}
             >
               {isSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
             </button>
@@ -398,7 +438,7 @@ export default function AdminDashboardRefactored() {
 
           {/* Profile */}
           <div className="admin-refactor-profile--sidebar" title="System Admin - Quản trị viên hệ thống">
-            <img src={avatar} alt="Admin" />
+            <img src={avatar} alt="Admin" onError={(e) => { e.currentTarget.src = '/avatar_hanna.webp'; }} />
             <div className="admin-profile-info">
               <strong>{user?.fullName || 'System Admin'}</strong>
               <span>Quản trị viên hệ thống</span>
@@ -492,7 +532,16 @@ export default function AdminDashboardRefactored() {
 
       <main className="admin-refactor-main">
         <header className="admin-refactor-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
+            <button
+              type="button"
+              className="admin-header-toggle-btn"
+              onClick={toggleSidebar}
+              title={isSidebarCollapsed ? "Mở rộng thanh bên (240px)" : "Thu gọn thanh bên (76px)"}
+              aria-label="Toggle sidebar"
+            >
+              {isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
             {activeTab !== 'overview' && activeTab !== 'customers' && <h1>{activeDefinition.title}</h1>}
             <div className="admin-global-search">
               <Search size={15} color="#9CA3AF" />

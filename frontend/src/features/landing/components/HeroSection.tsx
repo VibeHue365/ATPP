@@ -76,6 +76,27 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const topProduct = topProducts.length > 0 ? topProducts[secondaryIndex % topProducts.length] : null;
   const secondPackage = topPackages.length > 1 ? topPackages[(packageIndex + 1) % topPackages.length] : null;
 
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    if (distance > 40) {
+      onSelectSlide((currentSlide + 1) % banners.length);
+    } else if (distance < -40) {
+      onSelectSlide((currentSlide - 1 + banners.length) % banners.length);
+    }
+    setTouchStart(null);
+    setTouchEnd(null);
+  };
+
   useEffect(() => {
     let active = true;
 
@@ -167,14 +188,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
   return (
     <section className="lume-hero w-full">
-      <div
-        className="lume-hero-grid grid items-stretch"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
-          gap: '14px',
-        }}
-      >
+      <div className="lume-hero-grid grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
         {/* LEFT COLUMN: Text Content & CTAs & Qualitative Benefits (~34%) */}
         <div
           className="lg:col-span-4 rounded-2xl p-6 md:p-8 flex flex-col justify-between h-[460px] lg:h-[500px]"
@@ -301,10 +315,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
         {/* CENTER COLUMN: Single Visual Container with Overlay On Top Of Image (~41%) */}
         <div
-          className="lg:col-span-5 rounded-2xl relative overflow-hidden h-[460px] lg:h-[500px] border shadow-2xs group"
+          className="lg:col-span-5 rounded-2xl relative overflow-hidden h-[300px] sm:h-[380px] lg:h-[500px] border shadow-2xs group"
           style={{
             borderColor: 'var(--landing-border)',
           }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
         >
           {/* Moving image banner */}
           <div
@@ -320,9 +337,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           </div>
 
           {banners.length > 1 && (
-            <div className="absolute left-5 top-5 z-20 flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-              <button type="button" onClick={() => onSelectSlide((currentSlide - 1 + banners.length) % banners.length)} aria-label="Previous image" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/40 bg-black/25 text-white backdrop-blur-md hover:bg-black/45"><ArrowLeft size={16} /></button>
-              <button type="button" onClick={() => onSelectSlide((currentSlide + 1) % banners.length)} aria-label="Next image" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/40 bg-black/25 text-white backdrop-blur-md hover:bg-black/45"><ArrowRight size={16} /></button>
+            <div className="absolute left-5 top-5 z-20 flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+              <button type="button" onClick={() => onSelectSlide((currentSlide - 1 + banners.length) % banners.length)} aria-label="Previous image" className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full border border-white/40 bg-black/25 text-white backdrop-blur-md hover:bg-black/45"><ArrowLeft size={16} /></button>
+              <button type="button" onClick={() => onSelectSlide((currentSlide + 1) % banners.length)} aria-label="Next image" className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full border border-white/40 bg-black/25 text-white backdrop-blur-md hover:bg-black/45"><ArrowRight size={16} /></button>
             </div>
           )}
 
@@ -342,9 +359,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                       type="button"
                       onClick={() => onSelectSlide(idx)}
                       aria-label={`Slide ${idx + 1}`}
-                      className={`w-2 h-2 rounded-full transition-all border-none cursor-pointer ${
-                        currentSlide === idx ? 'w-4 bg-white' : 'bg-white/50 hover:bg-white/80'
-                      }`}
+                      className={`w-2 h-2 rounded-full transition-all border-none cursor-pointer ${currentSlide === idx ? 'w-4 bg-white' : 'bg-white/50 hover:bg-white/80'
+                        }`}
                     />
                   ))}
                 </div>

@@ -60,6 +60,8 @@ export const LoginForm: React.FC = () => {
         navigate(ROUTES.ADMIN_DASHBOARD, { replace: true });
       } else if (loggedInUser?.roles?.includes('PROVIDER')) {
         navigate(ROUTES.PROVIDER_DASHBOARD, { replace: true });
+      } else if (loggedInUser?.hasCompletedOnboarding === false) {
+        navigate(ROUTES.ONBOARDING, { replace: true });
       } else {
         const fromState = (location.state as any)?.from;
         let destination: string = ROUTES.LANDING;
