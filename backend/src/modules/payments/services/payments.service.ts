@@ -739,17 +739,26 @@ export class PaymentsService {
           booking.pricingSummary.grandTotal * (1 - COMMISSION_RATE),
         );
         // Use the stored estimate to deduct (prevents ghost-balance drift).
-        const estimatedDeduction =
-          (booking as any).estimatedNetAmount ?? actualNetAmount;
+        // Only deduct if an estimate was actually credited (e.g. Photography bookings).
+        const hasEstimatedCredit =
+          (booking as any).estimatedNetAmount !== undefined
+            ? (booking as any).estimatedNetAmount > 0
+            : booking.bookingType === BookingType.Photography;
+        const estimatedDeduction = hasEstimatedCredit
+          ? ((booking as any).estimatedNetAmount ?? actualNetAmount)
+          : 0;
         const providerModel = this.bookingModel.db.model('Provider');
+        const incFields: Record<string, number> = {
+          'wallet.availableBalance': +actualNetAmount, // credit actual
+          'wallet.totalEarned': +actualNetAmount, // cumulative (only grows)
+        };
+        if (estimatedDeduction > 0) {
+          incFields['wallet.pendingBalance'] = -estimatedDeduction;
+        }
         await providerModel.updateMany(
           { _id: { $in: booking.providerIds } },
           {
-            $inc: {
-              'wallet.pendingBalance': -estimatedDeduction, // deduct estimate
-              'wallet.availableBalance': +actualNetAmount, // credit actual
-              'wallet.totalEarned': +actualNetAmount, // cumulative (only grows)
-            },
+            $inc: incFields,
             $set: { 'wallet.lastUpdatedAt': new Date() },
           },
         );

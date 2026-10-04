@@ -1300,7 +1300,7 @@ export class ProviderVerificationService {
 
     const previousStatus = provider.status;
     provider.status = nextStatus;
-    await provider.save();
+    await provider.save({ validateModifiedOnly: true });
 
     await this.userModel.findByIdAndUpdate(provider.userId, {
       $set: { 'provider.providerStatus': nextStatus },

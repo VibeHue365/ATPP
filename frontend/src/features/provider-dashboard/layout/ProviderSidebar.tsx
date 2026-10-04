@@ -55,7 +55,7 @@ export function ProviderSidebar({
           <div
             className="p-brand-logo-box"
             onClick={() => isSidebarCollapsed && toggleSidebar?.()}
-            style={{ 
+            style={{
               cursor: isSidebarCollapsed ? 'pointer' : 'default',
               background: '#FFFFFF',
               width: '40px',
@@ -70,14 +70,14 @@ export function ProviderSidebar({
             }}
             title={isSidebarCollapsed ? "TàGo - Nhấn để mở rộng menu" : "TàGo"}
           >
-            <img 
-              src="/logo-icon.png" 
-              alt="TàGo" 
-              style={{ 
-                width: '28px', 
-                height: '28px', 
-                objectFit: 'contain' 
-              }} 
+            <img
+              src="/logo-icon.png"
+              alt="TàGo"
+              style={{
+                width: '28px',
+                height: '28px',
+                objectFit: 'contain'
+              }}
             />
           </div>
           {!isSidebarCollapsed && (
@@ -177,7 +177,6 @@ export function ProviderSidebar({
                 <Layers size={20} />
                 <span>Sản phẩm & Dịch vụ</span>
               </div>
-              {!isSidebarCollapsed && <ChevronDown size={16} className="p-nav-chevron" />}
             </button>
           )}
 
