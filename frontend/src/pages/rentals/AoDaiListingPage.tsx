@@ -1151,7 +1151,7 @@ export const AoDaiListingPage: React.FC = () => {
                       className="lume-product-card"
                       onClick={() => navigate(`/rentals/${product._id}`)}
                     >
-                      {/* Image Wrap - 3:4 aspect ratio, full dress visibility */}
+                      {/* Arched Image Wrap with non-clipping arch */}
                       <div className="lume-card-image-wrap">
                         {badgeText && (
                           <span className="lume-card-badge">{badgeText}</span>
@@ -1164,26 +1164,38 @@ export const AoDaiListingPage: React.FC = () => {
                           onClick={(e) => handleToggleFavorite(product._id, e)}
                         >
                           <Heart
-                            size={15}
-                            fill={isFavorited ? "#B52B47" : "none"}
-                            color={isFavorited ? "#B52B47" : "#5E5054"}
+                            size={16}
+                            fill={isFavorited ? "#8E1B2E" : "none"}
+                            color="#8E1B2E"
                           />
                         </button>
 
-                        <img
-                          src={getImageUrl(product.images?.[0])}
-                          alt={product.name}
-                          className="lume-card-img"
-                          loading="lazy"
-                          onError={(e) => {
-                            e.currentTarget.onerror = null;
-                            e.currentTarget.src = DEFAULT_AODAI_IMAGE;
-                          }}
-                        />
+                        <div className="lume-card-arch">
+                          <img
+                            src={getImageUrl(product.images?.[0])}
+                            alt={product.name}
+                            className="lume-card-img"
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = DEFAULT_AODAI_IMAGE;
+                            }}
+                          />
+                        </div>
                       </div>
 
                       {/* Card Content Body */}
                       <div className="lume-card-body">
+                        {/* Brand row: store name + verified badge */}
+                        <div className="lume-card-brand-bar">
+                          <span className="lume-brand-name" title={storeName}>
+                            {storeName}
+                          </span>
+                          <span className="lume-verified-badge" title="Cửa hàng đã xác minh">
+                            <Check size={10} /> Đã xác minh
+                          </span>
+                        </div>
+
                         {/* 1. Tên áo dài (đậm) */}
                         <h3
                           className="lume-card-title"
@@ -1220,15 +1232,9 @@ export const AoDaiListingPage: React.FC = () => {
                           </div>
                         )}
 
-                        {/* 4. Shop + dấu xác minh + địa điểm (nhỏ, xám) */}
-                        <div className="lume-card-shop-row">
-                          <span className="lume-shop-name" title={storeName}>
-                            {storeName}
-                          </span>
-                          <span className="lume-verified-badge" title="Cửa hàng đã xác minh">
-                            <Check size={11} /> Đã xác minh
-                          </span>
-                          <span className="lume-meta-dot">•</span>
+                        {/* 4. Địa điểm */}
+                        <div className="lume-card-location-row">
+                          <MapPin size={12} className="lume-location-icon" />
                           <span>{city}</span>
                         </div>
                       </div>
