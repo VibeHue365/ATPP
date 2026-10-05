@@ -187,21 +187,10 @@ export const LandingHeader: React.FC = () => {
 
     return () => window.cancelAnimationFrame(frame);
   }, [location.hash, location.pathname]);
-  const scrollToSection = (sectionId: string) => {
-    setIsMobileMenuOpen(false);
-    const element = document.getElementById(sectionId);
-
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
-    }
-
-    navigate(`${ROUTES.LANDING}#${sectionId}`);
-  };
 
   return (
     <header className={`lume-header ${isScrolled ? 'is-scrolled' : ''}`}>
-      <div className="lume-header__inner w-full max-w-[1440px] mx-auto">
+      <div className="lume-header__inner w-full max-w-[1200px] px-6 mx-auto">
         {/* Compact Moderate Rounded Container matching Target Screenshot */}
         <div
           className="lume-header__content w-full transition-all"

@@ -81,6 +81,7 @@ export interface UserPreferences {
   };
   preferredLocations: string[];
   preferredOccasions: string[];
+  note?: string | null;
 }
 
 export interface UserAddress {
@@ -202,6 +203,7 @@ export class User {
       },
       preferredLocations: { type: [String], default: [] },
       preferredOccasions: { type: [String], default: [] },
+      note: { type: String, default: null, trim: true },
     },
     default: {},
   })

@@ -59,56 +59,64 @@ export const PhotographerCard: React.FC<PhotographerCardProps> = ({
           loading="lazy"
           decoding="async"
         />
-        <div className="pl-card-style-tag"><span>{photographer.styleTag}</span></div>
-        {hasAoDaiInCart && (
-          <div className="pl-card-match-badge"><Sparkles size={10} />Phù hợp 98%</div>
+
+        {photographer.styleTag && (
+          <div className="pl-card-style-tag">
+            <span>{photographer.styleTag}</span>
+          </div>
         )}
-        <div onClick={(event) => event.stopPropagation()} className="pl-card-compare">
-          <input
-            type="checkbox"
-            id={`compare-cb-${photographer.id}`}
-            checked={isCompared}
-            onChange={onCompareChange}
-            className="pl-card-compare-checkbox"
-          />
-          <label htmlFor={`compare-cb-${photographer.id}`} className="pl-card-compare-label">SO SÁNH</label>
-        </div>
-        <div className="pl-card-rating">
-          <Star size={12} fill="#F4B548" stroke="#F4B548" />
-          <span>{photographer.rating.toFixed(1)}</span>
-          <span className="pl-card-rating-count">({photographer.reviewsCount})</span>
-        </div>
+
         <button
+          type="button"
           onClick={onToggleFavorite}
           aria-label={isFavorite ? 'Bỏ yêu thích' : 'Thêm yêu thích'}
           className={`pl-card-favorite-btn ${isFavorite ? 'active' : ''}`}
         >
-          <Heart size={16} fill={isFavorite ? '#B52B47' : 'none'} color={isFavorite ? '#B52B47' : '#8C827A'} />
+          <Heart
+            size={15}
+            fill={isFavorite ? '#8B1E2D' : 'none'}
+            color={isFavorite ? '#8B1E2D' : '#5E5054'}
+          />
         </button>
       </div>
 
       <div className="pl-card-body">
-        <div className="pl-card-info">
-          <span className="pl-card-provider">{photographer.name}</span>
-          <h3 className="pl-card-name">{packageName}</h3>
-          <p className="pl-card-quote">{photographer.location || photographer.quote || 'Gói chụp linh hoạt theo nhu cầu'}</p>
+        {/* 1. Tên gói chụp (đậm) */}
+        <h3 className="pl-card-name" title={packageName}>{packageName}</h3>
+
+        {/* 2. Giá gói (nổi bật, đỏ rượu) */}
+        <div className="pl-card-price-line">
+          <strong>{formatPrice(packagePrice)}đ</strong>
+          <span>/ gói</span>
         </div>
-        <div className="pl-card-package-meta">
-          <span><Clock3 size={12} />{durationHours ? `${durationHours} giờ chụp` : 'Lịch linh hoạt'}</span>
-          <span><ImageIcon size={12} />{editedPhotosCount ? `${editedPhotosCount} ảnh chỉnh` : 'Ảnh chỉnh theo gói'}</span>
-        </div>
-        <div className="pl-card-price-line"><strong>{formatPrice(packagePrice)}đ</strong><span>/ gói</span></div>
-        {!isBookable && <span className="pl-card-not-bookable">Chưa mở lịch đặt</span>}
-        <div className="pl-card-actions">
-          <button className="pl-card-btn-portfolio" onClick={onViewPortfolio}>
-            <Camera size={14} />Xem chi tiết
-          </button>
-          <button
-            className="pl-card-btn-booking"
-            onClick={(event) => { event.stopPropagation(); onOpen(); }}
-          >
-            <Calendar size={14} />{isBookable ? 'Đặt lịch' : 'Xem hồ sơ'}
-          </button>
+
+        {/* 3. Điểm phù hợp / Điểm nhấn */}
+        {hasAoDaiInCart ? (
+          <div className="pl-card-match-badge" title="Phù hợp với áo dài đã chọn trong giỏ">
+            <Sparkles size={11} className="pl-match-sparkle" />
+            <span>Khớp trang phục giỏ hàng (98%)</span>
+          </div>
+        ) : (
+          <div className="pl-card-package-meta">
+            <span><Clock3 size={11} />{durationHours ? `${durationHours}h chụp` : 'Linh hoạt'}</span>
+            <span>•</span>
+            <span><ImageIcon size={11} />{editedPhotosCount ? `${editedPhotosCount} ảnh` : 'Gói chuẩn'}</span>
+            <span>•</span>
+            <span className="pl-card-rating-inline">
+              <Star size={11} fill="#FACC15" stroke="#FACC15" />
+              {photographer.rating.toFixed(1)}
+            </span>
+          </div>
+        )}
+
+        {/* 4. Studio / Nhiếp ảnh gia + dấu xác minh + địa điểm */}
+        <div className="pl-card-shop-row">
+          <span className="pl-card-provider" title={photographer.name}>{photographer.name}</span>
+          <span className="pl-card-verified-badge">
+            <span className="pl-verified-check">✓</span> Đã xác minh
+          </span>
+          <span className="pl-card-meta-dot">•</span>
+          <span>{photographer.location || 'Huế'}</span>
         </div>
       </div>
     </article>

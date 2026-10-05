@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Check, ChevronDown, Sparkles } from 'lucide-react';
 
 export interface SidebarFilterValues {
   regions: string[];
@@ -20,6 +21,10 @@ interface ComboSidebarFilterProps {
   onResetAll: () => void;
   regionOptions?: FilterOptionWithCount[];
   typeOptions?: FilterOptionWithCount[];
+  userHasOnboarding?: boolean;
+  userPrefOccasion?: string;
+  userPrefStyle?: string;
+  userPrefSize?: string;
 }
 
 export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
@@ -40,15 +45,27 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
     { label: 'Gia đình', count: 0 },
     { label: 'Sự kiện', count: 0 },
   ],
+  userHasOnboarding = false,
+  userPrefOccasion,
+  userPrefStyle,
+  userPrefSize,
 }) => {
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    region: true,
+    type: true,
+    price: true,
+  });
 
-  const sortOptions = [
-    { key: 'popular', label: 'Phổ biến nhất' },
-    { key: 'newest', label: 'Mới nhất' },
-    { key: 'price_low', label: 'Giá: Thấp đến cao' },
-    { key: 'price_high', label: 'Giá: Cao đến thấp' },
-    { key: 'discount_high', label: 'Tiết kiệm nhiều nhất' },
-  ];
+  const toggleSection = (section: string) => {
+    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const [isPersonalizedFilterActive, setIsPersonalizedFilterActive] = useState(true);
+  const [disabledProfilePrefs, setDisabledProfilePrefs] = useState<{
+    size?: boolean;
+    style?: boolean;
+    occasion?: boolean;
+  }>({});
 
   const handleToggleRegion = (reg: string) => {
     if (reg === 'all') {
@@ -99,7 +116,7 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
     <aside className="figma-combo-sidebar">
       {/* Sidebar Header */}
       <div className="figma-combo-sidebar-header">
-        <h3 className="sidebar-title">LỌC NÂNG CAO</h3>
+        <h3 className="sidebar-title">Bộ lọc</h3>
         <button
           type="button"
           className="sidebar-reset-btn"
@@ -109,134 +126,257 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
         </button>
       </div>
 
-      {/* Group 1: KHU VỰC */}
-      <div className="sidebar-filter-group">
-        <h4 className="group-heading">KHU VỰC</h4>
-        <div className="checkbox-list">
-          <label className="checkbox-item">
-            <input
-              type="checkbox"
-              checked={isAllRegions}
-              onChange={() => handleToggleRegion('all')}
-            />
-            <span className="checkbox-custom" />
-            <span className="checkbox-label">Tất cả khu vực</span>
-          </label>
-
-          {regionOptions.map((opt) => (
-            <label key={opt.label} className="checkbox-item">
-              <input
-                type="checkbox"
-                checked={values.regions.includes(opt.label)}
-                onChange={() => handleToggleRegion(opt.label)}
-              />
-              <span className="checkbox-custom" />
-              <span className="checkbox-label">{opt.label}</span>
-              <span className="checkbox-count">{opt.count}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="sidebar-divider" />
-
-      {/* Group 2: LOẠI HÌNH */}
-      <div className="sidebar-filter-group">
-        <h4 className="group-heading">LOẠI HÌNH</h4>
-        <div className="checkbox-list">
-          {typeOptions.map((opt) => (
-            <label key={opt.label} className="checkbox-item">
-              <input
-                type="checkbox"
-                checked={values.types.includes(opt.label)}
-                onChange={() => handleToggleType(opt.label)}
-              />
-              <span className="checkbox-custom" />
-              <span className="checkbox-label">{opt.label}</span>
-              <span className="checkbox-count">{opt.count}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="sidebar-divider" />
-
-      {/* Group 3: MỨC GIÁ */}
-      <div className="sidebar-filter-group">
-        <h4 className="group-heading">MỨC GIÁ</h4>
-        <div className="price-slider-box">
-          <div className="price-labels-row">
-            <span>{values.minPrice.toLocaleString('vi-VN')}đ</span>
-            <span>{values.maxPrice >= 5000000 ? '5.000.000đ+' : `${values.maxPrice.toLocaleString('vi-VN')}đ`}</span>
+      {/* Onboarding Profile Strip */}
+      {userHasOnboarding && (
+        <div className="combo-profile-strip">
+          <div className="combo-profile-strip-header">
+            <div className="combo-profile-strip-title">
+              <Sparkles size={14} className="combo-sparkle-icon" />
+              <span>Hồ sơ gợi ý</span>
+            </div>
+            <a
+              href="/onboarding"
+              className="combo-profile-edit-link"
+              title="Chỉnh sửa số đo & sở thích"
+            >
+              Đổi sở thích
+            </a>
           </div>
 
-          <div className="price-range-slider-wrapper">
-            <input
-              type="range"
-              min={500000}
-              max={5000000}
-              step={100000}
-              value={values.maxPrice}
-              onChange={(e) =>
-                onChange({ maxPrice: Number(e.target.value), presetPrice: null })
-              }
-              className="price-range-input"
-            />
+          <div className="combo-profile-chips">
+            {userPrefSize && !disabledProfilePrefs.size && (
+              <span className="combo-profile-chip">
+                <span>Size {userPrefSize}</span>
+                <button
+                  type="button"
+                  className="combo-profile-chip-remove"
+                  onClick={() => setDisabledProfilePrefs((p) => ({ ...p, size: true }))}
+                  title="Bỏ lọc size"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+            {userPrefStyle && !disabledProfilePrefs.style && (
+              <span className="combo-profile-chip">
+                <span>Gu {userPrefStyle}</span>
+                <button
+                  type="button"
+                  className="combo-profile-chip-remove"
+                  onClick={() => setDisabledProfilePrefs((p) => ({ ...p, style: true }))}
+                  title="Bỏ lọc phong cách"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+            {userPrefOccasion && !disabledProfilePrefs.occasion && (
+              <span className="combo-profile-chip">
+                <span>Dịp {userPrefOccasion}</span>
+                <button
+                  type="button"
+                  className="combo-profile-chip-remove"
+                  onClick={() => setDisabledProfilePrefs((p) => ({ ...p, occasion: true }))}
+                  title="Bỏ lọc dịp"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+            {Object.values(disabledProfilePrefs).some(Boolean) && (
+              <button
+                type="button"
+                className="combo-profile-chip-reset"
+                onClick={() => setDisabledProfilePrefs({})}
+              >
+                Khôi phục
+              </button>
+            )}
           </div>
 
-          {/* 2x2 Preset Buttons */}
-          <div className="price-presets-grid">
+          <div className="combo-profile-toggle-row">
+            <span className="combo-toggle-text">
+              {isPersonalizedFilterActive ? "Gợi ý cá nhân hóa" : "Toàn bộ combo"}
+            </span>
             <button
               type="button"
-              className={`price-preset-btn ${values.presetPrice === 'under_1m' ? 'active' : ''}`}
-              onClick={() => handleSelectPricePreset('under_1m')}
+              role="switch"
+              aria-checked={isPersonalizedFilterActive}
+              onClick={() => setIsPersonalizedFilterActive(!isPersonalizedFilterActive)}
+              className={`combo-switch ${isPersonalizedFilterActive ? "is-active" : ""}`}
+              title="Bật/Tắt gợi ý cá nhân hóa"
             >
-              Dưới 1 triệu
-            </button>
-            <button
-              type="button"
-              className={`price-preset-btn ${values.presetPrice === '1m_2m' ? 'active' : ''}`}
-              onClick={() => handleSelectPricePreset('1m_2m')}
-            >
-              1 - 2 triệu
-            </button>
-            <button
-              type="button"
-              className={`price-preset-btn ${values.presetPrice === '2m_3m' ? 'active' : ''}`}
-              onClick={() => handleSelectPricePreset('2m_3m')}
-            >
-              2 - 3 triệu
-            </button>
-            <button
-              type="button"
-              className={`price-preset-btn ${values.presetPrice === 'above_3m' ? 'active' : ''}`}
-              onClick={() => handleSelectPricePreset('above_3m')}
-            >
-              Trên 3 triệu
+              <span className="combo-switch-thumb" />
             </button>
           </div>
         </div>
+      )}
+
+      {/* Accordion 1: KHU VỰC */}
+      <div className="combo-accordion-section">
+        <button
+          type="button"
+          className="combo-accordion-trigger"
+          onClick={() => toggleSection('region')}
+        >
+          <span className="combo-accordion-title">Khu vực</span>
+          <ChevronDown
+            size={15}
+            className={`combo-accordion-chevron ${openSections.region ? "is-open" : ""}`}
+          />
+        </button>
+        {openSections.region && (
+          <div className="combo-accordion-content">
+            <div className="checkbox-list">
+              <label className="checkbox-item">
+                <input
+                  type="checkbox"
+                  checked={isAllRegions}
+                  onChange={() => handleToggleRegion('all')}
+                />
+                <span className="checkbox-custom">
+                  {isAllRegions && <Check size={12} color="#FFFFFF" />}
+                </span>
+                <span className="checkbox-label">Tất cả khu vực</span>
+              </label>
+
+              {regionOptions.map((opt) => (
+                <label
+                  key={opt.label}
+                  className={`checkbox-item ${opt.count === 0 ? 'is-disabled' : ''}`}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={opt.count === 0}
+                    checked={values.regions.includes(opt.label)}
+                    onChange={() => handleToggleRegion(opt.label)}
+                  />
+                  <span className="checkbox-custom">
+                    {values.regions.includes(opt.label) && <Check size={12} color="#FFFFFF" />}
+                  </span>
+                  <span className="checkbox-label">
+                    {opt.label} <span className="checkbox-count-badge">({opt.count})</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="sidebar-divider" />
+      {/* Accordion 2: LOẠI HÌNH */}
+      <div className="combo-accordion-section">
+        <button
+          type="button"
+          className="combo-accordion-trigger"
+          onClick={() => toggleSection('type')}
+        >
+          <span className="combo-accordion-title">Loại hình combo</span>
+          <ChevronDown
+            size={15}
+            className={`combo-accordion-chevron ${openSections.type ? "is-open" : ""}`}
+          />
+        </button>
+        {openSections.type && (
+          <div className="combo-accordion-content">
+            <div className="checkbox-list">
+              {typeOptions.map((opt) => (
+                <label
+                  key={opt.label}
+                  className={`checkbox-item ${opt.count === 0 ? 'is-disabled' : ''}`}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={opt.count === 0}
+                    checked={values.types.includes(opt.label)}
+                    onChange={() => handleToggleType(opt.label)}
+                  />
+                  <span className="checkbox-custom">
+                    {values.types.includes(opt.label) && <Check size={12} color="#FFFFFF" />}
+                  </span>
+                  <span className="checkbox-label">
+                    {opt.label} <span className="checkbox-count-badge">({opt.count})</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
-      {/* Group 4: SẮP XẾP */}
-      <div className="sidebar-filter-group">
-        <h4 className="group-heading">SẮP XẾP</h4>
-        <div className="radio-list">
-          {sortOptions.map((opt) => (
-            <label key={opt.key} className="radio-item">
-              <input
-                type="radio"
-                name="sidebar-sort"
-                checked={values.sortBy === opt.key}
-                onChange={() => onChange({ sortBy: opt.key })}
-              />
-              <span className="radio-custom" />
-              <span className="radio-label">{opt.label}</span>
-            </label>
-          ))}
-        </div>
+      {/* Accordion 3: MỨC GIÁ */}
+      <div className="combo-accordion-section">
+        <button
+          type="button"
+          className="combo-accordion-trigger"
+          onClick={() => toggleSection('price')}
+        >
+          <span className="combo-accordion-title">Khoảng giá combo</span>
+          <ChevronDown
+            size={15}
+            className={`combo-accordion-chevron ${openSections.price ? "is-open" : ""}`}
+          />
+        </button>
+        {openSections.price && (
+          <div className="combo-accordion-content">
+            <div className="price-slider-box">
+              <div className="price-labels-row">
+                <span>{values.minPrice.toLocaleString('vi-VN')}đ</span>
+                <span>
+                  {values.maxPrice >= 5000000
+                    ? '5.000.000đ+'
+                    : `${values.maxPrice.toLocaleString('vi-VN')}đ`}
+                </span>
+              </div>
+
+              <div className="price-range-slider-wrapper">
+                <input
+                  type="range"
+                  min={500000}
+                  max={5000000}
+                  step={100000}
+                  value={values.maxPrice}
+                  onChange={(e) =>
+                    onChange({ maxPrice: Number(e.target.value), presetPrice: null })
+                  }
+                  className="price-range-input"
+                />
+              </div>
+
+              {/* Preset Buttons */}
+              <div className="price-presets-grid">
+                <button
+                  type="button"
+                  className={`price-preset-btn ${values.presetPrice === 'under_1m' ? 'active' : ''}`}
+                  onClick={() => handleSelectPricePreset('under_1m')}
+                >
+                  Dưới 1 triệu
+                </button>
+                <button
+                  type="button"
+                  className={`price-preset-btn ${values.presetPrice === '1m_2m' ? 'active' : ''}`}
+                  onClick={() => handleSelectPricePreset('1m_2m')}
+                >
+                  1 - 2 triệu
+                </button>
+                <button
+                  type="button"
+                  className={`price-preset-btn ${values.presetPrice === '2m_3m' ? 'active' : ''}`}
+                  onClick={() => handleSelectPricePreset('2m_3m')}
+                >
+                  2 - 3 triệu
+                </button>
+                <button
+                  type="button"
+                  className={`price-preset-btn ${values.presetPrice === 'above_3m' ? 'active' : ''}`}
+                  onClick={() => handleSelectPricePreset('above_3m')}
+                >
+                  Trên 3 triệu
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   );

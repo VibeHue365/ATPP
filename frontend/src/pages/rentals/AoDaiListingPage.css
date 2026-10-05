@@ -348,17 +348,15 @@
   background: #FFFFFF;
   border: 1px solid var(--lume-border);
   border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 6px 18px rgba(71, 37, 44, 0.04);
+  padding: 18px 18px 22px;
+  box-shadow: 0 4px 16px rgba(71, 37, 44, 0.03);
   position: sticky;
   top: 90px;
-  max-height: calc(100vh - 110px);
-  overflow-y: auto;
 }
 
 .lume-sidebar-header {
-  margin-bottom: 18px;
-  padding-bottom: 14px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
   border-bottom: 1px solid #F5EAEC;
 }
 
@@ -380,7 +378,7 @@
 
 .lume-sidebar-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 800;
   color: var(--lume-ink);
   letter-spacing: -0.02em;
@@ -401,6 +399,51 @@
 .lume-reset-btn:hover {
   opacity: 0.8;
   text-decoration: underline;
+}
+
+/* Accordion Sections */
+.lume-accordion-section {
+  border-bottom: 1px solid #F5EAEC;
+  padding: 13px 0;
+}
+
+.lume-accordion-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.lume-accordion-trigger {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 3px 0;
+  background: none;
+  border: none;
+  text-align: left;
+  font-family: inherit;
+}
+
+.lume-accordion-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--lume-ink);
+  letter-spacing: -0.01em;
+}
+
+.lume-accordion-chevron {
+  color: #9A858A;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.lume-accordion-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.lume-accordion-content {
+  padding-top: 11px;
 }
 
 .lume-filter-section {
@@ -437,14 +480,27 @@
   justify-content: space-between;
   font-size: 13px;
   font-weight: 600;
-  color: #67575B;
+  color: #5E4E52;
   cursor: pointer;
   user-select: none;
   transition: color 0.15s;
 }
 
-.lume-checkbox-label:hover {
+.lume-checkbox-label:hover:not(.is-disabled) {
   color: var(--lume-primary);
+}
+
+.lume-checkbox-label.is-disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.lume-item-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lume-text-light);
+  margin-left: 2px;
 }
 
 .lume-checkbox-left {
@@ -592,36 +648,51 @@
   background: #FFFFFF;
   border: 1px solid var(--lume-border);
   border-radius: 14px;
-  padding: 16px 20px;
-  box-shadow: 0 4px 16px rgba(181, 43, 71, 0.03);
+  padding: 14px 18px;
+  box-shadow: 0 4px 16px rgba(71, 37, 44, 0.03);
 }
 
 .lume-toolbar-left {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-
-.lume-toolbar-eyebrow {
-  font-size: 10px;
-  font-weight: 800;
-  color: var(--lume-primary);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  gap: 3px;
 }
 
 .lume-toolbar-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 800;
   color: var(--lume-ink);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
+}
+
+.lume-toolbar-subtitle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .lume-toolbar-count {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--lume-muted);
+}
+
+.lume-toolbar-toggle-btn {
+  background: none;
+  border: none;
+  padding: 0;
   font-size: 12px;
   font-weight: 600;
-  color: var(--lume-text-light);
+  color: var(--lume-primary);
+  text-decoration: underline;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.lume-toolbar-toggle-btn:hover {
+  opacity: 0.8;
 }
 
 .lume-sort-dropdown {
@@ -693,38 +764,44 @@
   color: var(--lume-primary);
 }
 
-/* Promo Banner Card */
+/* Promo Banner - Slim & Elegant Strip */
 .lume-promo-banner {
-  background: linear-gradient(135deg, #B52B47 0%, #8D1D34 100%);
-  border-radius: 14px;
-  padding: 18px 22px;
-  color: #FFFFFF;
+  background: #FFF7F8;
+  border: 1px solid #F6D8DE;
+  border-radius: 12px;
+  padding: 10px 18px;
+  color: var(--lume-ink);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  box-shadow: 0 8px 20px rgba(181, 43, 71, 0.2);
+  box-shadow: none;
 }
 
 .lume-promo-left {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  gap: 12px;
 }
 
 .lume-promo-tag {
+  display: inline-block;
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.9);
+  color: #8D1D34;
+  background: #FBE5E9;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 
 .lume-promo-headline {
   margin: 0;
-  font-size: 17px;
-  font-weight: 800;
-  color: #FFFFFF;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: #3C2D31;
   letter-spacing: -0.01em;
 }
 
@@ -732,24 +809,27 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  font-weight: 800;
-  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8D1D34;
   text-decoration: none;
   white-space: nowrap;
-  padding: 7px 14px;
-  background: rgba(255, 255, 255, 0.16);
+  padding: 5px 12px;
+  background: #FFFFFF;
+  border: 1px solid #F0D0D6;
   border-radius: 8px;
-  transition: background 0.15s, transform 0.15s;
+  transition: all 0.15s ease;
 }
 
 .lume-promo-link:hover {
-  background: rgba(255, 255, 255, 0.26);
+  background: #8D1D34;
+  color: #FFFFFF;
+  border-color: #8D1D34;
   transform: translateX(2px);
 }
 
 /* --------------------------------------------------------------------------
-   8. Product Grid & Arched Cards
+   8. Product Grid & 3:4 Cards
    -------------------------------------------------------------------------- */
 .lume-product-grid {
   display: grid;
@@ -759,146 +839,115 @@
 
 .lume-product-card {
   background: #FFFFFF;
-  border: 1px solid var(--lume-border);
-  border-radius: 14px;
+  border: 1px solid #EDE2E4;
+  border-radius: 12px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.22s ease, border-color 0.22s ease;
   position: relative;
   cursor: pointer;
 }
 
 .lume-product-card:hover {
-  border-color: var(--lume-border-hover);
+  border-color: #DDB2BC;
   transform: translateY(-4px);
-  box-shadow: 0 13px 28px rgba(181, 43, 71, 0.1);
+  box-shadow: 0 10px 24px rgba(71, 37, 44, 0.08);
 }
 
-/* Arched Image Container */
+/* 3:4 Full Dress Image Container (No arch clipping) */
 .lume-card-image-wrap {
   width: 100%;
-  aspect-ratio: 1.08;
-  background: var(--lume-soft);
+  aspect-ratio: 3 / 4;
+  background: #FBF7F8;
   position: relative;
   overflow: hidden;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-top: 12px;
-}
-
-/* The classical LUMÉ Arch Shape */
-.lume-card-arch {
-  width: 82%;
-  height: 92%;
-  background: #FFFFFF;
-  border-radius: 140px 140px 0 0;
-  overflow: hidden;
-  position: relative;
-  box-shadow: 0 4px 14px rgba(181, 43, 71, 0.06);
 }
 
 .lume-card-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.4s ease;
+  display: block;
+  transition: transform 0.35s ease;
 }
 
 .lume-product-card:hover .lume-card-img {
-  transform: scale(1.05);
+  transform: scale(1.04);
 }
 
+/* Single clean glassmorphic badge */
 .lume-card-badge {
   position: absolute;
   top: 10px;
   left: 10px;
-  background: var(--lume-primary);
-  color: #FFFFFF;
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 4px 9px;
-  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #8D1D34;
+  border: 1px solid rgba(181, 43, 71, 0.18);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  padding: 3.5px 8.5px;
+  border-radius: 6px;
   z-index: 2;
-  box-shadow: 0 2px 6px rgba(181, 43, 71, 0.25);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
+/* Favorite Button */
 .lume-fav-btn {
   position: absolute;
   top: 10px;
   right: 10px;
-  width: 31px;
-  height: 31px;
-  border-radius: 10px;
-  background: #FFFFFF;
-  border: 1px solid var(--lume-border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--lume-primary);
   cursor: pointer;
   transition: all 0.2s ease;
   z-index: 2;
 }
 
 .lume-fav-btn:hover {
-  transform: scale(1.08) rotate(-4deg);
-  background: var(--lume-soft);
+  transform: scale(1.1);
+  background: #FFFFFF;
 }
 
 .lume-fav-btn.is-favorited {
-  background: var(--lume-primary);
-  border-color: var(--lume-primary);
-  color: #FFFFFF;
+  background: #FFF0F2;
+  border-color: #F8CAD1;
 }
 
-/* Card Body */
+/* Card Body - Structured hierarchy */
 .lume-card-body {
-  padding: 14px 16px;
+  padding: 13px 15px 15px;
   display: flex;
   flex-direction: column;
   gap: 7px;
   flex: 1;
+  background: #FFFFFF;
 }
 
-.lume-card-brand-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 10px;
-}
-
-.lume-brand-name {
-  font-weight: 800;
-  color: #9B7A80;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.lume-verified-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--lume-verified-green);
-  font-weight: 700;
-  font-size: 10.5px;
-}
-
+/* 1. Tên áo dài (đậm) */
 .lume-card-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 750;
   color: var(--lume-ink);
   line-height: 1.35;
-  min-height: 40px;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  text-overflow: ellipsis;
   transition: color 0.15s;
 }
 
@@ -906,81 +955,90 @@
   color: var(--lume-primary);
 }
 
-.lume-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--lume-muted);
-}
-
-.lume-rating {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-weight: 750;
-  color: var(--lume-ink);
-}
-
-.lume-star-icon {
-  color: var(--lume-star-gold);
-}
-
-.lume-meta-dot {
-  color: var(--lume-text-light);
-}
-
-.lume-card-tags {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 1px;
-}
-
-.lume-tag-pill {
-  background: var(--lume-soft-bg);
-  border: 1px solid #F6E6E9;
-  color: #6E5A5E;
-  font-size: 10.5px;
-  font-weight: 650;
-  padding: 2px 7px;
-  border-radius: 6px;
-}
-
-.lume-card-hint {
-  margin: 2px 0 0;
-  font-size: 11px;
-  font-style: italic;
-  color: #9B8589;
-}
-
-.lume-card-footer {
-  margin-top: auto;
-  padding-top: 10px;
-  border-top: 1px solid #F3E7E9;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.lume-price-group {
+/* 2. Giá thuê / ngày (nổi bật, đỏ rượu) */
+.lume-card-price-row {
   display: flex;
   align-items: baseline;
-  gap: 3px;
+  gap: 4px;
 }
 
 .lume-price-amount {
-  font-size: 17px;
+  font-size: 16.5px;
   font-weight: 800;
-  color: var(--lume-primary);
-  letter-spacing: -0.02em;
+  color: #8D1E2D;
+  letter-spacing: -0.01em;
 }
 
 .lume-price-unit {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--lume-muted);
+}
+
+.lume-price-original {
+  font-size: 11.5px;
+  color: var(--lume-text-light);
+  text-decoration: line-through;
+  margin-left: 4px;
+}
+
+/* 3. Lý do phù hợp ngắn (Sparkles) */
+.lume-card-match-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
   font-size: 11px;
   font-weight: 600;
-  color: #9B8589;
+  color: #8D1D34;
+  background: #FDF2F4;
+  border: 1px solid #F5D5DC;
+  padding: 2.5px 8px;
+  border-radius: 5px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lume-match-sparkle {
+  color: #B52B47;
+  flex-shrink: 0;
+}
+
+/* 4. Shop + dấu xác minh + địa điểm (nhỏ, xám) */
+.lume-card-shop-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #7D6B70;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid #F6EFF0;
+}
+
+.lume-shop-name {
+  font-weight: 600;
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #5E5054;
+}
+
+.lume-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--lume-verified-green);
+  font-weight: 600;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.lume-meta-dot {
+  color: #C0B0B4;
 }
 
 .lume-detail-btn {
@@ -1160,126 +1218,148 @@
 }
 
 /* --------------------------------------------------------------------------
-   Onboarding Personalized Filter Card & Badges
+   Onboarding Profile Strip & iOS Switch
    -------------------------------------------------------------------------- */
-.lume-onboarding-card {
-  background: linear-gradient(135deg, rgba(251, 229, 233, 0.6) 0%, rgba(255, 248, 249, 0.95) 100%);
-  border: 1.5px solid #F0DADC;
-  border-radius: 16px;
-  padding: 16px;
-  margin-bottom: 24px;
-  box-shadow: 0 4px 14px rgba(181, 43, 71, 0.05);
+.lume-profile-strip {
+  background: #FAF6F7;
+  border: 1px solid #EFE4E6;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
 }
 
-.lume-onboarding-card-header {
+.lume-profile-strip-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
 }
 
-.lume-onboarding-card-badge {
+.lume-profile-strip-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--lume-primary);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--lume-ink);
 }
 
-.lume-onboarding-edit-link {
-  font-size: 12px;
-  font-weight: 700;
-  color: #8B5A2B;
+.lume-sparkle-icon {
+  color: #8D1D34;
+}
+
+.lume-profile-edit-link {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #8D1D34;
   text-decoration: underline;
   transition: opacity 0.15s;
 }
 
-.lume-onboarding-edit-link:hover {
+.lume-profile-edit-link:hover {
   opacity: 0.8;
 }
 
-.lume-onboarding-card-subtitle {
-  font-size: 12px;
-  color: var(--lume-text-secondary);
-  margin: 0 0 10px 0;
-  line-height: 1.4;
-}
-
-.lume-onboarding-chips {
+.lume-profile-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
-.lume-onboarding-chip {
+.lume-profile-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-size: 11px;
+  font-weight: 600;
+  color: #4B3B3E;
   background: #FFFFFF;
-  border: 1px solid #EAD2D7;
-  color: #5D4037;
-  padding: 4px 10px;
+  border: 1px solid #E6D2D6;
   border-radius: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  padding: 3px 8px 3px 9px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
-.lume-onboarding-chip strong {
-  color: var(--lume-primary);
+.lume-profile-chip-remove {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 10px;
+  color: #A08A8F;
+  cursor: pointer;
+  line-height: 1;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
 }
 
-.lume-onboarding-toggle-row {
+.lume-profile-chip-remove:hover {
+  background: #F2D5DA;
+  color: #8D1D34;
+}
+
+.lume-profile-chip-reset {
+  background: none;
+  border: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8D1D34;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 2px 4px;
+}
+
+.lume-profile-toggle-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px dashed #E8CCD1;
-  padding-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #EFE4E6;
 }
 
-.lume-toggle-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  font-size: 12px;
+.lume-toggle-text {
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--lume-ink);
-  user-select: none;
 }
 
-.lume-toggle-checkbox {
-  accent-color: var(--lume-primary);
+/* iOS Toggle Switch */
+.lume-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: #D8CED1;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  transition: background 0.2s ease;
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.lume-switch.is-active {
+  background: #8D1D34;
+}
+
+.lume-switch-thumb {
+  display: block;
   width: 16px;
   height: 16px;
-  cursor: pointer;
+  background: #FFFFFF;
+  border-radius: 50%;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
-.lume-toolbar-count-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
-.lume-view-all-btn {
-  background: none;
-  border: none;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--lume-primary);
-  text-decoration: underline;
-  cursor: pointer;
-  padding: 0;
-  transition: opacity 0.15s;
-}
-
-.lume-view-all-btn:hover {
-  opacity: 0.8;
+.lume-switch.is-active .lume-switch-thumb {
+  transform: translateX(16px);
 }
 
 .lume-size-btn.is-user-preferred {

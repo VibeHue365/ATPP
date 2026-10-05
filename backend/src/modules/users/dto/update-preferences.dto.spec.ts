@@ -26,4 +26,15 @@ describe('UpdatePreferencesDto', () => {
     expect(await validate(unsupported)).not.toHaveLength(0);
     expect(await validate(duplicated)).not.toHaveLength(0);
   });
+
+  it('accepts address and personal note preferences', async () => {
+    const dto = plainToInstance(UpdatePreferencesDto, {
+      address: '123 Đường Lê Lợi, Huế',
+      preferences: {
+        note: 'Ưu tiên gọi điện trước khi giao',
+      },
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+  });
 });

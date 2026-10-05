@@ -586,10 +586,10 @@
 
 .lume-header__inner {
   width: 100% !important;
-  max-width: 1440px !important;
+  max-width: 1200px !important;
   height: 100% !important;
   margin: 0 auto !important;
-  padding-inline: clamp(20px, 3.6vw, 52px) !important;
+  padding-inline: 24px !important;
 }
 
 .lume-header .lume-header__content {
@@ -1843,6 +1843,7 @@
   margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;

@@ -447,6 +447,9 @@ export class UsersRepository {
       if (prefs.preferredOccasions !== undefined) {
         updateQuery['preferences.preferredOccasions'] = prefs.preferredOccasions;
       }
+      if (prefs.note !== undefined) {
+        updateQuery['preferences.note'] = prefs.note;
+      }
     }
 
     if (Object.keys(updateQuery).length > 0) {

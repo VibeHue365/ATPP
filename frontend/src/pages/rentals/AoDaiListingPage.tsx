@@ -2,17 +2,15 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Heart,
-  Star,
   ChevronDown,
   Sparkles,
-  Search,
   Check,
   Calendar,
-  User,
-  GraduationCap,
-  Gem,
   ArrowRight,
   SlidersHorizontal,
+  MapPin,
+  Tag,
+  Layers,
 } from "lucide-react";
 import { httpClient } from "../../services/httpClient";
 import { API_BASE_URL } from "../../config/env";
@@ -20,7 +18,9 @@ import { useAuth } from "../../features/auth/hooks/useAuth";
 import { useToast } from "../../components/feedback/Toast";
 import { ROUTES } from "../../config/routes";
 import Swal from "sweetalert2";
-
+import { ListingHero } from "../../components/common/ListingHero";
+import { UnifiedSearchBar, type SearchFieldConfig } from "../../components/common/UnifiedSearchBar";
+import { ListingCategoryTabs } from "../../components/common/ListingCategoryTabs";
 
 import "./AoDaiListingPage.css";
 
@@ -143,6 +143,24 @@ export const AoDaiListingPage: React.FC = () => {
   const ITEMS_PER_PAGE = 9;
   const [debouncedMaxPrice, setDebouncedMaxPrice] = useState(maxPrice);
   const [isPersonalizedFilterActive, setIsPersonalizedFilterActive] = useState<boolean>(true);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    type: true,
+    size: true,
+    color: true,
+    price: true,
+    amenities: false,
+  });
+
+  const toggleSection = (section: string) => {
+    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const [disabledProfilePrefs, setDisabledProfilePrefs] = useState<{
+    size?: boolean;
+    color?: boolean;
+    style?: boolean;
+    occasion?: boolean;
+  }>({});
 
   // Onboarding user preferences extraction
   const userPreferences = user?.preferences;
@@ -365,18 +383,6 @@ export const AoDaiListingPage: React.FC = () => {
     };
   }, [products, totalCount]);
 
-  // 2. Dynamic Quick Categories Tabs with live counts
-  const quickCategories = useMemo(
-    () => [
-      { id: "all", name: "Tất cả", count: `${stats.totalCount} mẫu`, icon: Sparkles },
-      { id: "female", name: "Áo dài nữ", count: `${stats.female} mẫu`, icon: User },
-      { id: "male", name: "Áo dài nam", count: `${stats.male} mẫu`, icon: User },
-      { id: "couple", name: "Áo dài đôi", count: `${stats.couple} mẫu`, icon: Heart },
-      { id: "yearbook", name: "Kỷ yếu", count: `${stats.yearbook} mẫu`, icon: GraduationCap },
-      { id: "wedding", name: "Cưới hỏi", count: `${stats.wedding} mẫu`, icon: Gem },
-    ],
-    [stats]
-  );
 
   // 3. Featured live campaign (if any active on platform)
   const featuredCampaign = useMemo(() => {
@@ -463,419 +469,517 @@ export const AoDaiListingPage: React.FC = () => {
     }
   };
 
-  // Helper for card badge
+  // Helper for card badge - only status/highlight badges, not categories
   const getCardBadge = (product: ProductFromDb, index: number) => {
     if (product.activeCampaign) {
       return `-${product.activeCampaign.discountPercent}%`;
     }
     if (product.badges && product.badges.length > 0) {
-      return product.badges[0].label;
+      const label = product.badges[0].label;
+      if (!["KỶ YẾU", "NAM", "CẶP ĐÔI", "ĐÔI"].includes(label.toUpperCase())) {
+        return label;
+      }
     }
-    const name = product.name.toLowerCase();
-    if (name.includes("cặp") || name.includes("đôi")) return "CẶP ĐÔI";
-    if (name.includes("nam")) return "NAM";
-    if (name.includes("kỷ yếu")) return "KỶ YẾU";
-    if (index === 0) return "BÁN CHẠY";
-    if (index === 1) return "PHỔ BIẾN";
-    if (index === 2) return "MỚI";
-    return "NỔI BẬT";
+    if (index === 0) return "Bán chạy";
+    if (index === 1) return "Yêu thích";
+    if (index === 2) return "Mới";
+    return null;
   };
 
-  return (
-    <div className="lume-aodai-page">
-      <div className="lume-aodai-container">
-        {/* 1. Breadcrumb */}
-        <nav className="lume-breadcrumb" aria-label="Breadcrumb">
-          <Link to="/">Trang chủ</Link>
-          <span className="lume-breadcrumb-sep">/</span>
-          <span className="lume-breadcrumb-current">Thuê áo dài</span>
-        </nav>
+  const aodaiCategoryTabs = [
+    { id: 'all', label: 'Tất cả mẫu' },
+    { id: 'Nữ', label: 'Áo dài Nữ' },
+    { id: 'Nam', label: 'Áo dài Nam' },
+    { id: 'Cặp đôi', label: 'Cặp đôi' },
+    { id: 'Cổ phục', label: 'Cổ phục / Nhật Bình' },
+    { id: 'Kỷ yếu', label: 'Kỷ yếu / Sự kiện' },
+  ];
 
-        {/* 2. Hero Section */}
-        <section className="lume-hero-section">
-          <div className="lume-hero-text">
-            <span className="lume-hero-eyebrow">MẪU ÁO DÀI ĐÃ XÁC MINH</span>
-            <h1 className="lume-hero-title">Thuê áo dài tại miền Trung</h1>
-            <p className="lume-hero-sub">
-              Chọn mẫu, size, hình thức thuê và thời gian nhận trả phù hợp.
-            </p>
-          </div>
-          <div className="lume-hero-stats">
-            <div className="lume-stat-item">
-              <strong>{stats.totalCount > 0 ? `${stats.totalCount}+` : "0"}</strong>
-              <span>Mẫu áo dài</span>
-            </div>
-            <div className="lume-stat-item">
-              <strong>{stats.storesCount}</strong>
-              <span>Cửa hàng</span>
-            </div>
-            <div className="lume-stat-item">
-              <strong>{stats.avgRating}/5</strong>
-              <span>Đánh giá</span>
-            </div>
-          </div>
-        </section>
-
-        {/* 3. Quick Search Bar */}
-        <section className="lume-search-card">
-          <form
-            className="lume-search-form"
-            onSubmit={(e) => {
-              e.preventDefault();
+  const aodaiSearchFields: SearchFieldConfig[] = [
+    {
+      label: 'Khu vực',
+      icon: <MapPin size={13} />,
+      content: (
+        <>
+          <select
+            className="unified-search-select"
+            value={searchLocation}
+            onChange={(e) => {
+              setSearchLocation(e.target.value);
               setCurrentPage(1);
             }}
           >
-            {/* Field 1: Khu vực nhận áo */}
-            <div className="lume-search-field">
-              <span className="lume-search-label">Khu vực nhận áo</span>
-              <select
-                className="lume-search-select"
-                value={searchLocation}
-                onChange={(e) => {
-                  setSearchLocation(e.target.value);
-                  setCurrentPage(1);
-                }}
-              >
-                <option value="">Tất cả khu vực</option>
-                <option value="Huế">Huế</option>
-                <option value="Đà Nẵng">Đà Nẵng</option>
-                <option value="Hội An">Hội An</option>
-              </select>
-            </div>
+            <option value="">Tất cả khu vực</option>
+            <option value="Huế">Huế</option>
+            <option value="Đà Nẵng">Đà Nẵng</option>
+            <option value="Hội An">Hội An</option>
+          </select>
+          <ChevronDown size={14} className="unified-search-arrow" />
+        </>
+      ),
+    },
+    {
+      label: 'Hình thức thuê',
+      icon: <Tag size={13} />,
+      content: (
+        <>
+          <select
+            className="unified-search-select"
+            value={rentalType}
+            onChange={(e) => setRentalType(e.target.value)}
+          >
+            <option value="Theo ngày">Theo ngày</option>
+            <option value="Theo giờ">Theo giờ</option>
+            <option value="Theo sự kiện">Theo sự kiện</option>
+          </select>
+          <ChevronDown size={14} className="unified-search-arrow" />
+        </>
+      ),
+    },
+    {
+      label: 'Ngày thuê',
+      icon: <Calendar size={13} />,
+      content: (
+        <input
+          type="date"
+          className="unified-search-input"
+          value={rentalDate}
+          onChange={(e) => setRentalDate(e.target.value)}
+        />
+      ),
+    },
+    {
+      label: 'Size',
+      icon: <Layers size={13} />,
+      content: (
+        <>
+          <select
+            className="unified-search-select"
+            value={selectedSearchSize}
+            onChange={(e) => {
+              setSelectedSearchSize(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="">Tất cả size</option>
+            <option value="S">Size S</option>
+            <option value="M">Size M</option>
+            <option value="L">Size L</option>
+            <option value="XL">Size XL</option>
+            <option value="Free">Size Free</option>
+          </select>
+          <ChevronDown size={14} className="unified-search-arrow" />
+        </>
+      ),
+    },
+  ];
 
-            <div className="lume-search-divider" />
+  return (
+    <div className="unified-listing-page">
+      <div className="unified-listing-container">
+        {/* 1. Unified Hero */}
+        <ListingHero
+          breadcrumbs={[
+            { label: 'Trang chủ', href: '/' },
+            { label: 'Thuê áo dài' },
+          ]}
+          eyebrow="MẪU ÁO DÀI ĐÃ XÁC MINH"
+          title="Thuê áo dài tại miền Trung"
+          description="Chọn mẫu, size, hình thức thuê và thời gian nhận trả phù hợp."
+          stats={[
+            { value: stats.totalCount > 0 ? `${stats.totalCount}+` : '120+', label: 'Mẫu áo dài' },
+            { value: stats.storesCount > 0 ? `${stats.storesCount}` : '15+', label: 'Cửa hàng' },
+            { value: '4.9★', label: 'Đánh giá cao' },
+          ]}
+        />
 
-            {/* Field 2: Hình thức thuê */}
-            <div className="lume-search-field">
-              <span className="lume-search-label">Hình thức thuê</span>
-              <select
-                className="lume-search-select"
-                value={rentalType}
-                onChange={(e) => setRentalType(e.target.value)}
-              >
-                <option value="Theo ngày">Theo ngày</option>
-                <option value="Theo giờ">Theo giờ</option>
-                <option value="Theo sự kiện">Theo sự kiện</option>
-              </select>
-            </div>
+        {/* 2. Unified Search Bar */}
+        <UnifiedSearchBar
+          fields={aodaiSearchFields}
+          buttonText="Tìm áo dài"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setCurrentPage(1);
+          }}
+        />
 
-            <div className="lume-search-divider" />
+        {/* 3. Quick Category Tabs */}
+        <ListingCategoryTabs
+          tabs={aodaiCategoryTabs}
+          activeTab={activeTab}
+          onSelectTab={(tabId) => {
+            setActiveTab(tabId);
+            setCurrentPage(1);
+          }}
+        />
 
-            {/* Field 3: Thời gian */}
-            <div className="lume-search-field">
-              <span className="lume-search-label">Thời gian</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <input
-                  type="date"
-                  className="lume-search-input"
-                  value={rentalDate}
-                  onChange={(e) => setRentalDate(e.target.value)}
-                />
-                {!rentalDate && (
-                  <Calendar size={15} style={{ color: "var(--lume-text-light)" }} />
-                )}
-              </div>
-            </div>
-
-            <div className="lume-search-divider" />
-
-            {/* Field 4: Size */}
-            <div className="lume-search-field">
-              <span className="lume-search-label">Size</span>
-              <select
-                className="lume-search-select"
-                value={selectedSearchSize}
-                onChange={(e) => {
-                  setSelectedSearchSize(e.target.value);
-                  setCurrentPage(1);
-                }}
-              >
-                <option value="">Tất cả size</option>
-                <option value="S">Size S</option>
-                <option value="M">Size M</option>
-                <option value="L">Size L</option>
-                <option value="XL">Size XL</option>
-                <option value="Free">Size Free</option>
-              </select>
-            </div>
-
-            {/* Button */}
-            <button type="submit" className="lume-search-btn">
-              <Search size={16} />
-              <span>Tìm áo dài</span>
-            </button>
-          </form>
-        </section>
-
-
-
-        {/* 5. Main 2-Column Section (Sidebar + Grid) */}
-        <div className="lume-main-layout">
+        {/* 4. Main 2-Column Section (Sidebar + Grid) */}
+        <div className="unified-main-layout">
           {/* Left Column: Sidebar Filter */}
           <aside className="lume-sidebar">
             <div className="lume-sidebar-header">
-              <span className="lume-sidebar-eyebrow">BỘ LỌC</span>
               <div className="lume-sidebar-title-row">
-                <h2 className="lume-sidebar-title">Tinh chỉnh kết quả</h2>
+                <h2 className="lume-sidebar-title">Bộ lọc</h2>
                 <button
                   type="button"
                   className="lume-reset-btn"
                   onClick={handleClearAll}
                 >
-                  Xóa
+                  Xóa tất cả
                 </button>
               </div>
             </div>
 
-            {/* Onboarding Personalized Filter Card */}
+            {/* Onboarding Profile Strip */}
             {userHasOnboarding && (
-              <div className="lume-onboarding-card">
-                <div className="lume-onboarding-card-header">
-                  <div className="lume-onboarding-card-badge">
+              <div className="lume-profile-strip">
+                <div className="lume-profile-strip-header">
+                  <div className="lume-profile-strip-title">
                     <Sparkles size={14} className="lume-sparkle-icon" />
-                    <span>HỒ SƠ CỦA BẠN</span>
+                    <span>Hồ sơ gợi ý</span>
                   </div>
                   <Link
                     to={ROUTES.ONBOARDING}
-                    className="lume-onboarding-edit-link"
+                    className="lume-profile-edit-link"
                     title="Chỉnh sửa số đo & sở thích"
                   >
                     Đổi sở thích
                   </Link>
                 </div>
 
-                <p className="lume-onboarding-card-subtitle">
-                  Đang áp dụng số đo & phong cách đã khảo sát:
-                </p>
-
-                <div className="lume-onboarding-chips">
-                  {userPrefSize && (
-                    <span className="lume-onboarding-chip">
-                      Size <strong>{userPrefSize}</strong>
+                <div className="lume-profile-chips">
+                  {userPrefSize && !disabledProfilePrefs.size && (
+                    <span className="lume-profile-chip">
+                      <span>Size {userPrefSize}</span>
+                      <button
+                        type="button"
+                        className="lume-profile-chip-remove"
+                        onClick={() => setDisabledProfilePrefs((p) => ({ ...p, size: true }))}
+                        title="Bỏ lọc size"
+                      >
+                        ✕
+                      </button>
                     </span>
                   )}
-                  {userPrefRawColor && (
-                    <span className="lume-onboarding-chip">
-                      Tông <strong>{formatColorName(userPrefRawColor)}</strong>
+                  {userPrefRawColor && !disabledProfilePrefs.color && (
+                    <span className="lume-profile-chip">
+                      <span>{formatColorName(userPrefRawColor)}</span>
+                      <button
+                        type="button"
+                        className="lume-profile-chip-remove"
+                        onClick={() => setDisabledProfilePrefs((p) => ({ ...p, color: true }))}
+                        title="Bỏ lọc màu"
+                      >
+                        ✕
+                      </button>
                     </span>
                   )}
-                  {userPrefRawStyle && (
-                    <span className="lume-onboarding-chip">
-                      Gu <strong>{formatStyleName(userPrefRawStyle)}</strong>
+                  {userPrefRawStyle && !disabledProfilePrefs.style && (
+                    <span className="lume-profile-chip">
+                      <span>{formatStyleName(userPrefRawStyle)}</span>
+                      <button
+                        type="button"
+                        className="lume-profile-chip-remove"
+                        onClick={() => setDisabledProfilePrefs((p) => ({ ...p, style: true }))}
+                        title="Bỏ lọc phong cách"
+                      >
+                        ✕
+                      </button>
                     </span>
                   )}
-                  {userPrefRawOccasion && (
-                    <span className="lume-onboarding-chip">
-                      Dịp <strong>{formatOccasionName(userPrefRawOccasion)}</strong>
+                  {userPrefRawOccasion && !disabledProfilePrefs.occasion && (
+                    <span className="lume-profile-chip">
+                      <span>{formatOccasionName(userPrefRawOccasion)}</span>
+                      <button
+                        type="button"
+                        className="lume-profile-chip-remove"
+                        onClick={() => setDisabledProfilePrefs((p) => ({ ...p, occasion: true }))}
+                        title="Bỏ lọc dịp"
+                      >
+                        ✕
+                      </button>
                     </span>
+                  )}
+                  {Object.values(disabledProfilePrefs).some(Boolean) && (
+                    <button
+                      type="button"
+                      className="lume-profile-chip-reset"
+                      onClick={() => setDisabledProfilePrefs({})}
+                    >
+                      Khôi phục
+                    </button>
                   )}
                 </div>
 
-                <div className="lume-onboarding-toggle-row">
-                  <label className="lume-toggle-label">
-                    <input
-                      type="checkbox"
-                      checked={isPersonalizedFilterActive}
-                      onChange={(e) => {
-                        setIsPersonalizedFilterActive(e.target.checked);
-                        setCurrentPage(1);
-                      }}
-                      className="lume-toggle-checkbox"
-                    />
-                    <span className="lume-toggle-text">
-                      {isPersonalizedFilterActive
-                        ? "Đang bật gợi ý cá nhân hóa"
-                        : "Tắt lọc (Xem toàn bộ kho)"}
-                    </span>
-                  </label>
+                <div className="lume-profile-toggle-row">
+                  <span className="lume-toggle-text">
+                    {isPersonalizedFilterActive ? "Gợi ý cá nhân hóa" : "Toàn bộ kho áo dài"}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isPersonalizedFilterActive}
+                    onClick={() => {
+                      setIsPersonalizedFilterActive(!isPersonalizedFilterActive);
+                      setCurrentPage(1);
+                    }}
+                    className={`lume-switch ${isPersonalizedFilterActive ? "is-active" : ""}`}
+                    title="Bật/Tắt gợi ý cá nhân hóa"
+                  >
+                    <span className="lume-switch-thumb" />
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* Section 1: Loại áo dài (Dynamic live counts) */}
-            <div className="lume-filter-section">
-              <h3 className="lume-filter-heading">Loại áo dài</h3>
-              <div className="lume-checkbox-list">
-                <label className="lume-checkbox-label">
-                  <div className="lume-checkbox-left">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.includes("female")}
-                      onChange={() => handleToggleType("female")}
-                    />
-                    <div className="lume-custom-checkbox">
-                      {selectedTypes.includes("female") && (
-                        <Check size={12} color="#FFFFFF" />
-                      )}
-                    </div>
-                    <span>Áo dài nữ</span>
-                  </div>
-                  <span className="lume-checkbox-count">{stats.female}</span>
-                </label>
-
-                <label className="lume-checkbox-label">
-                  <div className="lume-checkbox-left">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.includes("male")}
-                      onChange={() => handleToggleType("male")}
-                    />
-                    <div className="lume-custom-checkbox">
-                      {selectedTypes.includes("male") && (
-                        <Check size={12} color="#FFFFFF" />
-                      )}
-                    </div>
-                    <span>Áo dài nam</span>
-                  </div>
-                  <span className="lume-checkbox-count">{stats.male}</span>
-                </label>
-
-                <label className="lume-checkbox-label">
-                  <div className="lume-checkbox-left">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.includes("couple")}
-                      onChange={() => handleToggleType("couple")}
-                    />
-                    <div className="lume-custom-checkbox">
-                      {selectedTypes.includes("couple") && (
-                        <Check size={12} color="#FFFFFF" />
-                      )}
-                    </div>
-                    <span>Áo dài đôi</span>
-                  </div>
-                  <span className="lume-checkbox-count">{stats.couple}</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Section 2: Size */}
-            <div className="lume-filter-section">
-              <h3 className="lume-filter-heading">Size</h3>
-              <div className="lume-size-options">
-                {SIZE_OPTIONS.map((size) => {
-                  const isSelected = selectedSizes.includes(size);
-                  const isUserSize = userPrefSize === size.toUpperCase();
-                  return (
-                    <button
-                      key={size}
-                      type="button"
-                      className={`lume-size-btn ${isSelected ? "is-selected" : ""} ${isUserSize ? "is-user-preferred" : ""}`}
-                      onClick={() => handleToggleSize(size)}
-                      title={isUserSize ? "Kích cỡ đề xuất theo số đo của bạn" : undefined}
-                    >
-                      <span>{size}</span>
-                      {isUserSize && (
-                        <span className="lume-size-star" title="Size đề xuất theo số đo của bạn">
-                          ★
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Section 3: Màu sắc */}
-            <div className="lume-filter-section">
-              <h3 className="lume-filter-heading">Màu sắc</h3>
-              <div className="lume-color-options">
-                {COLOR_PALETTES.map((color) => {
-                  const isSelected = selectedColors.includes(color.value);
-                  return (
-                    <button
-                      key={color.value}
-                      type="button"
-                      title={color.name}
-                      className={`lume-color-swatch ${isSelected ? "is-selected" : ""}`}
-                      style={{ backgroundColor: color.hex }}
-                      onClick={() => handleToggleColor(color.value)}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Section 4: Khoảng giá */}
-            <div className="lume-filter-section">
-              <h3 className="lume-filter-heading">Khoảng giá</h3>
-              <div className="lume-range-wrap">
-                <input
-                  type="range"
-                  min={90000}
-                  max={1000000}
-                  step={10000}
-                  value={maxPrice}
-                  onChange={(e) => {
-                    setMaxPrice(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="lume-range-slider"
+            {/* Accordion Section 1: Loại áo dài */}
+            <div className="lume-accordion-section">
+              <button
+                type="button"
+                className="lume-accordion-trigger"
+                onClick={() => toggleSection('type')}
+              >
+                <span className="lume-accordion-title">Loại áo dài</span>
+                <ChevronDown
+                  size={15}
+                  className={`lume-accordion-chevron ${openSections.type ? "is-open" : ""}`}
                 />
-                <div className="lume-range-labels">
-                  <span>90k</span>
-                  <span>1 triệu</span>
-                </div>
-                {maxPrice < 1000000 && (
-                  <div className="lume-current-price-badge">
-                    Tối đa: {maxPrice.toLocaleString("vi-VN")}đ
+              </button>
+              {openSections.type && (
+                <div className="lume-accordion-content">
+                  <div className="lume-checkbox-list">
+                    <label className={`lume-checkbox-label ${stats.female === 0 ? "is-disabled" : ""}`}>
+                      <div className="lume-checkbox-left">
+                        <input
+                          type="checkbox"
+                          disabled={stats.female === 0}
+                          checked={selectedTypes.includes("female")}
+                          onChange={() => handleToggleType("female")}
+                        />
+                        <div className="lume-custom-checkbox">
+                          {selectedTypes.includes("female") && <Check size={12} color="#FFFFFF" />}
+                        </div>
+                        <span>
+                          Áo dài nữ <span className="lume-item-count">({stats.female})</span>
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className={`lume-checkbox-label ${stats.male === 0 ? "is-disabled" : ""}`}>
+                      <div className="lume-checkbox-left">
+                        <input
+                          type="checkbox"
+                          disabled={stats.male === 0}
+                          checked={selectedTypes.includes("male")}
+                          onChange={() => handleToggleType("male")}
+                        />
+                        <div className="lume-custom-checkbox">
+                          {selectedTypes.includes("male") && <Check size={12} color="#FFFFFF" />}
+                        </div>
+                        <span>
+                          Áo dài nam <span className="lume-item-count">({stats.male})</span>
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className={`lume-checkbox-label ${stats.couple === 0 ? "is-disabled" : ""}`}>
+                      <div className="lume-checkbox-left">
+                        <input
+                          type="checkbox"
+                          disabled={stats.couple === 0}
+                          checked={selectedTypes.includes("couple")}
+                          onChange={() => handleToggleType("couple")}
+                        />
+                        <div className="lume-custom-checkbox">
+                          {selectedTypes.includes("couple") && <Check size={12} color="#FFFFFF" />}
+                        </div>
+                        <span>
+                          Áo dài đôi <span className="lume-item-count">({stats.couple})</span>
+                        </span>
+                      </div>
+                    </label>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
-            {/* Section 5: Tiện ích */}
-            <div className="lume-filter-section">
-              <h3 className="lume-filter-heading">Tiện ích</h3>
-              <div className="lume-checkbox-list">
-                <label className="lume-checkbox-label">
-                  <div className="lume-checkbox-left">
-                    <input
-                      type="checkbox"
-                      checked={selectedAmenities.includes("accessories")}
-                      onChange={() => handleToggleAmenity("accessories")}
-                    />
-                    <div className="lume-custom-checkbox">
-                      {selectedAmenities.includes("accessories") && (
-                        <Check size={12} color="#FFFFFF" />
-                      )}
-                    </div>
-                    <span>Có phụ kiện</span>
+            {/* Accordion Section 2: Kích cỡ */}
+            <div className="lume-accordion-section">
+              <button
+                type="button"
+                className="lume-accordion-trigger"
+                onClick={() => toggleSection('size')}
+              >
+                <span className="lume-accordion-title">Kích cỡ</span>
+                <ChevronDown
+                  size={15}
+                  className={`lume-accordion-chevron ${openSections.size ? "is-open" : ""}`}
+                />
+              </button>
+              {openSections.size && (
+                <div className="lume-accordion-content">
+                  <div className="lume-size-options">
+                    {SIZE_OPTIONS.map((size) => {
+                      const isSelected = selectedSizes.includes(size);
+                      const isUserSize = userPrefSize === size.toUpperCase();
+                      return (
+                        <button
+                          key={size}
+                          type="button"
+                          className={`lume-size-btn ${isSelected ? "is-selected" : ""} ${isUserSize ? "is-user-preferred" : ""}`}
+                          onClick={() => handleToggleSize(size)}
+                          title={isUserSize ? "Kích cỡ đề xuất của bạn" : undefined}
+                        >
+                          <span>{size}</span>
+                          {isUserSize && (
+                            <span className="lume-size-star" title="Size đề xuất của bạn">
+                              ★
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                </label>
+                </div>
+              )}
+            </div>
 
-                <label className="lume-checkbox-label">
-                  <div className="lume-checkbox-left">
-                    <input
-                      type="checkbox"
-                      checked={selectedAmenities.includes("tryOn")}
-                      onChange={() => handleToggleAmenity("tryOn")}
-                    />
-                    <div className="lume-custom-checkbox">
-                      {selectedAmenities.includes("tryOn") && (
-                        <Check size={12} color="#FFFFFF" />
-                      )}
-                    </div>
-                    <span>Được thử trước</span>
+            {/* Accordion Section 3: Màu sắc */}
+            <div className="lume-accordion-section">
+              <button
+                type="button"
+                className="lume-accordion-trigger"
+                onClick={() => toggleSection('color')}
+              >
+                <span className="lume-accordion-title">Màu sắc</span>
+                <ChevronDown
+                  size={15}
+                  className={`lume-accordion-chevron ${openSections.color ? "is-open" : ""}`}
+                />
+              </button>
+              {openSections.color && (
+                <div className="lume-accordion-content">
+                  <div className="lume-color-options">
+                    {COLOR_PALETTES.map((color) => {
+                      const isSelected = selectedColors.includes(color.value);
+                      return (
+                        <button
+                          key={color.value}
+                          type="button"
+                          title={color.name}
+                          className={`lume-color-swatch ${isSelected ? "is-selected" : ""}`}
+                          style={{ backgroundColor: color.hex }}
+                          onClick={() => handleToggleColor(color.value)}
+                        />
+                      );
+                    })}
                   </div>
-                </label>
+                </div>
+              )}
+            </div>
 
-                <label className="lume-checkbox-label">
-                  <div className="lume-checkbox-left">
+            {/* Accordion Section 4: Khoảng giá */}
+            <div className="lume-accordion-section">
+              <button
+                type="button"
+                className="lume-accordion-trigger"
+                onClick={() => toggleSection('price')}
+              >
+                <span className="lume-accordion-title">Khoảng giá</span>
+                <ChevronDown
+                  size={15}
+                  className={`lume-accordion-chevron ${openSections.price ? "is-open" : ""}`}
+                />
+              </button>
+              {openSections.price && (
+                <div className="lume-accordion-content">
+                  <div className="lume-range-wrap">
                     <input
-                      type="checkbox"
-                      checked={selectedAmenities.includes("changingRoom")}
-                      onChange={() => handleToggleAmenity("changingRoom")}
+                      type="range"
+                      min={90000}
+                      max={1000000}
+                      step={10000}
+                      value={maxPrice}
+                      onChange={(e) => {
+                        setMaxPrice(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="lume-range-slider"
                     />
-                    <div className="lume-custom-checkbox">
-                      {selectedAmenities.includes("changingRoom") && (
-                        <Check size={12} color="#FFFFFF" />
-                      )}
+                    <div className="lume-range-labels">
+                      <span>90k</span>
+                      <span>1 triệu</span>
                     </div>
-                    <span>Có phòng thay đồ</span>
+                    {maxPrice < 1000000 && (
+                      <div className="lume-current-price-badge">
+                        Tối đa: {maxPrice.toLocaleString("vi-VN")}đ
+                      </div>
+                    )}
                   </div>
-                </label>
-              </div>
+                </div>
+              )}
+            </div>
+
+            {/* Accordion Section 5: Tiện ích dịch vụ */}
+            <div className="lume-accordion-section">
+              <button
+                type="button"
+                className="lume-accordion-trigger"
+                onClick={() => toggleSection('amenities')}
+              >
+                <span className="lume-accordion-title">Tiện ích dịch vụ</span>
+                <ChevronDown
+                  size={15}
+                  className={`lume-accordion-chevron ${openSections.amenities ? "is-open" : ""}`}
+                />
+              </button>
+              {openSections.amenities && (
+                <div className="lume-accordion-content">
+                  <div className="lume-checkbox-list">
+                    <label className="lume-checkbox-label">
+                      <div className="lume-checkbox-left">
+                        <input
+                          type="checkbox"
+                          checked={selectedAmenities.includes("accessories")}
+                          onChange={() => handleToggleAmenity("accessories")}
+                        />
+                        <div className="lume-custom-checkbox">
+                          {selectedAmenities.includes("accessories") && <Check size={12} color="#FFFFFF" />}
+                        </div>
+                        <span>Có phụ kiện</span>
+                      </div>
+                    </label>
+
+                    <label className="lume-checkbox-label">
+                      <div className="lume-checkbox-left">
+                        <input
+                          type="checkbox"
+                          checked={selectedAmenities.includes("tryOn")}
+                          onChange={() => handleToggleAmenity("tryOn")}
+                        />
+                        <div className="lume-custom-checkbox">
+                          {selectedAmenities.includes("tryOn") && <Check size={12} color="#FFFFFF" />}
+                        </div>
+                        <span>Được thử trước</span>
+                      </div>
+                    </label>
+
+                    <label className="lume-checkbox-label">
+                      <div className="lume-checkbox-left">
+                        <input
+                          type="checkbox"
+                          checked={selectedAmenities.includes("changingRoom")}
+                          onChange={() => handleToggleAmenity("changingRoom")}
+                        />
+                        <div className="lume-custom-checkbox">
+                          {selectedAmenities.includes("changingRoom") && <Check size={12} color="#FFFFFF" />}
+                        </div>
+                        <span>Có phòng thay đồ</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
           </aside>
 
@@ -884,23 +988,14 @@ export const AoDaiListingPage: React.FC = () => {
             {/* Top Results Toolbar */}
             <div className="lume-results-toolbar">
               <div className="lume-toolbar-left">
-                <span className="lume-toolbar-eyebrow">DANH SÁCH ÁO DÀI</span>
                 <h2 className="lume-toolbar-title">
                   {isPersonalizedRanking
-                    ? "Mẫu áo dài gợi ý theo hồ sơ của bạn"
+                    ? "Mẫu áo dài gợi ý cho bạn"
                     : "Mẫu áo dài cho thuê"}
                 </h2>
-                <div className="lume-toolbar-count-row">
+                <div className="lume-toolbar-subtitle-row">
                   <span className="lume-toolbar-count">
-                    {isPersonalizedRanking ? (
-                      <>
-                        Tìm thấy <strong>{totalCount}</strong> mẫu phù hợp với vóc dáng & gu của bạn
-                      </>
-                    ) : (
-                      <>
-                        <strong>{totalCount}</strong> kết quả được tìm thấy
-                      </>
-                    )}
+                    {totalCount} mẫu phù hợp với bạn
                   </span>
                   {userHasOnboarding && (
                     <button
@@ -909,11 +1004,11 @@ export const AoDaiListingPage: React.FC = () => {
                         setIsPersonalizedFilterActive(!isPersonalizedFilterActive);
                         setCurrentPage(1);
                       }}
-                      className="lume-view-all-btn"
+                      className="lume-toolbar-toggle-btn"
                     >
                       {isPersonalizedFilterActive && sortOption === "recommended"
-                        ? "Xem toàn bộ kho áo dài"
-                        : "Bật lại lọc theo hồ sơ của tôi"}
+                        ? "Xem toàn bộ kho"
+                        : "Bật lại lọc gợi ý"}
                     </button>
                   )}
                 </div>
@@ -985,21 +1080,21 @@ export const AoDaiListingPage: React.FC = () => {
               </div>
             )}
 
-            {/* Promotional Banner Card (Dynamic if campaign active) */}
+            {/* Promotional Banner Strip */}
             <div className="lume-promo-banner">
               <div className="lume-promo-left">
                 <span className="lume-promo-tag">
-                  {featuredCampaign ? `ƯU ĐÃI ${featuredCampaign.occasion.toUpperCase()}` : "ƯU ĐÃI THUÊ THEO NGÀY"}
+                  {featuredCampaign ? `Ưu đãi ${featuredCampaign.occasion}` : "Ưu đãi thuê theo ngày"}
                 </span>
-                <h3 className="lume-promo-headline">
+                <h4 className="lume-promo-headline">
                   {featuredCampaign
-                    ? `Giảm ${featuredCampaign.discountPercent}% trực tiếp vào giá thuê`
+                    ? `Giảm ${featuredCampaign.discountPercent}% trực tiếp vào giá thuê khi đặt trước`
                     : "Gói thuê 3 ngày ưu đãi chỉ từ 390.000đ"}
-                </h3>
+                </h4>
               </div>
               <Link to="/promotions" className="lume-promo-link">
                 <span>Xem chi tiết</span>
-                <ArrowRight size={16} />
+                <ArrowRight size={14} />
               </Link>
             </div>
 
@@ -1048,15 +1143,6 @@ export const AoDaiListingPage: React.FC = () => {
                     provider?.address?.city ||
                     provider?.city ||
                     "Huế";
-                  const ratingVal =
-                    product.rating?.averageRating?.toFixed(1) || "4.9";
-                  const displayDeposit = product.depositAmount
-                    ? product.depositAmount.toLocaleString("vi-VN")
-                    : Math.round(product.basePrice * 2).toLocaleString("vi-VN");
-                  const displaySizes =
-                    product.sizes && product.sizes.length > 0
-                      ? `Size ${product.sizes.join("-")}`
-                      : "Size Free";
                   const currentPrice = product.discountedPrice || product.basePrice;
 
                   return (
@@ -1065,7 +1151,7 @@ export const AoDaiListingPage: React.FC = () => {
                       className="lume-product-card"
                       onClick={() => navigate(`/rentals/${product._id}`)}
                     >
-                      {/* Arched Image Container */}
+                      {/* Image Wrap - 3:4 aspect ratio, full dress visibility */}
                       <div className="lume-card-image-wrap">
                         {badgeText && (
                           <span className="lume-card-badge">{badgeText}</span>
@@ -1078,89 +1164,72 @@ export const AoDaiListingPage: React.FC = () => {
                           onClick={(e) => handleToggleFavorite(product._id, e)}
                         >
                           <Heart
-                            size={16}
+                            size={15}
                             fill={isFavorited ? "#B52B47" : "none"}
+                            color={isFavorited ? "#B52B47" : "#5E5054"}
                           />
                         </button>
 
-                        <div className="lume-card-arch">
-                          <img
-                            src={getImageUrl(product.images?.[0])}
-                            alt={product.name}
-                            className="lume-card-img"
-                            loading="lazy"
-                            onError={(e) => {
-                              e.currentTarget.onerror = null;
-                              e.currentTarget.src = DEFAULT_AODAI_IMAGE;
-                            }}
-                          />
-                        </div>
+                        <img
+                          src={getImageUrl(product.images?.[0])}
+                          alt={product.name}
+                          className="lume-card-img"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = DEFAULT_AODAI_IMAGE;
+                          }}
+                        />
                       </div>
 
                       {/* Card Content Body */}
                       <div className="lume-card-body">
-                        <div className="lume-card-brand-row">
-                          <span className="lume-brand-name">{storeName}</span>
-                          <span className="lume-verified-badge">
-                            <Check size={13} /> Đã xác minh
-                          </span>
-                        </div>
-
+                        {/* 1. Tên áo dài (đậm) */}
                         <h3
                           className="lume-card-title"
                           title={product.name}
-                          onClick={() => navigate(`/rentals/${product._id}`)}
                         >
                           {product.name}
                         </h3>
 
-                        <div className="lume-card-meta">
-                          <span className="lume-rating">
-                            <Star
-                              size={14}
-                              fill="var(--lume-star-gold)"
-                              className="lume-star-icon"
-                            />
-                            {ratingVal}
+                        {/* 2. Giá thuê / ngày (nổi bật, màu đỏ rượu) */}
+                        <div className="lume-card-price-row">
+                          <span className="lume-price-amount">
+                            {currentPrice.toLocaleString("vi-VN")}đ
+                          </span>
+                          <span className="lume-price-unit">/ ngày</span>
+                          {product.discountedPrice && product.basePrice > product.discountedPrice && (
+                            <span className="lume-price-original">
+                              {product.basePrice.toLocaleString("vi-VN")}đ
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 3. Lý do phù hợp ngắn */}
+                        {product.recommendation && (
+                          <div
+                            className="lume-card-match-pill"
+                            title={product.recommendation.reasons?.join(' · ') || 'Gợi ý cho bạn'}
+                          >
+                            <Sparkles size={11} className="lume-match-sparkle" />
+                            <span>
+                              {product.recommendation.reasons?.[0]
+                                ? product.recommendation.reasons[0]
+                                : `Phù hợp ${product.recommendation.matchPercent}%`}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* 4. Shop + dấu xác minh + địa điểm (nhỏ, xám) */}
+                        <div className="lume-card-shop-row">
+                          <span className="lume-shop-name" title={storeName}>
+                            {storeName}
+                          </span>
+                          <span className="lume-verified-badge" title="Cửa hàng đã xác minh">
+                            <Check size={11} /> Đã xác minh
                           </span>
                           <span className="lume-meta-dot">•</span>
                           <span>{city}</span>
-                        </div>
-
-                        <div className="lume-card-tags">
-                          <span className="lume-tag-pill">{displaySizes}</span>
-                          <span className="lume-tag-pill">
-                            Cọc {displayDeposit}đ
-                          </span>
-                        </div>
-
-                        <p
-                          className="lume-card-hint"
-                          title={product.recommendation?.reasons.join(' · ')}
-                        >
-                          {product.recommendation
-                            ? `${product.recommendation.matchPercent}% phù hợp · ${product.recommendation.reasons[0] || 'Đề xuất cho bạn'}`
-                            : 'Chọn thời gian để kiểm tra lịch'}
-                        </p>
-
-                        <div className="lume-card-footer">
-                          <div className="lume-price-group">
-                            <span className="lume-price-amount">
-                              {currentPrice.toLocaleString("vi-VN")}đ
-                            </span>
-                            <span className="lume-price-unit">/ ngày</span>
-                          </div>
-
-                          <button
-                            type="button"
-                            className="lume-detail-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/rentals/${product._id}`);
-                            }}
-                          >
-                            Xem chi tiết
-                          </button>
                         </div>
                       </div>
                     </article>

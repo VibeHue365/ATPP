@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
+@import "./styles/unifiedListing.css";
 
 :root {
   /* Color System */
@@ -883,6 +884,7 @@ button {
 .vh-text-gradient {
   background: linear-gradient(135deg, var(--color-primary), var(--color-gold));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -1885,6 +1887,7 @@ button {
   line-height: 1;
   background: linear-gradient(135deg, var(--color-primary), var(--color-gold));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -5492,6 +5495,7 @@ button {
 .vh-text-gradient {
   background: linear-gradient(135deg, var(--color-primary), var(--color-gold));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -6494,6 +6498,7 @@ button {
   line-height: 1;
   background: linear-gradient(135deg, var(--color-primary), var(--color-gold));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 

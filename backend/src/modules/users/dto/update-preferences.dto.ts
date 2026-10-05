@@ -8,6 +8,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -90,12 +91,22 @@ class UserPreferencesDto {
   @IsArray()
   @IsString({ each: true })
   preferredOccasions?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }
 
 export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   hasCompletedOnboarding?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  address?: string;
 
   @IsOptional()
   @IsObject()

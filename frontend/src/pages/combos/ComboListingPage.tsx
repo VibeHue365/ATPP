@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, ChevronRight, PackageOpen, Scissors, Camera } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, PackageOpen, Scissors, Camera, MapPin, Sparkles, Calendar, Users } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
 import { ROUTES } from '../../config/routes';
-import { ComboFigmaHero } from '../../features/combos/components/ComboFigmaHero';
+import { ListingHero } from '../../components/common/ListingHero';
+import { UnifiedSearchBar, type SearchFieldConfig } from '../../components/common/UnifiedSearchBar';
 import {
   ComboCategoryTabs,
   type ComboCategoryTabKey,
@@ -17,6 +18,7 @@ import {
 import { ComboFigmaCard } from '../../features/combos/components/ComboFigmaCard';
 import { calculateComboPricing, resolveImageUrl } from '../../features/combos/mappers/combo.mapper';
 import type { FigmaComboItem } from '../../features/combos/types/combo.types';
+import { useAuth } from '../../features/auth/hooks/useAuth';
 import './ComboListingPage.css';
 
 const DEFAULT_SIDEBAR_VALUES: SidebarFilterValues = {
@@ -50,6 +52,14 @@ export const ComboListingPage: React.FC = () => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
+
+  // User onboarding preferences
+  const { user } = useAuth();
+  const userPreferences = user?.preferences;
+  const userHasOnboarding = Boolean(user?.hasCompletedOnboarding && userPreferences);
+  const userPrefOccasion = userPreferences?.preferredOccasions?.[0] || '';
+  const userPrefStyle = userPreferences?.preferredAoDaiStyles?.[0] || '';
+  const userPrefSize = (userPreferences?.sizeInfo?.preferredSize || '').toUpperCase();
 
   // Real Dynamic API combos
   const [combos, setCombos] = useState<FigmaComboItem[]>([]);
@@ -277,24 +287,112 @@ export const ComboListingPage: React.FC = () => {
     return Math.max(...combos.map((c) => c.discountPercent || 0));
   }, [combos]);
 
+  const comboSearchFields: SearchFieldConfig[] = [
+    {
+      label: 'Khu vực',
+      icon: <MapPin size={13} />,
+      content: (
+        <>
+          <select
+            value={heroRegion}
+            onChange={(e) => setHeroRegion(e.target.value)}
+            className="unified-search-select"
+          >
+            <option value="all">Tất cả khu vực</option>
+            <option value="Huế">Huế</option>
+            <option value="Đà Nẵng">Đà Nẵng</option>
+            <option value="Hội An">Hội An</option>
+            <option value="Đà Lạt">Đà Lạt</option>
+            <option value="Hà Nội">Hà Nội</option>
+            <option value="TP.HCM">TP.HCM</option>
+          </select>
+          <ChevronDown size={14} className="unified-search-arrow" />
+        </>
+      ),
+    },
+    {
+      label: 'Loại combo',
+      icon: <Sparkles size={13} />,
+      content: (
+        <>
+          <select
+            value={heroBudget}
+            onChange={(e) => setHeroBudget(e.target.value)}
+            className="unified-search-select"
+          >
+            <option value="all">Tất cả loại combo</option>
+            <option value="under_2m">Combo Tiết kiệm (&lt; 2tr)</option>
+            <option value="2m_3m">Combo Tiêu chuẩn (2 - 3tr)</option>
+            <option value="above_3m">Combo Cao cấp (&gt; 3tr)</option>
+          </select>
+          <ChevronDown size={14} className="unified-search-arrow" />
+        </>
+      ),
+    },
+    {
+      label: 'Ngày chụp',
+      icon: <Calendar size={13} />,
+      content: (
+        <input
+          type="date"
+          value={heroDate}
+          onChange={(e) => setHeroDate(e.target.value)}
+          className="unified-search-input"
+        />
+      ),
+    },
+    {
+      label: 'Số người',
+      icon: <Users size={13} />,
+      content: (
+        <>
+          <select
+            value={heroPeople}
+            onChange={(e) => setHeroPeople(e.target.value)}
+            className="unified-search-select"
+          >
+            <option value="all">Không giới hạn</option>
+            <option value="1">1 người (Cá nhân)</option>
+            <option value="2">2 người (Cặp đôi)</option>
+            <option value="3-4">3 - 4 người (Nhóm)</option>
+            <option value="5+">Từ 5 người (Gia đình)</option>
+          </select>
+          <ChevronDown size={14} className="unified-search-arrow" />
+        </>
+      ),
+    },
+  ];
+
   return (
-    <main className="figma-combo-page">
-      <div className="figma-combo-container">
-        {/* 1. Hero Section + Floating Search Bar */}
-        <ComboFigmaHero
-          maxDiscount={maxDiscount}
-          region={heroRegion}
-          onRegionChange={setHeroRegion}
-          date={heroDate}
-          onDateChange={setHeroDate}
-          peopleCount={heroPeople}
-          onPeopleCountChange={setHeroPeople}
-          budget={heroBudget}
-          onBudgetChange={setHeroBudget}
-          onSearch={handleHeroSearch}
+    <main className="unified-listing-page">
+      <div className="unified-listing-container">
+        {/* 1. Unified Hero */}
+        <ListingHero
+          breadcrumbs={[
+            { label: 'Trang chủ', href: '/' },
+            { label: 'Combo' },
+          ]}
+          eyebrow="COMBO TRỌN GÓI TIẾT KIỆM"
+          title="Gói combo Áo dài & Chụp ảnh"
+          description="Trải nghiệm trọn gói tiện lợi, đồng bộ phong cách với mức giá ưu đãi nhất."
+          stats={[
+            { value: `${combos.length > 0 ? combos.length : '30'}+`, label: 'Gói combo' },
+            { value: `Tiết kiệm ${maxDiscount > 0 ? maxDiscount : 25}%`, label: 'Ưu đãi trọn gói' },
+            { value: '4.9★', label: 'Hài lòng' },
+          ]}
         />
 
-        {/* 2. Category Tabs Bar (6 Tabs) */}
+        {/* 2. Unified Search Bar */}
+        <UnifiedSearchBar
+          fields={comboSearchFields}
+          buttonText="Tìm combo"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleHeroSearch();
+          }}
+        />
+
+        {/* 3. Category Tabs Bar (6 Tabs) */}
         <ComboCategoryTabs
           activeTab={activeCategoryTab}
           onSelectTab={(tab) => {
@@ -304,8 +402,8 @@ export const ComboListingPage: React.FC = () => {
           counts={categoryCounts}
         />
 
-        {/* 3. Main 2-Column Section (Sidebar + Grid) */}
-        <div className="figma-combo-main-layout">
+        {/* 4. Main 2-Column Section (Sidebar + Grid) */}
+        <div className="unified-main-layout">
           {/* Left Sidebar */}
           <ComboSidebarFilter
             values={sidebarFilters}
@@ -316,39 +414,57 @@ export const ComboListingPage: React.FC = () => {
             onResetAll={handleResetAll}
             regionOptions={regionOptions}
             typeOptions={typeOptions}
+            userHasOnboarding={userHasOnboarding}
+            userPrefOccasion={userPrefOccasion}
+            userPrefStyle={userPrefStyle}
+            userPrefSize={userPrefSize}
           />
 
           {/* Right Product Grid Column */}
           <section className="figma-combo-content-area" aria-label="Danh sách combo">
-            {/* Header row above grid */}
-            <div className="figma-combo-grid-header">
-              <span className="grid-count-text">
-                Hiển thị{' '}
-                {sortedCombos.length > 0
-                  ? `${(currentPage - 1) * itemsPerPage + 1} - ${Math.min(currentPage * itemsPerPage, sortedCombos.length)}`
-                  : '0'}{' '}
-                trong <strong>{sortedCombos.length}</strong> combo
-              </span>
-
-              <div className="grid-sort-dropdown-wrapper">
-                <span className="sort-prefix">Sắp xếp:</span>
-                <div className="sort-select-box">
-                  <select
-                    value={sidebarFilters.sortBy}
-                    onChange={(e) =>
-                      setSidebarFilters((prev) => ({ ...prev, sortBy: e.target.value }))
-                    }
-                    className="grid-sort-select"
-                  >
-                    <option value="popular">Phổ biến nhất</option>
-                    <option value="newest">Mới nhất</option>
-                    <option value="price_low">Giá: Thấp đến cao</option>
-                    <option value="price_high">Giá: Cao đến thấp</option>
-                    <option value="discount_high">Tiết kiệm nhiều nhất</option>
-                  </select>
-                  <ChevronDown size={13} className="sort-arrow" />
-                </div>
+            {/* Top Results Toolbar */}
+            <div className="figma-combo-results-toolbar">
+              <div className="combo-toolbar-left">
+                <h2 className="combo-toolbar-title">Gói combo Áo dài & Chụp ảnh</h2>
+                <span className="combo-toolbar-subtitle">
+                  {sortedCombos.length} gói combo phù hợp với bạn
+                </span>
               </div>
+
+              <div className="combo-sort-dropdown">
+                <select
+                  value={sidebarFilters.sortBy}
+                  onChange={(e) =>
+                    setSidebarFilters((prev) => ({ ...prev, sortBy: e.target.value }))
+                  }
+                  className="combo-sort-select"
+                >
+                  <option value="popular">Phổ biến nhất</option>
+                  <option value="newest">Mới nhất</option>
+                  <option value="price_low">Giá: Thấp đến cao</option>
+                  <option value="price_high">Giá: Cao đến thấp</option>
+                  <option value="discount_high">Tiết kiệm nhiều nhất</option>
+                </select>
+                <ChevronDown size={14} className="combo-sort-arrow" />
+              </div>
+            </div>
+
+            {/* Promotional Banner Strip */}
+            <div className="combo-promo-banner">
+              <div className="combo-promo-left">
+                <span className="combo-promo-tag">Tiết kiệm trọn gói</span>
+                <h4 className="combo-promo-headline">
+                  Gói Combo Áo Dài + Chụp ảnh ưu đãi lên đến 35% so với đặt riêng lẻ
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/promotions')}
+                className="combo-promo-link"
+              >
+                <span>Xem ưu đãi</span>
+                <ChevronRight size={14} />
+              </button>
             </div>
 
             {/* Skeleton Loading State */}

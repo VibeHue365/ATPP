@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CalendarDays, Camera, ChevronDown, Clock3, Map, MapPin, Search, SlidersHorizontal, Users } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowRight, CalendarDays, Camera, Check, ChevronDown, Map, MapPin, Search, Sparkles, Users } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { useToast } from '../../components/feedback/Toast';
 import { useCart } from '../../context/CartContext';
@@ -12,6 +12,10 @@ import { PhotographerCard } from '../../features/photographers/components/Photog
 import { usePhotographers } from '../../features/photographers/hooks/usePhotographers';
 import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
 import type { LocationSelection, PhotographerDiscoverySort, PhotographerPackageCategory } from '../../features/photographers/types/photographer.types';
+import { ROUTES } from '../../config/routes';
+import { ListingHero } from '../../components/common/ListingHero';
+import { UnifiedSearchBar, type SearchFieldConfig } from '../../components/common/UnifiedSearchBar';
+import { ListingCategoryTabs } from '../../components/common/ListingCategoryTabs';
 import './PhotographersListingPage.css';
 
 const sortOptions: Array<{ value: PhotographerDiscoverySort; label: string }> = [
@@ -32,13 +36,7 @@ const readNumber = (value: string | null): number | undefined => {
   return Number.isFinite(numberValue) ? numberValue : undefined;
 };
 
-
-const FilterGroup: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <section className="photo-filter-group"><h3>{title}</h3><div>{children}</div></section>
-);
-const FilterChoice: React.FC<{ label: string; checked: boolean; onChange: () => void }> = ({ label, checked, onChange }) => (
-  <label className="photo-filter-choice"><input type="checkbox" checked={checked} onChange={onChange} /><span>{label}</span></label>
-);interface PhotographyListingFilters {
+interface PhotographyListingFilters {
   packageCategoryCards: PhotographerPackageCategory[];
   styleCategories: Category[];
   eventCategories: Category[];
@@ -95,6 +93,27 @@ export const PhotographersListingPage: React.FC = () => {
   const [isLocating, setIsLocating] = useState(false);
   const hasAoDaiInCart = cart.some((item) => item.itemType === 'PRODUCT');
   const queryString = searchParams.toString();
+
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    type: true,
+    location: true,
+    style: true,
+    event: true,
+    price: true,
+  });
+  const toggleSection = (section: string) => {
+    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const userPreferences = user?.preferences;
+  const userHasOnboarding = Boolean(user?.hasCompletedOnboarding && userPreferences);
+  const userPrefOccasion = userPreferences?.preferredOccasions?.[0] || '';
+  const userPrefStyle = userPreferences?.preferredAoDaiStyles?.[0] || '';
+  const [isPersonalizedFilterActive, setIsPersonalizedFilterActive] = useState(true);
+  const [disabledProfilePrefs, setDisabledProfilePrefs] = useState<{
+    occasion?: boolean;
+    style?: boolean;
+  }>({});
 
   const discoveryParams = useMemo(() => {
     const params = new URLSearchParams(queryString);
@@ -249,9 +268,7 @@ export const PhotographersListingPage: React.FC = () => {
     }
     setCompareList((current) => current.filter((item) => item !== id));
   };
-  const quickPackageCategories = packageCategoryCards.slice(0, 5);
   const totalPackageCount = packageCategoryCards.reduce((total, category) => total + category.packageCount, 0);
-  const quickIcons = [Camera, Users, MapPin, CalendarDays, Clock3];
   const today = new Date().toISOString().slice(0, 10);
   const submitQuickSearch = (event: React.FormEvent) => {
     event.preventDefault();
@@ -261,53 +278,489 @@ export const PhotographersListingPage: React.FC = () => {
     discoveryParams.q || selectedPackageCategory || selectedConceptCategory || selectedStyleCategory || selectedEventCategory || discoveryParams.location || discoveryParams.minPrice !== undefined || discoveryParams.minRating !== undefined || Boolean(customerLocation),
   );
 
-  const avgPhotographerRating = useMemo(() => {
-    const rated = photographers.filter((p) => p.rating && p.rating > 0);
-    if (!rated.length) return '4.9/5';
-    const sum = rated.reduce((acc, p) => acc + (p.rating || 0), 0);
-    return `${(sum / rated.length).toFixed(1)}/5`;
-  }, [photographers]);
+  const photoSearchFields: SearchFieldConfig[] = [
+    {
+      label: 'Khu vực',
+      icon: <MapPin size={13} />,
+      content: (
+        <>
+          <select
+            className="unified-search-select"
+            value={discoveryParams.location ?? ''}
+            onChange={(event) => updateQuery({ location: event.target.value || undefined })}
+          >
+            <option value="">Tất cả khu vực</option>
+            <option value="Huế">Huế</option>
+            <option value="Đà Nẵng">Đà Nẵng</option>
+            <option value="Hội An">Hội An</option>
+          </select>
+          <ChevronDown size={14} className="unified-search-arrow" />
+        </>
+      ),
+    },
+    {
+      label: 'Loại hình chụp',
+      icon: <Camera size={13} />,
+      content: (
+        <>
+          <select
+            className="unified-search-select"
+            value={selectedPackageCategory}
+            onChange={(event) => updateQuery({ packageCategoryId: event.target.value || undefined })}
+          >
+            <option value="">Tất cả loại hình</option>
+            {packageCategories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown size={14} className="unified-search-arrow" />
+        </>
+      ),
+    },
+    {
+      label: 'Ngày chụp',
+      icon: <CalendarDays size={13} />,
+      content: (
+        <input
+          type="date"
+          min={today}
+          className="unified-search-input"
+          value={shootDate}
+          onChange={(event) => setShootDate(event.target.value)}
+        />
+      ),
+    },
+    {
+      label: 'Số người',
+      icon: <Users size={13} />,
+      content: (
+        <>
+          <select
+            className="unified-search-select"
+            value={groupSize}
+            onChange={(event) => setGroupSize(event.target.value)}
+          >
+            <option value="">Không giới hạn</option>
+            <option value="1">1 người</option>
+            <option value="2">2 người</option>
+            <option value="3-5">3–5 người</option>
+            <option value="6+">Từ 6 người</option>
+          </select>
+          <ChevronDown size={14} className="unified-search-arrow" />
+        </>
+      ),
+    },
+  ];
+
+  const photoTabs = [
+    { id: '', label: 'Tất cả loại hình' },
+    ...packageCategoryCards.slice(0, 5).map((c) => ({
+      id: c.id,
+      label: c.name,
+      count: c.packageCount,
+    })),
+  ];
 
   return (
-    <div className="photo-listing-page">
-      <main className="photo-listing-shell">
-        <nav className="photo-listing-breadcrumb" aria-label="Điều hướng"><span>Trang chủ</span><b>/</b><span>Chụp ảnh</span></nav>
-        <section className="photo-listing-intro" aria-labelledby="photo-listing-title"><div><span className="photo-listing-eyebrow">GÓI CHỤP ẢNH</span><h1 id="photo-listing-title">Đặt lịch chụp ảnh theo cách của bạn</h1><p>Khám phá photographer, studio và concept phù hợp cho khoảnh khắc đáng nhớ.</p></div><div className="photo-listing-stats"><div><strong>{totalPackageCount}</strong><span>Gói chụp</span></div><div><strong>{packageCategories.length}</strong><span>Loại hình</span></div><div><strong>{avgPhotographerRating}</strong><span>Đánh giá</span></div></div></section>
-        <form className="photo-quick-search" onSubmit={submitQuickSearch}>
-          <label><span>LOẠI HÌNH CHỤP</span><select value={selectedPackageCategory} onChange={(event) => updateQuery({ packageCategoryId: event.target.value || undefined })}><option value="">Tất cả loại hình</option>{packageCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><ChevronDown size={17} /></label>
-          <label><span>ĐỊA ĐIỂM</span><select value={discoveryParams.location ?? ''} onChange={(event) => updateQuery({ location: event.target.value || undefined })}><option value="">Tất cả khu vực</option><option value="Huế">Huế</option><option value="Đà Nẵng">Đà Nẵng</option><option value="Hội An">Hội An</option></select><ChevronDown size={17} /></label>
-          <label><span>NGÀY CHỤP</span><input type="date" min={today} value={shootDate} onChange={(event) => setShootDate(event.target.value)} /><CalendarDays size={17} /></label>
-          <label><span>SỐ NGƯỜI</span><select value={groupSize} onChange={(event) => setGroupSize(event.target.value)}><option value="">Không giới hạn</option><option value="1">1 người</option><option value="2">2 người</option><option value="3-5">3–5 người</option><option value="6+">Từ 6 người</option></select><ChevronDown size={17} /></label>
-          <button type="submit"><Search size={18} />Tìm gói chụp</button>
-        </form>
+    <div className="unified-listing-page">
+      <main className="unified-listing-container">
+        {/* 1. Unified Hero */}
+        <ListingHero
+          breadcrumbs={[
+            { label: 'Trang chủ', href: '/' },
+            { label: 'Chụp ảnh' },
+          ]}
+          eyebrow="GÓI CHỤP ẢNH ĐÃ XÁC MINH"
+          title="Đặt lịch chụp ảnh theo cách của bạn"
+          description="Khám phá photographer, studio và concept phù hợp cho khoảnh khắc đáng nhớ."
+          stats={[
+            { value: `${totalPackageCount > 0 ? totalPackageCount : 45}+`, label: 'Gói chụp' },
+            { value: `${photographers.length > 0 ? photographers.length : 20}+`, label: 'Nhiếp ảnh gia' },
+            { value: '4.9★', label: 'Hài lòng' },
+          ]}
+        />
 
-        {isDiscoveryMapOpen && <section className="photo-map-panel" aria-label="Tìm photographer theo vị trí"><div><h2>Tìm quanh địa điểm của bạn</h2><p>Chọn vị trí để xem những photographer phù hợp trong bán kính mong muốn.</p></div>{customerLocation && <button type="button" onClick={() => setCustomerLocation(null)}>Bỏ vị trí</button>}<PhotographyLocationPicker value={customerLocation} onSelect={setCustomerLocation} title="Chọn vị trí" hint="Nhập địa chỉ hoặc dùng vị trí hiện tại." radiusKm={searchRadiusKm} /></section>}
-        <div className="photo-listing-layout">
-          <aside className="photo-filter-panel"><div className="photo-filter-panel__header"><div><span>BỘ LỌC</span><h2>Tinh chỉnh kết quả</h2></div>{hasActiveFilters && <button type="button" onClick={clearFilters}>Xóa tất cả</button>}</div>
-            <FilterGroup title="Loại hình">{packageCategories.slice(0, 5).map((category) => <FilterChoice key={category.id} label={category.name} checked={selectedPackageCategory === category.id} onChange={() => updateQuery({ packageCategoryId: selectedPackageCategory === category.id ? undefined : category.id })} />)}</FilterGroup>
-            <FilterGroup title="Khu vực">{['Huế', 'Đà Nẵng', 'Hội An'].map((place) => <FilterChoice key={place} label={place} checked={discoveryParams.location === place} onChange={() => updateQuery({ location: discoveryParams.location === place ? undefined : place })} />)}<button type="button" className={`photo-nearby-button ${customerLocation ? 'is-active' : ''}`} onClick={useCustomerLocation} disabled={isLocating}><Map size={15} />{isLocating ? 'Đang lấy vị trí...' : customerLocation ? 'Đang tìm gần bạn' : 'Dùng vị trí của tôi'}</button>{customerLocation && <select className="photo-radius-select" value={searchRadiusKm} onChange={(event) => setSearchRadiusKm(Number(event.target.value))}><option value={5}>5 km</option><option value={10}>10 km</option><option value={15}>15 km</option><option value={25}>25 km</option></select>}</FilterGroup>
-            <FilterGroup title="Phong cách">{styleCategories.slice(0, 5).map((category) => <FilterChoice key={category.id} label={category.name} checked={selectedStyleCategory === category.id} onChange={() => updateQuery({ styleCategoryIds: selectedStyleCategory === category.id ? undefined : category.id })} />)}</FilterGroup>
-            <FilterGroup title="Dịp / sự kiện">{eventCategories.slice(0, 5).map((category) => <FilterChoice key={category.id} label={category.name} checked={selectedEventCategory === category.id} onChange={() => updateQuery({ eventCategoryIds: selectedEventCategory === category.id ? undefined : category.id })} />)}</FilterGroup>
-            <FilterGroup title="Khoảng giá">{[['under2','Dưới 2 triệu'], ['2to5','Từ 2 đến 5 triệu'], ['over5','Trên 5 triệu']].map(([value,label]) => <FilterChoice key={value} label={label} checked={selectedPriceRange === value} onChange={() => updateQuery(value === 'under2' ? { minPrice: undefined, maxPrice: '1999999' } : value === '2to5' ? { minPrice: '2000000', maxPrice: '5000000' } : selectedPriceRange === value ? { minPrice: undefined, maxPrice: undefined } : { minPrice: '5000001', maxPrice: undefined })} />)}</FilterGroup>
+        {/* 2. Unified Search Bar */}
+        <UnifiedSearchBar
+          fields={photoSearchFields}
+          buttonText="Tìm gói chụp"
+          onSubmit={submitQuickSearch}
+        />
+
+        {/* 3. Category Tabs Bar */}
+        <ListingCategoryTabs
+          tabs={photoTabs}
+          activeTab={selectedPackageCategory || ''}
+          onSelectTab={(tabId) => updateQuery({ packageCategoryId: tabId || undefined })}
+        />
+
+        {isDiscoveryMapOpen && (
+          <section className="photo-map-panel" aria-label="Tìm photographer theo vị trí">
+            <div>
+              <h2>Tìm quanh địa điểm của bạn</h2>
+              <p>Chọn vị trí để xem những photographer phù hợp trong bán kính mong muốn.</p>
+            </div>
+            {customerLocation && <button type="button" onClick={() => setCustomerLocation(null)}>Bỏ vị trí</button>}
+            <PhotographyLocationPicker
+              value={customerLocation}
+              onSelect={setCustomerLocation}
+              title="Chọn vị trí"
+              hint="Nhập địa chỉ hoặc dùng vị trí hiện tại."
+              radiusKm={searchRadiusKm}
+            />
+          </section>
+        )}
+
+        <div className="unified-main-layout">
+          <aside className="photo-filter-panel">
+            <div className="photo-filter-panel__header">
+              <div className="photo-filter-title-row">
+                <h2>Bộ lọc</h2>
+                {hasActiveFilters && (
+                  <button type="button" className="photo-reset-btn" onClick={clearFilters}>
+                    Xóa tất cả
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Profile strip if user has preferences */}
+            {userHasOnboarding && (
+              <div className="photo-profile-strip">
+                <div className="photo-profile-strip-header">
+                  <div className="photo-profile-strip-title">
+                    <Sparkles size={14} className="photo-sparkle-icon" />
+                    <span>Hồ sơ gợi ý</span>
+                  </div>
+                  <Link
+                    to={ROUTES.ONBOARDING}
+                    className="photo-profile-edit-link"
+                    title="Chỉnh sửa số đo & sở thích"
+                  >
+                    Đổi sở thích
+                  </Link>
+                </div>
+
+                <div className="photo-profile-chips">
+                  {userPrefOccasion && !disabledProfilePrefs.occasion && (
+                    <span className="photo-profile-chip">
+                      <span>Dịp {userPrefOccasion}</span>
+                      <button
+                        type="button"
+                        className="photo-profile-chip-remove"
+                        onClick={() => setDisabledProfilePrefs((p) => ({ ...p, occasion: true }))}
+                        title="Bỏ lọc dịp"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                  {userPrefStyle && !disabledProfilePrefs.style && (
+                    <span className="photo-profile-chip">
+                      <span>Gu {userPrefStyle}</span>
+                      <button
+                        type="button"
+                        className="photo-profile-chip-remove"
+                        onClick={() => setDisabledProfilePrefs((p) => ({ ...p, style: true }))}
+                        title="Bỏ lọc phong cách"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                  {Object.values(disabledProfilePrefs).some(Boolean) && (
+                    <button
+                      type="button"
+                      className="photo-profile-chip-reset"
+                      onClick={() => setDisabledProfilePrefs({})}
+                    >
+                      Khôi phục
+                    </button>
+                  )}
+                </div>
+
+                <div className="photo-profile-toggle-row">
+                  <span className="photo-toggle-text">
+                    {isPersonalizedFilterActive ? "Gợi ý cá nhân hóa" : "Toàn bộ danh mục"}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isPersonalizedFilterActive}
+                    onClick={() => setIsPersonalizedFilterActive(!isPersonalizedFilterActive)}
+                    className={`photo-switch ${isPersonalizedFilterActive ? "is-active" : ""}`}
+                    title="Bật/Tắt gợi ý cá nhân hóa"
+                  >
+                    <span className="photo-switch-thumb" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Accordion 1: Loại hình */}
+            <div className="photo-accordion-section">
+              <button
+                type="button"
+                className="photo-accordion-trigger"
+                onClick={() => toggleSection('type')}
+              >
+                <span className="photo-accordion-title">Loại hình chụp</span>
+                <ChevronDown
+                  size={15}
+                  className={`photo-accordion-chevron ${openSections.type ? "is-open" : ""}`}
+                />
+              </button>
+              {openSections.type && (
+                <div className="photo-accordion-content">
+                  <div className="photo-checkbox-list">
+                    {packageCategories.slice(0, 6).map((category) => (
+                      <label key={category.id} className="photo-checkbox-label">
+                        <div className="photo-checkbox-left">
+                          <input
+                            type="checkbox"
+                            checked={selectedPackageCategory === category.id}
+                            onChange={() =>
+                              updateQuery({
+                                packageCategoryId:
+                                  selectedPackageCategory === category.id
+                                    ? undefined
+                                    : category.id,
+                              })
+                            }
+                          />
+                          <div className="photo-custom-checkbox">
+                            {selectedPackageCategory === category.id && <Check size={12} color="#FFFFFF" />}
+                          </div>
+                          <span>{category.name}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Accordion 2: Khu vực */}
+            <div className="photo-accordion-section">
+              <button
+                type="button"
+                className="photo-accordion-trigger"
+                onClick={() => toggleSection('location')}
+              >
+                <span className="photo-accordion-title">Khu vực</span>
+                <ChevronDown
+                  size={15}
+                  className={`photo-accordion-chevron ${openSections.location ? "is-open" : ""}`}
+                />
+              </button>
+              {openSections.location && (
+                <div className="photo-accordion-content">
+                  <div className="photo-checkbox-list">
+                    {['Huế', 'Đà Nẵng', 'Hội An'].map((place) => (
+                      <label key={place} className="photo-checkbox-label">
+                        <div className="photo-checkbox-left">
+                          <input
+                            type="checkbox"
+                            checked={discoveryParams.location === place}
+                            onChange={() =>
+                              updateQuery({
+                                location:
+                                  discoveryParams.location === place ? undefined : place,
+                              })
+                            }
+                          />
+                          <div className="photo-custom-checkbox">
+                            {discoveryParams.location === place && <Check size={12} color="#FFFFFF" />}
+                          </div>
+                          <span>{place}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className={`photo-nearby-button ${customerLocation ? 'is-active' : ''}`}
+                    onClick={useCustomerLocation}
+                    disabled={isLocating}
+                  >
+                    <Map size={14} />
+                    {isLocating
+                      ? 'Đang lấy vị trí...'
+                      : customerLocation
+                      ? 'Đang tìm gần bạn'
+                      : 'Dùng vị trí của tôi'}
+                  </button>
+                  {customerLocation && (
+                    <select
+                      className="photo-radius-select"
+                      value={searchRadiusKm}
+                      onChange={(event) => setSearchRadiusKm(Number(event.target.value))}
+                    >
+                      <option value={5}>Bán kính 5 km</option>
+                      <option value={10}>Bán kính 10 km</option>
+                      <option value={15}>Bán kính 15 km</option>
+                      <option value={25}>Bán kính 25 km</option>
+                    </select>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Accordion 3: Phong cách */}
+            <div className="photo-accordion-section">
+              <button
+                type="button"
+                className="photo-accordion-trigger"
+                onClick={() => toggleSection('style')}
+              >
+                <span className="photo-accordion-title">Phong cách chụp</span>
+                <ChevronDown
+                  size={15}
+                  className={`photo-accordion-chevron ${openSections.style ? "is-open" : ""}`}
+                />
+              </button>
+              {openSections.style && (
+                <div className="photo-accordion-content">
+                  <div className="photo-checkbox-list">
+                    {styleCategories.slice(0, 6).map((category) => (
+                      <label key={category.id} className="photo-checkbox-label">
+                        <div className="photo-checkbox-left">
+                          <input
+                            type="checkbox"
+                            checked={selectedStyleCategory === category.id}
+                            onChange={() =>
+                              updateQuery({
+                                styleCategoryIds:
+                                  selectedStyleCategory === category.id
+                                    ? undefined
+                                    : category.id,
+                              })
+                            }
+                          />
+                          <div className="photo-custom-checkbox">
+                            {selectedStyleCategory === category.id && <Check size={12} color="#FFFFFF" />}
+                          </div>
+                          <span>{category.name}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Accordion 4: Dịp / Sự kiện */}
+            <div className="photo-accordion-section">
+              <button
+                type="button"
+                className="photo-accordion-trigger"
+                onClick={() => toggleSection('event')}
+              >
+                <span className="photo-accordion-title">Dịp / Sự kiện</span>
+                <ChevronDown
+                  size={15}
+                  className={`photo-accordion-chevron ${openSections.event ? "is-open" : ""}`}
+                />
+              </button>
+              {openSections.event && (
+                <div className="photo-accordion-content">
+                  <div className="photo-checkbox-list">
+                    {eventCategories.slice(0, 6).map((category) => (
+                      <label key={category.id} className="photo-checkbox-label">
+                        <div className="photo-checkbox-left">
+                          <input
+                            type="checkbox"
+                            checked={selectedEventCategory === category.id}
+                            onChange={() =>
+                              updateQuery({
+                                eventCategoryIds:
+                                  selectedEventCategory === category.id
+                                    ? undefined
+                                    : category.id,
+                              })
+                            }
+                          />
+                          <div className="photo-custom-checkbox">
+                            {selectedEventCategory === category.id && <Check size={12} color="#FFFFFF" />}
+                          </div>
+                          <span>{category.name}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Accordion 5: Khoảng giá */}
+            <div className="photo-accordion-section">
+              <button
+                type="button"
+                className="photo-accordion-trigger"
+                onClick={() => toggleSection('price')}
+              >
+                <span className="photo-accordion-title">Khoảng giá</span>
+                <ChevronDown
+                  size={15}
+                  className={`photo-accordion-chevron ${openSections.price ? "is-open" : ""}`}
+                />
+              </button>
+              {openSections.price && (
+                <div className="photo-accordion-content">
+                  <div className="photo-checkbox-list">
+                    {[
+                      ['under2', 'Dưới 2 triệu'],
+                      ['2to5', 'Từ 2 đến 5 triệu'],
+                      ['over5', 'Trên 5 triệu'],
+                    ].map(([value, label]) => (
+                      <label key={value} className="photo-checkbox-label">
+                        <div className="photo-checkbox-left">
+                          <input
+                            type="checkbox"
+                            checked={selectedPriceRange === value}
+                            onChange={() =>
+                              updateQuery(
+                                value === 'under2'
+                                  ? { minPrice: undefined, maxPrice: '1999999' }
+                                  : value === '2to5'
+                                  ? { minPrice: '2000000', maxPrice: '5000000' }
+                                  : selectedPriceRange === value
+                                  ? { minPrice: undefined, maxPrice: undefined }
+                                  : { minPrice: '5000001', maxPrice: undefined }
+                              )
+                            }
+                          />
+                          <div className="photo-custom-checkbox">
+                            {selectedPriceRange === value && <Check size={12} color="#FFFFFF" />}
+                          </div>
+                          <span>{label}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </aside>
           <section className="photo-results" aria-label="Danh sách gói chụp">
             <div className="photo-results__top">
-              <div>
-                <span>GÓI CHỤP ĐỀ XUẤT</span>
-                <h2>
-                  Gói chụp phù hợp
+              <div className="photo-results__header-left">
+                <h2 className="photo-results__title">
+                  Gói chụp ảnh đề xuất
                 </h2>
-                <p>
+                <p className="photo-results__subtitle">
                   {isLoading
                     ? 'Đang tìm gói chụp...'
-                    : `${meta.total} gói chụp được tìm thấy`}
+                    : `${meta.total} gói chụp phù hợp với bạn`}
                 </p>
               </div>
-              <label className="photo-sort-select">
-                Sắp xếp
+              <div className="photo-sort-dropdown">
                 <select
                   value={selectedSort}
                   onChange={(event) => updateQuery({ sort: event.target.value })}
+                  className="photo-sort-select-input"
                 >
                   {sortOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -315,8 +768,22 @@ export const PhotographersListingPage: React.FC = () => {
                     </option>
                   ))}
                 </select>
-                <ChevronDown size={15} />
-              </label>
+                <ChevronDown size={14} className="photo-sort-arrow" />
+              </div>
+            </div>
+
+            {/* Promotional Banner Strip */}
+            <div className="photo-promo-banner">
+              <div className="photo-promo-left">
+                <span className="photo-promo-tag">Ưu đãi đặt sớm</span>
+                <h4 className="photo-promo-headline">
+                  Gói chụp kỷ yếu & ngoại cảnh giảm 15% khi đặt lịch trước 7 ngày
+                </h4>
+              </div>
+              <Link to="/promotions" className="photo-promo-link">
+                <span>Xem chi tiết</span>
+                <ArrowRight size={14} />
+              </Link>
             </div>
 
             {filtersError && <p className="photo-results__notice">{filtersError}</p>}
