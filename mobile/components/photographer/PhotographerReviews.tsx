@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/ui/ScreenState';
 import { Colors, FontFamily, Radius } from '@/constants/theme';
 import type { PhotographerReview } from '@/types/photographer';
 import { getMediaUrl } from '@/utils/media';
+import { ReviewReportButton } from '@/components/review/ReviewReportButton';
 
 export function PhotographerReviews({ reviews, rating = 0 }: { reviews: PhotographerReview[]; rating?: number }) {
   return <View style={styles.root}>
@@ -16,6 +17,7 @@ export function PhotographerReviews({ reviews, rating = 0 }: { reviews: Photogra
         <View style={styles.userRow}>{avatar ? <Image source={getMediaUrl(avatar)} style={styles.avatar} contentFit="cover" /> : <View style={styles.avatarFallback}><Text style={styles.initial}>{name.charAt(0).toUpperCase()}</Text></View>}<View style={styles.userInfo}><Text style={styles.name}>{name}</Text><Text style={styles.date}>{new Date(review.createdAt).toLocaleDateString('vi-VN')}</Text></View><Text style={styles.stars}>{'★'.repeat(Math.max(0, Math.min(5, Math.round(review.rating))))}</Text></View>
         {!!review.comment && <Text style={styles.comment}>{review.comment}</Text>}
         {!!review.reply && <View style={styles.reply}><Text style={styles.replyTitle}>↩ Studio đã phản hồi</Text><Text style={styles.replyText}>{review.reply}</Text></View>}
+        <ReviewReportButton reviewId={review._id} authorId={review.customerId?._id ?? review.customerId?.id}/>
       </AppCard>;
     })}
   </View>;

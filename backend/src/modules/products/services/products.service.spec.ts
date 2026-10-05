@@ -353,20 +353,22 @@ describe('ProductsService moderation', () => {
 
     expect(productsRepository.moderate).toHaveBeenCalledWith(
       productId,
-      ProductModerationStatus.PendingReview,
       expect.objectContaining({
-        moderationStatus: ProductModerationStatus.Approved,
-        customTags: [
-          expect.objectContaining({
-            normalizedLabel: 'nang tho',
-            status: ProductCustomTagStatus.Approved,
-          }),
-          expect.objectContaining({
-            normalizedLabel: 'ben song huong',
-            status: ProductCustomTagStatus.Rejected,
-          }),
-        ],
+        $set: expect.objectContaining({
+          moderationStatus: ProductModerationStatus.Approved,
+          customTags: [
+            expect.objectContaining({
+              normalizedLabel: 'nang tho',
+              status: ProductCustomTagStatus.Approved,
+            }),
+            expect.objectContaining({
+              normalizedLabel: 'ben song huong',
+              status: ProductCustomTagStatus.Rejected,
+            }),
+          ],
+        }),
       }),
+      ProductModerationStatus.PendingReview,
     );
   });
 

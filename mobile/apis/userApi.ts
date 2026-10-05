@@ -12,5 +12,9 @@ export const userApi={
   removeAddress:(id:string)=>httpClient.delete(`/users/me/addresses/${id}`),
   setDefaultAddress:(id:string)=>httpClient.post<never,UserAddress>(`/users/me/addresses/${id}/default`,{}),
   toggleFavorite:(targetType:'PRODUCT'|'PROVIDER',targetId:string)=>httpClient.patch<never,BackendUser>('/users/me/favorites',{targetType,targetId}),
-  updatePreferences:(preferences:UserPreferences)=>httpClient.patch<never,BackendUser>('/users/me/preferences',{hasCompletedOnboarding:true,preferences}),
+  updatePreferences:(preferences:UserPreferences,options?:{completeOnboarding?:boolean})=>httpClient.patch<never,BackendUser>('/users/me/preferences',{
+    ...(options?.completeOnboarding===undefined?{}:{hasCompletedOnboarding:options.completeOnboarding}),
+    preferences,
+  }),
+  completeOnboarding:()=>httpClient.patch<never,BackendUser>('/users/me/preferences',{hasCompletedOnboarding:true}),
 };

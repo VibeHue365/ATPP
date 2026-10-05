@@ -7,6 +7,7 @@ import type { Product } from '@/types/product';
 import { getMediaUrl } from '@/utils/media';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
+import { ProductInsights } from '@/components/product/ProductInsights';
 
 const money = (value: number) => new Intl.NumberFormat('vi-VN').format(value) + 'đ';
 
@@ -18,7 +19,7 @@ export function ProductCard({ product }: { product: Product }) {
   const onFavorite=async(event:{stopPropagation:()=>void})=>{event.stopPropagation();if(!isAuthenticated){router.push('/(auth)/login' as Href);return}try{await toggleFavorite('PRODUCT',product._id);show(liked?'Đã bỏ khỏi yêu thích':'Đã thêm vào yêu thích','success')}catch{show('Không thể cập nhật yêu thích','error')}};
   return <Pressable style={s.card} onPress={() => router.push(`/product/${product._id}` as Href)}>
     <View style={s.imageWrap}>{product.images?.[0] ? <Image source={getMediaUrl(product.images[0])} style={s.image} contentFit="cover" transition={180}/> : <View style={s.placeholder}><Text style={s.placeholderText}>ÁO DÀI</Text></View>}<Pressable style={s.heart} onPress={onFavorite}><Ionicons name={liked?'heart':'heart-outline'} size={18} color={Colors.primary}/></Pressable></View>
-    <View style={s.info}><View style={s.brandRow}><Text numberOfLines={1} style={s.brand}>{provider?.businessName ?? 'LUMÉ ÁO DÀI'}</Text><Text style={s.verified}>✓ Đã xác minh</Text></View><Text numberOfLines={2} style={s.name}>{product.name}</Text><Text style={s.rating}>★ {product.rating?.averageRating?.toFixed(1) ?? '4.9'} <Text style={s.location}>· {provider?.address?.city ?? 'Huế'}</Text></Text><View style={s.tags}>{product.sizes?.slice(0,3).map(size => <Text key={size} style={s.tag}>{size}</Text>)}</View><Text style={s.price}>{money(product.discountedPrice ?? product.basePrice)}<Text style={s.per}> /ngày</Text></Text></View>
+    <View style={s.info}><View style={s.brandRow}><Text numberOfLines={1} style={s.brand}>{provider?.businessName ?? 'LUMÉ ÁO DÀI'}</Text><Text style={s.verified}>✓ Đã xác minh</Text></View><Text numberOfLines={2} style={s.name}>{product.name}</Text><Text style={s.rating}>★ {product.rating?.averageRating?.toFixed(1) ?? '4.9'} <Text style={s.location}>· {provider?.address?.city ?? 'Huế'}</Text></Text><ProductInsights product={product} compact/><View style={s.tags}>{product.sizes?.slice(0,3).map(size => <Text key={size} style={s.tag}>{size}</Text>)}</View><Text style={s.price}>{money(product.discountedPrice ?? product.basePrice)}<Text style={s.per}> /ngày</Text></Text></View>
   </Pressable>;
 }
 

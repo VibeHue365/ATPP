@@ -267,6 +267,7 @@ export const ProviderDashboard: React.FC = () => {
     setUploadingImages, prodVideos, setProdVideos, uploadingVideos, setUploadingVideos, prodStyle,
     setProdStyle, prodOccasions, setProdOccasions, prodStyleCategoryIds, setProdStyleCategoryIds,
     prodEventCategoryIds, setProdEventCategoryIds, variants, setVariants, wizardStep, setWizardStep,
+    prodCustomTags, setProdCustomTags, customTagInput, setCustomTagInput,
     createdDraftId, setCreatedDraftId, activeTagCodes, setActiveTagCodes, editInvSummary,
     setEditInvSummary, savingDraft, setSavingDraft,
   } = useProductWizardState();
@@ -592,6 +593,9 @@ export const ProviderDashboard: React.FC = () => {
     setProdOccasions,
     setProdStyleCategoryIds,
     setProdEventCategoryIds,
+    prodCustomTags,
+    setProdCustomTags,
+    setCustomTagInput,
     setVariants,
     setWizardStep,
     setCreatedDraftId,
@@ -863,7 +867,7 @@ export const ProviderDashboard: React.FC = () => {
       <CampaignModal {...{ isCampaignModalOpen, setIsCampaignModalOpen, handleCreateCampaign, activeCampaign, handleDeactivateCampaign, campaignOccasion, setCampaignOccasion, campaignPercent, setCampaignPercent, campaignStart, setCampaignStart, campaignEnd, setCampaignEnd, submittingCampaign }} />
 
       {/* -------------------- MODALS: CREATE & EDIT PRODUCT -------------------- */}
-      <ProductWizardModal {...{ isModalOpen, handleWizardCancel, editingProduct, wizardStep, setWizardStep, prodName, setProdName, prodCategoryId, setProdCategoryId, categories, prodStatus, setProdStatus, prodBasePrice, setProdBasePrice, prodDepositAmount, setProdDepositAmount, prodDescription, setProdDescription, handleImageChange, uploadingImages, prodImages, removeImage, handleVideoChange, uploadingVideos, prodVideos, removeVideo, setAddInvProductId, setIsAddInventoryOpen, editInvSummary, prodSizes, setProdSizes, prodColors, setProdColors, prodMaterials, setProdMaterials, variantBusy, setVariantEditRow, setVariantEditQty, handleRemoveVariant, variants, setVariants, updateVariantRow, removeVariantRow, addVariantRow, colorsNeedingImages, prodColorImages, uploadingColor, handleColorImageChange, removeColorImage, createdDraftId, setActiveTagCodes, handleWizardFinish, handleWizardBack, handleWizardNext, savingDraft, activeTagCodes }} />
+      <ProductWizardModal {...{ isModalOpen, handleWizardCancel, editingProduct, wizardStep, setWizardStep, prodName, setProdName, prodCategoryId, setProdCategoryId, categories, prodStatus, setProdStatus, prodBasePrice, setProdBasePrice, prodDepositAmount, setProdDepositAmount, prodDescription, setProdDescription, handleImageChange, uploadingImages, prodImages, removeImage, handleVideoChange, uploadingVideos, prodVideos, removeVideo, setAddInvProductId, setIsAddInventoryOpen, editInvSummary, prodSizes, setProdSizes, prodColors, setProdColors, prodMaterials, setProdMaterials, prodCustomTags, setProdCustomTags, customTagInput, setCustomTagInput, variantBusy, setVariantEditRow, setVariantEditQty, handleRemoveVariant, variants, setVariants, updateVariantRow, removeVariantRow, addVariantRow, colorsNeedingImages, prodColorImages, uploadingColor, handleColorImageChange, removeColorImage, createdDraftId, setActiveTagCodes, handleWizardFinish, handleWizardBack, handleWizardNext, savingDraft, activeTagCodes }} />
       {/* Review reply modal popup */}
       {replyingReviewId && (
         <ReviewReplyModal {...{ handleReplyReview, setReplyingReviewId, replyText, setReplyText }} />

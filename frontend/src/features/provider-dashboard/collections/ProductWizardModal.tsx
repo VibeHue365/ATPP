@@ -20,8 +20,10 @@ import {
   Trash2,
   ArrowLeft,
   ArrowRight,
+  Clock,
 } from 'lucide-react';
 import { SmartTagEditor } from '../../smart-tagging/components/SmartTagEditor';
+import { productsApi } from '../api/providerDashboardApi';
 import {
   colorLabels,
   colorSwatches,
@@ -44,6 +46,16 @@ const SMART_TAG_LABELS: Record<string, string> = {
   BIEU_DIEN_SU_KIEN: 'Biểu diễn & Sự kiện',
   DAO_PHO: 'Dạo phố & Chụp ảnh',
 };
+
+interface ProductPriceHistoryItem {
+  id: string;
+  price: number;
+  depositAmount: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  isCurrent: boolean;
+  note: string | null;
+}
 
 type ProductWizardModalProps = Pick<
   ReturnType<typeof useProductWizardState>,
@@ -74,6 +86,10 @@ type ProductWizardModalProps = Pick<
   | 'setProdColors'
   | 'prodMaterials'
   | 'setProdMaterials'
+  | 'prodCustomTags'
+  | 'setProdCustomTags'
+  | 'customTagInput'
+  | 'setCustomTagInput'
   | 'variants'
   | 'setVariants'
   | 'prodColorImages'
@@ -145,6 +161,10 @@ export function ProductWizardModal({
   setProdColors,
   prodMaterials,
   setProdMaterials,
+  prodCustomTags,
+  setProdCustomTags,
+  customTagInput,
+  setCustomTagInput,
   variantBusy,
   setVariantEditRow,
   setVariantEditQty,
@@ -172,6 +192,82 @@ export function ProductWizardModal({
   const [designStory, setDesignStory] = useState<string>('');
   const [materialOrigin, setMaterialOrigin] = useState<string>('');
   const [fitTips, setFitTips] = useState<string>('');
+  const [customTagError, setCustomTagError] = useState('');
+  const [priceHistory, setPriceHistory] = useState<ProductPriceHistoryItem[]>([]);
+  const [priceHistoryOpen, setPriceHistoryOpen] = useState(false);
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
+  const [priceHistoryError, setPriceHistoryError] = useState('');
+  const [priceHistoryLoadedFor, setPriceHistoryLoadedFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPriceHistory([]);
+    setPriceHistoryOpen(false);
+    setPriceHistoryError('');
+    setPriceHistoryLoadedFor(null);
+  }, [editingProduct?._id]);
+
+  const loadPriceHistory = async () => {
+    if (!editingProduct) return;
+    setPriceHistoryLoading(true);
+    setPriceHistoryError('');
+    try {
+      const response = await productsApi.getPriceHistory<{
+        data: ProductPriceHistoryItem[];
+      }>(editingProduct._id, 1, 10);
+      setPriceHistory(Array.isArray(response?.data) ? response.data : []);
+      setPriceHistoryLoadedFor(editingProduct._id);
+    } catch (error: any) {
+      setPriceHistoryError(error?.message || 'Không thể tải lịch sử giá.');
+    } finally {
+      setPriceHistoryLoading(false);
+    }
+  };
+
+  const togglePriceHistory = () => {
+    if (!editingProduct) return;
+    const nextOpen = !priceHistoryOpen;
+    setPriceHistoryOpen(nextOpen);
+    if (nextOpen && priceHistoryLoadedFor !== editingProduct._id) {
+      void loadPriceHistory();
+    }
+  };
+
+  const formatPriceDate = (value: string) =>
+    new Intl.DateTimeFormat('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(value));
+
+  const addCustomTag = () => {
+    const label = customTagInput.trim().replace(/\s+/g, ' ');
+    if (label.length < 2 || label.length > 30) {
+      setCustomTagError('Thẻ phải dài từ 2 đến 30 ký tự.');
+      return;
+    }
+    if (prodCustomTags.length >= 3) {
+      setCustomTagError('Mỗi sản phẩm chỉ được đề xuất tối đa 3 thẻ riêng.');
+      return;
+    }
+    const duplicate = prodCustomTags.some(
+      (tag) => tag.localeCompare(label, 'vi', { sensitivity: 'base' }) === 0,
+    );
+    if (duplicate) {
+      setCustomTagError('Thẻ này đã được thêm.');
+      return;
+    }
+    setProdCustomTags((tags) => [...tags, label]);
+    setCustomTagInput('');
+    setCustomTagError('');
+  };
+
+  const removeCustomTag = (label: string) => {
+    setProdCustomTags((tags) => tags.filter((tag) => tag !== label));
+    setCustomTagError('');
+  };
 
   // Step 2: Variants & Inventory State
   const [selectedVariantIdx, setSelectedVariantIdx] = useState<number>(0);
@@ -540,6 +636,74 @@ export function ProductWizardModal({
                     </div>
                   </div>
                 </div>
+
+                {editingProduct && (
+                  <div className="pwm-price-history-card">
+                    <button
+                      type="button"
+                      className="pwm-price-history-toggle"
+                      onClick={togglePriceHistory}
+                      aria-expanded={priceHistoryOpen}
+                    >
+                      <span className="pwm-price-history-toggle-label">
+                        <span className="pwm-price-history-icon"><Clock size={15} /></span>
+                        <span>
+                          <strong>Lịch sử giá gần đây</strong>
+                          <small>Đối chiếu các mức giá và tiền cọc đã áp dụng</small>
+                        </span>
+                      </span>
+                      <ChevronRight className={priceHistoryOpen ? 'expanded' : ''} size={17} />
+                    </button>
+
+                    {priceHistoryOpen && (
+                      <div className="pwm-price-history-content">
+                        {priceHistoryLoading ? (
+                          <div className="pwm-price-history-state">Đang tải lịch sử giá...</div>
+                        ) : priceHistoryError ? (
+                          <div className="pwm-price-history-state error">
+                            <span>{priceHistoryError}</span>
+                            <button type="button" onClick={() => void loadPriceHistory()}>Thử lại</button>
+                          </div>
+                        ) : priceHistory.length === 0 ? (
+                          <div className="pwm-price-history-state">Chưa có phiên bản giá nào.</div>
+                        ) : (
+                          <div className="pwm-price-history-table-wrap">
+                            <table className="pwm-price-history-table">
+                              <thead>
+                                <tr>
+                                  <th>Thời điểm áp dụng</th>
+                                  <th>Giá thuê/ngày</th>
+                                  <th>Tiền cọc</th>
+                                  <th>Trạng thái</th>
+                                  <th>Ghi chú</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {priceHistory.map((version) => (
+                                  <tr key={version.id}>
+                                    <td>{formatPriceDate(version.effectiveFrom)}</td>
+                                    <td className="numeric">{Number(version.price).toLocaleString('vi-VN')}đ</td>
+                                    <td className="numeric">{Number(version.depositAmount).toLocaleString('vi-VN')}đ</td>
+                                    <td>
+                                      <span className={`pwm-price-version-status ${version.isCurrent ? 'current' : ''}`}>
+                                        {version.isCurrent ? 'Hiện tại' : 'Đã kết thúc'}
+                                      </span>
+                                    </td>
+                                    <td>{version.note || '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        <p className="pwm-price-history-note">
+                          Booking đã tạo luôn giữ mức giá tại thời điểm đặt. Giá mới chỉ áp dụng cho booking phát sinh sau khi cập nhật.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Status Row */}
                 <div className="pwm-form-group">
@@ -1830,6 +1994,65 @@ export function ProductWizardModal({
                     initialDecisionVersion={editingProduct?.taggingDecisionVersion}
                     onActiveTagsChange={setActiveTagCodes}
                   />
+                </div>
+
+                <div className="pwm-custom-tags-card">
+                  <div className="pwm-custom-tags-heading">
+                    <div>
+                      <h4>Đề xuất thẻ riêng</h4>
+                      <p>
+                        Thêm tối đa 3 thẻ mô tả đặc trưng của sản phẩm. Thẻ mới sẽ được Admin kiểm duyệt cùng sản phẩm.
+                      </p>
+                    </div>
+                    <span>{prodCustomTags.length}/3</span>
+                  </div>
+
+                  <div className="pwm-custom-tags-input-row">
+                    <input
+                      type="text"
+                      value={customTagInput}
+                      maxLength={30}
+                      disabled={prodCustomTags.length >= 3}
+                      placeholder={prodCustomTags.length >= 3 ? 'Đã đạt giới hạn 3 thẻ' : 'Ví dụ: Nàng thơ xứ Huế'}
+                      onChange={(event) => {
+                        setCustomTagInput(event.target.value);
+                        setCustomTagError('');
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          addCustomTag();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={addCustomTag}
+                      disabled={customTagInput.trim().length < 2 || prodCustomTags.length >= 3}
+                    >
+                      <Plus size={15} />
+                      Thêm thẻ
+                    </button>
+                  </div>
+
+                  {customTagError && <p className="pwm-custom-tags-error">{customTagError}</p>}
+
+                  {prodCustomTags.length > 0 && (
+                    <div className="pwm-custom-tags-list">
+                      {prodCustomTags.map((tag) => (
+                        <span key={tag} className="pwm-custom-tag-pill">
+                          {tag}
+                          <button type="button" aria-label={`Xóa thẻ ${tag}`} onClick={() => removeCustomTag(tag)}>
+                            <X size={13} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="pwm-custom-tags-note">
+                    Thẻ riêng không thay thế thẻ thông minh chuẩn. Bạn vẫn cần chọn ít nhất một thẻ chuẩn để hệ thống đề xuất chính xác.
+                  </p>
                 </div>
               </div>
 

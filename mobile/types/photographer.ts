@@ -44,6 +44,7 @@ export interface PhotographerAddress {
 
 export interface Photographer {
   _id: string;
+  userId?: string | null;
   providerId?: string;
   businessName?: string | null;
   quote?: string | null;
@@ -88,7 +89,7 @@ export interface PhotographerReview {
   comment?: string;
   reply?: string;
   createdAt: string;
-  customerId?: { fullName?: string; email?: string; avatarUrl?: string; profile?: { fullName?: string; avatarUrl?: string } };
+  customerId?: { _id?: string; id?: string; fullName?: string; email?: string; avatarUrl?: string; profile?: { fullName?: string; avatarUrl?: string } };
 }
 
 export interface PhotographySessionPayload {

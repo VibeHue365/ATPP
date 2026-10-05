@@ -104,6 +104,7 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard)
   async getPersonalized(
     @CurrentUser() user: AuthUser,
+    @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('maxPrice') maxPrice?: string,
@@ -120,6 +121,7 @@ export class ProductsController {
       Number.isFinite(parsedPage) ? parsedPage : 1,
       Number.isFinite(parsedLimit) ? parsedLimit : 12,
       {
+        search: search?.trim() || undefined,
         maxPrice: maxPrice ? Number(maxPrice) : undefined,
         colors: colors?.split(',').map((value) => value.trim()).filter(Boolean),
         sizes: sizes?.split(',').map((value) => value.trim()).filter(Boolean),

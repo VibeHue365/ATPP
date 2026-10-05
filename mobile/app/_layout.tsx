@@ -12,6 +12,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { SocketProvider } from '@/contexts/SocketContext';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -19,5 +20,5 @@ export default function RootLayout() {
   const [ready] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, PlayfairDisplay_700Bold });
   useEffect(() => { if (ready) void SplashScreen.hideAsync(); }, [ready]);
   if (!ready) return null;
-  return <ToastProvider><AuthProvider><CartProvider><NotificationProvider><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.background } }} /></NotificationProvider></CartProvider></AuthProvider></ToastProvider>;
+  return <ToastProvider><AuthProvider><SocketProvider><CartProvider><NotificationProvider><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.background } }} /></NotificationProvider></CartProvider></SocketProvider></AuthProvider></ToastProvider>;
 }

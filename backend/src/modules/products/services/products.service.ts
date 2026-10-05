@@ -1059,6 +1059,14 @@ export class ProductsService implements OnModuleInit {
       throw new BadRequestException('Unsupported moderation action');
     }
 
+    const expectedStatus =
+      dto.action === ProductModerationStatus.Hidden
+        ? ProductModerationStatus.Approved
+        : ProductModerationStatus.PendingReview;
+    if (product.moderationStatus !== expectedStatus) {
+      throw new ConflictException('Product moderation state was already changed');
+    }
+
     const updateData: any = {
       $set: {
         moderationStatus: dto.action,
@@ -1082,7 +1090,10 @@ export class ProductsService implements OnModuleInit {
       },
     };
 
-    if (dto.action === ProductModerationStatus.Approved && product.customTags?.length) {
+    if (
+      dto.action === ProductModerationStatus.Approved &&
+      ((product.customTags?.length ?? 0) > 0 || (dto.approvedCustomTags?.length ?? 0) > 0)
+    ) {
       const approvedLabels = new Set(
         (dto.approvedCustomTags ?? [])
           .map((label) => this.normalizeCustomTagLabel(label))
@@ -1108,7 +1119,11 @@ export class ProductsService implements OnModuleInit {
         mappedTagCode: tag.mappedTagCode ?? null,
       }));
     }
-    const updated = await this.productsRepository.moderate(id, updateData);
+    const updated = await this.productsRepository.moderate(
+      id,
+      updateData,
+      expectedStatus,
+    );
 
 
     if (!updated) {

@@ -9,7 +9,7 @@ import type { useProductWizardState } from './useProductWizardState';
 import type { useProviderProductsState } from './useProviderProductsState';
 
 type Dependencies = Pick<ReturnType<typeof useProductWizardState>,
-  'setEditingProduct' | 'setProdName' | 'setProdDescription' | 'setProdBasePrice' | 'setProdDepositAmount' | 'setProdSizes' | 'setProdColors' | 'setProdMaterials' | 'setProdStatus' | 'setProdImages' | 'setProdColorImages' | 'setProdVideos' | 'setProdStyle' | 'setProdOccasions' | 'setProdStyleCategoryIds' | 'setProdEventCategoryIds' | 'setVariants' | 'setWizardStep' | 'setCreatedDraftId' | 'setActiveTagCodes' | 'setProdCategoryId' | 'setIsModalOpen' | 'setEditInvSummary' | 'setUploadingImages' | 'prodVideos' | 'setUploadingVideos' | 'editingProduct' | 'editInvSummary' | 'variants' | 'setUploadingColor' | 'prodImages' | 'prodColorImages' | 'prodName' | 'prodCategoryId' | 'prodDescription' | 'prodBasePrice' | 'prodDepositAmount' | 'prodStatus' | 'prodStyle' | 'prodOccasions' | 'prodStyleCategoryIds' | 'prodEventCategoryIds' | 'wizardStep' | 'setSavingDraft' | 'createdDraftId' | 'activeTagCodes'
+  'setEditingProduct' | 'setProdName' | 'setProdDescription' | 'setProdBasePrice' | 'setProdDepositAmount' | 'setProdSizes' | 'setProdColors' | 'setProdMaterials' | 'setProdStatus' | 'setProdImages' | 'setProdColorImages' | 'setProdVideos' | 'setProdStyle' | 'setProdOccasions' | 'setProdStyleCategoryIds' | 'setProdEventCategoryIds' | 'prodCustomTags' | 'setProdCustomTags' | 'setCustomTagInput' | 'setVariants' | 'setWizardStep' | 'setCreatedDraftId' | 'setActiveTagCodes' | 'setProdCategoryId' | 'setIsModalOpen' | 'setEditInvSummary' | 'setUploadingImages' | 'prodVideos' | 'setUploadingVideos' | 'editingProduct' | 'editInvSummary' | 'variants' | 'setUploadingColor' | 'prodImages' | 'prodColorImages' | 'prodName' | 'prodCategoryId' | 'prodDescription' | 'prodBasePrice' | 'prodDepositAmount' | 'prodStatus' | 'prodStyle' | 'prodOccasions' | 'prodStyleCategoryIds' | 'prodEventCategoryIds' | 'wizardStep' | 'setSavingDraft' | 'createdDraftId' | 'activeTagCodes'
 > &
   Pick<ReturnType<typeof useProviderProductsState>,
     'categories' | 'styleCategories' | 'eventCategories'
@@ -24,6 +24,7 @@ export function createProductWizardActions({
   setEditingProduct, setProdName, setProdDescription, setProdBasePrice, setProdDepositAmount,
   setProdSizes, setProdColors, setProdMaterials, setProdStatus, setProdImages, setProdColorImages,
   setProdVideos, setProdStyle, setProdOccasions, setProdStyleCategoryIds, setProdEventCategoryIds,
+  prodCustomTags, setProdCustomTags, setCustomTagInput,
   setVariants, setWizardStep, setCreatedDraftId, setActiveTagCodes, categories, setProdCategoryId,
   setIsModalOpen, setEditInvSummary, setUploadingImages, toast, prodVideos, setUploadingVideos,
   editingProduct, editInvSummary, variants, setUploadingColor, prodImages, prodColorImages, prodName,
@@ -49,6 +50,8 @@ export function createProductWizardActions({
     setProdOccasions([]);
     setProdStyleCategoryIds([]);
     setProdEventCategoryIds([]);
+    setProdCustomTags([]);
+    setCustomTagInput('');
     setVariants([]);
     setWizardStep(1);
     setCreatedDraftId(null);
@@ -89,6 +92,8 @@ export function createProductWizardActions({
     setProdOccasions(p.occasions || []);
     setProdStyleCategoryIds(normalizeCategoryIds(p.styleCategoryIds));
     setProdEventCategoryIds(normalizeCategoryIds(p.eventCategoryIds));
+    setProdCustomTags((p.customTags || []).map(tag => tag.label));
+    setCustomTagInput('');
     setVariants([]);
     setWizardStep(1);
     setCreatedDraftId(null);
@@ -115,6 +120,8 @@ export function createProductWizardActions({
     setProdOccasions(p.occasions || []);
     setProdStyleCategoryIds(normalizeCategoryIds(p.styleCategoryIds));
     setProdEventCategoryIds(normalizeCategoryIds(p.eventCategoryIds));
+    setProdCustomTags((p.customTags || []).map(tag => tag.label));
+    setCustomTagInput('');
     // Sao chép biến thể từ áo gốc (số lượng đặt lại = 1 để provider tự nhập).
     const dupSizes = p.sizes && p.sizes.length ? p.sizes : ['M'];
     const dupColors = p.colors && p.colors.length ? p.colors : ['RED'];
@@ -282,6 +289,7 @@ export function createProductWizardActions({
     occasions: prodOccasions,
     styleCategoryIds: prodStyleCategoryIds,
     eventCategoryIds: prodEventCategoryIds,
+    customTags: prodCustomTags,
   });
 
   const validateWizardStep1 = () => {
@@ -389,6 +397,8 @@ export function createProductWizardActions({
     setEditingProduct(null);
     setCreatedDraftId(null);
     setActiveTagCodes([]);
+    setProdCustomTags([]);
+    setCustomTagInput('');
     setWizardStep(1);
     setProdImages([]);
     setProdColorImages({});

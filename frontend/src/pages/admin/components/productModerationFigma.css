@@ -1081,6 +1081,139 @@
   text-align: right;
 }
 
+.lume-custom-tag-review {
+  padding: 16px 18px;
+  border: 1px solid #eadcdf;
+  border-radius: 12px;
+  background: #fffafa;
+}
+
+.lume-custom-tag-review-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.lume-custom-tag-review-heading h4 {
+  margin: 0 0 4px;
+  color: #3f242a;
+  font-size: 13.5px;
+  font-weight: 750;
+}
+
+.lume-custom-tag-review-heading p {
+  margin: 0;
+  color: #6b5e61;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.lume-custom-tag-review-heading > span {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border: 1px solid #fecdd3;
+  border-radius: 999px;
+  color: #881337;
+  background: #fff1f2;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.lume-custom-tag-review-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.lume-custom-tag-review-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  border: 1px solid #ded5d7;
+  border-radius: 9px;
+  color: #4b4143;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.lume-custom-tag-review-item:hover:not(.locked),
+.lume-custom-tag-review-item.selected {
+  border-color: #be7182;
+  background: #fff1f2;
+}
+
+.lume-custom-tag-review-item.locked {
+  cursor: default;
+}
+
+.lume-custom-tag-review-item input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lume-custom-tag-checkbox {
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #c9bfc1;
+  border-radius: 5px;
+  color: #fff;
+  background: #fff;
+}
+
+.lume-custom-tag-review-item.selected .lume-custom-tag-checkbox {
+  border-color: #881337;
+  background: #881337;
+}
+
+.lume-custom-tag-label {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lume-custom-tag-status {
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #92400e;
+  background: #fef3c7;
+  font-size: 9.5px;
+  font-weight: 750;
+}
+
+.lume-custom-tag-status.approved {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.lume-custom-tag-status.rejected {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.lume-custom-tag-review-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f0e5e7;
+  color: #6b5e61;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.lume-custom-tag-review-note svg {
+  flex-shrink: 0;
+  color: #881337;
+}
+
 /* Partner Card */
 .lume-product-partner-profile-card {
   background: #ffffff;

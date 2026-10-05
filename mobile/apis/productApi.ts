@@ -16,6 +16,7 @@ function queryOf(filters: ProductFilters) {
 
 export const productApi = {
   list: (filters: ProductFilters = {}) => httpClient.get<never, ProductPage>(`/products?${queryOf(filters)}`),
+  personalized: (filters: ProductFilters = {}) => httpClient.get<never, ProductPage>(`/products/personalized?${queryOf(filters)}`),
   featured: (limit = 8) => httpClient.get<never, Product[]>(`/products/featured?limit=${limit}`),
   detail: (id: string) => httpClient.get<never, Product>(`/products/${id}`),
   reviews: (id:string) => httpClient.get<never,ProductReview[]>(`/reviews/item/${id}`),

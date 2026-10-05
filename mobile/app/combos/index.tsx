@@ -1,0 +1,38 @@
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ComboCard } from '@/components/combo/ComboCard';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/ScreenState';
+import { Colors, FontFamily, Radius } from '@/constants/theme';
+import { useCombos } from '@/hooks/useCombos';
+import type { ComboSort } from '@/types/combo';
+import { comboPublishedPrice } from '@/types/combo';
+
+const PAGE_SIZE = 6;
+const sorts: Array<{key:ComboSort;label:string}> = [{key:'popular',label:'Phổ biến'},{key:'discount_desc',label:'Giảm nhiều'},{key:'price_asc',label:'Giá thấp'},{key:'price_desc',label:'Giá cao'},{key:'newest',label:'Mới nhất'}];
+
+export default function ComboListScreen(){
+  const {items,loading,error,reload}=useCombos();
+  const [query,setQuery]=useState(''); const [city,setCity]=useState('Tất cả'); const [sort,setSort]=useState<ComboSort>('popular'); const [page,setPage]=useState(1);
+  const cities=useMemo(()=>['Tất cả',...new Set(items.map(item=>item.providerId?.address?.city).filter((v):v is string=>Boolean(v)))],[items]);
+  const filtered=useMemo(()=>{const key=query.trim().toLocaleLowerCase('vi');const result=items.filter(item=>(city==='Tất cả'||item.providerId?.address?.city===city)&&(!key||[item.name,item.description,item.productId?.name,item.photographyPackageId?.name,item.providerId?.businessName].some(value=>value?.toLocaleLowerCase('vi').includes(key))));return [...result].sort((a,b)=>sort==='price_asc'?comboPublishedPrice(a)-comboPublishedPrice(b):sort==='price_desc'?comboPublishedPrice(b)-comboPublishedPrice(a):sort==='discount_desc'?b.discountPercent-a.discountPercent:sort==='newest'?new Date(b.createdAt??0).getTime()-new Date(a.createdAt??0).getTime():(b.usedCount??0)-(a.usedCount??0));},[items,query,city,sort]);
+  const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE)); const shown=filtered.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
+  useEffect(()=>setPage(1),[query,city,sort]); useEffect(()=>{if(page>totalPages)setPage(totalPages)},[page,totalPages]);
+  if(loading)return <LoadingState label="Đang tải combo ưu đãi..."/>;
+  if(error)return <ErrorState message={error} onRetry={reload}/>;
+  return <SafeAreaView style={s.safe} edges={['top']}><View style={s.header}><Pressable style={s.back} onPress={()=>router.back()}><Ionicons name="chevron-back" size={22} color={Colors.text}/></Pressable><View><Text style={s.brand}>LUMÉ COMBO</Text><Text style={s.headerTitle}>Áo dài & chụp ảnh trọn gói</Text></View><View style={s.placeholder}/></View>
+    <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <View style={s.hero}><Text style={s.eyebrow}>ĐẶT MỘT LẦN · ĐỦ DỊCH VỤ</Text><Text style={s.title}>Combo trọn gói cho ngày đáng nhớ</Text><Text style={s.subtitle}>Chọn áo dài và lịch chụp trong cùng một hành trình.</Text></View>
+      <View style={s.search}><Ionicons name="search" size={18} color={Colors.textMuted}/><TextInput value={query} onChangeText={setQuery} placeholder="Tìm combo, áo dài, studio..." placeholderTextColor={Colors.textMuted} style={s.input}/>{query?<Pressable onPress={()=>setQuery('')}><Ionicons name="close-circle" size={18} color={Colors.textMuted}/></Pressable>:null}</View>
+      <Text style={s.filterLabel}>KHU VỰC</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>{cities.map(value=><Chip key={value} label={value} active={city===value} onPress={()=>setCity(value)}/>)}</ScrollView>
+      <Text style={s.filterLabel}>SẮP XẾP</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>{sorts.map(value=><Chip key={value.key} label={value.label} active={sort===value.key} onPress={()=>setSort(value.key)}/>)}</ScrollView>
+      <View style={s.result}><Text style={s.resultText}>{filtered.length} combo phù hợp</Text>{(query||city!=='Tất cả'||sort!=='popular')&&<Pressable onPress={()=>{setQuery('');setCity('Tất cả');setSort('popular')}}><Text style={s.reset}>Đặt lại</Text></Pressable>}</View>
+      {shown.length?shown.map(item=><ComboCard key={item._id} combo={item}/>):<EmptyState title={items.length?'Không tìm thấy combo':'Chưa có combo công khai'} message={items.length?'Thử thay đổi từ khóa hoặc bộ lọc.':'Provider chưa có combo đang hoạt động. Bạn vẫn có thể đặt áo dài và gói chụp riêng.'}/>} 
+      {totalPages>1&&<View style={s.pagination}><Pressable disabled={page===1} onPress={()=>setPage(v=>v-1)} style={[s.pageButton,page===1&&s.disabled]}><Ionicons name="chevron-back" size={18} color={Colors.primary}/></Pressable><Text style={s.pageText}>Trang {page}/{totalPages}</Text><Pressable disabled={page===totalPages} onPress={()=>setPage(v=>v+1)} style={[s.pageButton,page===totalPages&&s.disabled]}><Ionicons name="chevron-forward" size={18} color={Colors.primary}/></Pressable></View>}
+    </ScrollView>
+  </SafeAreaView>;
+}
+function Chip({label,active,onPress}:{label:string;active:boolean;onPress:()=>void}){return <Pressable onPress={onPress} style={[s.chip,active&&s.chipActive]}><Text style={[s.chipText,active&&s.chipTextActive]}>{label}</Text></Pressable>}
+const s=StyleSheet.create({safe:{flex:1,backgroundColor:Colors.background},header:{height:64,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',backgroundColor:Colors.surface,borderBottomWidth:1,borderBottomColor:Colors.border},back:{width:38,height:38,borderRadius:99,borderWidth:1,borderColor:Colors.border,alignItems:'center',justifyContent:'center'},placeholder:{width:38},brand:{fontFamily:FontFamily.display,fontSize:15,letterSpacing:2,color:Colors.primary,textAlign:'center'},headerTitle:{fontFamily:FontFamily.body,fontSize:9,color:Colors.textMuted,textAlign:'center',marginTop:2},content:{padding:16,paddingBottom:36,gap:13},hero:{backgroundColor:Colors.primarySoft,borderRadius:Radius.lg,padding:18},eyebrow:{fontFamily:FontFamily.bodyBold,fontSize:8,color:Colors.primary},title:{fontFamily:FontFamily.display,fontSize:25,lineHeight:32,color:Colors.text,marginTop:7},subtitle:{fontFamily:FontFamily.body,fontSize:11,lineHeight:18,color:Colors.textSecondary,marginTop:5},search:{height:48,backgroundColor:Colors.surface,borderRadius:Radius.md,borderWidth:1,borderColor:Colors.border,flexDirection:'row',alignItems:'center',paddingHorizontal:12,gap:8},input:{flex:1,fontFamily:FontFamily.body,fontSize:11,color:Colors.text},filterLabel:{fontFamily:FontFamily.bodyBold,fontSize:8,color:Colors.textMuted,marginBottom:-6},chips:{gap:8,paddingRight:10},chip:{paddingHorizontal:14,paddingVertical:9,borderRadius:Radius.pill,borderWidth:1,borderColor:Colors.border,backgroundColor:Colors.surface},chipActive:{backgroundColor:Colors.primary,borderColor:Colors.primary},chipText:{fontFamily:FontFamily.bodyMedium,fontSize:10,color:Colors.textSecondary},chipTextActive:{color:Colors.white},result:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginTop:4},resultText:{fontFamily:FontFamily.bodySemiBold,fontSize:11,color:Colors.text},reset:{fontFamily:FontFamily.bodySemiBold,fontSize:10,color:Colors.primary},pagination:{flexDirection:'row',justifyContent:'center',alignItems:'center',gap:18,marginTop:8},pageButton:{width:40,height:40,borderRadius:99,borderWidth:1,borderColor:Colors.border,backgroundColor:Colors.surface,alignItems:'center',justifyContent:'center'},pageText:{fontFamily:FontFamily.bodySemiBold,fontSize:11,color:Colors.text},disabled:{opacity:.35}});

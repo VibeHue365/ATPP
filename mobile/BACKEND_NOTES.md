@@ -5,8 +5,9 @@ Code mobile không được phép chỉnh sửa backend. Mọi vấn đề bị 
 ## Đăng nhập Google OAuth
 
 - Trạng thái: tạm hoãn.
-- Callback hiện tại của backend chuyển hướng tới `FRONTEND_URL/oauth/callback`.
-- Mobile cần một địa chỉ chuyển hướng dành cho ứng dụng native hoặc một endpoint cho phép đổi Google ID token lấy phiên đăng nhập.
+- Backend hiện có `POST /auth/oauth/exchange` để đổi authorization code một lần thành phiên đăng nhập, nhưng callback Google vẫn luôn chuyển hướng tới `FRONTEND_URL/oauth/callback`.
+- Mobile không thể nhận authorization code bằng Expo deep link vì backend không nhận `redirectUri`/platform trong OAuth state. Cũng không dùng WebView nhúng cho Google OAuth vì không phù hợp chính sách OAuth của Google.
+- Cần callback/universal link dành cho ứng dụng native, hoặc endpoint cho phép đổi Google ID token lấy phiên đăng nhập, trước khi bật nút Google trên mobile.
 - Đăng nhập bằng email và mật khẩu vẫn hoạt động mà không cần thay đổi phần này.
 
 ## Các phần đã xác nhận tương thích
@@ -21,6 +22,13 @@ Code mobile không được phép chỉnh sửa backend. Mọi vấn đề bị 
 - Trạng thái: tạm hoãn; mobile khóa trường nhập mã ưu đãi khi checkout có gói chụp ảnh.
 - `CreatePhotographyComboHoldDto` không chấp nhận `promoCode`, trong khi thiết kế checkout có trường mã ưu đãi cho đơn kết hợp gói chụp ảnh và áo dài.
 - Cần xác nhận bên nào chịu trách nhiệm sở hữu và tính toán giảm giá trước khi thay đổi hợp đồng backend.
+
+## Giá combo promotion chưa được nối với combo hold
+
+- Trạng thái: mobile đã hoàn thành danh sách, chi tiết, chọn dịch vụ, giỏ hàng và checkout combo bằng API thật; chưa sửa backend.
+- `GET /combo-promotions/public` và `GET /combo-promotions/:id` công bố `discountPercent`/`comboPrice`, nhưng `CreatePhotographyComboHoldDto` không nhận `comboPromotionId`.
+- `PhotographyHoldService.createComboHold` hiện luôn giảm cố định 10% cho phần phí thuê và chụp, không đọc promotion đã chọn và cũng không tăng `usedCount` của promotion.
+- Mobile hiển thị giá promotion là “giá công bố”, đồng thời dùng mức 10% khi dự tính checkout để khớp cách backend đang tạo booking. Cần nối promotion vào hold và tính giá phía server trước khi có thể cam kết mọi mức giảm do provider công bố.
 
 ## Lịch sử đánh giá của khách hàng
 
@@ -43,14 +51,30 @@ Code mobile không được phép chỉnh sửa backend. Mọi vấn đề bị 
 ## Chat customer
 
 - Mobile đã hỗ trợ mở các phòng chat hiện có, đọc và gửi tin nhắn qua API thật.
-- Chưa bật tạo cuộc trò chuyện từ danh sách photographer vì payload public không đảm bảo trả `userId`; dùng `_id` provider thay cho user id có thể tạo sai phòng hoặc trả lỗi.
-- `GET /chat/rooms/:roomId/messages` hiện chưa truyền user hiện tại vào service để kiểm tra người gọi có thuộc phòng hay không. Nên bổ sung kiểm tra thành viên phòng trước khi phát hành production.
+- Trang gian hàng đã bật tạo cuộc trò chuyện vì `GET /products/store-info/:providerId` trả `userId`; mobile chỉ gọi `POST /chat/rooms` khi trường này tồn tại và không dùng `_id` provider thay thế.
+- Trang chi tiết photographer đã bật tạo cuộc trò chuyện vì `GET /api/photographers/:id` có trả `userId`; payload discovery dạng danh sách không có trường này nên mobile luôn tải detail trước khi mở chat.
+- Đã hỗ trợ chọn ảnh, tải qua `POST /chat/upload`, gửi URL trong `attachments` và hiển thị ảnh trong hội thoại giống frontend web.
+- Mobile đã kết nối Socket.IO bằng JWT, dùng `join_room`, `send_message`, `mark_read`, `new_message`, `room_update`, `messages_read`, tự reconnect và quay về REST polling mỗi 5 giây khi mất socket. Handshake `authenticated` và `ping/pong` đã được kiểm tra thành công trên backend local.
+- `GET /chat/rooms/:roomId/messages`, `POST /chat/rooms/:roomId/messages`, socket `join_room`, `send_message` và `mark_read` hiện chưa kiểm tra người gọi có thuộc phòng hay không. Người dùng đã đăng nhập nếu biết `roomId` có thể đọc, ghi hoặc tham gia sai hội thoại; cần kiểm tra participant trong cả controller, service và gateway để bảo vệ dữ liệu web/mobile.
+- Tài khoản customer kiểm thử hiện chưa có phòng chat nên chưa gửi tin nhắn thử hai đầu với provider web, nhằm tránh tự tạo phòng/tin nhắn rác. Cần UAT bằng customer và provider thật trong giai đoạn kiểm thử tổng thể.
+
+## Báo cáo đánh giá không phù hợp
+
+- Mobile customer đã dùng endpoint thật `POST /reviews/:id/report`, giống phần provider trên web; không dùng dữ liệu giả.
+- Endpoint xác thực JWT nhưng không truyền `CurrentUser` vào service, không lưu người báo cáo và không kiểm tra báo cáo trùng hoặc người dùng báo cáo đánh giá của chính mình. Mobile ẩn nút trên đánh giá của tài khoản hiện tại khi payload có author id và khóa nút sau khi gửi trong phiên, nhưng backend vẫn cần ràng buộc để bảo vệ dữ liệu cho mọi client.
 
 ## Liên kết đặt lại mật khẩu trên mobile
 
 - Trạng thái: tạm hoãn; màn hình đặt lại mật khẩu trên mobile nhận tham số truy vấn `token` và cũng cho phép nhập token thủ công.
 - Email đặt lại mật khẩu hiện sử dụng `FRONTEND_URL/auth/reset-password`, vì vậy liên kết sẽ mở frontend web thay vì scheme `vibehue://` của mobile.
 - Cần xác nhận có sử dụng universal link/app link trong email đặt lại mật khẩu hay không trước khi chỉnh sửa cấu hình gửi email của backend.
+
+## Trợ lý AI customer
+
+- Mobile đã nối đúng hai endpoint web đang dùng: `POST /ai/chat` và `POST /ai/chat/with-image`; không sử dụng dữ liệu tư vấn hoặc sản phẩm giả.
+- Đăng nhập backend local hoạt động, FastAPI ở cổng `8000` cũng phản hồi health check, nhưng thử gọi `/ai/chat` qua backend không hoàn tất trong 15–30 giây khi bước xử lý Gemini bị chậm hoặc không phản hồi.
+- `AiService` trong backend gọi `fetch` tới FastAPI mà chưa có `AbortSignal.timeout` hoặc timeout tương đương. Vì vậy nhánh `offlineFallback` không được kích hoạt nếu kết nối vẫn mở nhưng không trả dữ liệu, đồng thời request mobile hết timeout sau 30 giây.
+- Nên đặt timeout rõ ràng cho lời gọi FastAPI/Gemini, hủy request khi quá hạn và trả fallback hoặc lỗi có kiểm soát. Chưa chỉnh sửa backend trong phạm vi mobile.
 
 ## Tài khoản kiểm thử mobile có xác thực
 
