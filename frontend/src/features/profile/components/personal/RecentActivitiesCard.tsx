@@ -22,7 +22,16 @@ export const RecentActivitiesCard: React.FC<RecentActivitiesCardProps> = ({ book
     bookings.slice(0, 4).forEach((b, idx) => {
       const firstItem = b.items?.[0] || {};
       const code = b.bookingCode || `RT-${b._id.slice(-4)}`;
-      const title = firstItem.name || (firstItem.itemType === 'PHOTOGRAPHY_PACKAGE' ? 'Gói chụp ảnh' : 'Trang phục thuê');
+      const prodObj = firstItem.productId && typeof firstItem.productId === 'object' ? firstItem.productId : null;
+      const pkgObj = firstItem.photographyPackageId && typeof firstItem.photographyPackageId === 'object' ? firstItem.photographyPackageId : null;
+      const title =
+        firstItem.name ||
+        prodObj?.name ||
+        pkgObj?.name ||
+        firstItem.packageSnapshot?.name ||
+        firstItem.productName ||
+        b.productName ||
+        (firstItem.itemType === 'PHOTOGRAPHY_PACKAGE' ? 'Gói chụp ảnh' : 'Trang phục thuê');
       const timeStr = b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : 'Gần đây';
 
       if (b.status === 'COMPLETED') {

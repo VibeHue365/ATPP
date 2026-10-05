@@ -227,12 +227,23 @@ export const ProfilePage: React.FC = () => {
           countdownText = 'Sắp diễn ra';
         }
 
+        const prodObj = !isPhoto && item.productId && typeof item.productId === 'object' ? item.productId : null;
+        const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
+        const itemTitle =
+          item.name ||
+          prodObj?.name ||
+          pkgObj?.name ||
+          item.packageSnapshot?.name ||
+          item.productName ||
+          b.productName ||
+          (isPhoto ? 'Gói Chụp Ảnh Cổ Phong' : 'Áo Dài Di Sản');
+
         list.push({
           id: `${b._id}-${idx}`,
           bookingId: b._id,
           bookingCode: b.bookingCode || `RT-${b._id.slice(-4)}`,
           type: isPhoto ? 'PHOTOSHOOT' : 'RENTAL',
-          title: item.name || (isPhoto ? 'Gói Chụp Ảnh Cổ Phong' : 'Áo Dài Nhật Bình Cung Đình'),
+          title: itemTitle,
           code: b.bookingCode || `RT-${b._id.slice(-4)}`,
           size: item.selectedSize || item.size || 'M',
           color: item.selectedColor || item.color,
@@ -269,11 +280,22 @@ export const ProfilePage: React.FC = () => {
         color: '#574D4F'
       };
 
+      const prodObj = !isPhoto && firstItem.productId && typeof firstItem.productId === 'object' ? firstItem.productId : null;
+      const pkgObj = firstItem.photographyPackageId && typeof firstItem.photographyPackageId === 'object' ? firstItem.photographyPackageId : null;
+      const orderTitle =
+        firstItem.name ||
+        prodObj?.name ||
+        pkgObj?.name ||
+        firstItem.packageSnapshot?.name ||
+        firstItem.productName ||
+        b.productName ||
+        (isPhoto ? 'Gói Chụp Ảnh Nghệ Thuật' : 'Áo Dài Di Sản');
+
       return {
         id: b._id,
         bookingId: b._id,
         bookingCode: b.bookingCode || `DH-${b._id.slice(-4)}`,
-        title: firstItem.name || (isPhoto ? 'Gói Chụp Ảnh Nghệ Thuật' : 'Áo Dài Truyền Thống'),
+        title: orderTitle,
         dateStr: b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : 'Gần đây',
         amount: b.pricingSummary?.grandTotal || b.totalAmount || 0,
         status: b.status,

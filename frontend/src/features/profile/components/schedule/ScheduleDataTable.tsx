@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Calendar,
   ChevronDown,
@@ -55,15 +56,121 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
   onOpenReview,
   onContinuePayment
 }) => {
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [activeDropdown, setActiveDropdown] = useState<{
+    id: string;
+    bookingId: string;
+    triggerRect: DOMRect;
+    booking: any;
+    item: any;
+  } | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
   const totalPages = Math.ceil(items.length / pageSize) || 1;
   const paginatedItems = items.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const toggleDropdown = (id: string) => {
-    setOpenDropdownId(openDropdownId === id ? null : id);
+  useEffect(() => {
+    if (!activeDropdown) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) {
+        return;
+      }
+      const isTrigger = (e.target as HTMLElement)?.closest('[data-dropdown-trigger="true"]');
+      if (isTrigger) {
+        return;
+      }
+      setActiveDropdown(null);
+    };
+
+    const handleScrollOrResize = () => {
+      setActiveDropdown(null);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActiveDropdown(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeDropdown]);
+
+  const toggleDropdown = (e: React.MouseEvent<HTMLButtonElement>, row: ScheduleRowItem) => {
+    e.stopPropagation();
+    if (activeDropdown?.id === row.id) {
+      setActiveDropdown(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setActiveDropdown({
+        id: row.id,
+        bookingId: row.bookingId,
+        triggerRect: rect,
+        booking: row.booking,
+        item: row.item
+      });
+    }
+  };
+
+  const getDropdownStyle = (): React.CSSProperties => {
+    if (!activeDropdown) return {};
+    const rect = activeDropdown.triggerRect;
+    const menuWidth = 184;
+
+    let left = rect.right - menuWidth;
+    if (left < 10) left = 10;
+    if (left + menuWidth > window.innerWidth - 10) {
+      left = window.innerWidth - menuWidth - 10;
+    }
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpward = spaceBelow < 220 && rect.top > 220;
+
+    if (openUpward) {
+      return {
+        position: 'fixed',
+        top: `${rect.top - 6}px`,
+        left: `${left}px`,
+        transform: 'translateY(-100%)',
+        width: `${menuWidth}px`,
+        backgroundColor: '#FFFFFF',
+        borderRadius: '12px',
+        border: '1px solid #EFE9E1',
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0,0,0,0.04)',
+        zIndex: 9999,
+        padding: '6px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '2px'
+      };
+    }
+
+    return {
+      position: 'fixed',
+      top: `${rect.bottom + 6}px`,
+      left: `${left}px`,
+      width: `${menuWidth}px`,
+      backgroundColor: '#FFFFFF',
+      borderRadius: '12px',
+      border: '1px solid #EFE9E1',
+      boxShadow: '0 10px 30px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0,0,0,0.04)',
+      zIndex: 9999,
+      padding: '6px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2px'
+    };
   };
 
   const col1Header =
@@ -127,7 +234,7 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
           </div>
         ) : (
           <>
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', overflowY: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #ECE5DB', backgroundColor: '#FCFAF7' }}>
@@ -241,231 +348,35 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
                   </td>
 
                   {/* Column 5: Action Dropdown */}
-                  <td style={{ padding: '14px 18px', textAlign: 'right', position: 'relative' }}>
-                    <div style={{ display: 'inline-block', position: 'relative' }}>
-                      <button
-                        type="button"
-                        onClick={() => toggleDropdown(row.id)}
+                  <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                    <button
+                      type="button"
+                      data-dropdown-trigger="true"
+                      onClick={(e) => toggleDropdown(e, row)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: activeDropdown?.id === row.id ? '#F8F5F1' : '#FFFFFF',
+                        border: activeDropdown?.id === row.id ? '1px solid #8B1E2D' : '1px solid #DED7CB',
+                        color: activeDropdown?.id === row.id ? '#8B1E2D' : '#4A3F35',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      <span>Chi tiết</span>
+                      <ChevronDown
+                        size={14}
                         style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                          backgroundColor: '#FFFFFF',
-                          border: '1px solid #DED7CB',
-                          color: '#4A3F35',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          transition: 'all 0.15s'
+                          transform: activeDropdown?.id === row.id ? 'rotate(180deg)' : 'none',
+                          transition: 'transform 0.15s ease'
                         }}
-                      >
-                        <span>Chi tiết</span>
-                        <ChevronDown size={14} />
-                      </button>
-
-                      {/* Dropdown Menu */}
-                      {openDropdownId === row.id && (
-                        <div
-                          style={{
-                            position: 'absolute',
-                            right: 0,
-                            top: '100%',
-                            marginTop: '4px',
-                            width: '180px',
-                            backgroundColor: '#FFFFFF',
-                            borderRadius: '12px',
-                            border: '1px solid #EFE9E1',
-                            boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-                            zIndex: 100,
-                            padding: '6px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '2px'
-                          }}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOpenDropdownId(null);
-                              onViewDetails(row.booking);
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              width: '100%',
-                              padding: '8px 10px',
-                              borderRadius: '6px',
-                              border: 'none',
-                              backgroundColor: 'transparent',
-                              color: '#231F20',
-                              fontSize: '12.5px',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              textAlign: 'left'
-                            }}
-                            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#FDF2F4')}
-                            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                          >
-                            <Eye size={14} color="#8B1E2D" />
-                            <span>Xem chi tiết</span>
-                          </button>
-
-                          {(row.booking.deliveredPhotos?.length > 0 || row.booking.deliveryDriveUrl) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenDropdownId(null);
-                                onViewDetails(row.booking);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                width: '100%',
-                                padding: '8px 10px',
-                                borderRadius: '6px',
-                                border: 'none',
-                                backgroundColor: 'transparent',
-                                color: '#1D4ED8',
-                                fontSize: '12.5px',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                textAlign: 'left'
-                              }}
-                              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#EFF6FF')}
-                              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                            >
-                              <Download size={14} />
-                              <span>Mở kho ảnh kết quả</span>
-                            </button>
-                          )}
-
-                          {['CONFIRMED', 'DEPOSIT_PAID'].includes(row.booking.status) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenDropdownId(null);
-                                onOpenReschedule(row.item);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                width: '100%',
-                                padding: '8px 10px',
-                                borderRadius: '6px',
-                                border: 'none',
-                                backgroundColor: 'transparent',
-                                color: '#1D4ED8',
-                                fontSize: '12.5px',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                textAlign: 'left'
-                              }}
-                              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#EFF6FF')}
-                              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                            >
-                              <CalendarCheck size={14} />
-                              <span>Đổi lịch hẹn</span>
-                            </button>
-                          )}
-
-                          {row.booking.status === 'PENDING_PAYMENT' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenDropdownId(null);
-                                onContinuePayment(row.bookingId);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                width: '100%',
-                                padding: '8px 10px',
-                                borderRadius: '6px',
-                                border: 'none',
-                                backgroundColor: 'transparent',
-                                color: '#8B1E2D',
-                                fontSize: '12.5px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                textAlign: 'left'
-                              }}
-                              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#FDF2F4')}
-                              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                            >
-                              <CreditCard size={14} />
-                              <span>Tiếp tục thanh toán</span>
-                            </button>
-                          )}
-
-                          {['COMPLETED', 'RETURNED'].includes(row.booking.status) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenDropdownId(null);
-                                onOpenReview(row.item);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                width: '100%',
-                                padding: '8px 10px',
-                                borderRadius: '6px',
-                                border: 'none',
-                                backgroundColor: 'transparent',
-                                color: '#D97706',
-                                fontSize: '12.5px',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                textAlign: 'left'
-                              }}
-                              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#FEF3C7')}
-                              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                            >
-                              <Star size={14} />
-                              <span>Đánh giá dịch vụ</span>
-                            </button>
-                          )}
-
-                          {!['COMPLETED', 'CANCELLED', 'RETURNED'].includes(row.booking.status) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenDropdownId(null);
-                                onOpenCancel(row.booking);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                width: '100%',
-                                padding: '8px 10px',
-                                borderRadius: '6px',
-                                border: 'none',
-                                backgroundColor: 'transparent',
-                                color: '#DC2626',
-                                fontSize: '12.5px',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                textAlign: 'left',
-                                borderTop: '1px dashed #ECE5DB'
-                              }}
-                              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#FEF2F2')}
-                              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                            >
-                              <XCircle size={14} />
-                              <span>Hủy lịch</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                      />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -560,6 +471,204 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
       </>
       )}
     </div>
+
+    {/* Dropdown Menu Portaled to Body (Avoids Table Overflow / Scrolling Glitches) */}
+    {activeDropdown &&
+      createPortal(
+        <div ref={dropdownRef} style={getDropdownStyle()}>
+          {/* 1. Xem chi tiết */}
+          <button
+            type="button"
+            onClick={() => {
+              const booking = activeDropdown.booking;
+              setActiveDropdown(null);
+              onViewDetails(booking);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              width: '100%',
+              padding: '8px 10px',
+              borderRadius: '6px',
+              border: 'none',
+              backgroundColor: 'transparent',
+              color: '#231F20',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              textAlign: 'left'
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#FDF2F4')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            <Eye size={14} color="#8B1E2D" />
+            <span>Xem chi tiết</span>
+          </button>
+
+          {/* 2. Mở kho ảnh kết quả */}
+          {(activeDropdown.booking.deliveredPhotos?.length > 0 || activeDropdown.booking.deliveryDriveUrl) && (
+            <button
+              type="button"
+              onClick={() => {
+                const booking = activeDropdown.booking;
+                setActiveDropdown(null);
+                onViewDetails(booking);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: 'transparent',
+                color: '#1D4ED8',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#EFF6FF')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <Download size={14} />
+              <span>Mở kho ảnh kết quả</span>
+            </button>
+          )}
+
+          {/* 3. Đổi lịch hẹn */}
+          {['CONFIRMED', 'DEPOSIT_PAID'].includes(activeDropdown.booking.status) && (
+            <button
+              type="button"
+              onClick={() => {
+                const item = activeDropdown.item;
+                setActiveDropdown(null);
+                onOpenReschedule(item);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: 'transparent',
+                color: '#1D4ED8',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#EFF6FF')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <CalendarCheck size={14} />
+              <span>Đổi lịch hẹn</span>
+            </button>
+          )}
+
+          {/* 4. Tiếp tục thanh toán */}
+          {activeDropdown.booking.status === 'PENDING_PAYMENT' && (
+            <button
+              type="button"
+              onClick={() => {
+                const bId = activeDropdown.bookingId;
+                setActiveDropdown(null);
+                onContinuePayment(bId);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: 'transparent',
+                color: '#8B1E2D',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#FDF2F4')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <CreditCard size={14} />
+              <span>Tiếp tục thanh toán</span>
+            </button>
+          )}
+
+          {/* 5. Đánh giá dịch vụ */}
+          {['COMPLETED', 'RETURNED'].includes(activeDropdown.booking.status) && (
+            <button
+              type="button"
+              onClick={() => {
+                const item = activeDropdown.item;
+                setActiveDropdown(null);
+                onOpenReview(item);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: 'transparent',
+                color: '#D97706',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#FEF3C7')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <Star size={14} />
+              <span>Đánh giá dịch vụ</span>
+            </button>
+          )}
+
+          {/* 6. Hủy lịch */}
+          {!['COMPLETED', 'CANCELLED', 'RETURNED'].includes(activeDropdown.booking.status) && (
+            <button
+              type="button"
+              onClick={() => {
+                const booking = activeDropdown.booking;
+                setActiveDropdown(null);
+                onOpenCancel(booking);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: 'transparent',
+                color: '#DC2626',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left',
+                borderTop: '1px dashed #ECE5DB'
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#FEF2F2')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <XCircle size={14} />
+              <span>Hủy lịch</span>
+            </button>
+          )}
+        </div>,
+        document.body
+      )}
   </div>
   );
 };

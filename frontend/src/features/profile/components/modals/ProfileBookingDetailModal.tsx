@@ -4,7 +4,8 @@ import {
   Download,
   XCircle,
   AlertTriangle,
-  Calendar
+  Calendar,
+  MapPin
 } from 'lucide-react';
 import { Modal } from '../../../../components/common/Modal';
 import { ImageWithFallback } from '../../../../shared/media/ImageWithFallback';
@@ -86,6 +87,28 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
   const photos = booking.deliveredPhotos && booking.deliveredPhotos.length > 0 ? booking.deliveredPhotos : [];
   const driveUrl = booking.deliveryDriveUrl;
 
+  // Photoshoot vs Rental check
+  const isPhotoshootBooking =
+    booking.bookingType === 'PHOTOGRAPHY' ||
+    booking.bookingType === 'COMBO' ||
+    booking.items?.some((it: any) => it.itemType === 'PHOTOGRAPHY_PACKAGE');
+
+  const photoshootSchedule = booking.schedules?.find(
+    (s: any) => s.scheduleType === 'PHOTOSHOOT'
+  );
+
+  const shootLocationAddress =
+    photoshootSchedule?.locationSnapshot?.address ||
+    photoshootSchedule?.locationAddress ||
+    booking.items?.find((it: any) => it.itemType === 'PHOTOGRAPHY_PACKAGE')?.shootLocation;
+
+  const rentalItem = booking.items?.find(
+    (it: any) => it.itemType === 'PRODUCT' || it.pickupReturnLocationSnapshot?.address
+  );
+  const pickupAddress =
+    rentalItem?.pickupReturnLocationSnapshot?.address ||
+    booking.pickupReturnLocationSnapshot?.address;
+
   return (
     <Modal
       isOpen={true}
@@ -93,9 +116,9 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
       title={`CHI TIẾT ĐƠN HÀNG: ${booking.bookingCode}`}
       maxWidth="720px"
     >
-      <div className="lume-modal-content-box animate-fade-in">
+      <div className="lume-modal-content-box animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {/* Status badges row */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #EAE6E1', paddingBottom: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #ECE5DB', paddingBottom: '14px' }}>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span style={{ fontSize: '12px', color: '#7D736B' }}>Trạng thái đơn:</span>
             <span
@@ -133,24 +156,24 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
         </div>
 
         {/* Customer Information Banner */}
-        <div style={{ backgroundColor: '#FCFAF7', padding: '16px', borderRadius: '12px', border: '1px solid #ECE5DB' }}>
-          <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#8B1E2D', marginBottom: '8px', textTransform: 'uppercase' }}>
+        <div style={{ backgroundColor: '#FCFAF7', padding: '16px 20px', borderRadius: '12px', border: '1px solid #ECE5DB' }}>
+          <h4 style={{ fontSize: '12.5px', fontWeight: 800, color: '#8B1E2D', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
             Thông tin người đặt
           </h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: '13px', color: '#4A3F35' }}>
-            <span>Người đặt: <strong>{user?.fullName || booking.customerName || 'Khách hàng'}</strong></span>
-            <span>Số điện thoại: <strong>{user?.phone || booking.customerPhone || 'Chưa cập nhật'}</strong></span>
-            <span style={{ gridColumn: 'span 2' }}>Email: <strong>{user?.email || booking.customerEmail || '—'}</strong></span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px 20px', fontSize: '13px', color: '#4A3F35' }}>
+            <span>Người đặt: <strong style={{ color: '#231F20' }}>{user?.fullName || booking.customerName || 'Khách hàng'}</strong></span>
+            <span>Số điện thoại: <strong style={{ color: '#231F20' }}>{user?.phone || booking.customerPhone || 'Chưa cập nhật'}</strong></span>
+            <span style={{ gridColumn: '1 / -1' }}>Email: <strong style={{ color: '#231F20' }}>{user?.email || booking.customerEmail || '—'}</strong></span>
           </div>
         </div>
 
         {/* Incident / Damage notice if applicable */}
         {bookingIncident && (
-          <div style={{ backgroundColor: '#FFF5F5', border: '1px solid #FEB2B2', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ backgroundColor: '#FFF5F5', border: '1px solid #FEB2B2', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#C53030', fontWeight: 750, fontSize: '13px' }}>
               <AlertTriangle size={15} /> <span>YÊU CẦU ĐỀN BÙ SỰ CỐ: {(bookingIncident.requestedAmount || 0).toLocaleString('vi-VN')}đ</span>
             </div>
-            <p style={{ fontSize: '12.5px', color: '#4A5568', margin: 0 }}>
+            <p style={{ fontSize: '12.5px', color: '#4A5568', margin: 0, lineHeight: 1.5 }}>
               {bookingIncident.description || 'Sự cố hỏng trang phục cần bồi thường.'}
             </p>
             {bookingIncident.status === 'PENDING_CUSTOMER' && onIncidentResponse && (
@@ -176,7 +199,7 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
 
         {/* Photography Delivered Photos */}
         {(photos.length > 0 || driveUrl) && (
-          <div style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1D4ED8', fontWeight: 800, fontSize: '13.5px' }}>
                 <Camera size={16} />
@@ -267,7 +290,7 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
 
         {/* Cancellation Reason Display */}
         {booking.status === 'CANCELLED' && booking.cancellation?.reason && (
-          <div style={{ backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontWeight: 750, fontSize: '13px' }}>
               <XCircle size={15} /> <span>LÝ DO HỦY ĐƠN</span>
             </div>
@@ -278,24 +301,38 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
         )}
 
         {/* Location change trigger if photoshoots present */}
-        {booking.status === 'CONFIRMED' && booking.schedules?.length > 0 && onOpenLocationChange && (
-          <div style={{ padding: '12px 14px', backgroundColor: '#EFF6FF', borderRadius: '10px', border: '1px solid #BFDBFE', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12.5px', color: '#1E40AF', fontWeight: 600 }}>
-              Địa điểm chụp: {booking.schedules[0]?.locationSnapshot?.address || booking.schedules[0]?.locationAddress || 'Lăng Khải Định, Huế'}
-            </span>
+        {isPhotoshootBooking && booking.status === 'CONFIRMED' && photoshootSchedule && onOpenLocationChange && (
+          <div style={{ padding: '14px 18px', backgroundColor: '#EFF6FF', borderRadius: '12px', border: '1px solid #BFDBFE', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <MapPin size={18} color="#2563EB" style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: '13px', color: '#1E40AF', fontWeight: 600 }}>
+                Địa điểm chụp: <strong>{shootLocationAddress || 'Theo thỏa thuận với thợ ảnh'}</strong>
+              </span>
+            </div>
             <button
               type="button"
-              onClick={() => onOpenLocationChange(booking.schedules[0])}
-              style={{ padding: '5px 12px', backgroundColor: '#2563EB', color: 'white', border: 'none', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
+              onClick={() => onOpenLocationChange(photoshootSchedule)}
+              style={{ padding: '6px 14px', backgroundColor: '#2563EB', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
             >
               Đổi địa điểm
             </button>
           </div>
         )}
 
+        {/* Store pickup & return location for Ao Dai rentals */}
+        {pickupAddress && (
+          <div style={{ padding: '14px 18px', backgroundColor: '#FDF8F6', borderRadius: '12px', border: '1px solid #F5E6E0', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+            <MapPin size={18} color="#8B1E2D" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div style={{ fontSize: '13px', color: '#574D4F', lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 600, color: '#8B1E2D' }}>Địa chỉ nhận & trả đồ (lấy tại cửa hàng): </span>
+              <strong style={{ color: '#231F20' }}>{pickupAddress}</strong>
+            </div>
+          </div>
+        )}
+
         {/* Items details */}
         <div>
-          <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#8B1E2D', textTransform: 'uppercase', margin: '0 0 12px 0' }}>
+          <h4 style={{ fontSize: '12.5px', fontWeight: 800, color: '#8B1E2D', textTransform: 'uppercase', letterSpacing: '0.03em', margin: '0 0 14px 0' }}>
             Danh sách dịch vụ & sản phẩm
           </h4>
 
@@ -309,12 +346,12 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
               const itemImage = prodObj?.images?.[0] || pkgObj?.coverImage || item.image || item.productImage;
 
               return (
-                <div key={idx} style={{ display: 'flex', gap: '14px', border: '1px solid #ECE5DB', borderRadius: '10px', padding: '14px', backgroundColor: '#FFFFFF' }}>
+                <div key={idx} style={{ display: 'flex', gap: '16px', border: '1px solid #ECE5DB', borderRadius: '12px', padding: '16px 18px', backgroundColor: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                   <ImageWithFallback
                     src={itemImage || (isProduct ? undefined : 'https://images.unsplash.com/photo-1537633552985-df8429e8048b')}
                     alt={itemName}
-                    fallback={<div style={{ width: '70px', height: '85px', borderRadius: '6px', background: '#F8F5F1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: '#8C827A' }}>Ảnh</div>}
-                    style={{ width: '70px', height: '85px', objectFit: 'cover', borderRadius: '6px' }}
+                    fallback={<div style={{ width: '74px', height: '90px', borderRadius: '8px', background: '#F8F5F1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: '#8C827A' }}>Ảnh</div>}
+                    style={{ width: '74px', height: '90px', objectFit: 'cover', borderRadius: '8px' }}
                   />
 
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -344,9 +381,14 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
                         )}
                       </div>
 
-                      <div style={{ fontSize: '12px', color: '#7D736B', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <div style={{ fontSize: '12px', color: '#7D736B', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         {isProduct ? (
-                          <span>Kích cỡ: <strong>{item.selectedSize || item.size || 'M'}</strong> • Màu sắc: <strong>{item.selectedColor || item.color || 'Đỏ'}</strong></span>
+                          <>
+                            <span>Kích cỡ: <strong>{item.selectedSize || item.size || 'M'}</strong> • Màu sắc: <strong>{item.selectedColor || item.color || 'Đỏ'}</strong></span>
+                            {(item.rentalFrom || item.startDate) && (
+                              <span>Thời gian thuê: <strong>{formatDate(item.rentalFrom || item.startDate)}</strong>{item.rentalTo ? ` đến ${formatDate(item.rentalTo || item.endDate)}` : ''}</span>
+                            )}
+                          </>
                         ) : (
                           <span>Khung giờ chụp: <strong>{item.shootTimeSlot || '09:00 - 11:00'}</strong> • Ngày: <strong>{formatDate(item.shootDate)}</strong></span>
                         )}
@@ -354,11 +396,11 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '6px', borderTop: '1px dashed #ECE5DB', paddingTop: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '8px', borderTop: '1px dashed #ECE5DB', paddingTop: '8px' }}>
                       <span style={{ fontSize: '11.5px', color: '#7D736B' }}>
                         {item.unitPrice?.toLocaleString('vi-VN')}đ x {item.quantity || 1}
                       </span>
-                      <strong style={{ fontSize: '13.5px', color: '#8B1E2D' }}>
+                      <strong style={{ fontSize: '14px', color: '#8B1E2D' }}>
                         {((item.unitPrice || 0) * (item.quantity || 1)).toLocaleString('vi-VN')}đ
                       </strong>
                     </div>
@@ -370,7 +412,7 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
         </div>
 
         {/* Financial Summary */}
-        <div style={{ marginLeft: 'auto', width: '320px', display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid #ECE5DB', paddingTop: '12px' }}>
+        <div style={{ marginLeft: 'auto', width: '340px', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #ECE5DB', paddingTop: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span>Tổng tiền dịch vụ:</span>
             <span style={{ fontWeight: 600 }}>{grandTotal.toLocaleString('vi-VN')}đ</span>
@@ -383,20 +425,20 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 800, color: '#231F20', borderTop: '1px dashed #ECE5DB', paddingTop: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 800, color: '#231F20', borderTop: '1px dashed #ECE5DB', paddingTop: '10px' }}>
             <span>Tổng thanh toán:</span>
             <span style={{ color: '#8B1E2D' }}>{grandTotal.toLocaleString('vi-VN')}đ</span>
           </div>
 
           {isPaid && (
-            <div style={{ fontSize: '11px', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '4px 8px', borderRadius: '6px', textAlign: 'center', marginTop: '4px', fontWeight: 700 }}>
+            <div style={{ fontSize: '11.5px', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '6px 10px', borderRadius: '6px', textAlign: 'center', marginTop: '6px', fontWeight: 700 }}>
               ✅ Đã thanh toán đầy đủ qua PayOS
             </div>
           )}
         </div>
 
         {/* Footer Actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #ECE5DB', paddingTop: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #ECE5DB', paddingTop: '20px' }}>
           {(booking.status === 'CONFIRMED' || booking.status === 'DEPOSIT_PAID') && (
             <button
               onClick={() => onOpenReschedule(booking.items?.[0])}

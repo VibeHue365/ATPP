@@ -2442,6 +2442,15 @@ export class BookingsService implements OnApplicationBootstrap {
         .exec();
 
       const updatedItems = items.map((item) => {
+        const prodName = (item.productId as any)?.name;
+        const pkgName = (item.photographyPackageId as any)?.name;
+        const resolvedName =
+          prodName ||
+          pkgName ||
+          (item as any).packageSnapshot?.name ||
+          (item as any).name ||
+          null;
+
         if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
           const matchedSchedule = schedules.find(
             (s: any) =>
@@ -2452,6 +2461,7 @@ export class BookingsService implements OnApplicationBootstrap {
           if (matchedSchedule) {
             return {
               ...item,
+              name: resolvedName,
               shootDate:
                 item.shootDate ||
                 matchedSchedule.startsAt ||
@@ -2462,7 +2472,10 @@ export class BookingsService implements OnApplicationBootstrap {
             };
           }
         }
-        return item;
+        return {
+          ...item,
+          name: resolvedName,
+        };
       });
 
       results.push({ ...booking.toObject(), items: updatedItems, schedules });
@@ -2510,6 +2523,15 @@ export class BookingsService implements OnApplicationBootstrap {
       : [];
 
     const updatedItems = items.map((item) => {
+      const prodName = (item.productId as any)?.name;
+      const pkgName = (item.photographyPackageId as any)?.name;
+      const resolvedName =
+        prodName ||
+        pkgName ||
+        (item as any).packageSnapshot?.name ||
+        (item as any).name ||
+        null;
+
       if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
         const matchedSchedule = schedules.find(
           (s: any) =>
@@ -2521,6 +2543,7 @@ export class BookingsService implements OnApplicationBootstrap {
         if (matchedSchedule) {
           return {
             ...item,
+            name: resolvedName,
             shootDate:
               item.shootDate ||
               matchedSchedule.startsAt ||
@@ -2531,7 +2554,10 @@ export class BookingsService implements OnApplicationBootstrap {
           };
         }
       }
-      return item;
+      return {
+        ...item,
+        name: resolvedName,
+      };
     });
 
     const itemsByBooking = new Map<string, typeof updatedItems>();
@@ -2606,6 +2632,15 @@ export class BookingsService implements OnApplicationBootstrap {
       .exec();
 
     const updatedItems = items.map((item) => {
+      const prodName = (item.productId as any)?.name;
+      const pkgName = (item.photographyPackageId as any)?.name;
+      const resolvedName =
+        prodName ||
+        pkgName ||
+        (item as any).packageSnapshot?.name ||
+        (item as any).name ||
+        null;
+
       if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
         const matchedSchedule = schedules.find(
           (s: any) =>
@@ -2616,6 +2651,7 @@ export class BookingsService implements OnApplicationBootstrap {
         if (matchedSchedule) {
           return {
             ...item,
+            name: resolvedName,
             shootDate:
               item.shootDate ||
               matchedSchedule.startsAt ||
@@ -2626,7 +2662,10 @@ export class BookingsService implements OnApplicationBootstrap {
           };
         }
       }
-      return item;
+      return {
+        ...item,
+        name: resolvedName,
+      };
     });
 
     const bookingObj = booking.toObject();
@@ -3683,6 +3722,15 @@ export class BookingsService implements OnApplicationBootstrap {
       const schedules = schedulesByBookingMap.get(bId) || [];
 
       const updatedItems = items.map((item) => {
+        const prodName = (item.productId as any)?.name;
+        const pkgName = (item.photographyPackageId as any)?.name;
+        const resolvedName =
+          prodName ||
+          pkgName ||
+          (item as any).packageSnapshot?.name ||
+          (item as any).name ||
+          null;
+
         if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
           const matchedSchedule = schedules.find(
             (s: any) =>
@@ -3703,6 +3751,7 @@ export class BookingsService implements OnApplicationBootstrap {
             }
             return {
               ...item,
+              name: resolvedName,
               shootDate:
                 item.shootDate ||
                 matchedSchedule.startsAt ||
@@ -3713,7 +3762,10 @@ export class BookingsService implements OnApplicationBootstrap {
             };
           }
         }
-        return item;
+        return {
+          ...item,
+          name: resolvedName,
+        };
       });
 
       return {
