@@ -187,7 +187,6 @@ export const LandingHeader: React.FC = () => {
 
     return () => window.cancelAnimationFrame(frame);
   }, [location.hash, location.pathname]);
-
   return (
     <header className={`lume-header ${isScrolled ? 'is-scrolled' : ''}`}>
       <div className="lume-header__inner w-full max-w-[1200px] px-6 mx-auto">
@@ -195,33 +194,17 @@ export const LandingHeader: React.FC = () => {
         <div
           className="lume-header__content w-full transition-all"
         >
-          {/* Left: Logo Box & Subtitle */}
+          {/* Left: Brand Logo */}
           <Link
             to="/"
-            aria-label="LUMÉ - Áo dài & Chụp ảnh"
-            className="flex items-center gap-2.5 text-decoration-none group shrink-0"
+            aria-label="TàGo - Áo dài & Chụp ảnh"
+            className="flex items-center text-decoration-none group shrink-0"
           >
-            {/* Near Circular Burgundy Icon */}
-            <div
-              className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center font-serif font-black text-lg text-white shadow-2xs transition-transform group-hover:scale-105 shrink-0"
-              style={{ backgroundColor: 'var(--landing-primary)' }}
-            >
-              L
-            </div>
-            <div className="flex flex-col shrink-0">
-              <span
-                className="font-header font-black text-base md:text-lg tracking-tight leading-none"
-                style={{ color: 'var(--landing-text-primary)' }}
-              >
-                LUMÉ
-              </span>
-              <span
-                className="text-[9px] font-bold tracking-widest uppercase mt-0.5"
-                style={{ color: 'var(--landing-text-muted)' }}
-              >
-                ÁO DÀI & CHỤP ẢNH
-              </span>
-            </div>
+            <img
+              src="/logo-transparent.png"
+              alt="TàGo - Áo dài & Chụp ảnh"
+              className="h-9 md:h-11 w-auto object-contain transition-transform group-hover:scale-105"
+            />
           </Link>
 
           {/* Center: Desktop Navigation Links (Visible exclusively on lg: desktop) */}

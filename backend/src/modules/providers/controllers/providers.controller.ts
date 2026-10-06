@@ -9,143 +9,27 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import {
-  IsArray,
-  ArrayNotEmpty,
-  ArrayUnique,
-  IsBoolean,
-  IsEnum,
-  IsNotEmpty,
-  IsNumber,
-  IsObject,
-  IsOptional,
-  IsString,
-  Max,
-  Min,
-} from 'class-validator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { ProvidersService } from '../services/providers.service';
-import { ProviderCapability } from '../schemas/provider.schema';
+import { ProviderOverviewService } from '../services/provider-overview.service';
+import { ProviderOverviewQueryDto } from '../dto/provider-overview-query.dto';
 import { CreatePortfolioItemDto, UpdatePortfolioItemDto } from '../dto/portfolio-item.dto';
-
-export class UpdateProviderProfileDto {
-  @IsString()
-  @IsOptional()
-  businessName?: string;
-
-  @IsArray()
-  @IsEnum(ProviderCapability, { each: true })
-  @IsOptional()
-  capabilities?: ProviderCapability[];
-
-  @IsOptional()
-  contact?: {
-    email: string;
-    phone: string;
-    website?: string | null;
-  };
-
-  @IsOptional()
-  address?: {
-    addressLine: string;
-    ward?: string | null;
-    district?: string | null;
-    city?: string | null;
-    geo?: { type: 'Point'; coordinates: [number, number] } | null;
-  };
-
-  @IsOptional()
-  policies?: {
-    cancellationPolicy?: string | null;
-    rentalPolicy?: string | null;
-  };
-
-  @IsOptional()
-  @IsObject()
-  rentalSettings?: {
-    useBusinessAddressForPickup?: boolean;
-    pickupLocation?: {
-      addressLine: string;
-      ward?: string | null;
-      district?: string | null;
-      city?: string | null;
-      geo?: { type: 'Point'; coordinates: [number, number] } | null;
-    } | null;
-  };
-
-  @IsOptional()
-  @IsObject()
-  photographySettings?: {
-    serviceRadiusKm?: number | null;
-  };
-
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  @IsOptional()
-  comboDiscountPercent?: number;
-}
-
-export class AddPortfolioImageDto {
-  @IsString()
-  @IsNotEmpty()
-  imageUrl: string;
-}
-import { ScheduleCapability } from '../../products/schemas/provider-schedule.schema';
-
-export class RecurringScheduleDto {
-  @IsNumber()
-  @Min(0)
-  @Max(6)
-  dayOfWeek: number;
-
-  @IsArray()
-  workingHours: Array<{ start: string; end: string }>;
-
-  @IsOptional()
-  @IsEnum(ScheduleCapability)
-  capability?: ScheduleCapability;
-}
-
-export class BulkRecurringScheduleDto {
-  @IsArray()
-  @ArrayNotEmpty()
-  @ArrayUnique()
-  @IsNumber({}, { each: true })
-  @Min(0, { each: true })
-  @Max(6, { each: true })
-  dayOfWeeks: number[];
-
-  @IsArray()
-  @ArrayNotEmpty()
-  workingHours: Array<{ start: string; end: string }>;
-
-  @IsOptional()
-  @IsEnum(ScheduleCapability)
-  capability?: ScheduleCapability;
-}
-export class SpecificDateScheduleDto {
-  @IsString()
-  @IsNotEmpty()
-  date: string;
-
-  @IsBoolean()
-  isOffDay: boolean;
-
-  @IsArray()
-  customSlots: Array<{ timeSlot: string; status: string }>;
-
-  @IsOptional()
-  @IsEnum(ScheduleCapability)
-  capability?: ScheduleCapability;
-}
+import { UpdateProviderProfileDto, AddPortfolioImageDto } from '../dto/update-provider-profile.dto';
+import {
+  RecurringScheduleDto,
+  BulkRecurringScheduleDto,
+  SpecificDateScheduleDto,
+} from '../dto/provider-schedule.dto';
 
 @Controller('providers')
 @UseGuards(JwtAuthGuard)
 export class ProvidersController {
-  constructor(private readonly providersService: ProvidersService) { }
+  constructor(
+    private readonly providersService: ProvidersService,
+    private readonly providerOverviewService: ProviderOverviewService,
+  ) { }
 
   @Get('me')
   async getMe(@CurrentUser() user: AuthUser) {
@@ -154,6 +38,14 @@ export class ProvidersController {
       user.email,
       user.email.split('@')[0],
     );
+  }
+
+  @Get('me/overview')
+  async getOverview(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ProviderOverviewQueryDto,
+  ) {
+    return this.providerOverviewService.getOverview(user.sub, query);
   }
 
   @Get('me/analytics')
@@ -256,6 +148,7 @@ export class ProvidersController {
       dto.isOffDay,
       dto.customSlots,
       dto.capability,
+      dto.reason,
     );
   }
 }

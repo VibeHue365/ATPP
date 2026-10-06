@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Heart, MapPin, Sparkles, Users } from 'lucide-react';
+import { Check, Heart, Sparkles } from 'lucide-react';
 import type { FigmaComboItem } from '../types/combo.types';
 
 interface ComboFigmaCardProps {

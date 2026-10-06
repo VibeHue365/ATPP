@@ -729,7 +729,7 @@ export const ProviderDashboard: React.FC = () => {
 
   const rentalOperationItems = React.useMemo(() => orders.flatMap((order) =>
     (order.items || [])
-      .filter((item: any) => item?.rentalFulfillment && item.rentalFulfillment.status !== 'COMPLETED' && item.rentalFulfillment.status !== 'CANCELLED')
+      .filter((item: any) => item?.rentalFulfillment && item.rentalFulfillment.status !== 'CANCELLED')
       .map((item: any) => ({ order, item })),
   ), [orders]);
 
@@ -878,7 +878,7 @@ export const ProviderDashboard: React.FC = () => {
 
       {/* Rate customer modal popup */}
       {ratingBooking && (
-        <CustomerRatingModal {...{ handleRateCustomer, setRatingBooking, setCRating, cRating, cComment, setCComment }} />
+        <CustomerRatingModal {...{ handleRateCustomer, setRatingBooking, setCRating, cRating, cComment, setCComment, ratingBooking }} />
       )}
 
       <PortfolioItemFormModal

@@ -26,7 +26,7 @@ export const PopularLocationSection: React.FC = () => {
       />
 
       {/* 3-Card Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lume-reveal-grid">
         {POPULAR_LOCATIONS_FIXTURE.map((item) => (
           <LocationCard key={item.id} item={item} />
         ))}

@@ -166,7 +166,7 @@ export const ServiceCategorySection: React.FC = () => {
       ) : (
         <div
           ref={shortcutsRef}
-          className="lume-service-shortcuts"
+          className="lume-service-shortcuts lume-reveal-grid"
           aria-label="Danh mục dịch vụ, có thể kéo ngang"
           onPointerDown={pauseAutoScroll}
           onPointerUp={resumeAutoScroll}

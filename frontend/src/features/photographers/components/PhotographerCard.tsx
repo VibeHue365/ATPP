@@ -1,17 +1,17 @@
 import React from 'react';
-import { Calendar, Camera, Clock3, Heart, Image as ImageIcon, Sparkles, Star } from 'lucide-react';
+import { Camera, Clock3, Heart, Image as ImageIcon, Sparkles, Star } from 'lucide-react';
 import { ImageWithFallback } from '../../../shared/media/ImageWithFallback';
 import type { PhotographerSummary } from '../types/photographer.types';
 
 interface PhotographerCardProps {
   photographer: PhotographerSummary;
   isFavorite: boolean;
-  isCompared: boolean;
+  isCompared?: boolean;
   hasAoDaiInCart: boolean;
   onOpen: () => void;
-  onCompareChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onCompareChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onToggleFavorite: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onViewPortfolio: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onViewPortfolio?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 const formatPrice = (price: number) =>
@@ -20,14 +20,10 @@ const formatPrice = (price: number) =>
 export const PhotographerCard: React.FC<PhotographerCardProps> = ({
   photographer,
   isFavorite,
-  isCompared,
   hasAoDaiInCart,
   onOpen,
-  onCompareChange,
   onToggleFavorite,
-  onViewPortfolio,
 }) => {
-  const isBookable = photographer.isBookable;
   const primaryPackage = photographer.packages[0];
   const packageName = primaryPackage?.name?.trim() || photographer.name;
   const packagePrice = primaryPackage?.price ?? photographer.price;

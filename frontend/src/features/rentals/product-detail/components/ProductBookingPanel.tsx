@@ -202,7 +202,7 @@ export const ProductBookingPanel: React.FC<{
       {availabilityView && <div className={`figma-status-box ${availabilityView.className}`}><Check size={18} /><div><strong>{availabilityView.title}</strong><span>{availabilityView.message}</span></div></div>}
       {availability.state === "idle" && <p className="figma-product-booking__availability-hint">Chọn màu, size và thời gian thuê để kiểm tra lịch trống.</p>}
 
-      <div className="figma-pickup-box"><MapPin size={19} /><div><strong>Nhận và trả tại cửa hàng</strong><span>{address}</span></div><button type="button" onClick={onNavigateProvider}>Xem bản đồ</button></div>
+      <div className="figma-pickup-box"><MapPin size={19} /><div><strong>Nhận và trả tại cửa hàng</strong><span>{address}</span></div></div>
 
       <div className="figma-summary-box">
         <div><span>Hình thức thuê</span><strong>{rentalMode === "DAILY" ? "Theo ngày" : "Theo giờ"}</strong></div>

@@ -55,10 +55,14 @@ export function createTrustActions({
     }
   };
 
-  const handleSearchTrustScore = async () => {
-    if (!searchCustId) return;
+  const handleSearchTrustScore = async (targetId?: string) => {
+    const idToSearch = targetId || searchCustId;
+    if (!idToSearch) return;
+    if (targetId && targetId !== searchCustId) {
+      setSearchCustId(targetId);
+    }
     try {
-      const res: any = await reviewsApi.getCustomerReviewTrust(searchCustId);
+      const res: any = await reviewsApi.getCustomerReviewTrust(idToSearch);
       setTrustScoreResult(res);
       toast.success('Đồng bộ tín nhiệm khách hàng hoàn tất!');
     } catch (err: any) {

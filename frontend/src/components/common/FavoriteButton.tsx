@@ -22,7 +22,7 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
       onClick={onToggle}
       title={title}
       aria-label={title}
-      className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${className}`}
+      className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer active:scale-80 hover:scale-108 ${className}`}
       style={{
         backgroundColor: 'rgba(255, 255, 255, 0.95)',
         border: '1px solid var(--landing-border, #E8DEDF)',
@@ -32,7 +32,7 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
     >
       <Heart
         size={size}
-        className={isFavorite ? 'fill-current' : ''}
+        className={`transition-transform duration-200 ${isFavorite ? 'fill-current scale-110' : ''}`}
       />
     </button>
   );

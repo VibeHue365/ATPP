@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Camera,
   Check,
   CheckCircle,
   Clock,
   Eye,
+  FileText,
   Flag,
   Package,
   Play,
@@ -16,6 +17,8 @@ import { formatPhotoStartTime, getPhotoScheduleStartsAt } from '../orderHelpers'
 
 interface OrderActionDropdownProps {
   order: Order;
+  menuAnchor?: { top: number; right: number; bottom: number; left: number } | null;
+  onSelectOrder?: (order: Order) => void;
   onClose: () => void;
   setSelectedBookingId: (id: string) => void;
   setIsDetailModalOpen: (open: boolean) => void;
@@ -40,6 +43,8 @@ type OrderAction = {
 
 export function OrderActionDropdown({
   order,
+  menuAnchor,
+  onSelectOrder,
   onClose,
   setSelectedBookingId,
   setIsDetailModalOpen,
@@ -195,6 +200,46 @@ export function OrderActionDropdown({
   const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStat);
   const pendingReschedule = order.items?.find((item: any) => item?.rescheduleRequest?.status === 'PENDING');
 
+  // Auto-close menu if user scrolls or resizes window
+  useEffect(() => {
+    const handleScrollOrResize = () => {
+      onClose();
+    };
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [onClose]);
+
+  // Precise positioning relative to clicked 3-dot button
+  const menuWidth = 230;
+  let topStyle: string | number = 40;
+  let bottomStyle: string | number = 'auto';
+  let rightPos = 20;
+  let maxHeightStyle: string | number = 320;
+
+  if (menuAnchor) {
+    const spaceBelow = window.innerHeight - menuAnchor.bottom;
+    const spaceAbove = menuAnchor.top;
+
+    // Only flip upwards if space below is really restricted (< 170px) AND space above is greater
+    const shouldOpenUpward = spaceBelow < 170 && spaceAbove > spaceBelow;
+
+    if (shouldOpenUpward) {
+      topStyle = 'auto';
+      bottomStyle = `${Math.max(8, window.innerHeight - menuAnchor.top + 4)}px`;
+      maxHeightStyle = `${Math.max(160, spaceAbove - 16)}px`;
+    } else {
+      topStyle = `${menuAnchor.bottom + 4}px`;
+      bottomStyle = 'auto';
+      maxHeightStyle = `${Math.max(160, spaceBelow - 16)}px`;
+    }
+
+    rightPos = Math.max(12, window.innerWidth - menuAnchor.right);
+  }
+
   return (
     <>
       <div
@@ -202,21 +247,24 @@ export function OrderActionDropdown({
           e.stopPropagation();
           onClose();
         }}
-        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 39, cursor: 'default' }}
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1049, cursor: 'default' }}
       />
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          position: 'absolute',
-          right: '20px',
-          top: '40px',
-          width: '235px',
+          position: 'fixed',
+          right: `${rightPos}px`,
+          top: topStyle,
+          bottom: bottomStyle,
+          width: `${menuWidth}px`,
+          maxHeight: maxHeightStyle,
+          overflowY: 'auto',
           backgroundColor: '#FFFFFF',
           border: '1px solid #E2E8F0',
           borderRadius: '12px',
-          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.04)',
+          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.14), 0 8px 10px -6px rgba(0,0,0,0.06)',
           padding: '4px 0',
-          zIndex: 40,
+          zIndex: 1050,
         }}
       >
         <div
@@ -245,7 +293,40 @@ export function OrderActionDropdown({
           </button>
         </div>
 
-        {/* View Details button */}
+        {/* View Details button (Unified to open full OrderDetailDrawer) */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+            if (onSelectOrder) {
+              onSelectOrder(order);
+            } else {
+              setSelectedBookingId(order._id);
+              setIsDetailModalOpen(true);
+            }
+          }}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '9px 14px',
+            fontSize: '12.5px',
+            fontWeight: 600,
+            color: '#1E293B',
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            textAlign: 'left',
+            borderBottom: '1px solid #F1F5F9',
+          }}
+        >
+          <Eye size={15} color="#2563EB" />
+          <span>Xem chi tiết đơn hàng</span>
+        </button>
+
+        {/* View Invoice button */}
         <button
           type="button"
           onClick={(e) => {
@@ -261,8 +342,8 @@ export function OrderActionDropdown({
             gap: '8px',
             padding: '8px 14px',
             fontSize: '12px',
-            fontWeight: 600,
-            color: '#1E293B',
+            fontWeight: 500,
+            color: '#475569',
             border: 'none',
             background: 'none',
             cursor: 'pointer',
@@ -270,8 +351,8 @@ export function OrderActionDropdown({
             borderBottom: '1px solid #F1F5F9',
           }}
         >
-          <Eye size={14} color="#2563EB" />
-          <span>Xem chi tiết đầy đủ</span>
+          <FileText size={14} color="#64748B" />
+          <span>Xem hóa đơn đặt lịch</span>
         </button>
 
         {/* Reschedule section if any */}

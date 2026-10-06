@@ -7,6 +7,7 @@ import { FeaturedAoDaiSection } from '../features/rentals/components/FeaturedAoD
 import { FeaturedPhotoshootSection } from '../features/photographers/components/FeaturedPhotoshootSection';
 import { ComboDealsSection } from '../features/combos/components/ComboDealsSection';
 import { PopularLocationSection } from '../features/landing/components/PopularLocationSection';
+import { ScrollReveal } from '../features/landing/components/ScrollReveal';
 import { DEFAULT_BANNERS, CAROUSEL_AUTOPLAY_INTERVAL_MS, type Banner } from '../features/landing/constants/landing.constants';
 import './LandingPage.css';
 
@@ -24,7 +25,7 @@ export const LandingPage: React.FC = () => {
 
   return (
     <div className="lume-landing w-full max-w-[1440px] mx-auto px-4 md:px-8 xl:px-[52px] space-y-[26px] pb-10 md:pb-14">
-      {/* Target Hero 3-Column Section */}
+      {/* Target Hero 3-Column Section (Above the fold) */}
       <HeroSection
         banners={banners}
         currentSlide={currentSlide}
@@ -32,25 +33,39 @@ export const LandingPage: React.FC = () => {
       />
 
       {/* Target Service Finder Filter Bar */}
-      <ServiceFinderBar />
+      <ScrollReveal threshold={0.05}>
+        <ServiceFinderBar />
+      </ScrollReveal>
 
       {/* Target Service Categories Grid ("Dịch vụ dành cho bạn") */}
-      <ServiceCategorySection />
+      <ScrollReveal threshold={0.05}>
+        <ServiceCategorySection />
+      </ScrollReveal>
 
       {/* Target Promotional Banners (Side-by-side Light & Dark Banners) */}
-      <PromotionalBannersSection />
+      <ScrollReveal threshold={0.05}>
+        <PromotionalBannersSection />
+      </ScrollReveal>
 
       {/* Target Featured Ao Dai Section (4-column Responsive Grid) */}
-      <FeaturedAoDaiSection />
+      <ScrollReveal threshold={0.05}>
+        <FeaturedAoDaiSection />
+      </ScrollReveal>
 
       {/* Target Featured Photoshoot Section (4-column Responsive Grid) */}
-      <FeaturedPhotoshootSection />
+      <ScrollReveal threshold={0.05}>
+        <FeaturedPhotoshootSection />
+      </ScrollReveal>
 
       {/* Target Combo Deals Section (2-column Soft Blush Container) */}
-      <ComboDealsSection />
+      <ScrollReveal threshold={0.05}>
+        <ComboDealsSection />
+      </ScrollReveal>
 
       {/* Target Popular Locations Section (3-column Burgundy Bottom Cards) */}
-      <PopularLocationSection />
+      <ScrollReveal threshold={0.05}>
+        <PopularLocationSection />
+      </ScrollReveal>
     </div>
   );
 };

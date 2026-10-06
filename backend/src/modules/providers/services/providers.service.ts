@@ -443,6 +443,7 @@ export class ProvidersService {
     isOffDay: boolean,
     customSlots: Array<{ timeSlot: string; status: string }>,
     capability: ScheduleCapability | null = null,
+    reason?: string | null,
   ): Promise<ProviderScheduleDocument> {
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
@@ -452,6 +453,10 @@ export class ProvidersService {
 
     const specificDate = new Date(dateStr);
     const offDays = isOffDay ? [specificDate] : [];
+    const reasonToSave =
+      isOffDay || (customSlots && customSlots.length > 0)
+        ? (reason?.trim() || null)
+        : null;
 
     return this.providersRepository.upsertSpecificDateSchedule(
       provider._id,
@@ -459,6 +464,7 @@ export class ProvidersService {
       offDays,
       customSlots,
       capability,
+      reasonToSave,
     );
   }
 

@@ -28,7 +28,7 @@ export class ChatWithImageRequestDto {
 @Controller('ai')
 @UseGuards(JwtAuthGuard)
 export class AiController {
-  constructor(private readonly aiService: AiService) {}
+  constructor(private readonly aiService: AiService) { }
 
   @Post('chat')
   async chat(@Body() dto: ChatRequestDto): Promise<ChatResponse> {

@@ -22,6 +22,7 @@ import {
   Camera,
   Image as ImageIcon,
   DollarSign,
+  AlertTriangle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { useProviderSessionState } from '../hooks/useProviderSessionState';
@@ -31,6 +32,7 @@ import { getImageUrl } from '../shared/mediaHelpers';
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../assets/images/onboarding_traditional.webp';
 import { httpClient } from '../../../services/httpClient';
+import { RentalEvidenceImage } from '../../rentals/components/RentalEvidenceImage';
 import './rentalOperationsFigma.css';
 
 const FALLBACK_AODAI_IMAGE = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=400&q=80';
@@ -75,12 +77,26 @@ export function RentalOperationsPanel({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const rowsPerPage = 6;
 
-  // Selected item for the side drawer
   const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [activeDrawerTab, setActiveDrawerTab] = useState<'overview' | 'products' | 'schedule' | 'payment' | 'evidence'>('overview');
   const [isGuidelineModalOpen, setIsGuidelineModalOpen] = useState<boolean>(false);
   const [isActionBusy, setIsActionBusy] = useState<boolean>(false);
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [evidencePreviews, setEvidencePreviews] = useState<string[]>([]);
+  const [conditionNote, setConditionNote] = useState<string>('');
+
+  const [isSettlementModalOpen, setIsSettlementModalOpen] = useState<boolean>(false);
+  const [settlementChoice, setSettlementChoice] = useState<'NORMAL' | 'ISSUE'>('NORMAL');
+  const [chargeType, setChargeType] = useState<'damageFee' | 'lateFee' | 'compensationAmount'>('damageFee');
+  const [deductAmount, setDeductAmount] = useState<number>(0);
+  const [issueReason, setIssueReason] = useState<string>('');
+
+  const resetEvidence = () => {
+    setEvidenceFiles([]);
+    setEvidencePreviews([]);
+    setConditionNote('');
+  };
 
   // Helper date calculations
   const todayKey = toLocalDateKey();
@@ -123,7 +139,7 @@ export function RentalOperationsPanel({
         if (returnDueDate && returnDueDate.getTime() < Date.now()) {
           overdue++;
         }
-      } else if (status === 'COMPLETED' || status === 'RETURNED') {
+      } else if (status === 'COMPLETED') {
         completed++;
       }
     });
@@ -154,6 +170,7 @@ export function RentalOperationsPanel({
       if (activeStatusTab === 'RENTED' && status !== 'PICKED_UP') return false;
       if (activeStatusTab === 'RETURNING_TODAY' && (status !== 'PICKED_UP' || returnDue !== todayKey)) return false;
       if (activeStatusTab === 'OVERDUE' && !isOverdue) return false;
+      if (activeStatusTab === 'COMPLETED' && status !== 'COMPLETED') return false;
 
       // Dropdown status filter
       if (statusFilter !== 'ALL' && status !== statusFilter) return false;
@@ -195,6 +212,16 @@ export function RentalOperationsPanel({
     const returnDue = fulfillment?.returnDueAt ? parseSafeDate(fulfillment.returnDueAt) : null;
     const isDueToday = returnDue && toLocalDateKey(returnDue) === todayKey;
     const isOverdue = returnDue && returnDue.getTime() < Date.now() && status === 'PICKED_UP';
+
+    const hasProposedCharges = Object.values(fulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED');
+    if (hasProposedCharges || fulfillment?.issueStatus === 'REPORTED') {
+      return {
+        label: 'Chờ duyệt trừ cọc',
+        sub: 'Đã báo sự cố',
+        className: 'ro-status-late',
+        dot: '#DC2626',
+      };
+    }
 
     if (isOverdue) {
       return {
@@ -260,21 +287,123 @@ export function RentalOperationsPanel({
     const status = fulfillment.status || 'PENDING';
     const basePath = `/bookings/${order._id}/items/${item._id}/rental`;
 
+    // Phương án B: Bắt buộc phải có ít nhất 1 ảnh bằng chứng trước khi giao hoặc nhận lại áo
+    if (status === 'READY_FOR_PICKUP' && evidenceFiles.length === 0) {
+      setActiveDrawerTab('evidence');
+      toast?.info?.('Vui lòng chụp hoặc tải ít nhất 1 ảnh hiện trạng áo tại tab "Bằng chứng" trước khi xác nhận đã giao để bảo vệ quyền lợi tiền cọc!');
+      return;
+    }
+
+    if (status === 'PICKED_UP' && evidenceFiles.length === 0) {
+      setActiveDrawerTab('evidence');
+      toast?.info?.('Vui lòng chụp hoặc tải ít nhất 1 ảnh kiểm tra áo tại tab "Bằng chứng" trước khi xác nhận nhận lại áo để đối soát tiền cọc!');
+      return;
+    }
+
     setIsActionBusy(true);
     try {
       if (status === 'PENDING') {
         await httpClient.post(`${basePath}/ready`, {});
         toast?.success?.('Đã chuyển sang trạng thái Sẵn sàng giao áo!');
       } else if (status === 'READY_FOR_PICKUP') {
-        await httpClient.post(`${basePath}/picked-up`, { fileIds: [] });
-        toast?.success?.('Xác nhận khách đã nhận áo thành công!');
+        // 1. Tải ảnh lên endpoint bằng chứng
+        const formData = new FormData();
+        evidenceFiles.forEach((file) => formData.append('images', file));
+        const uploadRes: any = await httpClient.post(`${basePath}/evidence`, formData);
+        const fileIds: string[] = (uploadRes?.files || uploadRes?.data?.files || []).map((f: any) => f.fileId).filter(Boolean);
+
+        if (!fileIds.length) {
+          throw new Error('Tải ảnh bằng chứng thất bại. Vui lòng thử lại.');
+        }
+
+        // 2. Xác nhận đã giao kèm fileIds bằng chứng
+        await httpClient.post(`${basePath}/picked-up`, {
+          fileIds,
+          conditionNote: conditionNote.trim() || undefined,
+        });
+        toast?.success?.('Bàn giao áo dài thành công! Ảnh bằng chứng hiện trạng đã được lưu trữ.');
+        resetEvidence();
       } else if (status === 'PICKED_UP') {
-        await httpClient.post(`${basePath}/returned`, { fileIds: [] });
-        toast?.success?.('Xác nhận đã nhận lại áo từ khách!');
+        // 1. Tải ảnh lên endpoint bằng chứng
+        const formData = new FormData();
+        evidenceFiles.forEach((file) => formData.append('images', file));
+        const uploadRes: any = await httpClient.post(`${basePath}/evidence`, formData);
+        const fileIds: string[] = (uploadRes?.files || uploadRes?.data?.files || []).map((f: any) => f.fileId).filter(Boolean);
+
+        if (!fileIds.length) {
+          throw new Error('Tải ảnh bằng chứng thất bại. Vui lòng thử lại.');
+        }
+
+        // 2. Xác nhận đã nhận lại kèm fileIds bằng chứng
+        await httpClient.post(`${basePath}/returned`, {
+          fileIds,
+          conditionNote: conditionNote.trim() || undefined,
+        });
+        toast?.success?.('Xác nhận đã nhận lại áo từ khách thành công! Đã lưu ảnh đối soát cọc.');
+        resetEvidence();
+      } else if (status === 'RETURNED') {
+        const hasProposedCharges = Object.values(fulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED');
+        if (hasProposedCharges || fulfillment?.issueStatus === 'REPORTED') {
+          toast?.info?.('Đơn thuê đang có đề xuất khấu trừ cọc chờ Admin xét duyệt.');
+          return;
+        }
+        setSettlementChoice('NORMAL');
+        setChargeType('damageFee');
+        setDeductAmount(0);
+        setIssueReason('');
+        setIsSettlementModalOpen(true);
+        return;
       }
       await fetchOrders();
     } catch (err: any) {
       toast?.error?.(err?.message || 'Thao tác không thành công.');
+    } finally {
+      setIsActionBusy(false);
+    }
+  };
+
+  const handleConfirmSettlement = async () => {
+    if (!currentItem) return;
+    const { order, item } = currentItem;
+    const basePath = `/bookings/${order._id}/items/${item._id}/rental`;
+    const depositAmt = item.depositAmount || 0;
+
+    setIsActionBusy(true);
+    try {
+      if (settlementChoice === 'NORMAL') {
+        await httpClient.post(`${basePath}/complete`, { inventoryStatus: 'AVAILABLE' });
+        toast?.success?.('Đã hoàn tất tất toán & hoàn lại 100% tiền cọc cho khách hàng!');
+        setIsSettlementModalOpen(false);
+        setIsDrawerOpen(false);
+      } else {
+        const amountNum = Number(deductAmount);
+        if (!amountNum || amountNum <= 0) {
+          toast?.error?.('Vui lòng nhập số tiền khấu trừ hợp lệ lớn hơn 0.');
+          return;
+        }
+        if (amountNum > depositAmt) {
+          toast?.error?.(`Số tiền khấu trừ không được vượt quá tiền cọc của món đồ (${depositAmt.toLocaleString('vi-VN')} đ).`);
+          return;
+        }
+        if (!issueReason.trim()) {
+          toast?.error?.('Vui lòng nhập lý do / mô tả chi tiết hư hỏng.');
+          return;
+        }
+
+        await httpClient.post(`${basePath}/charges`, {
+          chargeType,
+          amount: Math.round(amountNum),
+          reason: issueReason.trim(),
+        });
+        toast?.success?.('Đã gửi đề xuất khấu trừ cọc! Đơn chuyển sang trạng thái chờ duyệt giải quyết sự cố.');
+        setIsSettlementModalOpen(false);
+        setIsDrawerOpen(false);
+      }
+      await fetchOrders();
+    } catch (err: any) {
+      toast?.error?.(err?.message || 'Thao tác không thành công.');
+      await fetchOrders();
+      setIsSettlementModalOpen(false);
     } finally {
       setIsActionBusy(false);
     }
@@ -433,6 +562,13 @@ export function RentalOperationsPanel({
           >
             Quá hạn ({metrics.overdue})
           </button>
+          <button
+            type="button"
+            onClick={() => { setActiveStatusTab('COMPLETED'); setCurrentPage(1); }}
+            className={`ro-tab-pill ${activeStatusTab === 'COMPLETED' ? 'active' : ''}`}
+          >
+            Đã hoàn thành ({metrics.completed})
+          </button>
         </div>
 
         {/* Search & Filter Toolbar */}
@@ -469,6 +605,7 @@ export function RentalOperationsPanel({
             <option value="READY_FOR_PICKUP">Sẵn sàng giao</option>
             <option value="PICKED_UP">Đang thuê</option>
             <option value="RETURNED">Đã nhận lại</option>
+            <option value="COMPLETED">Đã hoàn thành</option>
           </select>
 
           <button
@@ -532,6 +669,7 @@ export function RentalOperationsPanel({
                       key={key}
                       onClick={() => {
                         setSelectedItemKey(key);
+                        resetEvidence();
                         setIsDrawerOpen(true);
                       }}
                       className={`ro-tr ${isSelected ? 'selected' : ''}`}
@@ -621,11 +759,13 @@ export function RentalOperationsPanel({
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedItemKey(key);
+                            resetEvidence();
                             setIsDrawerOpen(true);
                           }}
                           className="ro-btn-action"
+                          style={status === 'COMPLETED' ? { backgroundColor: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB' } : undefined}
                         >
-                          Xử lý
+                          {status === 'COMPLETED' ? 'Chi tiết' : 'Xử lý'}
                         </button>
                         <button
                           type="button"
@@ -697,7 +837,10 @@ export function RentalOperationsPanel({
         <>
           <div
             className="ro-drawer-overlay"
-            onClick={() => setIsDrawerOpen(false)}
+            onClick={() => {
+              resetEvidence();
+              setIsDrawerOpen(false);
+            }}
           />
           <aside className="ro-drawer">
             {/* Drawer Header */}
@@ -707,7 +850,10 @@ export function RentalOperationsPanel({
               </h3>
               <button
                 type="button"
-                onClick={() => setIsDrawerOpen(false)}
+                onClick={() => {
+                  resetEvidence();
+                  setIsDrawerOpen(false);
+                }}
                 className="ro-drawer-close"
                 title="Đóng chi tiết"
               >
@@ -941,12 +1087,28 @@ export function RentalOperationsPanel({
                           : currentItem.item.rentalFulfillment?.status === 'PICKED_UP'
                           ? 'Bước hiện tại: Khách đang trong thời gian thuê'
                           : currentItem.item.rentalFulfillment?.status === 'RETURNED'
-                          ? 'Bước hiện tại: Đã nhận lại áo, kiểm tra giặt ủi'
+                          ? Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED'
+                            ? 'Bước hiện tại: Đang chờ duyệt khấu trừ bồi thường cọc'
+                            : 'Bước hiện tại: Đã nhận lại áo, kiểm tra giặt ủi'
                           : 'Bước hiện tại: Chờ chuẩn bị áo dài'}
                       </div>
                       <div className="ro-step-action-desc">
-                        Hãy kiểm tra sản phẩm, chuẩn bị đúng mẫu, size và phụ kiện đi kèm theo hợp đồng.
+                        {Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED'
+                          ? 'Yêu cầu trừ cọc do hư hỏng / vi phạm hợp đồng đã được ghi nhận và đang chờ Admin xử lý.'
+                          : 'Hãy kiểm tra sản phẩm, chuẩn bị đúng mẫu, size và phụ kiện đi kèm theo hợp đồng.'}
                       </div>
+
+                      {(Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED') && (
+                        <div style={{ backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', padding: '10px 12px', marginTop: '10px' }}>
+                          <div style={{ color: '#991B1B', fontWeight: 600, fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <AlertTriangle size={15} />
+                            Đã gửi đề xuất khấu trừ cọc
+                          </div>
+                          <div style={{ color: '#B91C1C', fontSize: '11.5px', marginTop: '4px', lineHeight: 1.4 }}>
+                            Hệ thống tạm khóa hoàn tất tất toán để bảo vệ quyền lợi hai bên trong quá trình giải quyết bồi thường.
+                          </div>
+                        </div>
+                      )}
 
                       <div className="ro-checklist-item">
                         <CheckCircle2 size={15} />
@@ -1073,18 +1235,143 @@ export function RentalOperationsPanel({
             {activeDrawerTab === 'evidence' && (
               <div className="ro-section-card">
                 <div className="ro-section-header">
-                  <ImageIcon size={14} />
-                  <span>Ảnh minh chứng giao nhận</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <ImageIcon size={14} />
+                    <span>Ảnh minh chứng giao nhận</span>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#DC2626', fontWeight: 700, marginLeft: 'auto' }}>
+                    * Bắt buộc khi giao &amp; nhận
+                  </span>
                 </div>
                 <p style={{ fontSize: '12px', color: '#6B7280', margin: '0 0 10px 0' }}>
-                  Chụp ảnh hiện trạng áo dài lúc bàn giao cho khách và khi nhận lại để đối soát tiền cọc.
+                  Chụp hoặc tải ảnh hiện trạng áo dài lúc bàn giao cho khách và khi nhận lại để đối soát tiền cọc (tối đa 5 ảnh).
                 </p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                  <div style={{ aspectRatio: '1', border: '1px dashed #D1D5DB', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', cursor: 'pointer' }}>
-                    <Camera size={20} />
-                    <span style={{ fontSize: '10px', marginTop: 4 }}>+ Thêm ảnh</span>
+
+                {/* Existing Evidence Photos */}
+                {((currentItem.item?.rentalFulfillment?.pickupEvidence?.files?.length || 0) > 0 || (currentItem.item?.rentalFulfillment?.returnEvidence?.files?.length || 0) > 0) && (
+                  <div style={{ marginBottom: '14px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>Ảnh đã lưu trong đơn:</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                      {[
+                        ...(currentItem.item?.rentalFulfillment?.pickupEvidence?.files || []),
+                        ...(currentItem.item?.rentalFulfillment?.returnEvidence?.files || [])
+                      ].map((ef: any, idx: number) => (
+                        <div key={idx} style={{ aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB', position: 'relative' }}>
+                          {ef.fileId?.startsWith('http') ? (
+                            <img src={ef.fileId} alt={`Evidence ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <RentalEvidenceImage
+                              bookingId={currentItem.order._id}
+                              itemId={currentItem.item._id}
+                              fileId={ef.fileId}
+                              alt={`Evidence ${idx + 1}`}
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                )}
+
+                {/* New Evidence Uploads */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '12px' }}>
+                  {evidencePreviews.map((preview, pIdx) => (
+                    <div key={pIdx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #D1D5DB' }}>
+                      <img src={preview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEvidenceFiles((prev) => prev.filter((_, i) => i !== pIdx));
+                          setEvidencePreviews((prev) => prev.filter((_, i) => i !== pIdx));
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: 4,
+                          right: 4,
+                          width: 20,
+                          height: 20,
+                          borderRadius: '50%',
+                          backgroundColor: 'rgba(0,0,0,0.6)',
+                          color: '#fff',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px'
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  {evidenceFiles.length < 5 && (
+                    <label style={{ aspectRatio: '1', border: '1.5px dashed #D97706', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#D97706', cursor: 'pointer', backgroundColor: '#FFFBEB' }}>
+                      <Camera size={20} />
+                      <span style={{ fontSize: '10.5px', marginTop: 4, fontWeight: 700 }}>+ Chụp / Tải ảnh</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          if (!files.length) return;
+                          const available = 5 - evidenceFiles.length;
+                          const toAdd = files.slice(0, available);
+                          setEvidenceFiles((prev) => [...prev, ...toAdd]);
+                          const newPreviews = toAdd.map((f) => URL.createObjectURL(f));
+                          setEvidencePreviews((prev) => [...prev, ...newPreviews]);
+                        }}
+                      />
+                    </label>
+                  )}
                 </div>
+
+                <div style={{ marginTop: '10px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                    Ghi chú hiện trạng áo (tùy chọn):
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={conditionNote}
+                    onChange={(e) => setConditionNote(e.target.value)}
+                    placeholder="VD: Áo mới 100%, đầy đủ phụ kiện mấn quạt..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #D1D5DB',
+                      fontSize: '12.5px',
+                      fontFamily: 'inherit',
+                      resize: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {evidenceFiles.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={handleAdvanceStep}
+                    disabled={isActionBusy}
+                    className="ro-btn-advance"
+                    style={{ marginTop: '12px', width: '100%', justifyContent: 'center' }}
+                  >
+                    <span>
+                      {currentItem.item.rentalFulfillment?.status === 'READY_FOR_PICKUP'
+                        ? `Xác nhận giao áo với ${evidenceFiles.length} ảnh ➔`
+                        : currentItem.item.rentalFulfillment?.status === 'PICKED_UP'
+                        ? `Xác nhận nhận lại áo với ${evidenceFiles.length} ảnh ➔`
+                        : 'Lưu thay đổi ➔'}
+                    </span>
+                  </button>
+                ) : (
+                  <p style={{ fontSize: '11.5px', color: '#B45309', backgroundColor: '#FEF3C7', padding: '8px 10px', borderRadius: '6px', margin: '10px 0 0 0' }}>
+                    💡 Cần tải ít nhất 1 ảnh hiện trạng để xác nhận giao hoặc nhận lại đồ.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -1110,22 +1397,43 @@ export function RentalOperationsPanel({
               <span>Liên hệ khách</span>
             </a>
 
-            <button
-              type="button"
-              onClick={handleAdvanceStep}
-              disabled={isActionBusy}
-              className="ro-btn-advance"
-            >
-              <span>
-                {currentItem.item.rentalFulfillment?.status === 'READY_FOR_PICKUP'
-                  ? 'Xác nhận đã giao ➔'
-                  : currentItem.item.rentalFulfillment?.status === 'PICKED_UP'
-                  ? 'Xác nhận đã nhận lại ➔'
-                  : currentItem.item.rentalFulfillment?.status === 'RETURNED'
-                  ? 'Hoàn tất tất toán'
-                  : 'Đã chuẩn bị xong ➔'}
-              </span>
-            </button>
+            {(() => {
+              const fulfillment = currentItem.item.rentalFulfillment || {};
+              const status = fulfillment.status;
+              const hasProposedCharges = Object.values(fulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED');
+              const isCompleted = status === 'COMPLETED';
+              const isPendingReview = hasProposedCharges || fulfillment?.issueStatus === 'REPORTED';
+
+              return (
+                <button
+                  type="button"
+                  onClick={handleAdvanceStep}
+                  disabled={isActionBusy || isCompleted || isPendingReview}
+                  className="ro-btn-advance"
+                  style={
+                    isCompleted
+                      ? { opacity: 0.7, cursor: 'default', backgroundColor: '#059669' }
+                      : isPendingReview
+                      ? { opacity: 0.7, cursor: 'not-allowed', backgroundColor: '#DC2626' }
+                      : undefined
+                  }
+                >
+                  <span>
+                    {status === 'READY_FOR_PICKUP'
+                      ? 'Xác nhận đã giao ➔'
+                      : status === 'PICKED_UP'
+                      ? 'Xác nhận đã nhận lại ➔'
+                      : status === 'RETURNED'
+                      ? isPendingReview
+                        ? 'Chờ duyệt trừ cọc'
+                        : 'Hoàn tất tất toán ➔'
+                      : status === 'COMPLETED'
+                      ? '✓ Đã hoàn tất'
+                      : 'Đã chuẩn bị xong ➔'}
+                  </span>
+                </button>
+              );
+            })()}
           </div>
         </aside>
       </>
@@ -1193,6 +1501,246 @@ export function RentalOperationsPanel({
                 }}
               >
                 Đã hiểu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settlement & Dispute Modal (Nghiệm thu & Tất toán đơn thuê áo dài) */}
+      {isSettlementModalOpen && currentItem && (
+        <div className="ro-drawer-backdrop" onClick={() => !isActionBusy && setIsSettlementModalOpen(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '620px',
+              width: '92%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '18px',
+              padding: '24px 28px',
+              margin: 'auto',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              position: 'relative',
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', paddingBottom: '14px', borderBottom: '1px solid #F3F4F6' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#111827' }}>
+                  Nghiệm thu &amp; Tất toán đơn thuê
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#6B7280' }}>
+                  Đơn hàng: #{currentItem.order.bookingCode || currentItem.order._id?.slice(-8)} — {currentItem.order.customerName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isActionBusy && setIsSettlementModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Current Item Quick Info */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 14px', background: '#F9FAFB', borderRadius: '12px', marginBottom: '18px', border: '1px solid #E5E7EB' }}>
+              <img
+                src={resolveProductImg(currentItem.item)}
+                alt="Product"
+                style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #E5E7EB' }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: '13.5px', color: '#1F2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {currentItem.item.productName || 'Áo dài truyền thống'}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>
+                  Tiền đặt cọc của món đồ: <strong style={{ color: '#047857' }}>{(currentItem.item.depositAmount || 0).toLocaleString('vi-VN')} đ</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Selection Choices */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              {/* Option A: Normal / Intact */}
+              <div
+                onClick={() => setSettlementChoice('NORMAL')}
+                style={{
+                  border: settlementChoice === 'NORMAL' ? '2px solid #059669' : '1px solid #E5E7EB',
+                  backgroundColor: settlementChoice === 'NORMAL' ? '#F0FDF4' : '#FFFFFF',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                }}
+              >
+                <div style={{ marginTop: '2px', color: settlementChoice === 'NORMAL' ? '#059669' : '#9CA3AF' }}>
+                  <CheckCircle2 size={20} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: settlementChoice === 'NORMAL' ? '#065F46' : '#1F2937' }}>
+                    Áo dài nguyên vẹn (Hoàn 100% cọc)
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: '#4B5563', marginTop: '3px', lineHeight: 1.5 }}>
+                    Sản phẩm đạt chuẩn sau kiểm tra giặt ủi, đầy đủ phụ kiện. Hệ thống sẽ tự động hoàn trả <strong>{(currentItem.item.depositAmount || 0).toLocaleString('vi-VN')} đ</strong> tiền cọc cho khách hàng.
+                  </div>
+                </div>
+              </div>
+
+              {/* Option B: Issue / Charge */}
+              <div
+                onClick={() => setSettlementChoice('ISSUE')}
+                style={{
+                  border: settlementChoice === 'ISSUE' ? '2px solid #DC2626' : '1px solid #E5E7EB',
+                  backgroundColor: settlementChoice === 'ISSUE' ? '#FEF2F2' : '#FFFFFF',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                }}
+              >
+                <div style={{ marginTop: '2px', color: settlementChoice === 'ISSUE' ? '#DC2626' : '#9CA3AF' }}>
+                  <AlertTriangle size={20} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: settlementChoice === 'ISSUE' ? '#991B1B' : '#1F2937' }}>
+                    Phát hiện sự cố / Hư hỏng (Đề xuất khấu trừ cọc)
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: '#4B5563', marginTop: '3px', lineHeight: 1.5 }}>
+                    Sản phẩm bị rách, sứt chỉ, ố bẩn nặng không giặt được, thiếu phụ kiện hoặc khách trả quá hạn. Yêu cầu khấu trừ bồi thường từ tiền cọc.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-form if Option B is active */}
+            {settlementChoice === 'ISSUE' && (
+              <div style={{ backgroundColor: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '12px', padding: '16px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: '#9A3412', marginBottom: '6px' }}>
+                    Loại vi phạm / Lý do khấu trừ
+                  </label>
+                  <select
+                    value={chargeType}
+                    onChange={(e: any) => setChargeType(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #FDBA74', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#1F2937', outline: 'none' }}
+                  >
+                    <option value="damageFee">Rách áo / Hư hỏng sản phẩm / Vết ố nặng</option>
+                    <option value="lateFee">Khách trả trễ hạn so với thỏa thuận</option>
+                    <option value="compensationAmount">Mất phụ kiện / Hư hỏng toàn bộ sản phẩm</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '12.5px', fontWeight: 600, color: '#9A3412' }}>
+                      Số tiền đề xuất trừ cọc (VNĐ)
+                    </label>
+                    <span style={{ fontSize: '11.5px', color: '#C2410C' }}>
+                      Tối đa: {(currentItem.item.depositAmount || 0).toLocaleString('vi-VN')} đ
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={currentItem.item.depositAmount || 0}
+                    value={deductAmount || ''}
+                    onChange={(e) => setDeductAmount(Number(e.target.value))}
+                    placeholder="Nhập số tiền cần khấu trừ..."
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #FDBA74', fontSize: '13.5px', backgroundColor: '#FFFFFF', color: '#1F2937', outline: 'none', boxSizing: 'border-box' }}
+                  />
+
+                  {/* Quick percentage chips */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                    {[0.2, 0.5, 1].map((ratio) => {
+                      const val = Math.round((currentItem.item.depositAmount || 0) * ratio);
+                      return (
+                        <button
+                          key={ratio}
+                          type="button"
+                          onClick={() => setDeductAmount(val)}
+                          style={{
+                            fontSize: '11px',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            border: '1px solid #FDBA74',
+                            backgroundColor: deductAmount === val ? '#F97316' : '#FFFFFF',
+                            color: deductAmount === val ? '#FFFFFF' : '#9A3412',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {ratio === 1 ? '100% Cọc' : `${ratio * 100}% Cọc`} ({val.toLocaleString('vi-VN')}đ)
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: '#9A3412', marginBottom: '6px' }}>
+                    Lý do / Mô tả chi tiết vết hư hại (Bắt buộc)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={issueReason}
+                    onChange={(e) => setIssueReason(e.target.value)}
+                    placeholder="Mô tả cụ thể vị trí rách, vết ố bẩn hoặc các chi tiết phụ kiện bị thiếu..."
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #FDBA74', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#1F2937', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setIsSettlementModalOpen(false)}
+                disabled={isActionBusy}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  backgroundColor: '#FFFFFF',
+                  color: '#374151',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                }}
+              >
+                Hủy bỏ
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmSettlement}
+                disabled={isActionBusy}
+                style={{
+                  padding: '9px 22px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: settlementChoice === 'NORMAL' ? '#059669' : '#DC2626',
+                  color: '#FFFFFF',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: isActionBusy ? 'not-allowed' : 'pointer',
+                  opacity: isActionBusy ? 0.7 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                {isActionBusy && <RefreshCw size={14} className="ro-spin" />}
+                <span>
+                  {settlementChoice === 'NORMAL' ? 'Xác nhận & Hoàn 100% Cọc' : 'Gửi yêu cầu trừ cọc'}
+                </span>
               </button>
             </div>
           </div>

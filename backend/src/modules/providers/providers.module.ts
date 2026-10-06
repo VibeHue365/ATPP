@@ -29,12 +29,15 @@ import {
 } from '../bookings/schemas/booking-item.schema';
 import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
+import { BookingSchedule, BookingScheduleSchema } from '../bookings/schemas/booking-schedule.schema';
+import { PhotographyPackage, PhotographyPackageSchema } from '../products/schemas/photography-package.schema';
 import { ProviderVerificationsController } from './controllers/provider-verifications.controller';
 import { AdminProviderVerificationsController } from './controllers/admin-provider-verifications.controller';
 import { AdminProvidersController } from './controllers/admin-providers.controller';
 import { ProvidersController } from './controllers/providers.controller';
 import { AdminPortfolioModerationController } from './controllers/admin-portfolio-moderation.controller';
 import { ProvidersService } from './services/providers.service';
+import { ProviderOverviewService } from './services/provider-overview.service';
 import { ProvidersRepository } from './repositories/providers.repository';
 import { ProviderVerificationService } from './services/provider-verification.service';
 import { ProviderOcrQueueService } from './services/provider-ocr-queue.service';
@@ -62,6 +65,8 @@ const providerSupportModels = MongooseModule.forFeature([
   { name: BookingItem.name, schema: BookingItemSchema },
   { name: Review.name, schema: ReviewSchema },
   { name: Payment.name, schema: PaymentSchema },
+  { name: BookingSchedule.name, schema: BookingScheduleSchema },
+  { name: PhotographyPackage.name, schema: PhotographyPackageSchema },
 ]);
 
 @Module({
@@ -82,6 +87,7 @@ const providerSupportModels = MongooseModule.forFeature([
   ],
   providers: [
     ProvidersService,
+    ProviderOverviewService,
     ProvidersRepository,
     ProviderVerificationService,
 
@@ -93,6 +99,7 @@ const providerSupportModels = MongooseModule.forFeature([
   exports: [
     providerModels,
     ProvidersService,
+    ProviderOverviewService,
     ProvidersRepository,
     ProviderVerificationService,
     ProviderOcrQueueService,

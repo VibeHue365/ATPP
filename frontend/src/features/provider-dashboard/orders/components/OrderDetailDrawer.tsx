@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   AlertTriangle,
   Calendar,
@@ -31,6 +31,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../../assets/images/onboarding_traditional.webp';
+import { RentalEvidenceImage } from '../../../rentals/components/RentalEvidenceImage';
 
 interface OrderDetailDrawerProps {
   order: Order | null;
@@ -59,8 +60,7 @@ export function OrderDetailDrawer({
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [internalNoteInput, setInternalNoteInput] = useState('');
   const [internalNotesList, setInternalNotesList] = useState<Array<{ author: string; time: string; text: string }>>([
-    { author: 'Hệ thống VibeHue Escrow', time: '20/07 15:02', text: 'Khách hàng hoàn tất đặt cọc qua VibeHue Escrow. Đơn được xác nhận tự động.' },
-    { author: 'Bạn (Nhà cung cấp)', time: '21/07 10:15', text: 'Đã chuẩn bị sẵn đồ size M và liên hệ thợ ảnh Trần Quang Huy.' },
+    { author: 'Hệ thống VibeHue Escrow', time: order?.orderDate || 'Khi xác nhận', text: 'Khách hàng hoàn tất đặt cọc qua VibeHue Escrow. Đơn được xác nhận tự động.' },
   ]);
 
   const navigate = useNavigate();
@@ -103,17 +103,43 @@ export function OrderDetailDrawer({
   const isPhoto = order.bookingType === 'PHOTOGRAPHY';
   const isAoDai = !isCombo && !isPhoto;
   const rawStatus = (order.rawStatus || '').toUpperCase();
+  const primaryItem = order.items?.[0];
+  const rf = primaryItem?.rentalFulfillment;
+  const photoItem = order.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId);
+  const photoSchedule = (order.schedules || []).find((s: any) => s.scheduleType === 'PHOTOSHOOT');
+  const shootDate = photoItem?.shootDate || photoSchedule?.startsAt || photoSchedule?.scheduledDate;
 
-  // Master Stepper Configuration (8 steps matching Figma)
+  const formatShortTime = (dateVal?: string | Date | null, fallback: string = 'Theo lịch') => {
+    if (!dateVal) return fallback;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return typeof dateVal === 'string' ? dateVal : fallback;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const formatMilestoneDateTime = (dateVal?: string | Date | null, fallback: string = 'Theo lịch hẹn') => {
+    if (!dateVal) return fallback;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return typeof dateVal === 'string' ? dateVal : fallback;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const day = pad(d.getDate());
+    const month = pad(d.getMonth() + 1);
+    const year = d.getFullYear();
+    const hours = pad(d.getHours());
+    const mins = pad(d.getMinutes());
+    return `${day}/${month}/${year} • ${hours}:${mins}`;
+  };
+
+  // Master Stepper Configuration (8 steps with real dynamic timestamps)
   const masterSteps = [
-    { label: 'Xác nhận', key: 'CONFIRMED', time: '20/07 15:02' },
-    { label: 'Chuẩn bị áo', key: 'PICKUP_PENDING', time: '27/07 07:30' },
-    { label: 'Khách nhận áo', key: 'PICKED_UP', time: '27/07 08:00' },
-    { label: 'Đang chụp', key: 'IN_PROGRESS', time: '27/07 09:00', icon: Camera },
-    { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: 'DK 28/07' },
-    { label: 'Khách trả áo', key: 'RETURN_PENDING', time: 'DK 29/07' },
-    { label: 'Kiểm tra', key: 'RETURNED', time: 'DK 29/07' },
-    { label: 'Hoàn tất', key: 'COMPLETED', time: 'DK 02/08' },
+    { label: 'Xác nhận', key: 'CONFIRMED', time: formatShortTime(order.rawOrderDate || order.createdAt, order.orderDate || 'Đã xác nhận') },
+    { label: 'Chuẩn bị áo', key: 'PICKUP_PENDING', time: rf?.readyAt ? formatShortTime(rf.readyAt) : 'Chuẩn bị' },
+    { label: 'Khách nhận áo', key: 'PICKED_UP', time: rf?.pickedUpAt ? formatShortTime(rf.pickedUpAt) : (rf?.pickupDueAt ? formatShortTime(rf.pickupDueAt) : 'Nhận đồ') },
+    { label: 'Đang chụp', key: 'IN_PROGRESS', time: shootDate ? formatShortTime(shootDate) : 'Chụp ảnh', icon: Camera },
+    { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: order.photosApproved ? 'Đã duyệt' : (order.deliveredPhotos ? 'Đã giao' : 'Trả ảnh') },
+    { label: 'Khách trả áo', key: 'RETURN_PENDING', time: rf?.returnedAt ? formatShortTime(rf.returnedAt) : (rf?.returnDueAt ? formatShortTime(rf.returnDueAt) : 'Trả đồ') },
+    { label: 'Kiểm tra', key: 'RETURNED', time: rf?.returnedAt ? 'Đã kiểm tra' : 'Kiểm tra' },
+    { label: 'Hoàn tất', key: 'COMPLETED', time: rawStatus === 'COMPLETED' ? (formatShortTime(rf?.completedAt, order.updatedDate || 'Hoàn tất')) : 'Dự kiến' },
   ];
 
   // Active step computation (0 to 7)
@@ -175,6 +201,347 @@ export function OrderDetailDrawer({
   };
 
   const photoPackageImg = 'https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=300&q=80';
+
+  // Dynamic progress info & time remaining computation
+  const progressInfo = useMemo(() => {
+    if (isOrderCompleted) {
+      return {
+        step: '5/5',
+        percent: 100,
+        title: 'Tiến độ thực hiện (100%)',
+        desc: 'Đơn hàng đã hoàn tất trọn vẹn, đã hoàn tất bàn giao và tất toán.',
+        deadlineNum: 'Hoàn tất',
+        deadlineColor: '#059669',
+        deadlineTitle: 'Trạng thái đơn',
+        deadlineDesc: 'Đơn hàng đã kết thúc thành công đúng cam kết chất lượng.',
+      };
+    }
+    if (rawStatus === 'CANCELLED') {
+      return {
+        step: '0/5',
+        percent: 0,
+        title: 'Đơn đã hủy',
+        desc: 'Đơn hàng đã bị hủy, không còn hiệu lực thực hiện.',
+        deadlineNum: 'Đã hủy',
+        deadlineColor: '#DC2626',
+        deadlineTitle: 'Trạng thái đơn',
+        deadlineDesc: 'Đơn hàng đã dừng quy trình.',
+      };
+    }
+
+    // Compute remaining time from real dates
+    const primaryItem = order.items?.[0];
+    const targetDateStr = primaryItem?.rentalEndDate || order.endDate || primaryItem?.shootDate;
+    let deadlineNum = 'Theo lịch';
+    let deadlineColor = '#D97706';
+    let deadlineTitle = 'Thời hạn dịch vụ';
+    let deadlineDesc = 'Đang tiến hành theo đúng kế hoạch cam kết.';
+
+    if (targetDateStr) {
+      const targetTime = new Date(targetDateStr).getTime();
+      if (!isNaN(targetTime)) {
+        const diffMs = targetTime - Date.now();
+        const diffHours = Math.round(diffMs / (1000 * 3600));
+        if (diffMs < 0) {
+          deadlineNum = 'Quá hạn';
+          deadlineColor = '#DC2626';
+          deadlineTitle = 'Hạn hoàn tất';
+          deadlineDesc = 'Đã vượt quá thời hạn dự kiến, vui lòng kiểm tra thu hồi.';
+        } else if (diffHours >= 24) {
+          const days = Math.floor(diffHours / 24);
+          deadlineNum = `${days} ngày`;
+          deadlineColor = '#059669';
+          deadlineTitle = 'Thời hạn dịch vụ';
+          deadlineDesc = `Còn ${days} ngày đến thời điểm hẹn bàn giao/kết thúc.`;
+        } else {
+          deadlineNum = `${Math.max(1, diffHours)} giờ`;
+          deadlineColor = '#D97706';
+          deadlineTitle = 'Thời hạn dịch vụ';
+          deadlineDesc = `Còn ${Math.max(1, diffHours)} giờ đến thời điểm bàn giao.`;
+        }
+      }
+    }
+
+    if (isAoDai) {
+      const stepIdx = Math.min(4, aoDaiCurrentIdx);
+      const stepNum = stepIdx + 1;
+      const pct = Math.round((stepNum / 5) * 100);
+      const descs = [
+        'Đơn hàng đang ở giai đoạn chuẩn bị trang phục tại cửa hàng.',
+        'Trang phục đã sẵn sàng, đang chờ khách hàng nhận đồ.',
+        'Khách hàng đang trong thời gian thuê và trải nghiệm trang phục.',
+        'Khách đã trả đồ, đang tiến hành kiểm tra và tất toán cọc.',
+        'Đã hoàn tất quy trình thuê trang phục.',
+      ];
+      return {
+        step: `${stepNum}/5`,
+        percent: pct,
+        title: `Tiến độ thực hiện (${pct}%)`,
+        desc: descs[stepIdx] || 'Đang thực hiện đúng cam kết chất lượng.',
+        deadlineNum,
+        deadlineColor,
+        deadlineTitle,
+        deadlineDesc,
+      };
+    } else {
+      const stepIdx = Math.min(4, photoCurrentIdx);
+      const stepNum = stepIdx + 1;
+      const pct = Math.round((stepNum / 5) * 100);
+      const descs = [
+        'Đang chờ đến lịch chụp ảnh theo khung giờ hẹn.',
+        'Nhiếp ảnh gia đang trong quá trình thực hiện buổi chụp.',
+        'Đã chụp xong, đang trong giai đoạn chỉnh sửa và bàn giao ảnh.',
+        'Đang chờ khách hàng duyệt ảnh và xác nhận chất lượng.',
+        'Đã hoàn tất buổi chụp và bàn giao sản phẩm trọn vẹn.',
+      ];
+      return {
+        step: `${stepNum}/5`,
+        percent: pct,
+        title: `Tiến độ thực hiện (${pct}%)`,
+        desc: descs[stepIdx] || 'Đang thực hiện đúng cam kết chất lượng.',
+        deadlineNum,
+        deadlineColor,
+        deadlineTitle,
+        deadlineDesc,
+      };
+    }
+  }, [isOrderCompleted, rawStatus, isAoDai, aoDaiCurrentIdx, photoCurrentIdx, order]);
+
+  // Real evidence items extracted from order items and rental fulfillment
+  const evidenceItems = useMemo(() => {
+    const list: Array<{
+      id: string;
+      title: string;
+      meta: string;
+      statusText: string;
+      statusBg: string;
+      statusColor: string;
+      fileId?: string;
+      imageUrl?: string;
+      itemId?: string;
+    }> = [];
+
+    (order.items || []).forEach((item: any, iIdx: number) => {
+      const rf = item.rentalFulfillment;
+      const itemName = item.name || item.productId?.name || `Trang phục #${iIdx + 1}`;
+      if (rf?.pickupEvidence?.files?.length) {
+        rf.pickupEvidence.files.forEach((f: any, fIdx: number) => {
+          list.push({
+            id: `pickup-${item._id}-${f.fileId || fIdx}`,
+            title: `Ảnh bàn giao (${itemName}) #${fIdx + 1}`,
+            meta: rf.pickupConditionNote ? `Tình trạng: ${rf.pickupConditionNote}` : 'Đã chụp lưu trữ khi giao cho khách',
+            statusText: 'Đã bàn giao',
+            statusBg: '#ECFDF5',
+            statusColor: '#059669',
+            fileId: f.fileId,
+            itemId: item._id,
+          });
+        });
+      }
+      if (rf?.returnEvidence?.files?.length) {
+        rf.returnEvidence.files.forEach((f: any, fIdx: number) => {
+          list.push({
+            id: `return-${item._id}-${f.fileId || fIdx}`,
+            title: `Ảnh nhận lại & kiểm tra (${itemName}) #${fIdx + 1}`,
+            meta: rf.returnConditionNote ? `Ghi chú: ${rf.returnConditionNote}` : 'Đã chụp khi khách hoàn trả',
+            statusText: 'Đã nhận lại',
+            statusBg: '#EFF6FF',
+            statusColor: '#2563EB',
+            fileId: f.fileId,
+            itemId: item._id,
+          });
+        });
+      }
+    });
+
+    if (order.pickupDamageReport?.evidencePhotos?.length) {
+      order.pickupDamageReport.evidencePhotos.forEach((photoUrl: string, idx: number) => {
+        list.push({
+          id: `damage-${idx}`,
+          title: `Ảnh khách báo lỗi đồ #${idx + 1}`,
+          meta: order.pickupDamageReport?.description || 'Báo cáo sự cố từ khách hàng',
+          statusText: 'Khách báo lỗi',
+          statusBg: '#FEF2F2',
+          statusColor: '#DC2626',
+          imageUrl: photoUrl,
+        });
+      });
+    }
+
+    return list;
+  }, [order]);
+
+  // Dynamic schedule milestones generated from real booking, item, schedules & fulfillment data
+  const dynamicMilestones = useMemo(() => {
+    const list: Array<{
+      time: string;
+      title: string;
+      desc: string;
+      icon: any;
+      color: string;
+      bg: string;
+      badgeText: string;
+      badgeColor: string;
+      badgeBg: string;
+    }> = [];
+
+    const orderTimeStr = formatMilestoneDateTime(order.rawOrderDate || order.createdAt, order.orderDate || 'Khi tạo đơn');
+    const depositAmt = order.depositTotal || order.pricingSummary?.depositTotal || (order.totalAmount ? Math.round(order.totalAmount * 0.5) : 0);
+    const itemName = primaryItem?.name || primaryItem?.productId?.name || order.productName || 'Trang phục Áo dài';
+    const itemSize = primaryItem?.size || primaryItem?.selectedVariant?.size;
+    const isPaid = rawStatus !== 'PENDING' && rawStatus !== 'PENDING_PAYMENT';
+
+    // 1. Mốc 1: Đặt lịch & Đặt cọc Escrow
+    list.push({
+      time: orderTimeStr,
+      title: 'Khách hàng đặt lịch & Thanh toán cọc giữ chỗ',
+      desc: isPaid
+        ? `Hệ thống xác nhận đã nhận cọc ${depositAmt > 0 ? `${depositAmt.toLocaleString('vi-VN')}đ` : 'giữ chỗ'} qua VibeHue Escrow QR.`
+        : `Đang chờ khách hàng thanh toán cọc ${depositAmt > 0 ? `${depositAmt.toLocaleString('vi-VN')}đ` : ''} qua VibeHue Escrow.`,
+      icon: CheckCircle,
+      color: '#10B981',
+      bg: '#ECFDF5',
+      badgeText: isPaid ? '✓ Đã cọc Escrow' : '⏳ Chờ thanh toán',
+      badgeColor: isPaid ? '#059669' : '#D97706',
+      badgeBg: isPaid ? '#ECFDF5' : '#FFFBEB',
+    });
+
+    if (isAoDai || isCombo) {
+      // 2. Mốc 2: Chuẩn bị trang phục tại cửa hàng
+      const isReady = Boolean(rf?.readyAt) || ['PICKUP_PENDING', 'PICKED_UP', 'IN_PROGRESS', 'AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(rawStatus);
+      const isPreparing = rawStatus === 'CONFIRMED' || rawStatus === 'DEPOSIT_PAID';
+      list.push({
+        time: rf?.readyAt
+          ? formatMilestoneDateTime(rf.readyAt)
+          : (rf?.pickupDueAt ? `Dự kiến: ${formatMilestoneDateTime(rf.pickupDueAt)}` : 'Dự kiến trước ngày nhận đồ'),
+        title: `Chuẩn bị trang phục: ${itemName}${itemSize ? ` (Size ${itemSize})` : ''}`,
+        desc: rf?.readyAt
+          ? `Cửa hàng đã hoàn tất kiểm tra chất lượng trang phục, ủi phẳng và chuẩn bị sẵn phụ kiện đi kèm.`
+          : `Nhân viên kiểm tra Áo dài, ủi phẳng và xếp phụ kiện chuẩn bị bàn giao cho khách.`,
+        icon: Shirt,
+        color: isReady ? '#15803D' : (isPreparing ? '#D97706' : '#64748B'),
+        bg: isReady ? '#F0FDF4' : (isPreparing ? '#FFFBEB' : '#F8FAFC'),
+        badgeText: isReady ? '✓ Đã sẵn sàng' : (isPreparing ? '● Đang chuẩn bị' : 'Chờ thực hiện'),
+        badgeColor: isReady ? '#15803D' : (isPreparing ? '#D97706' : '#64748B'),
+        badgeBg: isReady ? '#F0FDF4' : (isPreparing ? '#FFFBEB' : '#F1F5F9'),
+      });
+
+      // 3. Mốc 3: Khách nhận áo dài & Bàn giao đồ (Check-in nhận áo)
+      const isPickedUp = Boolean(rf?.pickedUpAt) || ['PICKED_UP', 'IN_PROGRESS', 'AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(rawStatus);
+      const isAwaitingPickup = rawStatus === 'PICKUP_PENDING';
+      const pickupEvidenceCount = rf?.pickupEvidence?.files?.length || 0;
+      list.push({
+        time: rf?.pickedUpAt
+          ? formatMilestoneDateTime(rf.pickedUpAt)
+          : (rf?.pickupDueAt ? `Hạn nhận: ${formatMilestoneDateTime(rf.pickupDueAt)}` : 'Theo lịch hẹn bàn giao'),
+        title: 'Khách nhận áo dài & Bàn giao đồ (Check-in nhận)',
+        desc: rf?.pickedUpAt
+          ? `Khách đã nhận đồ${pickupEvidenceCount > 0 ? ` (đã lưu ${pickupEvidenceCount} ảnh bằng chứng bàn giao)` : ''}. ${rf?.pickupConditionNote ? `Tình trạng: "${rf.pickupConditionNote}".` : 'Khách hàng thử áo và xác nhận đồ hoàn hảo.'}`
+          : `Khách hàng nhận đồ tại điểm hẹn: ${order.pickupLocation || 'Cửa hàng'}. Nhân viên kiểm tra và chụp ảnh bằng chứng bàn giao.`,
+        icon: Package,
+        color: isPickedUp ? '#2563EB' : (isAwaitingPickup ? '#D97706' : '#64748B'),
+        bg: isPickedUp ? '#EFF6FF' : (isAwaitingPickup ? '#FFFBEB' : '#F8FAFC'),
+        badgeText: isPickedUp ? '✓ Đã bàn giao' : (isAwaitingPickup ? '● Chờ khách nhận' : 'Chờ thực hiện'),
+        badgeColor: isPickedUp ? '#2563EB' : (isAwaitingPickup ? '#D97706' : '#64748B'),
+        badgeBg: isPickedUp ? '#EFF6FF' : (isAwaitingPickup ? '#FFFBEB' : '#F1F5F9'),
+      });
+    }
+
+    if (isPhoto || isCombo) {
+      // 4. Mốc: Buổi chụp ảnh ngoại cảnh / studio (Check-in buổi chụp)
+      const isShootDone = ['AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(rawStatus) || Boolean(order.deliveredPhotos);
+      const isShooting = rawStatus === 'IN_PROGRESS';
+      const shootTimeStr = shootDate
+        ? `${formatMilestoneDateTime(shootDate)}${photoItem?.shootTimeSlot ? ` • ${photoItem.shootTimeSlot}` : ''}`
+        : 'Theo khung giờ hẹn';
+      const shootLocationStr = photoItem?.shootLocation || photoSchedule?.locationAddress || order.pickupLocation || 'Địa điểm hẹn tại Huế';
+
+      list.push({
+        time: shootTimeStr,
+        title: `Buổi chụp ảnh: ${photoItem?.name || photoItem?.photographyPackageId?.name || order.productName || 'Chụp ảnh ngoại cảnh Cố Đô'}`,
+        desc: `Địa điểm: ${shootLocationStr}. ${isShootDone ? 'Buổi chụp ảnh đã hoàn tất thành công.' : (isShooting ? 'Nhiếp ảnh gia đang trong quá trình thực hiện buổi chụp.' : 'Nhiếp ảnh gia có mặt đúng giờ hẹn và chuẩn bị thiết bị.')}`,
+        icon: Camera,
+        color: isShootDone ? '#10B981' : (isShooting ? '#BE123C' : '#64748B'),
+        bg: isShootDone ? '#ECFDF5' : (isShooting ? '#FFF1F2' : '#F8FAFC'),
+        badgeText: isShootDone ? '✓ Đã chụp xong' : (isShooting ? '● Đang chụp' : 'Chờ thực hiện'),
+        badgeColor: isShootDone ? '#10B981' : (isShooting ? '#BE123C' : '#64748B'),
+        badgeBg: isShootDone ? '#ECFDF5' : (isShooting ? '#FFF1F2' : '#F1F5F9'),
+      });
+
+      // 5. Mốc: Bàn giao bộ ảnh gốc
+      const isDelivered = Boolean(order.deliveredPhotos) || isShootDone;
+      list.push({
+        time: isDelivered ? 'Đã bàn giao ảnh gốc' : 'Dự kiến sau 24h - 48h từ buổi chụp',
+        title: 'Bàn giao bộ ảnh gốc cho khách chọn',
+        desc: order.deliveryDriveUrl
+          ? `Đã gửi liên kết Drive bộ ảnh: ${order.deliveryDriveUrl}`
+          : 'Dự kiến tải lên toàn bộ file ảnh gốc chất lượng cao để khách chọn ảnh chỉnh sửa hậu kỳ.',
+        icon: Clock,
+        color: isDelivered ? '#10B981' : '#D97706',
+        bg: isDelivered ? '#ECFDF5' : '#FFFBEB',
+        badgeText: isDelivered ? '✓ Đã bàn giao' : 'Đang xử lý',
+        badgeColor: isDelivered ? '#10B981' : '#D97706',
+        badgeBg: isDelivered ? '#ECFDF5' : '#FFFBEB',
+      });
+
+      // 6. Mốc: Khách duyệt ảnh & Hậu kỳ
+      const isApproved = Boolean(order.photosApproved) || rawStatus === 'COMBO_PHOTOS_APPROVED' || isOrderCompleted;
+      list.push({
+        time: isApproved ? 'Khách đã duyệt' : 'Dự kiến sau khi khách chọn ảnh',
+        title: 'Khách hàng duyệt ảnh & Hoàn thiện hậu kỳ',
+        desc: isApproved
+          ? 'Khách hàng đã nghiệm thu và duyệt danh sách ảnh hoàn thiện đúng cam kết chất lượng.'
+          : 'Đang chờ khách duyệt hoặc thợ ảnh đang tiến hành chỉnh màu/da theo yêu cầu.',
+        icon: Sparkles,
+        color: isApproved ? '#10B981' : '#8B5CF6',
+        bg: isApproved ? '#ECFDF5' : '#F5F3FF',
+        badgeText: isApproved ? '✓ Đã duyệt ảnh' : 'Chờ duyệt',
+        badgeColor: isApproved ? '#10B981' : '#8B5CF6',
+        badgeBg: isApproved ? '#ECFDF5' : '#F5F3FF',
+      });
+    }
+
+    if (isAoDai || isCombo) {
+      // 7. Mốc: Khách hàng hoàn trả áo dài & Kiểm tra hoàn cọc (Check-in trả đồ)
+      const isReturned = Boolean(rf?.returnedAt) || ['RETURNED', 'COMPLETED'].includes(rawStatus);
+      const isAwaitingReturn = rawStatus === 'RETURN_PENDING' || rawStatus === 'COMBO_PHOTOS_APPROVED';
+      const returnEvidenceCount = rf?.returnEvidence?.files?.length || 0;
+      list.push({
+        time: rf?.returnedAt
+          ? formatMilestoneDateTime(rf.returnedAt)
+          : (rf?.returnDueAt ? `Hạn trả: ${formatMilestoneDateTime(rf.returnDueAt)}` : 'Hạn trả theo thỏa thuận'),
+        title: 'Khách hàng hoàn trả áo dài & Kiểm tra đồ (Check-in trả)',
+        desc: rf?.returnedAt
+          ? `Đã nhận lại áo${returnEvidenceCount > 0 ? ` (đã chụp ${returnEvidenceCount} ảnh kiểm tra)` : ''}. ${rf?.returnConditionNote ? `Ghi chú: "${rf.returnConditionNote}".` : 'Kiểm tra áo không rách, không ố bẩn nặng để hoàn tất hoàn cọc.'}`
+          : `Khách hàng hoàn trả áo dài tại cửa hàng. Nhân viên kiểm tra đối soát tình trạng vải, phụ kiện để hoàn cọc.`,
+        icon: Shirt,
+        color: isReturned ? '#10B981' : (isAwaitingReturn ? '#6D28D9' : '#64748B'),
+        bg: isReturned ? '#ECFDF5' : (isAwaitingReturn ? '#F5F3FF' : '#F8FAFC'),
+        badgeText: isReturned ? '✓ Đã nhận lại' : (isAwaitingReturn ? '● Chờ trả đồ' : 'Chờ thực hiện'),
+        badgeColor: isReturned ? '#10B981' : (isAwaitingReturn ? '#6D28D9' : '#64748B'),
+        badgeBg: isReturned ? '#ECFDF5' : (isAwaitingReturn ? '#F5F3FF' : '#F1F5F9'),
+      });
+    }
+
+    // 8. Mốc cuối: Nghiệm thu hoàn tất & Tất toán cọc Escrow
+    list.push({
+      time: isOrderCompleted
+        ? formatMilestoneDateTime(rf?.completedAt || order.updatedDate || order.orderDate, 'Đã hoàn tất')
+        : 'Sau khi kiểm tra và nghiệm thu toàn bộ',
+      title: 'Nghiệm thu dịch vụ & Tất toán Escrow',
+      desc: isOrderCompleted
+        ? `Đơn hàng đã hoàn tất thành công trọn vẹn. Hệ thống VibeHue Escrow đã giải ngân doanh thu cho nhà cung cấp${rf?.depositRefundAmount ? ` và hoàn lại ${rf.depositRefundAmount.toLocaleString('vi-VN')}đ cọc cho khách hàng.` : '.'}`
+        : 'Khách hàng nghiệm thu dịch vụ và hệ thống VibeHue Escrow tự động giải ngân doanh thu cho nhà cung cấp.',
+      icon: CheckCircle,
+      color: isOrderCompleted ? '#10B981' : '#64748B',
+      bg: isOrderCompleted ? '#ECFDF5' : '#F8FAFC',
+      badgeText: isOrderCompleted ? '✓ Đã hoàn tất' : 'Chờ nghiệm thu',
+      badgeColor: isOrderCompleted ? '#10B981' : '#64748B',
+      badgeBg: isOrderCompleted ? '#ECFDF5' : '#F1F5F9',
+    });
+
+    return list;
+  }, [order, rawStatus, isAoDai, isPhoto, isCombo, isOrderCompleted, primaryItem, rf, photoItem, photoSchedule, shootDate]);
 
   return (
     <div className="p-drawer-backdrop" onClick={onClose}>
@@ -319,15 +686,15 @@ export function OrderDetailDrawer({
             </div>
             <div className="p-dh-item">
               <span className="label">Khách hàng:</span>
-              <span className="val">{order.customerName || 'Nguyễn Thảo My'}</span>
+              <span className="val">{order.customerName || 'Khách hàng'}</span>
             </div>
             <div className="p-dh-item">
               <span className="label">Hotline:</span>
-              <span className="val">{order.customerPhone || '0901 234 567'}</span>
+              <span className="val">{order.customerPhone || '—'}</span>
             </div>
             <div className="p-dh-item">
               <span className="label">Email:</span>
-              <span className="val">{order.customerEmail || 'thaomy@gmail.com'}</span>
+              <span className="val">{order.customerEmail || '—'}</span>
             </div>
             <div className="p-dh-item">
               <span className="label">Ngày đặt:</span>
@@ -335,11 +702,13 @@ export function OrderDetailDrawer({
             </div>
             <div className="p-dh-item">
               <span className="label">Địa chỉ:</span>
-              <span className="val">{order.pickupLocation || 'Đại Nội Huế, 23 Đặng Thái Thân'}</span>
+              <span className="val">{order.pickupLocation || 'Tại cửa hàng'}</span>
             </div>
             <div className="p-dh-item">
               <span className="label">Thời hạn:</span>
-              <span className="val" style={{ color: '#D97706', fontWeight: 700 }}>Còn 2 giờ 15 phút</span>
+              <span className="val" style={{ color: progressInfo.deadlineColor, fontWeight: 700 }}>
+                {progressInfo.deadlineNum}
+              </span>
             </div>
           </div>
         </div>
@@ -402,24 +771,24 @@ export function OrderDetailDrawer({
                     <div
                       className="p-donut-circle"
                       style={{
-                        background: 'conic-gradient(#059669 0% 80%, #e2e8f0 80% 100%)',
+                        background: `conic-gradient(#059669 0% ${progressInfo.percent}%, #e2e8f0 ${progressInfo.percent}% 100%)`,
                       }}
                     >
-                      <div className="p-donut-inner">4/5</div>
+                      <div className="p-donut-inner">{progressInfo.step}</div>
                     </div>
                     <div className="p-score-info">
-                      <h4>Tiến độ thực hiện (80%)</h4>
-                      <p>Đơn hàng đang ở giai đoạn Đang chụp, đúng cam kết chất lượng.</p>
+                      <h4>{progressInfo.title}</h4>
+                      <p>{progressInfo.desc}</p>
                     </div>
                   </div>
 
                   <div className="p-score-card">
-                    <div className="p-rev-num" style={{ color: '#D97706' }}>
-                      2h15m
+                    <div className="p-rev-num" style={{ color: progressInfo.deadlineColor }}>
+                      {progressInfo.deadlineNum}
                     </div>
                     <div className="p-score-info">
-                      <h4>Thời hạn hoàn tất</h4>
-                      <p>Còn 2 giờ 15 phút đến hạn hoàn tất buổi chụp và chuẩn bị file.</p>
+                      <h4>{progressInfo.deadlineTitle}</h4>
+                      <p>{progressInfo.deadlineDesc}</p>
                     </div>
                   </div>
                 </div>
@@ -534,29 +903,43 @@ export function OrderDetailDrawer({
                   <div className="p-info-grid-2">
                     <div className="p-info-item">
                       <span className="info-label">Họ và tên khách hàng</span>
-                      <span className="info-val">{order.customerName || 'Nguyễn Thảo My'}</span>
+                      <span className="info-val">{order.customerName || 'Khách hàng'}</span>
                     </div>
                     <div className="p-info-item">
                       <span className="info-label">Phân loại khách hàng</span>
                       <span className="info-val" style={{ color: '#7E22CE', fontWeight: 700 }}>
-                        ★ Khách hàng thân thiết
+                        ★ Khách hàng {order.customerType || 'thân thiết'}
                       </span>
                     </div>
                     <div className="p-info-item">
                       <span className="info-label">Số điện thoại liên hệ</span>
-                      <span className="info-val">{order.customerPhone || '0901 234 567'}</span>
+                      <span className="info-val">{order.customerPhone || '—'}</span>
                     </div>
                     <div className="p-info-item">
                       <span className="info-label">Email tài khoản</span>
-                      <span className="info-val">{order.customerEmail || 'thaomy@gmail.com'}</span>
+                      <span className="info-val">{order.customerEmail || '—'}</span>
                     </div>
                     <div className="p-info-item">
-                      <span className="info-label">Ngày hẹn sử dụng</span>
-                      <span className="info-val">27/07/2024 (08:00 - 12:00)</span>
+                      <span className="info-label">Thời gian sử dụng / Hẹn lịch</span>
+                      <span className="info-val">
+                        {(() => {
+                          const primaryItem = order.items?.[0];
+                          if (primaryItem?.rentalStartDate && primaryItem?.rentalEndDate) {
+                            return `${new Date(primaryItem.rentalStartDate).toLocaleDateString('vi-VN')} → ${new Date(primaryItem.rentalEndDate).toLocaleDateString('vi-VN')}`;
+                          }
+                          if (primaryItem?.shootDate) {
+                            return `${primaryItem.shootDate} (${primaryItem.timeSlot || 'Theo lịch'})`;
+                          }
+                          if (order.startDate && order.endDate) {
+                            return `${new Date(order.startDate).toLocaleDateString('vi-VN')} → ${new Date(order.endDate).toLocaleDateString('vi-VN')}`;
+                          }
+                          return order.orderDate || 'Theo lịch hẹn';
+                        })()}
+                      </span>
                     </div>
                     <div className="p-info-item">
                       <span className="info-label">Địa điểm chụp &amp; Giao nhận</span>
-                      <span className="info-val">{order.pickupLocation || 'Đại Nội Huế, 23 Đặng Thái Thân'}</span>
+                      <span className="info-val">{order.pickupLocation || 'Tại cửa hàng nhà cung cấp'}</span>
                     </div>
                   </div>
 
@@ -565,7 +948,7 @@ export function OrderDetailDrawer({
                       Ghi chú của khách hàng:
                     </span>
                     <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#334155', fontStyle: 'italic' }}>
-                      &quot;{order.customerNotes || 'Chụp ảnh và thuê áo dài cho kỷ niệm tốt nghiệp tại Cung An Định và Đại Nội.'}&quot;
+                      &quot;{order.customerNotes || 'Không có ghi chú thêm từ khách hàng.'}&quot;
                     </p>
                   </div>
                 </div>
@@ -579,53 +962,80 @@ export function OrderDetailDrawer({
                     </h3>
                   </div>
 
-                  {/* Item 1: Áo dài */}
-                  <div className="p-drawer-item-card" style={{ marginBottom: '10px' }}>
-                    <img src={traditionalAoDaiImg} alt="Áo dài" className="p-drawer-item-img" />
-                    <div className="p-drawer-item-info">
-                      <div className="p-drawer-item-name">
-                        {order.bookingType === 'PHOTOGRAPHY' ? 'Trang phục tự chuẩn bị' : 'Áo dài Nhật Bình Trắng Ngọc'}
-                      </div>
-                      <div className="p-drawer-item-specs">
-                        Size: M &nbsp;|&nbsp; Số lượng: 1 &nbsp;|&nbsp; Phụ kiện: Mấn đội đầu, Quạt gấm thêu tay
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#475569', marginTop: '3px' }}>
-                        Ngày nhận: <strong>27/07 • 08:00</strong> &nbsp;•&nbsp; Ngày trả: <strong>29/07 • 18:00</strong>
-                      </div>
-                    </div>
-                    <div className="p-drawer-item-pricing">
-                      <div className="p-drawer-item-price">800.000đ</div>
-                      <div className="p-drawer-item-deposit">Cọc: 1.000.000đ</div>
-                      <span style={{ fontSize: '10.5px', fontWeight: 600, backgroundColor: '#DCFCE7', color: '#15803D', padding: '2px 8px', borderRadius: '4px', display: 'inline-block', marginTop: '4px' }}>
-                        ✓ Đã chuẩn bị
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Item 2: Chụp ảnh */}
-                  {(isCombo || isPhoto) && (
+                  {/* Real dynamic items */}
+                  {(!order.items || order.items.length === 0) ? (
                     <div className="p-drawer-item-card">
-                      <img src={photoPackageImg} alt="Chụp ảnh" className="p-drawer-item-img" />
+                      <img src={traditionalAoDaiImg} alt={order.productName} className="p-drawer-item-img" />
                       <div className="p-drawer-item-info">
-                        <div className="p-drawer-item-name">Gói chụp ngoại cảnh Cố Đô</div>
-                        <div className="p-drawer-item-specs" style={{ color: '#1E293B', fontWeight: 600 }}>
-                          Nhiếp ảnh gia: Trần Quang Huy (Sony A7IV, Lens 85mm f/1.4 GM)
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
-                          Thời gian chụp: 09:00 - 12:00 &nbsp;|&nbsp; Địa điểm: Đại Nội Huế
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px' }}>
-                          Số ảnh gốc: 80 - 100 ảnh &nbsp;|&nbsp; Ảnh chỉnh sửa: 20 ảnh chất lượng cao
-                        </div>
+                        <div className="p-drawer-item-name">{order.productName || 'Sản phẩm/Dịch vụ đặt lịch'}</div>
+                        <div className="p-drawer-item-specs">Số lượng: 1</div>
                       </div>
                       <div className="p-drawer-item-pricing">
-                        <div className="p-drawer-item-price">2.000.000đ</div>
-                        <div className="p-drawer-item-deposit">Cọc: 1.000.000đ</div>
-                        <span style={{ fontSize: '10.5px', fontWeight: 600, backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: '4px', display: 'inline-block', marginTop: '4px' }}>
-                          🕒 Đang thực hiện
-                        </span>
+                        <div className="p-drawer-item-price">{order.total}</div>
                       </div>
                     </div>
+                  ) : (
+                    order.items.map((item: any, idx: number) => {
+                      const isProd = item.itemType === 'PRODUCT';
+                      const itemName = item.name || item.productId?.name || item.photographyPackageId?.name || (isProd ? 'Áo dài truyền thống' : 'Gói chụp ảnh');
+                      const itemImg = item.productId?.images?.[0] || item.photographyPackageId?.images?.[0] || (isProd ? traditionalAoDaiImg : photoPackageImg);
+                      const linePrice = Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1));
+                      const depositAmt = Number(item.depositAmount || 0);
+
+                      return (
+                        <div key={item._id || idx} className="p-drawer-item-card" style={{ marginBottom: idx < order.items!.length - 1 ? '10px' : 0 }}>
+                          <img
+                            src={typeof itemImg === 'string' && itemImg.startsWith('http') ? itemImg : (isProd ? traditionalAoDaiImg : photoPackageImg)}
+                            alt={itemName}
+                            className="p-drawer-item-img"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = isProd ? traditionalAoDaiImg : photoPackageImg;
+                            }}
+                          />
+                          <div className="p-drawer-item-info">
+                            <div className="p-drawer-item-name">{itemName}</div>
+                            <div className="p-drawer-item-specs">
+                              {isProd ? (
+                                <>
+                                  {item.size ? `Size: ${item.size}` : ''}
+                                  {item.color ? ` • Màu: ${item.color}` : ''}
+                                  {` • SL: ${item.quantity || 1}`}
+                                </>
+                              ) : (
+                                <>
+                                  {item.shootDate ? `Lịch chụp: ${item.shootDate}` : 'Gói chụp ảnh chuyên nghiệp'}
+                                  {item.timeSlot ? ` • ${item.timeSlot}` : ''}
+                                  {` • SL: ${item.quantity || 1}`}
+                                </>
+                              )}
+                            </div>
+                            {isProd && item.rentalStartDate && item.rentalEndDate && (
+                              <div style={{ fontSize: '11px', color: '#475569', marginTop: '3px' }}>
+                                Thời gian thuê: <strong>{new Date(item.rentalStartDate).toLocaleDateString('vi-VN')}</strong> → <strong>{new Date(item.rentalEndDate).toLocaleDateString('vi-VN')}</strong>
+                              </div>
+                            )}
+                          </div>
+                          <div className="p-drawer-item-pricing">
+                            <div className="p-drawer-item-price">{linePrice.toLocaleString('vi-VN')}đ</div>
+                            {depositAmt > 0 && (
+                              <div className="p-drawer-item-deposit">Cọc: {depositAmt.toLocaleString('vi-VN')}đ</div>
+                            )}
+                            <span style={{
+                              fontSize: '10.5px',
+                              fontWeight: 600,
+                              backgroundColor: isOrderCompleted ? '#DCFCE7' : '#EFF6FF',
+                              color: isOrderCompleted ? '#15803D' : '#1D4ED8',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              display: 'inline-block',
+                              marginTop: '4px'
+                            }}>
+                              {isOrderCompleted ? '✓ Đã hoàn tất' : (item.rentalFulfillment?.status ? `Trạng thái: ${item.rentalFulfillment.status}` : 'Đang xử lý')}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -637,7 +1047,7 @@ export function OrderDetailDrawer({
                   <div className="p-card-header">
                     <h3 className="p-card-title">
                       <FileText size={16} color="#881337" />
-                      <span>Hồ sơ minh chứng (5 tài liệu &amp; ảnh)</span>
+                      <span>Hồ sơ minh chứng ({evidenceItems.length + 1} tài liệu &amp; ảnh)</span>
                     </h3>
                     <button
                       type="button"
@@ -650,41 +1060,51 @@ export function OrderDetailDrawer({
                   </div>
 
                   <div className="p-quick-doc-list">
-                    <div
-                      className="p-quick-doc-item"
-                      onClick={() => setSelectedEvidenceImage(traditionalAoDaiImg)}
-                    >
-                      <div className="p-quick-doc-left">
-                        <div className="p-quick-doc-thumb">
-                          <img src={traditionalAoDaiImg} alt="Áo dài" />
-                        </div>
-                        <div className="p-quick-doc-info">
-                          <span className="p-quick-doc-title">Ảnh kiểm tra áo dài trước giao</span>
-                          <span className="p-quick-doc-meta">Hình ảnh rõ nét, đầy đủ phụ kiện mấn • Bấm xem</span>
-                        </div>
+                    {evidenceItems.length === 0 ? (
+                      <div style={{ padding: '14px', textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '12px', color: '#64748B', display: 'block' }}>
+                          Chưa có ảnh bàn giao hoặc kiểm tra đồ được tải lên.
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                          Ảnh sẽ tự động hiển thị tại đây khi hoàn tất xác nhận giao nhận hoặc khi khách trả đồ.
+                        </span>
                       </div>
-                      <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#059669', background: '#ECFDF5', padding: '2px 8px', borderRadius: '4px' }}>
-                        Đã kiểm tra (100%)
-                      </span>
-                    </div>
-
-                    <div
-                      className="p-quick-doc-item"
-                      onClick={() => setSelectedEvidenceImage(photoPackageImg)}
-                    >
-                      <div className="p-quick-doc-left">
-                        <div className="p-quick-doc-thumb">
-                          <img src={photoPackageImg} alt="Buổi chụp" />
+                    ) : (
+                      evidenceItems.map((doc) => (
+                        <div
+                          key={doc.id}
+                          className="p-quick-doc-item"
+                          onClick={() => {
+                            if (doc.imageUrl) setSelectedEvidenceImage(doc.imageUrl);
+                          }}
+                        >
+                          <div className="p-quick-doc-left">
+                            <div className="p-quick-doc-thumb" style={{ overflow: 'hidden', position: 'relative', width: '38px', height: '38px', borderRadius: '6px', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {doc.fileId && doc.itemId ? (
+                                <RentalEvidenceImage
+                                  bookingId={order._id}
+                                  itemId={doc.itemId}
+                                  fileId={doc.fileId}
+                                  alt={doc.title}
+                                  onPreview={(url) => setSelectedEvidenceImage(url)}
+                                />
+                              ) : doc.imageUrl ? (
+                                <img src={doc.imageUrl} alt={doc.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <FileText size={16} color="#475569" />
+                              )}
+                            </div>
+                            <div className="p-quick-doc-info">
+                              <span className="p-quick-doc-title">{doc.title}</span>
+                              <span className="p-quick-doc-meta">{doc.meta}</span>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: '10.5px', fontWeight: 600, color: doc.statusColor, background: doc.statusBg, padding: '2px 8px', borderRadius: '4px' }}>
+                            {doc.statusText}
+                          </span>
                         </div>
-                        <div className="p-quick-doc-info">
-                          <span className="p-quick-doc-title">Ảnh check-in hiện trường buổi chụp</span>
-                          <span className="p-quick-doc-meta">Đại Nội Huế, thời tiết nắng đẹp • Bấm xem</span>
-                        </div>
-                      </div>
-                      <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#2563EB', background: '#EFF6FF', padding: '2px 8px', borderRadius: '4px' }}>
-                        GPS Định vị
-                      </span>
-                    </div>
+                      ))
+                    )}
 
                     <div className="p-quick-doc-item">
                       <div className="p-quick-doc-left">
@@ -692,12 +1112,12 @@ export function OrderDetailDrawer({
                           <FileText size={16} />
                         </div>
                         <div className="p-quick-doc-info">
-                          <span className="p-quick-doc-title">Biên bản bàn giao trang phục</span>
-                          <span className="p-quick-doc-meta">Mã xác nhận bàn giao #BB-37AB40</span>
+                          <span className="p-quick-doc-title">Biên bản điện tử đơn đặt lịch</span>
+                          <span className="p-quick-doc-meta">Mã xác nhận đơn {order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}</span>
                         </div>
                       </div>
                       <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#059669', background: '#ECFDF5', padding: '2px 8px', borderRadius: '4px' }}>
-                        Đã ký nhận
+                        Đã xác thực
                       </span>
                     </div>
 
@@ -726,28 +1146,45 @@ export function OrderDetailDrawer({
                       <span>Thông tin thanh toán &amp; Ký quỹ (Escrow)</span>
                     </h3>
                     <span style={{ fontSize: '11px', fontWeight: 700, color: '#059669', background: '#ECFDF5', padding: '2px 8px', borderRadius: '6px' }}>
-                      ✓ Đã thanh toán Escrow
+                      {order.rawStatus === 'PENDING' || order.rawStatus === 'PENDING_PAYMENT' ? 'Chờ thanh toán cọc' : '✓ Đã thanh toán Escrow'}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                      <span>Tổng giá trị đơn hàng:</span>
-                      <strong style={{ color: '#0F172A', fontSize: '14px' }}>{order.total || '2.800.000đ'}</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                      <span>Đặt cọc thanh toán trước (50%):</span>
-                      <span style={{ fontWeight: 600, color: '#15803D' }}>1.400.000đ (Đã thanh toán)</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                      <span>Tiền cọc tài sản trang phục:</span>
-                      <span style={{ fontWeight: 600, color: '#0284C7' }}>1.000.000đ (Đang tạm giữ)</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: '8px', fontWeight: 700 }}>
-                      <span style={{ color: '#0F172A' }}>Còn lại thanh toán tại chỗ:</span>
-                      <span style={{ color: '#D97706', fontSize: '14px' }}>1.400.000đ</span>
-                    </div>
-                  </div>
+                  {(() => {
+                    const grandTotal = order.totalAmount || Number((order.total || '').replace(/[^\d]/g, '')) || 0;
+                    const depositPaid = order.pricingSummary?.depositAmount || Math.round(grandTotal * 0.5);
+                    const assetDeposit = order.depositTotal || order.pricingSummary?.depositTotal || 0;
+                    const remaining = Math.max(0, grandTotal - depositPaid);
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                          <span>Tổng giá trị đơn hàng:</span>
+                          <strong style={{ color: '#0F172A', fontSize: '14px' }}>{grandTotal.toLocaleString('vi-VN')}đ</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                          <span>Đặt cọc dịch vụ trước:</span>
+                          <span style={{ fontWeight: 600, color: '#15803D' }}>
+                            {depositPaid.toLocaleString('vi-VN')}đ {order.rawStatus !== 'PENDING' && order.rawStatus !== 'PENDING_PAYMENT' ? '(Đã thanh toán)' : '(Chờ thanh toán)'}
+                          </span>
+                        </div>
+                        {assetDeposit > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                            <span>Tiền cọc tài sản trang phục:</span>
+                            <span style={{ fontWeight: 600, color: '#0284C7' }}>
+                              {assetDeposit.toLocaleString('vi-VN')}đ {isOrderCompleted ? '(Đã tất toán)' : '(Đang tạm giữ)'}
+                            </span>
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: '8px', fontWeight: 700 }}>
+                          <span style={{ color: '#0F172A' }}>Còn lại cần thanh toán:</span>
+                          <span style={{ color: '#D97706', fontSize: '14px' }}>
+                            {isOrderCompleted ? '0đ (Đã thanh toán đủ)' : `${remaining.toLocaleString('vi-VN')}đ`}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Card 5: Master Stepper Timeline */}
@@ -1028,75 +1465,35 @@ export function OrderDetailDrawer({
                 <span>Lịch trình chi tiết các mốc thực hiện &amp; Check-in</span>
               </div>
 
-              {[
-                {
-                  time: '20/07/2024 • 14:32',
-                  title: 'Khách hàng đặt lịch & Thanh toán cọc giữ chỗ',
-                  desc: 'Hệ thống xác nhận đã nhận cọc 1.400.000đ qua VibeHue Escrow QR.',
-                  icon: CheckCircle,
-                  color: '#10B981',
-                  bg: '#ECFDF5',
-                },
-                {
-                  time: '27/07/2024 • 07:30',
-                  title: 'Chuẩn bị trang phục tại cửa hàng',
-                  desc: 'Nhân viên hoàn tất kiểm tra Áo dài Nhật Bình (Mã #AD-NB01, Size M), ủi phẳng và xếp phụ kiện.',
-                  icon: Shirt,
-                  color: '#15803D',
-                  bg: '#F0FDF4',
-                },
-                {
-                  time: '27/07/2024 • 08:00',
-                  title: 'Khách nhận áo dài & Bàn giao đồ',
-                  desc: 'Khách hàng thử áo tại cửa hàng và ký nhận tình trạng trang phục hoàn hảo.',
-                  icon: Package,
-                  color: '#2563EB',
-                  bg: '#EFF6FF',
-                },
-                {
-                  time: '27/07/2024 • 09:00 - 12:00',
-                  title: 'Buổi chụp ảnh ngoại cảnh Cố Đô Huế',
-                  desc: 'Địa điểm: Đại Nội Huế (Ngọ Môn, Điện Thái Hòa). Nhiếp ảnh gia: Trần Quang Huy.',
-                  icon: Camera,
-                  color: '#BE123C',
-                  bg: '#FFF1F2',
-                },
-                {
-                  time: '28/07/2024 • 12:00 (Hạn chót)',
-                  title: 'Bàn giao bộ ảnh gốc qua Google Drive',
-                  desc: 'Dự kiến từ 80 - 100 file ảnh gốc chất lượng cao cho khách chọn 20 ảnh chỉnh sửa.',
-                  icon: Clock,
-                  color: '#D97706',
-                  bg: '#FFFBEB',
-                },
-                {
-                  time: '29/07/2024 • 18:00 (Hạn chót)',
-                  title: 'Khách hàng hoàn trả áo dài & Kiểm tra hoàn cọc',
-                  desc: 'Kiểm tra áo không rách, không ố bẩn nặng để hoàn trả cọc 1.000.000đ.',
-                  icon: Shirt,
-                  color: '#6D28D9',
-                  bg: '#F5F3FF',
-                },
-                {
-                  time: '02/08/2024 • 17:00 (Hạn chót)',
-                  title: 'Bàn giao 20 ảnh đã chỉnh sửa & Hoàn tất đơn',
-                  desc: 'Khách hàng nghiệm thu ảnh và hệ thống giải ngân doanh thu cho nhà cung cấp.',
-                  icon: CheckCircle,
-                  color: '#10B981',
-                  bg: '#ECFDF5',
-                },
-              ].map((milestone, idx) => {
+              {dynamicMilestones.map((milestone, idx) => {
                 const IconComp = milestone.icon;
                 return (
-                  <div key={idx} className="p-schedule-milestone-card">
-                    <div className="p-milestone-icon-wrap" style={{ backgroundColor: milestone.bg, color: milestone.color }}>
-                      <IconComp size={18} />
+                  <div key={idx} className="p-schedule-milestone-card" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flex: 1 }}>
+                      <div className="p-milestone-icon-wrap" style={{ backgroundColor: milestone.bg, color: milestone.color }}>
+                        <IconComp size={18} />
+                      </div>
+                      <div className="p-milestone-content">
+                        <div className="p-milestone-time">{milestone.time}</div>
+                        <div className="p-milestone-title">{milestone.title}</div>
+                        <div className="p-milestone-desc">{milestone.desc}</div>
+                      </div>
                     </div>
-                    <div className="p-milestone-content">
-                      <div className="p-milestone-time">{milestone.time}</div>
-                      <div className="p-milestone-title">{milestone.title}</div>
-                      <div className="p-milestone-desc">{milestone.desc}</div>
-                    </div>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: milestone.badgeColor,
+                        backgroundColor: milestone.badgeBg,
+                        padding: '3px 10px',
+                        borderRadius: '6px',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        alignSelf: 'flex-start',
+                      }}
+                    >
+                      {milestone.badgeText}
+                    </span>
                   </div>
                 );
               })}
@@ -1118,65 +1515,89 @@ export function OrderDetailDrawer({
                   </span>
                 </div>
 
-                <div className="p-payment-row">
-                  <span>Thuê Áo dài Nhật Bình Trắng Ngọc (3 ngày)</span>
-                  <strong>800.000đ</strong>
-                </div>
-                <div className="p-payment-row">
-                  <span>Gói chụp ngoại cảnh Cố Đô (1 buổi 3 giờ)</span>
-                  <strong>2.000.000đ</strong>
-                </div>
-                <div className="p-payment-row">
-                  <span>Tiền cọc tài sản trang phục (Áo dài)</span>
-                  <strong>1.000.000đ</strong>
-                </div>
+                {order.items && order.items.length > 0 ? (
+                  order.items.map((item: any, idx: number) => {
+                    const itemName = item.name || item.productId?.name || item.photographyPackageId?.name || (item.itemType === 'PRODUCT' ? 'Áo dài' : 'Gói chụp ảnh');
+                    const linePrice = Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1));
+                    return (
+                      <div key={item._id || idx} className="p-payment-row">
+                        <span>{itemName} (x{item.quantity || 1})</span>
+                        <strong>{linePrice.toLocaleString('vi-VN')}đ</strong>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-payment-row">
+                    <span>{order.productName || 'Dịch vụ'}</span>
+                    <strong>{order.total}</strong>
+                  </div>
+                )}
+
+                {Boolean(order.depositTotal && order.depositTotal > 0) && (
+                  <div className="p-payment-row">
+                    <span>Tiền cọc tài sản trang phục (Áo dài)</span>
+                    <strong>{Number(order.depositTotal).toLocaleString('vi-VN')}đ</strong>
+                  </div>
+                )}
 
                 <div className="p-payment-row total">
                   <span>Tổng giá trị đơn hàng:</span>
                   <span style={{ color: '#BE123C', fontSize: '16px' }}>
-                    {order.total || '2.800.000đ'}
+                    {order.total || `${(order.totalAmount || 0).toLocaleString('vi-VN')}đ`}
                   </span>
                 </div>
               </div>
 
-              <div className="p-payment-summary-box">
-                <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
-                  Trạng thái dòng tiền &amp; Ký quỹ Escrow
-                </span>
+              {(() => {
+                const grandTotal = order.totalAmount || Number((order.total || '').replace(/[^\d]/g, '')) || 0;
+                const depositPaid = order.pricingSummary?.depositAmount || Math.round(grandTotal * 0.5);
+                const assetDeposit = order.depositTotal || order.pricingSummary?.depositTotal || 0;
+                const remaining = Math.max(0, grandTotal - depositPaid);
 
-                <div className="p-payment-row">
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <CheckCircle size={14} color="#10B981" />
-                    <span>Tiền cọc dịch vụ đã thu (50%)</span>
-                  </span>
-                  <strong style={{ color: '#10B981' }}>1.400.000đ (Đã thu qua Escrow)</strong>
-                </div>
+                return (
+                  <div className="p-payment-summary-box">
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
+                      Trạng thái dòng tiền &amp; Ký quỹ Escrow
+                    </span>
 
-                <div className="p-payment-row">
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <CheckCircle size={14} color="#10B981" />
-                    <span>Tiền cọc tài sản áo dài đã thu</span>
-                  </span>
-                  <strong style={{ color: '#10B981' }}>1.000.000đ (Đang tạm giữ bảo đảm)</strong>
-                </div>
+                    <div className="p-payment-row">
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CheckCircle size={14} color="#10B981" />
+                        <span>Tiền cọc dịch vụ đã thu</span>
+                      </span>
+                      <strong style={{ color: '#10B981' }}>
+                        {depositPaid.toLocaleString('vi-VN')}đ ({order.rawStatus !== 'PENDING' && order.rawStatus !== 'PENDING_PAYMENT' ? 'Đã thu qua Escrow' : 'Chờ thanh toán'})
+                      </strong>
+                    </div>
 
-                <div className="p-payment-row">
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Hourglass size={14} color="#D97706" />
-                    <span>Số tiền còn lại cần thu khi gặp</span>
-                  </span>
-                  <strong style={{ color: '#D97706' }}>1.400.000đ (Thu khi chụp)</strong>
-                </div>
+                    {assetDeposit > 0 && (
+                      <div className="p-payment-row">
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CheckCircle size={14} color="#10B981" />
+                          <span>Tiền cọc tài sản trang phục</span>
+                        </span>
+                        <strong style={{ color: '#0284C7' }}>
+                          {assetDeposit.toLocaleString('vi-VN')}đ ({isOrderCompleted ? 'Đã tất toán' : 'Đang tạm giữ bảo đảm'})
+                        </strong>
+                      </div>
+                    )}
 
-                <div className="p-payment-row" style={{ borderTop: '1px dashed #E2E8F0', paddingTop: '8px' }}>
-                  <span style={{ color: '#64748B' }}>Dự kiến hoàn trả cọc áo dài:</span>
-                  <strong style={{ color: '#2563EB' }}>1.000.000đ (Sau kiểm tra áo)</strong>
-                </div>
+                    <div className="p-payment-row">
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Hourglass size={14} color="#D97706" />
+                        <span>Số tiền còn lại cần thu</span>
+                      </span>
+                      <strong style={{ color: '#D97706' }}>
+                        {isOrderCompleted ? '0đ (Đã thanh toán đủ)' : `${remaining.toLocaleString('vi-VN')}đ (Thanh toán tại chỗ)`}
+                      </strong>
+                    </div>
 
-                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
-                  Cổng ký quỹ: <strong>VibeHue Escrow Banking</strong> &nbsp;|&nbsp; Mã giao dịch: <strong>#TXN-200724881</strong>
-                </div>
-              </div>
+                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
+                      Cổng ký quỹ: <strong>VibeHue Escrow Banking</strong> &nbsp;|&nbsp; Mã đơn: <strong>{order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}</strong>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button
@@ -1257,50 +1678,52 @@ export function OrderDetailDrawer({
               )}
 
               <div className="p-evidence-grid">
-                {[
-                  {
-                    title: 'Áo dài trước khi giao khách',
-                    time: '27/07 07:35',
-                    src: traditionalAoDaiImg,
-                    badge: 'Đã kiểm duyệt',
-                    badgeColor: '#10B981',
-                    badgeBg: '#ECFDF5',
-                  },
-                  {
-                    title: 'Check-in buổi chụp tại Ngọ Môn',
-                    time: '27/07 09:10',
-                    src: photoPackageImg,
-                    badge: 'Hiện trường',
-                    badgeColor: '#2563EB',
-                    badgeBg: '#EFF6FF',
-                  },
-                  {
-                    title: 'Kiểm tra áo khi khách trả',
-                    time: '29/07 18:15',
-                    src: traditionalAoDaiImg,
-                    badge: 'Đang chờ',
-                    badgeColor: '#D97706',
-                    badgeBg: '#FFFBEB',
-                  },
-                ].map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="p-evidence-card"
-                    onClick={() => setSelectedEvidenceImage(item.src)}
-                  >
-                    <div className="p-evidence-thumb-wrap">
-                      <img src={item.src} alt={item.title} />
-                      <span
-                        className="p-evidence-badge"
-                        style={{ backgroundColor: item.badgeBg, color: item.badgeColor }}
-                      >
-                        {item.badge}
-                      </span>
+                {evidenceItems.length === 0 ? (
+                  <div style={{ gridColumn: '1 / -1', padding: '36px', textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px dashed #CBD5E1' }}>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Chưa có ảnh minh chứng được tải lên
                     </div>
-                    <div className="p-evidence-title">{item.title}</div>
-                    <div className="p-evidence-meta">{item.time} • Bấm để xem ảnh phóng to</div>
+                    <div style={{ fontSize: '12px', color: '#94A3B8' }}>
+                      Các ảnh bàn giao trước giao, ảnh nhận lại sau trả hoặc ảnh báo hỏng đồ sẽ tự động xuất hiện ở đây.
+                    </div>
                   </div>
-                ))}
+                ) : (
+                  evidenceItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-evidence-card"
+                      onClick={() => {
+                        if (item.imageUrl) setSelectedEvidenceImage(item.imageUrl);
+                      }}
+                    >
+                      <div className="p-evidence-thumb-wrap" style={{ position: 'relative', width: '100%', height: '150px', background: '#F1F5F9', overflow: 'hidden' }}>
+                        {item.fileId && item.itemId ? (
+                          <RentalEvidenceImage
+                            bookingId={order._id}
+                            itemId={item.itemId}
+                            fileId={item.fileId}
+                            alt={item.title}
+                            onPreview={(url) => setSelectedEvidenceImage(url)}
+                          />
+                        ) : item.imageUrl ? (
+                          <img src={item.imageUrl} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                            <FileText size={32} color="#94A3B8" />
+                          </div>
+                        )}
+                        <span
+                          className="p-evidence-badge"
+                          style={{ backgroundColor: item.statusBg, color: item.statusColor }}
+                        >
+                          {item.statusText}
+                        </span>
+                      </div>
+                      <div className="p-evidence-title">{item.title}</div>
+                      <div className="p-evidence-meta">{item.meta}</div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

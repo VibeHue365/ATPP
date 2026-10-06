@@ -9306,3 +9306,89 @@ button {
   }
 }
 
+/* ==========================================================================
+   AI Assistant Floating Widget & Luxury Subtle Glow (Modern Minimalist Luxury)
+   ========================================================================== */
+.lume-ai-btn-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lume-ai-pulse-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(181, 43, 71, 0.35);
+  animation: lume-ai-breathe 3.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  pointer-events: none;
+}
+
+@keyframes lume-ai-breathe {
+  0% {
+    transform: scale(0.96);
+    opacity: 0.6;
+    box-shadow: 0 0 0 0 rgba(181, 43, 71, 0.25);
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0;
+    box-shadow: 0 0 16px 4px rgba(181, 43, 71, 0);
+  }
+  100% {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+}
+
+.lume-ai-toggle-btn {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  will-change: transform, box-shadow;
+}
+
+.lume-ai-toggle-btn:hover {
+  transform: translateY(-2px) scale(1.06) !important;
+  box-shadow: 0 14px 36px rgba(181, 43, 71, 0.22), 0 3px 10px rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(181, 43, 71, 0.5) !important;
+}
+
+.lume-ai-toggle-btn:active {
+  transform: scale(0.94) !important;
+  transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.lume-ai-sparkle-icon {
+  animation: lume-sparkle-twinkle 3.6s ease-in-out infinite;
+}
+
+@keyframes lume-sparkle-twinkle {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+    filter: drop-shadow(0 0 3px rgba(181, 43, 71, 0.4));
+  }
+  50% {
+    transform: rotate(12deg) scale(1.12);
+    filter: drop-shadow(0 0 8px rgba(181, 43, 71, 0.7));
+  }
+}
+
+.lume-chat-popup {
+  animation: lume-chat-pop-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: bottom right;
+}
+
+@keyframes lume-chat-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.94) translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+
+

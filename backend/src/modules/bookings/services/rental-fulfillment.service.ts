@@ -17,7 +17,7 @@ interface TransitionInput { itemId: string; actor: RentalActorSnapshot; note?: s
 
 @Injectable()
 export class RentalFulfillmentService {
-  constructor(@InjectModel(BookingItem.name) private readonly bookingItemModel: Model<BookingItem>) {}
+  constructor(@InjectModel(BookingItem.name) private readonly bookingItemModel: Model<BookingItem>) { }
 
   async markReady(input: TransitionInput) {
     return this.transition({ ...input, expectedStatus: RentalFulfillmentStatus.Pending, nextStatus: RentalFulfillmentStatus.ReadyForPickup, action: 'MARKED_READY', set: { 'rentalFulfillment.readyAt': new Date() }, extraFilter: { 'rentalFulfillment.inventoryStatus': RentalInventoryStatus.Reserved } });
@@ -66,7 +66,7 @@ export class RentalFulfillmentService {
     const charge = { amount: Math.round(input.amount), status: 'PROPOSED', reason: input.reason.trim(), proposedBy: input.actor, proposedAt: now };
     const updated = await this.bookingItemModel.findOneAndUpdate({
       _id: itemId, itemType: BookingItemType.Product, 'rentalFulfillment.status': RentalFulfillmentStatus.Returned,
-      'rentalFulfillment.depositSettlementStatus': { $in: [DepositSettlementStatus.PendingSettlement, DepositSettlementStatus.FullyReleased] },
+      'rentalFulfillment.depositSettlementStatus': { $in: [DepositSettlementStatus.PendingSettlement, DepositSettlementStatus.FullyReleased, DepositSettlementStatus.Held, null] },
       [`rentalFulfillment.charges.${input.chargeType}`]: { $exists: false },
       depositAmount: { $gte: charge.amount },
     }, {
@@ -133,7 +133,7 @@ export class RentalFulfillmentService {
     if (!finalStatus || !allowedInventoryStatuses.includes(finalStatus)) {
       finalStatus = RentalInventoryStatus.Available;
     }
-    return this.transition({ ...input, expectedStatus: RentalFulfillmentStatus.Returned, nextStatus: RentalFulfillmentStatus.Completed, action: 'MARKED_COMPLETED', set: { 'rentalFulfillment.completedAt': new Date(), 'rentalFulfillment.inventoryStatus': finalStatus }, extraFilter: { 'rentalFulfillment.issueStatus': { $in: [RentalIssueStatus.None, RentalIssueStatus.Resolved] }, 'rentalFulfillment.depositSettlementStatus': { $in: [DepositSettlementStatus.FullyReleased, DepositSettlementStatus.PartiallyDeducted, DepositSettlementStatus.FullyDeducted] } } });
+    return this.transition({ ...input, expectedStatus: RentalFulfillmentStatus.Returned, nextStatus: RentalFulfillmentStatus.Completed, action: 'MARKED_COMPLETED', set: { 'rentalFulfillment.completedAt': new Date(), 'rentalFulfillment.inventoryStatus': finalStatus }, extraFilter: { 'rentalFulfillment.issueStatus': { $in: [RentalIssueStatus.None, RentalIssueStatus.Resolved, null] }, 'rentalFulfillment.depositSettlementStatus': { $in: [DepositSettlementStatus.FullyReleased, DepositSettlementStatus.PartiallyDeducted, DepositSettlementStatus.FullyDeducted, DepositSettlementStatus.Held, null] } } });
   }
 
   private async transition(input: TransitionInput & { expectedStatus: RentalFulfillmentStatus; nextStatus: RentalFulfillmentStatus; action: RentalFulfillmentAction; set: Record<string, unknown>; extraFilter?: Record<string, unknown> }) {

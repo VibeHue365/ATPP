@@ -6,7 +6,7 @@ import { ROUTES } from '../../../config/routes';
 export const PromotionalBannersSection: React.FC = () => {
   return (
     <section className="lume-promotions w-full">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch lume-reveal-grid">
         
         {/* LEFT BANNER: Light / Soft Surface */}
         <div 

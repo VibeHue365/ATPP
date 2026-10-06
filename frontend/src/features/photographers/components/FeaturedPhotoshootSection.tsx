@@ -6,6 +6,7 @@ import { SectionHeader } from '../../../components/common/SectionHeader';
 import { photographersApi } from '../../photographers/api/photographers.api';
 import { FEATURED_PHOTOSHOOT_PACKAGES_FIXTURE, type PhotoshootPackageItem } from '../data/photoshoot-package.fixture';
 import { PhotoshootPackageCard } from './PhotoshootPackageCard';
+import { PhotoshootCardSkeleton } from './PhotoshootCardSkeleton';
 
 export const FeaturedPhotoshootSection: React.FC = () => {
   const [items, setItems] = useState<PhotoshootPackageItem[]>(FEATURED_PHOTOSHOOT_PACKAGES_FIXTURE);
@@ -85,11 +86,13 @@ export const FeaturedPhotoshootSection: React.FC = () => {
 
       {/* Product Grid */}
       {loading && items.length === 0 ? (
-        <div className="py-12 text-center text-xs font-semibold text-stone-500">
-          Đang tải các gói chụp nổi bật...
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <PhotoshootCardSkeleton key={`photo-skel-${idx}`} />
+          ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 lume-reveal-grid">
           {items.map((item, index) => (
             <PhotoshootPackageCard key={item.id || `card-${index}`} item={item} />
           ))}

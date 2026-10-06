@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check, Clock, Circle, Image as ImageIcon } from 'lucide-react';
 import { ImageWithFallback } from '../../../../shared/media/ImageWithFallback';
+import { RentalEvidenceImage } from '../../../rentals/components/RentalEvidenceImage';
 
 interface RentalTimelineAndPhotosProps {
   timelineSteps?: {
@@ -14,7 +15,10 @@ interface RentalTimelineAndPhotosProps {
     id: string;
     title: string;
     timestamp: string;
-    image: string;
+    image?: string;
+    fileId?: string;
+    bookingId?: string;
+    itemId?: string;
   }[];
   onViewPhoto?: (photo: any) => void;
 }
@@ -200,16 +204,27 @@ export const RentalTimelineAndPhotos: React.FC<RentalTimelineAndPhotosProps> = (
                   position: 'relative'
                 }}
               >
-                <ImageWithFallback
-                  src={photo.image}
-                  alt={photo.title}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  fallback={
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8C827A' }}>
-                      <ImageIcon size={24} />
-                    </div>
-                  }
-                />
+                {photo.fileId && photo.bookingId && photo.itemId ? (
+                  <RentalEvidenceImage
+                    bookingId={photo.bookingId}
+                    itemId={photo.itemId}
+                    fileId={photo.fileId}
+                    alt={photo.title}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    asLink={true}
+                  />
+                ) : (
+                  <ImageWithFallback
+                    src={photo.image || ''}
+                    alt={photo.title}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    fallback={
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8C827A' }}>
+                        <ImageIcon size={24} />
+                      </div>
+                    }
+                  />
+                )}
 
                 <div
                   style={{

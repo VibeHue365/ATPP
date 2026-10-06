@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Res,
+  StreamableFile,
   UnsupportedMediaTypeException,
   UploadedFiles,
   UseGuards,
@@ -111,7 +112,7 @@ export class RentalFulfillmentController {
     @Param('itemId') itemId: string,
     @Param('fileId') fileId: string,
     @Res({ passthrough: true }) response: Response,
-  ) {
+  ): Promise<StreamableFile> {
     const evidence = await this.workflow.getEvidenceForViewing(bookingId, itemId, fileId, user);
     const file = await this.privateStorage.readPrivateFile(evidence.bucket, evidence.storageKey);
     const extension = evidence.mimeType === 'image/png' ? 'png' : evidence.mimeType === 'image/webp' ? 'webp' : 'jpg';
@@ -119,7 +120,7 @@ export class RentalFulfillmentController {
     response.setHeader('Content-Disposition', `inline; filename="rental-evidence.${extension}"`);
     response.setHeader('Cache-Control', 'private, no-store, max-age=0');
     response.setHeader('X-Content-Type-Options', 'nosniff');
-    return file;
+    return new StreamableFile(file);
   }
 
   private hasValidImageSignature(file: Express.Multer.File): boolean {

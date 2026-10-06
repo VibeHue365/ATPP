@@ -517,7 +517,12 @@ export function CalendarPanel({
                     {isSelectedDateBlocked ? (
                       <span className="cal-slot-chip blocked">
                         <CalendarOff size={13} />
-                        <span>Ngày này đã bị chặn lịch nghỉ</span>
+                        <span>
+                          Ngày này đã bị chặn lịch nghỉ
+                          {blockedDatesMap.get(selectedDate)?.reason
+                            ? ` (${blockedDatesMap.get(selectedDate).reason})`
+                            : ''}
+                        </span>
                       </span>
                     ) : selectedDateSchedule && Array.isArray(selectedDateSchedule.workingHours) && selectedDateSchedule.workingHours.length > 0 ? (
                       selectedDateSchedule.workingHours.map((slot: any, idx: number) => (
@@ -979,6 +984,11 @@ export function CalendarPanel({
                                 ? `Chặn ca: ${sched.customSlots.map((c: any) => c.timeSlot).join(', ')}`
                                 : 'Chặn toàn bộ cả ngày'}
                             </div>
+                            {sched.reason && (
+                              <div style={{ fontSize: '12.5px', color: '#6B7280', marginTop: '3px', fontStyle: 'italic' }}>
+                                Lý do: {sched.reason}
+                              </div>
+                            )}
                           </div>
                           {handleUnblockDate && (
                             <button
@@ -1115,6 +1125,11 @@ export function CalendarPanel({
                                 ? `Chặn ca: ${sched.customSlots.map((c: any) => c.timeSlot).join(', ')}`
                                 : 'Chặn toàn bộ cả ngày'}
                             </div>
+                            {sched.reason && (
+                              <div style={{ fontSize: '12.5px', color: '#6B7280', marginTop: '3px', fontStyle: 'italic' }}>
+                                Lý do: {sched.reason}
+                              </div>
+                            )}
                           </div>
                           {handleUnblockDate && (
                             <button

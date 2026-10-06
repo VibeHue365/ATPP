@@ -93,8 +93,10 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     DEPOSIT_PAID: isPhoto ? 'ĐÃ ĐẶT CỌC' : 'ĐÃ ĐẶT CỌC',
     PENDING_PAYMENT: 'CHỜ THANH TOÁN',
     PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
+    READY_FOR_PICKUP: 'CHỜ NHẬN ĐỒ',
     PICKED_UP: isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ',
     IN_PROGRESS: isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ',
+    RENTING: isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ',
     AWAITING_REVIEW: 'CHỜ DUYỆT ẢNH',
     RETURN_PENDING: 'CHỜ TRẢ ĐỒ',
     RETURNED: isPhoto ? 'HOÀN THÀNH' : 'ĐÃ TRẢ ĐỒ',
@@ -102,7 +104,8 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     CANCELLED: 'ĐÃ HỦY'
   };
 
-  const currentStatusLabel = statusLabels[booking?.status] || booking?.status || 'ĐANG THUÊ';
+  const currentStatus = booking?.status || item?.rentalFulfillment?.status || 'CONFIRMED';
+  const currentStatusLabel = statusLabels[currentStatus] || currentStatus || (isPhoto ? 'SẮP CHỤP' : 'SẮP NHẬN');
 
   // Financial values
   const rentalPrice = (item.unitPrice || 0) * (item.quantity || 1) || booking?.pricingSummary?.subTotal || 0;
@@ -233,40 +236,101 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
   }[] = [
     {
       id: 'step-1',
-      title: 'Sẵn sàng nhận áo',
-      description: 'Áo dài được kiểm tra và chuẩn bị tại cửa hàng',
+      title: 'Shop chuẩn bị áo',
+      description: ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+        ? 'Đã chuẩn bị xong và kiểm tra chất lượng tại cửa hàng'
+        : 'Cửa hàng đang kiểm tra và chuẩn bị áo dài',
       timestamp: readyTimeStr,
-      status: ['PICKUP_PENDING', 'PICKED_UP', 'IN_PROGRESS', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(booking?.status) ? 'COMPLETED' : 'ACTIVE'
+      status: ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+        ? 'COMPLETED'
+        : 'ACTIVE'
     },
     {
       id: 'step-2',
-      title: 'Đã nhận áo',
-      description: `Nhận áo tại ${storeName}`,
+      title: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+        ? 'Đã nhận áo'
+        : 'Chờ nhận áo tại cửa hàng',
+      description: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+        ? `Đã nhận áo tại ${storeName}`
+        : `Vui lòng đến ${storeName} để nhận áo theo lịch hẹn`,
       timestamp: rawPickup ? new Date(rawPickup).toLocaleDateString('vi-VN') + ' • ' + pickupTimeStr : undefined,
-      status: ['PICKED_UP', 'IN_PROGRESS', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(booking?.status) ? 'COMPLETED' : booking?.status === 'PICKUP_PENDING' ? 'ACTIVE' : 'PENDING'
+      status: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+        ? 'COMPLETED'
+        : ['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus)
+        ? 'ACTIVE'
+        : 'PENDING'
     },
     {
       id: 'step-3',
-      title: 'Đang thuê',
-      description: 'Thời gian thuê đang diễn ra',
-      status: ['RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(booking?.status) ? 'COMPLETED' : ['PICKED_UP', 'IN_PROGRESS'].includes(booking?.status) ? 'ACTIVE' : 'PENDING'
+      title: 'Khách đang thuê',
+      description: ['RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+        ? 'Đã hoàn tất thời gian trải nghiệm trang phục'
+        : ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus)
+        ? 'Thời gian thuê đang diễn ra theo hợp đồng'
+        : 'Chưa bắt đầu thời gian thuê',
+      status: ['RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+        ? 'COMPLETED'
+        : ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus)
+        ? 'ACTIVE'
+        : 'PENDING'
     },
     {
       id: 'step-4',
-      title: 'Trả áo',
-      description: ['RETURNED', 'COMPLETED'].includes(booking?.status) ? 'Đã hoàn tất kiểm tra và hoàn cọc' : 'Chưa hoàn thành',
-      timestamp: ['RETURNED', 'COMPLETED'].includes(booking?.status) && rawReturn ? new Date(rawReturn).toLocaleDateString('vi-VN') : undefined,
-      status: ['RETURNED', 'COMPLETED'].includes(booking?.status) ? 'COMPLETED' : booking?.status === 'RETURN_PENDING' ? 'ACTIVE' : 'PENDING'
+      title: 'Trả áo & Hoàn cọc',
+      description: ['RETURNED', 'COMPLETED'].includes(currentStatus)
+        ? 'Đã hoàn tất kiểm tra và hoàn cọc'
+        : currentStatus === 'RETURN_PENDING'
+        ? 'Đang kiểm tra áo và đối soát hoàn cọc'
+        : `Trả áo tại ${storeAddress} để nhận lại tiền cọc`,
+      timestamp: ['RETURNED', 'COMPLETED'].includes(currentStatus) && rawReturn ? new Date(rawReturn).toLocaleDateString('vi-VN') : undefined,
+      status: ['RETURNED', 'COMPLETED'].includes(currentStatus)
+        ? 'COMPLETED'
+        : currentStatus === 'RETURN_PENDING'
+        ? 'ACTIVE'
+        : 'PENDING'
     }
   ];
 
   // Photos
-  const photos = (booking?.handoverPhotos || []).map((imgUrl: string, pIdx: number) => ({
-    id: `photo-${pIdx}`,
-    title: `Ảnh bàn giao #${pIdx + 1}`,
-    timestamp: paymentTimeStr,
-    image: imgUrl
-  }));
+  const bookingId = booking?._id?.toString() || '';
+  const itemId = item?._id?.toString() || '';
+
+  const pickupFiles = item?.rentalFulfillment?.pickupEvidence?.files || [];
+  const returnFiles = item?.rentalFulfillment?.returnEvidence?.files || [];
+
+  const photos: any[] = [];
+  pickupFiles.forEach((f: any, idx: number) => {
+    photos.push({
+      id: `pickup-${f.fileId || idx}`,
+      title: `Ảnh bàn giao #${idx + 1}`,
+      timestamp: f.uploadedAt ? new Date(f.uploadedAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : paymentTimeStr,
+      fileId: f.fileId,
+      bookingId,
+      itemId,
+      image: f.url || '',
+    });
+  });
+
+  returnFiles.forEach((f: any, idx: number) => {
+    photos.push({
+      id: `return-${f.fileId || idx}`,
+      title: `Ảnh nhận lại #${idx + 1}`,
+      timestamp: f.uploadedAt ? new Date(f.uploadedAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : paymentTimeStr,
+      fileId: f.fileId,
+      bookingId,
+      itemId,
+      image: f.url || '',
+    });
+  });
+
+  (booking?.handoverPhotos || []).forEach((url: string, idx: number) => {
+    photos.push({
+      id: `handover-${idx}`,
+      title: `Ảnh xác nhận #${idx + 1}`,
+      timestamp: paymentTimeStr,
+      image: url,
+    });
+  });
 
   return (
     <div
@@ -296,7 +360,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
           color: itemColor,
           material: itemMaterial,
           accessories: itemAccessories,
-          status: booking?.status || 'RENTING',
+          status: currentStatus,
           statusLabel: currentStatusLabel,
           readyTime: readyTimeStr,
           pickupTime: rawPickup ? new Date(rawPickup).toLocaleDateString('vi-VN') + ' ' + pickupTimeStr : pickupTimeStr,
@@ -340,10 +404,12 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
 
       {/* 5. Bottom Action Bar */}
       <RentalBottomActionBar
+        status={currentStatus}
         onCancel={() => onOpenCancel?.(booking || { _id: 'demo-1', bookingCode: itemCode })}
         onExtend={() => onOpenRescheduleOrExtend?.(item)}
         onSupport={handleSupport}
         onReturn={handleReturn}
+        onOpenMap={handleOpenMap}
       />
     </div>
   );

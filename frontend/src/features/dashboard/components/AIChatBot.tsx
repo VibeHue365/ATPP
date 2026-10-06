@@ -1,12 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { httpClient } from '../../../services/httpClient';
-import { Send, Sparkles, Brain, Cpu, MessageSquare, Image, X } from 'lucide-react';
+import { ArrowUp, Sparkles, Brain, Cpu, Image, X } from 'lucide-react';
+
+interface RecommendedProduct {
+  _id?: string;
+  id?: string;
+  name: string;
+  basePrice?: number;
+  materials?: string[];
+  images?: string[];
+}
 
 interface Message {
   sender: 'user' | 'ai';
   text: string;
-  image?: string; // base64 preview or object URL
-  recommended_products?: any[];
+  image?: string;
+  recommended_products?: RecommendedProduct[];
   category?: string;
   source?: string;
   confidence?: number;
@@ -20,7 +29,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: 'ai',
-      text: 'Xin chào! Mình là Trợ lý AI cổ phong của Di sản Áo Dài. Mình có thể hỗ trợ bạn tìm hiểu các kiểu dáng thiết kế cổ áo, tay áo, tà áo và tư vấn lựa chọn chất liệu vải phù hợp hoàn hảo với vóc dáng của bạn. Bạn muốn bắt đầu tìm hiểu về phần nào ạ? 😊',
+      text: 'Xin chào quý khách. Tôi là Stylist AI của TàGo, đồng hành tư vấn kiểu dáng, chất liệu lụa tơ tằm và phối áo dài tôn vóc dáng riêng biệt của bạn. Bạn đang chuẩn bị trang phục cho dịp nào ạ?',
     },
   ]);
   const [input, setInput] = useState('');
@@ -120,7 +129,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
         ...prev,
         {
           sender: 'ai',
-          text: 'Rất tiếc, kết nối đến Trợ lý AI đang gặp sự cố. Bạn hãy thử nhắn lại sau ít phút hoặc hỏi về cổ áo, tay áo, chất liệu vải nha! 😊',
+          text: 'Rất tiếc, kết nối đến Stylist AI đang gián đoạn trong giây lát. Bạn vui lòng thử lại sau ít phút nhé! ✨',
         },
       ]);
     } finally {
@@ -129,100 +138,244 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
   };
 
   const suggestions = [
-    { label: 'Tư vấn cổ áo dài', text: 'Nên chọn dáng cổ áo dài nào để che khuyết điểm cổ ngắn?' },
-    { label: 'Kiểu tay áo thịnh hành', text: 'Tư vấn các dáng tay áo dài cách tân trẻ trung?' },
-    { label: 'Chất liệu vải lụa tơ tằm', text: 'Vải lụa tơ tằm có ưu điểm gì khi may áo dài?' },
-    { label: 'Giá thuê & Dịch vụ', text: 'Bảng giá thuê và thời gian thuê tối đa của shop?' },
+    { label: 'Dáng cổ che khuyết điểm', text: 'Nên chọn dáng cổ áo dài nào để che khuyết điểm cổ ngắn hoặc đầy đặn?' },
+    { label: 'Áo dài cách tân chụp ảnh', text: 'Tư vấn những mẫu áo dài cách tân trẻ trung, lên hình nổi bật nhất?' },
+    { label: 'Chọn lụa tơ tằm', text: 'Chất liệu lụa tơ tằm cổ truyền có đặc điểm gì nổi bật khi may áo dài?' },
+    { label: 'Chính sách thuê áo', text: 'Bảng giá và thời gian thuê áo dài tại TàGo như thế nào?' },
   ];
 
+  const hasContentToSend = Boolean(input.trim() || selectedImage);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fafaf9', overflow: 'hidden' }}>
-      {/* Bot Header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 16px', background: 'linear-gradient(135deg, #1c1917 0%, #292524 50%, #1c1917 100%)',
-        color: '#ffffff', borderBottom: '1px solid #44403c', flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            padding: '6px', background: '#8B5A2B', color: '#fff', borderRadius: '8px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Sparkles size={16} />
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        background: 'linear-gradient(180deg, #FFFFFF 0%, #FAF8F5 100%)',
+        fontFamily: 'var(--font-body, system-ui, -apple-system, sans-serif)',
+        overflow: 'hidden',
+        position: 'relative',
+      }}
+    >
+      {/* Minimalist Glassmorphism Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 20px',
+          background: 'rgba(255, 255, 255, 0.88)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
+          <div
+            style={{
+              width: '34px',
+              height: '34px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #1C1917 0%, #3D3535 100%)',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
+              flexShrink: 0,
+            }}
+          >
+            <Sparkles size={16} style={{ color: '#F6D285' }} />
           </div>
           <div>
-            <h4 style={{ fontFamily: 'var(--font-header)', fontSize: '14px', fontWeight: 700, letterSpacing: '0.025em', color: '#fef3c7', margin: 0, lineHeight: 1.3 }}>
-              Trợ Lý AI Áo Dài Cổ Phong
-            </h4>
-            <span style={{ fontSize: '10px', color: '#a8a29e', fontWeight: 500, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', animation: 'pulse 2s infinite' }}></span>
-              <span>TRỰC TUYẾN • TỰ HỌC THÔNG MINH</span>
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span
+                style={{
+                  fontFamily: 'var(--font-header, "Playfair Display", serif)',
+                  fontSize: '14.5px',
+                  fontWeight: 600,
+                  color: '#1C1917',
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                TàGo Stylist
+              </span>
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  padding: '1px 6px',
+                  background: 'rgba(181, 43, 71, 0.08)',
+                  color: '#B52B47',
+                  borderRadius: '999px',
+                }}
+              >
+                AI
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: '#10B981',
+                  boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)',
+                }}
+              />
+              <span style={{ fontSize: '11px', color: '#78716C', fontWeight: 500 }}>
+                Cố vấn phong cách Di sản
+              </span>
+            </div>
           </div>
         </div>
+
         {onClose && (
           <button
             onClick={onClose}
-            style={{ padding: '4px', color: '#a8a29e', background: 'none', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}
-            title="Đóng cửa sổ"
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = '#44403c'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = '#a8a29e'; e.currentTarget.style.background = 'none'; }}
+            aria-label="Đóng cửa sổ tư vấn"
+            style={{
+              width: '30px',
+              height: '30px',
+              borderRadius: '50%',
+              background: 'rgba(0, 0, 0, 0.04)',
+              border: 'none',
+              color: '#57534E',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.08)';
+              e.currentTarget.style.color = '#1C1917';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.04)';
+              e.currentTarget.style.color = '#57534E';
+            }}
           >
-            <X size={18} />
+            <X size={15} />
           </button>
         )}
       </div>
 
-      {/* Message Area */}
-      <div style={{ flex: 1, padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      {/* Conversation Thread */}
+      <div
+        style={{
+          flex: 1,
+          padding: '18px 20px',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+        }}
+      >
         {messages.map((msg, idx) => (
           <div
             key={idx}
             style={{
-              display: 'flex', flexDirection: 'column', maxWidth: '85%',
+              display: 'flex',
+              flexDirection: 'column',
+              maxWidth: msg.sender === 'user' ? '82%' : '88%',
               alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
-              alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start',
             }}
           >
+            {/* Sender Subtitle for AI */}
+            {msg.sender === 'ai' && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: '#8B5A2B',
+                  letterSpacing: '0.02em',
+                  marginBottom: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <span>TàGo Stylist</span>
+              </span>
+            )}
+
+            {/* Bubble */}
             <div
               style={{
-                padding: '12px 16px',
-                borderRadius: msg.sender === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
-                fontSize: '13px', lineHeight: '1.65',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                padding: '13px 17px',
+                borderRadius:
+                  msg.sender === 'user'
+                    ? '18px 18px 4px 18px'
+                    : '4px 18px 18px 18px',
+                fontSize: '13.5px',
+                lineHeight: '1.65',
+                wordBreak: 'break-word',
                 ...(msg.sender === 'user'
-                  ? { background: '#1c1917', color: '#ffffff' }
-                  : { background: '#ffffff', color: '#1c1917', border: '1px solid #e7e5e4' }
-                ),
+                  ? {
+                      background: 'linear-gradient(135deg, #2D1A1E 0%, #1C1917 100%)',
+                      color: '#FFFFFF',
+                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+                    }
+                  : {
+                      background: '#FFFFFF',
+                      color: '#262322',
+                      border: '1px solid rgba(0, 0, 0, 0.06)',
+                      boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)',
+                    }),
               }}
             >
               {msg.image && (
                 <img
                   src={msg.image}
-                  alt="User uploaded"
-                  style={{ maxWidth: '100%', maxHeight: '192px', borderRadius: '8px', marginBottom: '8px', objectFit: 'cover', display: 'block' }}
+                  alt="Ảnh người dùng"
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '170px',
+                    borderRadius: '10px',
+                    marginBottom: '8px',
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
                 />
               )}
               {msg.text}
             </div>
 
-            {/* Recommended Products UI */}
+            {/* Recommended Products Carousel Cards */}
             {msg.sender === 'ai' && msg.recommended_products && msg.recommended_products.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', width: '100%', maxWidth: '320px' }}>
-                <span style={{ fontSize: '10px', fontWeight: 800, color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0 4px' }}>
-                  Mẫu sản phẩm gợi ý:
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px', width: '100%' }}>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: '#B52B47',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  Gợi ý trang phục phù hợp:
                 </span>
-                <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '8px' }}>
-                  {msg.recommended_products.map((prod: any) => (
+                <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '4px' }}>
+                  {msg.recommended_products.map((prod, pIdx) => (
                     <div
-                      key={prod._id}
+                      key={prod._id || prod.id || pIdx}
                       style={{
-                        flexShrink: 0, width: '140px', background: '#fff', border: '1px solid #e7e5e4',
-                        borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-                        transition: 'border-color 0.2s',
+                        flexShrink: 0,
+                        width: '148px',
+                        background: '#FFFFFF',
+                        border: '1px solid rgba(0, 0, 0, 0.08)',
+                        borderRadius: '14px',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        boxShadow: '0 3px 12px rgba(0, 0, 0, 0.04)',
+                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                       }}
                     >
-                      <div style={{ height: '80px', background: '#f5f5f4', position: 'relative' }}>
+                      <div style={{ height: '94px', background: '#F5F2EF', position: 'relative' }}>
                         <img
                           src={prod.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=300&q=80'}
                           alt={prod.name}
@@ -231,17 +384,50 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
                             (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=300&q=80';
                           }}
                         />
-                        <span style={{ position: 'absolute', bottom: '4px', right: '4px', padding: '2px 4px', background: 'rgba(0,0,0,0.6)', fontSize: '8px', color: '#fff', fontWeight: 700, borderRadius: '4px' }}>
-                          {prod.basePrice?.toLocaleString('vi-VN')}đ
+                        <span
+                          style={{
+                            position: 'absolute',
+                            bottom: '5px',
+                            right: '5px',
+                            padding: '2px 6px',
+                            background: 'rgba(28, 25, 23, 0.85)',
+                            backdropFilter: 'blur(4px)',
+                            fontSize: '9.5px',
+                            color: '#FFFFFF',
+                            fontWeight: 600,
+                            borderRadius: '6px',
+                          }}
+                        >
+                          {prod.basePrice ? `${prod.basePrice.toLocaleString('vi-VN')}đ` : 'Liên hệ'}
                         </span>
                       </div>
-                      <div style={{ padding: '8px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div style={{ padding: '8px 10px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                         <div>
-                          <h5 style={{ fontFamily: 'var(--font-header)', fontSize: '11px', fontWeight: 700, color: '#1c1917', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
+                          <h5
+                            style={{
+                              fontFamily: 'var(--font-header, serif)',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              color: '#1C1917',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              margin: 0,
+                            }}
+                          >
                             {prod.name}
                           </h5>
-                          <p style={{ fontSize: '9px', color: '#78716c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '2px 0 0' }}>
-                            {prod.materials?.join(', ') || 'N/A'}
+                          <p
+                            style={{
+                              fontSize: '10px',
+                              color: '#78716C',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              margin: '2px 0 0',
+                            }}
+                          >
+                            {prod.materials?.join(', ') || 'Lụa tơ tằm'}
                           </p>
                         </div>
                         <button
@@ -250,18 +436,31 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
                             if (el) {
                               el.scrollIntoView({ behavior: 'smooth' });
                             } else {
-                              alert(`Sản phẩm: ${prod.name}\nGiá thuê: ${prod.basePrice?.toLocaleString('vi-VN')}đ\nChất liệu: ${prod.materials?.join(', ')}`);
+                              window.location.href = '/rentals';
                             }
                           }}
                           style={{
-                            marginTop: '6px', width: '100%', padding: '4px 0', background: '#1c1917', color: '#fff',
-                            fontSize: '9px', fontWeight: 700, borderRadius: '4px', border: 'none', cursor: 'pointer',
-                            textAlign: 'center', transition: 'background 0.2s',
+                            marginTop: '8px',
+                            width: '100%',
+                            padding: '5px 0',
+                            background: '#1C1917',
+                            color: '#FFFFFF',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            borderRadius: '7px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            transition: 'all 0.2s ease',
                           }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = '#a11e22'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = '#1c1917'; }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#B52B47';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = '#1C1917';
+                          }}
                         >
-                          Thuê ngay
+                          Chi tiết
                         </button>
                       </div>
                     </div>
@@ -270,25 +469,38 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
               </div>
             )}
 
-            {/* Smart tags for AI replies */}
+            {/* Smart badges for AI answers */}
             {msg.sender === 'ai' && (msg.category || msg.source) && (
-              <div style={{ display: 'flex', gap: '8px', marginTop: '6px', fontSize: '10px', color: '#78716c', fontWeight: 700, padding: '0 4px' }}>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '6px', fontSize: '10px', color: '#78716C' }}>
                 {msg.category && msg.category !== 'general' && (
-                  <span style={{ padding: '2px 8px', background: 'rgba(214,211,209,0.5)', borderRadius: '9999px', display: 'flex', alignItems: 'center', gap: '2px', border: '1px solid rgba(214,211,209,0.3)' }}>
+                  <span
+                    style={{
+                      padding: '2px 7px',
+                      background: 'rgba(0, 0, 0, 0.04)',
+                      borderRadius: '999px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                    }}
+                  >
                     <Cpu size={10} />
-                    <span>CHỦ ĐỀ: {msg.category.toUpperCase()}</span>
+                    <span>{msg.category.toUpperCase()}</span>
                   </span>
                 )}
                 {msg.source && (
-                  <span style={{
-                    padding: '2px 8px', borderRadius: '9999px', display: 'flex', alignItems: 'center', gap: '2px',
-                    ...(msg.source === 'gemini_learned'
-                      ? { background: '#ecfdf5', color: '#15803d', border: '1px solid #d1fae5' }
-                      : { background: 'rgba(214,211,209,0.5)', border: '1px solid rgba(214,211,209,0.3)' }
-                    ),
-                  }}>
+                  <span
+                    style={{
+                      padding: '2px 7px',
+                      borderRadius: '999px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      background: msg.source === 'gemini_learned' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                      color: msg.source === 'gemini_learned' ? '#065F46' : '#78716C',
+                    }}
+                  >
                     <Brain size={10} />
-                    <span>NGUỒN: {msg.source === 'gemini_learned' ? 'AI TỰ HỌC (GEMINI)' : 'CƠ SỞ TRI THỨC'}</span>
+                    <span>{msg.source === 'gemini_learned' ? 'GEMINI' : 'TRI THỨC TAGO'}</span>
                   </span>
                 )}
               </div>
@@ -297,119 +509,274 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
         ))}
 
         {isLoading && (
-          <div style={{
-            alignSelf: 'flex-start', display: 'flex', gap: '4px', alignItems: 'center',
-            padding: '12px 16px', background: '#fff', border: '1px solid #f5f5f4',
-            borderRadius: '4px 16px 16px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-          }}>
-            <span className="animate-bounce" style={{ width: '6px', height: '6px', background: '#78716c', borderRadius: '50%', animationDelay: '0ms' }}></span>
-            <span className="animate-bounce" style={{ width: '6px', height: '6px', background: '#78716c', borderRadius: '50%', animationDelay: '150ms' }}></span>
-            <span className="animate-bounce" style={{ width: '6px', height: '6px', background: '#78716c', borderRadius: '50%', animationDelay: '300ms' }}></span>
+          <div
+            style={{
+              alignSelf: 'flex-start',
+              display: 'flex',
+              gap: '5px',
+              alignItems: 'center',
+              padding: '12px 16px',
+              background: '#FFFFFF',
+              border: '1px solid rgba(0, 0, 0, 0.06)',
+              borderRadius: '4px 18px 18px 18px',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
+            }}
+          >
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                background: '#B52B47',
+                borderRadius: '50%',
+                display: 'inline-block',
+                animation: 'bounce 1.4s infinite ease-in-out',
+                animationDelay: '0ms',
+              }}
+            />
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                background: '#B52B47',
+                borderRadius: '50%',
+                display: 'inline-block',
+                animation: 'bounce 1.4s infinite ease-in-out',
+                animationDelay: '180ms',
+              }}
+            />
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                background: '#B52B47',
+                borderRadius: '50%',
+                display: 'inline-block',
+                animation: 'bounce 1.4s infinite ease-in-out',
+                animationDelay: '360ms',
+              }}
+            />
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Suggested prompts */}
+      {/* Suggested Prompts - Minimalist Floating Pills */}
       {messages.length === 1 && (
-        <div style={{ padding: '8px 16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+        <div
+          style={{
+            padding: '4px 18px 10px',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '7px',
+          }}
+        >
           {suggestions.map((s, idx) => (
             <button
               key={idx}
               onClick={() => handleSend(s.text)}
               style={{
-                padding: '6px 14px', background: '#ffffff', border: '1px solid #e7e5e4',
-                fontSize: '12px', fontWeight: 700, color: '#44403c', borderRadius: '9999px',
-                cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '6px 12px',
+                background: '#FFFFFF',
+                border: '1px solid rgba(0, 0, 0, 0.08)',
+                fontSize: '11.5px',
+                fontWeight: 500,
+                color: '#44403C',
+                borderRadius: '999px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f4'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#B52B47';
+                e.currentTarget.style.color = '#B52B47';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 3px 8px rgba(181, 43, 71, 0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.08)';
+                e.currentTarget.style.color = '#44403C';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.02)';
+              }}
             >
-              <MessageSquare size={10} />
+              <Sparkles size={11} style={{ color: '#B52B47', opacity: 0.7 }} />
               <span>{s.label}</span>
             </button>
           ))}
         </div>
       )}
 
-      {/* Image Preview Row */}
+      {/* Image Preview Tag */}
       {selectedImage && (
-        <div style={{ padding: '8px 16px', background: '#fafaf9', borderTop: '1px solid #e7e5e4', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ position: 'relative', width: '48px', height: '48px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e7e5e4', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-            <img src={selectedImage.previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <div
+          style={{
+            padding: '6px 18px 8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+          }}
+        >
+          <div
+            style={{
+              position: 'relative',
+              width: '42px',
+              height: '42px',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              border: '1px solid rgba(0, 0, 0, 0.12)',
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)',
+              flexShrink: 0,
+            }}
+          >
+            <img src={selectedImage.previewUrl} alt="Đã chọn" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             <button
               type="button"
               onClick={handleRemoveImage}
               style={{
-                position: 'absolute', top: '2px', right: '2px', padding: '2px',
-                background: 'rgba(12,10,9,0.7)', color: '#fff', border: 'none',
-                borderRadius: '50%', cursor: 'pointer', transition: 'background 0.2s',
+                position: 'absolute',
+                top: '2px',
+                right: '2px',
+                padding: '2px',
+                background: 'rgba(0, 0, 0, 0.7)',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '50%',
+                cursor: 'pointer',
+                display: 'flex',
               }}
             >
-              <X size={8} />
+              <X size={9} />
             </button>
           </div>
-          <span style={{ fontSize: '10px', color: '#78716c', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
-            Ảnh đã chọn để tìm sản phẩm
+          <span style={{ fontSize: '11px', color: '#78716C', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            Đã đính kèm ảnh để AI nhận diện
           </span>
         </div>
       )}
 
-      {/* Input Box */}
-      <div style={{ padding: '12px 16px', background: '#ffffff', borderTop: '1px solid #e7e5e4', display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          accept="image/*"
-          style={{ display: 'none' }}
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isLoading}
+      {/* Modern Capsule Input Bar (Apple / Claude style) */}
+      <div
+        style={{
+          padding: '10px 18px 16px',
+          background: 'rgba(255, 255, 255, 0.92)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderTop: '1px solid rgba(0, 0, 0, 0.05)',
+        }}
+      >
+        <div
           style={{
-            width: '38px', height: '38px', padding: '8px', background: '#fafaf9',
-            border: '1px solid #e7e5e4', color: '#78716c', borderRadius: '12px',
-            cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-          title="Tải ảnh lên để tìm sản phẩm"
-          onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f4'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = '#fafaf9'; }}
-        >
-          <Image size={18} />
-        </button>
-        <input
-          type="text"
-          placeholder="Yêu cầu áo dài đỏ thêu hoa, tay lỡ..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          disabled={isLoading}
-          style={{
-            flex: 1, height: '38px', padding: '0 16px', background: '#fafaf9',
-            border: '1px solid rgba(231,229,228,0.8)', borderRadius: '12px',
-            fontSize: '13px', color: '#1c1917', outline: 'none',
-          }}
-          onFocus={(e) => { e.currentTarget.style.borderColor = '#1c1917'; e.currentTarget.style.background = '#fff'; }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(231,229,228,0.8)'; e.currentTarget.style.background = '#fafaf9'; }}
-        />
-        <button
-          onClick={() => handleSend()}
-          disabled={isLoading || (!input.trim() && !selectedImage)}
-          style={{
-            width: '38px', height: '38px', padding: '8px',
-            background: (isLoading || (!input.trim() && !selectedImage)) ? '#d6d3d1' : '#1c1917',
-            color: '#ffffff', borderRadius: '12px', border: 'none',
-            cursor: (isLoading || (!input.trim() && !selectedImage)) ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: '#F5F3EF',
+            borderRadius: '24px',
+            padding: '5px 6px 5px 14px',
+            border: '1px solid rgba(0, 0, 0, 0.06)',
+            transition: 'all 0.2s ease',
+            boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.02)',
           }}
         >
-          <Send size={18} />
-        </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept="image/*"
+            style={{ display: 'none' }}
+          />
+
+          <input
+            type="text"
+            placeholder="Hỏi về kiểu dáng hoặc gửi ảnh mẫu..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            disabled={isLoading}
+            style={{
+              flex: 1,
+              height: '34px',
+              background: 'transparent',
+              border: 'none',
+              fontSize: '13px',
+              color: '#1C1917',
+              outline: 'none',
+            }}
+          />
+
+          {/* Photo attach button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            title="Đính kèm ảnh mẫu áo dài"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              background: 'transparent',
+              border: 'none',
+              color: selectedImage ? '#B52B47' : '#78716C',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#1C1917';
+              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = selectedImage ? '#B52B47' : '#78716C';
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            <Image size={17} />
+          </button>
+
+          {/* Modern Circular Send Button with Up Arrow */}
+          <button
+            onClick={() => handleSend()}
+            disabled={isLoading || !hasContentToSend}
+            aria-label="Gửi tin nhắn"
+            style={{
+              width: '34px',
+              height: '34px',
+              borderRadius: '50%',
+              border: 'none',
+              cursor: isLoading || !hasContentToSend ? 'not-allowed' : 'pointer',
+              background: hasContentToSend
+                ? 'linear-gradient(135deg, #1C1917 0%, #3D3535 100%)'
+                : 'rgba(0, 0, 0, 0.08)',
+              color: hasContentToSend ? '#FFFFFF' : '#A8A29E',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+              boxShadow: hasContentToSend ? '0 2px 8px rgba(0, 0, 0, 0.2)' : 'none',
+            }}
+            onMouseEnter={(e) => {
+              if (hasContentToSend) {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #B52B47 0%, #941B35 100%)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (hasContentToSend) {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #1C1917 0%, #3D3535 100%)';
+                e.currentTarget.style.transform = 'scale(1)';
+              }
+            }}
+          >
+            <ArrowUp size={17} strokeWidth={2.4} />
+          </button>
+        </div>
       </div>
     </div>
   );
 };
 
+export default AIChatBot;

@@ -29,6 +29,9 @@ export interface Order {
   customerNotes?: string;
   pricingSummary?: any;
   paymentSummary?: any;
+  bookingCode?: string;
+  deliveredPhotos?: string[];
+  deliveryDriveUrl?: string;
   pickupDamageReport?: {
     reportedAt: string;
     description: string;

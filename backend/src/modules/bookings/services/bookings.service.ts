@@ -2567,9 +2567,42 @@ export class BookingsService implements OnApplicationBootstrap {
       grouped.push(item);
       itemsByBooking.set(key, grouped);
     }
+
+    const schedulesByBooking = new Map<string, any[]>();
+    for (const schedule of schedules) {
+      const bId = (schedule as any).bookingId;
+      if (!bId) continue;
+      const key = bId.toString();
+      const grouped = schedulesByBooking.get(key) || [];
+      grouped.push(schedule);
+      schedulesByBooking.set(key, grouped);
+    }
+
+    let customerReviews: any[] = [];
+    try {
+      customerReviews = bookingIds.length
+        ? await this.bookingModel.db
+            .model('CustomerReview')
+            .find({ bookingId: { $in: bookingIds }, providerId: provider._id })
+            .lean()
+            .exec()
+        : [];
+    } catch {
+      customerReviews = [];
+    }
+
+    const reviewsByBooking = new Map<string, any>();
+    for (const rev of customerReviews) {
+      const bId = (rev as any).bookingId;
+      if (!bId) continue;
+      reviewsByBooking.set(bId.toString(), rev);
+    }
+
     return bookings.map((booking) => ({
       ...booking,
       items: itemsByBooking.get(booking._id.toString()) || [],
+      schedules: schedulesByBooking.get(booking._id.toString()) || [],
+      customerReview: reviewsByBooking.get(booking._id.toString()) || null,
     }));
   }
 
@@ -2671,6 +2704,17 @@ export class BookingsService implements OnApplicationBootstrap {
     const bookingObj = booking.toObject();
     const customerUser = booking.customerId as any;
 
+    let customerReview: any = null;
+    try {
+      customerReview = await this.bookingModel.db
+        .model('CustomerReview')
+        .findOne({ bookingId: booking._id })
+        .lean()
+        .exec();
+    } catch {
+      customerReview = null;
+    }
+
     return {
       ...bookingObj,
       customerName: customerUser?.profile?.fullName || '',
@@ -2678,6 +2722,7 @@ export class BookingsService implements OnApplicationBootstrap {
       customerEmail: customerUser?.auth?.email || '',
       items: updatedItems,
       schedules,
+      customerReview: customerReview || null,
     };
   }
 

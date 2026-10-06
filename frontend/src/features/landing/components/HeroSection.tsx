@@ -237,7 +237,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <button
                 type="button"
                 onClick={() => scrollToSection('rentals')}
-                className="rounded-xl text-sm font-bold text-white transition-all cursor-pointer hover:opacity-95 flex items-center gap-2 border-none shrink-0"
+                className="rounded-xl text-sm font-bold text-white transition-all cursor-pointer hover:opacity-95 hover:shadow-md active:scale-95 flex items-center gap-2 border-none shrink-0"
                 style={{
                   backgroundColor: '#B52B47',
                   color: '#FFFFFF',
@@ -251,7 +251,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <button
                 type="button"
                 onClick={() => scrollToSection('combos')}
-                className="rounded-xl text-sm font-semibold transition-all cursor-pointer border hover:bg-[#FFF5F7] hover:border-[#B52B47] hover:text-[#B52B47] bg-white shrink-0"
+                className="rounded-xl text-sm font-semibold transition-all cursor-pointer border hover:bg-[#FFF5F7] hover:border-[#B52B47] hover:text-[#B52B47] hover:shadow-sm active:scale-95 bg-white shrink-0"
                 style={{
                   color: '#292324',
                   borderColor: '#E2CED1',
@@ -328,12 +328,22 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             className="lume-hero-slides absolute inset-0 flex transition-transform duration-700 ease-out"
             style={{ transform: `translateX(-${currentSlide * 100}%)` }}
           >
-            {banners.map((banner, index) => (
-              <div key={`${banner.imageUrl}-${index}`} className="lume-hero-slide relative h-full w-full shrink-0">
-                <img src={banner.imageUrl} alt={banner.title || 'LUMÉ Hero Banner'} className="absolute inset-0 h-full w-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/35" />
-              </div>
-            ))}
+            {banners.map((banner, index) => {
+              const isActive = index === currentSlide;
+              return (
+                <div
+                  key={`${banner.imageUrl}-${index}`}
+                  className={`lume-hero-slide relative h-full w-full shrink-0 overflow-hidden ${isActive ? 'is-active' : ''}`}
+                >
+                  <img
+                    src={banner.imageUrl}
+                    alt={banner.title || 'LUMÉ Hero Banner'}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/40" />
+                </div>
+              );
+            })}
           </div>
 
           {banners.length > 1 && (
@@ -359,20 +369,23 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                       type="button"
                       onClick={() => onSelectSlide(idx)}
                       aria-label={`Slide ${idx + 1}`}
-                      className={`w-2 h-2 rounded-full transition-all border-none cursor-pointer ${currentSlide === idx ? 'w-4 bg-white' : 'bg-white/50 hover:bg-white/80'
-                        }`}
+                      className={`h-2 rounded-full transition-all duration-300 border-none cursor-pointer ${
+                        currentSlide === idx ? 'w-5 bg-white shadow-sm' : 'w-2 bg-white/50 hover:bg-white/80'
+                      }`}
                     />
                   ))}
                 </div>
               )}
             </div>
 
-            <h3 className="text-base md:text-lg font-bold font-header text-white line-clamp-1">
-              {activeBanner.title || 'Bộ Sưu Tập Gấm Mới'}
-            </h3>
-            <p className="text-xs text-stone-200 line-clamp-1">
-              {activeBanner.subtitle || 'Khám phá các mẫu áo dài truyền thống & nghệ thuật'}
-            </p>
+            <div key={currentSlide} className="lume-hero-caption-animate flex flex-col gap-1">
+              <h3 className="text-base md:text-lg font-bold font-header text-white line-clamp-1">
+                {activeBanner.title || 'Bộ Sưu Tập Gấm Mới'}
+              </h3>
+              <p className="text-xs text-stone-200 line-clamp-1">
+                {activeBanner.subtitle || 'Khám phá các mẫu áo dài truyền thống & nghệ thuật'}
+              </p>
+            </div>
             {banners.length > 1 && (
               <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-white/25">
                 <div key={currentSlide} className="lume-hero-progress h-full rounded-full bg-white" style={{ animationDuration: '5000ms' }} />
@@ -440,7 +453,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <img
                 src={topPackage?.image || DEFAULT_PHOTO_IMG}
                 alt={topPackage ? topPackage.name : 'Chụp kỷ yếu'}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
               />
             </div>
           </div>
@@ -499,7 +512,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <img
                   src={topCombo.image || DEFAULT_COMBO_IMG}
                   alt={topCombo.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
                 />
               </div>
             </div>
@@ -564,7 +577,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <img
                   src={topProduct?.image || secondPackage?.image || DEFAULT_PHOTO_IMG}
                   alt={topProduct?.name || secondPackage?.name || 'Áo dài'}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
                 />
               </div>
             </div>

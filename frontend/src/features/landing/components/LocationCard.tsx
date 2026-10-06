@@ -21,7 +21,7 @@ export const LocationCard: React.FC<LocationCardProps> = ({ item }) => {
           src={item.image}
           alt={`Địa điểm chụp ảnh ${item.name}`}
           loading="lazy"
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 will-change-transform"
         />
       </div>
 

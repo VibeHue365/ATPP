@@ -27,12 +27,12 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
 
   // Compute step active/completed states
   const rawStatus = rentalData.status;
-  let activeStep = rentalData.currentStepIndex || 3;
+  let activeStep = rentalData.currentStepIndex || 1;
   if (['RETURNED', 'COMPLETED'].includes(rawStatus)) {
     activeStep = 4;
   } else if (['PICKED_UP', 'RENTING', 'IN_PROGRESS', 'RETURN_PENDING'].includes(rawStatus)) {
     activeStep = 3;
-  } else if (rawStatus === 'PICKUP_PENDING') {
+  } else if (['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(rawStatus)) {
     activeStep = 2;
   } else {
     activeStep = 1;
@@ -172,48 +172,58 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
 
           {/* Stepper items */}
           <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-            {/* Step 1: Sẵn sàng */}
+            {/* Step 1: Chuẩn bị / Sẵn sàng */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textAlign: 'center' }}>
               <div
                 style={{
                   width: '28px',
                   height: '28px',
                   borderRadius: '50%',
-                  backgroundColor: activeStep >= 1 ? '#10B981' : '#EAE5DC',
+                  backgroundColor: activeStep > 1 ? '#10B981' : activeStep === 1 ? '#EA580C' : '#EAE5DC',
                   color: '#FFFFFF',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '12px',
-                  fontWeight: 800
+                  fontWeight: 800,
+                  boxShadow: activeStep === 1 ? '0 0 0 3px #FED7AA' : 'none'
                 }}
               >
-                <Check size={16} />
+                {activeStep > 1 ? <Check size={16} /> : '1'}
               </div>
-              <span style={{ fontSize: '12px', fontWeight: 750, color: '#231F20' }}>Sẵn sàng</span>
-              <span style={{ fontSize: '10.5px', color: '#8C827A' }}>{rentalData.readyTime}</span>
+              <span style={{ fontSize: '12px', fontWeight: 750, color: activeStep === 1 ? '#EA580C' : '#231F20' }}>
+                {activeStep > 1 ? 'Đã chuẩn bị' : 'Chuẩn bị'}
+              </span>
+              <span style={{ fontSize: '10.5px', color: activeStep === 1 ? '#EA580C' : '#8C827A' }}>
+                {rentalData.readyTime || (activeStep === 1 ? 'Đang chuẩn bị' : 'Sẵn sàng')}
+              </span>
             </div>
 
-            {/* Step 2: Đã nhận */}
+            {/* Step 2: Chờ nhận / Đã nhận */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textAlign: 'center' }}>
               <div
                 style={{
                   width: '28px',
                   height: '28px',
                   borderRadius: '50%',
-                  backgroundColor: activeStep >= 2 ? '#10B981' : '#EAE5DC',
-                  color: '#FFFFFF',
+                  backgroundColor: activeStep > 2 ? '#10B981' : activeStep === 2 ? '#EA580C' : '#EAE5DC',
+                  color: activeStep >= 2 ? '#FFFFFF' : '#8C827A',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '12px',
-                  fontWeight: 800
+                  fontWeight: 800,
+                  boxShadow: activeStep === 2 ? '0 0 0 3px #FED7AA' : 'none'
                 }}
               >
-                {activeStep >= 2 ? <Check size={16} /> : '2'}
+                {activeStep > 2 ? <Check size={16} /> : '2'}
               </div>
-              <span style={{ fontSize: '12px', fontWeight: 750, color: '#231F20' }}>Đã nhận</span>
-              <span style={{ fontSize: '10.5px', color: '#8C827A' }}>{rentalData.pickupTime}</span>
+              <span style={{ fontSize: '12px', fontWeight: 750, color: activeStep === 2 ? '#EA580C' : activeStep > 2 ? '#231F20' : '#8C827A' }}>
+                {activeStep > 2 ? 'Đã nhận' : 'Chờ nhận'}
+              </span>
+              <span style={{ fontSize: '10.5px', color: activeStep === 2 ? '#EA580C' : '#8C827A' }}>
+                {activeStep >= 2 ? (rentalData.pickupTime || 'Tại cửa hàng') : 'Chờ nhận áo'}
+              </span>
             </div>
 
             {/* Step 3: Đang thuê (Active) */}
@@ -224,7 +234,7 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
                   height: '28px',
                   borderRadius: '50%',
                   backgroundColor: activeStep > 3 ? '#10B981' : activeStep === 3 ? '#EA580C' : '#EAE5DC',
-                  color: '#FFFFFF',
+                  color: activeStep >= 3 ? '#FFFFFF' : '#8C827A',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -235,7 +245,7 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
               >
                 {activeStep > 3 ? <Check size={16} /> : '3'}
               </div>
-              <span style={{ fontSize: '12px', fontWeight: 800, color: activeStep === 3 ? '#EA580C' : '#231F20' }}>Đang thuê</span>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: activeStep === 3 ? '#EA580C' : activeStep > 3 ? '#231F20' : '#8C827A' }}>Đang thuê</span>
               <span style={{ fontSize: '10.5px', color: activeStep === 3 ? '#EA580C' : '#8C827A', fontWeight: activeStep === 3 ? 600 : 400 }}>Thời gian thuê</span>
             </div>
 
@@ -252,7 +262,8 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '12px',
-                  fontWeight: 800
+                  fontWeight: 800,
+                  boxShadow: activeStep === 4 ? '0 0 0 3px #A7F3D0' : 'none'
                 }}
               >
                 {activeStep >= 4 ? <Check size={16} /> : '4'}

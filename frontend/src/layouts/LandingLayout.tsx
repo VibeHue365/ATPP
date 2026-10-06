@@ -4,7 +4,6 @@ import { useAuth } from '../features/auth/hooks/useAuth';
 import { ROUTES } from '../config/routes';
 import { LandingHeader } from '../features/landing/components/LandingHeader';
 import { LandingFooter } from '../features/landing/components/LandingFooter';
-import { AIChatBot } from '../features/dashboard/components/AIChatBot';
 
 export const LandingLayout: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
@@ -38,9 +37,6 @@ export const LandingLayout: React.FC = () => {
 
       {/* Target Scoped Landing Footer */}
       <LandingFooter />
-
-      {/* AI Assistant Chat Widget */}
-      <AIChatBot />
     </div>
   );
 };

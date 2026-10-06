@@ -43,7 +43,7 @@ export const PhotoshootPackageCard: React.FC<PhotoshootPackageCardProps> = ({ it
             src={item.image}
             alt={item.name}
             loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 will-change-transform"
           />
         </Link>
 

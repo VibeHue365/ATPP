@@ -93,7 +93,7 @@ export function createProviderDataActions({
       const shouldLoadCalendar = view === 'calendar';
       const shouldLoadReviews = view === 'reviews';
       const shouldLoadBookings = view === 'reviews' || view === 'trust';
-      const shouldLoadAnalytics = view === 'analytics' || view === 'overview';
+      const shouldLoadAnalytics = view === 'analytics';
       const [portfolioRes, packagesRes, productsRes, summary, combosRes, schedulesRes, vouchersRes, reviewsRes, bookingsRes, analyticsRes] = await Promise.all([
         shouldLoadPortfolio && hasPhotography ? portfolioApi.listItems() : Promise.resolve(null),
         shouldLoadComboData && hasPhotography ? providerApi.listPhotographyPackages() : Promise.resolve(null),

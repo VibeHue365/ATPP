@@ -6,6 +6,7 @@ import { CartProvider } from './context/CartContext';
 import { SocketProvider } from './context/SocketContext';
 import ScrollToTop from './components/common/ScrollToTop';
 import AppRouter from './routes/AppRouter';
+import { AIFloatingWidget } from './features/dashboard/components/AIFloatingWidget';
 import './App.css';
 
 export const App: React.FC = () => {
@@ -17,6 +18,7 @@ export const App: React.FC = () => {
             <BrowserRouter>
               <ScrollToTop />
               <AppRouter />
+              <AIFloatingWidget />
             </BrowserRouter>
           </CartProvider>
         </SocketProvider>

@@ -7,6 +7,7 @@ import { SectionHeader } from '../../../components/common/SectionHeader';
 import type { ProductFromDb, AoDaiItem } from '../types/rental.types';
 import { mapProductToAoDaiItem } from '../mappers/product.mapper';
 import { AoDaiCard } from './AoDaiCard';
+import { AoDaiCardSkeleton } from './AoDaiCardSkeleton';
 
 export const FeaturedAoDaiSection: React.FC = () => {
   const [items, setItems] = useState<AoDaiItem[]>([]);
@@ -62,8 +63,10 @@ export const FeaturedAoDaiSection: React.FC = () => {
 
       {/* States & Product Grid */}
       {loading ? (
-        <div className="py-12 text-center text-xs font-semibold text-stone-500">
-          Đang tải danh sách Áo Dài nổi bật...
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <AoDaiCardSkeleton key={`aodai-skel-${idx}`} />
+          ))}
         </div>
       ) : error ? (
         <div className="py-12 text-center text-xs font-semibold text-stone-500">
@@ -74,7 +77,7 @@ export const FeaturedAoDaiSection: React.FC = () => {
           Hiện chưa có sản phẩm Áo Dài nổi bật nào.
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 lume-reveal-grid">
           {items.map((item) => (
             <AoDaiCard key={item.id} item={item} />
           ))}
