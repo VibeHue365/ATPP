@@ -32,6 +32,7 @@ type ProviderSidebarProps = Pick<ReturnType<typeof useProviderNavigationState>,
   handleLogoutClick: () => Promise<void>;
   isSidebarCollapsed?: boolean;
   toggleSidebar?: () => void;
+  chatUnreadCount?: number;
 };
 
 export function ProviderSidebar({
@@ -45,6 +46,7 @@ export function ProviderSidebar({
   handleLogoutClick,
   isSidebarCollapsed = false,
   toggleSidebar,
+  chatUnreadCount = 0,
 }: ProviderSidebarProps) {
   return (
     <aside className={`p-sidebar-aside ${isSidebarCollapsed ? 'collapsed' : ''}`} aria-label="Menu chính">
@@ -237,20 +239,22 @@ export function ProviderSidebar({
 
           {/* 10. Tin nhắn (with badge 5) */}
           <button
-            onClick={() => navigate('/chat')}
-            className="p-nav-item"
+            onClick={() => setCurrentView('chat')}
+            className={`p-nav-item ${currentView === 'chat' ? 'active' : ''}`}
             aria-label="Tin nhắn"
-            title="Tin nhắn (5 tin chưa đọc)"
+            title={chatUnreadCount > 0 ? `Tin nhắn (${chatUnreadCount} tin chưa đọc)` : 'Tin nhắn'}
             type="button"
           >
             <div className="p-nav-item-left">
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <MessageSquare size={20} />
-                {isSidebarCollapsed && <span className="p-nav-badge-dot" />}
+                {isSidebarCollapsed && chatUnreadCount > 0 && <span className="p-nav-badge-dot" />}
               </div>
               <span>Tin nhắn</span>
             </div>
-            {!isSidebarCollapsed && <span className="p-nav-badge-red">5</span>}
+            {!isSidebarCollapsed && chatUnreadCount > 0 && (
+              <span className="p-nav-badge-red">{chatUnreadCount > 99 ? '99+' : chatUnreadCount}</span>
+            )}
           </button>
 
           {/* 11. Cài đặt cửa hàng */}
@@ -336,7 +340,7 @@ export function ProviderSidebar({
           {isSidebarCollapsed ? (
             <button
               className="p-support-btn-collapsed"
-              onClick={() => navigate('/chat')}
+              onClick={() => setCurrentView('chat')}
               type="button"
               title="Cần hỗ trợ? Nhấn để liên hệ đội ngũ TàGo"
               aria-label="Liên hệ hỗ trợ"
@@ -356,7 +360,7 @@ export function ProviderSidebar({
               </div>
               <button
                 className="p-support-btn"
-                onClick={() => navigate('/chat')}
+                onClick={() => setCurrentView('chat')}
                 type="button"
               >
                 Liên hệ ngay

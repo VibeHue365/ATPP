@@ -8,6 +8,7 @@ import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import { ChatController } from './chat.controller';
 import { CloudinaryService } from './cloudinary.service';
+import { providerModels } from '../providers/providers.module';
 
 export const chatModels = MongooseModule.forFeature([
   { name: ChatRoom.name, schema: ChatRoomSchema },
@@ -15,7 +16,7 @@ export const chatModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [chatModels, AuthModule, UsersModule],
+  imports: [chatModels, providerModels, AuthModule, UsersModule],
   controllers: [ChatController],
   providers: [ChatGateway, ChatService, CloudinaryService],
   exports: [chatModels, ChatGateway, ChatService, CloudinaryService],

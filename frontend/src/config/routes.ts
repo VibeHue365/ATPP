@@ -24,6 +24,6 @@
   COMBO_DETAIL: '/combos/:id',
   PROVIDER_STORE: '/stores/:id',
   NOTIFICATIONS: '/notifications',
-  CHAT: '/chat',
+  CHAT: '/dashboard/chat',
   VIRTUAL_TRYON_3D: '/virtual-tryon-3d',
 } as const;

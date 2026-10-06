@@ -22,6 +22,11 @@ export class ChatController {
     return this.chatService.getRooms(user.sub);
   }
 
+  @Get('partners')
+  async getAvailablePartners(@CurrentUser() user: AuthUser) {
+    return this.chatService.getAvailablePartners(user.sub);
+  }
+
   @Get('rooms/:roomId/messages')
   async getMessages(
     @Param('roomId') roomId: string,

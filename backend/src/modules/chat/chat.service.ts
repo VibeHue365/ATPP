@@ -4,6 +4,11 @@ import { Model, Types } from 'mongoose';
 import { ChatRoom, ChatRoomDocument } from './schemas/chat-room.schema';
 import { ChatMessage, ChatMessageDocument } from './schemas/chat-message.schema';
 import { User } from '../users/schemas/user.schema';
+import {
+  Provider,
+  ProviderCapability,
+  ProviderStatus,
+} from '../providers/schemas/provider.schema';
 
 @Injectable()
 export class ChatService {
@@ -11,6 +16,7 @@ export class ChatService {
     @InjectModel(ChatRoom.name) private readonly chatRoomModel: Model<ChatRoom>,
     @InjectModel(ChatMessage.name) private readonly chatMessageModel: Model<ChatMessage>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
+    @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
   ) {}
 
   async getRooms(userId: string) {
@@ -24,6 +30,23 @@ export class ChatService {
       })
       .sort({ lastMessageAt: -1 })
       .exec();
+
+    const roomIds = rooms.map((room) => room._id);
+    const unreadRows = roomIds.length
+      ? await this.chatMessageModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+          {
+            $match: {
+              roomId: { $in: roomIds },
+              senderId: { $ne: userObjectId },
+              readBy: { $ne: userObjectId },
+            },
+          },
+          { $group: { _id: '$roomId', count: { $sum: 1 } } },
+        ])
+      : [];
+    const unreadByRoom = new Map(
+      unreadRows.map((row) => [row._id.toString(), row.count]),
+    );
 
     return rooms.map((room) => {
       const otherParticipant = room.participants.find(
@@ -51,7 +74,77 @@ export class ChatService {
             }
           : null,
         lastMessageAt: room.lastMessageAt,
+        unreadCount: unreadByRoom.get(room._id.toString()) || 0,
       };
+    });
+  }
+
+  async getAvailablePartners(userId: string) {
+    const userObjectId = new Types.ObjectId(userId);
+    const existingRooms = await this.chatRoomModel
+      .find({ participants: userObjectId })
+      .select('participants')
+      .lean()
+      .exec();
+
+    const excludedUserIds = new Set<string>([userId]);
+    for (const room of existingRooms) {
+      for (const participantId of room.participants) {
+        excludedUserIds.add(participantId.toString());
+      }
+    }
+
+    const providers = await this.providerModel
+      .find({
+        status: ProviderStatus.Active,
+        capabilities: ProviderCapability.Photography,
+      })
+      .select('_id userId businessName capabilities media portfolio')
+      .lean()
+      .exec();
+
+    const candidateUserIds = providers
+      .map((provider) => provider.userId)
+      .filter(
+        (partnerUserId): partnerUserId is Types.ObjectId =>
+          Boolean(partnerUserId) && !excludedUserIds.has(partnerUserId.toString()),
+      );
+
+    if (candidateUserIds.length === 0) return [];
+
+    const users = await this.userModel
+      .find({ _id: { $in: candidateUserIds } })
+      .select('_id profile.fullName profile.avatarUrl')
+      .lean()
+      .exec();
+    const usersById = new Map(users.map((user) => [user._id.toString(), user]));
+
+    return providers.flatMap((provider) => {
+      const partnerUserId = provider.userId?.toString();
+      if (!partnerUserId || excludedUserIds.has(partnerUserId)) return [];
+
+      const partnerUser = usersById.get(partnerUserId);
+      if (!partnerUser) return [];
+
+      const media = provider.media as
+        | { logoUrl?: string | null; coverUrl?: string | null; images?: string[] }
+        | undefined;
+      const legacyPortfolio = (provider as any).portfolio as string[] | undefined;
+
+      return [{
+        _id: provider._id,
+        userId: partnerUser._id,
+        businessName:
+          provider.businessName || partnerUser.profile?.fullName || 'Đối tác',
+        capabilities: provider.capabilities || [],
+        avatarUrl:
+          partnerUser.profile?.avatarUrl ||
+          media?.logoUrl ||
+          media?.coverUrl ||
+          media?.images?.[0] ||
+          legacyPortfolio?.[0] ||
+          null,
+      }];
     });
   }
 
@@ -75,16 +168,24 @@ export class ChatService {
     }
 
     const userObjectId = new Types.ObjectId(userId);
-    const partnerObjectId = new Types.ObjectId(otherUserId);
-
-    if (userId === otherUserId) {
-      throw new BadRequestException('Cannot chat with yourself');
+    let partner = await this.userModel.findById(otherUserId).exec();
+    if (!partner) {
+      const provider = await this.providerModel
+        .findById(otherUserId)
+        .select('userId')
+        .lean()
+        .exec();
+      if (provider?.userId) {
+        partner = await this.userModel.findById(provider.userId).exec();
+      }
     }
-
-    // Check if partner exists
-    const partner = await this.userModel.findById(partnerObjectId).exec();
     if (!partner) {
       throw new NotFoundException('Partner not found');
+    }
+
+    const partnerObjectId = partner._id;
+    if (userObjectId.equals(partnerObjectId)) {
+      throw new BadRequestException('Cannot chat with yourself');
     }
 
     // Find 1v1 room

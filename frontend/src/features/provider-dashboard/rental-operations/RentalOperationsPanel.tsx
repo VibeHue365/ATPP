@@ -24,7 +24,6 @@ import {
   DollarSign,
   AlertTriangle,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import type { useProviderSessionState } from '../hooks/useProviderSessionState';
 import type { useProviderOrderState } from '../orders/useProviderOrderState';
 import { toLocalDateKey } from '../shared/dateHelpers';
@@ -48,6 +47,7 @@ type RentalOperationsPanelProps = Pick<ReturnType<typeof useProviderOrderState>,
   rentalOperationItems: { order: Order; item: any; }[];
   orders?: Order[];
   toast?: any;
+  onOpenChat: () => void;
 };
 
 export function RentalOperationsPanel({
@@ -57,9 +57,8 @@ export function RentalOperationsPanel({
   setSelectedBookingId,
   setIsDetailModalOpen,
   toast,
+  onOpenChat,
 }: RentalOperationsPanelProps) {
-  const navigate = useNavigate();
-
   // Reset scroll on mount to ensure top Hero Banner and Metric Cards are shown
   useEffect(() => {
     const parentContainer = document.querySelector('.ro-wrapper')?.parentElement;
@@ -978,7 +977,7 @@ export function RentalOperationsPanel({
                   <div className="ro-contact-buttons">
                     <button
                       type="button"
-                      onClick={() => navigate('/chat')}
+                      onClick={onOpenChat}
                       className="ro-btn-contact"
                     >
                       <MessageSquare size={14} />

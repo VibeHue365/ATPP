@@ -67,6 +67,8 @@ import { CustomerRatingModal } from '../../features/provider-dashboard/trust/Cus
 import { TrustPanel } from '../../features/provider-dashboard/trust/TrustPanel';
 import { useProviderTrustState } from '../../features/provider-dashboard/trust/useProviderTrustState';
 import { NotificationsPage } from '../notifications/NotificationsPage';
+import { ChatPage } from '../chat/ChatPage';
+import { chatService } from '../../services/chatService';
 import './providerServiceProfile.css';
 
 export const ProviderDashboard: React.FC = () => {
@@ -653,6 +655,32 @@ export const ProviderDashboard: React.FC = () => {
   }, [currentView]);
 
   const { socket } = useSocket();
+  const [chatUnreadCount, setChatUnreadCount] = React.useState(0);
+
+  const refreshChatUnreadCount = React.useCallback(async () => {
+    try {
+      const rooms = await chatService.getRooms();
+      setChatUnreadCount(
+        rooms.reduce((total, room) => total + (room.unreadCount || 0), 0),
+      );
+    } catch {
+      setChatUnreadCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshChatUnreadCount();
+  }, [refreshChatUnreadCount]);
+
+  useEffect(() => {
+    if (!socket) return;
+    socket.on('room_update', refreshChatUnreadCount);
+    socket.on('messages_read', refreshChatUnreadCount);
+    return () => {
+      socket.off('room_update', refreshChatUnreadCount);
+      socket.off('messages_read', refreshChatUnreadCount);
+    };
+  }, [socket, refreshChatUnreadCount]);
 
   const fetchOrdersRef = useRef(fetchOrders);
 
@@ -759,7 +787,7 @@ export const ProviderDashboard: React.FC = () => {
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-light-bg)' }}>
       {/* SIDEBAR */}
-      <ProviderSidebar {...{ setCurrentView, currentView, hasAodaiCapability, setCollectionTab, collectionTab, hasPhotographyCapability, navigate, handleLogoutClick, isSidebarCollapsed, toggleSidebar }} />
+      <ProviderSidebar {...{ setCurrentView, currentView, hasAodaiCapability, setCollectionTab, collectionTab, hasPhotographyCapability, navigate, handleLogoutClick, isSidebarCollapsed, toggleSidebar, chatUnreadCount }} />
 
       {/* MAIN CONTENT AREA */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh', overflowY: 'auto', backgroundColor: 'var(--color-light-bg)' }}>
@@ -788,12 +816,22 @@ export const ProviderDashboard: React.FC = () => {
           </main>
         )}
 
+        {currentView === 'chat' && (
+          <main style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <ChatPage
+              embedded
+              excludeProviderId={provider?._id}
+              onUnreadCountChange={setChatUnreadCount}
+            />
+          </main>
+        )}
+
         {currentView === 'orders' && (
-          <OrdersPanel {...{ toast, tabs, setOrderTab, orderTab, hasAodaiCapability, hasPhotographyCapability, orders, setBookingTypeFilter, bookingTypeFilter, monthlyRevenue, loadingOrders, filteredOrders, setSelectedBookingId, setIsDetailModalOpen, setActionMenuId, actionMenuId, resolveRescheduleRequest, changeOrderStatus, setReportingOrder, setSelectedItemId, setIncidentDesc, setIncidentPhotos, setIncidentAmount, setIncidentActionType, activePage, setActivePage }} />
+          <OrdersPanel {...{ toast, tabs, setOrderTab, orderTab, hasAodaiCapability, hasPhotographyCapability, orders, setBookingTypeFilter, bookingTypeFilter, monthlyRevenue, loadingOrders, filteredOrders, setSelectedBookingId, setIsDetailModalOpen, setActionMenuId, actionMenuId, resolveRescheduleRequest, changeOrderStatus, setReportingOrder, setSelectedItemId, setIncidentDesc, setIncidentPhotos, setIncidentAmount, setIncidentActionType, activePage, setActivePage }} onOpenChat={() => setCurrentView('chat')} />
         )}
 
         {currentView === 'rental-operations' && (
-          <RentalOperationsPanel {...{ fetchOrders, loadingOrders, rentalOperationItems, setSelectedBookingId, setIsDetailModalOpen, orders, toast }} />
+          <RentalOperationsPanel {...{ fetchOrders, loadingOrders, rentalOperationItems, setSelectedBookingId, setIsDetailModalOpen, orders, toast }} onOpenChat={() => setCurrentView('chat')} />
         )}
         {currentView === 'collections' && (
           <CollectionsPanel {...{ collectionTab, openAddModal, setCollectionTab, prodSearch, setProdSearch, setProdPage, prodSizeFilter, setProdSizeFilter, prodColorFilter, setProdColorFilter, prodSortBy, setProdSortBy, loadingProducts, products, openEditModal, handleDuplicateProduct, handleDeleteProduct, prodTotal, prodLimit, prodPage, renderInventoryView, categories, fetchProducts, inventorySummary, toast }} />

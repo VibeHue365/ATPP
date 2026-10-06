@@ -4,7 +4,7 @@ import { useAuth } from '../../features/auth/hooks/useAuth';
 import { useSocket } from '../../context/SocketContext';
 import { useToast } from '../../components/feedback/Toast';
 import { chatService } from '../../services/chatService';
-import { httpClient } from '../../services/httpClient';
+import type { AvailableChatPartner } from '../../services/chatService';
 import type { ChatRoom, ChatMessage } from '../../types/chat.types';
 import {
   Send,
@@ -15,7 +15,23 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/env';
 
-export const ChatPage: React.FC = () => {
+interface ChatPageProps {
+  embedded?: boolean;
+  onUnreadCountChange?: (count: number) => void;
+  excludeProviderId?: string;
+}
+
+const normalizeEntityId = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const nestedId = record._id ?? record.id;
+    return nestedId == null ? '' : String(nestedId);
+  }
+  return value == null ? '' : String(value);
+};
+
+export const ChatPage: React.FC<ChatPageProps> = ({ embedded = false, onUnreadCountChange, excludeProviderId }) => {
   const { user } = useAuth();
   const { socket, isConnected } = useSocket();
   const location = useLocation();
@@ -30,13 +46,15 @@ export const ChatPage: React.FC = () => {
 
   // New Chat Dialog States
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
-  const [potentialPartners, setPotentialPartners] = useState<any[]>([]);
+  const [potentialPartners, setPotentialPartners] = useState<AvailableChatPartner[]>([]);
   const [loadingPartners, setLoadingPartners] = useState(false);
+  const [startingPartnerId, setStartingPartnerId] = useState<string | null>(null);
 
   // File attachments state
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesRequestIdRef = useRef(0);
 
   // Scroll ref for messages
   const messageEndRef = useRef<HTMLDivElement>(null);
@@ -50,6 +68,9 @@ export const ChatPage: React.FC = () => {
       setLoadingRooms(true);
       const data = await chatService.getRooms();
       setRooms(data);
+      onUnreadCountChange?.(
+        data.reduce((total, room) => total + (room.unreadCount || 0), 0),
+      );
 
       // Select active room if passed or select first
       if (selectRoomId) {
@@ -71,27 +92,43 @@ export const ChatPage: React.FC = () => {
 
   // Load messages when active room changes
   useEffect(() => {
-    if (!activeRoom) return;
+    if (!activeRoom) {
+      setMessages([]);
+      return;
+    }
+
+    const roomId = normalizeEntityId(activeRoom.id);
+    const requestId = ++messagesRequestIdRef.current;
+    setMessages([]);
 
     const fetchMessages = async () => {
       try {
         setLoadingMessages(true);
-        const data = await chatService.getMessages(activeRoom.id);
+        const data = await chatService.getMessages(roomId);
+        if (messagesRequestIdRef.current !== requestId) return;
         setMessages(data);
 
         // Join socket room
         if (socket) {
-          socket.emit('join_room', { roomId: activeRoom.id });
-          socket.emit('mark_read', { roomId: activeRoom.id });
+          socket.emit('join_room', { roomId });
+          socket.emit('mark_read', { roomId });
         }
       } catch (err: any) {
         toast.error('Không thể tải lịch sử tin nhắn');
       } finally {
-        setLoadingMessages(false);
+        if (messagesRequestIdRef.current === requestId) {
+          setLoadingMessages(false);
+        }
       }
     };
 
     fetchMessages();
+
+    return () => {
+      if (messagesRequestIdRef.current === requestId) {
+        messagesRequestIdRef.current += 1;
+      }
+    };
   }, [activeRoom, socket]);
 
   // Scroll to bottom on new messages
@@ -105,7 +142,10 @@ export const ChatPage: React.FC = () => {
 
     const onNewMessage = (message: ChatMessage) => {
       // If message is for the active room, append it and mark as read
-      if (activeRoom && message.roomId === activeRoom.id) {
+      if (
+        activeRoom &&
+        normalizeEntityId(message.roomId) === normalizeEntityId(activeRoom.id)
+      ) {
         setMessages((prev) => [...prev, message]);
         socket.emit('mark_read', { roomId: activeRoom.id });
       }
@@ -119,10 +159,16 @@ export const ChatPage: React.FC = () => {
     };
 
     const onMessagesRead = (data: { roomId: string; userId: string }) => {
-      if (activeRoom && data.roomId === activeRoom.id && data.userId !== user?.id) {
+      if (
+        activeRoom &&
+        normalizeEntityId(data.roomId) === normalizeEntityId(activeRoom.id) &&
+        normalizeEntityId(data.userId) !== normalizeEntityId(user?.id)
+      ) {
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.senderId === user?.id ? { ...msg, isRead: true } : msg
+            normalizeEntityId(msg.senderId) === normalizeEntityId(user?.id)
+              ? { ...msg, isRead: true }
+              : msg
           )
         );
       }
@@ -206,8 +252,12 @@ export const ChatPage: React.FC = () => {
     setIsNewChatOpen(true);
     try {
       setLoadingPartners(true);
-      const res = await httpClient.get<any>('/api/photographers');
-      setPotentialPartners(res?.data || []);
+      const partners = await chatService.getAvailablePartners();
+      setPotentialPartners(
+        excludeProviderId
+          ? partners.filter((partner) => String(partner._id) !== String(excludeProviderId))
+          : partners,
+      );
     } catch (err: any) {
       toast.error('Không thể lấy danh sách đối tác');
     } finally {
@@ -216,14 +266,18 @@ export const ChatPage: React.FC = () => {
   };
 
   const startNewChat = async (partnerUserId: string) => {
-    setIsNewChatOpen(false);
+    if (!partnerUserId || startingPartnerId) return;
+    setStartingPartnerId(partnerUserId);
     try {
       const room = await chatService.getOrCreateRoom(partnerUserId);
       // Select the newly created or fetched room
       setActiveRoom(room);
-      fetchRooms(room.id);
+      await fetchRooms(room.id);
+      setIsNewChatOpen(false);
     } catch (err: any) {
       toast.error(err.message || 'Không thể tạo phòng chat');
+    } finally {
+      setStartingPartnerId(null);
     }
   };
 
@@ -264,13 +318,13 @@ export const ChatPage: React.FC = () => {
   };
 
   return (
-    <div style={{ backgroundColor: '#FCF9F2', minHeight: '90vh', padding: '24px 0' }}>
+    <div style={{ backgroundColor: '#FCF9F2', minHeight: embedded ? 0 : '90vh', height: embedded ? '100%' : undefined, padding: embedded ? '24px 32px' : '24px 0' }}>
       <div
         style={{
           maxWidth: '1280px',
           margin: '0 auto',
           padding: '0 24px',
-          height: '750px',
+          height: embedded ? '100%' : '750px',
           display: 'grid',
           gridTemplateColumns: '320px 1fr',
           backgroundColor: '#FFFFFF',
@@ -330,7 +384,7 @@ export const ChatPage: React.FC = () => {
                 // Check if last message is sent by partner and is unread
                 const isUnread =
                   room.lastMessage &&
-                  room.lastMessage.senderId !== user?.id &&
+                  normalizeEntityId(room.lastMessage.senderId) !== normalizeEntityId(user?.id) &&
                   !room.lastMessage.isRead;
 
                 return (
@@ -570,7 +624,8 @@ export const ChatPage: React.FC = () => {
                     </div>
 
                     {messages.map((msg) => {
-                      const isMe = msg.senderId === user?.id;
+                      const isMe =
+                        normalizeEntityId(msg.senderId) === normalizeEntityId(user?.id);
 
                       return (
                         <div
@@ -867,7 +922,7 @@ export const ChatPage: React.FC = () => {
                     letterSpacing: '0.05em',
                   }}
                 >
-                  <span>ĐÃ CÓ TRỢ LÝ SOẠN THẢO AI</span>
+                  <span></span>
                   <span>TỐI ĐA 2.000 KÝ TỰ</span>
                 </div>
               </div>
@@ -977,7 +1032,8 @@ export const ChatPage: React.FC = () => {
                       gap: '12px',
                       padding: '10px 12px',
                       borderRadius: '10px',
-                      cursor: 'pointer',
+                      cursor: startingPartnerId ? 'wait' : 'pointer',
+                      opacity: startingPartnerId && startingPartnerId !== (partner.userId || partner._id) ? 0.55 : 1,
                       transition: 'background-color 0.2s',
                       marginBottom: '4px',
                       textAlign: 'left',
@@ -986,7 +1042,7 @@ export const ChatPage: React.FC = () => {
                     onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                   >
                     <img
-                      src={partner.portfolio?.[0] || '/avatar_hanna.webp'}
+                      src={partner.avatarUrl || '/avatar_hanna.webp'}
                       alt={partner.businessName}
                       style={{
                         width: '40px',

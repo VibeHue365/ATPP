@@ -30,6 +30,7 @@ type OrdersPanelProps = Pick<ReturnType<typeof useProviderOrderState>,
   filteredOrders: Order[];
   resolveRescheduleRequest: (order: Order, item: any, approved: boolean) => Promise<void>;
   changeOrderStatus: (_id: string, apiStatus: string) => Promise<void>;
+  onOpenChat: () => void;
 };
 
 export function OrdersPanel({
@@ -59,6 +60,7 @@ export function OrdersPanel({
   setIncidentActionType,
   activePage,
   setActivePage,
+  onOpenChat,
 }: OrdersPanelProps) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number; bottom: number; left: number } | null>(null);
@@ -171,6 +173,7 @@ export function OrdersPanel({
             resolveRescheduleRequest={resolveRescheduleRequest}
             changeOrderStatus={changeOrderStatus}
             onOpenIncidentReport={handleOpenIncidentReport}
+            onOpenChat={onOpenChat}
             toast={toast}
           />
         )}
