@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { ConfirmModal } from '../../utils/confirmModal';
 
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
@@ -297,19 +298,14 @@ export const ProductDetailPage: React.FC = () => {
 
   const handleToggleFavorite = async () => {
     if (!user) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Yêu cầu đăng nhập',
-        text: 'Vui lòng đăng nhập để lưu sản phẩm yêu thích!',
-        confirmButtonColor: 'var(--color-primary)',
-        confirmButtonText: 'Đăng nhập ngay',
-        showCancelButton: true,
-        cancelButtonText: 'Hủy',
-      }).then((result) => {
-        if (result.isConfirmed) {
-          navigate('/login');
-        }
-      });
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để lưu sản phẩm Áo Dài yêu thích!',
+        { confirmButtonText: 'Đăng nhập ngay' }
+      );
+      if (result.isConfirmed) {
+        navigate('/login');
+      }
       return;
     }
     try {
@@ -1004,6 +1000,17 @@ export const ProductDetailPage: React.FC = () => {
 
   // Add to cart & Rent now
   const handleAddToCart = async () => {
+    if (!isAuthenticated) {
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để thêm trang phục vào giỏ hàng!',
+        { confirmButtonText: 'Đăng nhập ngay' },
+      );
+      if (result.isConfirmed) {
+        navigate(ROUTES.LOGIN, { state: { from: location } });
+      }
+      return;
+    }
     if (!validateBookingForm()) return;
     const rentalFrom = rentalMode === 'DAILY' ? startDate : singleDate;
     const rentalTo = rentalMode === 'DAILY' ? endDate : singleDate;
@@ -1064,7 +1071,19 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   const handleBookingSubmit = async () => {
+    if (!isAuthenticated) {
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để tiếp tục đặt thuê trang phục!',
+        { confirmButtonText: 'Đăng nhập ngay' },
+      );
+      if (result.isConfirmed) {
+        navigate(ROUTES.LOGIN, { state: { from: location } });
+      }
+      return;
+    }
     if (!validateBookingForm()) return;
+
     const rentalFrom = rentalMode === 'DAILY' ? startDate : singleDate;
     const rentalTo = rentalMode === 'DAILY' ? endDate : singleDate;
     try {

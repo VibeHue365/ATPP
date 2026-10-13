@@ -106,7 +106,7 @@ type CombosPanelProps = Pick<
     handleCreateOrUpdateVoucher?: (e: FormEvent<Element>) => Promise<void>;
     handleEditVoucher?: (voucher: any) => void;
     clearVoucherForm?: () => void;
-    handleCreateOrUpdateCombo: (e: FormEvent<Element>) => Promise<void>;
+    handleCreateOrUpdateCombo: (e: FormEvent<Element>) => Promise<boolean | void>;
     clearComboForm: () => void;
     handleEditCombo: (combo: any) => void;
     handleDeleteCombo: (id: string) => Promise<void>;
@@ -294,8 +294,10 @@ export const CombosPanel: React.FC<CombosPanelProps> = ({
   };
 
   const handleComboSubmit = async (e: React.FormEvent) => {
-    await handleCreateOrUpdateCombo(e);
-    setIsModalOpen(false);
+    const success = await handleCreateOrUpdateCombo(e);
+    if (success !== false) {
+      setIsModalOpen(false);
+    }
   };
 
   // Metrics calculation

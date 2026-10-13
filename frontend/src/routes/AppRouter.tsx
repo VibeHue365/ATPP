@@ -40,13 +40,14 @@ const NotFoundPage = lazy(() => import('../pages/errors/NotFoundPage'));
 const OnboardingPage = lazy(() => import('../pages/onboarding/OnboardingPage'));
 const ProviderDashboard = lazy(() => import('../pages/providerdashboard/ProviderDashboard'));
 const BecomeProviderPage = lazy(() => import('../pages/provider/BecomeProviderPage'));
-const AdminDashboardRefactored = lazy(() => import('../pages/admin/AdminDashboardRefactored'));
+const AdminDashboard = lazy(() => import('../pages/admin/AdminDashboard'));
 const ComboListingPage = lazy(() =>
   import('../pages/combos/ComboListingPage').then((m) => ({ default: m.ComboListingPage }))
 );
 const ComboDetailPage = lazy(() => import('../pages/combos/ComboDetailPage'));
 const CheckoutResultPage = lazy(() => import('../pages/checkout/CheckoutResultPage'));
 const ProviderStorePage = lazy(() => import('../pages/store/ProviderStorePage'));
+const StoresListingPage = lazy(() => import('../pages/store/StoresListingPage'));
 const NotificationsPage = lazy(() => import('../pages/notifications/NotificationsPage'));
 const ChatPage = lazy(() => import('../pages/chat/ChatPage'));
 const VirtualTryOn3DPage = lazy(() => import('../pages/virtual-tryon/VirtualTryOn3DPage'));
@@ -103,6 +104,8 @@ export const AppRouter: React.FC = () => {
           <Route path={ROUTES.COMBOS} element={<ComboListingPage />} />
           <Route path={ROUTES.COMBO_DETAIL} element={<ComboDetailPage />} />
           <Route path={ROUTES.PROVIDER_STORE} element={<ProviderStorePage />} />
+          <Route path={ROUTES.STORES} element={<StoresListingPage />} />
+          <Route path="/partners" element={<Navigate to={ROUTES.STORES} replace />} />
           <Route path={ROUTES.CART} element={<CartPage />} />
         </Route>
 
@@ -136,11 +139,11 @@ export const AppRouter: React.FC = () => {
             <Route path={ROUTES.PROVIDER_REGISTER} element={<BecomeProviderPage />} />
           </Route>
           {/* Admin Dashboard Page (No MainLayout header/footer) */}
-          <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardRefactored />} />
+          <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboard />} />
         </Route>
 
-        {/* Parallel preview route: allows previewing redesign directly */}
-        <Route path={ROUTES.ADMIN_DASHBOARD_REFACTORED} element={<AdminDashboardRefactored />} />
+        {/* Legacy preview route: automatically redirects to canonical Admin Dashboard */}
+        <Route path={ROUTES.ADMIN_DASHBOARD_REFACTORED} element={<Navigate to={ROUTES.ADMIN_DASHBOARD} replace />} />
 
         {/* 404 Route Fallback */}
         <Route path="*" element={<NotFoundPage />} />

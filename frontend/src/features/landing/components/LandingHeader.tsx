@@ -189,7 +189,7 @@ export const LandingHeader: React.FC = () => {
   }, [location.hash, location.pathname]);
   return (
     <header className={`lume-header ${isScrolled ? 'is-scrolled' : ''}`}>
-      <div className="lume-header__inner w-full max-w-[1200px] px-6 mx-auto">
+      <div className="lume-header__inner w-full max-w-[1440px] px-4 md:px-8 xl:px-10 mx-auto">
         {/* Compact Moderate Rounded Container matching Target Screenshot */}
         <div
           className="lume-header__content w-full transition-all"
@@ -208,7 +208,7 @@ export const LandingHeader: React.FC = () => {
           </Link>
 
           {/* Center: Desktop Navigation Links (Visible exclusively on lg: desktop) */}
-          <nav className="lume-header__nav hidden lg:flex items-center justify-center gap-7 lg:gap-9 font-body shrink-0">
+          <nav className="lume-header__nav hidden lg:flex items-center justify-center font-body">
             <Link
               to={ROUTES.LANDING}
               onClick={(e) => {
@@ -238,6 +238,32 @@ export const LandingHeader: React.FC = () => {
               className={`lume-header__nav-link transition-all text-decoration-none whitespace-nowrap ${location.pathname === ROUTES.COMBOS ? 'is-active' : ''}`}
             >
               Combo
+            </Link>
+            <Link
+              to={ROUTES.STORES}
+              className={`lume-header__nav-link transition-all text-decoration-none whitespace-nowrap ${location.pathname === ROUTES.STORES ? 'is-active' : ''}`}
+            >
+              Cửa hàng &amp; Studio
+            </Link>
+            <Link
+              to={ROUTES.VIRTUAL_TRYON_3D}
+              className={`lume-header__nav-link transition-all text-decoration-none whitespace-nowrap flex items-center gap-1.5 ${location.pathname === ROUTES.VIRTUAL_TRYON_3D ? 'is-active' : ''}`}
+            >
+              <span>Thử đồ 3D</span>
+              <span
+                style={{
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  padding: '1px 5px',
+                  borderRadius: '999px',
+                  backgroundColor: '#FEF3C7',
+                  color: '#92400E',
+                  border: '1px solid #FDE68A',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                AI
+              </span>
             </Link>
           </nav>
 
@@ -596,10 +622,39 @@ export const LandingHeader: React.FC = () => {
             <Link
               to={ROUTES.COMBOS}
               onClick={() => setIsMobileMenuOpen(false)}
-              className="py-2.5 text-decoration-none"
-              style={{ color: 'var(--landing-text-primary)' }}
+              className="py-2.5 border-b text-decoration-none"
+              style={{ borderColor: 'var(--landing-border)', color: location.pathname === ROUTES.COMBOS ? 'var(--landing-primary)' : 'var(--landing-text-primary)' }}
             >
               Combo
+            </Link>
+            <Link
+              to={ROUTES.STORES}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="py-2.5 border-b text-decoration-none"
+              style={{ borderColor: 'var(--landing-border)', color: location.pathname === ROUTES.STORES ? 'var(--landing-primary)' : 'var(--landing-text-primary)' }}
+            >
+              Cửa hàng &amp; Studio
+            </Link>
+            <Link
+              to={ROUTES.VIRTUAL_TRYON_3D}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="py-2.5 text-decoration-none flex items-center justify-between"
+              style={{ color: location.pathname === ROUTES.VIRTUAL_TRYON_3D ? 'var(--landing-primary)' : 'var(--landing-text-primary)' }}
+            >
+              <span>Thử đồ 3D</span>
+              <span
+                style={{
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  padding: '1px 6px',
+                  borderRadius: '999px',
+                  backgroundColor: '#FEF3C7',
+                  color: '#92400E',
+                  border: '1px solid #FDE68A',
+                }}
+              >
+                AI ✨
+              </span>
             </Link>
 
             {!isAuthenticated && (

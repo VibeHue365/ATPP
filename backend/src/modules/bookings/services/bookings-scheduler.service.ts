@@ -66,6 +66,15 @@ export class BookingsSchedulerService {
     }
   }
 
+  @Cron(CronExpression.EVERY_MINUTE)
+  async cleanupExpiredPendingBookings() {
+    try {
+      await this.bookingStatusService.cleanupExpiredPendingBookings();
+    } catch (error) {
+      this.logger.error('Unable to cleanup expired pending bookings.', error);
+    }
+  }
+
   /**
    * Auto-complete photography bookings that have been in AWAITING_REVIEW for > 48 hours.
    * Runs every hour. Uses atomic findOneAndUpdate to prevent double-processing

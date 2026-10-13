@@ -21,6 +21,12 @@ export class ProvidersRepository {
     return this.providerModel.findOne({ userId });
   }
 
+  async findByUserIdWithWallet(userId: Types.ObjectId): Promise<ProviderDocument | null> {
+    return this.providerModel
+      .findOne({ userId })
+      .select('+wallet +paymentAccounts');
+  }
+
   async findById(providerId: Types.ObjectId): Promise<ProviderDocument | null> {
     return this.providerModel.findById(providerId);
   }

@@ -213,7 +213,7 @@ export class ReviewsService {
   async getReviewsForProvider(providerIdStr: string): Promise<Review[]> {
     return this.reviewModel
       .find({ providerId: new Types.ObjectId(providerIdStr) })
-      .populate('customerId')
+      .populate('customerId', 'profile.fullName profile.avatarUrl')
       .sort({ createdAt: -1 });
   }
 
@@ -235,7 +235,7 @@ export class ReviewsService {
 
     return this.reviewModel
       .find({ bookingItemId: { $in: bookingItemIds } })
-      .populate('customerId')
+      .populate('customerId', 'profile.fullName profile.avatarUrl')
       .sort({ createdAt: -1 });
   }
 

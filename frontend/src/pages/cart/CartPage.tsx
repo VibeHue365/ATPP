@@ -7,6 +7,8 @@ import { useCart } from '../../context/CartContext';
 import type { CartItem } from '../../context/CartContext';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
+import { ConfirmModal } from '../../utils/confirmModal';
+
 import { productSlots, isTimeSlotOverlap } from '../rentals/product-detail/utils/timeSlotUtils';
 import type { EnrichedCartItem, ComboGroupEntry, CartCalendarDay, CartItemGroup } from './types';
 import {
@@ -21,6 +23,11 @@ import { CartItemCard } from './components/CartItemCard';
 import { CartEditItemInline } from './components/CartEditItemInline';
 import { CartOrderSummary } from './components/CartOrderSummary';
 import { CartMobileStickyBar } from './components/CartMobileStickyBar';
+import {
+  VoucherPickerModal,
+  type ApplicableVoucherItem,
+  type IneligibleVoucherItem,
+} from './components/VoucherPickerModal';
 import './CartPage.css';
 
 export const CartPage: React.FC = () => {
@@ -43,6 +50,12 @@ export const CartPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [realProductList, setRealProductList] = useState<any[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+
+  // Voucher states
+  const [selectedVoucher, setSelectedVoucher] = useState<ApplicableVoucherItem | null>(null);
+  const [applicableVouchers, setApplicableVouchers] = useState<ApplicableVoucherItem[]>([]);
+  const [ineligibleVouchers, setIneligibleVouchers] = useState<IneligibleVoucherItem[]>([]);
+  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
 
   // Calendar and busy date/slot states for editing item
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
@@ -490,10 +503,96 @@ export const CartPage: React.FC = () => {
     [enrichedCart, selectedItemIds],
   );
 
-  const totals = useMemo(
+  const baseTotals = useMemo(
     () => calculateCartTotals(enrichedCart, selectedItemIds),
     [enrichedCart, selectedItemIds],
   );
+
+  const totals = useMemo(() => {
+    const voucherDiscount = selectedVoucher ? selectedVoucher.discountAmount : 0;
+    const platformSubsidy = selectedVoucher ? selectedVoucher.platformSubsidyAmount : 0;
+    const amountDue = Math.max(
+      0,
+      baseTotals.depositToPayNow - voucherDiscount - platformSubsidy,
+    );
+    return {
+      ...baseTotals,
+      voucherDiscountTotal: voucherDiscount,
+      platformSubsidyAmount: platformSubsidy,
+      amountDueNow: amountDue,
+    };
+  }, [baseTotals, selectedVoucher]);
+
+  // Fetch applicable vouchers whenever selected items change
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchVouchers = async () => {
+      if (selectedItems.length === 0) {
+        setApplicableVouchers([]);
+        setIneligibleVouchers([]);
+        setSelectedVoucher(null);
+        return;
+      }
+
+      const productItems = selectedItems.filter((item) => item.itemType === 'PRODUCT');
+      const photoItems = selectedItems.filter(
+        (item) => item.itemType === 'PHOTOGRAPHY_PACKAGE',
+      );
+
+      const itemsPayload = selectedItems.map((item, idx) => ({
+        id: item.id || `item_${idx}`,
+        productId: item.productId,
+        photographyPackageId: item.photographyPackageId,
+        providerId: (item as any).providerId || '',
+        itemType: item.itemType,
+        unitPrice: item.basePrice || 0,
+        quantity: item.quantity || 1,
+        depositAmount: item.depositAmount || 0,
+        comboDiscountAmount: (item as any).comboDiscountAmount || 0,
+      }));
+
+      const bType =
+        photoItems.length > 0 && productItems.length > 0
+          ? 'COMBO'
+          : photoItems.length > 0
+          ? 'PHOTOGRAPHY'
+          : 'AODAI_RENTAL';
+
+      try {
+        const res: any = await httpClient.post('/promotions/applicable', {
+          bookingType: bType,
+          items: itemsPayload,
+          travelFee: 0,
+          serviceFee: 0,
+        });
+
+        if (!isCancelled && res) {
+          const applicable: ApplicableVoucherItem[] = res.applicable || [];
+          const ineligible: IneligibleVoucherItem[] = res.ineligible || [];
+          setApplicableVouchers(applicable);
+          setIneligibleVouchers(ineligible);
+
+          if (selectedVoucher) {
+            const matched = applicable.find(
+              (v) => v.promotion.code === selectedVoucher.promotion.code,
+            );
+            if (matched) {
+              setSelectedVoucher(matched);
+            } else {
+              setSelectedVoucher(null);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi tải danh sách voucher:', err);
+      }
+    };
+
+    fetchVouchers();
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedItemIds, enrichedCart]);
 
   const resumePendingCheckout = async (): Promise<boolean> => {
     const selectedIds = selectedItems.map((item) => item.id).sort().join('|');
@@ -549,8 +648,14 @@ export const CartPage: React.FC = () => {
   const handleCheckout = async () => {
     if (selectedItems.length === 0) return;
     if (!isAuthenticated) {
-      toast.info('Vui lòng đăng nhập để tiến hành thanh toán.');
-      navigate(ROUTES.LOGIN, { state: { from: location } });
+      const res = await ConfirmModal.requireAuth(
+        'Đăng nhập để thanh toán',
+        'Vui lòng đăng nhập vào tài khoản của bạn để tiến hành xác nhận đặt dịch vụ và thanh toán an toàn.',
+        { confirmButtonText: 'Đăng nhập ngay' },
+      );
+      if (res.isConfirmed) {
+        navigate(ROUTES.LOGIN, { state: { from: location } });
+      }
       return;
     }
     if (await resumePendingCheckout()) return;
@@ -673,6 +778,7 @@ export const CartPage: React.FC = () => {
         }
         const holdPayload = {
           packageId: photo.photographyPackageId,
+          promoCode: selectedVoucher ? selectedVoucher.promotion.code : undefined,
           sessions: [
             {
               clientId: photo.id,
@@ -715,6 +821,7 @@ export const CartPage: React.FC = () => {
           items: rentalItemsPayload,
           travelFee: 0,
           serviceFee: 0,
+          promoCode: selectedVoucher ? selectedVoucher.promotion.code : undefined,
         });
         bookingId = bookingRes._id;
       }
@@ -741,6 +848,46 @@ export const CartPage: React.FC = () => {
       toast.error(err.message || 'Thao tác thanh toán thất bại');
       setIsLoading(false);
     }
+  };
+
+  const handleApplyManualCode = async (code: string): Promise<boolean> => {
+    const trimmed = code.trim().toUpperCase();
+    if (!trimmed) {
+      toast.error('Vui lòng nhập mã voucher');
+      return false;
+    }
+    const foundApplicable = applicableVouchers.find(
+      (v) => v.promotion.code.toUpperCase() === trimmed,
+    );
+    if (foundApplicable) {
+      setSelectedVoucher(foundApplicable);
+      toast.success(`Đã áp dụng mã ${trimmed}`);
+      return true;
+    }
+    const foundIneligible = ineligibleVouchers.find(
+      (v) => v.promotion.code.toUpperCase() === trimmed,
+    );
+    if (foundIneligible) {
+      toast.error(`Mã ${trimmed}: ${foundIneligible.reason}`);
+      return false;
+    }
+    toast.error('Mã giảm giá không hợp lệ hoặc không áp dụng cho đơn hàng này');
+    return false;
+  };
+
+  const handleOpenVoucherPicker = async () => {
+    if (!isAuthenticated) {
+      const res = await ConfirmModal.requireAuth(
+        'Đăng nhập để dùng mã ưu đãi',
+        'Vui lòng đăng nhập để xem danh sách ưu đãi và áp dụng voucher cho đơn hàng của bạn.',
+        { confirmButtonText: 'Đăng nhập ngay' },
+      );
+      if (res.isConfirmed) {
+        navigate(ROUTES.LOGIN, { state: { from: location } });
+      }
+      return;
+    }
+    setIsVoucherModalOpen(true);
   };
 
   return (
@@ -922,16 +1069,30 @@ export const CartPage: React.FC = () => {
               hasCityMismatch={false}
               isLoading={isLoading}
               onCheckout={handleCheckout}
+              selectedVoucher={selectedVoucher}
+              onOpenVoucherPicker={handleOpenVoucherPicker}
+              onRemoveVoucher={() => setSelectedVoucher(null)}
             />
           </div>
         )}
       </div>
 
+      {/* Voucher Picker Modal */}
+      <VoucherPickerModal
+        isOpen={isVoucherModalOpen}
+        onClose={() => setIsVoucherModalOpen(false)}
+        applicableList={applicableVouchers}
+        ineligibleList={ineligibleVouchers}
+        selectedVoucherCode={selectedVoucher?.promotion.code || null}
+        onSelectVoucher={(voucher) => setSelectedVoucher(voucher)}
+        onApplyManualCode={handleApplyManualCode}
+      />
+
       {/* Mobile Sticky Checkout Bar */}
       {cart.length > 0 && (
         <CartMobileStickyBar
           selectedCount={selectedItems.length}
-          depositToPayNow={totals.depositToPayNow}
+          depositToPayNow={totals.amountDueNow ?? totals.depositToPayNow}
           grandTotal={totals.grandTotal}
           isLoading={isLoading}
           onCheckout={handleCheckout}

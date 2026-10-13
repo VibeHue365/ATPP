@@ -200,4 +200,44 @@ describe('SettlementCalculationService', () => {
     expect(second[0].commissionRate).toBe(0.15);
     expect(second[0].policySnapshot.policyVersion).toBe(3);
   });
+
+  it('subtracts shop voucher discount from provider gross and records platform voucher discount', async () => {
+    const service = new SettlementCalculationService(policyResolver as never);
+    const providerId = new Types.ObjectId();
+    const result = await service.calculateSettlementsForBooking(
+      {
+        _id: new Types.ObjectId(),
+        bookingCode: 'BK_VOUCHER_TEST',
+        status: 'COMPLETED',
+      },
+      [
+        {
+          _id: new Types.ObjectId(),
+          providerId,
+          itemType: BookingItemType.Product,
+          unitPrice: 500000,
+          quantity: 1,
+          comboDiscountAmount: 50000,
+          shopVoucherDiscountAmount: 30000,
+          platformVoucherDiscountAmount: 20000,
+        },
+      ],
+      null,
+    );
+
+    // serviceAmount = 500,000.
+    // providerDiscount = combo (50k) + shopVoucher (30k) = 80,000
+    // grossAmount = commissionBaseAmount = 500k - 80k = 420,000
+    // commission (10%) = 42,000
+    expect(result[0].grossAmount).toBe(420000);
+    expect(result[0].commissionBaseAmount).toBe(420000);
+    expect(result[0].commissionAmount).toBe(42000);
+    expect(result[0].itemSnapshots[0]).toMatchObject({
+      serviceAmount: 500000,
+      providerDiscountAmount: 80000,
+      platformDiscountAmount: 20000,
+      commissionBaseAmount: 420000,
+      commissionAmount: 42000,
+    });
+  });
 });

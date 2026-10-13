@@ -41,6 +41,7 @@ import { WebhookEventRepository } from './repositories/webhook-event.repository'
 import { SettlementTransferMapper } from './mappers/settlement-transfer.mapper';
 import { SettlementsModule } from '../settlements/settlements.module';
 import { SystemPoliciesModule } from '../system-policies/system-policies.module';
+import { ProductsModule } from '../products/products.module';
 
 export const paymentModels = MongooseModule.forFeature([
   { name: Payment.name, schema: PaymentSchema },
@@ -62,6 +63,7 @@ export const paymentModels = MongooseModule.forFeature([
     NotificationsModule,
     SettlementsModule,
     SystemPoliciesModule,
+    ProductsModule,
   ],
   controllers: [PaymentsController, RefundsController],
   providers: [

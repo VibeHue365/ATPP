@@ -61,11 +61,18 @@ async function bootstrap() {
 void bootstrap();
 // trigger watch reload: 2026-10-04T23:19:00
 
-function allowedCorsOrigins(): string[] {
-  return (process.env.FRONTEND_URL ?? 'http://localhost:5173')
+function allowedCorsOrigins(): (string | RegExp)[] {
+  const envOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:5173')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+
+  // In development, permit localhost/127.0.0.1 on common dev ports (5173, 5174, 5175, etc.)
+  return [
+    ...envOrigins,
+    /^http:\/\/localhost:(517[0-9]|300[0-9]|417[0-9])$/,
+    /^http:\/\/127\.0\.0\.1:(517[0-9]|300[0-9]|417[0-9])$/,
+  ];
 }
 
 function securityHeaders(

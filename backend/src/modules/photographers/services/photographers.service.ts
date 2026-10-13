@@ -1,4 +1,4 @@
-﻿import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -619,17 +619,15 @@ export class PhotographersService {
     const provider = typeof (photographer as any).toObject === 'function'
       ? (photographer as any).toObject()
       : photographer;
-    const {
-      address: providerAddress,
-      rentalSettings: _rentalSettings,
-      photographySettings,
-      ...publicProvider
-    } = provider;
+    const providerAddress = provider.address;
+    const photographySettings = provider.photographySettings;
     const address = providerAddress
       ? {
+          addressLine: providerAddress.addressLine ?? null,
           ward: providerAddress.ward ?? null,
           district: providerAddress.district ?? null,
           city: providerAddress.city ?? null,
+          geo: providerAddress.geo ?? null,
         }
       : null;
     const media = { ...provider.media, images: provider.media?.images || [] };
@@ -644,7 +642,16 @@ export class PhotographersService {
     }));
 
     return {
-      ...publicProvider,
+      _id: provider._id,
+      businessName: provider.businessName,
+      capabilities: provider.capabilities,
+      contact: provider.contact,
+      rating: provider.rating,
+      status: provider.status,
+      comboDiscountPercent: provider.comboDiscountPercent,
+      policies: provider.policies,
+      createdAt: provider.createdAt,
+      updatedAt: provider.updatedAt,
       address,
       serviceRadiusKm: photographySettings?.serviceRadiusKm ?? null,
       media,

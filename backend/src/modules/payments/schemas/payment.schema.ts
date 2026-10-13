@@ -18,6 +18,7 @@ export enum PaymentPurpose {
 
 export enum PaymentStatus {
   Pending = 'PENDING',
+  Processing = 'PROCESSING',
   Success = 'SUCCESS',
   Failed = 'FAILED',
   Cancelled = 'CANCELLED',
@@ -89,6 +90,21 @@ export class Payment {
   })
   payos?: PayOSCheckoutInfo | null;
 
+  @Prop({ type: Types.ObjectId, ref: 'Payment', default: null, index: true })
+  originalPaymentId?: Types.ObjectId | null;
+
+  @Prop({ type: String, default: null })
+  refundReason?: string | null;
+
+  @Prop({ type: Number, default: 0 })
+  retryCount?: number;
+
+  @Prop({ type: String, default: null })
+  lastError?: string | null;
+
+  @Prop({ type: Boolean, default: false })
+  needsManualReview?: boolean;
+
   @Prop({ type: Date, default: null })
   paidAt?: Date | null;
 }
@@ -96,3 +112,13 @@ export class Payment {
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
 PaymentSchema.index({ 'payos.orderCode': 1 }, { unique: true, sparse: true });
 PaymentSchema.index({ status: 1, purpose: 1, createdAt: 1 });
+PaymentSchema.index(
+  { originalPaymentId: 1, refundReason: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      purpose: PaymentPurpose.DepositRefund,
+      originalPaymentId: { $type: 'objectId' },
+    },
+  },
+);

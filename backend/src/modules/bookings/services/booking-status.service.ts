@@ -10,6 +10,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -29,6 +30,9 @@ import {
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/schemas/notification.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
+import { PaymentDocument } from '../../payments/schemas/payment.schema';
+import { PromotionsService } from '../../products/services/promotions.service';
+import { SettlementCalculationService } from '../../settlements/services/settlement-calculation.service';
 const SYSTEM_POLICIES = {
   BOOKING_HOLD_TIMEOUT_MS: 15 * 60 * 1000,
   FREE_CANCEL_LIMIT_HOURS: 24,
@@ -50,6 +54,8 @@ export class BookingStatusService {
     private readonly notificationsService: NotificationsService,
     @Inject(forwardRef(() => PaymentsService))
     private readonly paymentsService: PaymentsService,
+    private readonly promotionsService: PromotionsService,
+    private readonly settlementCalc: SettlementCalculationService,
   ) {}
 
   async cleanupExpiredPendingBookings(
@@ -107,6 +113,10 @@ export class BookingStatusService {
             { $set: { status: ReservationStatus.Cancelled } },
           )
           .session(session);
+
+        for (const bId of bookingIds) {
+          await this.promotionsService.releaseVoucher(bId, session);
+        }
       }
 
       if (isInternalSession) {
@@ -420,132 +430,108 @@ export class BookingStatusService {
         isFreeCancel = true;
       }
 
+      // 1. Lấy số tiền khách thực tế đã thanh toán và có thể hoàn (không lấy grandTotal!)
+      const refundable =
+        booking.status === BookingStatus.PendingPayment
+          ? 0
+          : await this.paymentsService.getRefundableAmount(
+              booking._id,
+              session,
+            );
+
       let penaltyAmount = 0;
-      if (isFreeCancel) {
-        refundAmount = booking.pricingSummary?.grandTotal || 0;
+      refundAmount = 0;
+
+      if (booking.status === BookingStatus.PendingPayment) {
+        refundAmount = 0;
+        penaltyAmount = 0;
+      } else if (isFreeCancel) {
+        refundAmount = refundable;
+        penaltyAmount = 0;
       } else {
         const items = await this.bookingsRepository.findBookingItems(
           { bookingId: booking._id },
           undefined,
           session,
         );
+
         for (const item of items) {
-          if (item.itemType === BookingItemType.Product) {
-            penaltyAmount +=
-              Math.round(
-                item.unitPrice * SYSTEM_POLICIES.PRODUCT_CANCEL_PENALTY_RATE,
-              ) * item.quantity;
-          } else {
-            penaltyAmount +=
-              Math.round(
-                item.unitPrice *
-                  SYSTEM_POLICIES.PHOTOGRAPHY_CANCEL_PENALTY_RATE,
-              ) * item.quantity;
-          }
+          const itemNet = this.settlementCalc.getCustomerPaidServiceAmount(
+            item as any,
+          );
+          const rate =
+            item.itemType === BookingItemType.Product
+              ? SYSTEM_POLICIES.PRODUCT_CANCEL_PENALTY_RATE
+              : SYSTEM_POLICIES.PHOTOGRAPHY_CANCEL_PENALTY_RATE;
+          penaltyAmount += Math.round(itemNet * rate);
         }
 
-        penaltyAmount = Math.min(
-          penaltyAmount,
-          booking.pricingSummary.subTotal,
+        // Lấy cọc giữ đồ áo dài (nếu có) để bảo vệ, không phạt vào cọc giữ đồ áo dài
+        const rentalItems = items.filter(
+          (i) => i.itemType === BookingItemType.Product,
         );
-
-        const providerItems = new Map<string, BookingItemDocument[]>();
-        for (const item of items) {
-          const pId = item.providerId.toString();
-          if (!providerItems.has(pId)) providerItems.set(pId, []);
-          providerItems.get(pId)!.push(item);
-        }
-
-        for (const [pIdStr, pItems] of providerItems.entries()) {
-          let providerPenalty = 0;
-          for (const item of pItems) {
-            if (item.itemType === BookingItemType.Product) {
-              providerPenalty +=
-                Math.round(
-                  item.unitPrice * SYSTEM_POLICIES.PRODUCT_CANCEL_PENALTY_RATE,
-                ) * item.quantity;
-            } else {
-              providerPenalty +=
-                Math.round(
-                  item.unitPrice *
-                    SYSTEM_POLICIES.PHOTOGRAPHY_CANCEL_PENALTY_RATE,
-                ) * item.quantity;
-            }
-          }
-
-          if (providerPenalty > 0) {
-            const provider = await this.providerModel
-              .findById(new Types.ObjectId(pIdStr))
-              .session(session);
-            if (provider) {
-              let bankName = 'VietinBank';
-              let accountNumber = '1029384756';
-              let accountHolder = 'PROVIDER STUDIO';
-
-              if (
-                provider.paymentAccounts &&
-                provider.paymentAccounts.length > 0
-              ) {
-                const activeAccount =
-                  provider.paymentAccounts.find((a) => a.isDefault) ||
-                  provider.paymentAccounts[0];
-                bankName = activeAccount.bankName || bankName;
-                accountNumber = activeAccount.accountNumberMasked
-                  ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
-                  : accountNumber;
-                accountHolder = activeAccount.accountHolder || accountHolder;
-              }
-
-              const transferRef = `CANCEL_PENALTY_${booking.bookingCode}`;
-              await this.paymentsService.executeAutoTransfer(
-                bankName,
-                accountNumber,
-                accountHolder,
-                providerPenalty,
-                transferRef,
-              );
-            }
-          }
-        }
-
-        refundAmount = Math.max(
-          (booking.pricingSummary?.grandTotal || 0) - penaltyAmount,
+        const rentalDepositTotal = rentalItems.reduce(
+          (sum, i) => sum + (i.depositAmount || 0),
           0,
         );
+
+        // Chặn trần phạt tuyệt đối: Không phạt vào cọc giữ đồ và không vượt quá số tiền khách đã thanh toán
+        const maxPenaltyAllowed = Math.max(0, refundable - rentalDepositTotal);
+        penaltyAmount = Math.min(penaltyAmount, maxPenaltyAllowed);
+
+        refundAmount = Math.max(0, refundable - penaltyAmount);
       }
 
-      if (booking.status === BookingStatus.PendingPayment) {
-        refundAmount = 0;
+      // 2. Chuyển trạng thái có điều kiện (Conditional Update) chống Race condition
+      const cancelledByObjId =
+        userId && Types.ObjectId.isValid(userId)
+          ? new Types.ObjectId(userId)
+          : null;
+      const cancelReason =
+        reason ||
+        (isProvider
+          ? 'Nhà cung cấp chủ động hủy lịch'
+          : 'Khách hàng hủy đơn');
+      const timelineNote = isFreeCancel
+        ? `Đơn hàng đã được hủy thành công. Hoàn tiền 100% (${refundAmount.toLocaleString('vi-VN')}đ).`
+        : `Đơn hàng đã bị hủy. Khách bị phạt tiền dịch vụ (${penaltyAmount.toLocaleString('vi-VN')}đ). Hoàn cọc giữ đồ & số dư (${refundAmount.toLocaleString('vi-VN')}đ). Lý do phạt: ${penaltyReason}`;
+
+      const savedBooking = await this.bookingsRepository.model.findOneAndUpdate(
+        { _id: booking._id, status: booking.status },
+        {
+          $set: {
+            status: BookingStatus.Cancelled,
+            cancellation: {
+              cancelledBy: cancelledByObjId,
+              reason: cancelReason,
+              cancelledAt: now,
+              refundAmount,
+            },
+          },
+          $push: {
+            statusTimeline: {
+              status: BookingStatus.Cancelled,
+              changedAt: now,
+              note: timelineNote,
+              changedBy: cancelledByObjId,
+            },
+          },
+        },
+        { new: true, session },
+      );
+
+      if (!savedBooking) {
+        throw new ConflictException(
+          'Trạng thái đơn hàng đã bị thay đổi bởi một tiến trình khác. Vui lòng làm mới trang.',
+        );
       }
 
-      booking.status = BookingStatus.Cancelled;
-      booking.cancellation = {
-        cancelledBy: new Types.ObjectId(userId || undefined),
-        reason:
-          reason ||
-          (isProvider
-            ? 'Nhà cung cấp chủ động hủy lịch'
-            : 'Khách hàng hủy đơn'),
-        cancelledAt: now,
-        refundAmount,
-      };
-
-      booking.statusTimeline.push({
-        status: BookingStatus.Cancelled,
-        changedAt: now,
-        note: isFreeCancel
-          ? `Đơn hàng đã được hủy thành công. Hoàn tiền 100% (${refundAmount.toLocaleString('vi-VN')}đ).`
-          : `Đơn hàng đã bị hủy. Khách bị phạt mất cọc dịch vụ (${penaltyAmount.toLocaleString('vi-VN')}đ). Hoàn cọc giữ đồ & số dư (${refundAmount.toLocaleString('vi-VN')}đ). Lý do phạt: ${penaltyReason}`,
-        changedBy: userId ? new Types.ObjectId(userId) : null,
-      });
-
-      const savedBooking = await booking.save({ session });
-
+      // 3. Thông báo cho khách hàng
       try {
         await this.notificationsService.createNotification(
           this.getCustomerIdStr(booking),
           `Đơn hàng đã hủy`,
-          `Đơn hàng ${booking.bookingCode} của bạn đã bị hủy. Lý do: ${reason}`,
+          `Đơn hàng ${booking.bookingCode} của bạn đã bị hủy. Lý do: ${cancelReason}`,
           NotificationType.Booking,
           { bookingId: booking._id },
         );
@@ -553,6 +539,7 @@ export class BookingStatusService {
         console.error('Failed to create cancelBooking notification:', e);
       }
 
+      // 4. Cập nhật lịch và giải phóng kho
       await this.bookingsRepository.updateManySchedules(
         { bookingId: booking._id },
         { status: BookingScheduleStatus.Cancelled },
@@ -566,19 +553,62 @@ export class BookingStatusService {
         )
         .session(session);
 
+      // 5. Nhả voucher có điều kiện (Diff 2): chỉ nhả nếu hủy miễn phí (fullRefund)
+      await this.promotionsService.releaseVoucher(
+        booking._id,
+        { fullRefund: isFreeCancel },
+        session,
+      );
+
+      // 6. Hủy tất cả các Payment Pending thu tiền của booking này
+      await this.paymentsService.cancelPendingPaymentsForBooking(
+        booking._id,
+        session,
+      );
+
+      // 7. Tạo Ý định hoàn tiền (Refund Intent) trong transaction nếu có tiền hoàn
+      let createdRefundIntents: PaymentDocument[] = [];
       if (refundAmount > 0) {
-        await this.paymentsService.refundDeposit(
-          booking._id.toString(),
+        createdRefundIntents = await this.paymentsService.createRefundIntents(
+          booking._id,
           refundAmount,
+          'BOOKING_CANCEL',
+          session,
         );
+      }
+
+      // 8. Đóng Escrow có điều kiện
+      const escrowModel = this.providerModel.db.model('BookingEscrow');
+      const escrow = await escrowModel
+        .findOne({ bookingId: booking._id })
+        .session(session);
+      if (escrow && escrow.status === 'HELD') {
+        escrow.status =
+          refundAmount > 0 ? 'REFUNDED' : 'CANCELLED';
+        await escrow.save({ session });
       }
 
       await this.paymentsService.cancelSettlementsForBooking(
         booking._id.toString(),
       );
 
+      // 9. Commit Transaction (nếu là Internal Session)
       if (isInternalSession) {
         await session.commitTransaction();
+      }
+
+      // 10. SAU KHI COMMIT: Kích hoạt thực thi hoàn tiền Async (ngoài transaction)
+      if (createdRefundIntents.length > 0) {
+        for (const intent of createdRefundIntents) {
+          this.paymentsService
+            .executeRefundIntent(intent.paymentCode)
+            .catch((err) => {
+              console.error(
+                `Lỗi kích hoạt hoàn tiền async cho ${intent.paymentCode}:`,
+                err,
+              );
+            });
+        }
       }
 
       return Array.isArray(rolesOrCancelledByUserId)

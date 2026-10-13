@@ -796,7 +796,7 @@ export const ProviderDashboard: React.FC = () => {
           <RentalOperationsPanel {...{ fetchOrders, loadingOrders, rentalOperationItems, setSelectedBookingId, setIsDetailModalOpen, orders, toast }} />
         )}
         {currentView === 'collections' && (
-          <CollectionsPanel {...{ collectionTab, openAddModal, setCollectionTab, prodSearch, setProdSearch, setProdPage, prodSizeFilter, setProdSizeFilter, prodColorFilter, setProdColorFilter, prodSortBy, setProdSortBy, loadingProducts, products, openEditModal, handleDuplicateProduct, handleDeleteProduct, prodTotal, prodLimit, prodPage, renderInventoryView, categories, fetchProducts, inventorySummary, toast }} />
+          <CollectionsPanel {...{ collectionTab, openAddModal, setCollectionTab, prodSearch, setProdSearch, setProdPage, prodSizeFilter, setProdSizeFilter, prodColorFilter, setProdColorFilter, prodSortBy, setProdSortBy, loadingProducts, products, openEditModal, handleDuplicateProduct, handleDeleteProduct, prodTotal, prodLimit, prodPage, renderInventoryView, categories, fetchProducts, inventorySummary, toast, provider }} />
         )}
 
         {currentView === 'profile' && (

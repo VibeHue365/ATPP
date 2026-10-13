@@ -17,7 +17,7 @@ import { API_BASE_URL } from "../../config/env";
 import { useAuth } from "../../features/auth/hooks/useAuth";
 import { useToast } from "../../components/feedback/Toast";
 import { ROUTES } from "../../config/routes";
-import Swal from "sweetalert2";
+import { ConfirmModal } from "../../utils/confirmModal";
 import { ListingHero } from "../../components/common/ListingHero";
 import { UnifiedSearchBar, type SearchFieldConfig } from "../../components/common/UnifiedSearchBar";
 import { ListingCategoryTabs } from "../../components/common/ListingCategoryTabs";
@@ -441,19 +441,14 @@ export const AoDaiListingPage: React.FC = () => {
   const handleToggleFavorite = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) {
-      Swal.fire({
-        icon: "warning",
-        title: "Yêu cầu đăng nhập",
-        text: "Vui lòng đăng nhập để lưu sản phẩm yêu thích!",
-        confirmButtonColor: "#B52B47",
-        confirmButtonText: "Đăng nhập ngay",
-        showCancelButton: true,
-        cancelButtonText: "Hủy",
-      }).then((result) => {
-        if (result.isConfirmed) {
-          navigate("/auth/login");
-        }
-      });
+      const result = await ConfirmModal.requireAuth(
+        "Yêu cầu đăng nhập",
+        "Vui lòng đăng nhập để lưu sản phẩm Áo Dài yêu thích!",
+        { confirmButtonText: "Đăng nhập ngay" }
+      );
+      if (result.isConfirmed) {
+        navigate("/auth/login");
+      }
       return;
     }
     try {
@@ -588,7 +583,7 @@ export const AoDaiListingPage: React.FC = () => {
           description="Chọn mẫu, size, hình thức thuê và thời gian nhận trả phù hợp."
           stats={[
             { value: stats.totalCount > 0 ? `${stats.totalCount}+` : '120+', label: 'Mẫu áo dài' },
-            { value: stats.storesCount > 0 ? `${stats.storesCount}` : '15+', label: 'Cửa hàng' },
+            { value: stats.storesCount > 0 ? `${stats.storesCount}` : '15+', label: 'Cửa hàng', href: '/stores' },
             { value: '4.9★', label: 'Đánh giá cao' },
           ]}
         />
@@ -1143,6 +1138,7 @@ export const AoDaiListingPage: React.FC = () => {
                     provider?.address?.city ||
                     provider?.city ||
                     "Huế";
+                  const providerId = provider?._id || (typeof product.providerId === "string" ? product.providerId : undefined);
                   const currentPrice = product.discountedPrice || product.basePrice;
 
                   return (
@@ -1188,12 +1184,45 @@ export const AoDaiListingPage: React.FC = () => {
                       <div className="lume-card-body">
                         {/* Brand row: store name + verified badge */}
                         <div className="lume-card-brand-bar">
-                          <span className="lume-brand-name" title={storeName}>
-                            {storeName}
-                          </span>
-                          <span className="lume-verified-badge" title="Cửa hàng đã xác minh">
-                            <Check size={10} /> Đã xác minh
-                          </span>
+                          {providerId ? (
+                            <button
+                              type="button"
+                              className="lume-brand-link-btn group/brand"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/stores/${providerId}`);
+                              }}
+                              title={`Ghé thăm gian hàng ${storeName}`}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                padding: 0,
+                                margin: 0,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                maxWidth: '100%',
+                              }}
+                            >
+                              <span className="lume-brand-name group-hover/brand:underline group-hover/brand:text-[#8E1B2E] transition-colors" title={storeName}>
+                                {storeName}
+                              </span>
+                              <span className="lume-verified-badge" title="Cửa hàng đã xác minh">
+                                <Check size={10} /> Đã xác minh
+                              </span>
+                            </button>
+                          ) : (
+                            <>
+                              <span className="lume-brand-name" title={storeName}>
+                                {storeName}
+                              </span>
+                              <span className="lume-verified-badge" title="Cửa hàng đã xác minh">
+                                <Check size={10} /> Đã xác minh
+                              </span>
+                            </>
+                          )}
                         </div>
 
                         {/* 1. Tên áo dài (đậm) */}

@@ -118,6 +118,15 @@ export class Settlement {
   @Prop({ type: Date, default: null })
   settledAt?: Date | null;
 
+  @Prop({ type: Date, default: null, index: true })
+  walletCreditedAt?: Date | null;
+
+  @Prop({ type: Number, default: null })
+  walletCreditedAmount?: number | null;
+
+  @Prop({ type: Date, default: null, index: true })
+  walletDebitedAt?: Date | null;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

@@ -41,11 +41,10 @@ export const PromotionalBannersSection: React.FC = () => {
 
             <Link
               to={ROUTES.RENTALS}
-              className="text-xs font-bold inline-flex items-center gap-1.5 hover:underline text-decoration-none self-start mt-1"
-              style={{ color: 'var(--landing-primary)' }}
+              className="inline-flex items-center gap-2 self-start rounded-full bg-[#c02c55] px-4.5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-[#a81f47] active:scale-95 text-decoration-none !text-white"
             >
               <span>Xem bộ sưu tập</span>
-              <ArrowRight size={14} />
+              <ArrowRight size={14} strokeWidth={2.4} />
             </Link>
           </div>
 
@@ -71,8 +70,7 @@ export const PromotionalBannersSection: React.FC = () => {
           <div className="flex flex-col justify-between gap-3 flex-1 min-w-0">
             <div className="flex flex-col gap-2">
               <span 
-                className="text-[10px] font-bold uppercase tracking-wider"
-                style={{ color: 'var(--landing-primary-soft)' }}
+                className="text-[10px] font-bold uppercase tracking-wider text-rose-200"
               >
                 CHỤP THEO CONCEPT
               </span>
@@ -86,10 +84,10 @@ export const PromotionalBannersSection: React.FC = () => {
 
             <Link
               to={ROUTES.PHOTOGRAPHERS}
-              className="text-xs font-bold inline-flex items-center gap-1.5 hover:underline text-decoration-none text-white self-start mt-1"
+              className="inline-flex items-center gap-2 self-start rounded-full bg-white px-4.5 py-2 text-xs font-bold text-[#c02c55] shadow-xs transition hover:bg-rose-50 active:scale-95 text-decoration-none !text-[#c02c55]"
             >
               <span>Xem gói chụp</span>
-              <ArrowRight size={14} />
+              <ArrowRight size={14} strokeWidth={2.4} />
             </Link>
           </div>
 

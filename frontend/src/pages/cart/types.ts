@@ -41,4 +41,7 @@ export interface CartTotals {
   totalPhotographerFee: number;
   comboDiscountTotal: number;
   remainingToPayLater: number;
+  voucherDiscountTotal?: number;
+  platformSubsidyAmount?: number;
+  amountDueNow?: number;
 }

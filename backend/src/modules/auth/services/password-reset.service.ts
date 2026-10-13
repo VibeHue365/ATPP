@@ -41,7 +41,7 @@ export class PasswordResetService {
     context: RequestContext,
   ): Promise<Record<string, unknown>> {
     const userObjectId = new Types.ObjectId(userId);
-    const user = await this.usersRepository.findUserById(userObjectId);
+    const user = await this.usersRepository.findUserByIdWithPassword(userObjectId);
     if (!user?.auth.passwordHash) {
       throw new BadRequestException(
         'This account does not have a local password',

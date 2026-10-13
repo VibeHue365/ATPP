@@ -68,15 +68,10 @@ export class SettlementsService {
       throw new BadRequestException(SETTLEMENT_ERROR_CODES.NoBookingItems);
     }
 
-    const distinctProviderCount = this.countDistinctProviders(items);
-    const existing = await this.assertNoPartialStateOrReturnExisting(
-      bookingObjectId,
-      distinctProviderCount,
+    const existing = await this.settlementModel.find({ bookingId: bookingObjectId });
+    const existingProviderMap = new Map(
+      existing.map((s) => [s.providerId.toString(), s]),
     );
-
-    if (existing) {
-      return existing;
-    }
 
     const latestPayment = await this.paymentModel
       .findOne({
@@ -104,40 +99,41 @@ export class SettlementsService {
       false,
     );
 
+    const missingPayloads = payloads.filter(
+      (p) => !existingProviderMap.has(p.providerId.toString()),
+    );
+
+    if (missingPayloads.length === 0) {
+      return existing;
+    }
+
     const settlementCodes: string[] = [];
     const documents = [];
-    for (const payload of payloads) {
+    for (const payload of missingPayloads) {
       const settlementCode = await this.codeService.generateSettlementCode();
       settlementCodes.push(settlementCode);
       documents.push({ settlementCode, ...payload });
     }
 
     try {
-      const settlements = await this.settlementModel.insertMany(documents, {
-        ordered: true,
+      const created = await this.settlementModel.insertMany(documents, {
+        ordered: false,
       });
       await this.markGenerationSuccess(bookingObjectId);
-      await this.auditCreated(settlements);
-      return settlements;
+      await this.auditCreated(created);
     } catch (error) {
-      if (this.isDuplicateKeyError(error)) {
-        const concurrentExisting =
-          await this.assertNoPartialStateOrReturnExisting(
-            bookingObjectId,
-            distinctProviderCount,
-          );
-
-        if (concurrentExisting) {
-          return concurrentExisting;
-        }
+      if (!this.isDuplicateKeyError(error)) {
+        await this.settlementModel.deleteMany({
+          settlementCode: { $in: settlementCodes },
+        });
+        await this.markGenerationFailure(bookingObjectId, error);
+        throw new BadRequestException(SETTLEMENT_ERROR_CODES.GenerationFailed);
       }
-
-      await this.settlementModel.deleteMany({
-        settlementCode: { $in: settlementCodes },
-      });
-      await this.markGenerationFailure(bookingObjectId, error);
-      throw new BadRequestException(SETTLEMENT_ERROR_CODES.GenerationFailed);
     }
+
+    return this.settlementModel
+      .find({ bookingId: bookingObjectId })
+      .sort({ providerId: 1 });
   }
 
   async regenerateSettlementsForBooking(
@@ -265,32 +261,68 @@ export class SettlementsService {
     const id = this.toObjectId(settlementId);
     const before = await this.findByIdOrThrow(id);
     const adjustmentAmount = await this.applyPendingAdjustments(before);
-    const settlement = await this.settlementModel.findOneAndUpdate(
-      {
-        _id: id,
-        status: SettlementStatus.ReadyToSettle,
-        payableAmount: { $gte: 0 },
-      },
-      {
-        $set: {
-          status: SettlementStatus.Settled,
-          settledBy: this.toObjectId(actorId),
-          settledAt: new Date(),
-          payoutReference: dto.payoutReference ?? null,
-          note: [dto.note, adjustmentAmount > 0 ? `Applied refund adjustment: ${adjustmentAmount}` : null].filter(Boolean).join(' | ') || null,
-        },
-      },
-      { new: true },
-    );
 
-    if (!settlement) {
-      throw new BadRequestException(
-        SETTLEMENT_ERROR_CODES.StatusTransitionInvalid,
-      );
+    const session = await this.settlementModel.db.startSession();
+    let settlement: Settlement | null = null;
+
+    try {
+      await session.withTransaction(async () => {
+        settlement = await this.settlementModel.findOneAndUpdate(
+          {
+            _id: id,
+            status: SettlementStatus.ReadyToSettle,
+            payableAmount: { $gte: 0 },
+          },
+          {
+            $set: {
+              status: SettlementStatus.Settled,
+              settledBy: this.toObjectId(actorId),
+              settledAt: new Date(),
+              walletDebitedAt: new Date(),
+              payoutReference: dto.payoutReference ?? null,
+              note: [
+                dto.note,
+                adjustmentAmount > 0
+                  ? `Applied refund adjustment: ${adjustmentAmount}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' | ') || null,
+            },
+          },
+          { new: true, session },
+        );
+
+        if (!settlement) {
+          throw new BadRequestException(
+            SETTLEMENT_ERROR_CODES.StatusTransitionInvalid,
+          );
+        }
+
+        // Trừ đúng số tiền đã cộng ví trước đó
+        const creditedAmount = settlement.walletCreditedAmount ?? 0;
+        if (creditedAmount > 0) {
+          const providerModel = this.settlementModel.db.model('Provider');
+          await providerModel.updateOne(
+            { _id: settlement.providerId },
+            {
+              $inc: {
+                'wallet.availableBalance': -creditedAmount,
+              },
+              $set: {
+                'wallet.lastUpdatedAt': new Date(),
+              },
+            },
+            { session },
+          );
+        }
+      });
+    } finally {
+      await session.endSession();
     }
 
     await this.auditOne(
-      settlement,
+      settlement!,
       actorId,
       AdminAuditAction.SettlementMarkedSettled,
       dto.note ?? dto.payoutReference ?? null,
@@ -298,7 +330,7 @@ export class SettlementsService {
       before,
     );
 
-    return settlement;
+    return settlement!;
   }
 
   private async applyPendingAdjustments(settlement: Settlement): Promise<number> {

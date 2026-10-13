@@ -42,6 +42,7 @@ export interface Order {
 export interface Product {
   _id: string;
   name: string;
+  providerId?: string | { _id?: string; [key: string]: any };
   categoryId: {
     _id: string;
     name: string;

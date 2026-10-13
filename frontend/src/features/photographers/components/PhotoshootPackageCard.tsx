@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Star, Clock } from 'lucide-react';
+import { Star, Clock, Camera } from 'lucide-react';
 import { ROUTES } from '../../../config/routes';
 import { PriceDisplay } from '../../../components/common/PriceDisplay';
 import type { PhotoshootPackageItem } from '../data/photoshoot-package.fixture';
@@ -10,6 +10,8 @@ export interface PhotoshootPackageCardProps {
 }
 
 export const PhotoshootPackageCard: React.FC<PhotoshootPackageCardProps> = ({ item }) => {
+  const [imageError, setImageError] = useState(false);
+
   const ratingValue: number =
     typeof item.rating === 'number'
       ? item.rating
@@ -39,12 +41,19 @@ export const PhotoshootPackageCard: React.FC<PhotoshootPackageCardProps> = ({ it
           className="block w-full h-full text-decoration-none"
           tabIndex={-1}
         >
-          <img
-            src={item.image}
-            alt={item.name}
-            loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 will-change-transform"
-          />
+          {item.image && !imageError ? (
+            <img
+              src={item.image}
+              alt={item.name}
+              loading="lazy"
+              className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 will-change-transform"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-stone-100 text-stone-400 gap-1">
+              <Camera size={32} strokeWidth={1.5} />
+            </div>
+          )}
         </Link>
 
         {/* Badge Overlay */}

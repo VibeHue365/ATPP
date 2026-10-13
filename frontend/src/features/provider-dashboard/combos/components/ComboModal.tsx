@@ -623,7 +623,13 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                       <input
                         type="number"
                         min="1"
+                        max={selectedPackageMaxPeople !== null ? selectedPackageMaxPeople : undefined}
                         className="cb-input-text"
+                        style={
+                          selectedPackageMaxPeople !== null && Number(cShootPeopleCount || 1) > selectedPackageMaxPeople
+                            ? { borderColor: '#E11D48', backgroundColor: '#FFF5F5' }
+                            : undefined
+                        }
                         placeholder="Số người"
                         required
                         value={cShootPeopleCount}
@@ -631,11 +637,17 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                           setCShootPeopleCount(e.target.value === '' ? '' : Number(e.target.value))
                         }
                       />
-                      <span className="cb-field-hint">
-                        {selectedPackageMaxPeople !== null
-                          ? `Max: ${selectedPackageMaxPeople}`
-                          : 'Theo gói'}
-                      </span>
+                      {selectedPackageMaxPeople !== null && Number(cShootPeopleCount || 1) > selectedPackageMaxPeople ? (
+                        <span style={{ color: '#E11D48', fontSize: 11, fontWeight: 600, marginTop: 4, display: 'block' }}>
+                          Số người chụp ({cShootPeopleCount}) không được lớn hơn tối đa của gói ({selectedPackageMaxPeople} người)
+                        </span>
+                      ) : (
+                        <span className="cb-field-hint">
+                          {selectedPackageMaxPeople !== null
+                            ? `Tối đa theo gói: ${selectedPackageMaxPeople} người`
+                            : 'Theo gói'}
+                        </span>
+                      )}
                     </div>
 
                     <div className="cb-field-group">
@@ -646,7 +658,13 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                       <input
                         type="number"
                         min="1"
+                        max={selectedProductStock !== null && selectedProductStock > 0 ? selectedProductStock : undefined}
                         className="cb-input-text"
+                        style={
+                          selectedProductStock !== null && selectedProductStock > 0 && Number(cAoDaiQuantity || 1) > selectedProductStock
+                            ? { borderColor: '#E11D48', backgroundColor: '#FFF5F5' }
+                            : undefined
+                        }
                         placeholder="Số áo"
                         required
                         value={cAoDaiQuantity}
@@ -654,11 +672,17 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                           setCAoDaiQuantity(e.target.value === '' ? '' : Number(e.target.value))
                         }
                       />
-                      <span className="cb-field-hint">
-                        {selectedProductStock !== null
-                          ? `Tồn: ${selectedProductStock}`
-                          : 'Theo kho'}
-                      </span>
+                      {selectedProductStock !== null && selectedProductStock > 0 && Number(cAoDaiQuantity || 1) > selectedProductStock ? (
+                        <span style={{ color: '#E11D48', fontSize: 11, fontWeight: 600, marginTop: 4, display: 'block' }}>
+                          Số áo ({cAoDaiQuantity}) vượt quá tồn kho khả dụng ({selectedProductStock} áo)
+                        </span>
+                      ) : (
+                        <span className="cb-field-hint">
+                          {selectedProductStock !== null
+                            ? `Tồn khả dụng: ${selectedProductStock} áo`
+                            : 'Theo kho'}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -895,6 +919,9 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                     key={prodId}
                     onClick={() => {
                       setCProductId(prodId);
+                      if (stock !== null && stock > 0 && Number(cAoDaiQuantity || 1) > stock) {
+                        setCAoDaiQuantity(stock);
+                      }
                       setIsAoDaiModalOpen(false);
                     }}
                     style={{
@@ -1019,6 +1046,10 @@ export const ComboModal: React.FC<ComboModalProps> = ({
                     key={pkgId}
                     onClick={() => {
                       setCPackageId(pkgId);
+                      const maxAllowed = pkg.maxPeople || 1;
+                      if (Number(cShootPeopleCount || 1) > maxAllowed) {
+                        setCShootPeopleCount(maxAllowed);
+                      }
                       setIsPackageModalOpen(false);
                     }}
                     style={{

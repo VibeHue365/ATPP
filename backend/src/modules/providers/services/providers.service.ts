@@ -751,7 +751,10 @@ const bookingIds = bookings.map((booking) => booking._id);
    * và 10 settlement gần nhất để hiển thị lịch sử giao dịch.
    */
   async getWallet(userIdStr: string) {
-    const provider = await this.requireProvider(userIdStr);
+    const provider = await this.providersRepository.findByUserIdWithWallet(
+      this.toObjectId(userIdStr),
+    );
+    if (!provider) throw new NotFoundException('Provider profile not found');
 
     const wallet = provider.wallet ?? {
       pendingBalance: 0,

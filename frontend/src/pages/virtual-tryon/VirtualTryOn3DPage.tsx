@@ -1,8 +1,10 @@
-﻿import React, { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Sparkles, Camera, Upload, RefreshCw, Download, Settings, Check } from 'lucide-react';
 import { virtualTryOn3DService } from '../../services/virtualTryOn3DService';
+import { useToast } from '../../components/feedback/Toast';
 
 export const VirtualTryOn3DPage: React.FC = () => {
+  const toast = useToast();
   const [personFile, setPersonFile] = useState<File | null>(null);
   const [personPreview, setPersonPreview] = useState<string | null>(null);
   const [clothFile, setClothFile] = useState<File | null>(null);
@@ -66,11 +68,11 @@ export const VirtualTryOn3DPage: React.FC = () => {
 
   const handleStartTryOn = async () => {
     if (!personFile) {
-      alert('Vui lòng tải lên ảnh của bạn hoặc ảnh người mẫu!');
+      toast.warning('Vui lòng tải lên ảnh của bạn hoặc ảnh người mẫu!');
       return;
     }
     if (!clothFile) {
-      alert('Vui lòng tải lên hoặc chọn một mẫu Áo Dài từ danh sách!');
+      toast.warning('Vui lòng tải lên hoặc chọn một mẫu Áo Dài từ danh sách!');
       return;
     }
 
@@ -111,7 +113,7 @@ export const VirtualTryOn3DPage: React.FC = () => {
       setRenderTime(`${elapsed}s`);
     } catch (err: any) {
       clearInterval(progressTimer);
-      alert('Lỗi sinh 3D: ' + (err.message || 'Không thể kết nối tới Server AI. Vui lòng kiểm tra lại URL API trong phần Cài Đặt!'));
+      toast.error('Lỗi sinh 3D: ' + (err.message || 'Không thể kết nối tới Server AI. Vui lòng kiểm tra lại URL API trong phần Cài Đặt!'));
     } finally {
       setLoading(false);
     }

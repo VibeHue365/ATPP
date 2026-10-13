@@ -1,6 +1,7 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Sparkles, Upload, RefreshCw, Download, Settings, Camera, Check } from 'lucide-react';
 import { virtualTryOn3DService } from '../../../services/virtualTryOn3DService';
+import { useToast } from '../../../components/feedback/Toast';
 
 // Khai báo kiểu dữ liệu cho Web Component <model-viewer> trong React TypeScript
 declare global {
@@ -24,6 +25,7 @@ export const VirtualTryOn3DModal: React.FC<VirtualTryOn3DModalProps> = ({
   productImage,
   productName,
 }) => {
+  const toast = useToast();
   const [personFile, setPersonFile] = useState<File | null>(null);
   const [personPreview, setPersonPreview] = useState<string | null>(null);
   const [clothFile, setClothFile] = useState<File | null>(null);
@@ -82,11 +84,11 @@ export const VirtualTryOn3DModal: React.FC<VirtualTryOn3DModalProps> = ({
 
   const handleStartTryOn = async () => {
     if (!personFile) {
-      alert('Vui lòng tải lên ảnh người mẫu / ảnh của bạn!');
+      toast.warning('Vui lòng tải lên ảnh người mẫu / ảnh của bạn!');
       return;
     }
     if (!clothFile && !productImage) {
-      alert('Vui lòng chọn hoặc tải lên ảnh trang phục Áo Dài!');
+      toast.warning('Vui lòng chọn hoặc tải lên ảnh trang phục Áo Dài!');
       return;
     }
 
@@ -132,7 +134,7 @@ export const VirtualTryOn3DModal: React.FC<VirtualTryOn3DModalProps> = ({
       setRenderTime(`${elapsed}s`);
     } catch (err: any) {
       clearInterval(progressTimer);
-      alert('Lỗi sinh 3D: ' + (err.message || 'Không thể kết nối tới Server AI Kaggle. Vui lòng kiểm tra lại URL API trong phần Cài Đặt!'));
+      toast.error('Lỗi sinh 3D: ' + (err.message || 'Không thể kết nối tới Server AI Kaggle. Vui lòng kiểm tra lại URL API trong phần Cài Đặt!'));
     } finally {
       setLoading(false);
     }

@@ -135,7 +135,7 @@ export class User {
       },
       phone: { type: String, default: null, trim: true },
       phoneNormalized: { type: String, default: null, trim: true },
-      passwordHash: { type: String, default: null },
+      passwordHash: { type: String, default: null, select: false },
       emailVerified: { type: Boolean, default: false },
       phoneVerified: { type: Boolean, default: false },
       authProviders: [

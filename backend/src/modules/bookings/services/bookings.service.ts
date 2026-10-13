@@ -472,14 +472,19 @@ export class BookingsService implements OnApplicationBootstrap {
       inventoryItems.push(newItem[0]);
     }
 
+    const now = new Date();
     const conflictingReservations = await this.inventoryReservationModel
       .find({
         inventoryItemId: { $in: inventoryItems.map((i) => i._id) },
-        status: {
-          $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed],
-        },
         reservedFrom: { $lte: reservedTo },
         reservedTo: { $gte: reservedFrom },
+        $or: [
+          { status: ReservationStatus.Confirmed },
+          {
+            status: ReservationStatus.TempReserved,
+            expiresAt: { $gt: now },
+          },
+        ],
       })
       .session(session);
 
@@ -499,14 +504,67 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const selectedItemIds = availableItems.slice(0, quantity).map((i) => i._id);
 
-    // Acquire write locks on selected inventory items
-    for (const itemId of selectedItemIds) {
-      await this.inventoryItemModel
-        .updateOne({ _id: itemId }, { $set: { updatedAt: new Date() } })
-        .session(session);
-    }
+    // Acquire write locks on selected inventory items to trigger MongoDB WriteConflict on concurrent transactions
+    await this.inventoryItemModel
+      .updateMany(
+        { _id: { $in: selectedItemIds } },
+        { $inc: { reservationVersion: 1 } },
+        { session },
+      );
 
     return selectedItemIds;
+  }
+
+  /**
+   * Khóa và giữ chỗ tồn kho nguyên tử (Pessimistic document-level locking + Batch reservation insert).
+   * 1. Pre-check conflict với $lte/$gte và expiresAt > now để chặn cả TTL lag.
+   * 2. Batch insert tất cả reservations trong 1 thao tác với insertMany.
+   */
+  private async reserveInventoryItemsAtomic(
+    itemIds: Types.ObjectId[],
+    reservedFrom: Date,
+    reservedTo: Date,
+    session: any,
+  ): Promise<any[]> {
+    if (!itemIds || itemIds.length === 0) return [];
+
+    const now = new Date();
+    const conflict = await this.inventoryReservationModel
+      .exists({
+        inventoryItemId: { $in: itemIds },
+        reservedFrom: { $lte: reservedTo },
+        reservedTo: { $gte: reservedFrom },
+        $or: [
+          { status: ReservationStatus.Confirmed },
+          {
+            status: ReservationStatus.TempReserved,
+            expiresAt: { $gt: now },
+          },
+        ],
+      })
+      .session(session);
+
+    if (conflict) {
+      throw new BadRequestException(
+        'Sản phẩm vừa bị người khác nhanh tay đặt trước. Vui lòng thử lại!',
+      );
+    }
+
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const reservationsToInsert = itemIds.map((itemId) => ({
+      inventoryItemId: itemId,
+      bookingId: new Types.ObjectId(),
+      bookingItemId: new Types.ObjectId(),
+      reservedFrom,
+      reservedTo,
+      status: ReservationStatus.TempReserved,
+      expiresAt,
+    }));
+
+    return (await this.inventoryReservationModel.insertMany(
+      reservationsToInsert,
+      { session },
+    )) as any[];
   }
 
   // Getter để map photographyPackageModel sang photoPackageModel cho cả hai bên
@@ -1318,45 +1376,14 @@ export class BookingsService implements OnApplicationBootstrap {
 
             inventoryItemId = availableItemIds[0];
 
-            for (const itemId of availableItemIds) {
-              const resDoc = new this.inventoryReservationModel({
-                inventoryItemId: itemId,
-                bookingId: new Types.ObjectId(),
-                bookingItemId: new Types.ObjectId(),
+            const createdReservations =
+              await this.reserveInventoryItemsAtomic(
+                availableItemIds,
                 reservedFrom,
                 reservedTo,
-                status: ReservationStatus.TempReserved,
-                expiresAt: new Date(Date.now() + 30 * 60 * 1000),
-              });
-              await resDoc.save({ session });
-
-              // Post-Insert Conflict Check
-              const allOverlapping = await this.inventoryReservationModel
-                .find({
-                  inventoryItemId: itemId,
-                  status: {
-                    $in: [
-                      ReservationStatus.TempReserved,
-                      ReservationStatus.Confirmed,
-                    ],
-                  },
-                  reservedFrom: { $lte: reservedTo },
-                  reservedTo: { $gte: reservedFrom },
-                })
-                .sort({ _id: 1 })
-                .session(session);
-
-              if (allOverlapping.length > 1) {
-                const winner = allOverlapping[0];
-                if (winner._id.toString() !== resDoc._id.toString()) {
-                  throw new BadRequestException(
-                    `Sản phẩm vừa bị người khác nhanh tay đặt trước. Vui lòng thử lại!`,
-                  );
-                }
-              }
-
-              itemReservations.push(resDoc);
-            }
+                session,
+              );
+            itemReservations.push(...createdReservations);
           }
         } else if (item.photographyPackageId) {
           const pkg = await this.photoPackageModel
@@ -1637,20 +1664,19 @@ export class BookingsService implements OnApplicationBootstrap {
           { session },
         );
 
-        if (detail.reservations) {
-          for (const res of detail.reservations) {
-            const updateResult = await this.inventoryReservationModel
-              .updateOne(
-                { _id: res._id },
-                {
-                  $set: {
-                    bookingId: booking._id,
-                    bookingItemId: savedItem._id,
-                  },
+        if (detail.reservations && detail.reservations.length > 0) {
+          const resIds = detail.reservations.map((res: any) => res._id);
+          await this.inventoryReservationModel
+            .updateMany(
+              { _id: { $in: resIds } },
+              {
+                $set: {
+                  bookingId: booking._id,
+                  bookingItemId: savedItem._id,
                 },
-              )
-              .session(session);
-          }
+              },
+            )
+            .session(session);
         }
 
         if (detail.itemType === BookingItemType.Product) {
@@ -1927,45 +1953,12 @@ export class BookingsService implements OnApplicationBootstrap {
 
       const availableItemFirst = availableItemIds[0];
 
-      const itemReservations: any[] = [];
-      for (const itemId of availableItemIds) {
-        const resDoc = new this.inventoryReservationModel({
-          inventoryItemId: itemId,
-          bookingId: new Types.ObjectId(),
-          bookingItemId: new Types.ObjectId(),
-          reservedFrom,
-          reservedTo,
-          status: ReservationStatus.TempReserved,
-          expiresAt: new Date(Date.now() + 30 * 60 * 1000),
-        });
-        await resDoc.save({ session });
-
-        const allOverlapping = await this.inventoryReservationModel
-          .find({
-            inventoryItemId: itemId,
-            status: {
-              $in: [
-                ReservationStatus.TempReserved,
-                ReservationStatus.Confirmed,
-              ],
-            },
-            reservedFrom: { $lte: reservedTo },
-            reservedTo: { $gte: reservedFrom },
-          })
-          .sort({ _id: 1 })
-          .session(session);
-
-        if (allOverlapping.length > 1) {
-          const winner = allOverlapping[0];
-          if (winner._id.toString() !== resDoc._id.toString()) {
-            throw new BadRequestException(
-              'Sản phẩm vừa bị người khác nhanh tay đặt trước. Vui lòng thử lại!',
-            );
-          }
-        }
-
-        itemReservations.push(resDoc);
-      }
+      const itemReservations = await this.reserveInventoryItemsAtomic(
+        availableItemIds,
+        reservedFrom,
+        reservedTo,
+        session,
+      );
 
       const booking = new this.bookingModel({
         bookingCode,
@@ -2029,10 +2022,11 @@ export class BookingsService implements OnApplicationBootstrap {
 
       const savedBookingItem = await bookingItem.save({ session });
 
-      for (const res of itemReservations) {
-        const updateResult = await this.inventoryReservationModel
-          .updateOne(
-            { _id: res._id },
+      if (itemReservations && itemReservations.length > 0) {
+        const resIds = itemReservations.map((res: any) => res._id);
+        await this.inventoryReservationModel
+          .updateMany(
+            { _id: { $in: resIds } },
             {
               $set: {
                 bookingId: savedBooking._id,
@@ -2041,10 +2035,6 @@ export class BookingsService implements OnApplicationBootstrap {
             },
           )
           .session(session);
-        console.log(
-          `[DEBUG] Linked reservation ${res._id} to booking ${savedBooking._id}:`,
-          updateResult,
-        );
       }
 
       if (rentalType === 'DAILY' && rentalFrom && rentalTo) {
@@ -2420,26 +2410,68 @@ export class BookingsService implements OnApplicationBootstrap {
     const customerId = new Types.ObjectId(userIdStr);
     const bookings = await this.bookingModel
       .find({ customerId })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1, _id: -1 });
+
+    if (!bookings.length) {
+      return [];
+    }
+
+    const bookingIds = bookings.map((b) => b._id);
+
+    // 1 query lấy toàn bộ items của các đơn hàng (sort _id để bảo toàn thứ tự ban đầu)
+    const allItems = await this.bookingItemModel
+      .find({ bookingId: { $in: bookingIds } })
+      .populate({
+        path: 'productId',
+        populate: {
+          path: 'providerId',
+          select:
+            'businessName status address media rating contact comboDiscountPercent',
+        },
+      })
+      .populate('photographyPackageId')
+      .populate(
+        'providerId',
+        'businessName status address media rating contact comboDiscountPercent',
+      )
+      .sort({ _id: 1 })
+      .lean()
+      .exec();
+
+    // 1 query lấy toàn bộ schedules bằng model đã inject sẵn
+    const allSchedules = await this.bookingScheduleModel
+      .find({ bookingId: { $in: bookingIds } })
+      .lean()
+      .exec();
+
+    // Gom nhóm in-memory O(1)
+    const itemsByBooking = new Map<string, any[]>();
+    for (const item of allItems) {
+      const bId = item.bookingId.toString();
+      let list = itemsByBooking.get(bId);
+      if (!list) {
+        list = [];
+        itemsByBooking.set(bId, list);
+      }
+      list.push(item);
+    }
+
+    const schedulesByBooking = new Map<string, any[]>();
+    for (const schedule of allSchedules) {
+      const bId = (schedule as any).bookingId.toString();
+      let list = schedulesByBooking.get(bId);
+      if (!list) {
+        list = [];
+        schedulesByBooking.set(bId, list);
+      }
+      list.push(schedule);
+    }
 
     const results: Record<string, any>[] = [];
     for (const booking of bookings) {
-      const items = await this.bookingItemModel
-        .find({ bookingId: booking._id })
-        .populate({
-          path: 'productId',
-          populate: { path: 'providerId' },
-        })
-        .populate('photographyPackageId')
-        .populate('providerId')
-        .lean()
-        .exec();
-
-      const schedules = await this.bookingModel.db
-        .model('BookingSchedule')
-        .find({ bookingId: booking._id })
-        .lean()
-        .exec();
+      const bIdStr = booking._id.toString();
+      const items = itemsByBooking.get(bIdStr) || [];
+      const schedules = schedulesByBooking.get(bIdStr) || [];
 
       const updatedItems = items.map((item) => {
         const prodName = (item.productId as any)?.name;
@@ -2499,7 +2531,7 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const bookings = await this.bookingModel
       .find({ providerIds: provider._id })
-      .populate('customerId')
+      .populate('customerId', 'profile.fullName profile.avatarUrl auth.phone auth.email')
       .sort({ createdAt: -1 })
       .lean()
       .exec();
@@ -2614,7 +2646,7 @@ export class BookingsService implements OnApplicationBootstrap {
     const bookingId = new Types.ObjectId(bookingIdStr);
     let booking = await this.bookingModel
       .findById(bookingId)
-      .populate('customerId');
+      .populate('customerId', 'profile.fullName profile.avatarUrl auth.phone auth.email');
     if (!booking) throw new NotFoundException('Booking not found');
 
     if (
@@ -2627,7 +2659,7 @@ export class BookingsService implements OnApplicationBootstrap {
       await this.rentalDepositRefundCoordinator.coordinate(bookingIdStr);
       booking = (await this.bookingModel
         .findById(bookingId)
-        .populate('customerId'))!;
+        .populate('customerId', 'profile.fullName profile.avatarUrl auth.phone auth.email'))!;
     }
 
     if (userId) {

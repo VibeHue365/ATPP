@@ -87,6 +87,11 @@ export class ProductsController {
     return this.productsService.getPublicProviderProfile(providerId);
   }
 
+  @Get('stores')
+  async listStores(): Promise<any[]> {
+    return this.productsService.listPublicStores();
+  }
+
   @Get('categories')
   async getCategories(): Promise<any[]> {
     return this.productsService.getCategories();

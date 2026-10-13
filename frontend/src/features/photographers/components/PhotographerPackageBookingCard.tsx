@@ -6,16 +6,17 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-
   Clock3,
   MapPin,
   ShieldCheck,
   Star,
+  Ticket,
   X,
 } from 'lucide-react';
 import type { LocationSelection, PhotographerDetails, PhotographerPackage, PhotographyQuote } from '../types/photographer.types';
 import type { PhotographyCalendarDay, PhotographyTimeSlot } from './PhotographyScheduleSelector';
 import { PhotographyLocationPicker } from './PhotographyLocationPicker';
+import type { ApplicableVoucherItem } from '../../../pages/cart/components/VoucherPickerModal';
 
 interface PhotographerPackageBookingCardProps {
   photographer: PhotographerDetails;
@@ -49,6 +50,10 @@ interface PhotographerPackageBookingCardProps {
   onAgreeTermsChange: (checked: boolean) => void;
   onBookNow: () => void;
   onAddToCart: () => void;
+  selectedVoucher?: ApplicableVoucherItem | null;
+  applicableVouchersCount?: number;
+  onOpenVoucherPicker?: () => void;
+  onRemoveVoucher?: () => void;
 }
 
 const formatPrice = (amount: number) => `${amount.toLocaleString('vi-VN')}đ`;
@@ -58,6 +63,7 @@ const formatDate = (date: string) => {
   const [year, month, day] = date.split('-');
   return year && month && day ? `${day}/${month}/${year}` : date;
 };
+
 
 const formatDuration = (minutes: number) => {
   const hours = Math.floor(minutes / 60);
@@ -98,13 +104,19 @@ export const PhotographerPackageBookingCard: React.FC<PhotographerPackageBooking
   onAgreeTermsChange,
   onBookNow,
   onAddToCart,
+  selectedVoucher,
+  applicableVouchersCount,
+  onOpenVoucherPicker,
+  onRemoveVoucher,
 }) => {
   const [openPanel, setOpenPanel] = useState<'schedule' | 'location' | null>(null);
   const [draftDate, setDraftDate] = useState(selectedDate);
   const [draftSlot, setDraftSlot] = useState<PhotographyTimeSlot | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const packagePrice = selectedPackage?.price ?? 0;
-  const total = quote?.valid && quote.totals ? quote.totals.totalAmount : packagePrice;
+  const quoteTotal = quote?.valid && quote.totals ? quote.totals.totalAmount : packagePrice;
+  const voucherDiscount = selectedVoucher ? selectedVoucher.discountAmount : 0;
+  const finalTotal = Math.max(0, quoteTotal - voucherDiscount);
   const quoteMessage = quote?.valid === false ? quote.errors[0]?.message : quoteError;
   const availableDays = useMemo(
     () => calendarDays.filter((day) => !day.isEmpty),
@@ -234,12 +246,77 @@ export const PhotographerPackageBookingCard: React.FC<PhotographerPackageBooking
         </section>
       )}
 
+      {/* Voucher Picker Entry */}
+      <section className="ppd-booking-section ppd-voucher-section">
+        <div className="ppd-booking-section__heading"><span>MÃ GIẢM GIÁ</span><Ticket size={16} /></div>
+        {!selectedVoucher ? (
+          <button
+            type="button"
+            className="ppd-voucher-trigger"
+            onClick={onOpenVoucherPicker}
+          >
+            <span className="ppd-voucher-trigger__left">
+              <span className="ppd-voucher-trigger__icon">
+                <Ticket size={15} />
+              </span>
+              <span className="ppd-voucher-trigger__copy">
+                <strong>Chọn mã ưu đãi / voucher</strong>
+                {typeof applicableVouchersCount === 'number' && applicableVouchersCount > 0 ? (
+                  <small>{applicableVouchersCount} mã có sẵn</small>
+                ) : (
+                  <small>Áp dụng mã giảm giá cho đơn</small>
+                )}
+              </span>
+            </span>
+            <ChevronRight size={15} />
+          </button>
+        ) : (
+          <div className="ppd-voucher-applied">
+            <div className="ppd-voucher-applied__left">
+              <span className="ppd-voucher-applied__icon">
+                <Ticket size={15} />
+              </span>
+              <div className="ppd-voucher-applied__copy">
+                <strong>{selectedVoucher.promotion.code}</strong>
+                <small>Đã giảm {formatPrice(selectedVoucher.discountAmount)}</small>
+              </div>
+            </div>
+            <div className="ppd-voucher-applied__actions">
+              {onOpenVoucherPicker && (
+                <button type="button" onClick={onOpenVoucherPicker} className="ppd-voucher-btn-change">
+                  Đổi
+                </button>
+              )}
+              {onRemoveVoucher && (
+                <button type="button" onClick={onRemoveVoucher} className="ppd-voucher-btn-remove" aria-label="Bỏ chọn mã">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
       {quoteMessage && <p className="ppd-error">{quoteMessage}</p>}
       {isBusy && <p className="ppd-error">Ca này vừa được giữ chỗ. Vui lòng chọn ca khác.</p>}
 
       <div className="ppd-booking-total">
-        <span>Tạm tính</span>
-        <strong>{isQuoteLoading ? 'Đang tính…' : formatPrice(total)}</strong>
+        {selectedVoucher && selectedVoucher.discountAmount > 0 && (
+          <div className="ppd-booking-total__row ppd-booking-total__row--sub">
+            <span>Giá buổi chụp</span>
+            <span>{isQuoteLoading ? 'Đang tính…' : formatPrice(quoteTotal)}</span>
+          </div>
+        )}
+        {selectedVoucher && selectedVoucher.discountAmount > 0 && (
+          <div className="ppd-booking-total__row ppd-booking-total__row--discount">
+            <span>Ưu đãi voucher</span>
+            <strong>-{formatPrice(selectedVoucher.discountAmount)}</strong>
+          </div>
+        )}
+        <div className="ppd-booking-total__row ppd-booking-total__row--main">
+          <span>{selectedVoucher && selectedVoucher.discountAmount > 0 ? 'Tổng thanh toán cọc' : 'Tạm tính'}</span>
+          <strong>{isQuoteLoading ? 'Đang tính…' : formatPrice(finalTotal)}</strong>
+        </div>
       </div>
       <label className="ppd-terms"><input type="checkbox" checked={agreeTerms} onChange={(event) => onAgreeTermsChange(event.target.checked)} /><span>Tôi đồng ý chính sách cọc và cam kết chụp đúng giờ.</span></label>
       <button type="button" className="ppd-primary-button" disabled={actionDisabled} onClick={onBookNow}>
@@ -247,6 +324,7 @@ export const PhotographerPackageBookingCard: React.FC<PhotographerPackageBooking
       </button>
       <button type="button" className="ppd-secondary-button" disabled={actionDisabled || !canAddToCart} onClick={onAddToCart}>Lưu vào giỏ hàng</button>
       <p className="ppd-payment-note">Sau khi tiếp tục, hệ thống sẽ giữ lịch và chuyển bạn sang bước thanh toán.</p>
+
       {openPanel && createPortal((
         <div className="ppd-booking-dialog" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePanel(); }}>
           <div className={`ppd-booking-dialog__panel${openPanel === 'location' ? ' ppd-booking-dialog__panel--location' : ''}`} role="dialog" aria-modal="true" aria-labelledby="ppd-booking-dialog-title">

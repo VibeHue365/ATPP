@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CalendarDays, Camera, Check, ChevronDown, Map, MapPin, Search, Sparkles, Users } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { ConfirmModal } from '../../utils/confirmModal';
 import { useToast } from '../../components/feedback/Toast';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../features/auth/hooks/useAuth';
@@ -233,15 +233,11 @@ export const PhotographersListingPage: React.FC = () => {
   const handleToggleFavorite = async (id: string, event: React.MouseEvent) => {
     event.stopPropagation();
     if (!user) {
-      const result = await Swal.fire({
-        icon: 'warning',
-        title: 'Yêu cầu đăng nhập',
-        text: 'Vui lòng đăng nhập để lưu nhiếp ảnh gia yêu thích.',
-        confirmButtonColor: '#7a1519',
-        confirmButtonText: 'Đăng nhập ngay',
-        showCancelButton: true,
-        cancelButtonText: 'Hủy',
-      });
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để lưu nhiếp ảnh gia yêu thích.',
+        { confirmButtonText: 'Đăng nhập ngay' }
+      );
       if (result.isConfirmed) navigate('/login');
       return;
     }

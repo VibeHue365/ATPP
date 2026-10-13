@@ -44,12 +44,25 @@ export interface BookingPricingSummary {
   discountAmount: number;
   comboDiscountTotal?: number;
   voucherDiscountTotal?: number;
+  platformSubsidyAmount?: number;
+  amountDueNow?: number;
   travelFee: number;
   overtimeFee: number;
   lateFee: number;
   damageFee: number;
   serviceFee?: number;
   grandTotal: number;
+}
+
+export interface VoucherSnapshot {
+  promotionId: Types.ObjectId;
+  code: string;
+  name: string;
+  discountType: string;
+  discountValue: number;
+  discountAmount: number;
+  scope: 'SHOP' | 'PLATFORM';
+  providerId?: Types.ObjectId | null;
 }
 
 export interface BookingPaymentSummary {
@@ -300,6 +313,9 @@ export class Booking {
     requestedAt?: Date | null;
     completedAt?: Date | null;
   };
+
+  @Prop({ type: Object, default: null })
+  voucherSnapshot?: VoucherSnapshot | null;
 }
 
 export const BookingSchema = SchemaFactory.createForClass(Booking);

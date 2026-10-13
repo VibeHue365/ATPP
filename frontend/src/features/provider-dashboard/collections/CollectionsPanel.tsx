@@ -55,6 +55,7 @@ type CollectionsPanelProps = Pick<ReturnType<typeof useProviderNavigationState>,
   fetchProducts?: () => Promise<void>;
   inventorySummary?: any[];
   toast?: any;
+  provider?: any;
 };
 
 export function CollectionsPanel({
@@ -82,6 +83,7 @@ export function CollectionsPanel({
   categories = [],
   inventorySummary = [],
   toast,
+  provider,
 }: CollectionsPanelProps) {
   // UI states
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -251,6 +253,57 @@ export function CollectionsPanel({
     e.stopPropagation();
     setFavorites((prev) => ({ ...prev, [id]: !prev[id] }));
   };
+
+  // Safe navigation to public product page with status guards & noopener
+  const handleOpenPublicProduct = (p: Product) => {
+    if (!p?._id) {
+      toast?.error?.('Không tìm thấy thông tin sản phẩm.');
+      return;
+    }
+
+    if (p.status === 'DRAFT') {
+      toast?.warning?.('Sản phẩm đang ở trạng thái Bản nháp, chưa được mở bán công khai trên sàn.');
+      return;
+    }
+
+    if (p.moderationStatus === 'PENDING_REVIEW') {
+      toast?.warning?.('Sản phẩm đang chờ Quản trị viên phê duyệt, chưa hiển thị công khai.');
+      return;
+    }
+
+    if (p.moderationStatus === 'CHANGES_REQUESTED') {
+      toast?.warning?.(
+        p.moderationReason
+          ? `Sản phẩm cần chỉnh sửa: ${p.moderationReason}`
+          : 'Sản phẩm cần chỉnh sửa theo yêu cầu của Quản trị viên trước khi hiển thị công khai.'
+      );
+      return;
+    }
+
+    if (p.moderationStatus === 'REJECTED') {
+      toast?.error?.(
+        p.moderationReason
+          ? `Sản phẩm đã bị từ chối: ${p.moderationReason}`
+          : 'Sản phẩm đã bị từ chối duyệt, không thể xem công khai.'
+      );
+      return;
+    }
+
+    if (p.status === 'INACTIVE' || p.moderationStatus === 'HIDDEN') {
+      toast?.warning?.('Sản phẩm đang tạm ẩn. Vui lòng chuyển sang "Hiện sản phẩm" để khách hàng có thể xem.');
+      return;
+    }
+
+    // Sản phẩm hợp lệ & đang mở bán (ACTIVE): Mở trang ở tab mới an toàn chống reverse tabnabbing
+    const publicUrl = `/rentals/${encodeURIComponent(p._id)}`;
+    const newWindow = window.open(publicUrl, '_blank', 'noopener,noreferrer');
+    if (newWindow) {
+      newWindow.opener = null;
+    }
+  };
+
+  const providerId = provider?._id || (typeof selectedProduct?.providerId === 'object' ? selectedProduct?.providerId?._id : selectedProduct?.providerId);
+  const providerStoreUrl = providerId ? `/stores/${encodeURIComponent(providerId)}` : null;
 
   const totalPages = Math.max(1, Math.ceil(prodTotal / (prodLimit || 8)));
 
@@ -891,10 +944,13 @@ export function CollectionsPanel({
                 <div className="ps-drawer-quick-actions">
                   <button
                     type="button"
-                    onClick={() => {
-                      toast?.info?.('Đang mở trang sản phẩm công khai...');
-                    }}
+                    onClick={() => handleOpenPublicProduct(selectedProduct)}
                     className="ps-btn-quick"
+                    title={
+                      selectedProduct.status !== 'ACTIVE'
+                        ? 'Chỉ có thể xem khi sản phẩm đang mở bán công khai'
+                        : 'Mở trang chi tiết sản phẩm trên web ở tab mới'
+                    }
                   >
                     <ExternalLink size={13} />
                     <span>Xem trên cửa hàng</span>
@@ -960,6 +1016,30 @@ export function CollectionsPanel({
                         {typeof selectedProduct.categoryId === 'object' ? selectedProduct.categoryId?.name : 'Áo dài cổ phục'}
                       </span>
                     </div>
+
+                    {providerStoreUrl && (
+                      <div className="ps-info-row">
+                        <span className="ps-info-label">Cửa hàng</span>
+                        <a
+                          href={providerStoreUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ps-info-value"
+                          style={{
+                            color: '#531320',
+                            fontWeight: 650,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            textDecoration: 'none',
+                          }}
+                          title="Xem trang gian hàng của bạn trên web"
+                        >
+                          <span>Xem toàn bộ gian hàng</span>
+                          <ExternalLink size={12} />
+                        </a>
+                      </div>
+                    )}
 
                     <div className="ps-info-row">
                       <span className="ps-info-label">Mô tả</span>

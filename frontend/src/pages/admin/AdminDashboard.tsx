@@ -42,7 +42,7 @@ import { adminReportedReviewsApi } from '../../features/admin-reviews/api/adminR
 import { adminVerificationApi } from '../../features/admin-verifications/api/adminVerificationApi';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { useToast } from '../../components/feedback/Toast';
-import './adminDashboardRefactored.css';
+import './adminDashboard.css';
 
 type AdminTab =
   | 'overview'
@@ -239,7 +239,7 @@ function TabPanel({
   }
 }
 
-export default function AdminDashboardRefactored() {
+export default function AdminDashboard() {
   const navigate = useNavigate();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();

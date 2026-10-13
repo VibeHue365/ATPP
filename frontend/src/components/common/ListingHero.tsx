@@ -9,6 +9,7 @@ export interface BreadcrumbItem {
 export interface StatItem {
   value: string | number;
   label: string;
+  href?: string;
 }
 
 interface ListingHeroProps {
@@ -57,12 +58,25 @@ export const ListingHero: React.FC<ListingHeroProps> = ({
 
         {stats.length > 0 && (
           <div className="unified-hero-stats">
-            {stats.slice(0, 3).map((stat, idx) => (
-              <div key={idx} className="unified-hero-stat-item">
-                <span className="unified-hero-stat-value">{stat.value}</span>
-                <span className="unified-hero-stat-label">{stat.label}</span>
-              </div>
-            ))}
+            {stats.slice(0, 3).map((stat, idx) =>
+              stat.href ? (
+                <Link
+                  key={idx}
+                  to={stat.href}
+                  className="unified-hero-stat-item hover:opacity-80 transition-opacity"
+                  style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                  title={`Xem ${stat.label}`}
+                >
+                  <span className="unified-hero-stat-value">{stat.value}</span>
+                  <span className="unified-hero-stat-label">{stat.label} ↗</span>
+                </Link>
+              ) : (
+                <div key={idx} className="unified-hero-stat-item">
+                  <span className="unified-hero-stat-value">{stat.value}</span>
+                  <span className="unified-hero-stat-label">{stat.label}</span>
+                </div>
+              )
+            )}
           </div>
         )}
       </div>

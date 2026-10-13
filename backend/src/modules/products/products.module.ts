@@ -43,11 +43,17 @@ import { UsersModule } from '../users/users.module';
 import { SmartTaggingModule } from '../smart-tagging/smart-tagging.module';
 import { StorageModule } from '../storage/storage.module';
 import { PersonalizedProductRecommendationService } from './services/personalized-product-recommendation.service';
+import {
+  PromotionRedemption,
+  PromotionRedemptionSchema,
+} from './schemas/promotion-redemption.schema';
+import { VoucherPricingService } from './services/voucher-pricing.service';
 
 export const productModels = MongooseModule.forFeature([
   { name: Product.name, schema: ProductSchema },
   { name: PriceVersion.name, schema: PriceVersionSchema },
   { name: Promotion.name, schema: PromotionSchema },
+  { name: PromotionRedemption.name, schema: PromotionRedemptionSchema },
   { name: InventoryItem.name, schema: InventoryItemSchema },
   { name: InventoryReservation.name, schema: InventoryReservationSchema },
   { name: PhotographyPackage.name, schema: PhotographyPackageSchema },
@@ -69,6 +75,7 @@ export const productModels = MongooseModule.forFeature([
   ],
   providers: [
     PromotionsService,
+    VoucherPricingService,
     ProductsService,
     ProductsRepository,
     InventoryService,
@@ -80,6 +87,7 @@ export const productModels = MongooseModule.forFeature([
   exports: [
     productModels,
     PromotionsService,
+    VoucherPricingService,
     ProductsService,
     InventoryService,
     DiscountCampaignService,

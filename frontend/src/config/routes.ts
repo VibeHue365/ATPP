@@ -1,4 +1,4 @@
-﻿export const ROUTES = {
+export const ROUTES = {
   LANDING: '/',
   RENTALS: '/rentals',
   PHOTOGRAPHERS: '/photographers',
@@ -23,6 +23,7 @@
   COMBOS: '/combos',
   COMBO_DETAIL: '/combos/:id',
   PROVIDER_STORE: '/stores/:id',
+  STORES: '/stores',
   NOTIFICATIONS: '/notifications',
   CHAT: '/chat',
   VIRTUAL_TRYON_3D: '/virtual-tryon-3d',
