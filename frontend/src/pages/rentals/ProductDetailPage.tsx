@@ -11,7 +11,7 @@ import { ROUTES } from '../../config/routes';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { checkProductAvailability } from '../../features/rentals/services/productAvailabilityService';
 import { useProductAvailability } from '../../features/rentals/hooks/useProductAvailability';
-import { VirtualTryOn3DModal } from '../../features/virtual-tryon-3d/components/VirtualTryOn3DModal';
+import { VirtualTryOn2DModal } from '../../features/virtual-tryon-2d/components/VirtualTryOn2DModal';
 
 // Local modular components & utilities
 import type {
@@ -1317,7 +1317,7 @@ export const ProductDetailPage: React.FC = () => {
       </div>
 
       {/* Interactive Modals */}
-      <VirtualTryOn3DModal
+      <VirtualTryOn2DModal
         isOpen={isAiStylingOpen}
         onClose={() => setIsAiStylingOpen(false)}
         productImage={getImageUrl(product.images?.[0] || '')}

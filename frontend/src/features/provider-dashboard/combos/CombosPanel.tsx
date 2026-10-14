@@ -101,9 +101,9 @@ type CombosPanelProps = Pick<
     hasPhotographyCapability: boolean | undefined;
     openCampaignModal: () => void;
     handleDeactivateCampaign: () => Promise<void>;
-    handleAddVoucher: (e: FormEvent<Element>) => Promise<void>;
+    handleAddVoucher: (e: FormEvent<Element>) => Promise<any>;
     handleDeleteVoucher: (id: string) => Promise<void>;
-    handleCreateOrUpdateVoucher?: (e: FormEvent<Element>) => Promise<void>;
+    handleCreateOrUpdateVoucher?: (e: FormEvent<Element>) => Promise<any>;
     handleEditVoucher?: (voucher: any) => void;
     clearVoucherForm?: () => void;
     handleCreateOrUpdateCombo: (e: FormEvent<Element>) => Promise<boolean | void>;

@@ -4,7 +4,6 @@ import {
   Sparkles,
   Scissors,
   Camera,
-  Calendar,
   Clock,
   Users,
   ChevronRight,

@@ -26,5 +26,6 @@ export const ROUTES = {
   STORES: '/stores',
   NOTIFICATIONS: '/notifications',
   CHAT: '/chat',
+  VIRTUAL_TRYON: '/virtual-tryon',
   VIRTUAL_TRYON_3D: '/virtual-tryon-3d',
 } as const;

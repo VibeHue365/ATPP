@@ -50,7 +50,7 @@ const ProviderStorePage = lazy(() => import('../pages/store/ProviderStorePage'))
 const StoresListingPage = lazy(() => import('../pages/store/StoresListingPage'));
 const NotificationsPage = lazy(() => import('../pages/notifications/NotificationsPage'));
 const ChatPage = lazy(() => import('../pages/chat/ChatPage'));
-const VirtualTryOn3DPage = lazy(() => import('../pages/virtual-tryon/VirtualTryOn3DPage'));
+const VirtualTryOn2DPage = lazy(() => import('../pages/virtual-tryon/VirtualTryOn2DPage'));
 
 const PageFallbackLoader: React.FC = () => (
   <div
@@ -98,7 +98,8 @@ export const AppRouter: React.FC = () => {
           <Route path={ROUTES.RENTALS} element={<AoDaiListingPage />} />
           <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
-          <Route path={ROUTES.VIRTUAL_TRYON_3D} element={<VirtualTryOn3DPage />} />
+          <Route path={ROUTES.VIRTUAL_TRYON} element={<VirtualTryOn2DPage />} />
+          <Route path={ROUTES.VIRTUAL_TRYON_3D} element={<VirtualTryOn2DPage />} />
           <Route path={ROUTES.PHOTOGRAPHERS} element={<PhotographersListingPage />} />
           <Route path={ROUTES.PHOTOGRAPHER_DETAIL} element={<PhotographerDetailPage />} />
           <Route path={ROUTES.COMBOS} element={<ComboListingPage />} />
