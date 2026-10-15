@@ -257,7 +257,6 @@
   font-weight: 600 !important;
   margin: 0 !important;
   padding: 0 16px !important;
-  display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   letter-spacing: 0.01em !important;
@@ -265,6 +264,23 @@
   box-sizing: border-box !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   outline: none !important;
+}
+
+.swal2-actions button.swal2-styled:not([style*="display: none"]) {
+  display: inline-flex;
+}
+
+/* Deny ("No") button is never used in VibeHue / LUMÉ; completely hide by default */
+.swal2-actions button.swal2-deny {
+  display: none !important;
+}
+
+/* Ensure buttons hidden internally by SweetAlert2 are never forced visible */
+.swal2-actions button[style*="display: none"],
+.swal2-actions button.swal2-styled[style*="display: none"],
+.swal2-actions button.swal2-hide,
+.swal2-styled[style*="display: none"] {
+  display: none !important;
 }
 
 /* Confirm Button (Primary VibeHue Burgundy) */

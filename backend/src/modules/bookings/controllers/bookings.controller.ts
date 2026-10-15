@@ -311,8 +311,9 @@ export class BookingsController {
   async customerConfirmPickup(
     @Param('id') id: string,
     @CurrentUser() user: AuthUser,
+    @Body() body?: { evidencePhotos?: string[] },
   ) {
-    return this.bookingsService.customerConfirmPickup(id, user.sub);
+    return this.bookingsService.customerConfirmPickup(id, user.sub, body?.evidencePhotos);
   }
 
   @Post(':id/customer-report-damage')

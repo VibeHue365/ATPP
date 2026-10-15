@@ -3020,11 +3020,7 @@ export class BookingsService implements OnApplicationBootstrap {
         );
       }
 
-      if (newStatus === BookingStatus.PickedUp && isProvider && !isAdmin) {
-        throw new BadRequestException(
-          'Trạng thái lấy đồ phải do Khách hàng bấm duyệt xác nhận nhận đồ trên ứng dụng.',
-        );
-      }
+      // Provider và Admin đều được phép cập nhật sang PICKED_UP khi bàn giao đồ tại cửa hàng
     }
 
     // Nếu chuyển sang COMPLETED → dùng completeBooking để trigger settlement
@@ -4388,6 +4384,7 @@ export class BookingsService implements OnApplicationBootstrap {
   async customerConfirmPickup(
     bookingId: string,
     customerId: string,
+    evidencePhotos?: string[],
   ): Promise<any> {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
@@ -4396,28 +4393,49 @@ export class BookingsService implements OnApplicationBootstrap {
     if (this.getCustomerIdStr(booking) !== customerId) {
       throw new ForbiddenException('Bạn không có quyền xác nhận đơn này');
     }
-    if (booking.status !== BookingStatus.PickupPending) {
+    if (
+      booking.status !== BookingStatus.PickupPending &&
+      booking.status !== BookingStatus.Confirmed &&
+      booking.status !== BookingStatus.DepositPaid
+    ) {
       throw new BadRequestException('Đơn hàng không ở trạng thái chờ nhận đồ');
     }
 
-    if (booking.handoverInitiatedAt) {
-      const diffMs =
-        Date.now() - new Date(booking.handoverInitiatedAt).getTime();
-      if (diffMs > 30 * 60 * 1000) {
-        throw new BadRequestException(
-          'Đã quá thời gian 30 phút xác nhận tại quầy',
-        );
-      }
+    if (evidencePhotos && evidencePhotos.length) {
+      booking.handoverPhotos = [
+        ...(booking.handoverPhotos || []),
+        ...evidencePhotos,
+      ];
     }
 
     booking.status = BookingStatus.PickedUp;
     booking.statusTimeline.push({
       status: BookingStatus.PickedUp,
       changedAt: new Date(),
-      note: 'Khách hàng xác nhận nhận đồ hoàn hảo tại quầy.',
+      note: 'Khách hàng gửi ảnh hiện trạng và xác nhận nhận áo thành công.',
     });
 
     await booking.save();
+
+    await this.bookingItemModel.updateMany(
+      {
+        bookingId: booking._id,
+        itemType: BookingItemType.Product,
+        'rentalFulfillment.status': {
+          $in: [
+            RentalFulfillmentStatus.Pending,
+            RentalFulfillmentStatus.ReadyForPickup,
+          ],
+        },
+      },
+      {
+        $set: {
+          'rentalFulfillment.status': RentalFulfillmentStatus.PickedUp,
+          'rentalFulfillment.pickedUpAt': new Date(),
+        },
+      },
+    );
+
     return { success: true, booking };
   }
 

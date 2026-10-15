@@ -27,6 +27,7 @@ import {
   Sparkles,
   User,
   X,
+  XCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
@@ -173,6 +174,19 @@ export function OrderDetailDrawer({
 
   // Active step computation
   const isOrderCompleted = rawStatus === 'COMPLETED' || (order.status || '').toUpperCase() === 'HOÀN THÀNH' || (order.status || '').toUpperCase() === 'COMPLETED';
+  const isCancelled = rawStatus === 'CANCELLED' || (order.status || '').toUpperCase() === 'ĐÃ HỦY' || (order.status || '').toUpperCase() === 'CANCELLED';
+
+  const cancellationReason = useMemo(() => {
+    if (order.cancellation?.reason) return order.cancellation.reason;
+    if (order.cancellationReason) return order.cancellationReason;
+    if (order.cancelReason) return order.cancelReason;
+    if (order.statusTimeline && Array.isArray(order.statusTimeline)) {
+      const cancelEntry = [...order.statusTimeline].reverse().find((e) => e.status === 'CANCELLED');
+      if (cancelEntry?.note) return cancelEntry.note;
+    }
+    return '';
+  }, [order]);
+
   const activeMasterIndex = useMemo(() => {
     if (isOrderCompleted) return masterSteps.length - 1;
 
@@ -328,24 +342,24 @@ export function OrderDetailDrawer({
         desc: isAoDai
           ? 'Đã hoàn tất quy trình thuê và tất toán cọc cho khách hàng.'
           : isPhoto
-          ? 'Đã hoàn tất nghiệm thu bộ ảnh chất lượng cao.'
-          : 'Đã hoàn tất trọn vẹn cả dịch vụ thuê áo và chụp ảnh.',
+            ? 'Đã hoàn tất nghiệm thu bộ ảnh chất lượng cao.'
+            : 'Đã hoàn tất trọn vẹn cả dịch vụ thuê áo và chụp ảnh.',
         deadlineNum: 'Hoàn tất',
         deadlineColor: '#059669',
         deadlineTitle: 'Trạng thái đơn',
         deadlineDesc: 'Đơn hàng đã kết thúc thành công đúng cam kết chất lượng.',
       };
     }
-    if (rawStatus === 'CANCELLED') {
+    if (rawStatus === 'CANCELLED' || isCancelled) {
       return {
         step: '0/5',
         percent: 0,
         title: 'Đơn đã hủy',
-        desc: 'Đơn hàng đã bị hủy, không còn hiệu lực thực hiện.',
+        desc: cancellationReason ? `Lý do: "${cancellationReason}"` : 'Đơn hàng đã bị hủy, không còn hiệu lực thực hiện.',
         deadlineNum: 'Đã hủy',
         deadlineColor: '#DC2626',
         deadlineTitle: 'Trạng thái đơn',
-        deadlineDesc: 'Đơn hàng đã dừng quy trình.',
+        deadlineDesc: cancellationReason ? `Lý do: ${cancellationReason}` : 'Đơn hàng đã dừng quy trình.',
       };
     }
 
@@ -417,8 +431,8 @@ export function OrderDetailDrawer({
     const currentDesc = isAoDai
       ? (descMapAoDai[activeMasterIndex] || 'Đang thực hiện đúng cam kết chất lượng.')
       : isPhoto
-      ? (descMapPhoto[activeMasterIndex] || 'Đang thực hiện đúng cam kết chất lượng.')
-      : (descMapCombo[activeMasterIndex] || 'Đang thực hiện đúng cam kết chất lượng.');
+        ? (descMapPhoto[activeMasterIndex] || 'Đang thực hiện đúng cam kết chất lượng.')
+        : (descMapCombo[activeMasterIndex] || 'Đang thực hiện đúng cam kết chất lượng.');
 
     return {
       step: `${stepNum}/${totalStepCount}`,
@@ -773,12 +787,12 @@ export function OrderDetailDrawer({
                       borderRadius: '9999px',
                       fontSize: '11.5px',
                       fontWeight: 700,
-                      backgroundColor: '#EFF6FF',
-                      color: '#1D4ED8',
-                      border: '1px solid #BFDBFE',
+                      backgroundColor: isCancelled ? '#FEF2F2' : isOrderCompleted ? '#ECFDF5' : '#EFF6FF',
+                      color: isCancelled ? '#DC2626' : isOrderCompleted ? '#059669' : '#1D4ED8',
+                      border: `1px solid ${isCancelled ? '#FECACA' : isOrderCompleted ? '#A7F3D0' : '#BFDBFE'}`,
                     }}
                   >
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#2563EB' }} />
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isCancelled ? '#DC2626' : isOrderCompleted ? '#059669' : '#2563EB' }} />
                     <span>{order.status || 'Đang thực hiện'}</span>
                   </span>
                   {isAoDai && (
@@ -917,6 +931,92 @@ export function OrderDetailDrawer({
                     </div>
                   </div>
                 </div>
+
+                {/* Cancellation Detail Box */}
+                {isCancelled && (
+                  <div
+                    style={{
+                      backgroundColor: '#FEF2F2',
+                      border: '1.5px solid #FECACA',
+                      borderRadius: '12px',
+                      padding: '16px 18px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      boxShadow: '0 2px 8px rgba(220, 38, 38, 0.05)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <XCircle size={18} color="#DC2626" />
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#991B1B' }}>
+                          Chi tiết hủy đơn hàng
+                        </span>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          backgroundColor: '#FEE2E2',
+                          color: '#DC2626',
+                          padding: '3px 9px',
+                          borderRadius: '6px',
+                          border: '1px solid #FECACA',
+                        }}
+                      >
+                        ĐÃ HỦY ĐƠN
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '12.5px', color: '#7F1D1D', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div>
+                        <strong>Đối tượng hủy:</strong>{' '}
+                        {cancellationReason?.includes('[KHÁCH VẮNG MẶT - NO SHOW]')
+                          ? 'Nhà cung cấp (Báo cáo khách vắng mặt)'
+                          : 'Khách hàng yêu cầu hủy'}
+                      </div>
+                      {order.cancellation?.cancelledAt && (
+                        <div>
+                          <strong>Thời gian hủy:</strong>{' '}
+                          {formatMilestoneDateTime(order.cancellation.cancelledAt)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Lý do hủy do khách hàng viết */}
+                    <div
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1.5px dashed #F87171',
+                        borderRadius: '8px',
+                        padding: '12px 14px',
+                      }}
+                    >
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#991B1B', textTransform: 'uppercase', marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <FileText size={13} />
+                        <span>Lý do hủy đơn do khách hàng viết:</span>
+                      </div>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: '13px',
+                          color: '#1F2937',
+                          fontStyle: 'italic',
+                          lineHeight: 1.5,
+                          fontWeight: 500,
+                        }}
+                      >
+                        &quot;{cancellationReason || 'Khách hàng không cung cấp lý do chi tiết.'}&quot;
+                      </p>
+                    </div>
+
+                    {order.cancellation?.refundAmount !== undefined && order.cancellation.refundAmount !== null && (
+                      <div style={{ fontSize: '12px', color: '#059669', fontWeight: 650 }}>
+                        ✓ Số tiền hoàn cọc/số dư cho khách: <strong>{Number(order.cancellation.refundAmount).toLocaleString('vi-VN')}đ</strong>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Reschedule Alert Banner */}
                 {(pendingRescheduleItem || order.items?.some((i: any) => i?.rescheduleRequest?.status === 'PENDING') || (order as any).hasRescheduleDemo) && (
@@ -1076,6 +1176,17 @@ export function OrderDetailDrawer({
                       &quot;{order.customerNotes || 'Không có ghi chú thêm từ khách hàng.'}&quot;
                     </p>
                   </div>
+
+                  {isCancelled && cancellationReason && (
+                    <div style={{ borderTop: '1px dashed #FECACA', paddingTop: '10px', marginTop: '10px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#DC2626', textTransform: 'uppercase' }}>
+                        Lý do khách hủy đơn:
+                      </span>
+                      <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#991B1B', fontStyle: 'italic', fontWeight: 600 }}>
+                        &quot;{cancellationReason}&quot;
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Card 2: Chi tiết sản phẩm & Dịch vụ */}
@@ -1349,15 +1460,32 @@ export function OrderDetailDrawer({
 
                   {/* Master 8-step connected timeline */}
                   <div className="p-master-stepper-track">
-                    <div className="p-master-progress-bg" />
                     <div
-                      className="p-master-progress-fill"
+                      className="p-master-progress-track"
                       style={{
-                        width: isOrderCompleted
-                          ? '100%'
-                          : `${Math.min(100, Math.max(0, (activeMasterIndex / (masterSteps.length - 1)) * 100))}%`,
+                        position: 'absolute',
+                        top: '13px',
+                        left: `calc(100% / (${masterSteps.length} * 2))`,
+                        right: `calc(100% / (${masterSteps.length} * 2))`,
+                        height: '3px',
+                        backgroundColor: '#E2E8F0',
+                        zIndex: 1,
+                        overflow: 'hidden',
+                        borderRadius: '2px',
                       }}
-                    />
+                    >
+                      <div
+                        className="p-master-progress-fill"
+                        style={{
+                          height: '100%',
+                          backgroundColor: '#881337',
+                          width: isOrderCompleted
+                            ? '100%'
+                            : `${Math.min(100, Math.max(0, (activeMasterIndex / (masterSteps.length - 1)) * 100))}%`,
+                          transition: 'width 0.3s ease',
+                        }}
+                      />
+                    </div>
 
                     {masterSteps.map((step, idx) => {
                       const isDone = isOrderCompleted || idx < activeMasterIndex;
@@ -1395,15 +1523,31 @@ export function OrderDetailDrawer({
                           <span>Tiến trình Áo dài</span>
                         </div>
                         <div className="p-substepper-row">
-                          <div className="p-substepper-line" />
                           <div
-                            className="p-substepper-line-fill"
+                            className="p-substepper-track-wrap"
                             style={{
-                              width: isOrderCompleted
-                                ? '100%'
-                                : `${Math.min(100, Math.max(0, (aoDaiCurrentIdx / (aoDaiStepsConfig.length - 1)) * 100))}%`,
+                              position: 'absolute',
+                              top: '9px',
+                              left: `calc(100% / (${aoDaiSubsteps.length} * 2))`,
+                              right: `calc(100% / (${aoDaiSubsteps.length} * 2))`,
+                              height: '2px',
+                              backgroundColor: '#E2E8F0',
+                              zIndex: 1,
+                              overflow: 'hidden',
                             }}
-                          />
+                          >
+                            <div
+                              className="p-substepper-line-fill"
+                              style={{
+                                height: '100%',
+                                backgroundColor: '#10B981',
+                                width: isOrderCompleted
+                                  ? '100%'
+                                  : `${Math.min(100, Math.max(0, (aoDaiCurrentIdx / (aoDaiStepsConfig.length - 1)) * 100))}%`,
+                                transition: 'width 0.3s ease',
+                              }}
+                            />
+                          </div>
                           {aoDaiSubsteps.map((sub, i) => (
                             <div key={i} className="p-substep-item">
                               <div className={`p-substep-dot ${sub.status}`}>
@@ -1429,15 +1573,31 @@ export function OrderDetailDrawer({
                           <span>Tiến trình Chụp ảnh</span>
                         </div>
                         <div className="p-substepper-row">
-                          <div className="p-substepper-line" />
                           <div
-                            className="p-substepper-line-fill photo"
+                            className="p-substepper-track-wrap"
                             style={{
-                              width: isOrderCompleted
-                                ? '100%'
-                                : `${Math.min(100, Math.max(0, (photoCurrentIdx / (photoStepsConfig.length - 1)) * 100))}%`,
+                              position: 'absolute',
+                              top: '9px',
+                              left: `calc(100% / (${photoSubsteps.length} * 2))`,
+                              right: `calc(100% / (${photoSubsteps.length} * 2))`,
+                              height: '2px',
+                              backgroundColor: '#E2E8F0',
+                              zIndex: 1,
+                              overflow: 'hidden',
                             }}
-                          />
+                          >
+                            <div
+                              className="p-substepper-line-fill photo"
+                              style={{
+                                height: '100%',
+                                backgroundColor: '#BE123C',
+                                width: isOrderCompleted
+                                  ? '100%'
+                                  : `${Math.min(100, Math.max(0, (photoCurrentIdx / (photoStepsConfig.length - 1)) * 100))}%`,
+                                transition: 'width 0.3s ease',
+                              }}
+                            />
+                          </div>
                           {photoSubsteps.map((sub, i) => (
                             <div key={i} className="p-substep-item">
                               <div className={`p-substep-dot ${sub.status}`}>
@@ -1820,27 +1980,29 @@ export function OrderDetailDrawer({
                 <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
                   Ảnh bằng chứng giao nhận &amp; Kiểm tra
                 </span>
-                <button
-                  type="button"
-                  onClick={() => onOpenIncidentReport(order)}
-                  style={{
-                    background: 'none',
-                    border: '1px solid #FECACA',
-                    backgroundColor: '#FEF2F2',
-                    color: '#DC2626',
-                    borderRadius: '6px',
-                    padding: '4px 10px',
-                    fontSize: '11.5px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                  }}
-                >
-                  <AlertTriangle size={13} />
-                  <span>Tạo báo cáo sự cố</span>
-                </button>
+                {!isCancelled && !isOrderCompleted && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenIncidentReport(order)}
+                    style={{
+                      background: 'none',
+                      border: '1px solid #FECACA',
+                      backgroundColor: '#FEF2F2',
+                      color: '#DC2626',
+                      borderRadius: '6px',
+                      padding: '4px 10px',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <AlertTriangle size={13} />
+                    <span>Tạo báo cáo sự cố</span>
+                  </button>
+                )}
               </div>
 
               {order.pickupDamageReport && (
@@ -1937,15 +2099,17 @@ export function OrderDetailDrawer({
               <span>In phiếu hẹn</span>
             </button>
 
-            <button
-              type="button"
-              className="p-drawer-danger-btn"
-              onClick={() => onOpenIncidentReport(order)}
-              title="Báo cáo sự cố hoặc hư hỏng"
-            >
-              <AlertTriangle size={14} />
-              <span>Báo sự cố</span>
-            </button>
+            {!isCancelled && !isOrderCompleted && (
+              <button
+                type="button"
+                className="p-drawer-danger-btn"
+                onClick={() => onOpenIncidentReport(order)}
+                title="Báo cáo sự cố hoặc hư hỏng"
+              >
+                <AlertTriangle size={14} />
+                <span>Báo sự cố</span>
+              </button>
+            )}
 
             {/* Primary contextual status button */}
             {rawStatus === 'CONFIRMED' && isPhoto && (
@@ -1993,14 +2157,10 @@ export function OrderDetailDrawer({
             )}
 
             {rawStatus === 'PICKUP_PENDING' && (
-              <button
-                type="button"
-                className="p-drawer-primary-btn"
-                onClick={() => changeOrderStatus(order._id, 'PICKED_UP')}
-              >
-                <Package size={14} />
-                <span>Khách nhận đồ</span>
-              </button>
+              <span style={{ fontSize: '12.5px', fontWeight: 650, color: '#D97706', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFBEB', padding: '7px 14px', borderRadius: '8px', border: '1px solid #FDE68A' }}>
+                <Clock size={14} />
+                <span>Chờ khách hàng bấm nhận đồ</span>
+              </span>
             )}
 
             {rawStatus === 'PICKED_UP' && !isPhoto && (
@@ -2030,7 +2190,7 @@ export function OrderDetailDrawer({
             {isOrderCompleted && (
               <span style={{ fontSize: '13px', fontWeight: 700, color: '#10B981', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                 <CheckCircle size={15} color="#10B981" />
-                <span>✓ Đơn đã hoàn tất</span>
+                <span>Đơn đã hoàn tất</span>
               </span>
             )}
           </div>

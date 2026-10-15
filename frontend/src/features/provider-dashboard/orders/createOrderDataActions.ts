@@ -150,6 +150,9 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           pricingSummary: b.pricingSummary,
           paymentSummary: b.paymentSummary,
           pickupDamageReport: b.pickupDamageReport || null,
+          cancellation: b.cancellation || null,
+          cancellationReason: b.cancellation?.reason || b.cancellationReason || b.cancelReason || '',
+          statusTimeline: b.statusTimeline || [],
         };
       });
 
