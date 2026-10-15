@@ -1810,7 +1810,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                               {p.purpose === 'DEPOSIT_PAYMENT'
                                 ? 'Đặt cọc giữ chỗ'
                                 : p.purpose === 'DEPOSIT_REFUND'
-                                  ? 'Hoàn trả tiền cọc'
+                                  ? (p.bookingId?.status === 'CANCELLED' || p.refundReason === 'LATE_PAYMENT_CLOSED_BOOKING' || (p.refundReason || '').toLowerCase().includes('hủy')
+                                      ? 'Hoàn tiền hủy đơn'
+                                      : (p.bookingId?.status === 'DISPUTED' || p.bookingId?.disputeResult || (p.refundReason || '').toLowerCase().includes('tranh chấp'))
+                                        ? 'Hoàn tiền giải quyết tranh chấp'
+                                        : 'Hoàn trả tiền cọc giữ đồ')
                                   : 'Thanh toán hoàn tất'}
                             </div>
                             {bType && (
