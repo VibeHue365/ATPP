@@ -5,19 +5,22 @@ import { RentalInfoColumns } from './RentalInfoColumns';
 import { RentalTimelineAndPhotos } from './RentalTimelineAndPhotos';
 import { RentalBottomActionBar } from './RentalBottomActionBar';
 import Swal from 'sweetalert2';
+import { httpClient } from '../../../../services/httpClient';
 
 interface ProfileRentalDetailPageProps {
   booking?: any;
   onBack: () => void;
   onOpenRescheduleOrExtend?: (item: any) => void;
   onOpenCancel?: (booking: any) => void;
+  onRefreshBooking?: () => void;
 }
 
 export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = ({
   booking,
   onBack,
   onOpenRescheduleOrExtend,
-  onOpenCancel
+  onOpenCancel,
+  onRefreshBooking
 }) => {
   const item = booking?.items?.[0] || {};
   const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE';
@@ -226,6 +229,90 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     });
   };
 
+  // Confirm pickup with optional photo upload
+  const handleConfirmPickup = async () => {
+    if (!booking?._id) return;
+
+    let selectedFiles: File[] = [];
+
+    const result = await Swal.fire({
+      title: 'Xác nhận đã nhận áo dài',
+      html: `
+        <div style="text-align: left; font-size: 13.5px; color: #4A3F35; line-height: 1.6;">
+          <p style="margin-bottom: 12px;">
+            Bạn xác nhận đã nhận đầy đủ áo dài và phụ kiện trực tiếp từ cửa hàng <strong>${storeName}</strong>?
+          </p>
+          <div style="background-color: #F8F5F1; border: 1px dashed #DED7CB; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+            <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #8B1E2D; font-size: 13px;">
+              📸 Tải ảnh hiện trạng áo lúc nhận (Khuyến nghị):
+            </label>
+            <input
+              type="file"
+              id="swal-pickup-photos"
+              accept="image/*"
+              multiple
+              style="width: 100%; font-size: 12px;"
+            />
+            <small style="color: #7D736B; display: block; margin-top: 4px; font-size: 11px;">
+              Chụp rõ nếp áo, phụ kiện đi kèm để lưu bằng chứng đối soát khi hoàn trả tiền cọc.
+            </small>
+          </div>
+          <p style="margin: 0; font-size: 12px; color: #059669; font-weight: 600;">
+            ✓ Sau khi xác nhận, thời gian thuê của bạn sẽ chính thức bắt đầu tính.
+          </p>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Xác nhận nhận áo',
+      cancelButtonText: 'Đóng',
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#7D736B',
+      didOpen: () => {
+        const input = document.getElementById('swal-pickup-photos') as HTMLInputElement;
+        if (input) {
+          input.addEventListener('change', (e: any) => {
+            selectedFiles = Array.from(e.target.files || []);
+          });
+        }
+      },
+      preConfirm: async () => {
+        try {
+          Swal.showLoading();
+          const uploadedUrls: string[] = [];
+
+          for (const file of selectedFiles) {
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+              const res: any = await httpClient.post('/bookings/upload-reference', formData);
+              if (res?.url) uploadedUrls.push(res.url);
+            } catch (upErr) {
+              console.warn('Lỗi tải ảnh:', upErr);
+            }
+          }
+
+          await httpClient.post(`/bookings/${booking._id}/customer-confirm-pickup`, {
+            evidencePhotos: uploadedUrls.length > 0 ? uploadedUrls : undefined
+          });
+          return true;
+        } catch (err: any) {
+          Swal.showValidationMessage(err?.message || 'Có lỗi xảy ra khi xác nhận nhận áo.');
+          return false;
+        }
+      }
+    });
+
+    if (result.isConfirmed) {
+      await Swal.fire({
+        icon: 'success',
+        title: 'Nhận áo thành công!',
+        text: 'Đơn thuê của bạn đã chuyển sang trạng thái Đang thuê. Chúc bạn có trải nghiệm tuyệt vời!',
+        confirmButtonColor: '#8B1E2D'
+      });
+      onRefreshBooking?.();
+    }
+  };
+
   // Timeline steps
   const timelineSteps: {
     id: string;
@@ -410,6 +497,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         onSupport={handleSupport}
         onReturn={handleReturn}
         onOpenMap={handleOpenMap}
+        onConfirmPickup={handleConfirmPickup}
       />
     </div>
   );

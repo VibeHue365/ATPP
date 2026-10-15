@@ -8,6 +8,7 @@ interface RentalBottomActionBarProps {
   onSupport: () => void;
   onReturn: () => void;
   onOpenMap?: () => void;
+  onConfirmPickup?: () => void;
 }
 
 export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
@@ -16,7 +17,8 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
   onExtend,
   onSupport,
   onReturn,
-  onOpenMap
+  onOpenMap,
+  onConfirmPickup
 }) => {
   const currentStatus = status || 'CONFIRMED';
   const canCancel = ['PENDING_PAYMENT', 'WAITING_PAYMENT', 'CONFIRMED', 'DEPOSIT_PAID', 'PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus);
@@ -113,6 +115,38 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
         >
           <MapPin size={15} color={currentStatus === 'PICKUP_PENDING' || currentStatus === 'READY_FOR_PICKUP' ? '#FFFFFF' : '#8B1E2D'} />
           <span>Đến điểm nhận áo</span>
+        </button>
+      )}
+
+      {/* 2b. Xác nhận đã nhận áo (khi shop đã sẵn sàng giao hoặc đang chờ nhận đồ) */}
+      {['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus) && onConfirmPickup && (
+        <button
+          type="button"
+          onClick={onConfirmPickup}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '10px 20px',
+            borderRadius: '10px',
+            backgroundColor: '#059669',
+            border: 'none',
+            color: '#FFFFFF',
+            fontSize: '13px',
+            fontWeight: 750,
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+            transition: 'all 0.15s'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.backgroundColor = '#047857';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = '#059669';
+          }}
+        >
+          <CheckSquare size={15} />
+          <span>Xác nhận đã nhận áo</span>
         </button>
       )}
 

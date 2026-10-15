@@ -5,13 +5,16 @@ import {
   XCircle,
   AlertTriangle,
   Calendar,
-  MapPin
+  MapPin,
+  CheckSquare
 } from 'lucide-react';
 import { Modal } from '../../../../components/common/Modal';
 import { ImageWithFallback } from '../../../../shared/media/ImageWithFallback';
 import { downloadPhotosAsZip, downloadSinglePhoto } from '../../../../utils/downloadUtils';
 import { API_BASE_URL } from '../../../../config/env';
 import { useToast } from '../../../../components/feedback/Toast';
+import Swal from 'sweetalert2';
+import { httpClient } from '../../../../services/httpClient';
 
 interface ProfileBookingDetailModalProps {
   booking: any;
@@ -24,6 +27,7 @@ interface ProfileBookingDetailModalProps {
   bookingIncident?: any;
   onIncidentResponse?: (agree: boolean) => void;
   onOpenLocationChange?: (schedule: any) => void;
+  onRefreshBooking?: () => void;
 }
 
 export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps> = ({
@@ -474,6 +478,104 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
               }}
             >
               <Calendar size={14} /> Đổi lịch hẹn
+            </button>
+          )}
+
+          {['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(booking.status) && (
+            <button
+              onClick={async () => {
+                let selectedFiles: File[] = [];
+                const result = await Swal.fire({
+                  title: 'Xác nhận đã nhận áo dài',
+                  html: `
+                    <div style="text-align: left; font-size: 13.5px; color: #4A3F35; line-height: 1.6;">
+                      <p style="margin-bottom: 12px;">
+                        Bạn xác nhận đã nhận áo dài từ cửa hàng cho đơn <strong>#${booking.bookingCode}</strong>?
+                      </p>
+                      <div style="background-color: #F8F5F1; border: 1px dashed #DED7CB; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                        <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #8B1E2D; font-size: 13px;">
+                          📸 Tải ảnh hiện trạng áo lúc nhận (Khuyến nghị):
+                        </label>
+                        <input
+                          type="file"
+                          id="swal-modal-pickup-photos"
+                          accept="image/*"
+                          multiple
+                          style="width: 100%; font-size: 12px;"
+                        />
+                        <small style="color: #7D736B; display: block; margin-top: 4px; font-size: 11px;">
+                          Chụp rõ áo và phụ kiện để làm bằng chứng bảo vệ quyền lợi tiền cọc.
+                        </small>
+                      </div>
+                      <p style="margin: 0; font-size: 12px; color: #059669; font-weight: 600;">
+                        ✓ Sau khi xác nhận, thời gian thuê sẽ chính thức bắt đầu tính.
+                      </p>
+                    </div>
+                  `,
+                  showCancelButton: true,
+                  confirmButtonText: 'Xác nhận nhận áo',
+                  cancelButtonText: 'Đóng',
+                  confirmButtonColor: '#059669',
+                  cancelButtonColor: '#7D736B',
+                  didOpen: () => {
+                    const input = document.getElementById('swal-modal-pickup-photos') as HTMLInputElement;
+                    if (input) {
+                      input.addEventListener('change', (e: any) => {
+                        selectedFiles = Array.from(e.target.files || []);
+                      });
+                    }
+                  },
+                  preConfirm: async () => {
+                    try {
+                      Swal.showLoading();
+                      const uploadedUrls: string[] = [];
+                      for (const file of selectedFiles) {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        try {
+                          const res: any = await httpClient.post('/bookings/upload-reference', formData);
+                          if (res?.url) uploadedUrls.push(res.url);
+                        } catch (e) {
+                          console.warn('Lỗi tải ảnh:', e);
+                        }
+                      }
+                      await httpClient.post(`/bookings/${booking._id}/customer-confirm-pickup`, {
+                        evidencePhotos: uploadedUrls.length > 0 ? uploadedUrls : undefined
+                      });
+                      return true;
+                    } catch (err: any) {
+                      Swal.showValidationMessage(err?.message || 'Có lỗi xảy ra khi xác nhận nhận áo.');
+                      return false;
+                    }
+                  }
+                });
+
+                if (result.isConfirmed) {
+                  await Swal.fire({
+                    icon: 'success',
+                    title: 'Nhận áo thành công!',
+                    text: 'Đơn thuê đã chuyển sang trạng thái Đang thuê.',
+                    confirmButtonColor: '#8B1E2D'
+                  });
+                  onRefreshBooking?.();
+                  onClose();
+                }
+              }}
+              style={{
+                padding: '8px 18px',
+                borderRadius: '8px',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                backgroundColor: '#059669',
+                color: 'white',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <CheckSquare size={14} /> Xác nhận đã nhận áo
             </button>
           )}
 

@@ -568,6 +568,17 @@ export const ProfilePage: React.FC = () => {
                       setRescheduleItem(item);
                     }}
                     onOpenCancel={(b) => setBookingToCancel(b)}
+                    onRefreshBooking={async () => {
+                      await fetchBookings(true);
+                      try {
+                        const data = await httpClient.get<any[]>('/api/bookings');
+                        const list = Array.isArray(data) ? data : [];
+                        const updated = list.find((b: any) => b._id === viewingRentalBooking._id);
+                        if (updated) setViewingRentalBooking(updated);
+                      } catch (e) {
+                        console.error(e);
+                      }
+                    }}
                   />
                 )
               ) : (
@@ -621,6 +632,7 @@ export const ProfilePage: React.FC = () => {
           onContinuePayment={handleContinuePayment}
           onOpenReview={(item) => setReviewingItem(item)}
           onOpenLocationChange={(sched) => setLocationChangeSchedule(sched)}
+          onRefreshBooking={() => fetchBookings(true)}
         />
       )}
 
