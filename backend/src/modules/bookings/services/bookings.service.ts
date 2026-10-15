@@ -33,6 +33,8 @@ import { BookingItem, BookingItemType } from '../schemas/booking-item.schema';
 import {
   createRentalFulfillment,
   RentalFulfillmentStatus,
+  RentalInventoryStatus,
+  DepositSettlementStatus,
 } from '../schemas/rental-fulfillment.types';
 import { Product } from '../../products/schemas/product.schema';
 import { PhotographyPackage } from '../../products/schemas/photography-package.schema';
@@ -2788,6 +2790,67 @@ export class BookingsService implements OnApplicationBootstrap {
         throw new ForbiddenException(
           'Chỉ khách hàng, Nhà cung cấp của đơn hàng hoặc Admin mới có quyền xác nhận hoàn thành đơn hàng.',
         );
+      }
+    }
+
+    // Tự động hoàn tất các physical item đang ở giai đoạn hoàn trả hoặc thực hiện sang COMPLETED khi hoàn tất đơn
+    const returnedOrActiveItems = await this.bookingItemModel.find({
+      bookingId,
+      itemType: BookingItemType.Product,
+      'rentalFulfillment.status': {
+        $in: [
+          RentalFulfillmentStatus.Returned,
+          RentalFulfillmentStatus.PickedUp,
+          RentalFulfillmentStatus.ReadyForPickup,
+        ],
+      },
+    });
+
+    if (returnedOrActiveItems.length) {
+      await this.bookingItemModel.updateMany(
+        {
+          bookingId,
+          itemType: BookingItemType.Product,
+          'rentalFulfillment.status': {
+            $in: [
+              RentalFulfillmentStatus.Returned,
+              RentalFulfillmentStatus.PickedUp,
+              RentalFulfillmentStatus.ReadyForPickup,
+            ],
+          },
+        },
+        {
+          $set: {
+            'rentalFulfillment.status': RentalFulfillmentStatus.Completed,
+            'rentalFulfillment.completedAt': new Date(),
+            'rentalFulfillment.inventoryStatus': RentalInventoryStatus.Available,
+            'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.FullyReleased,
+          },
+          $push: {
+            'rentalFulfillment.history': {
+              action: 'MARKED_COMPLETED',
+              actor: { role: 'PROVIDER' },
+              occurredAt: new Date(),
+              note: 'Hoàn tất đơn hàng bởi nhà cung cấp.',
+            },
+          },
+        },
+      );
+
+      try {
+        const inventoryModel = this.bookingItemModel.db.model('InventoryItem');
+        const reservationModel = this.bookingItemModel.db.model('InventoryReservation');
+        for (const it of returnedOrActiveItems) {
+          if (it.inventoryItemId) {
+            await inventoryModel.updateOne({ _id: it.inventoryItemId }, { $set: { status: 'CLEANING' } }).exec();
+          }
+          await reservationModel.updateOne(
+            { bookingItemId: it._id, status: 'CONFIRMED' },
+            { $set: { status: 'COMPLETED' } },
+          ).exec();
+        }
+      } catch (err) {
+        console.error('Failed to sync physical inventory at completeBooking:', err);
       }
     }
 

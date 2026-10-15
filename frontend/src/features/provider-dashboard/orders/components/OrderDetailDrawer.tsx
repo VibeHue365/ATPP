@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../../assets/images/onboarding_traditional.webp';
 import { RentalEvidenceImage } from '../../../rentals/components/RentalEvidenceImage';
@@ -58,6 +59,7 @@ export function OrderDetailDrawer({
   const [activeTab, setActiveTab] = useState<'overview' | 'details' | 'schedule' | 'payment' | 'incidents'>('overview');
   const [selectedEvidenceImage, setSelectedEvidenceImage] = useState<string | null>(null);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
   const [internalNoteInput, setInternalNoteInput] = useState('');
   const [internalNotesList, setInternalNotesList] = useState<Array<{ author: string; time: string; text: string }>>([
     { author: 'Hệ thống VibeHue Escrow', time: order?.orderDate || 'Khi xác nhận', text: 'Khách hàng hoàn tất đặt cọc qua VibeHue Escrow. Đơn được xác nhận tự động.' },
@@ -130,29 +132,80 @@ export function OrderDetailDrawer({
     return `${day}/${month}/${year} • ${hours}:${mins}`;
   };
 
-  // Master Stepper Configuration (8 steps with real dynamic timestamps)
-  const masterSteps = [
-    { label: 'Xác nhận', key: 'CONFIRMED', time: formatShortTime(order.rawOrderDate || order.createdAt, order.orderDate || 'Đã xác nhận') },
-    { label: 'Chuẩn bị áo', key: 'PICKUP_PENDING', time: rf?.readyAt ? formatShortTime(rf.readyAt) : 'Chuẩn bị' },
-    { label: 'Khách nhận áo', key: 'PICKED_UP', time: rf?.pickedUpAt ? formatShortTime(rf.pickedUpAt) : (rf?.pickupDueAt ? formatShortTime(rf.pickupDueAt) : 'Nhận đồ') },
-    { label: 'Đang chụp', key: 'IN_PROGRESS', time: shootDate ? formatShortTime(shootDate) : 'Chụp ảnh', icon: Camera },
-    { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: order.photosApproved ? 'Đã duyệt' : (order.deliveredPhotos ? 'Đã giao' : 'Trả ảnh') },
-    { label: 'Khách trả áo', key: 'RETURN_PENDING', time: rf?.returnedAt ? formatShortTime(rf.returnedAt) : (rf?.returnDueAt ? formatShortTime(rf.returnDueAt) : 'Trả đồ') },
-    { label: 'Kiểm tra', key: 'RETURNED', time: rf?.returnedAt ? 'Đã kiểm tra' : 'Kiểm tra' },
-    { label: 'Hoàn tất', key: 'COMPLETED', time: rawStatus === 'COMPLETED' ? (formatShortTime(rf?.completedAt, order.updatedDate || 'Hoàn tất')) : 'Dự kiến' },
-  ];
+  // Master Stepper Configuration tailored for each booking type:
+  // 1. Ao Dai Rental: Xác nhận -> Chuẩn bị áo -> Khách nhận áo -> Khách trả áo -> Kiểm tra đồ -> Hoàn tất (6 steps)
+  // 2. Photography: Xác nhận -> Đang chụp -> Bàn giao ảnh -> Khách duyệt ảnh -> Hoàn tất (5 steps)
+  // 3. Combo: Xác nhận -> Chuẩn bị áo -> Khách nhận áo -> Đang chụp -> Bàn giao ảnh -> Khách trả áo -> Kiểm tra & Duyệt -> Hoàn tất (8 steps)
+  const masterSteps = useMemo(() => {
+    if (isAoDai) {
+      return [
+        { label: 'Xác nhận', key: 'CONFIRMED', time: formatShortTime(order.rawOrderDate || order.createdAt, order.orderDate || 'Đã xác nhận') },
+        { label: 'Chuẩn bị áo', key: 'PICKUP_PENDING', time: rf?.readyAt ? formatShortTime(rf.readyAt) : 'Chuẩn bị' },
+        { label: 'Khách nhận áo', key: 'PICKED_UP', time: rf?.pickedUpAt ? formatShortTime(rf.pickedUpAt) : (rf?.pickupDueAt ? formatShortTime(rf.pickupDueAt) : 'Nhận đồ') },
+        { label: 'Khách trả áo', key: 'RETURN_PENDING', time: rf?.returnedAt ? formatShortTime(rf.returnedAt) : (rf?.returnDueAt ? formatShortTime(rf.returnDueAt) : 'Trả đồ') },
+        { label: 'Kiểm tra đồ', key: 'RETURNED', time: rf?.returnedAt ? 'Đã kiểm tra' : 'Kiểm tra' },
+        { label: 'Hoàn tất', key: 'COMPLETED', time: rawStatus === 'COMPLETED' ? (formatShortTime(rf?.completedAt, order.updatedDate || 'Hoàn tất')) : 'Dự kiến' },
+      ];
+    }
 
-  // Active step computation (0 to 7)
-  const isOrderCompleted = rawStatus === 'COMPLETED';
-  let activeMasterIndex = 3;
-  if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT') activeMasterIndex = 0;
-  else if (rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') activeMasterIndex = 1;
-  else if (rawStatus === 'PICKUP_PENDING') activeMasterIndex = 2;
-  else if (rawStatus === 'IN_PROGRESS' || rawStatus === 'PICKED_UP') activeMasterIndex = 3;
-  else if (rawStatus === 'AWAITING_REVIEW') activeMasterIndex = 4;
-  else if (rawStatus === 'RETURN_PENDING' || rawStatus === 'COMBO_PHOTOS_APPROVED') activeMasterIndex = 5;
-  else if (rawStatus === 'RETURNED') activeMasterIndex = 6;
-  else if (isOrderCompleted) activeMasterIndex = 7;
+    if (isPhoto) {
+      return [
+        { label: 'Xác nhận', key: 'CONFIRMED', time: formatShortTime(order.rawOrderDate || order.createdAt, order.orderDate || 'Đã xác nhận') },
+        { label: 'Đang chụp', key: 'IN_PROGRESS', time: shootDate ? formatShortTime(shootDate) : 'Chụp ảnh', icon: Camera },
+        { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: order.photosApproved ? 'Đã duyệt' : (order.deliveredPhotos ? 'Đã giao' : 'Trả ảnh') },
+        { label: 'Khách duyệt ảnh', key: 'COMBO_PHOTOS_APPROVED', time: order.photosApproved ? 'Đã duyệt' : 'Chờ duyệt', icon: Sparkles },
+        { label: 'Hoàn tất', key: 'COMPLETED', time: rawStatus === 'COMPLETED' ? (formatShortTime(order.updatedDate, 'Hoàn tất')) : 'Dự kiến' },
+      ];
+    }
+
+    // COMBO (both rental & photography)
+    return [
+      { label: 'Xác nhận', key: 'CONFIRMED', time: formatShortTime(order.rawOrderDate || order.createdAt, order.orderDate || 'Đã xác nhận') },
+      { label: 'Chuẩn bị áo', key: 'PICKUP_PENDING', time: rf?.readyAt ? formatShortTime(rf.readyAt) : 'Chuẩn bị' },
+      { label: 'Khách nhận áo', key: 'PICKED_UP', time: rf?.pickedUpAt ? formatShortTime(rf.pickedUpAt) : (rf?.pickupDueAt ? formatShortTime(rf.pickupDueAt) : 'Nhận đồ') },
+      { label: 'Đang chụp', key: 'IN_PROGRESS', time: shootDate ? formatShortTime(shootDate) : 'Chụp ảnh', icon: Camera },
+      { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: order.photosApproved ? 'Đã duyệt' : (order.deliveredPhotos ? 'Đã giao' : 'Trả ảnh') },
+      { label: 'Khách trả áo', key: 'RETURN_PENDING', time: rf?.returnedAt ? formatShortTime(rf.returnedAt) : (rf?.returnDueAt ? formatShortTime(rf.returnDueAt) : 'Trả đồ') },
+      { label: 'Kiểm tra & Duyệt', key: 'RETURNED', time: rf?.returnedAt ? 'Đã kiểm tra' : 'Kiểm tra' },
+      { label: 'Hoàn tất', key: 'COMPLETED', time: rawStatus === 'COMPLETED' ? (formatShortTime(rf?.completedAt, order.updatedDate || 'Hoàn tất')) : 'Dự kiến' },
+    ];
+  }, [isAoDai, isPhoto, order, rf, shootDate, rawStatus]);
+
+  // Active step computation
+  const isOrderCompleted = rawStatus === 'COMPLETED' || (order.status || '').toUpperCase() === 'HOÀN THÀNH' || (order.status || '').toUpperCase() === 'COMPLETED';
+  const activeMasterIndex = useMemo(() => {
+    if (isOrderCompleted) return masterSteps.length - 1;
+
+    if (isAoDai) {
+      if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT') return 0;
+      if (rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') return 0;
+      if (rawStatus === 'PICKUP_PENDING') return 1;
+      if (rawStatus === 'PICKED_UP' || rawStatus === 'IN_PROGRESS') return 2;
+      if (rawStatus === 'RETURN_PENDING') return 3;
+      if (rawStatus === 'RETURNED') return 4;
+      return 0;
+    }
+
+    if (isPhoto) {
+      if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT') return 0;
+      if (rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') return 0;
+      if (rawStatus === 'IN_PROGRESS') return 1;
+      if (rawStatus === 'AWAITING_REVIEW') return 2;
+      if (rawStatus === 'COMBO_PHOTOS_APPROVED' || order.photosApproved) return 3;
+      return 0;
+    }
+
+    // COMBO
+    if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT') return 0;
+    if (rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') return 0;
+    if (rawStatus === 'PICKUP_PENDING') return 1;
+    if (rawStatus === 'PICKED_UP') return 2;
+    if (rawStatus === 'IN_PROGRESS') return 3;
+    if (rawStatus === 'AWAITING_REVIEW') return 4;
+    if (rawStatus === 'RETURN_PENDING') return 5;
+    if (rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED') return 6;
+    return 0;
+  }, [isOrderCompleted, isAoDai, isPhoto, rawStatus, masterSteps.length, order.photosApproved]);
 
   const currentStepNumber = isOrderCompleted ? masterSteps.length : Math.min(masterSteps.length, activeMasterIndex + 1);
 
@@ -200,16 +253,83 @@ export function OrderDetailDrawer({
     toast.success('Đã lưu ghi chú nội bộ');
   };
 
+  const handleCompleteOrder = async () => {
+    if (isCompleting || isOrderCompleted) return;
+
+    const result = await Swal.fire({
+      title: 'Xác nhận hoàn tất đơn hàng?',
+      text: 'Sau khi hoàn tất, quy trình và tiến độ của đơn hàng sẽ đạt 100%. Tiền cọc và thanh toán sẽ được đối soát tự động.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Đồng ý hoàn tất',
+      cancelButtonText: 'Hủy',
+      confirmButtonColor: '#15803D',
+      cancelButtonColor: '#64748B',
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      setIsCompleting(true);
+      await changeOrderStatus(order._id, 'COMPLETED');
+
+      const nowStr = new Date().toISOString();
+      const updatedItems = (order.items || []).map((item: any) => {
+        if (item.rentalFulfillment) {
+          return {
+            ...item,
+            rentalFulfillment: {
+              ...item.rentalFulfillment,
+              status: 'COMPLETED',
+              completedAt: nowStr,
+              inventoryStatus: 'AVAILABLE',
+              depositSettlementStatus: 'FULLY_RELEASED',
+            },
+          };
+        }
+        return item;
+      });
+
+      const updatedOrder: Order = {
+        ...order,
+        rawStatus: 'COMPLETED',
+        status: 'HOÀN THÀNH',
+        updatedDate: 'Vừa xong',
+        items: updatedItems,
+        pricingSummary: {
+          ...order.pricingSummary,
+          depositRefundAmount: order.depositTotal || 0,
+        },
+        paymentSummary: {
+          ...order.paymentSummary,
+          paymentStatus: 'PAID',
+        },
+      };
+
+      if (onSelectOrder) {
+        onSelectOrder(updatedOrder);
+      }
+    } catch (err: any) {
+      console.error('Error completing order:', err);
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
   const photoPackageImg = 'https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=300&q=80';
 
   // Dynamic progress info & time remaining computation
   const progressInfo = useMemo(() => {
     if (isOrderCompleted) {
       return {
-        step: '5/5',
+        step: `${masterSteps.length}/${masterSteps.length}`,
         percent: 100,
         title: 'Tiến độ thực hiện (100%)',
-        desc: 'Đơn hàng đã hoàn tất trọn vẹn, đã hoàn tất bàn giao và tất toán.',
+        desc: isAoDai
+          ? 'Đã hoàn tất quy trình thuê và tất toán cọc cho khách hàng.'
+          : isPhoto
+          ? 'Đã hoàn tất nghiệm thu bộ ảnh chất lượng cao.'
+          : 'Đã hoàn tất trọn vẹn cả dịch vụ thuê áo và chụp ảnh.',
         deadlineNum: 'Hoàn tất',
         deadlineColor: '#059669',
         deadlineTitle: 'Trạng thái đơn',
@@ -262,50 +382,55 @@ export function OrderDetailDrawer({
       }
     }
 
-    if (isAoDai) {
-      const stepIdx = Math.min(4, aoDaiCurrentIdx);
-      const stepNum = stepIdx + 1;
-      const pct = Math.round((stepNum / 5) * 100);
-      const descs = [
-        'Đơn hàng đang ở giai đoạn chuẩn bị trang phục tại cửa hàng.',
-        'Trang phục đã sẵn sàng, đang chờ khách hàng nhận đồ.',
-        'Khách hàng đang trong thời gian thuê và trải nghiệm trang phục.',
-        'Khách đã trả đồ, đang tiến hành kiểm tra và tất toán cọc.',
-        'Đã hoàn tất quy trình thuê trang phục.',
-      ];
-      return {
-        step: `${stepNum}/5`,
-        percent: pct,
-        title: `Tiến độ thực hiện (${pct}%)`,
-        desc: descs[stepIdx] || 'Đang thực hiện đúng cam kết chất lượng.',
-        deadlineNum,
-        deadlineColor,
-        deadlineTitle,
-        deadlineDesc,
-      };
-    } else {
-      const stepIdx = Math.min(4, photoCurrentIdx);
-      const stepNum = stepIdx + 1;
-      const pct = Math.round((stepNum / 5) * 100);
-      const descs = [
-        'Đang chờ đến lịch chụp ảnh theo khung giờ hẹn.',
-        'Nhiếp ảnh gia đang trong quá trình thực hiện buổi chụp.',
-        'Đã chụp xong, đang trong giai đoạn chỉnh sửa và bàn giao ảnh.',
-        'Đang chờ khách hàng duyệt ảnh và xác nhận chất lượng.',
-        'Đã hoàn tất buổi chụp và bàn giao sản phẩm trọn vẹn.',
-      ];
-      return {
-        step: `${stepNum}/5`,
-        percent: pct,
-        title: `Tiến độ thực hiện (${pct}%)`,
-        desc: descs[stepIdx] || 'Đang thực hiện đúng cam kết chất lượng.',
-        deadlineNum,
-        deadlineColor,
-        deadlineTitle,
-        deadlineDesc,
-      };
-    }
-  }, [isOrderCompleted, rawStatus, isAoDai, aoDaiCurrentIdx, photoCurrentIdx, order]);
+    const totalStepCount = masterSteps.length;
+    const stepNum = isOrderCompleted ? totalStepCount : Math.min(totalStepCount, activeMasterIndex + 1);
+    const pct = Math.round((stepNum / totalStepCount) * 100);
+
+    const descMapAoDai = [
+      'Đơn hàng đã được xác nhận, tiền cọc được bảo chứng an toàn qua Escrow.',
+      'Cửa hàng đang kiểm tra chất lượng, ủi phẳng và chuẩn bị trang phục.',
+      'Khách hàng đã nhận đồ và đang trong thời gian thuê trải nghiệm.',
+      'Khách hàng mang trang phục đến hoàn trả tại cửa hàng.',
+      'Cửa hàng kiểm tra đối soát tình trạng đồ để tất toán hoàn cọc.',
+      'Đã hoàn tất quy trình thuê và tất toán cọc cho khách hàng.',
+    ];
+
+    const descMapPhoto = [
+      'Đơn chụp ảnh đã xác nhận lịch hẹn, cọc giữ chỗ an toàn qua Escrow.',
+      'Nhiếp ảnh gia đang trong quá trình thực hiện buổi chụp.',
+      'Đã chụp xong, đang chọn lọc và tải lên bộ ảnh gốc.',
+      'Đang chờ khách hàng duyệt và chọn ảnh để hoàn thiện hậu kỳ.',
+      'Đã hoàn tất nghiệm thu bộ ảnh chất lượng cao.',
+    ];
+
+    const descMapCombo = [
+      'Đơn Combo đã xác nhận cọc, chuẩn bị thực hiện dịch vụ.',
+      'Cửa hàng đang chuẩn bị trang phục áo dài cho buổi chụp.',
+      'Khách đã nhận trang phục để chuẩn bị cho buổi chụp.',
+      'Nhiếp ảnh gia đang thực hiện buổi chụp ngoại cảnh với áo dài.',
+      'Đã tải bộ ảnh lên hệ thống để khách hàng chọn ảnh.',
+      'Khách hàng hoàn trả trang phục sau buổi chụp.',
+      'Kiểm tra tình trạng trang phục và nghiệm thu ảnh.',
+      'Đã hoàn tất trọn vẹn cả dịch vụ thuê áo và chụp ảnh.',
+    ];
+
+    const currentDesc = isAoDai
+      ? (descMapAoDai[activeMasterIndex] || 'Đang thực hiện đúng cam kết chất lượng.')
+      : isPhoto
+      ? (descMapPhoto[activeMasterIndex] || 'Đang thực hiện đúng cam kết chất lượng.')
+      : (descMapCombo[activeMasterIndex] || 'Đang thực hiện đúng cam kết chất lượng.');
+
+    return {
+      step: `${stepNum}/${totalStepCount}`,
+      percent: pct,
+      title: `Tiến độ thực hiện (${pct}%)`,
+      desc: currentDesc,
+      deadlineNum,
+      deadlineColor,
+      deadlineTitle,
+      deadlineDesc,
+    };
+  }, [isOrderCompleted, rawStatus, isAoDai, isPhoto, masterSteps, activeMasterIndex, order]);
 
   // Real evidence items extracted from order items and rental fulfillment
   const evidenceItems = useMemo(() => {
@@ -1151,10 +1276,36 @@ export function OrderDetailDrawer({
                   </div>
 
                   {(() => {
-                    const grandTotal = order.totalAmount || Number((order.total || '').replace(/[^\d]/g, '')) || 0;
-                    const depositPaid = order.pricingSummary?.depositAmount || Math.round(grandTotal * 0.5);
-                    const assetDeposit = order.depositTotal || order.pricingSummary?.depositTotal || 0;
-                    const remaining = Math.max(0, grandTotal - depositPaid);
+                    const grandTotal = order.pricingSummary?.grandTotal || order.totalAmount || Number((order.total || '').replace(/[^\d]/g, '')) || 0;
+                    const assetDeposit = Number(order.depositTotal || order.pricingSummary?.depositTotal || 0);
+                    const isRental = order.bookingType === 'AODAI_RENTAL';
+                    const isPhoto = order.bookingType === 'PHOTOGRAPHY';
+                    const isCombo = order.bookingType === 'COMBO';
+                    const isPaidStatus = !['PENDING', 'PENDING_PAYMENT'].includes(order.rawStatus || '');
+                    const totalPaid = Number(order.paymentSummary?.totalPaid || 0);
+                    const serviceAmount = Math.max(0, Number(order.pricingSummary?.subTotal || (grandTotal - assetDeposit)));
+
+                    let serviceDepositPaid = 0;
+                    let remaining = 0;
+
+                    if (isOrderCompleted || order.paymentSummary?.paymentStatus === 'PAID') {
+                      serviceDepositPaid = serviceAmount;
+                      remaining = 0;
+                    } else if (isRental) {
+                      serviceDepositPaid = isPaidStatus ? serviceAmount : (totalPaid > 0 ? Math.max(0, totalPaid - assetDeposit) : 0);
+                      remaining = isPaidStatus ? 0 : grandTotal;
+                    } else if (isPhoto) {
+                      const expectedDeposit = Number(order.pricingSummary?.amountDueNow || Math.round(serviceAmount * 0.2));
+                      serviceDepositPaid = isPaidStatus ? (totalPaid > 0 ? totalPaid : expectedDeposit) : 0;
+                      remaining = isPaidStatus ? Math.max(0, grandTotal - serviceDepositPaid) : grandTotal;
+                    } else if (isCombo) {
+                      const expectedDeposit = Number(order.pricingSummary?.amountDueNow || Math.round(serviceAmount * 0.5));
+                      serviceDepositPaid = isPaidStatus ? (totalPaid > 0 ? Math.max(0, totalPaid - assetDeposit) : Math.max(0, expectedDeposit - assetDeposit)) : 0;
+                      remaining = isPaidStatus ? Math.max(0, grandTotal - (totalPaid > 0 ? totalPaid : expectedDeposit)) : grandTotal;
+                    } else {
+                      serviceDepositPaid = totalPaid > 0 ? totalPaid : (isPaidStatus ? serviceAmount : 0);
+                      remaining = isPaidStatus ? Math.max(0, grandTotal - serviceDepositPaid - assetDeposit) : grandTotal;
+                    }
 
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
@@ -1163,23 +1314,23 @@ export function OrderDetailDrawer({
                           <strong style={{ color: '#0F172A', fontSize: '14px' }}>{grandTotal.toLocaleString('vi-VN')}đ</strong>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                          <span>Đặt cọc dịch vụ trước:</span>
+                          <span>{isRental ? 'Tiền thuê trang phục:' : 'Đặt cọc dịch vụ trước:'}</span>
                           <span style={{ fontWeight: 600, color: '#15803D' }}>
-                            {depositPaid.toLocaleString('vi-VN')}đ {order.rawStatus !== 'PENDING' && order.rawStatus !== 'PENDING_PAYMENT' ? '(Đã thanh toán)' : '(Chờ thanh toán)'}
+                            {serviceDepositPaid.toLocaleString('vi-VN')}đ {isPaidStatus ? '(Đã thanh toán)' : '(Chờ thanh toán)'}
                           </span>
                         </div>
                         {assetDeposit > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
                             <span>Tiền cọc tài sản trang phục:</span>
                             <span style={{ fontWeight: 600, color: '#0284C7' }}>
-                              {assetDeposit.toLocaleString('vi-VN')}đ {isOrderCompleted ? '(Đã tất toán)' : '(Đang tạm giữ)'}
+                              {assetDeposit.toLocaleString('vi-VN')}đ {isOrderCompleted ? '(Đã tất toán)' : '(Đang tạm giữ Escrow)'}
                             </span>
                           </div>
                         )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: '8px', fontWeight: 700 }}>
                           <span style={{ color: '#0F172A' }}>Còn lại cần thanh toán:</span>
-                          <span style={{ color: '#D97706', fontSize: '14px' }}>
-                            {isOrderCompleted ? '0đ (Đã thanh toán đủ)' : `${remaining.toLocaleString('vi-VN')}đ`}
+                          <span style={{ color: remaining === 0 ? '#10B981' : '#D97706', fontSize: '14px' }}>
+                            {remaining === 0 ? 'Đã thanh toán đủ' : `${remaining.toLocaleString('vi-VN')}đ`}
                           </span>
                         </div>
                       </div>
@@ -1235,9 +1386,9 @@ export function OrderDetailDrawer({
                     })}
                   </div>
 
-                  {/* Dual Sub-steppers */}
-                  <div className={`p-dual-substepper-grid ${!isCombo ? 'single' : ''}`}>
-                    {(isCombo || !isPhoto) && (
+                  {/* Dual Sub-steppers only for Combo orders */}
+                  {isCombo && (
+                    <div className="p-dual-substepper-grid">
                       <div className="p-substepper-box">
                         <div className="p-substepper-header">
                           <Shirt size={14} color="#15803D" />
@@ -1271,9 +1422,7 @@ export function OrderDetailDrawer({
                           ))}
                         </div>
                       </div>
-                    )}
 
-                    {(isCombo || isPhoto) && (
                       <div className="p-substepper-box">
                         <div className="p-substepper-header">
                           <Camera size={14} color="#BE123C" />
@@ -1307,8 +1456,8 @@ export function OrderDetailDrawer({
                           ))}
                         </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Card 6: Ghi chú nội bộ thẩm định & Điều phối matching Admin */}
@@ -1540,6 +1689,20 @@ export function OrderDetailDrawer({
                   </div>
                 )}
 
+                {Boolean(order.pricingSummary?.serviceFee && order.pricingSummary.serviceFee > 0) && (
+                  <div className="p-payment-row">
+                    <span>Phí dịch vụ / Vệ sinh</span>
+                    <strong>{Number(order.pricingSummary.serviceFee).toLocaleString('vi-VN')}đ</strong>
+                  </div>
+                )}
+
+                {Boolean((order.pricingSummary?.voucherDiscountTotal || order.pricingSummary?.discountAmount) && (order.pricingSummary.voucherDiscountTotal > 0 || order.pricingSummary.discountAmount > 0)) && (
+                  <div className="p-payment-row" style={{ color: '#059669' }}>
+                    <span>Ưu đãi giảm giá</span>
+                    <strong>-{Number(order.pricingSummary.voucherDiscountTotal || order.pricingSummary.discountAmount).toLocaleString('vi-VN')}đ</strong>
+                  </div>
+                )}
+
                 <div className="p-payment-row total">
                   <span>Tổng giá trị đơn hàng:</span>
                   <span style={{ color: '#BE123C', fontSize: '16px' }}>
@@ -1549,10 +1712,36 @@ export function OrderDetailDrawer({
               </div>
 
               {(() => {
-                const grandTotal = order.totalAmount || Number((order.total || '').replace(/[^\d]/g, '')) || 0;
-                const depositPaid = order.pricingSummary?.depositAmount || Math.round(grandTotal * 0.5);
-                const assetDeposit = order.depositTotal || order.pricingSummary?.depositTotal || 0;
-                const remaining = Math.max(0, grandTotal - depositPaid);
+                const grandTotal = order.pricingSummary?.grandTotal || order.totalAmount || Number((order.total || '').replace(/[^\d]/g, '')) || 0;
+                const assetDeposit = Number(order.depositTotal || order.pricingSummary?.depositTotal || 0);
+                const isRental = order.bookingType === 'AODAI_RENTAL';
+                const isPhoto = order.bookingType === 'PHOTOGRAPHY';
+                const isCombo = order.bookingType === 'COMBO';
+                const isPaidStatus = !['PENDING', 'PENDING_PAYMENT'].includes(order.rawStatus || '');
+                const totalPaid = Number(order.paymentSummary?.totalPaid || 0);
+                const serviceAmount = Math.max(0, Number(order.pricingSummary?.subTotal || (grandTotal - assetDeposit)));
+
+                let serviceDepositPaid = 0;
+                let remaining = 0;
+
+                if (isOrderCompleted || order.paymentSummary?.paymentStatus === 'PAID') {
+                  serviceDepositPaid = serviceAmount;
+                  remaining = 0;
+                } else if (isRental) {
+                  serviceDepositPaid = isPaidStatus ? serviceAmount : (totalPaid > 0 ? Math.max(0, totalPaid - assetDeposit) : 0);
+                  remaining = isPaidStatus ? 0 : grandTotal;
+                } else if (isPhoto) {
+                  const expectedDeposit = Number(order.pricingSummary?.amountDueNow || Math.round(serviceAmount * 0.2));
+                  serviceDepositPaid = isPaidStatus ? (totalPaid > 0 ? totalPaid : expectedDeposit) : 0;
+                  remaining = isPaidStatus ? Math.max(0, grandTotal - serviceDepositPaid) : grandTotal;
+                } else if (isCombo) {
+                  const expectedDeposit = Number(order.pricingSummary?.amountDueNow || Math.round(serviceAmount * 0.5));
+                  serviceDepositPaid = isPaidStatus ? (totalPaid > 0 ? Math.max(0, totalPaid - assetDeposit) : Math.max(0, expectedDeposit - assetDeposit)) : 0;
+                  remaining = isPaidStatus ? Math.max(0, grandTotal - (totalPaid > 0 ? totalPaid : expectedDeposit)) : grandTotal;
+                } else {
+                  serviceDepositPaid = totalPaid > 0 ? totalPaid : (isPaidStatus ? serviceAmount : 0);
+                  remaining = isPaidStatus ? Math.max(0, grandTotal - serviceDepositPaid - assetDeposit) : grandTotal;
+                }
 
                 return (
                   <div className="p-payment-summary-box">
@@ -1563,10 +1752,10 @@ export function OrderDetailDrawer({
                     <div className="p-payment-row">
                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <CheckCircle size={14} color="#10B981" />
-                        <span>Tiền cọc dịch vụ đã thu</span>
+                        <span>{isRental ? 'Tiền thuê dịch vụ đã thu' : 'Tiền cọc dịch vụ đã thu'}</span>
                       </span>
                       <strong style={{ color: '#10B981' }}>
-                        {depositPaid.toLocaleString('vi-VN')}đ ({order.rawStatus !== 'PENDING' && order.rawStatus !== 'PENDING_PAYMENT' ? 'Đã thu qua Escrow' : 'Chờ thanh toán'})
+                        {serviceDepositPaid.toLocaleString('vi-VN')}đ ({isPaidStatus ? 'Đã thu qua Escrow' : 'Chờ thanh toán'})
                       </strong>
                     </div>
 
@@ -1584,11 +1773,11 @@ export function OrderDetailDrawer({
 
                     <div className="p-payment-row">
                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Hourglass size={14} color="#D97706" />
+                        {remaining === 0 ? <CheckCircle size={14} color="#10B981" /> : <Hourglass size={14} color="#D97706" />}
                         <span>Số tiền còn lại cần thu</span>
                       </span>
-                      <strong style={{ color: '#D97706' }}>
-                        {isOrderCompleted ? '0đ (Đã thanh toán đủ)' : `${remaining.toLocaleString('vi-VN')}đ (Thanh toán tại chỗ)`}
+                      <strong style={{ color: remaining === 0 ? '#10B981' : '#D97706' }}>
+                        {remaining === 0 ? 'Đã thanh toán đủ' : `${remaining.toLocaleString('vi-VN')}đ (Thanh toán tại chỗ)`}
                       </strong>
                     </div>
 
@@ -1814,20 +2003,34 @@ export function OrderDetailDrawer({
               </button>
             )}
 
-            {rawStatus === 'RETURNED' && (
+            {rawStatus === 'PICKED_UP' && !isPhoto && (
               <button
                 type="button"
                 className="p-drawer-primary-btn"
-                onClick={() => changeOrderStatus(order._id, 'COMPLETED')}
+                onClick={() => changeOrderStatus(order._id, 'RETURNED')}
               >
-                <CheckCircle size={14} />
-                <span>Hoàn tất đơn hàng</span>
+                <Check size={14} />
+                <span>Khách trả đồ</span>
               </button>
             )}
 
-            {rawStatus === 'COMPLETED' && (
-              <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#10B981' }}>
-                ✓ Đơn đã hoàn tất
+            {(rawStatus === 'RETURNED' || rawStatus === 'RETURN_PENDING' || rawStatus === 'COMBO_PHOTOS_APPROVED' || (isPhoto && rawStatus === 'AWAITING_REVIEW')) && !isOrderCompleted && (
+              <button
+                type="button"
+                className="p-drawer-primary-btn"
+                style={{ backgroundColor: '#15803D' }}
+                onClick={handleCompleteOrder}
+                disabled={isCompleting}
+              >
+                <CheckCircle size={14} />
+                <span>{isCompleting ? 'Đang hoàn tất...' : 'Hoàn tất đơn hàng'}</span>
+              </button>
+            )}
+
+            {isOrderCompleted && (
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#10B981', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <CheckCircle size={15} color="#10B981" />
+                <span>✓ Đơn đã hoàn tất</span>
               </span>
             )}
           </div>

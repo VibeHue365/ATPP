@@ -20,6 +20,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -31,10 +32,22 @@ import { ReviewsService } from '../services/reviews.service';
 import { PublicMediaService } from '../../storage/services/public-media.service';
 
 export class CreateReviewDto {
+  @Transform(({ value }) => {
+    if (!value) return value;
+    if (typeof value === 'object' && value._id) return value._id.toString();
+    if (typeof value === 'string') return value.trim();
+    return value;
+  })
   @IsString()
   @IsNotEmpty()
   bookingId: string;
 
+  @Transform(({ value }) => {
+    if (!value) return value;
+    if (typeof value === 'object' && value._id) return value._id.toString();
+    if (typeof value === 'string') return value.trim();
+    return value;
+  })
   @IsString()
   @IsNotEmpty()
   bookingItemId: string;
@@ -52,10 +65,22 @@ export class CreateReviewDto {
   @IsOptional()
   images?: string[];
 
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    if (typeof value === 'object' && value._id) return value._id.toString();
+    if (typeof value === 'string') return value.trim() || undefined;
+    return value;
+  })
   @IsString()
   @IsOptional()
   productId?: string;
 
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    if (typeof value === 'object' && value._id) return value._id.toString();
+    if (typeof value === 'string') return value.trim() || undefined;
+    return value;
+  })
   @IsString()
   @IsOptional()
   photographyPackageId?: string;

@@ -454,9 +454,13 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
       await bookingsApi.updateStatus(_id, { status: apiStatus });
       const displayStatus = statusDisplayMap[apiStatus] || apiStatus;
       setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: apiStatus } : o));
+      if (fetchOrders) {
+        await fetchOrders(true, true);
+      }
       toast.success(`Đã cập nhật trạng thái đơn hàng thành "${displayStatus}"!`);
     } catch (err: any) {
       toast.error(err.message || 'Cập nhật trạng thái thất bại');
+      throw err;
     }
     setActionMenuId(null);
   };

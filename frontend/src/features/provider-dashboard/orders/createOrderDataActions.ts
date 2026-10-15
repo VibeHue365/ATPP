@@ -69,19 +69,23 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           : '';
 
         let totalAmt = 0;
-        if (b.items && b.items.length > 0) {
-          totalAmt = b.items.reduce((sum: number, item: any) => {
+        if (b.pricingSummary?.grandTotal) {
+          totalAmt = Number(b.pricingSummary.grandTotal);
+        } else if (b.paymentSummary?.totalPaid) {
+          totalAmt = Number(b.paymentSummary.totalPaid);
+        } else if (b.totalAmount) {
+          totalAmt = Number(b.totalAmount);
+        } else if (b.items && b.items.length > 0) {
+          const itemsSubtotal = b.items.reduce((sum: number, item: any) => {
             const price = Number(item.unitPrice ?? item.price ?? 0);
             const qty = item.quantity ?? 1;
             const discount = item.comboDiscountAmount ?? item.discountAmount ?? 0;
             const lineTotal = Number(item.subtotal ?? item.totalPrice ?? 0);
             return sum + Math.max(0, (lineTotal > 0 ? lineTotal : price * qty) - discount);
           }, 0);
-        }
-        if (b.bookingType === 'COMBO' && b.pricingSummary?.grandTotal) {
-          totalAmt = b.pricingSummary.grandTotal;
-        } else if (totalAmt === 0) {
-          totalAmt = Number(b.pricingSummary?.grandTotal ?? b.paymentSummary?.totalPaid ?? b.totalAmount ?? b.total ?? 0);
+          totalAmt = itemsSubtotal + Number(b.pricingSummary?.depositTotal ?? 0);
+        } else {
+          totalAmt = Number(b.total ?? 0);
         }
 
         const statusMap: Record<string, string> = {
@@ -114,6 +118,12 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           })
           : dateStr;
 
+        const calculatedDeposit = Number(
+          b.pricingSummary?.depositTotal ??
+          b.items?.reduce((sum: number, it: any) => sum + (it.depositAmount || 0), 0) ??
+          0
+        );
+
         return {
           _id: b._id,
           id: `#${b._id?.slice(-6).toUpperCase()}`,
@@ -131,7 +141,7 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           totalAmount: totalAmt,
           items: b.items,
           schedules: b.schedules,
-          depositTotal: b.pricingSummary?.depositTotal || (totalAmt > 0 ? Math.round(totalAmt * 0.5) : 0),
+          depositTotal: calculatedDeposit,
           rawStatus: b.status,
           bookingType: b.bookingType,
           photosApproved: Boolean(b.photosApproved),

@@ -607,7 +607,11 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
             <button
               type="button"
               onClick={() => {
-                const item = activeDropdown.item;
+                const item = {
+                  ...activeDropdown.item,
+                  bookingId: activeDropdown.bookingId || activeDropdown.booking?._id,
+                  booking: activeDropdown.booking
+                };
                 setActiveDropdown(null);
                 onOpenReview(item);
               }}

@@ -186,13 +186,16 @@ export class BookingStatusService {
         BookingStatus.Returned,
         BookingStatus.Disputed,
         BookingStatus.PartiallyRefunded,
+        BookingStatus.ComboPhotosApproved,
+        BookingStatus.AwaitingReview,
+        BookingStatus.PickedUp,
       ];
       if (
         !allowedFrom.includes(currentStatus) &&
         roles?.includes('ADMIN') === false
       ) {
         throw new BadRequestException(
-          `Không thể hoàn thành đơn đặt lịch từ trạng thái hiện tại: ${currentStatus}. Đơn hàng cần được trả áo (RETURNED) hoặc giải quyết tranh chấp (DISPUTED).`,
+          `Không thể hoàn thành đơn đặt lịch từ trạng thái hiện tại: ${currentStatus}.`,
         );
       }
 

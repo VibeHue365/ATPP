@@ -192,9 +192,13 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     if (!reviewingItem) return;
     try {
       toast.info('Đang gửi đánh giá...');
+      const bookingId = typeof reviewingItem.bookingId === 'object' && reviewingItem.bookingId?._id ? reviewingItem.bookingId._id : (reviewingItem.bookingId || reviewingItem._id);
+      const bookingItemId = reviewingItem.bookingItemId || reviewingItem.itemId || reviewingItem._id;
+      const productId = typeof reviewingItem.productId === 'object' && reviewingItem.productId?._id ? reviewingItem.productId._id : reviewingItem.productId;
       await httpClient.post('/reviews', {
-        bookingId: reviewingItem.bookingId || reviewingItem._id,
-        productId: reviewingItem.productId,
+        bookingId,
+        bookingItemId,
+        productId,
         rating,
         comment,
       });

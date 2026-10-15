@@ -249,21 +249,7 @@ export const LandingHeader: React.FC = () => {
               to={ROUTES.VIRTUAL_TRYON_3D}
               className={`lume-header__nav-link transition-all text-decoration-none whitespace-nowrap flex items-center gap-1.5 ${location.pathname === ROUTES.VIRTUAL_TRYON_3D ? 'is-active' : ''}`}
             >
-              <span>Thử đồ 3D</span>
-              <span
-                style={{
-                  fontSize: '9px',
-                  fontWeight: 800,
-                  padding: '1px 5px',
-                  borderRadius: '999px',
-                  backgroundColor: '#FEF3C7',
-                  color: '#92400E',
-                  border: '1px solid #FDE68A',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                AI
-              </span>
+              <span>Thử đồ AI</span>
             </Link>
           </nav>
 

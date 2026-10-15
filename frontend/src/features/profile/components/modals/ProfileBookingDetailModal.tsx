@@ -80,7 +80,10 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
 
   // Financial values
   const grandTotal = booking.pricingSummary?.grandTotal || booking.totalAmount || 0;
-  const discountAmount = booking.discountAmount || 0;
+  const depositTotal = booking.pricingSummary?.depositTotal || 0;
+  const serviceSubTotal = booking.pricingSummary?.subTotal || Math.max(0, grandTotal - depositTotal);
+  const serviceFee = booking.pricingSummary?.serviceFee || 0;
+  const discountAmount = booking.discountAmount || booking.pricingSummary?.discountAmount || booking.pricingSummary?.voucherDiscountTotal || 0;
   const isPaid = booking.status !== 'PENDING_PAYMENT' && booking.status !== 'WAITING_PAYMENT';
 
   // Delivered photos
@@ -358,12 +361,12 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <h5 style={{ fontSize: '14px', fontWeight: 750, color: '#231F20', margin: 0 }}>{itemName}</h5>
-                        {booking.status === 'COMPLETED' && (
+                        {['COMPLETED', 'RETURNED'].includes(booking.status) && (
                           item.isReviewed ? (
                             <span style={{ color: '#10B981', fontSize: '11.5px', fontWeight: 700 }}>Đã đánh giá</span>
                           ) : (
                             <button
-                              onClick={() => onOpenReview(item)}
+                              onClick={() => onOpenReview({ ...item, bookingId: booking._id, booking })}
                               style={{
                                 padding: '4px 10px',
                                 backgroundColor: '#8B1E2D',
@@ -414,9 +417,23 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
         {/* Financial Summary */}
         <div style={{ marginLeft: 'auto', width: '340px', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #ECE5DB', paddingTop: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-            <span>Tổng tiền dịch vụ:</span>
-            <span style={{ fontWeight: 600 }}>{grandTotal.toLocaleString('vi-VN')}đ</span>
+            <span>Giá dịch vụ / thuê:</span>
+            <span style={{ fontWeight: 600 }}>{serviceSubTotal.toLocaleString('vi-VN')}đ</span>
           </div>
+
+          {depositTotal > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+              <span>Tiền cọc tài sản trang phục:</span>
+              <span style={{ fontWeight: 600, color: '#0284C7' }}>{depositTotal.toLocaleString('vi-VN')}đ</span>
+            </div>
+          )}
+
+          {serviceFee > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+              <span>Phí dịch vụ:</span>
+              <span style={{ fontWeight: 600 }}>{serviceFee.toLocaleString('vi-VN')}đ</span>
+            </div>
+          )}
 
           {discountAmount > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#059669' }}>
