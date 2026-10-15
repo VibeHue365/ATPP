@@ -31,12 +31,27 @@ export interface Order {
   paymentSummary?: any;
   bookingCode?: string;
   deliveredPhotos?: string[];
+  handoverPhotos?: string[];
   deliveryDriveUrl?: string;
   pickupDamageReport?: {
     reportedAt: string;
     description: string;
     evidencePhotos: string[];
   } | null;
+  cancellation?: {
+    cancelledBy?: any;
+    reason?: string;
+    cancelledAt?: string | Date;
+    refundAmount?: number;
+  } | null;
+  cancellationReason?: string;
+  cancelReason?: string;
+  statusTimeline?: Array<{
+    status: string;
+    changedAt: string | Date;
+    note?: string;
+    changedBy?: any;
+  }>;
 }
 
 export interface Product {

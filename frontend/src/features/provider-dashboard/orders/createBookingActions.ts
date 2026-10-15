@@ -297,8 +297,15 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
           reason: `[KHÁCH VẮNG MẶT - NO SHOW] ${reason}`,
           reportPhotos: photos
         });
+        const fullReason = `[KHÁCH VẮNG MẶT - NO SHOW] ${reason}`;
         const displayStatus = statusDisplayMap['CANCELLED'] || 'Đã hủy';
-        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? { ...o, status: displayStatus, rawStatus: 'CANCELLED' } : o));
+        setOrders(prev => prev.map(o => (o._id === _id || o.id === _id) ? {
+          ...o,
+          status: displayStatus,
+          rawStatus: 'CANCELLED',
+          cancellation: { reason: fullReason, cancelledAt: new Date() },
+          cancellationReason: fullReason,
+        } : o));
         toast.success('Đã gửi báo cáo Khách vắng mặt thành công kèm ảnh bằng chứng. Tiền cọc sẽ được bồi thường cho bạn!');
       } catch (err: any) {
         toast.error(err.message || 'Báo cáo thất bại');
