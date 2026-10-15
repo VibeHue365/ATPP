@@ -47,8 +47,7 @@ export class PaymentsRepository {
     return this.paymentModel
       .find({
         bookingId: { $in: bookingIds },
-        status: PaymentStatus.Success,
-        purpose: { $ne: PaymentPurpose.DepositRefund },
+        status: { $in: [PaymentStatus.Success, PaymentStatus.Processing] },
       })
       .sort({ createdAt: -1 })
       .populate('bookingId')

@@ -37,8 +37,10 @@ export class PayOSRefundService {
     orderCode: number,
     amount: number,
   ): Promise<PayOSRefundResult> {
-    const isMock = this.configService.get<string>('PAYOS_REFUND_MOCK') === 'true';
     const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
+    const isMock =
+      this.configService.get<string>('PAYOS_REFUND_MOCK') === 'true' ||
+      ((!this.payOSClientId || this.payOSClientId.includes('your_')) && nodeEnv !== 'production');
 
     if (isMock) {
       if (nodeEnv === 'production') {
