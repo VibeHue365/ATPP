@@ -87,6 +87,9 @@ const emptyBusinessProfile: ProviderBusinessProfile = {
   address: '',
   province: '',
   description: '',
+  taxCode: '',
+  businessType: '',
+  avatar: '',
 };
 
 const emptyAodaiInfo: AodaiInfo = {
@@ -113,10 +116,10 @@ function normalizeVerificationDetail(
     requestedCapabilities: Array.isArray(detail.requestedCapabilities)
       ? detail.requestedCapabilities
       : [],
-    businessProfile: detail.businessProfile ?? {},
-    aodaiInfo: detail.aodaiInfo ?? {},
+    businessProfile: detail.businessProfile ? (({ _id, ...rest }: any) => rest)(detail.businessProfile) : {},
+    aodaiInfo: detail.aodaiInfo ? (({ _id, ...rest }: any) => rest)(detail.aodaiInfo) : {},
     photographyInfo: {
-      ...(detail.photographyInfo ?? {}),
+      ...(detail.photographyInfo ? (({ _id, ...rest }: any) => rest)(detail.photographyInfo) : {}),
       photographyStyles: Array.isArray(detail.photographyInfo?.photographyStyles)
         ? detail.photographyInfo.photographyStyles
         : [],
@@ -718,9 +721,20 @@ export const BecomeProviderPage: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      const { _id: bpId, ...cleanBusinessProfile } = businessProfile as any;
-      const { _id: adId, ...cleanAodaiInfo } = updatedAodaiInfo as any;
-      const { _id: phId, ...cleanPhotographyInfo } = updatedPhotographyInfo as any;
+      const sanitizePayload = (obj?: Record<string, any>) => {
+        if (!obj) return undefined;
+        const res: Record<string, any> = {};
+        for (const [k, v] of Object.entries(obj)) {
+          if (k !== '_id' && v !== null && v !== undefined) {
+            res[k] = v;
+          }
+        }
+        return res;
+      };
+
+      const cleanBusinessProfile = sanitizePayload(businessProfile as any);
+      const cleanAodaiInfo = sanitizePayload(updatedAodaiInfo as any);
+      const cleanPhotographyInfo = sanitizePayload(updatedPhotographyInfo as any);
 
       const detail = await providerVerificationService.update(verificationId, {
         businessProfile: cleanBusinessProfile,
@@ -814,8 +828,9 @@ export const BecomeProviderPage: React.FC = () => {
             ? extFields.address
             : null;
 
+      const { _id: _ignored, ...cleanProfile } = businessProfile as any;
       const updatedBusinessProfile = {
-        ...businessProfile,
+        ...cleanProfile,
         [field]: value,
       };
 
@@ -2193,6 +2208,18 @@ function ReviewStep({
         <SummaryItem label="Số giấy tờ thiếu" value={verification.missingDocuments.length > 0 ? `${verification.missingDocuments.length} tài liệu bắt buộc` : 'Đã đủ tài liệu'} />
         <SummaryItem label="Ngày khởi tạo" value={formatDate(verification.createdAt || '')} />
       </div>
+
+      {verification.missingDocuments && verification.missingDocuments.length > 0 && (
+        <div className="vh-provider-alert warning animate-fade-in" style={{ marginTop: 16 }}>
+          <AlertCircle size={18} />
+          <div>
+            <strong>Hồ sơ còn thiếu giấy tờ bắt buộc:</strong>
+            <p style={{ margin: '4px 0 0 0', fontSize: 13 }}>
+              Vui lòng quay lại Bước 4 để tải lên: <strong>{verification.missingDocuments.map((d: any) => documentLabels[d as ProviderDocumentType] || d).join(', ')}</strong>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {verification.ocrWarnings && verification.ocrWarnings.length > 0 && (
         <div className="vh-provider-alert warning animate-fade-in">

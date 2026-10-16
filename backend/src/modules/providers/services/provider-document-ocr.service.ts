@@ -204,7 +204,7 @@ export class ProviderDocumentOcrService {
 
       const detectedFullName = (isIdentityFront || isPassport) ? this.extractFullName(linesText) : null;
       const detectedDob = (isIdentityFront || isPassport) ? this.extractDob(result.text) : null;
-      const detectedAddress = isIdentityFront ? this.extractAddress(result.text) : null;
+      const detectedAddress = isIdentityFront ? this.extractAddress(linesText) : null;
 
       const finalName = detectedFullName || (ownerName && nameSim >= 0.60 ? ownerName : null);
 
@@ -317,20 +317,21 @@ export class ProviderDocumentOcrService {
   private extractFullName(lines: string[]): string | null {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (/ho\s*va\s*ten|full\s*name|ho\s*ten/i.test(line)) {
+      if (/h[oọ]\s*v[aà]\s*t[eêéèẽẻẹ]|full\s*name|h[oọ]\s*t[eêéèẽẻẹ]/i.test(line)) {
         const parts = line.split(/[:\/\-]/);
         const after = parts[parts.length - 1].trim();
-        if (after.length >= 3 && !/full\s*name|ho\s*va\s*ten|ho\s*ten/i.test(after)) {
-          return after;
+        const afterWords = after.split(/\s+/).filter((w) => /^[A-Z\u00C0-\u1EF9]{2,}$/u.test(w));
+        if (afterWords.length >= 2) {
+          return afterWords.join(' ');
         }
-        if (i + 1 < lines.length) {
-          const nextLine = lines[i + 1].trim();
-          const words = nextLine.split(/\s+/);
-          const nameWords = words.filter((w) => /^[A-ZÀ-Ỹ]{2,}$/u.test(w));
+        for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
+          const aheadLine = lines[j].trim();
+          if (/ngay\s*sinh|date\s*of\s*birth|sinh\s*ngay/i.test(aheadLine)) break;
+          const words = aheadLine.split(/\s+/);
+          const nameWords = words.filter((w) => /^[A-Z\u00C0-\u1EF9]{2,}$/u.test(w));
           if (nameWords.length >= 2) {
             return nameWords.join(' ');
           }
-          return nextLine;
         }
       }
     }
@@ -344,11 +345,35 @@ export class ProviderDocumentOcrService {
     return dobMatch ? dobMatch[1] : null;
   }
 
-  private extractAddress(text: string): string | null {
-    const addrMatch = text.match(
-      /(?:Nơi thường trú|Nơi cư trú|thường trú|noi thuong tru|thuong tru)[:\s]*([^\n]+)/i,
-    );
-    return addrMatch ? addrMatch[1].trim() : null;
+  private extractAddress(lines: string[]): string | null {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (/noi\s*thuong\s*tru|noi\s*cu\s*tru|thuong\s*tru|place\s*of\s*residence/i.test(line)) {
+        const afterLabel = line
+          .replace(/.*(?:place\s*of\s*residence|noi\s*thuong\s*tru|thuong\s*tru|noi\s*cu\s*tru)[:\s\/]*/i, '')
+          .trim();
+        const addrParts: string[] = [];
+        if (afterLabel.length >= 5) {
+          addrParts.push(afterLabel);
+        }
+        for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
+          let nextLine = lines[j].trim();
+          if (/co\s*gia\s*tri|date\s*of\s*expiry|ngay\s*het\s*han/i.test(nextLine)) {
+            nextLine = nextLine
+              .replace(/.*(?:date\s*of\s*expiry|co\s*gia\s*tri\s*den)[:\s\d\/\.-]*/i, '')
+              .trim();
+          }
+          if (/^\d{2}[\/\.-]\d{2}[\/\.-]\d{4}$/.test(nextLine)) break;
+          if (nextLine.length >= 3) {
+            addrParts.push(nextLine);
+          }
+        }
+        if (addrParts.length > 0) {
+          return addrParts.join(' ').replace(/\s+,/g, ',').trim();
+        }
+      }
+    }
+    return null;
   }
 
   private async remoteOcr(buffer: Buffer): Promise<{

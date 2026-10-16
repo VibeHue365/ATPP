@@ -26,6 +26,9 @@ export class CreateProviderVerificationDto {
 }
 
 export class BusinessProfileDto {
+  @IsOptional()
+  _id?: string;
+
   @IsString()
   @IsOptional()
   businessName?: string;
@@ -53,9 +56,24 @@ export class BusinessProfileDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @IsString()
+  @IsOptional()
+  taxCode?: string;
+
+  @IsString()
+  @IsOptional()
+  businessType?: string;
+
+  @IsString()
+  @IsOptional()
+  avatar?: string;
 }
 
 export class AodaiInfoDto {
+  @IsOptional()
+  _id?: string;
+
   @IsString()
   @IsOptional()
   shopName?: string;
@@ -78,6 +96,9 @@ export class AodaiInfoDto {
 }
 
 export class PhotographyInfoDto {
+  @IsOptional()
+  _id?: string;
+
   @IsString()
   @IsOptional()
   studioName?: string;
