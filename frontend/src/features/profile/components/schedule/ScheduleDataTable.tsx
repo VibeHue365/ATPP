@@ -506,8 +506,8 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
             <span>Xem chi tiết</span>
           </button>
 
-          {/* 1b. Khách xác nhận đã nhận áo khi ở trạng thái PICKUP_PENDING */}
-          {activeDropdown.booking.status === 'PICKUP_PENDING' && (
+          {/* 1b. Khách xác nhận đã nhận áo khi ở trạng thái PICKUP_PENDING / READY_FOR_PICKUP */}
+          {['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(activeDropdown.booking.status) && (
             <button
               type="button"
               onClick={() => {
@@ -535,6 +535,38 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
             >
               <CalendarCheck size={14} color="#8E44AD" />
               <span>Xác nhận nhận áo</span>
+            </button>
+          )}
+
+          {/* 1c. Khách duyệt ảnh khi ở trạng thái AWAITING_REVIEW */}
+          {activeDropdown.booking.status === 'AWAITING_REVIEW' && (
+            <button
+              type="button"
+              onClick={() => {
+                const booking = activeDropdown.booking;
+                setActiveDropdown(null);
+                onViewDetails(booking);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: '#ECFDF5',
+                color: '#047857',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D1FAE5')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#ECFDF5')}
+            >
+              <CalendarCheck size={14} color="#047857" />
+              <span>Duyệt ảnh</span>
             </button>
           )}
 
