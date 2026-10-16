@@ -107,6 +107,8 @@ export function OrderDetailDrawer({
   const isPhoto = order.bookingType === 'PHOTOGRAPHY';
   const isAoDai = !isCombo && !isPhoto;
   const rawStatus = (order.rawStatus || '').toUpperCase();
+  const isOrderCompleted = rawStatus === 'COMPLETED' || (order.status || '').toUpperCase() === 'HOÀN THÀNH' || (order.status || '').toUpperCase() === 'COMPLETED';
+  const isCancelled = rawStatus === 'CANCELLED' || (order.status || '').toUpperCase() === 'ĐÃ HỦY' || (order.status || '').toUpperCase() === 'CANCELLED';
   const primaryItem = order.items?.[0];
   const rf = primaryItem?.rentalFulfillment;
   const photoItem = order.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId);
@@ -171,11 +173,9 @@ export function OrderDetailDrawer({
       { label: 'Kiểm tra & Duyệt', key: 'RETURNED', time: rf?.returnedAt ? 'Đã kiểm tra' : 'Kiểm tra' },
       { label: 'Hoàn tất', key: 'COMPLETED', time: rawStatus === 'COMPLETED' ? (formatShortTime(rf?.completedAt, order.updatedDate || 'Hoàn tất')) : 'Dự kiến' },
     ];
-  }, [isAoDai, isPhoto, order, rf, shootDate, rawStatus]);
+  }, [isAoDai, isPhoto, order, rf, shootDate, rawStatus, isOrderCompleted]);
 
   // Active step computation
-  const isOrderCompleted = rawStatus === 'COMPLETED' || (order.status || '').toUpperCase() === 'HOÀN THÀNH' || (order.status || '').toUpperCase() === 'COMPLETED';
-  const isCancelled = rawStatus === 'CANCELLED' || (order.status || '').toUpperCase() === 'ĐÃ HỦY' || (order.status || '').toUpperCase() === 'CANCELLED';
 
   const cancellationReason = useMemo(() => {
     if (order.cancellation?.reason) return order.cancellation.reason;
