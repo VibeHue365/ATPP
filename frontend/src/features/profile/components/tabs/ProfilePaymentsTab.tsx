@@ -539,8 +539,8 @@ export const ProfilePaymentsTab: React.FC = () => {
                             {bType === 'PHOTOGRAPHY'
                               ? '📷 Gói chụp ảnh'
                               : bType === 'COMBO'
-                              ? '✨ Combo Thuê & Chụp'
-                              : '👘 Thuê áo dài'}
+                                ? '✨ Combo Thuê & Chụp'
+                                : '👘 Thuê áo dài'}
                           </div>
                         )}
                       </td>
@@ -591,17 +591,17 @@ export const ProfilePaymentsTab: React.FC = () => {
                             backgroundColor: isSuccess
                               ? '#ECFDF5'
                               : isProcessing
-                              ? '#EFF6FF'
-                              : p.status === 'PENDING'
-                              ? '#FEF3C7'
-                              : '#FEE2E2',
+                                ? '#EFF6FF'
+                                : p.status === 'PENDING'
+                                  ? '#FEF3C7'
+                                  : '#FEE2E2',
                             color: isSuccess
                               ? '#047857'
                               : isProcessing
-                              ? '#1D4ED8'
-                              : p.status === 'PENDING'
-                              ? '#B45309'
-                              : '#DC2626'
+                                ? '#1D4ED8'
+                                : p.status === 'PENDING'
+                                  ? '#B45309'
+                                  : '#DC2626'
                           }}
                         >
                           {isSuccess ? (
@@ -615,14 +615,14 @@ export const ProfilePaymentsTab: React.FC = () => {
                             {isSuccess
                               ? 'Thành công'
                               : isProcessing
-                              ? isRefund
-                                ? 'Đang hoàn tiền'
-                                : 'Đang xử lý'
-                              : p.status === 'PENDING'
-                              ? 'Chờ thanh toán'
-                              : p.status === 'CANCELLED'
-                              ? 'Đã hủy'
-                              : 'Thất bại'}
+                                ? isRefund
+                                  ? 'Đang hoàn tiền'
+                                  : 'Đang xử lý'
+                                : p.status === 'PENDING'
+                                  ? 'Chờ thanh toán'
+                                  : p.status === 'CANCELLED'
+                                    ? 'Đã hủy'
+                                    : 'Thất bại'}
                           </span>
                         </span>
                       </td>

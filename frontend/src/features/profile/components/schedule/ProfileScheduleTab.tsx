@@ -169,10 +169,25 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
           statusBg = '#ECFDF5';
           statusColor = '#047857';
         } else if (b.status === 'RETURN_PENDING') {
-          statusLabel = 'CHỜ TRẢ ĐỒ';
-          statusSubtext = 'Đang kiểm tra trả đồ combo';
-          statusBg = '#FEF9E7';
-          statusColor = '#F39C12';
+          const hasIncident = Boolean(
+            b.activeIncident ||
+            b.hasIncident ||
+            b.statusTimeline?.some((t: any) =>
+              t.status === 'RETURN_PENDING' &&
+              (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
+            )
+          );
+          if (hasIncident) {
+            statusLabel = 'CHỜ DUYỆT SỰ CỐ';
+            statusSubtext = 'Shop yêu cầu đền bù hư hỏng';
+            statusBg = '#FFF1F2';
+            statusColor = '#E11D48';
+          } else {
+            statusLabel = 'CHỜ TRẢ ĐỒ';
+            statusSubtext = 'Đang kiểm tra trả đồ combo';
+            statusBg = '#FEF9E7';
+            statusColor = '#F39C12';
+          }
         } else if (b.status === 'AWAITING_REVIEW') {
           statusLabel = 'CHỜ DUYỆT ẢNH';
           statusSubtext = 'Đã có ảnh, vui lòng xem & duyệt';
@@ -232,10 +247,15 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
 
       (b.items || []).forEach((item: any, idx: number) => {
         const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
+        const isCombo =
+          b.bookingType === 'COMBO' ||
+          item.itemType === 'COMBO' ||
+          (b.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
+            b.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
 
         // Check if matches activeCategory
-        if (activeCategory === 'RENTAL' && isPhoto) return;
-        if (activeCategory === 'PHOTOSHOOT' && !isPhoto) return;
+        if (activeCategory === 'RENTAL' && (isPhoto || isCombo)) return;
+        if (activeCategory === 'PHOTOSHOOT' && (!isPhoto || isCombo)) return;
 
         const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
         const prodObj = !isPhoto && item.productId && typeof item.productId === 'object' ? item.productId : null;
@@ -335,6 +355,83 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             statusBg = '#F3F4F6';
             statusColor = '#4B5563';
           }
+        } else if (isCombo) {
+          if (b.status === 'PENDING_PAYMENT') {
+            statusLabel = 'CHỜ CỌC';
+            statusSubtext = 'Chưa thanh toán cọc';
+            statusBg = '#FEF3C7';
+            statusColor = '#B45309';
+          } else if (b.status === 'DEPOSIT_PAID') {
+            statusLabel = 'CHỜ DUYỆT';
+            statusSubtext = 'Chờ đối tác xác nhận';
+            statusBg = '#FFFBEB';
+            statusColor = '#B45309';
+          } else if (b.status === 'CONFIRMED') {
+            statusLabel = 'SẮP DIỄN RA';
+            statusSubtext = getDaysDiffText(rawStart, 'Bắt đầu sau') || 'Đã xác nhận lịch';
+            statusBg = '#EFF6FF';
+            statusColor = '#1D4ED8';
+          } else if (b.status === 'PICKUP_PENDING') {
+            statusLabel = 'CHỜ NHẬN ĐỒ';
+            statusSubtext = 'Trang phục sẵn sàng, chờ nhận';
+            statusBg = '#F5EEF8';
+            statusColor = '#8E44AD';
+          } else if (b.status === 'IN_PROGRESS' || b.status === 'PICKED_UP') {
+            statusLabel = 'ĐANG TRẢI NGHIỆM';
+            statusSubtext = 'Đang trong lịch trình combo';
+            statusBg = '#ECFDF5';
+            statusColor = '#047857';
+          } else if (b.status === 'RETURN_PENDING') {
+            const hasIncident = Boolean(
+              b.activeIncident ||
+              b.hasIncident ||
+              b.statusTimeline?.some((t: any) =>
+                t.status === 'RETURN_PENDING' &&
+                (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
+              )
+            );
+            if (hasIncident) {
+              statusLabel = 'CHỜ DUYỆT SỰ CỐ';
+              statusSubtext = 'Shop yêu cầu đền bù hư hỏng';
+              statusBg = '#FFF1F2';
+              statusColor = '#E11D48';
+            } else {
+              statusLabel = 'CHỜ TRẢ ĐỒ';
+              statusSubtext = 'Đang kiểm tra trả đồ combo';
+              statusBg = '#FEF9E7';
+              statusColor = '#F39C12';
+            }
+          } else if (b.status === 'AWAITING_REVIEW') {
+            statusLabel = 'CHỜ DUYỆT ẢNH';
+            statusSubtext = 'Đã có ảnh, vui lòng duyệt';
+            statusBg = '#FEF3C7';
+            statusColor = '#B45309';
+          } else if (b.status === 'COMBO_PHOTOS_APPROVED') {
+            statusLabel = 'ĐÃ DUYỆT ẢNH';
+            statusSubtext = 'Chờ hoàn tất trả đồ';
+            statusBg = '#E0F2FE';
+            statusColor = '#0369A1';
+          } else if (b.status === 'COMPLETED' || b.status === 'RETURNED') {
+            statusLabel = 'HOÀN TẤT';
+            statusSubtext = 'Đã hoàn tất trải nghiệm';
+            statusBg = '#E8F8F5';
+            statusColor = '#27AE60';
+          } else if (b.status === 'CANCELLED') {
+            statusLabel = 'ĐÃ HỦY';
+            statusSubtext = 'Đơn đã hủy';
+            statusBg = '#FDEDEC';
+            statusColor = '#C0392B';
+          } else if (b.status === 'DISPUTED') {
+            statusLabel = 'TRANH CHẤP';
+            statusSubtext = 'Đang xử lý khiếu nại';
+            statusBg = '#FEF2F2';
+            statusColor = '#DC2626';
+          } else if (b.status === 'REFUNDED' || b.status === 'PARTIALLY_REFUNDED') {
+            statusLabel = 'ĐÃ HOÀN TIỀN';
+            statusSubtext = 'Đã hoàn tiền đơn';
+            statusBg = '#F3F4F6';
+            statusColor = '#4B5563';
+          }
         } else {
           // RENTAL (Thuê áo dài)
           if (b.status === 'PENDING_PAYMENT') {
@@ -363,10 +460,25 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             statusBg = '#ECFDF5';
             statusColor = '#047857';
           } else if (b.status === 'RETURN_PENDING') {
-            statusLabel = 'CHỜ TRẢ ĐỒ';
-            statusSubtext = 'Đang kiểm tra trả đồ';
-            statusBg = '#FEF9E7';
-            statusColor = '#F39C12';
+            const hasIncident = Boolean(
+              b.activeIncident ||
+              b.hasIncident ||
+              b.statusTimeline?.some((t: any) =>
+                t.status === 'RETURN_PENDING' &&
+                (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
+              )
+            );
+            if (hasIncident) {
+              statusLabel = 'CHỜ DUYỆT SỰ CỐ';
+              statusSubtext = 'Shop yêu cầu đền bù hư hỏng';
+              statusBg = '#FFF1F2';
+              statusColor = '#E11D48';
+            } else {
+              statusLabel = 'CHỜ TRẢ ĐỒ';
+              statusSubtext = 'Đang kiểm tra trả đồ';
+              statusBg = '#FEF9E7';
+              statusColor = '#F39C12';
+            }
           } else if (b.status === 'RETURNED' || b.status === 'COMPLETED') {
             statusLabel = 'ĐÃ TRẢ';
             statusSubtext = 'Đã trả đúng hạn';

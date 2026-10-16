@@ -2281,25 +2281,33 @@ export function OrderDetailDrawer({
             )}
 
             {rawStatus === 'COMBO_PHOTOS_APPROVED' && (
-              <>
-                <span style={{ fontSize: '12.5px', fontWeight: 650, color: '#0369A1', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#E0F2FE', padding: '7px 14px', borderRadius: '8px', border: '1px solid #BAE6FD' }}>
-                  <CheckCircle size={14} />
-                  <span>Khách đã duyệt ảnh</span>
-                </span>
-                <button
-                  type="button"
-                  className="p-drawer-primary-btn"
-                  style={{ backgroundColor: '#15803D' }}
-                  onClick={handleCompleteOrder}
-                  disabled={isCompleting}
-                >
-                  <CheckCircle size={14} />
-                  <span>{isCompleting ? 'Đang hoàn tất...' : 'Hoàn tất đơn hàng'}</span>
-                </button>
-              </>
+              <span style={{ fontSize: '12.5px', fontWeight: 650, color: '#0369A1', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#E0F2FE', padding: '7px 14px', borderRadius: '8px', border: '1px solid #BAE6FD' }}>
+                <CheckCircle size={14} />
+                <span>Khách đã duyệt ảnh</span>
+              </span>
             )}
 
-            {(rawStatus === 'RETURNED' || rawStatus === 'RETURN_PENDING') && !isOrderCompleted && (
+            {rawStatus === 'RETURN_PENDING' && (
+              <span
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 650,
+                  color: '#D97706',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#FFFBEB',
+                  padding: '7px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #FDE68A',
+                }}
+              >
+                <Clock size={14} />
+                <span>Đang chờ khách duyệt sự cố</span>
+              </span>
+            )}
+
+            {(rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED') && !isOrderCompleted && (
               <button
                 type="button"
                 className="p-drawer-primary-btn"
