@@ -5,8 +5,6 @@ import {
   Clock,
   ArrowDownLeft,
   ArrowUpRight,
-  ShieldCheck,
-  AlertCircle,
   RotateCcw,
   Wallet
 } from 'lucide-react';
