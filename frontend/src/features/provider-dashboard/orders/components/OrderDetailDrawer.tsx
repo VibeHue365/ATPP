@@ -61,6 +61,7 @@ export function OrderDetailDrawer({
   const [selectedEvidenceImage, setSelectedEvidenceImage] = useState<string | null>(null);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
   const [internalNoteInput, setInternalNoteInput] = useState('');
   const [internalNotesList, setInternalNotesList] = useState<Array<{ author: string; time: string; text: string }>>([
     { author: 'Hệ thống VibeHue Escrow', time: order?.orderDate || 'Khi xác nhận', text: 'Khách hàng hoàn tất đặt cọc qua VibeHue Escrow. Đơn được xác nhận tự động.' },
@@ -327,6 +328,26 @@ export function OrderDetailDrawer({
       console.error('Error completing order:', err);
     } finally {
       setIsCompleting(false);
+    }
+  };
+
+  const handleConfirmOrder = async () => {
+    if (isConfirming) return;
+    try {
+      setIsConfirming(true);
+      await changeOrderStatus(order._id, 'CONFIRMED');
+      if (onSelectOrder) {
+        onSelectOrder({
+          ...order,
+          rawStatus: 'CONFIRMED',
+          status: 'ĐANG THỰC HIỆN',
+          updatedDate: 'Vừa xong',
+        });
+      }
+    } catch (err) {
+      console.error('Error confirming order:', err);
+    } finally {
+      setIsConfirming(false);
     }
   };
 
@@ -2112,6 +2133,38 @@ export function OrderDetailDrawer({
             )}
 
             {/* Primary contextual status button */}
+            {rawStatus === 'DEPOSIT_PAID' && (
+              <>
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  style={{ backgroundColor: '#1565C0' }}
+                  onClick={handleConfirmOrder}
+                  disabled={isConfirming}
+                >
+                  <CheckCircle size={14} />
+                  <span>
+                    {isConfirming
+                      ? 'Đang xác nhận...'
+                      : isPhoto
+                      ? 'Chấp nhận lịch chụp'
+                      : 'Xác nhận đơn hàng'}
+                  </span>
+                </button>
+                {isPhoto && (
+                  <button
+                    type="button"
+                    className="p-drawer-danger-btn"
+                    onClick={() => changeOrderStatus(order._id, 'CANCELLED')}
+                    title="Từ chối lịch chụp nếu không thể sắp xếp"
+                  >
+                    <X size={14} />
+                    <span>Từ chối lịch chụp</span>
+                  </button>
+                )}
+              </>
+            )}
+
             {rawStatus === 'CONFIRMED' && isPhoto && (
               <button
                 type="button"
@@ -2145,7 +2198,7 @@ export function OrderDetailDrawer({
               </button>
             )}
 
-            {(rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') && !isPhoto && !isCombo && (
+            {(rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') && !isPhoto && (
               <button
                 type="button"
                 className="p-drawer-primary-btn"
@@ -2163,15 +2216,26 @@ export function OrderDetailDrawer({
               </span>
             )}
 
-            {rawStatus === 'PICKED_UP' && !isPhoto && (
-              <button
-                type="button"
-                className="p-drawer-primary-btn"
-                onClick={() => changeOrderStatus(order._id, 'RETURNED')}
-              >
-                <Check size={14} />
-                <span>Khách trả đồ</span>
-              </button>
+            {rawStatus === 'PICKED_UP' && (
+              isCombo && !order.photosApproved ? (
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  onClick={() => changeOrderStatus(order._id, 'SESSION_START')}
+                >
+                  <Play size={14} />
+                  <span>Bắt đầu buổi chụp</span>
+                </button>
+              ) : !isPhoto ? (
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  onClick={() => changeOrderStatus(order._id, 'RETURNED')}
+                >
+                  <Check size={14} />
+                  <span>Khách trả đồ</span>
+                </button>
+              ) : null
             )}
 
             {(rawStatus === 'RETURNED' || rawStatus === 'RETURN_PENDING' || rawStatus === 'COMBO_PHOTOS_APPROVED' || (isPhoto && rawStatus === 'AWAITING_REVIEW')) && !isOrderCompleted && (

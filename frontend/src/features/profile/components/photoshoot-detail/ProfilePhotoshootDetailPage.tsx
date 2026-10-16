@@ -49,8 +49,38 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
     ? new Date(rawDate).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' })
     : 'Chưa cập nhật ngày chụp';
   const timeSlotStr = item.shootTimeSlot || '09:00 - 11:00';
-  const locationName = item.shootLocation?.name || item.locationSnapshot?.name || 'Đại Nội Huế';
-  const locationAddress = item.shootLocation?.address || item.locationSnapshot?.address || 'Thành phố Huế';
+
+  // Parse shoot location robustly
+  const rawLocation =
+    typeof item.shootLocation === 'string'
+      ? item.shootLocation
+      : item.shootLocation?.name ||
+        item.shootLocation?.address ||
+        item.shootLocationSnapshot?.address ||
+        item.locationSnapshot?.name ||
+        item.locationSnapshot?.address ||
+        booking?.schedules?.[0]?.locationAddress ||
+        booking?.schedules?.[0]?.locationSnapshot?.address ||
+        '';
+
+  let locationName = 'Đại Nội Huế';
+  let locationAddress = 'Thành phố Huế';
+
+  if (rawLocation && rawLocation.trim()) {
+    const trimmed = rawLocation.trim();
+    if (trimmed.includes(',')) {
+      const parts = trimmed.split(',').map((p: string) => p.trim()).filter(Boolean);
+      locationName = parts[0] || 'Địa điểm chụp';
+      locationAddress = parts.slice(1).join(', ') || trimmed;
+    } else {
+      locationName = trimmed;
+      locationAddress = trimmed;
+    }
+  } else if (item.shootLocation && typeof item.shootLocation === 'object') {
+    locationName = item.shootLocation.name || item.shootLocation.address || 'Đại Nội Huế';
+    locationAddress = item.shootLocation.address || item.shootLocation.name || 'Thành phố Huế';
+  }
+
   const concept = item.concept || pkgObj?.concept || 'Áo dài Cổ phong / Hoàng cung';
 
   // Pricing

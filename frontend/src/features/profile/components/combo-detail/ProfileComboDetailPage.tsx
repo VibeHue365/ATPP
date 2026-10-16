@@ -64,8 +64,37 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
   const rentalEnd = rentalItem.rentalTo || rentalItem.endDate || booking?.endDate;
   const shootDate = photoItem.shootDate || rentalStart;
   const shootTime = photoItem.shootTimeSlot || '09:00 - 11:00';
-  const shootLocation = photoItem.shootLocation?.name || photoItem.locationSnapshot?.name || 'Đại Nội Huế';
-  const shootAddress = photoItem.shootLocation?.address || photoItem.locationSnapshot?.address || 'Thành phố Huế';
+
+  // Parse shoot location robustly
+  const rawShootLocation =
+    typeof photoItem.shootLocation === 'string'
+      ? photoItem.shootLocation
+      : photoItem.shootLocation?.name ||
+        photoItem.shootLocation?.address ||
+        photoItem.shootLocationSnapshot?.address ||
+        photoItem.locationSnapshot?.name ||
+        photoItem.locationSnapshot?.address ||
+        booking?.schedules?.[0]?.locationAddress ||
+        booking?.schedules?.[0]?.locationSnapshot?.address ||
+        '';
+
+  let shootLocation = 'Đại Nội Huế';
+  let shootAddress = 'Thành phố Huế';
+
+  if (rawShootLocation && rawShootLocation.trim()) {
+    const trimmed = rawShootLocation.trim();
+    if (trimmed.includes(',')) {
+      const parts = trimmed.split(',').map((p: string) => p.trim()).filter(Boolean);
+      shootLocation = parts[0] || 'Địa điểm chụp';
+      shootAddress = parts.slice(1).join(', ') || trimmed;
+    } else {
+      shootLocation = trimmed;
+      shootAddress = trimmed;
+    }
+  } else if (photoItem.shootLocation && typeof photoItem.shootLocation === 'object') {
+    shootLocation = photoItem.shootLocation.name || photoItem.shootLocation.address || 'Đại Nội Huế';
+    shootAddress = photoItem.shootLocation.address || photoItem.shootLocation.name || 'Thành phố Huế';
+  }
 
   // Pricing
   const comboDiscount = booking?.pricingSummary?.comboDiscountTotal || 0;

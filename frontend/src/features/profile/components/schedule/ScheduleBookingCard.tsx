@@ -52,8 +52,13 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
   const dateFormatted = rawDate
     ? new Date(rawDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : 'Chưa cập nhật';
-  const timeSlot = item.shootTimeSlot || (isPhoto ? '09:00 - 11:00' : undefined);
-  const location = item.shootLocation || booking.deliveryAddress?.address || 'TP. Huế';
+  const timeSlot = item.shootTimeSlot || item.timeSlot || booking.schedules?.[0]?.timeSlot || '';
+  const location =
+    (typeof item.shootLocation === 'string' ? item.shootLocation : item.shootLocation?.name || item.shootLocation?.address) ||
+    item.shootLocationSnapshot?.address ||
+    booking.schedules?.[0]?.locationAddress ||
+    booking.deliveryAddress?.address ||
+    'TP. Huế';
 
   // Status info
   const statusConfig: Record<string, { label: string; bg: string; color: string }> = {
