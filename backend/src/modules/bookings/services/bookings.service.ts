@@ -2469,11 +2469,36 @@ export class BookingsService implements OnApplicationBootstrap {
       list.push(schedule);
     }
 
+    // Query active incident reports for these bookings
+    let allIncidents: any[] = [];
+    try {
+      const incidentModel =
+        this.bookingModel.db.models['IncidentReport'] ||
+        this.bookingModel.db.model('IncidentReport');
+      if (incidentModel) {
+        allIncidents = await incidentModel
+          .find({
+            bookingId: { $in: bookingIds },
+            status: { $in: ['PENDING_CUSTOMER', 'DISPUTED'] },
+          })
+          .lean()
+          .exec();
+      }
+    } catch {
+      // Ignore if incident model not initialized
+    }
+
+    const incidentsByBooking = new Map<string, any>();
+    for (const inc of allIncidents) {
+      incidentsByBooking.set(inc.bookingId.toString(), inc);
+    }
+
     const results: Record<string, any>[] = [];
     for (const booking of bookings) {
       const bIdStr = booking._id.toString();
       const items = itemsByBooking.get(bIdStr) || [];
       const schedules = schedulesByBooking.get(bIdStr) || [];
+      const activeIncident = incidentsByBooking.get(bIdStr) || null;
 
       const updatedItems = items.map((item) => {
         const prodName = (item.productId as any)?.name;
@@ -2512,7 +2537,13 @@ export class BookingsService implements OnApplicationBootstrap {
         };
       });
 
-      results.push({ ...booking.toObject(), items: updatedItems, schedules });
+      results.push({
+        ...booking.toObject(),
+        items: updatedItems,
+        schedules,
+        activeIncident,
+        hasIncident: Boolean(activeIncident),
+      });
     }
     return results;
   }

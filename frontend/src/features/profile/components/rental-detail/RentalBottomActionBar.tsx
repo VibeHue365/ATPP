@@ -1,30 +1,43 @@
 import React from 'react';
-import { XCircle, Clock, Headphones, CheckSquare, MapPin, CheckCircle2 } from 'lucide-react';
+import { XCircle, Clock, Headphones, CheckSquare, MapPin, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 interface RentalBottomActionBarProps {
   status?: string;
+  incident?: any;
+  respondingIncident?: boolean;
   onCancel: () => void;
   onExtend: () => void;
   onSupport: () => void;
   onReturn: () => void;
   onOpenMap?: () => void;
   onConfirmPickup?: () => void;
+  onAgreeIncident?: () => void;
+  onDisagreeIncident?: () => void;
 }
 
 export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
   status,
+  incident,
+  respondingIncident,
   onCancel,
   onExtend,
   onSupport,
   onReturn,
   onOpenMap,
-  onConfirmPickup
+  onConfirmPickup,
+  onAgreeIncident,
+  onDisagreeIncident
 }) => {
   const currentStatus = status || 'CONFIRMED';
-  const canCancel = ['PENDING_PAYMENT', 'WAITING_PAYMENT', 'CONFIRMED', 'DEPOSIT_PAID', 'PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus);
+  const isPendingCustomerIncident =
+    (currentStatus === 'RETURN_PENDING' || currentStatus === 'PENDING_CUSTOMER') &&
+    incident?.status === 'PENDING_CUSTOMER';
+  const isDisputed = currentStatus === 'DISPUTED' || incident?.status === 'DISPUTED';
+  const isIncidentAccepted = incident?.status === 'ACCEPTED';
+  const canCancel = !isPendingCustomerIncident && !isDisputed && ['PENDING_PAYMENT', 'WAITING_PAYMENT', 'CONFIRMED', 'DEPOSIT_PAID', 'PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus);
   const isPickupStage = ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'CONFIRMED', 'DEPOSIT_PAID'].includes(currentStatus);
-  const canExtend = ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus);
-  const canReturn = ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus);
+  const canExtend = !isPendingCustomerIncident && !isDisputed && ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus);
+  const canReturn = !isPendingCustomerIncident && !isDisputed && ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus);
   const isReturnPending = currentStatus === 'RETURN_PENDING';
   const isCompleted = ['RETURNED', 'COMPLETED'].includes(currentStatus);
 
@@ -242,8 +255,124 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
         </button>
       )}
 
-      {/* 6. Trạng thái chờ shop kiểm tra trả áo */}
-      {isReturnPending && (
+      {/* 6. Khiếu nại / Đồng ý đền bù khi có sự cố chờ duyệt */}
+      {isPendingCustomerIncident && (
+        <>
+          <button
+            type="button"
+            onClick={onDisagreeIncident}
+            disabled={respondingIncident}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '10px 18px',
+              borderRadius: '10px',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: respondingIncident ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s'
+            }}
+            onMouseOver={(e) => {
+              if (!respondingIncident) {
+                e.currentTarget.style.backgroundColor = '#FEF2F2';
+                e.currentTarget.style.borderColor = '#DC2626';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (!respondingIncident) {
+                e.currentTarget.style.backgroundColor = '#FFFFFF';
+                e.currentTarget.style.borderColor = '#FECACA';
+              }
+            }}
+          >
+            <AlertTriangle size={15} color="#DC2626" />
+            <span>{respondingIncident ? 'Đang gửi...' : 'Khiếu nại lên Admin'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onAgreeIncident}
+            disabled={respondingIncident}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '10px 22px',
+              borderRadius: '10px',
+              backgroundColor: '#059669',
+              border: 'none',
+              color: '#FFFFFF',
+              fontSize: '13px',
+              fontWeight: 750,
+              cursor: respondingIncident ? 'not-allowed' : 'pointer',
+              boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+              transition: 'all 0.15s'
+            }}
+            onMouseOver={(e) => {
+              if (!respondingIncident) e.currentTarget.style.backgroundColor = '#047857';
+            }}
+            onMouseOut={(e) => {
+              if (!respondingIncident) e.currentTarget.style.backgroundColor = '#059669';
+            }}
+          >
+            <CheckSquare size={15} />
+            <span>
+              {respondingIncident
+                ? 'Đang xử lý...'
+                : `Đồng ý đền bù (${(incident?.requestedAmount || 0).toLocaleString('vi-VN')}đ)`}
+            </span>
+          </button>
+        </>
+      )}
+
+      {/* 6b. Trạng thái đang tranh chấp */}
+      {isDisputed && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '10px 18px',
+            borderRadius: '10px',
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
+            color: '#991B1B',
+            fontSize: '13px',
+            fontWeight: 700
+          }}
+        >
+          <AlertTriangle size={15} color="#991B1B" />
+          <span>Đang tranh chấp (Chờ Ban Quản Trị xử lý)</span>
+        </div>
+      )}
+
+      {/* 6c. Trạng thái đã đồng ý đền bù */}
+      {isIncidentAccepted && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '10px 18px',
+            borderRadius: '10px',
+            backgroundColor: '#ECFDF5',
+            border: '1px solid #A7F3D0',
+            color: '#047857',
+            fontSize: '13px',
+            fontWeight: 700
+          }}
+        >
+          <CheckCircle2 size={15} />
+          <span>Đã đồng ý đền bù sự cố</span>
+        </div>
+      )}
+
+      {/* 6d. Trạng thái chờ shop kiểm tra trả áo thông thường */}
+      {isReturnPending && !isPendingCustomerIncident && !isDisputed && !isIncidentAccepted && (
         <div
           style={{
             display: 'inline-flex',

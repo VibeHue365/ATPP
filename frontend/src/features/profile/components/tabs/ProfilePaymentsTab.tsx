@@ -481,27 +481,7 @@ export const ProfilePaymentsTab: React.FC = () => {
                     >
                       {/* Mã GD / Đơn */}
                       <td style={{ padding: '14px', verticalAlign: 'middle' }}>
-                        <div style={{ fontWeight: 800, color: '#231F20', fontSize: '13px', fontFamily: 'monospace' }}>
-                          {displayCode}
-                        </div>
-                        {bookingCode && (
-                          <div
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              marginTop: '4px',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              backgroundColor: '#F3EFE9',
-                              color: '#6E6259'
-                            }}
-                          >
-                            Đơn #{bookingCode}
-                          </div>
-                        )}
+                        {bookingCode}
                       </td>
 
                       {/* Thời gian */}
@@ -541,8 +521,8 @@ export const ProfilePaymentsTab: React.FC = () => {
                             {bType === 'PHOTOGRAPHY'
                               ? '📷 Gói chụp ảnh'
                               : bType === 'COMBO'
-                              ? '✨ Combo Thuê & Chụp'
-                              : '👘 Thuê áo dài'}
+                                ? '✨ Combo Thuê & Chụp'
+                                : '👘 Thuê áo dài'}
                           </div>
                         )}
                       </td>
@@ -593,17 +573,17 @@ export const ProfilePaymentsTab: React.FC = () => {
                             backgroundColor: isSuccess
                               ? '#ECFDF5'
                               : isProcessing
-                              ? '#EFF6FF'
-                              : p.status === 'PENDING'
-                              ? '#FEF3C7'
-                              : '#FEE2E2',
+                                ? '#EFF6FF'
+                                : p.status === 'PENDING'
+                                  ? '#FEF3C7'
+                                  : '#FEE2E2',
                             color: isSuccess
                               ? '#047857'
                               : isProcessing
-                              ? '#1D4ED8'
-                              : p.status === 'PENDING'
-                              ? '#B45309'
-                              : '#DC2626'
+                                ? '#1D4ED8'
+                                : p.status === 'PENDING'
+                                  ? '#B45309'
+                                  : '#DC2626'
                           }}
                         >
                           {isSuccess ? (
@@ -617,14 +597,14 @@ export const ProfilePaymentsTab: React.FC = () => {
                             {isSuccess
                               ? 'Thành công'
                               : isProcessing
-                              ? isRefund
-                                ? 'Đang hoàn tiền'
-                                : 'Đang xử lý'
-                              : p.status === 'PENDING'
-                              ? 'Chờ thanh toán'
-                              : p.status === 'CANCELLED'
-                              ? 'Đã hủy'
-                              : 'Thất bại'}
+                                ? isRefund
+                                  ? 'Đang hoàn tiền'
+                                  : 'Đang xử lý'
+                                : p.status === 'PENDING'
+                                  ? 'Chờ thanh toán'
+                                  : p.status === 'CANCELLED'
+                                    ? 'Đã hủy'
+                                    : 'Thất bại'}
                           </span>
                         </span>
                       </td>

@@ -2174,7 +2174,27 @@ export function OrderDetailDrawer({
               </button>
             )}
 
-            {(rawStatus === 'RETURNED' || rawStatus === 'RETURN_PENDING' || rawStatus === 'COMBO_PHOTOS_APPROVED' || (isPhoto && rawStatus === 'AWAITING_REVIEW')) && !isOrderCompleted && (
+            {rawStatus === 'RETURN_PENDING' && (
+              <span
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 650,
+                  color: '#D97706',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#FFFBEB',
+                  padding: '7px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #FDE68A',
+                }}
+              >
+                <Clock size={14} />
+                <span>Đang chờ khách duyệt sự cố</span>
+              </span>
+            )}
+
+            {(rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED' || (isPhoto && rawStatus === 'AWAITING_REVIEW')) && !isOrderCompleted && (
               <button
                 type="button"
                 className="p-drawer-primary-btn"

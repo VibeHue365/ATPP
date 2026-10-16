@@ -88,8 +88,22 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
               display: 'inline-block',
               padding: '3px 8px',
               borderRadius: '4px',
-              backgroundColor: ['RETURNED', 'COMPLETED'].includes(rawStatus) ? '#ECFDF5' : '#FFEDD5',
-              color: ['RETURNED', 'COMPLETED'].includes(rawStatus) ? '#047857' : '#C2410C',
+              backgroundColor:
+                rawStatus === 'DISPUTED' || rentalData.statusLabel === 'TRANH CHẤP'
+                  ? '#FEE2E2'
+                  : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
+                  ? '#FFF1F2'
+                  : ['RETURNED', 'COMPLETED'].includes(rawStatus)
+                  ? '#ECFDF5'
+                  : '#FFEDD5',
+              color:
+                rawStatus === 'DISPUTED' || rentalData.statusLabel === 'TRANH CHẤP'
+                  ? '#991B1B'
+                  : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
+                  ? '#E11D48'
+                  : ['RETURNED', 'COMPLETED'].includes(rawStatus)
+                  ? '#047857'
+                  : '#C2410C',
               fontSize: '11px',
               fontWeight: 800,
               letterSpacing: '0.03em',
