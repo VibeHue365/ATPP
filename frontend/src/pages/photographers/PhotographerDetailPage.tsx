@@ -97,6 +97,29 @@ export const PhotographerDetailPage: React.FC = () => {
   const [reviews, setReviews] = useState<PhotographerReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState<boolean>(true);
 
+  // Load real reviews for photographer from DB
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchReviews = async () => {
+      if (!id) return;
+      try {
+        setReviewsLoading(true);
+        const data = await httpClient.get<PhotographerReview[]>(`/reviews/provider/${id}`);
+        if (!isCancelled && Array.isArray(data)) {
+          setReviews(data);
+        }
+      } catch (err) {
+        console.warn('Lỗi khi tải đánh giá của nhiếp ảnh gia:', err);
+      } finally {
+        if (!isCancelled) setReviewsLoading(false);
+      }
+    };
+    void fetchReviews();
+    return () => {
+      isCancelled = true;
+    };
+  }, [id]);
+
   // Lightbox States
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);

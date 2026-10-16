@@ -12,6 +12,7 @@ import { useAuth } from '../../features/auth/hooks/useAuth';
 import { checkProductAvailability } from '../../features/rentals/services/productAvailabilityService';
 import { useProductAvailability } from '../../features/rentals/hooks/useProductAvailability';
 import { VirtualTryOn3DModal } from '../../features/virtual-tryon-3d/components/VirtualTryOn3DModal';
+import { photographersApi } from '../../features/photographers/api/photographers.api';
 
 // Local modular components & utilities
 import type {
@@ -275,6 +276,56 @@ export const ProductDetailPage: React.FC = () => {
 
     fetchProductDetails();
   }, [id]);
+
+  // Load suggested photographers from DB (same city or top rated)
+  useEffect(() => {
+    let active = true;
+    const fetchSuggested = async () => {
+      try {
+        const city = product?.providerId?.address?.city || undefined;
+        let res = await photographersApi.getAll({
+          limit: 4,
+          location: city,
+          sort: 'rating_desc',
+        });
+
+        // Fallback: If no photographers in this specific city, get top-rated overall
+        if ((!res?.data || res.data.length === 0) && city) {
+          res = await photographersApi.getAll({
+            limit: 4,
+            sort: 'rating_desc',
+          });
+        }
+
+        if (active && res?.data && res.data.length > 0) {
+          const mapped: SuggestedPhotographer[] = res.data.slice(0, 4).map((p: any) => {
+            const pkg = p.defaultPackage || (p.packages && p.packages[0]);
+            const rawImg = p.coverImage || p.media?.coverUrl || pkg?.images?.[0] || '';
+            const priceVal = pkg?.price ?? p.price;
+            return {
+              id: p._id,
+              name: p.businessName || 'Nhiếp ảnh gia',
+              rating: typeof p.rating?.averageRating === 'number' ? p.rating.averageRating : 5.0,
+              count: p.rating?.totalReviews ?? (p.reviewCount || 0),
+              desc: p.quote || pkg?.name || 'Gói chụp ảnh áo dài chuyên nghiệp',
+              price: priceVal ? `${Number(priceVal).toLocaleString('vi-VN')}đ` : 'Liên hệ',
+              image: getImageUrl(rawImg),
+            };
+          });
+          setSuggestedPhotographers(mapped);
+        }
+      } catch (e) {
+        console.warn('Lỗi khi tải gợi ý thợ chụp ảnh:', e);
+      }
+    };
+
+    if (product?._id) {
+      void fetchSuggested();
+    }
+    return () => {
+      active = false;
+    };
+  }, [product]);
 
   // Color change update main image
   useEffect(() => {

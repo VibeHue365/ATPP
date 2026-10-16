@@ -27,6 +27,8 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { validateEnv } from './common/config/env.validation';
 import { ApiDocsController } from './common/controllers/api-docs.controller';
 import { GeocodingModule } from './modules/geocoding/geocoding.module';
+import { LandingCmsModule } from './modules/landing-cms/landing-cms.module';
+import { BannersModule } from './modules/banners/banners.module';
 
 @Module({
   imports: [
@@ -62,6 +64,8 @@ import { GeocodingModule } from './modules/geocoding/geocoding.module';
     SmartTaggingModule,
     AnalyticsModule,
     GeocodingModule,
+    LandingCmsModule,
+    BannersModule,
   ],
   controllers: [AppController, ApiDocsController],
   providers: [AppService],

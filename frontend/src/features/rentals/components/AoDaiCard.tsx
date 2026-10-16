@@ -55,7 +55,7 @@ export const AoDaiCard: React.FC<AoDaiCardProps> = ({ item }) => {
       }}
     >
       {/* Image Area Container */}
-      <div className="lume-rental-card__media relative w-full aspect-[3/4] overflow-hidden bg-stone-100">
+      <div className="lume-rental-card__media relative w-full aspect-[4/5] overflow-hidden bg-stone-100">
         <Link 
           to={`/rentals/${item.id}`} 
           className="block w-full h-full text-decoration-none"

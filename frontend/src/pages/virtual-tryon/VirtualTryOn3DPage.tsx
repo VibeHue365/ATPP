@@ -1,7 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Camera, Upload, RefreshCw, Download, Settings, Check } from 'lucide-react';
 import { virtualTryOn3DService } from '../../services/virtualTryOn3DService';
 import { useToast } from '../../components/feedback/Toast';
+import { httpClient } from '../../services/httpClient';
+import { getMediaUrl } from '../../shared/media/mediaUrl';
 
 export const VirtualTryOn3DPage: React.FC = () => {
   const toast = useToast();
@@ -27,12 +29,39 @@ export const VirtualTryOn3DPage: React.FC = () => {
 
   const modelViewerRef = useRef<any>(null);
 
-  // Danh sách mẫu Áo Dài có sẵn để test nhanh
-  const sampleAoDaiList = [
+  // Danh sách mẫu Áo Dài có sẵn để test nhanh (kết nối DB thật, có fallback an toàn)
+  const [sampleAoDaiList, setSampleAoDaiList] = useState<Array<{ name: string; url: string }>>([
     { name: 'Áo Dài Truyền Thống Đỏ', url: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=600' },
     { name: 'Áo Dài Cách Tân Xanh Ngọc', url: 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?w=600' },
     { name: 'Áo Dài Cưới Gấm Hoàng Gia', url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600' },
-  ];
+  ]);
+
+  useEffect(() => {
+    let active = true;
+    httpClient
+      .get<any>('/products?limit=6&status=ACTIVE')
+      .then((res) => {
+        if (!active) return;
+        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        const realSamples = list
+          .filter((p: any) => p && (p.images?.[0] || p.coverImage))
+          .map((p: any) => {
+            const raw = p.images?.[0] || p.coverImage;
+            return {
+              name: p.name || 'Áo dài',
+              url: getMediaUrl(raw) || raw,
+            };
+          });
+        if (realSamples.length > 0) {
+          setSampleAoDaiList(realSamples);
+        }
+      })
+      .catch((e) => console.warn('Không thể tải danh sách sản phẩm mẫu cho 3D try-on:', e));
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSelectSampleCloth = async (url: string) => {
     setClothPreview(url);

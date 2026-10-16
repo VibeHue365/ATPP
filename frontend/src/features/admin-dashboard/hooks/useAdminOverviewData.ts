@@ -81,26 +81,6 @@ export interface AdminOverviewData {
   };
 }
 
-// Sample points for the month (01 to 30) reflecting realistic Lumé trends matching Figma visual curve
-const DEFAULT_CHART_POINTS: OverviewChartPoint[] = [
-  { day: '01', bookings: 140, gmvMillions: 28 },
-  { day: '03', bookings: 190, gmvMillions: 36 },
-  { day: '05', bookings: 230, gmvMillions: 42 },
-  { day: '07', bookings: 310, gmvMillions: 55 },
-  { day: '09', bookings: 280, gmvMillions: 48 },
-  { day: '11', bookings: 340, gmvMillions: 62 },
-  { day: '13', bookings: 420, gmvMillions: 74 },
-  { day: '15', bookings: 390, gmvMillions: 68 },
-  { day: '17', bookings: 460, gmvMillions: 82 },
-  { day: '19', bookings: 380, gmvMillions: 64 },
-  { day: '21', bookings: 410, gmvMillions: 71 },
-  { day: '23', bookings: 490, gmvMillions: 88 },
-  { day: '25', bookings: 530, gmvMillions: 95 },
-  { day: '27', bookings: 470, gmvMillions: 84 },
-  { day: '29', bookings: 510, gmvMillions: 91 },
-  { day: '30', bookings: 560, gmvMillions: 99 },
-];
-
 const OVERVIEW_CACHE_TTL_MS = 60_000;
 const overviewCache = new Map<string, { data: AdminOverviewData; loadedAt: number }>();
 
@@ -124,127 +104,69 @@ export function useAdminOverviewData() {
 
     try {
       const backendStats: AdminStats = await adminStatsApi.get(period);
-      const pendingVerifsCount = backendStats.operational?.pendingVerifications ?? 0;
-      const openDisputesCount = backendStats.operational?.openDisputes ?? 0;
-
-      const totalBookingsCount = backendStats?.bookings?.total || 8124;
-      const totalRevenue = backendStats?.revenue?.total || 1250680000;
+      const totalBookingsCount = backendStats.bookings?.total ?? 0;
+      const totalRevenue = backendStats.revenue?.total ?? 0;
       const totalPartners =
-        (backendStats?.shops?.total ?? 0) + (backendStats?.photographers?.total ?? 0) || 412;
+        (backendStats.shops?.total ?? 0) + (backendStats.photographers?.total ?? 0);
 
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
 
+      const pendingVerifsCount = backendStats.operational?.pendingVerifications ?? 0;
+      const openDisputesCount = backendStats.operational?.openDisputes ?? 0;
+
+      const kpis = backendStats.kpis ?? {
+        totalBookings: { value: totalBookingsCount, growth: 0 },
+        gmv: { value: totalRevenue, growth: 0 },
+        activePartners: { value: totalPartners, growth: 0 },
+        pendingApprovals: {
+          total: pendingVerifsCount,
+          growth: 0,
+          partners: pendingVerifsCount,
+          products: 0,
+          combos: 0,
+        },
+        pendingRefunds: { value: 0, growth: 0 },
+        openDisputes: { value: openDisputesCount, growth: 0 },
+      };
+
+      const chartPoints =
+        backendStats.chart?.points && backendStats.chart.points.length > 0
+          ? backendStats.chart.points
+          : [];
+
+      const services = backendStats.services ?? {
+        total: totalBookingsCount,
+        items: [
+          { id: 'rental', name: 'Thuê áo dài', count: 0, percentage: 0, color: '#4A121A' },
+          { id: 'photo', name: 'Chụp ảnh', count: 0, percentage: 0, color: '#E06D75' },
+          { id: 'combo', name: 'Combo trọn gói', count: 0, percentage: 0, color: '#F4A6AC' },
+          { id: 'other', name: 'Dịch vụ khác', count: 0, percentage: 0, color: '#D1D5DB' },
+        ],
+      };
+
+      const tasks = backendStats.tasks ?? [];
+      const topPartners = backendStats.topPartners ?? [];
+      const activities = backendStats.activities ?? [];
+      const alerts = backendStats.alerts ?? {
+        warnings: [],
+        critical: [],
+      };
+
       const nextData: AdminOverviewData = {
         lastUpdated: timeStr,
-        kpis: {
-          totalBookings: {
-            value: totalBookingsCount,
-            growth: 12.3,
-          },
-          gmv: {
-            value: totalRevenue,
-            growth: 18.6,
-          },
-          activePartners: {
-            value: totalPartners,
-            growth: 8.1,
-          },
-          pendingApprovals: {
-            total: pendingVerifsCount + 12 + 7,
-            growth: 33.3,
-            partners: pendingVerifsCount,
-            products: 12,
-            combos: 7,
-          },
-          pendingRefunds: {
-            value: 12,
-            growth: 20.0,
-          },
-          openDisputes: {
-            value: openDisputesCount,
-            growth: 14.3,
-          },
-        },
+        kpis,
         chart: {
           period,
-          summaryBookings: totalBookingsCount,
-          summaryGmv: totalRevenue,
-          points: DEFAULT_CHART_POINTS,
+          summaryBookings: backendStats.chart?.summaryBookings ?? totalBookingsCount,
+          summaryGmv: backendStats.chart?.summaryGmv ?? totalRevenue,
+          points: chartPoints,
         },
-        services: {
-          total: totalBookingsCount,
-          items: [
-            { id: 'rental', name: 'Thuê áo dài', count: 3562, percentage: 43.8, color: '#4A121A' },
-            { id: 'photo', name: 'Chụp ảnh', count: 2481, percentage: 30.5, color: '#E06D75' },
-            { id: 'combo', name: 'Combo trọn gói', count: 1624, percentage: 20.0, color: '#F4A6AC' },
-            { id: 'other', name: 'Dịch vụ khác', count: 457, percentage: 5.6, color: '#D1D5DB' },
-          ],
-        },
-        tasks: [
-          { id: 'task-1', title: 'Booking chờ xác nhận > 24h', count: 18, tab: 'bookings', variant: 'red' },
-          { id: 'task-2', title: 'Hồ sơ đối tác chờ duyệt', count: pendingVerifsCount, tab: 'verifications', variant: 'red' },
-          { id: 'task-3', title: 'Sản phẩm chờ duyệt', count: 12, tab: 'product-moderation', variant: 'red' },
-          { id: 'task-4', title: 'Combo chờ duyệt', count: 7, tab: 'combo-moderation', variant: 'amber' },
-          { id: 'task-5', title: 'Yêu cầu hoàn tiền mới', count: 6, tab: 'refunds', variant: 'red' },
-          { id: 'task-6', title: 'Tranh chấp cần xử lý', count: openDisputesCount, tab: 'disputes', variant: 'red' },
-        ],
-        topPartners: [
-          { rank: 1, name: 'Áo Dài Cổ Đồ', bookings: 324, avatar: '/avatar_hanna.webp' },
-          { rank: 2, name: 'Studio Huế', bookings: 286, avatar: '/avatar_hanna.webp' },
-          { rank: 3, name: 'Áo Dài Gấm', bookings: 251, avatar: '/avatar_hanna.webp' },
-          { rank: 4, name: 'Nhiếp ảnh Trí', bookings: 198, avatar: '/avatar_hanna.webp' },
-          { rank: 5, name: 'Heritage Stu', bookings: 176, avatar: '/avatar_hanna.webp' },
-        ],
-        activities: [
-          {
-            id: 'act-1',
-            type: 'booking',
-            actor: 'Nguyễn Minh Anh',
-            action: 'đã đặt lịch thuê áo dài',
-            timeAgo: '2 phút trước',
-          },
-          {
-            id: 'act-2',
-            type: 'product',
-            actor: 'Đối tác Áo Dài Huế Xưa',
-            action: 'đã cập nhật sản phẩm mới',
-            timeAgo: '15 phút trước',
-          },
-          {
-            id: 'act-3',
-            type: 'refund',
-            actor: 'Yêu cầu hoàn tiền #HT1023',
-            action: 'được tạo và chờ phê duyệt',
-            timeAgo: '28 phút trước',
-          },
-          {
-            id: 'act-4',
-            type: 'verification',
-            actor: 'Hồ sơ đối tác Studio Ánh Dương',
-            action: 'đã được phê duyệt thành công!',
-            timeAgo: '1 giờ trước',
-          },
-          {
-            id: 'act-5',
-            type: 'dispute',
-            actor: 'Tranh chấp #TC0045',
-            action: 'vừa có phản hồi mới từ khách hàng',
-            timeAgo: '2 giờ trước',
-          },
-        ],
-        alerts: {
-          warnings: [
-            { id: 'w-1', title: 'Booking chờ xác nhận > 24h', count: 18, severity: 'warning' },
-            { id: 'w-2', title: 'Hoàn tiền quá hạn xử lý', count: 4, severity: 'warning' },
-            { id: 'w-3', title: 'Đối tác có nhiều đánh giá xấu', count: 3, severity: 'warning' },
-            { id: 'w-4', title: 'Sản phẩm bị báo cáo', count: 5, severity: 'warning' },
-          ],
-          critical: [
-            { id: 'c-1', title: 'Tranh chấp mới phát sinh', count: 2, severity: 'critical' },
-            { id: 'c-2', title: 'Hoạt động đăng nhập bất thường', count: 1, severity: 'critical' },
-          ],
-        },
+        services,
+        tasks,
+        topPartners,
+        activities,
+        alerts,
       };
       overviewCache.set(period, { data: nextData, loadedAt: Date.now() });
       setData(nextData);

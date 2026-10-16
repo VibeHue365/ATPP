@@ -95,7 +95,7 @@ export class ProviderDocumentOcrService {
       const blur = await this.blurScore(rawBuffer);
 
       const minLuminance = Number(this.config.get<string>('OCR_MIN_LUMINANCE', '0.2'));
-      const maxLuminance = Number(this.config.get<string>('OCR_MAX_LUMINANCE', '0.9'));
+      const maxLuminance = Number(this.config.get<string>('OCR_MAX_LUMINANCE', '0.98'));
       const minContrast = Number(this.config.get<string>('OCR_MIN_CONTRAST', '18'));
       const blurThreshold = Number(this.config.get<string>('OCR_BLUR_THRESHOLD', '15'));
 
@@ -176,12 +176,15 @@ export class ProviderDocumentOcrService {
       }
 
       // Three-tier decision model
-      const hasHeavyIssue = qualityWarnings.length > 0 || warnings.includes('OCR_TEXT_EMPTY');
+      const isCriticalDarkOrBlur = luminance < minLuminance || blur < blurThreshold;
+      const hasHeavyIssue = isCriticalDarkOrBlur || warnings.includes('OCR_TEXT_EMPTY');
       const hasSoftIssue =
         warnings.includes('OWNER_NAME_MISMATCH') ||
         warnings.includes('OWNER_NAME_UNCERTAIN') ||
         warnings.includes('OCR_ID_NUMBER_NOT_FOUND') ||
         warnings.includes('ID_NUMBER_INCONSISTENT') ||
+        warnings.includes('IMAGE_TOO_BRIGHT') ||
+        warnings.includes('IMAGE_LOW_CONTRAST') ||
         result.confidence < confThreshold;
 
       let assessment: OcrAssessment;
@@ -199,9 +202,15 @@ export class ProviderDocumentOcrService {
           ? OcrStatus.Failed
           : OcrStatus.NeedsManualReview;
 
-      const fields = {
+      const detectedFullName = (isIdentityFront || isPassport) ? this.extractFullName(linesText) : null;
+      const detectedDob = (isIdentityFront || isPassport) ? this.extractDob(result.text) : null;
+      const detectedAddress = isIdentityFront ? this.extractAddress(result.text) : null;
+
+      const finalName = detectedFullName || (ownerName && nameSim >= 0.60 ? ownerName : null);
+
+      const fields: Record<string, unknown> = {
         fullName: {
-          value: ownerName && nameSim >= 0.60 ? ownerName : null,
+          value: finalName,
           confidence: result.confidence,
           similarity: Math.round(nameSim * 100) / 100,
         },
@@ -212,6 +221,13 @@ export class ProviderDocumentOcrService {
           confidence: result.confidence,
         },
       };
+
+      if (detectedDob) {
+        fields.dateOfBirth = { value: detectedDob, confidence: result.confidence };
+      }
+      if (detectedAddress) {
+        fields.address = { value: detectedAddress, confidence: result.confidence };
+      }
 
       // Only store identity fingerprint for front side to prevent false mismatches
       const fingerprintValue = (isIdentityFront && detectedIdNumber) ? detectedIdNumber : undefined;
@@ -269,21 +285,70 @@ export class ProviderDocumentOcrService {
 
   private nameSimilarity(ownerName: string, lines: string[]): number {
     const target = this.normalize(ownerName);
-    if (!target) return 0;
+    if (!target) return 1.0;
     let best = 0;
 
     for (const line of lines) {
       const l = this.normalize(line);
       if (!l) continue;
-      if (l.includes(target)) return 1.0;
+      if (l.includes(target) || target.includes(l)) return 1.0;
 
       const sliceLen = Math.min(l.length, target.length + 4);
       const lSlice = l.slice(0, sliceLen);
       const dist = this.levenshteinDistance(target, lSlice);
       const sim = 1 - dist / Math.max(target.length, 1);
       if (sim > best) best = sim;
+
+      const words = l.split(/\s+/).filter(Boolean);
+      for (let i = 0; i < words.length; i++) {
+        for (let j = i + 1; j <= words.length; j++) {
+          const phrase = words.slice(i, j).join('');
+          if (phrase.length >= Math.max(3, target.length - 3)) {
+            const pDist = this.levenshteinDistance(target, phrase);
+            const pSim = 1 - pDist / Math.max(target.length, 1);
+            if (pSim > best) best = pSim;
+          }
+        }
+      }
     }
     return Math.max(0, Math.min(1, best));
+  }
+
+  private extractFullName(lines: string[]): string | null {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (/ho\s*va\s*ten|full\s*name|ho\s*ten/i.test(line)) {
+        const parts = line.split(/[:\/\-]/);
+        const after = parts[parts.length - 1].trim();
+        if (after.length >= 3 && !/full\s*name|ho\s*va\s*ten|ho\s*ten/i.test(after)) {
+          return after;
+        }
+        if (i + 1 < lines.length) {
+          const nextLine = lines[i + 1].trim();
+          const words = nextLine.split(/\s+/);
+          const nameWords = words.filter((w) => /^[A-ZÀ-Ỹ]{2,}$/u.test(w));
+          if (nameWords.length >= 2) {
+            return nameWords.join(' ');
+          }
+          return nextLine;
+        }
+      }
+    }
+    return null;
+  }
+
+  private extractDob(text: string): string | null {
+    const dobMatch =
+      text.match(/(?:ngay sinh|date of birth|sinh ngay)[:\s]*(\d{2}[\/\.-]\d{2}[\/\.-]\d{4})/i) ||
+      text.match(/(\d{2}\/\d{2}\/\d{4})/);
+    return dobMatch ? dobMatch[1] : null;
+  }
+
+  private extractAddress(text: string): string | null {
+    const addrMatch = text.match(
+      /(?:Nơi thường trú|Nơi cư trú|thường trú|noi thuong tru|thuong tru)[:\s]*([^\n]+)/i,
+    );
+    return addrMatch ? addrMatch[1].trim() : null;
   }
 
   private async remoteOcr(buffer: Buffer): Promise<{

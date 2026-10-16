@@ -110,6 +110,27 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
     onChange({ presetPrice: preset, minPrice: min, maxPrice: max });
   };
 
+  const formatStyleName = (val?: string): string => {
+    if (!val) return '';
+    const map: Record<string, string> = {
+      TRADITIONAL: 'Truyền thống',
+      MODERN: 'Cách tân',
+      EDGY: 'Phá cách',
+    };
+    return map[val.toUpperCase()] || val;
+  };
+
+  const formatOccasionName = (val?: string): string => {
+    if (!val) return '';
+    const map: Record<string, string> = {
+      GRADUATION: 'Kỷ yếu',
+      WEDDING: 'Cưới hỏi',
+      FESTIVAL: 'Lễ hội',
+      EVENT: 'Sự kiện',
+    };
+    return map[val.toUpperCase()] || val;
+  };
+
   const isAllRegions = values.regions.length === 0;
 
   return (
@@ -129,21 +150,21 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
       {/* Onboarding Profile Strip */}
       {userHasOnboarding && (
         <div className="combo-profile-strip">
-          <div className="combo-profile-strip-header">
-            <div className="combo-profile-strip-title">
+          <div className="combo-profile-strip__header">
+            <div className="combo-profile-strip__title">
               <Sparkles size={14} className="combo-sparkle-icon" />
               <span>Hồ sơ gợi ý</span>
             </div>
             <a
               href="/onboarding"
-              className="combo-profile-edit-link"
+              className="combo-profile-strip__edit"
               title="Chỉnh sửa số đo & sở thích"
             >
               Đổi sở thích
             </a>
           </div>
 
-          <div className="combo-profile-chips">
+          <div className="combo-profile-strip__chips">
             {userPrefSize && !disabledProfilePrefs.size && (
               <span className="combo-profile-chip">
                 <span>Size {userPrefSize}</span>
@@ -159,7 +180,7 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
             )}
             {userPrefStyle && !disabledProfilePrefs.style && (
               <span className="combo-profile-chip">
-                <span>Gu {userPrefStyle}</span>
+                <span>Gu {formatStyleName(userPrefStyle)}</span>
                 <button
                   type="button"
                   className="combo-profile-chip-remove"
@@ -172,7 +193,7 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
             )}
             {userPrefOccasion && !disabledProfilePrefs.occasion && (
               <span className="combo-profile-chip">
-                <span>Dịp {userPrefOccasion}</span>
+                <span>Dịp {formatOccasionName(userPrefOccasion)}</span>
                 <button
                   type="button"
                   className="combo-profile-chip-remove"
@@ -194,7 +215,7 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
             )}
           </div>
 
-          <div className="combo-profile-toggle-row">
+          <div className="combo-profile-strip__toggle-row">
             <span className="combo-toggle-text">
               {isPersonalizedFilterActive ? "Gợi ý cá nhân hóa" : "Toàn bộ combo"}
             </span>
@@ -235,7 +256,7 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
                   onChange={() => handleToggleRegion('all')}
                 />
                 <span className="checkbox-custom">
-                  {isAllRegions && <Check size={12} color="#FFFFFF" />}
+                  {isAllRegions && <Check size={12} color="#FFFFFF" strokeWidth={2.5} />}
                 </span>
                 <span className="checkbox-label">Tất cả khu vực</span>
               </label>
@@ -252,10 +273,11 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
                     onChange={() => handleToggleRegion(opt.label)}
                   />
                   <span className="checkbox-custom">
-                    {values.regions.includes(opt.label) && <Check size={12} color="#FFFFFF" />}
+                    {values.regions.includes(opt.label) && <Check size={12} color="#FFFFFF" strokeWidth={2.5} />}
                   </span>
                   <span className="checkbox-label">
-                    {opt.label} <span className="checkbox-count-badge">({opt.count})</span>
+                    <span>{opt.label}</span>
+                    <span className="checkbox-count-badge">({opt.count})</span>
                   </span>
                 </label>
               ))}
@@ -292,10 +314,11 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
                     onChange={() => handleToggleType(opt.label)}
                   />
                   <span className="checkbox-custom">
-                    {values.types.includes(opt.label) && <Check size={12} color="#FFFFFF" />}
+                    {values.types.includes(opt.label) && <Check size={12} color="#FFFFFF" strokeWidth={2.5} />}
                   </span>
                   <span className="checkbox-label">
-                    {opt.label} <span className="checkbox-count-badge">({opt.count})</span>
+                    <span>{opt.label}</span>
+                    <span className="checkbox-count-badge">({opt.count})</span>
                   </span>
                 </label>
               ))}

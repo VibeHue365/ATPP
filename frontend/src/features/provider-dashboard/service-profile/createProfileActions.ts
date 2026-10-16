@@ -6,7 +6,7 @@ import { buildCancellationPolicySummary, normalizeCancellationRefundRules } from
 import type { useProviderProfileState } from './useProviderProfileState';
 
 type Dependencies = Pick<ReturnType<typeof useProviderProfileState>,
-  'businessName' | 'phone' | 'addressLine' | 'city' | 'cancellationRefundRules' | 'cancellationAdditionalNotes' | 'setIsSavingProfile' | 'baseLatitude' | 'baseLongitude' | 'useBusinessAddressForPickup' | 'pickupAddressLine' | 'pickupLatitude' | 'pickupLongitude' | 'serviceRadiusKm' | 'comboDiscountPercent'
+  'businessName' | 'phone' | 'addressLine' | 'city' | 'cancellationRefundRules' | 'cancellationAdditionalNotes' | 'setIsSavingProfile' | 'baseLatitude' | 'baseLongitude' | 'useBusinessAddressForPickup' | 'pickupAddressLine' | 'pickupLatitude' | 'pickupLongitude' | 'serviceRadiusKm' | 'comboDiscountPercent' | 'coverUrl'
 > &
   Pick<ReturnType<typeof useProviderSessionState>,
     'provider'
@@ -21,7 +21,7 @@ export function createProfileActions({
   businessName, phone, addressLine, city, toast, cancellationRefundRules, cancellationAdditionalNotes,
   setIsSavingProfile, provider, baseLatitude, baseLongitude, useBusinessAddressForPickup,
   pickupAddressLine, pickupLatitude, pickupLongitude, serviceRadiusKm, comboDiscountPercent,
-  fetchProviderData,
+  coverUrl, fetchProviderData,
 }: Dependencies) {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +46,10 @@ export function createProfileActions({
         businessName,
         contact: { ...provider?.contact, phone },
         address: { ...provider?.address, addressLine, city, geo: baseLatitude && baseLongitude ? { type: 'Point', coordinates: [Number(baseLongitude), Number(baseLatitude)] } : null },
+        media: {
+          ...provider?.media,
+          coverUrl: coverUrl?.trim() || null,
+        },
         rentalSettings: { useBusinessAddressForPickup, pickupLocation: useBusinessAddressForPickup ? null : { addressLine: pickupAddressLine, geo: pickupLatitude && pickupLongitude ? { type: 'Point', coordinates: [Number(pickupLongitude), Number(pickupLatitude)] } : null } },
         photographySettings: { serviceRadiusKm: serviceRadiusKm === '' ? null : Number(serviceRadiusKm) },
         policies: {
@@ -57,7 +61,7 @@ export function createProfileActions({
           },
         },
         comboDiscountPercent: Number(comboDiscountPercent),
-      });
+      } as any);
       toast.success('Cập nhật thông tin dịch vụ thành công!');
       fetchProviderData();
     } catch (err: any) {

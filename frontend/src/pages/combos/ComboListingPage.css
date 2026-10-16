@@ -423,14 +423,16 @@
   margin-bottom: 14px;
 }
 
-.combo-profile-strip__header {
+.combo-profile-strip__header,
+.combo-profile-strip-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
 }
 
-.combo-profile-strip__title {
+.combo-profile-strip__title,
+.combo-profile-strip-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -443,7 +445,9 @@
   color: #8D1E2D;
 }
 
-.combo-profile-strip__edit {
+.combo-profile-strip__edit,
+.combo-profile-strip-edit,
+.combo-profile-edit-link {
   font-size: 11.5px;
   font-weight: 600;
   color: #8D1E2D;
@@ -451,11 +455,14 @@
   transition: opacity 0.15s;
 }
 
-.combo-profile-strip__edit:hover {
+.combo-profile-strip__edit:hover,
+.combo-profile-strip-edit:hover,
+.combo-profile-edit-link:hover {
   opacity: 0.8;
 }
 
-.combo-profile-strip__chips {
+.combo-profile-strip__chips,
+.combo-profile-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -509,7 +516,8 @@
   padding: 2px 4px;
 }
 
-.combo-profile-strip__toggle-row {
+.combo-profile-strip__toggle-row,
+.combo-profile-toggle-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -526,47 +534,35 @@
 /* iOS Toggle Switch */
 .combo-switch {
   position: relative;
-  display: inline-block;
   width: 36px;
   height: 20px;
-  cursor: pointer;
-}
-
-.combo-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.combo-switch__slider {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #D8CED1;
+  background: #D8CED1;
   border-radius: 20px;
-  transition: background-color 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  transition: background 0.2s ease;
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
-.combo-switch__slider::before {
-  position: absolute;
-  content: "";
-  height: 16px;
+.combo-switch.is-active {
+  background: #8D1E2D;
+}
+
+.combo-switch-thumb {
+  display: block;
   width: 16px;
-  left: 2px;
-  bottom: 2px;
-  background-color: #FFFFFF;
+  height: 16px;
+  background: #FFFFFF;
   border-radius: 50%;
   transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
-.combo-switch input:checked + .combo-switch__slider {
-  background-color: #8D1E2D;
-}
-
-.combo-switch input:checked + .combo-switch__slider::before {
+.combo-switch.is-active .combo-switch-thumb {
   transform: translateX(16px);
 }
 
@@ -619,15 +615,15 @@
 .checkbox-list {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
 }
 
 .checkbox-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--figma-text-body);
   cursor: pointer;
   user-select: none;
@@ -647,7 +643,8 @@
 .checkbox-left {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
+  flex: 1;
 }
 
 .checkbox-item input {
@@ -658,7 +655,7 @@
   width: 17px;
   height: 17px;
   border: 1.5px solid #C4B7A6;
-  border-radius: 5px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -672,21 +669,19 @@
   border-color: var(--figma-red);
 }
 
-.checkbox-item input:checked + .checkbox-custom::after {
-  content: '✓';
-  color: #FFFFFF;
-  font-size: 11px;
-  font-weight: 800;
-}
-
 .checkbox-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   flex: 1;
+  font-size: 13px;
 }
 
 .checkbox-count-badge {
-  font-size: 11.5px;
+  font-size: 12px;
   color: #9A858A;
   font-weight: 500;
+  margin-left: 6px;
 }
 
 /* Price Range Slider */
@@ -1084,19 +1079,31 @@
   align-items: baseline;
   gap: 6px;
   margin-top: 2px;
+  flex-wrap: wrap;
 }
 
+.card-current-price,
 .combo-price-main {
-  font-size: 16.5px;
+  font-size: 16px;
   font-weight: 850;
   color: #8D1E2D;
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
+.card-price-unit {
+  font-size: 12px;
+  color: #9A858A;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.card-old-price,
 .combo-price-original {
   font-size: 12px;
   color: #9A858A;
   text-decoration: line-through;
+  white-space: nowrap;
 }
 
 /* Savings Pill with Sparkles */
@@ -1135,17 +1142,53 @@
 .combo-card-shop-row {
   display: flex;
   align-items: center;
-  gap: 5px;
+  flex-wrap: nowrap;
+  gap: 6px;
   margin-top: auto;
   padding-top: 8px;
   border-top: 1px solid #F5EAEC;
   font-size: 11.5px;
   color: #746568;
   font-weight: 600;
+  overflow: hidden;
 }
 
+.combo-shop-name,
 .combo-card-shop-name {
   color: #574D4F;
+  font-weight: 600;
+  max-width: 90px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+}
+
+.combo-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #16A34A;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.combo-verified-icon {
+  flex-shrink: 0;
+  color: #16A34A;
+}
+
+.combo-meta-dot {
+  color: #C0B0B4;
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+.combo-people-count {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .combo-card-verified-dot {

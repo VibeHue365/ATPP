@@ -804,16 +804,31 @@ export const BecomeProviderPage: React.FC = () => {
     if (!verificationId || !value) return;
     try {
       setActionLoading('apply-ocr');
+      const frontDoc = verification?.documents.find((d) => d.documentType === 'IDENTITY_CARD_FRONT')?.current;
+      const extFields = frontDoc?.extractedFields as Record<string, any> | undefined;
+
+      const extAddr =
+        typeof extFields?.address === 'object' && extFields?.address !== null
+          ? extFields.address.value
+          : typeof extFields?.address === 'string'
+            ? extFields.address
+            : null;
+
       const updatedBusinessProfile = {
         ...businessProfile,
         [field]: value,
       };
+
+      if (field === 'ownerName' && extAddr && !updatedBusinessProfile.address) {
+        updatedBusinessProfile.address = extAddr;
+      }
+
       setBusinessProfile(updatedBusinessProfile);
       await providerVerificationService.update(verificationId, {
         businessProfile: updatedBusinessProfile,
       });
       await refreshVerification();
-      setSuccess(`Đã cập nhật ${field === 'ownerName' ? 'họ và tên' : 'mã số thuế'} vào hồ sơ theo kết quả OCR.`);
+      setSuccess(`Đã cập nhật ${field === 'ownerName' ? 'họ và tên' + (extAddr ? ' và địa chỉ' : '') : 'mã số thuế'} vào hồ sơ theo kết quả OCR.`);
     } catch (err) {
       setError(messageFromError(err));
     } finally {
@@ -1878,6 +1893,20 @@ function UploadDropZone({
         ? current.extractedFields.idNumberMasked
         : null;
 
+  const extractedAddress =
+    typeof current?.extractedFields?.address === 'object' && current?.extractedFields?.address !== null
+      ? ((current.extractedFields.address as { value?: string }).value ?? null)
+      : typeof current?.extractedFields?.address === 'string'
+        ? current.extractedFields.address
+        : null;
+
+  const extractedDob =
+    typeof current?.extractedFields?.dateOfBirth === 'object' && current?.extractedFields?.dateOfBirth !== null
+      ? ((current.extractedFields.dateOfBirth as { value?: string }).value ?? null)
+      : typeof current?.extractedFields?.dateOfBirth === 'string'
+        ? current.extractedFields.dateOfBirth
+        : null;
+
   const warnings =
     current?.ocr?.warningCodes && current.ocr.warningCodes.length > 0
       ? current.ocr.warningCodes
@@ -2031,7 +2060,7 @@ function UploadDropZone({
               </div>
             )}
 
-            {(extractedId || extractedName) && (
+            {(extractedId || extractedName || extractedDob || extractedAddress) && (
               <div className="vh-ocr-extracted-info">
                 {extractedId && (
                   <div className="vh-ocr-detail-row">
@@ -2045,19 +2074,43 @@ function UploadDropZone({
                     <strong>{extractedName}</strong>
                   </div>
                 )}
+                {extractedDob && (
+                  <div className="vh-ocr-detail-row">
+                    <span>Ngày sinh:</span>
+                    <strong>{extractedDob}</strong>
+                  </div>
+                )}
+                {extractedAddress && (
+                  <div className="vh-ocr-detail-row">
+                    <span>Nơi thường trú:</span>
+                    <strong>{extractedAddress}</strong>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Opt-in Apply Name to Profile */}
+            {/* Opt-in Apply Name and Address to Profile */}
             {extractedName && documentType === 'IDENTITY_CARD_FRONT' && onApplyOcrToProfile && (
-              <div style={{ textAlign: 'right', marginTop: 4 }}>
+              <div style={{ textAlign: 'right', marginTop: 8 }}>
                 <button
                   type="button"
                   className="vh-btn vh-btn-ghost vh-btn-sm"
                   onClick={() => onApplyOcrToProfile('ownerName', extractedName)}
-                  style={{ fontSize: 12, padding: '4px 8px', color: '#059669', fontWeight: 600, cursor: 'pointer' }}
+                  style={{
+                    fontSize: 12,
+                    padding: '6px 12px',
+                    color: '#047857',
+                    background: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    borderRadius: 6,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
                 >
-                  ✓ Áp dụng tên theo CCCD vào hồ sơ
+                  <span>⚡</span> Áp dụng thông tin CCCD vào hồ sơ
                 </button>
               </div>
             )}

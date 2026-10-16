@@ -146,8 +146,9 @@ def parse_tesseract_tsv(tsv: str) -> dict[str, object]:
     else:
         avg_conf = 0.0
 
+    multiline_text = "\n".join(l["text"] for l in formatted_lines) if formatted_lines else " ".join(all_words)
     return {
-        "text": " ".join(all_words),
+        "text": multiline_text,
         "confidence": round(avg_conf, 2),
         "lines": formatted_lines,
     }
