@@ -59,7 +59,7 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3000);
 }
 void bootstrap();
-// trigger watch reload: 2026-10-04T23:19:00
+// trigger watch reload: 2026-10-15T20:35:50
 
 function allowedCorsOrigins(): (string | RegExp)[] {
   const envOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:5173')

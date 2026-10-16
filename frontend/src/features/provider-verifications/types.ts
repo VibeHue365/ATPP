@@ -88,6 +88,9 @@ export interface ProviderBusinessProfile {
   address?: string;
   province?: string;
   description?: string;
+  taxCode?: string;
+  businessType?: string;
+  avatar?: string;
 }
 
 export interface AodaiInfo {

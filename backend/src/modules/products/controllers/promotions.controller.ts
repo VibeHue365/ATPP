@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
   ForbiddenException,
   BadRequestException,
@@ -229,6 +230,11 @@ export class PromotionsController {
     }
 
     return this.promotionsService.updatePromotion(id, providerIdStr, dto);
+  }
+
+  @Get('public')
+  async getPublicPromotions(@Query('tier') tier?: string) {
+    return this.promotionsService.getPublicPromotions(tier);
   }
 
   @Get('provider-promotions/:providerId')

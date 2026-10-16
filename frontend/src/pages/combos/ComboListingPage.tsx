@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, ChevronRight, PackageOpen, Scissors, Camera, MapPin, Sparkles, Calendar, Users } from 'lucide-react';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { ChevronDown, ChevronLeft, ChevronRight, PackageOpen, Scissors, Camera, MapPin, Sparkles, Calendar, Users, Search } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
 import { ROUTES } from '../../config/routes';
 import { ListingHero } from '../../components/common/ListingHero';
 import { UnifiedSearchBar, type SearchFieldConfig } from '../../components/common/UnifiedSearchBar';
+import { CustomSelect } from '../../components/common/CustomSelect';
+import { ServiceDatePicker } from '../../components/common/ServiceDatePicker';
 import {
   ComboCategoryTabs,
   type ComboCategoryTabKey,
@@ -36,18 +38,95 @@ const BASE_TYPES = ['Ngoại cảnh', 'Studio', 'Cặp đôi', 'Gia đình', 'S�
 export const ComboListingPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const getInitialRegion = (): string => {
+    const loc = searchParams.get('location') || searchParams.get('region');
+    return loc && loc !== 'all' ? loc : 'all';
+  };
+
+  const getInitialTab = (): ComboCategoryTabKey => {
+    const concept = searchParams.get('concept');
+    if (concept === 'ngoai-canh') return 'outdoor';
+    if (concept === 'studio') return 'studio';
+    if (concept === 'cap-doi') return 'couple';
+    const tab = searchParams.get('tab');
+    if (tab && ['all', 'hot', 'savings', 'outdoor', 'studio', 'couple'].includes(tab)) {
+      return tab as ComboCategoryTabKey;
+    }
+    return 'all';
+  };
 
   // Top Hero Search States
-  const [heroRegion, setHeroRegion] = useState('all');
-  const [heroDate, setHeroDate] = useState('');
-  const [heroPeople, setHeroPeople] = useState('all');
-  const [heroBudget, setHeroBudget] = useState('all');
+  const [comboSearchText, setComboSearchText] = useState<string>(
+    searchParams.get('q') || searchParams.get('search') || ''
+  );
+  const [debouncedComboSearch, setDebouncedComboSearch] = useState(comboSearchText);
+  const [heroRegion, setHeroRegion] = useState<string>(getInitialRegion);
+  const [heroDate, setHeroDate] = useState<string>(searchParams.get('date') || '');
+  const [heroPeople, setHeroPeople] = useState<string>(searchParams.get('people') || 'all');
+  const [heroBudget, setHeroBudget] = useState<string>('all');
+
+  // Debounce search text 300ms
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedComboSearch(comboSearchText);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [comboSearchText]);
+
+  // Sync debounced search to URL params and reset page
+  useEffect(() => {
+    const currentQ = searchParams.get('q') || searchParams.get('search') || '';
+    if (debouncedComboSearch.trim() !== currentQ.trim()) {
+      const params = new URLSearchParams(searchParams);
+      if (debouncedComboSearch.trim()) {
+        params.set('q', debouncedComboSearch.trim());
+      } else {
+        params.delete('q');
+        params.delete('search');
+      }
+      setSearchParams(params, { replace: true });
+      setCurrentPage(1);
+    }
+  }, [debouncedComboSearch]);
 
   // Category Tab state
-  const [activeCategoryTab, setActiveCategoryTab] = useState<ComboCategoryTabKey>('all');
+  const [activeCategoryTab, setActiveCategoryTab] = useState<ComboCategoryTabKey>(getInitialTab);
 
   // Sidebar Filter States
-  const [sidebarFilters, setSidebarFilters] = useState<SidebarFilterValues>(DEFAULT_SIDEBAR_VALUES);
+  const [sidebarFilters, setSidebarFilters] = useState<SidebarFilterValues>(() => {
+    const reg = getInitialRegion();
+    return { ...DEFAULT_SIDEBAR_VALUES, regions: reg !== 'all' ? [reg] : [] };
+  });
+
+  // Sync searchParams from URL whenever they change
+  useEffect(() => {
+    const qParam = searchParams.get('q') || searchParams.get('search');
+    if (qParam !== null && qParam !== undefined && qParam !== comboSearchText) {
+      setComboSearchText(qParam);
+    }
+    const loc = searchParams.get('location') || searchParams.get('region');
+    const d = searchParams.get('date');
+    const p = searchParams.get('people');
+    const concept = searchParams.get('concept');
+    const tab = searchParams.get('tab');
+
+    if (loc !== null) {
+      const reg = loc && loc !== 'all' ? loc : 'all';
+      setHeroRegion(reg);
+      setSidebarFilters((prev) => ({ ...prev, regions: reg !== 'all' ? [reg] : [] }));
+    }
+    if (d !== null) setHeroDate(d);
+    if (p !== null) setHeroPeople(p);
+
+    if (concept === 'ngoai-canh') setActiveCategoryTab('outdoor');
+    else if (concept === 'studio') setActiveCategoryTab('studio');
+    else if (concept === 'cap-doi') setActiveCategoryTab('couple');
+    else if (tab && ['all', 'hot', 'savings', 'outdoor', 'studio', 'couple'].includes(tab)) {
+      setActiveCategoryTab(tab as ComboCategoryTabKey);
+    }
+  }, [searchParams]);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -195,14 +274,45 @@ export const ComboListingPage: React.FC = () => {
     setHeroPeople('all');
     setHeroBudget('all');
     setHeroDate('');
+    setComboSearchText('');
+    setDebouncedComboSearch('');
     setActiveCategoryTab('all');
     setCurrentPage(1);
+    setSearchParams(new URLSearchParams(), { replace: true });
   };
 
   const handleHeroSearch = () => {
-    if (heroRegion !== 'all') {
-      setSidebarFilters((prev) => ({ ...prev, regions: [heroRegion] }));
+    const params = new URLSearchParams(searchParams);
+    if (comboSearchText.trim()) {
+      params.set('q', comboSearchText.trim());
+      setDebouncedComboSearch(comboSearchText.trim());
+    } else {
+      params.delete('q');
+      params.delete('search');
+      setDebouncedComboSearch('');
     }
+
+    if (heroRegion !== 'all') {
+      params.set('location', heroRegion);
+      setSidebarFilters((prev) => ({ ...prev, regions: [heroRegion] }));
+    } else {
+      params.delete('location');
+      params.delete('region');
+      setSidebarFilters((prev) => ({ ...prev, regions: [] }));
+    }
+
+    if (heroDate) {
+      params.set('date', heroDate);
+    } else {
+      params.delete('date');
+    }
+
+    if (heroPeople !== 'all') {
+      params.set('people', heroPeople);
+    } else {
+      params.delete('people');
+    }
+
     if (heroBudget === 'under_2m') {
       setSidebarFilters((prev) => ({ ...prev, maxPrice: 2000000, presetPrice: 'under_1m' }));
     } else if (heroBudget === '2m_3m') {
@@ -210,12 +320,25 @@ export const ComboListingPage: React.FC = () => {
     } else if (heroBudget === 'above_3m') {
       setSidebarFilters((prev) => ({ ...prev, minPrice: 3000000, maxPrice: 5000000, presetPrice: 'above_3m' }));
     }
+    setSearchParams(params, { replace: true });
     setCurrentPage(1);
   };
 
   // Filtered & Sorted combos
   const filteredCombos = useMemo(() => {
     return combos.filter((item) => {
+      // 0. Keyword text search
+      if (debouncedComboSearch.trim()) {
+        const query = debouncedComboSearch.trim().toLowerCase();
+        const matchTitle = (item.title || '').toLowerCase().includes(query);
+        const matchDesc = (item.description || '').toLowerCase().includes(query);
+        const matchRegion = (item.region || '').toLowerCase().includes(query);
+        const matchType = (item.locationType || '').toLowerCase().includes(query);
+        if (!matchTitle && !matchDesc && !matchRegion && !matchType) {
+          return false;
+        }
+      }
+
       // 1. Category Tab Filter
       if (activeCategoryTab === 'hot' && item.discountPercent < 20 && item.badge.text !== 'BEST SELLER') {
         return false;
@@ -248,9 +371,18 @@ export const ComboListingPage: React.FC = () => {
         return false;
       }
 
+      // 5. People Filter
+      if (heroPeople !== 'all') {
+        const count = parseInt(item.people, 10) || (item.peopleCategory === 'single' ? 1 : item.peopleCategory === 'couple' ? 2 : 4);
+        if (heroPeople === '1' && count !== 1) return false;
+        if (heroPeople === '2' && count !== 2) return false;
+        if (heroPeople === '3-4' && (count < 3 || count > 4)) return false;
+        if (heroPeople === '5+' && count < 5) return false;
+      }
+
       return true;
     });
-  }, [combos, activeCategoryTab, sidebarFilters]);
+  }, [combos, activeCategoryTab, sidebarFilters, heroPeople, debouncedComboSearch]);
 
   // Sort
   const sortedCombos = useMemo(() => {
@@ -289,55 +421,76 @@ export const ComboListingPage: React.FC = () => {
 
   const comboSearchFields: SearchFieldConfig[] = [
     {
+      label: 'Từ khóa',
+      icon: <Search size={13} />,
+      content: (
+        <input
+          type="text"
+          className="unified-search-input"
+          value={comboSearchText}
+          onChange={(e) => setComboSearchText(e.target.value)}
+          placeholder="Tên combo, áo dài..."
+        />
+      ),
+    },
+    {
       label: 'Khu vực',
       icon: <MapPin size={13} />,
       content: (
-        <>
-          <select
-            value={heroRegion}
-            onChange={(e) => setHeroRegion(e.target.value)}
-            className="unified-search-select"
-          >
-            <option value="all">Tất cả khu vực</option>
-            <option value="Huế">Huế</option>
-            <option value="Đà Nẵng">Đà Nẵng</option>
-            <option value="Hội An">Hội An</option>
-            <option value="Đà Lạt">Đà Lạt</option>
-            <option value="Hà Nội">Hà Nội</option>
-            <option value="TP.HCM">TP.HCM</option>
-          </select>
-          <ChevronDown size={14} className="unified-search-arrow" />
-        </>
+        <CustomSelect
+          value={heroRegion}
+          onChange={(val) => setHeroRegion(val)}
+          options={[
+            { value: 'all', label: 'Tất cả khu vực' },
+            { value: 'Huế', label: 'Huế' },
+            { value: 'Đà Nẵng', label: 'Đà Nẵng' },
+            { value: 'Hội An', label: 'Hội An' },
+            { value: 'Đà Lạt', label: 'Đà Lạt' },
+            { value: 'Hà Nội', label: 'Hà Nội' },
+            { value: 'TP.HCM', label: 'TP.HCM' },
+          ]}
+        />
       ),
     },
     {
       label: 'Loại combo',
       icon: <Sparkles size={13} />,
       content: (
-        <>
-          <select
-            value={heroBudget}
-            onChange={(e) => setHeroBudget(e.target.value)}
-            className="unified-search-select"
-          >
-            <option value="all">Tất cả loại combo</option>
-            <option value="under_2m">Combo Tiết kiệm (&lt; 2tr)</option>
-            <option value="2m_3m">Combo Tiêu chuẩn (2 - 3tr)</option>
-            <option value="above_3m">Combo Cao cấp (&gt; 3tr)</option>
-          </select>
-          <ChevronDown size={14} className="unified-search-arrow" />
-        </>
+        <CustomSelect
+          value={heroBudget}
+          onChange={(val) => setHeroBudget(val)}
+          options={[
+            { value: 'all', label: 'Tất cả loại combo' },
+            { value: 'under_2m', label: 'Combo Tiết kiệm (< 2tr)' },
+            { value: '2m_3m', label: 'Combo Tiêu chuẩn (2 - 3tr)' },
+            { value: 'above_3m', label: 'Combo Cao cấp (> 3tr)' },
+          ]}
+        />
       ),
     },
     {
-      label: 'Ngày chụp',
+      label: 'Lịch Combo',
       icon: <Calendar size={13} />,
       content: (
-        <input
-          type="date"
-          value={heroDate}
-          onChange={(e) => setHeroDate(e.target.value)}
-          className="unified-search-input"
+        <ServiceDatePicker
+          serviceType="combo"
+          value={{
+            rentalType: 'HOURLY',
+            startDate: heroDate,
+            endDate: heroDate,
+            singleDate: heroDate,
+            startTime: '08:00',
+            endTime: '11:00',
+            timeSlot: searchParams.get('timeSlot') || '08:00 - 11:00',
+          }}
+          onChange={(val) => {
+            const chosen = val.singleDate || val.startDate;
+            setHeroDate(chosen);
+            const params = new URLSearchParams(searchParams);
+            if (chosen) params.set('date', chosen);
+            if (val.timeSlot) params.set('timeSlot', val.timeSlot);
+            setSearchParams(params, { replace: true });
+          }}
         />
       ),
     },
@@ -345,20 +498,17 @@ export const ComboListingPage: React.FC = () => {
       label: 'Số người',
       icon: <Users size={13} />,
       content: (
-        <>
-          <select
-            value={heroPeople}
-            onChange={(e) => setHeroPeople(e.target.value)}
-            className="unified-search-select"
-          >
-            <option value="all">Không giới hạn</option>
-            <option value="1">1 người (Cá nhân)</option>
-            <option value="2">2 người (Cặp đôi)</option>
-            <option value="3-4">3 - 4 người (Nhóm)</option>
-            <option value="5+">Từ 5 người (Gia đình)</option>
-          </select>
-          <ChevronDown size={14} className="unified-search-arrow" />
-        </>
+        <CustomSelect
+          value={heroPeople}
+          onChange={(val) => setHeroPeople(val)}
+          options={[
+            { value: 'all', label: 'Không giới hạn' },
+            { value: '1', label: '1 người (Cá nhân)' },
+            { value: '2', label: '2 người (Cặp đôi)' },
+            { value: '3-4', label: '3 - 4 người (Nhóm)' },
+            { value: '5+', label: 'Từ 5 người (Gia đình)' },
+          ]}
+        />
       ),
     },
   ];
@@ -368,6 +518,7 @@ export const ComboListingPage: React.FC = () => {
       <div className="unified-listing-container">
         {/* 1. Unified Hero */}
         <ListingHero
+          placement="COMBO"
           breadcrumbs={[
             { label: 'Trang chủ', href: '/' },
             { label: 'Combo' },
@@ -398,6 +549,18 @@ export const ComboListingPage: React.FC = () => {
           onSelectTab={(tab) => {
             setActiveCategoryTab(tab);
             setCurrentPage(1);
+            const params = new URLSearchParams(searchParams);
+            if (tab === 'all') {
+              params.delete('tab');
+              params.delete('concept');
+            } else {
+              params.set('tab', tab);
+              if (tab === 'outdoor') params.set('concept', 'ngoai-canh');
+              else if (tab === 'studio') params.set('concept', 'studio');
+              else if (tab === 'couple') params.set('concept', 'cap-doi');
+              else params.delete('concept');
+            }
+            setSearchParams(params, { replace: true });
           }}
           counts={categoryCounts}
         />

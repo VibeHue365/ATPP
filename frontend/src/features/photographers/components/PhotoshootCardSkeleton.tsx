@@ -11,7 +11,7 @@ export const PhotoshootCardSkeleton: React.FC = () => {
       aria-hidden="true"
     >
       {/* Media placeholder */}
-      <div className="relative w-full aspect-[3/4] overflow-hidden bg-stone-100">
+      <div className="relative w-full aspect-[16/11] overflow-hidden bg-stone-100">
         <div className="w-full h-full lume-skeleton-shimmer" />
         {/* Badge placeholder */}
         <div className="absolute top-2 left-2 w-16 h-5 rounded-full lume-skeleton-shimmer opacity-80" />

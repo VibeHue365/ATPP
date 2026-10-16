@@ -87,6 +87,9 @@ const emptyBusinessProfile: ProviderBusinessProfile = {
   address: '',
   province: '',
   description: '',
+  taxCode: '',
+  businessType: '',
+  avatar: '',
 };
 
 const emptyAodaiInfo: AodaiInfo = {
@@ -113,10 +116,10 @@ function normalizeVerificationDetail(
     requestedCapabilities: Array.isArray(detail.requestedCapabilities)
       ? detail.requestedCapabilities
       : [],
-    businessProfile: detail.businessProfile ?? {},
-    aodaiInfo: detail.aodaiInfo ?? {},
+    businessProfile: detail.businessProfile ? (({ _id, ...rest }: any) => rest)(detail.businessProfile) : {},
+    aodaiInfo: detail.aodaiInfo ? (({ _id, ...rest }: any) => rest)(detail.aodaiInfo) : {},
     photographyInfo: {
-      ...(detail.photographyInfo ?? {}),
+      ...(detail.photographyInfo ? (({ _id, ...rest }: any) => rest)(detail.photographyInfo) : {}),
       photographyStyles: Array.isArray(detail.photographyInfo?.photographyStyles)
         ? detail.photographyInfo.photographyStyles
         : [],
@@ -718,9 +721,20 @@ export const BecomeProviderPage: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      const { _id: bpId, ...cleanBusinessProfile } = businessProfile as any;
-      const { _id: adId, ...cleanAodaiInfo } = updatedAodaiInfo as any;
-      const { _id: phId, ...cleanPhotographyInfo } = updatedPhotographyInfo as any;
+      const sanitizePayload = (obj?: Record<string, any>) => {
+        if (!obj) return undefined;
+        const res: Record<string, any> = {};
+        for (const [k, v] of Object.entries(obj)) {
+          if (k !== '_id' && v !== null && v !== undefined) {
+            res[k] = v;
+          }
+        }
+        return res;
+      };
+
+      const cleanBusinessProfile = sanitizePayload(businessProfile as any);
+      const cleanAodaiInfo = sanitizePayload(updatedAodaiInfo as any);
+      const cleanPhotographyInfo = sanitizePayload(updatedPhotographyInfo as any);
 
       const detail = await providerVerificationService.update(verificationId, {
         businessProfile: cleanBusinessProfile,
@@ -804,16 +818,32 @@ export const BecomeProviderPage: React.FC = () => {
     if (!verificationId || !value) return;
     try {
       setActionLoading('apply-ocr');
+      const frontDoc = verification?.documents.find((d) => d.documentType === 'IDENTITY_CARD_FRONT')?.current;
+      const extFields = frontDoc?.extractedFields as Record<string, any> | undefined;
+
+      const extAddr =
+        typeof extFields?.address === 'object' && extFields?.address !== null
+          ? extFields.address.value
+          : typeof extFields?.address === 'string'
+            ? extFields.address
+            : null;
+
+      const { _id: _ignored, ...cleanProfile } = businessProfile as any;
       const updatedBusinessProfile = {
-        ...businessProfile,
+        ...cleanProfile,
         [field]: value,
       };
+
+      if (field === 'ownerName' && extAddr && !updatedBusinessProfile.address) {
+        updatedBusinessProfile.address = extAddr;
+      }
+
       setBusinessProfile(updatedBusinessProfile);
       await providerVerificationService.update(verificationId, {
         businessProfile: updatedBusinessProfile,
       });
       await refreshVerification();
-      setSuccess(`Đã cập nhật ${field === 'ownerName' ? 'họ và tên' : 'mã số thuế'} vào hồ sơ theo kết quả OCR.`);
+      setSuccess(`Đã cập nhật ${field === 'ownerName' ? 'họ và tên' + (extAddr ? ' và địa chỉ' : '') : 'mã số thuế'} vào hồ sơ theo kết quả OCR.`);
     } catch (err) {
       setError(messageFromError(err));
     } finally {
@@ -1878,6 +1908,20 @@ function UploadDropZone({
         ? current.extractedFields.idNumberMasked
         : null;
 
+  const extractedAddress =
+    typeof current?.extractedFields?.address === 'object' && current?.extractedFields?.address !== null
+      ? ((current.extractedFields.address as { value?: string }).value ?? null)
+      : typeof current?.extractedFields?.address === 'string'
+        ? current.extractedFields.address
+        : null;
+
+  const extractedDob =
+    typeof current?.extractedFields?.dateOfBirth === 'object' && current?.extractedFields?.dateOfBirth !== null
+      ? ((current.extractedFields.dateOfBirth as { value?: string }).value ?? null)
+      : typeof current?.extractedFields?.dateOfBirth === 'string'
+        ? current.extractedFields.dateOfBirth
+        : null;
+
   const warnings =
     current?.ocr?.warningCodes && current.ocr.warningCodes.length > 0
       ? current.ocr.warningCodes
@@ -2031,7 +2075,7 @@ function UploadDropZone({
               </div>
             )}
 
-            {(extractedId || extractedName) && (
+            {(extractedId || extractedName || extractedDob || extractedAddress) && (
               <div className="vh-ocr-extracted-info">
                 {extractedId && (
                   <div className="vh-ocr-detail-row">
@@ -2045,19 +2089,43 @@ function UploadDropZone({
                     <strong>{extractedName}</strong>
                   </div>
                 )}
+                {extractedDob && (
+                  <div className="vh-ocr-detail-row">
+                    <span>Ngày sinh:</span>
+                    <strong>{extractedDob}</strong>
+                  </div>
+                )}
+                {extractedAddress && (
+                  <div className="vh-ocr-detail-row">
+                    <span>Nơi thường trú:</span>
+                    <strong>{extractedAddress}</strong>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Opt-in Apply Name to Profile */}
+            {/* Opt-in Apply Name and Address to Profile */}
             {extractedName && documentType === 'IDENTITY_CARD_FRONT' && onApplyOcrToProfile && (
-              <div style={{ textAlign: 'right', marginTop: 4 }}>
+              <div style={{ textAlign: 'right', marginTop: 8 }}>
                 <button
                   type="button"
                   className="vh-btn vh-btn-ghost vh-btn-sm"
                   onClick={() => onApplyOcrToProfile('ownerName', extractedName)}
-                  style={{ fontSize: 12, padding: '4px 8px', color: '#059669', fontWeight: 600, cursor: 'pointer' }}
+                  style={{
+                    fontSize: 12,
+                    padding: '6px 12px',
+                    color: '#047857',
+                    background: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    borderRadius: 6,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
                 >
-                  ✓ Áp dụng tên theo CCCD vào hồ sơ
+                  <span>⚡</span> Áp dụng thông tin CCCD vào hồ sơ
                 </button>
               </div>
             )}
@@ -2140,6 +2208,18 @@ function ReviewStep({
         <SummaryItem label="Số giấy tờ thiếu" value={verification.missingDocuments.length > 0 ? `${verification.missingDocuments.length} tài liệu bắt buộc` : 'Đã đủ tài liệu'} />
         <SummaryItem label="Ngày khởi tạo" value={formatDate(verification.createdAt || '')} />
       </div>
+
+      {verification.missingDocuments && verification.missingDocuments.length > 0 && (
+        <div className="vh-provider-alert warning animate-fade-in" style={{ marginTop: 16 }}>
+          <AlertCircle size={18} />
+          <div>
+            <strong>Hồ sơ còn thiếu giấy tờ bắt buộc:</strong>
+            <p style={{ margin: '4px 0 0 0', fontSize: 13 }}>
+              Vui lòng quay lại Bước 4 để tải lên: <strong>{verification.missingDocuments.map((d: any) => documentLabels[d as ProviderDocumentType] || d).join(', ')}</strong>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {verification.ocrWarnings && verification.ocrWarnings.length > 0 && (
         <div className="vh-provider-alert warning animate-fade-in">

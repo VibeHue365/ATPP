@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -7,8 +8,13 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UnsupportedMediaTypeException,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
@@ -17,6 +23,7 @@ import { ProviderOverviewService } from '../services/provider-overview.service';
 import { ProviderOverviewQueryDto } from '../dto/provider-overview-query.dto';
 import { CreatePortfolioItemDto, UpdatePortfolioItemDto } from '../dto/portfolio-item.dto';
 import { UpdateProviderProfileDto, AddPortfolioImageDto } from '../dto/update-provider-profile.dto';
+import { PublicMediaService } from '../../storage/services/public-media.service';
 import {
   RecurringScheduleDto,
   BulkRecurringScheduleDto,
@@ -29,7 +36,30 @@ export class ProvidersController {
   constructor(
     private readonly providersService: ProvidersService,
     private readonly providerOverviewService: ProviderOverviewService,
+    private readonly publicMedia: PublicMediaService,
   ) { }
+
+  @Post('me/cover-image')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      storage: memoryStorage(),
+    }),
+  )
+  async uploadCoverImage(
+    @CurrentUser() user: AuthUser,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Vui lòng chọn file ảnh để tải lên');
+    const { fileTypeFromBuffer } = await import('file-type');
+    const detectedType = await fileTypeFromBuffer(file.buffer);
+    const validMimes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!detectedType || !validMimes.includes(detectedType.mime)) {
+      throw new UnsupportedMediaTypeException('Chỉ chấp nhận file ảnh JPEG, PNG, WEBP hợp lệ');
+    }
+    const uploaded = await this.publicMedia.uploadImage('providers/cover', file);
+    return { url: uploaded.url, key: uploaded.key };
+  }
 
   @Get('me')
   async getMe(@CurrentUser() user: AuthUser) {

@@ -40,7 +40,8 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
   onOpenReview,
   bookingIncident,
   onIncidentResponse,
-  onOpenLocationChange
+  onOpenLocationChange,
+  onRefreshBooking,
 }) => {
   const toast = useToast();
   if (!booking) return null;

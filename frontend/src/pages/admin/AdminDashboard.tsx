@@ -49,6 +49,7 @@ type AdminTab =
   | 'customers'
   | 'providers'
   | 'categories'
+  | 'banners'
   | 'bookings'
   | 'settlements'
   | 'refunds'
@@ -90,6 +91,7 @@ const CustomerManagementPanel = lazy(() => import('./components/CustomerManageme
 const PartnerManagementPanel = lazy(() => import('./components/PartnerManagementPanel').then((module) => ({ default: module.PartnerManagementPanel })));
 const BookingManagementPanel = lazy(() => import('./components/BookingManagementPanel').then((module) => ({ default: module.BookingManagementPanel })));
 const CategoryManagement = lazy(() => import('./components/CategoryManagement').then((module) => ({ default: module.CategoryManagement })));
+const BannerManagementPanel = lazy(() => import('./components/BannerManagementPanel').then((module) => ({ default: module.BannerManagementPanel })));
 const SettlementManagement = lazy(() => import('./components/SettlementManagement').then((module) => ({ default: module.SettlementManagement })));
 const RefundManagement = lazy(() => import('./components/RefundManagement').then((module) => ({ default: module.RefundManagement })));
 const RevenuePanel = lazy(() => import('../../features/admin-dashboard/components/RevenuePanel').then((module) => ({ default: module.RevenuePanel })));
@@ -111,6 +113,7 @@ export const navGroups: NavGroupDef[] = [
       { id: 'customers', label: 'Khách hàng', title: 'Quản lý Khách hàng', icon: User },
       { id: 'providers', label: 'Đối tác', title: 'Quản lý Đối tác & Nhà cung cấp', icon: Store },
       { id: 'categories', label: 'Danh mục', title: 'Quản lý Danh mục Dịch vụ', icon: Folder },
+      { id: 'banners', label: 'Quản lý Banner', title: 'Quản lý Banner Toàn Trang', icon: Image },
     ],
   },
   {
@@ -223,6 +226,7 @@ function TabPanel({
     case 'customers': return <CustomerManagementPanel />;
     case 'providers': return <PartnerManagementPanel />;
     case 'categories': return <CategoryManagement />;
+    case 'banners': return <BannerManagementPanel />;
     case 'bookings': return <BookingManagementPanel />;
     case 'settlements': return <SettlementManagement />;
     case 'refunds': return <RefundManagement />;

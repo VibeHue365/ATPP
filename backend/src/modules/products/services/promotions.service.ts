@@ -102,6 +102,28 @@ export class PromotionsService {
     return this.promotionModel.findOne({ code: code.toUpperCase().trim() });
   }
 
+  async getPublicPromotions(tier?: string): Promise<any[]> {
+    const now = new Date();
+    const query: any = {
+      status: PromotionStatus.Active,
+      startDate: { $lte: now },
+      endDate: { $gte: now },
+    };
+    if (tier) {
+      const upperTier = tier.toUpperCase();
+      query.$or = [
+        { requiredTiers: { $exists: false } },
+        { requiredTiers: { $size: 0 } },
+        { requiredTiers: upperTier },
+      ];
+    }
+    return this.promotionModel
+      .find(query)
+      .sort({ discountValue: -1, createdAt: -1 })
+      .limit(10)
+      .lean();
+  }
+
   async deletePromotion(
     promotionIdStr: string,
     providerIdStr?: string,
