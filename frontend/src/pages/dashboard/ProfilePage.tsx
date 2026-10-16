@@ -129,7 +129,7 @@ export const ProfilePage: React.FC = () => {
 
   useEffect(() => {
     if (!socket) return;
-    const handler = (payload: { bookingId: string; status: string }) => {
+    const handler = (payload: { bookingId: string; status: string; bookingCode?: string }) => {
       console.log('[RT] booking_updated received', payload);
       fetchBookingsRef.current(true);
       setActiveDetailBooking((prev: any) => {
@@ -141,12 +141,56 @@ export const ProfilePage: React.FC = () => {
         }
         return prev;
       });
+      setViewingRentalBooking((prev: any) => {
+        if (prev && (prev._id === payload.bookingId || prev.bookingCode === payload.bookingCode)) {
+          httpClient
+            .get<any>('/api/bookings/' + payload.bookingId)
+            .then((fresh) => {
+              if (fresh) setViewingRentalBooking(fresh);
+            })
+            .catch(() => {});
+        }
+        return prev;
+      });
     };
     socket.on('booking_updated', handler);
     return () => {
       socket.off('booking_updated', handler);
     };
   }, [socket]);
+
+  // Synchronize viewingRentalBooking whenever master bookings list updates
+  useEffect(() => {
+    if (viewingRentalBooking?._id && bookings.length > 0) {
+      const updated = bookings.find((b) => b._id === viewingRentalBooking._id);
+      if (updated && (updated.status !== viewingRentalBooking.status || updated.updatedAt !== viewingRentalBooking.updatedAt)) {
+        setViewingRentalBooking(updated);
+      }
+    }
+  }, [bookings, viewingRentalBooking?._id]);
+
+  // Auto-refresh when tab becomes active (e.g. switching between Provider and Customer tabs)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBookings(true);
+        if (viewingRentalBooking?._id) {
+          httpClient
+            .get<any>('/api/bookings/' + viewingRentalBooking._id)
+            .then((fresh) => {
+              if (fresh) setViewingRentalBooking(fresh);
+            })
+            .catch(() => {});
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+    };
+  }, [viewingRentalBooking?._id]);
 
   // Load incident details when viewing booking detail
   useEffect(() => {

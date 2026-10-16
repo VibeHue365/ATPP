@@ -2907,6 +2907,23 @@ export class BookingsService implements OnApplicationBootstrap {
       console.error('Failed to create completeBooking notifications:', e);
     }
 
+    try {
+      const customerIdStr = this.getCustomerIdStr(booking);
+      const providerIdStrs = (booking.providerIds || []).map((id) => id.toString());
+      const recipientIds = [...new Set([customerIdStr, ...providerIdStrs])].filter(Boolean);
+      this.notificationsService.emitBookingUpdate(
+        {
+          bookingId: booking._id.toString(),
+          bookingCode: booking.bookingCode,
+          status: BookingStatus.Completed,
+          deliveredPhotos: (booking as any).deliveredPhotos ?? [],
+        },
+        recipientIds,
+      );
+    } catch (e) {
+      console.warn('Failed to emit booking_updated in completeBooking:', e);
+    }
+
     await this.paymentsService.settleBooking(bookingIdStr);
 
     return booking;
@@ -2965,6 +2982,24 @@ export class BookingsService implements OnApplicationBootstrap {
         note: 'Khách hàng đã xác nhận hài lòng về sản phẩm ảnh chụp. Đơn hàng tiếp tục luồng thuê áo dài.',
       });
       await booking.save();
+
+      try {
+        const customerIdStr = this.getCustomerIdStr(booking);
+        const providerIdStrs = (booking.providerIds || []).map((id) => id.toString());
+        const recipientIds = [...new Set([customerIdStr, ...providerIdStrs])].filter(Boolean);
+        this.notificationsService.emitBookingUpdate(
+          {
+            bookingId: booking._id.toString(),
+            bookingCode: booking.bookingCode,
+            status: BookingStatus.ComboPhotosApproved,
+            deliveredPhotos: (booking as any).deliveredPhotos ?? [],
+          },
+          recipientIds,
+        );
+      } catch (e) {
+        console.warn('Failed to emit booking_updated in confirmCompleteByCustomer:', e);
+      }
+
       return booking;
     }
 
@@ -4450,6 +4485,23 @@ export class BookingsService implements OnApplicationBootstrap {
         },
       },
     );
+
+    try {
+      const customerIdStr = this.getCustomerIdStr(booking);
+      const providerIdStrs = (booking.providerIds || []).map((id) => id.toString());
+      const recipientIds = [...new Set([customerIdStr, ...providerIdStrs])].filter(Boolean);
+      this.notificationsService.emitBookingUpdate(
+        {
+          bookingId: booking._id.toString(),
+          bookingCode: booking.bookingCode,
+          status: BookingStatus.PickedUp,
+          deliveredPhotos: (booking as any).deliveredPhotos ?? [],
+        },
+        recipientIds,
+      );
+    } catch (e) {
+      console.warn('Failed to emit booking_updated in customerConfirmPickup:', e);
+    }
 
     return { success: true, booking };
   }

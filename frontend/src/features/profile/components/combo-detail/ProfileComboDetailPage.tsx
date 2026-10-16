@@ -45,6 +45,10 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
   const [isConfirming, setIsConfirming] = useState(false);
   const [activeTabSection, setActiveTabSection] = useState<'ALL' | 'AODAI' | 'PHOTOSHOOT'>('ALL');
 
+  React.useEffect(() => {
+    onRefreshBooking?.();
+  }, []);
+
   const items = booking?.items || [];
   const rentalItem = items.find((i: any) => i.itemType !== 'PHOTOGRAPHY_PACKAGE') || items[0] || {};
   const photoItem = items.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE') || items[1] || {};
@@ -636,6 +640,122 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
         </div>
       )}
 
+      {/* Action Banner: RETURN_PENDING */}
+      {rawStatus === 'RETURN_PENDING' && (
+        <div
+          style={{
+            backgroundColor: '#FFFBEB',
+            border: '1.5px solid #FCD34D',
+            borderRadius: '16px',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            flexWrap: 'wrap',
+            boxShadow: '0 4px 12px rgba(180, 83, 9, 0.08)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                backgroundColor: '#F39C12',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <Shirt size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: '#92400E' }}>
+                Đang kiểm tra áo dài & đối soát cọc
+              </div>
+              <div style={{ fontSize: '12.5px', color: '#78350F', marginTop: '3px' }}>
+                Cửa hàng <strong>{rentalProvider?.businessName || 'tiệm áo dài'}</strong> đang kiểm tra tình trạng áo dài hoàn trả và chuẩn bị thủ tục hoàn tiền cọc cho bạn.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: '12px', fontWeight: 700, color: '#B45309', backgroundColor: '#FEF3C7', padding: '8px 14px', borderRadius: '8px', border: '1px solid #FDE68A' }}>
+            ⏳ Chờ cửa hàng chốt hoàn tất
+          </div>
+        </div>
+      )}
+
+      {/* Action Banner: COMPLETED */}
+      {rawStatus === 'COMPLETED' && (
+        <div
+          style={{
+            backgroundColor: '#ECFDF5',
+            border: '1.5px solid #6EE7B7',
+            borderRadius: '16px',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            flexWrap: 'wrap',
+            boxShadow: '0 4px 12px rgba(4, 120, 87, 0.08)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                backgroundColor: '#059669',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <Sparkles size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: '#065F46' }}>
+                Đơn hàng Combo đã hoàn tất thành công!
+              </div>
+              <div style={{ fontSize: '12.5px', color: '#047857', marginTop: '3px' }}>
+                Bạn đã hoàn thành trải nghiệm trọn gói áo dài & chụp ảnh. Cảm ơn bạn đã đồng hành cùng LUMÉ!
+              </div>
+            </div>
+          </div>
+
+          {onOpenReview && (
+            <button
+              type="button"
+              onClick={() => onOpenReview({ ...photoItem, bookingId: booking?._id, booking })}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                borderRadius: '10px',
+                backgroundColor: '#F59E0B',
+                color: '#FFFFFF',
+                border: 'none',
+                fontSize: '13.5px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(245, 158, 11, 0.28)'
+              }}
+            >
+              <Star size={16} />
+              <span>Đánh giá Combo</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* 2. Main Combo Overview Card & 6-Step Stepper */}
       <div
         style={{
@@ -847,7 +967,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
             </div>
 
             {/* Step 5: Trả áo */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textAlign: 'center', maxWidth: '70px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textAlign: 'center', maxWidth: '75px' }}>
               <div
                 style={{
                   width: '28px',
@@ -865,7 +985,9 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                 {activeStep > 5 ? <Check size={15} /> : '5'}
               </div>
               <span style={{ fontSize: '11px', fontWeight: activeStep === 5 ? 800 : 700, color: activeStep === 5 ? '#1D4ED8' : '#231F20' }}>Trả áo</span>
-              <span style={{ fontSize: '9.5px', color: '#8C827A' }}>{activeStep >= 5 ? 'Đã trả áo' : 'Hạn trả áo'}</span>
+              <span style={{ fontSize: '9.5px', color: '#8C827A' }}>
+                {rawStatus === 'RETURN_PENDING' ? 'Đang kiểm tra' : activeStep >= 5 ? 'Đã trả áo' : 'Hạn trả áo'}
+              </span>
             </div>
 
             {/* Step 6: Hoàn tất */}
