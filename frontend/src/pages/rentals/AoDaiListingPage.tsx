@@ -11,6 +11,7 @@ import {
   MapPin,
   Tag,
   Layers,
+  Search,
 } from "lucide-react";
 import { httpClient } from "../../services/httpClient";
 import { API_BASE_URL } from "../../config/env";
@@ -21,6 +22,8 @@ import { ConfirmModal } from "../../utils/confirmModal";
 import { ListingHero } from "../../components/common/ListingHero";
 import { UnifiedSearchBar, type SearchFieldConfig } from "../../components/common/UnifiedSearchBar";
 import { ListingCategoryTabs } from "../../components/common/ListingCategoryTabs";
+import { CustomSelect } from "../../components/common/CustomSelect";
+import { ServiceDatePicker } from "../../components/common/ServiceDatePicker";
 
 import "./AoDaiListingPage.css";
 
@@ -109,7 +112,7 @@ const SIZE_OPTIONS = ["S", "M", "L", "XL", "Free"];
 
 export const AoDaiListingPage: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const categoryId = searchParams.get("categoryId") || "";
   const toast = useToast();
   const { user, toggleFavorite: apiToggleFavorite } = useAuth();
@@ -121,14 +124,75 @@ export const AoDaiListingPage: React.FC = () => {
   const [totalCount, setTotalCount] = useState<number>(0);
   const [serverTotalPages, setServerTotalPages] = useState<number>(1);
 
+  // Map concept param from Landing Page to Category Tab
+  const getInitialTab = (): string => {
+    const concept = searchParams.get("concept");
+    if (concept === 'ky-yeu') return 'Kỷ yếu';
+    if (concept === 'cap-doi') return 'Cặp đôi';
+    if (concept === 'cuoi') return 'Cổ phục';
+    return searchParams.get("tab") || "all";
+  };
+
+  const initialLocation = searchParams.get("location") || searchParams.get("providerLocation") || "";
+  const initialDate = searchParams.get("date") || "";
+
   // Quick category tab
-  const [activeTab, setActiveTab] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<string>(getInitialTab);
 
   // Search Bar state
-  const [searchLocation, setSearchLocation] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState<string>(
+    searchParams.get("q") || searchParams.get("search") || ""
+  );
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
+  const [searchLocation, setSearchLocation] = useState<string>(initialLocation === 'all' ? '' : initialLocation);
   const [rentalType, setRentalType] = useState<string>("Theo ngày");
-  const [rentalDate, setRentalDate] = useState<string>("");
+  const [rentalDate, setRentalDate] = useState<string>(initialDate);
   const [selectedSearchSize, setSelectedSearchSize] = useState<string>("");
+
+  // Debounce search term 300ms
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  // Sync debounced search to URL params and reset page
+  useEffect(() => {
+    const currentQ = searchParams.get("q") || searchParams.get("search") || "";
+    if (debouncedSearchTerm.trim() !== currentQ.trim()) {
+      const params = new URLSearchParams(searchParams);
+      if (debouncedSearchTerm.trim()) {
+        params.set("q", debouncedSearchTerm.trim());
+      } else {
+        params.delete("q");
+        params.delete("search");
+      }
+      setSearchParams(params, { replace: true });
+      setCurrentPage(1);
+    }
+  }, [debouncedSearchTerm]);
+
+  // Sync state when URL search params change
+  useEffect(() => {
+    const qParam = searchParams.get("q") || searchParams.get("search");
+    if (qParam !== null && qParam !== undefined && qParam !== searchTerm) {
+      setSearchTerm(qParam);
+    }
+    const loc = searchParams.get("location") || searchParams.get("providerLocation");
+    if (loc !== null && loc !== undefined) {
+      setSearchLocation(loc === 'all' ? '' : loc);
+    }
+    const d = searchParams.get("date");
+    if (d) {
+      setRentalDate(d);
+    }
+    const concept = searchParams.get("concept");
+    if (concept === 'ky-yeu') setActiveTab('Kỷ yếu');
+    else if (concept === 'cap-doi') setActiveTab('Cặp đôi');
+    else if (concept === 'cuoi') setActiveTab('Cổ phục');
+    else if (searchParams.get("tab")) setActiveTab(searchParams.get("tab")!);
+  }, [searchParams]);
 
   // Sidebar Filter states
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
@@ -264,6 +328,9 @@ export const AoDaiListingPage: React.FC = () => {
         if (searchLocation) {
           params.append('providerLocation', searchLocation);
         }
+        if (debouncedSearchTerm.trim()) {
+          params.append('search', debouncedSearchTerm.trim());
+        }
         const productTypes = selectedTypes.length > 0
           ? selectedTypes
           : activeTab !== 'all'
@@ -317,6 +384,7 @@ export const AoDaiListingPage: React.FC = () => {
   }, [
     categoryId,
     debouncedMaxPrice,
+    debouncedSearchTerm,
     selectedColors,
     selectedSizes,
     selectedSearchSize,
@@ -436,6 +504,12 @@ export const AoDaiListingPage: React.FC = () => {
     setSearchLocation("");
     setSelectedSearchSize("");
     setRentalType("Theo ngày");
+    setSearchTerm("");
+    setDebouncedSearchTerm("");
+    const params = new URLSearchParams(searchParams);
+    params.delete("q");
+    params.delete("search");
+    setSearchParams(params, { replace: true });
   };
 
   const handleToggleFavorite = async (id: string, e: React.MouseEvent) => {
@@ -492,54 +566,90 @@ export const AoDaiListingPage: React.FC = () => {
 
   const aodaiSearchFields: SearchFieldConfig[] = [
     {
+      label: 'Từ khóa',
+      icon: <Search size={13} />,
+      content: (
+        <input
+          type="text"
+          className="unified-search-input"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Tên áo, kiểu dáng..."
+        />
+      ),
+    },
+    {
       label: 'Khu vực',
       icon: <MapPin size={13} />,
       content: (
-        <>
-          <select
-            className="unified-search-select"
-            value={searchLocation}
-            onChange={(e) => {
-              setSearchLocation(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="">Tất cả khu vực</option>
-            <option value="Huế">Huế</option>
-            <option value="Đà Nẵng">Đà Nẵng</option>
-            <option value="Hội An">Hội An</option>
-          </select>
-          <ChevronDown size={14} className="unified-search-arrow" />
-        </>
+        <CustomSelect
+          value={searchLocation}
+          onChange={(val) => {
+            setSearchLocation(val);
+            setCurrentPage(1);
+          }}
+          options={[
+            { value: '', label: 'Tất cả khu vực' },
+            { value: 'Huế', label: 'Huế' },
+            { value: 'Đà Nẵng', label: 'Đà Nẵng' },
+            { value: 'Hội An', label: 'Hội An' },
+          ]}
+        />
       ),
     },
     {
       label: 'Hình thức thuê',
       icon: <Tag size={13} />,
       content: (
-        <>
-          <select
-            className="unified-search-select"
-            value={rentalType}
-            onChange={(e) => setRentalType(e.target.value)}
-          >
-            <option value="Theo ngày">Theo ngày</option>
-            <option value="Theo giờ">Theo giờ</option>
-            <option value="Theo sự kiện">Theo sự kiện</option>
-          </select>
-          <ChevronDown size={14} className="unified-search-arrow" />
-        </>
+        <CustomSelect
+          value={rentalType}
+          onChange={(val) => setRentalType(val)}
+          options={[
+            { value: 'Theo ngày', label: 'Theo ngày' },
+            { value: 'Theo giờ', label: 'Theo giờ' },
+            { value: 'Theo sự kiện', label: 'Theo sự kiện' },
+          ]}
+        />
       ),
     },
     {
-      label: 'Ngày thuê',
+      label: 'Ngày nhận - trả',
       icon: <Calendar size={13} />,
       content: (
-        <input
-          type="date"
-          className="unified-search-input"
-          value={rentalDate}
-          onChange={(e) => setRentalDate(e.target.value)}
+        <ServiceDatePicker
+          serviceType="aodai"
+          value={{
+            rentalType: searchParams.get('rentalType') === 'HOURLY' ? 'HOURLY' : 'DAILY',
+            startDate: searchParams.get('startDate') || rentalDate,
+            endDate: searchParams.get('endDate') || rentalDate,
+            singleDate: searchParams.get('startDate') || rentalDate,
+            startTime: searchParams.get('startTime') || '08:00',
+            endTime: searchParams.get('endTime') || '11:00',
+            timeSlot: searchParams.get('timeSlot') || '08:00 - 11:00',
+          }}
+          onChange={(val) => {
+            const params = new URLSearchParams(searchParams);
+            if (val.rentalType === 'DAILY') {
+              if (val.startDate) {
+                params.set('startDate', val.startDate);
+                params.set('date', val.startDate);
+                setRentalDate(val.startDate);
+              }
+              if (val.endDate) params.set('endDate', val.endDate);
+              params.set('rentalType', 'DAILY');
+            } else {
+              const d = val.singleDate || val.startDate;
+              if (d) {
+                params.set('date', d);
+                params.set('startDate', d);
+                setRentalDate(d);
+              }
+              if (val.startTime) params.set('startTime', val.startTime);
+              if (val.endTime) params.set('endTime', val.endTime);
+              params.set('rentalType', 'HOURLY');
+            }
+            setSearchParams(params, { replace: true });
+          }}
         />
       ),
     },
@@ -547,24 +657,21 @@ export const AoDaiListingPage: React.FC = () => {
       label: 'Size',
       icon: <Layers size={13} />,
       content: (
-        <>
-          <select
-            className="unified-search-select"
-            value={selectedSearchSize}
-            onChange={(e) => {
-              setSelectedSearchSize(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="">Tất cả size</option>
-            <option value="S">Size S</option>
-            <option value="M">Size M</option>
-            <option value="L">Size L</option>
-            <option value="XL">Size XL</option>
-            <option value="Free">Size Free</option>
-          </select>
-          <ChevronDown size={14} className="unified-search-arrow" />
-        </>
+        <CustomSelect
+          value={selectedSearchSize}
+          onChange={(val) => {
+            setSelectedSearchSize(val);
+            setCurrentPage(1);
+          }}
+          options={[
+            { value: '', label: 'Tất cả size' },
+            { value: 'S', label: 'Size S' },
+            { value: 'M', label: 'Size M' },
+            { value: 'L', label: 'Size L' },
+            { value: 'XL', label: 'Size XL' },
+            { value: 'Free', label: 'Size Free' },
+          ]}
+        />
       ),
     },
   ];
@@ -574,6 +681,7 @@ export const AoDaiListingPage: React.FC = () => {
       <div className="unified-listing-container">
         {/* 1. Unified Hero */}
         <ListingHero
+          placement="AODAI"
           breadcrumbs={[
             { label: 'Trang chủ', href: '/' },
             { label: 'Thuê áo dài' },
@@ -594,6 +702,7 @@ export const AoDaiListingPage: React.FC = () => {
           buttonText="Tìm áo dài"
           onSubmit={(e) => {
             e.preventDefault();
+            setDebouncedSearchTerm(searchTerm);
             setCurrentPage(1);
           }}
         />
@@ -718,10 +827,10 @@ export const AoDaiListingPage: React.FC = () => {
                       setIsPersonalizedFilterActive(!isPersonalizedFilterActive);
                       setCurrentPage(1);
                     }}
-                    className={`lume-switch ${isPersonalizedFilterActive ? "is-active" : ""}`}
+                    className={`lume-profile-switch ${isPersonalizedFilterActive ? "is-active" : ""}`}
                     title="Bật/Tắt gợi ý cá nhân hóa"
                   >
-                    <span className="lume-switch-thumb" />
+                    <span className="lume-profile-switch-thumb" />
                   </button>
                 </div>
               </div>

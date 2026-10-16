@@ -32,6 +32,11 @@ export const providerApi = {
   updateProfile<T = unknown>(...args: Tail<Parameters<typeof httpClient.patch<T>>>) {
     return httpClient.patch<T>(`/providers/me`, ...args);
   },
+  uploadCoverImage(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return httpClient.post<{ url: string; key: string }>(`/providers/me/cover-image`, formData);
+  },
 };
 
 export const promotionsApi = {

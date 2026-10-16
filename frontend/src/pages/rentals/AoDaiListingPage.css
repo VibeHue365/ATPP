@@ -1380,38 +1380,46 @@
   color: var(--lume-ink);
 }
 
-/* iOS Toggle Switch */
-.lume-switch {
+/* iOS Toggle Switch - Scoped to avoid collisions with profile/admin styles */
+.lume-profile-switch,
+.lume-profile-toggle-row .lume-switch {
   position: relative;
-  width: 36px;
-  height: 20px;
-  background: #D8CED1;
-  border-radius: 20px;
-  border: none;
+  width: 36px !important;
+  height: 20px !important;
+  background: #D8CED1 !important;
+  border-radius: 20px !important;
+  border: none !important;
   cursor: pointer;
-  padding: 2px;
+  padding: 2px !important;
   transition: background 0.2s ease;
   outline: none;
-  display: inline-flex;
-  align-items: center;
+  display: inline-flex !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
 }
 
-.lume-switch.is-active {
-  background: #8D1D34;
+.lume-profile-switch.is-active,
+.lume-profile-toggle-row .lume-switch.is-active {
+  background: #8D1D34 !important;
 }
 
-.lume-switch-thumb {
-  display: block;
-  width: 16px;
-  height: 16px;
-  background: #FFFFFF;
-  border-radius: 50%;
-  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+.lume-profile-switch-thumb,
+.lume-profile-toggle-row .lume-switch-thumb {
+  display: block !important;
+  width: 16px !important;
+  height: 16px !important;
+  background: #FFFFFF !important;
+  border-radius: 50% !important;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2) !important;
+  flex-shrink: 0 !important;
+  transform: translateX(0);
 }
 
-.lume-switch.is-active .lume-switch-thumb {
-  transform: translateX(16px);
+.lume-profile-switch.is-active .lume-profile-switch-thumb,
+.lume-profile-toggle-row .lume-switch.is-active .lume-switch-thumb {
+  transform: translateX(16px) !important;
 }
 
 .lume-size-btn.is-user-preferred {

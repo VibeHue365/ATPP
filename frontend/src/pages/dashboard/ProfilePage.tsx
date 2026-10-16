@@ -348,8 +348,43 @@ export const ProfilePage: React.FC = () => {
     return savings;
   }, [bookings]);
 
-  // 5. Dynamic Special Offers tailored to membership tier
+  // 5. Dynamic Special Offers from DB (with tier-based fallback for cold start)
+  const [dbOffers, setDbOffers] = useState<SpecialOfferItem[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchOffers = async () => {
+      try {
+        const rawTier = quickStats.membershipTier.includes('Diamond')
+          ? 'DIAMOND'
+          : quickStats.membershipTier.includes('Gold')
+            ? 'GOLD'
+            : 'SILVER';
+        const res: any = await httpClient.get(`/promotions/public?tier=${rawTier}`);
+        if (active && Array.isArray(res) && res.length > 0) {
+          const mapped: SpecialOfferItem[] = res.map((p: any) => ({
+            id: p._id || p.id,
+            code: p.code,
+            title: p.name || `Ưu đãi ${p.code}`,
+            description: p.description || 'Áp dụng cho các đơn đặt trên Lumé',
+            expiryDate: p.endDate ? new Date(p.endDate).toLocaleDateString('vi-VN') : 'Vô thời hạn',
+            type: p.discountType === 'PERCENTAGE' ? 'DISCOUNT_PERCENT' : 'DISCOUNT_FIXED',
+            discountValue: p.discountType === 'PERCENTAGE' ? `${p.discountValue}%` : `${Number(p.discountValue).toLocaleString('vi-VN')}đ`,
+          }));
+          setDbOffers(mapped);
+        }
+      } catch (err) {
+        console.warn('Không thể tải danh sách ưu đãi từ DB:', err);
+      }
+    };
+    void fetchOffers();
+    return () => {
+      active = false;
+    };
+  }, [quickStats.membershipTier]);
+
   const specialOffers: SpecialOfferItem[] = useMemo(() => {
+    if (dbOffers.length > 0) return dbOffers;
     const year = new Date().getFullYear();
     if (quickStats.membershipTier === 'Diamond Member') {
       return [
@@ -416,7 +451,7 @@ export const ProfilePage: React.FC = () => {
         discountValue: '100.000đ'
       }
     ];
-  }, [quickStats.membershipTier]);
+  }, [dbOffers, quickStats.membershipTier]);
 
   // Actions
   const handleContinuePayment = async (bookingId: string) => {

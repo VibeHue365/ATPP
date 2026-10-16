@@ -10,11 +10,29 @@ import { FeaturedStoresSection } from '../features/landing/components/FeaturedSt
 import { PopularLocationSection } from '../features/landing/components/PopularLocationSection';
 import { ScrollReveal } from '../features/landing/components/ScrollReveal';
 import { DEFAULT_BANNERS, CAROUSEL_AUTOPLAY_INTERVAL_MS, type Banner } from '../features/landing/constants/landing.constants';
+import { landingCmsApi } from '../features/landing/api/landingCmsApi';
 import './LandingPage.css';
 
 export const LandingPage: React.FC = () => {
-  const [banners] = useState<Banner[]>(DEFAULT_BANNERS);
+  const [banners, setBanners] = useState<Banner[]>(DEFAULT_BANNERS);
   const [currentSlide, setCurrentSlide] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    landingCmsApi.getPublicBanners()
+      .then((data) => {
+        if (active && Array.isArray(data) && data.length > 0) {
+          setBanners(data);
+        }
+      })
+      .catch((err) => {
+        console.warn('[LandingPage] Failed to fetch CMS banners from DB, using fallback:', err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (banners.length <= 1) return;

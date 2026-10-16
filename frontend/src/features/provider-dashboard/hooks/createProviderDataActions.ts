@@ -18,7 +18,7 @@ type Dependencies = Pick<ReturnType<typeof useProviderSessionState>,
   'setIsLoadingProvider' | 'setProvider'
 > &
   Pick<ReturnType<typeof useProviderProfileState>,
-    'setBusinessName' | 'setPhone' | 'setAddressLine' | 'setCity' | 'setCancellationRefundRules' | 'setCancellationAdditionalNotes' | 'setComboDiscountPercent' | 'setBaseLatitude' | 'setBaseLongitude' | 'setServiceRadiusKm' | 'setUseBusinessAddressForPickup' | 'setPickupAddressLine' | 'setPickupLatitude' | 'setPickupLongitude'
+    'setBusinessName' | 'setPhone' | 'setAddressLine' | 'setCity' | 'setCancellationRefundRules' | 'setCancellationAdditionalNotes' | 'setComboDiscountPercent' | 'setBaseLatitude' | 'setBaseLongitude' | 'setServiceRadiusKm' | 'setUseBusinessAddressForPickup' | 'setPickupAddressLine' | 'setPickupLatitude' | 'setPickupLongitude' | 'setCoverUrl'
   > &
   Pick<ReturnType<typeof useProviderNavigationState>,
     'currentView'
@@ -55,7 +55,7 @@ export function createProviderDataActions({
   setIsLoadingProvider, setProvider, setBusinessName, setPhone, setAddressLine, setCity,
   setCancellationRefundRules, setCancellationAdditionalNotes, setComboDiscountPercent, setBaseLatitude,
   setBaseLongitude, setServiceRadiusKm, setUseBusinessAddressForPickup, setPickupAddressLine,
-  setPickupLatitude, setPickupLongitude, currentView, setPortfolioItems, setPhotoPackages,
+  setPickupLatitude, setPickupLongitude, setCoverUrl, currentView, setPortfolioItems, setPhotoPackages,
   setMyProductsList, setInventorySummary, setCombos, setVouchers, setSchedules, setReviewsData,
   setBookingsState, setAnalyticsData, toast, navigate, logout,
 }: Dependencies) {
@@ -68,6 +68,7 @@ export function createProviderDataActions({
       setPhone(pRes.contact?.phone || '');
       setAddressLine(pRes.address?.addressLine || '');
       setCity(pRes.address?.city || '');
+      setCoverUrl(pRes.media?.coverUrl || '');
       const persistedCancellationConfig = pRes.policies?.cancellationPolicyConfig;
       const legacyCancellationPolicy = pRes.policies?.cancellationPolicy || '';
       setCancellationRefundRules(Array.isArray(persistedCancellationConfig?.refundRules)

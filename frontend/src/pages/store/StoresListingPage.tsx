@@ -1,5 +1,5 @@
-import { useNavigate } from 'react-router-dom';
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Store,
   Camera,
@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
 import { API_BASE_URL } from '../../config/env';
-// import { ROUTES } from '../../config/routes';
 import { ListingHero } from '../../components/common/ListingHero';
 import './StoresListingPage.css';
 

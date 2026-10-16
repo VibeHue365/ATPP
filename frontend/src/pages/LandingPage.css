@@ -828,141 +828,259 @@
 }
 
 /* Featured áo dài cards — luxury editorial card system with smooth elevation */
-.lume-landing #rentals > .grid { gap:10px; }
+.lume-landing #rentals > .grid { gap: 16px; }
 .lume-landing #rentals > .grid > .lume-rental-card {
-  min-width:0;
-  padding:0 !important;
-  overflow:hidden;
-  border:1px solid #F0DADC !important;
-  border-radius:16px !important;
-  background:#FFFFFF !important;
-  box-shadow:0 2px 8px rgba(41, 35, 36, 0.03) !important;
-  transition:border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-             box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-             transform 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
-  will-change:transform, box-shadow;
+  min-width: 0;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 1px solid #F0DADC !important;
+  border-radius: 18px !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 2px 10px rgba(41, 35, 36, 0.04) !important;
+  transition: border-color 0.35s ease,
+             box-shadow 0.35s ease,
+             transform 0.35s ease !important;
+  will-change: transform, box-shadow;
 }
 .lume-landing #rentals > .grid > .lume-rental-card:hover {
-  border-color:rgba(181, 43, 71, 0.32) !important;
-  box-shadow:0 16px 36px -6px rgba(181, 43, 71, 0.13), 0 4px 12px rgba(41, 35, 36, 0.04) !important;
-  transform:translateY(-5px) !important;
+  border-color: rgba(181, 43, 71, 0.35) !important;
+  box-shadow: 0 14px 32px -4px rgba(181, 43, 71, 0.12), 0 4px 12px rgba(41, 35, 36, 0.04) !important;
+  transform: translateY(-4px) !important;
 }
 .lume-landing #rentals .lume-rental-card__media {
-  aspect-ratio: 3 / 4 !important;
-  margin:0 !important;
-  border-radius:15px 15px 0 0 !important;
-  background-color:#EEE5E7 !important;
-  overflow:hidden;
-  position:relative;
+  aspect-ratio: 4 / 5 !important;
+  margin: 0 !important;
+  border-radius: 17px 17px 0 0 !important;
+  background-color: #F7EFF1 !important;
+  overflow: hidden;
+  position: relative;
 }
 .lume-landing #rentals .lume-rental-card__media img {
-  transition:transform 0.75s cubic-bezier(0.16, 1, 0.3, 1), filter 0.4s ease !important;
-  will-change:transform;
+  transition: transform 0.75s cubic-bezier(0.16, 1, 0.3, 1), filter 0.4s ease !important;
+  will-change: transform;
 }
 .lume-landing #rentals > .grid > .lume-rental-card:hover .lume-rental-card__media img {
-  transform:scale(1.08) !important;
+  transform: scale(1.06) !important;
 }
 .lume-landing #rentals > .grid > .lume-rental-card:hover .lume-rental-card__title {
-  color:#B52B47 !important;
+  color: #B52B47 !important;
 }
-.lume-landing #rentals .lume-rental-card__favorite { top:8px; right:8px; }
+.lume-landing #rentals .lume-rental-card__favorite { top: 10px; right: 10px; }
 .lume-landing #rentals .lume-rental-card__favorite button {
-  width:28px !important;
-  height:28px !important;
-  border-color:#F2E3E6 !important;
-  box-shadow:0 2px 7px rgba(68,45,50,.08) !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-color: rgba(255, 255, 255, 0.85) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(8px) !important;
+  box-shadow: 0 2px 8px rgba(68, 45, 50, .1) !important;
 }
-.lume-landing #rentals .lume-rental-card__favorite svg { width:14px; height:14px; }
-.lume-landing #rentals .lume-rental-card__content { min-height:104px; padding:10px 10px 11px; gap:8px; }
-.lume-landing #rentals .lume-rental-card__details { gap:4px; min-width:0; }
-.lume-landing #rentals .lume-rental-card__material { font-size:7px; letter-spacing:.055em; color:#9A858A !important; }
-.lume-landing #rentals .lume-rental-card__title { font-size:12px; line-height:1.35; letter-spacing:-.015em; color:#292324 !important; }
-.lume-landing #rentals .lume-rental-card__tags { min-height:14px; margin:0 !important; transform:scale(.78); transform-origin:left top; }
-.lume-landing #rentals .lume-rental-card__price-row { margin:0 !important; padding:0 !important; border:0 !important; }
-.lume-landing #rentals .lume-rental-card__price-label { display:none; }
-.lume-landing #rentals .lume-rental-card__price-row .text-lg { font-size:13px; line-height:1; color:#B52B47 !important; }
-.lume-landing #rentals .lume-rental-card__price-row .text-xs { font-size:8px; color:#9A858A !important; }
+.lume-landing #rentals .lume-rental-card__favorite svg { width: 16px; height: 16px; }
+.lume-landing #rentals .lume-rental-card__content { 
+  min-height: 140px; 
+  padding: 16px !important; 
+  gap: 10px; 
+}
+.lume-landing #rentals .lume-rental-card__details { 
+  gap: 6px; 
+  min-width: 0; 
+}
+.lume-landing #rentals .lume-rental-card__material { 
+  font-size: 11px !important; 
+  letter-spacing: .06em; 
+  font-weight: 700;
+  color: #9A858A !important; 
+  text-transform: uppercase;
+}
+.lume-landing #rentals .lume-rental-card__title { 
+  font-size: 15px !important; 
+  font-weight: 700;
+  line-height: 1.35; 
+  letter-spacing: -.01em; 
+  color: #292324 !important; 
+}
+.lume-landing #rentals .lume-rental-card__tags { 
+  min-height: 22px; 
+  margin: 2px 0 0 0 !important; 
+  transform: none !important; 
+}
+.lume-landing #rentals .lume-rental-card__price-row { 
+  margin-top: 6px !important; 
+  padding-top: 10px !important; 
+  border-top: 1px solid #F3E5E7 !important; 
+}
+.lume-landing #rentals .lume-rental-card__price-label { 
+  display: block !important; 
+  font-size: 9px !important;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: #9A858A !important;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.lume-landing #rentals .lume-rental-card__price-row .text-lg { 
+  font-size: 17px !important; 
+  font-weight: 800;
+  line-height: 1.1; 
+  color: #B52B47 !important; 
+}
+.lume-landing #rentals .lume-rental-card__price-row .text-xs { 
+  font-size: 11px !important; 
+  font-weight: 500;
+  color: #7A696D !important; 
+}
 .lume-landing #rentals .lume-rental-card__availability {
-  padding:5px 10px !important;
-  border-radius:999px !important;
-  background:#FBE5E9 !important;
-  color:#B52B47 !important;
-  font-size:8px !important;
-  line-height:1 !important;
+  padding: 7px 16px !important;
+  border-radius: 999px !important;
+  background: #FBE5E9 !important;
+  color: #B52B47 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  transition: all 0.25s ease !important;
 }
-.lume-landing #rentals .lume-rental-card__availability:hover { background:#F4D4DA !important; }
+.lume-landing #rentals .lume-rental-card__availability:hover { 
+  background: #B52B47 !important; 
+  color: #FFFFFF !important;
+  box-shadow: 0 4px 12px rgba(181, 43, 71, 0.25) !important;
+}
 @media (max-width:767px) {
   .lume-landing #rentals > .grid { gap:12px; }
-  .lume-landing #rentals .lume-rental-card__content { min-height:108px; }
+  .lume-landing #rentals .lume-rental-card__content { min-height: 130px; padding: 12px !important; }
+  .lume-landing #rentals .lume-rental-card__title { font-size: 14px !important; }
 }
-/* Featured photoshoot cards — luxury editorial card system with smooth elevation */
-.lume-landing #photographers > .grid { gap:10px; }
+
+/* Featured photoshoot cards — photography showcase card */
+.lume-landing #photographers > .grid { gap: 16px; }
 .lume-landing #photographers > .grid > .lume-photoshoot-card {
-  min-width:0;
-  padding:0 !important;
-  overflow:hidden;
-  border:1px solid #F0DADC !important;
-  border-radius:16px !important;
-  background:#FFFFFF !important;
-  box-shadow:0 2px 8px rgba(41, 35, 36, 0.03) !important;
-  transition:border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-             box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-             transform 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
-  will-change:transform, box-shadow;
+  min-width: 0;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 1px solid #F0DADC !important;
+  border-radius: 18px !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 2px 10px rgba(41, 35, 36, 0.04) !important;
+  transition: border-color 0.35s ease,
+             box-shadow 0.35s ease,
+             transform 0.35s ease !important;
+  will-change: transform, box-shadow;
 }
 .lume-landing #photographers > .grid > .lume-photoshoot-card:hover {
-  border-color:rgba(181, 43, 71, 0.32) !important;
-  box-shadow:0 16px 36px -6px rgba(181, 43, 71, 0.13), 0 4px 12px rgba(41, 35, 36, 0.04) !important;
-  transform:translateY(-5px) !important;
+  border-color: rgba(181, 43, 71, 0.35) !important;
+  box-shadow: 0 14px 32px -4px rgba(181, 43, 71, 0.12), 0 4px 12px rgba(41, 35, 36, 0.04) !important;
+  transform: translateY(-4px) !important;
 }
 .lume-landing #photographers .lume-photoshoot-card__media {
-  aspect-ratio: 3 / 4 !important;
-  margin:0 !important;
-  border-radius:15px 15px 0 0 !important;
-  background-color:#EEE5E7 !important;
-  overflow:hidden;
-  position:relative;
+  aspect-ratio: 16 / 11 !important;
+  margin: 0 !important;
+  border-radius: 17px 17px 0 0 !important;
+  background-color: #F7EFF1 !important;
+  overflow: hidden;
+  position: relative;
 }
 .lume-landing #photographers .lume-photoshoot-card__media img {
-  transition:transform 0.75s cubic-bezier(0.16, 1, 0.3, 1), filter 0.4s ease !important;
-  will-change:transform;
+  transition: transform 0.75s cubic-bezier(0.16, 1, 0.3, 1), filter 0.4s ease !important;
+  will-change: transform;
 }
 .lume-landing #photographers > .grid > .lume-photoshoot-card:hover .lume-photoshoot-card__media img {
-  transform:scale(1.08) !important;
+  transform: scale(1.06) !important;
 }
 .lume-landing #photographers > .grid > .lume-photoshoot-card:hover .lume-photoshoot-card__title {
-  color:#B52B47 !important;
+  color: #B52B47 !important;
 }
-.lume-landing #photographers .lume-photoshoot-card__badge { top:8px; left:8px; }
+.lume-landing #photographers .lume-photoshoot-card__badge { top: 10px; left: 10px; }
 .lume-landing #photographers .lume-photoshoot-card__badge span {
-  padding:5px 9px !important;
-  border-radius:999px !important;
-  background:#B52B47 !important;
-  font-size:8px !important;
-  line-height:1 !important;
+  padding: 5px 12px !important;
+  border-radius: 999px !important;
+  background: rgba(181, 43, 71, 0.92) !important;
+  backdrop-filter: blur(4px) !important;
+  color: #FFFFFF !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: .04em !important;
+  line-height: 1.2 !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15) !important;
 }
-.lume-landing #photographers .lume-photoshoot-card__content { min-height:104px; padding:10px 10px 11px; gap:8px; }
-.lume-landing #photographers .lume-photoshoot-card__details { gap:4px; min-width:0; }
-.lume-landing #photographers .lume-photoshoot-card__meta { font-size:8px; }
-.lume-landing #photographers .lume-photoshoot-card__meta svg { width:10px; height:10px; }
-.lume-landing #photographers .lume-photoshoot-card__title { font-size:12px; line-height:1.35; letter-spacing:-.015em; color:#292324 !important; }
-.lume-landing #photographers .lume-photoshoot-card__rating { margin:0 !important; transform:scale(.82); transform-origin:left top; }
-.lume-landing #photographers .lume-photoshoot-card__price-row { margin:0 !important; padding:0 !important; border:0 !important; }
-.lume-landing #photographers .lume-photoshoot-card__price-label { display:none; }
-.lume-landing #photographers .lume-photoshoot-card__price-row .text-lg { font-size:13px; line-height:1; color:#B52B47 !important; }
-.lume-landing #photographers .lume-photoshoot-card__price-row .text-xs { font-size:8px; color:#9A858A !important; }
+.lume-landing #photographers .lume-photoshoot-card__content { 
+  min-height: 140px; 
+  padding: 16px !important; 
+  gap: 10px; 
+}
+.lume-landing #photographers .lume-photoshoot-card__details { 
+  gap: 6px; 
+  min-width: 0; 
+}
+.lume-landing #photographers .lume-photoshoot-card__meta { 
+  font-size: 11px !important; 
+  font-weight: 700;
+}
+.lume-landing #photographers .lume-photoshoot-card__meta svg { 
+  width: 13px !important; 
+  height: 13px !important; 
+}
+.lume-landing #photographers .lume-photoshoot-card__title { 
+  font-size: 15px !important; 
+  font-weight: 700;
+  line-height: 1.35; 
+  letter-spacing: -.01em; 
+  color: #292324 !important; 
+}
+.lume-landing #photographers .lume-photoshoot-card__rating { 
+  margin: 0 !important; 
+  transform: none !important; 
+  gap: 6px !important;
+}
+.lume-landing #photographers .lume-photoshoot-card__rating .text-xs {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+.lume-landing #photographers .lume-photoshoot-card__rating svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+.lume-landing #photographers .lume-photoshoot-card__price-row { 
+  margin-top: 6px !important; 
+  padding-top: 10px !important; 
+  border-top: 1px solid #F3E5E7 !important; 
+}
+.lume-landing #photographers .lume-photoshoot-card__price-label { 
+  display: block !important; 
+  font-size: 9px !important;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: #9A858A !important;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.lume-landing #photographers .lume-photoshoot-card__price-row .text-lg { 
+  font-size: 17px !important; 
+  font-weight: 800;
+  line-height: 1.1; 
+  color: #B52B47 !important; 
+}
+.lume-landing #photographers .lume-photoshoot-card__price-row .text-xs { 
+  font-size: 11px !important; 
+  font-weight: 500;
+  color: #7A696D !important; 
+}
 .lume-landing #photographers .lume-photoshoot-card__availability {
-  padding:5px 10px !important;
-  border-radius:999px !important;
-  background:#FBE5E9 !important;
-  color:#B52B47 !important;
-  font-size:8px !important;
-  line-height:1 !important;
+  padding: 7px 16px !important;
+  border-radius: 999px !important;
+  background: #FBE5E9 !important;
+  color: #B52B47 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  transition: all 0.25s ease !important;
 }
-.lume-landing #photographers .lume-photoshoot-card__availability:hover { background:#F4D4DA !important; }
+.lume-landing #photographers .lume-photoshoot-card__availability:hover { 
+  background: #B52B47 !important; 
+  color: #FFFFFF !important;
+  box-shadow: 0 4px 12px rgba(181, 43, 71, 0.25) !important;
+}
 @media (max-width:767px) {
   .lume-landing #photographers > .grid { gap:12px; }
-  .lume-landing #photographers .lume-photoshoot-card__content { min-height:108px; }
+  .lume-landing #photographers .lume-photoshoot-card__content { min-height: 130px; padding: 12px !important; }
+  .lume-landing #photographers .lume-photoshoot-card__title { font-size: 14px !important; }
 }
 
 /* Landing palette refinement â€” burgundy and blush surfaces aligned to the Figma reference. */

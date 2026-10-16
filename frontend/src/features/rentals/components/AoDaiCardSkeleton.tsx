@@ -11,7 +11,7 @@ export const AoDaiCardSkeleton: React.FC = () => {
       aria-hidden="true"
     >
       {/* Media placeholder */}
-      <div className="relative w-full aspect-[3/4] overflow-hidden bg-stone-100">
+      <div className="relative w-full aspect-[4/5] overflow-hidden bg-stone-100">
         <div className="w-full h-full lume-skeleton-shimmer" />
         {/* Favorite circle placeholder */}
         <div className="absolute top-2 right-2 w-7 h-7 rounded-full lume-skeleton-shimmer opacity-80" />

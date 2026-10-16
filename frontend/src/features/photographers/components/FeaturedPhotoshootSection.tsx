@@ -5,7 +5,7 @@ import { ROUTES } from '../../../config/routes';
 import { SectionHeader } from '../../../components/common/SectionHeader';
 import { photographersApi } from '../../photographers/api/photographers.api';
 import { getMediaUrl } from '../../../shared/media/mediaUrl';
-import type { PhotoshootPackageItem } from '../data/photoshoot-package.fixture';
+import type { PhotoshootPackageItem } from '../types/photographer.types';
 import { PhotoshootPackageCard } from './PhotoshootPackageCard';
 import { PhotoshootCardSkeleton } from './PhotoshootCardSkeleton';
 

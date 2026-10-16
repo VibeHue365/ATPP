@@ -82,10 +82,11 @@ export const ComboFigmaCard: React.FC<ComboFigmaCardProps> = ({ combo }) => {
             {combo.location}
           </span>
           <span className="combo-verified-badge">
-            <Check size={11} /> Đã xác minh
+            <Check size={11} strokeWidth={2.5} className="combo-verified-icon" />
+            <span>Đã xác minh</span>
           </span>
           <span className="combo-meta-dot">•</span>
-          <span>{combo.people}</span>
+          <span className="combo-people-count">{combo.people}</span>
         </div>
       </div>
     </article>
