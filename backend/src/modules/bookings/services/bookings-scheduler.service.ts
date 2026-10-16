@@ -107,7 +107,7 @@ export class BookingsSchedulerService {
           // Prevents double-processing if cron overlaps with a customer confirm-complete call.
           const locked = await this.bookingModel.findOneAndUpdate(
             { _id: candidate._id, status: BookingStatus.AwaitingReview },
-            { $set: { status: BookingStatus.Completed } },
+            { $set: { status: BookingStatus.Completed, photosApproved: true } },
             { new: false }, // return OLD doc — if null, someone else already changed it
           );
 

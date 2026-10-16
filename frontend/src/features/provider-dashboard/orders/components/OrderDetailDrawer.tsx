@@ -154,8 +154,8 @@ export function OrderDetailDrawer({
       return [
         { label: 'Xác nhận', key: 'CONFIRMED', time: formatShortTime(order.rawOrderDate || order.createdAt, order.orderDate || 'Đã xác nhận') },
         { label: 'Đang chụp', key: 'IN_PROGRESS', time: shootDate ? formatShortTime(shootDate) : 'Chụp ảnh', icon: Camera },
-        { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: order.photosApproved ? 'Đã duyệt' : (order.deliveredPhotos ? 'Đã giao' : 'Trả ảnh') },
-        { label: 'Khách duyệt ảnh', key: 'COMBO_PHOTOS_APPROVED', time: order.photosApproved ? 'Đã duyệt' : 'Chờ duyệt', icon: Sparkles },
+        { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: (order.deliveredPhotos?.length || order.deliveryDriveUrl || rawStatus === 'AWAITING_REVIEW' || isOrderCompleted) ? 'Đã giao' : 'Trả ảnh' },
+        { label: 'Khách duyệt ảnh', key: 'COMBO_PHOTOS_APPROVED', time: (order.photosApproved || isOrderCompleted) ? 'Đã duyệt' : 'Chờ duyệt', icon: Sparkles },
         { label: 'Hoàn tất', key: 'COMPLETED', time: rawStatus === 'COMPLETED' ? (formatShortTime(order.updatedDate, 'Hoàn tất')) : 'Dự kiến' },
       ];
     }
@@ -166,7 +166,7 @@ export function OrderDetailDrawer({
       { label: 'Chuẩn bị áo', key: 'PICKUP_PENDING', time: rf?.readyAt ? formatShortTime(rf.readyAt) : 'Chuẩn bị' },
       { label: 'Khách nhận áo', key: 'PICKED_UP', time: rf?.pickedUpAt ? formatShortTime(rf.pickedUpAt) : (rf?.pickupDueAt ? formatShortTime(rf.pickupDueAt) : 'Nhận đồ') },
       { label: 'Đang chụp', key: 'IN_PROGRESS', time: shootDate ? formatShortTime(shootDate) : 'Chụp ảnh', icon: Camera },
-      { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: order.photosApproved ? 'Đã duyệt' : (order.deliveredPhotos ? 'Đã giao' : 'Trả ảnh') },
+      { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: (order.deliveredPhotos?.length || order.deliveryDriveUrl || ['AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(rawStatus) || isOrderCompleted) ? 'Đã giao' : 'Trả ảnh' },
       { label: 'Khách trả áo', key: 'RETURN_PENDING', time: rf?.returnedAt ? formatShortTime(rf.returnedAt) : (rf?.returnDueAt ? formatShortTime(rf.returnDueAt) : 'Trả đồ') },
       { label: 'Kiểm tra & Duyệt', key: 'RETURNED', time: rf?.returnedAt ? 'Đã kiểm tra' : 'Kiểm tra' },
       { label: 'Hoàn tất', key: 'COMPLETED', time: rawStatus === 'COMPLETED' ? (formatShortTime(rf?.completedAt, order.updatedDate || 'Hoàn tất')) : 'Dự kiến' },
@@ -205,7 +205,7 @@ export function OrderDetailDrawer({
       if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT') return 0;
       if (rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') return 0;
       if (rawStatus === 'IN_PROGRESS') return 1;
-      if (rawStatus === 'AWAITING_REVIEW') return 2;
+      if (rawStatus === 'AWAITING_REVIEW') return 3;
       if (rawStatus === 'COMBO_PHOTOS_APPROVED' || order.photosApproved) return 3;
       return 0;
     }
@@ -2188,14 +2188,22 @@ export function OrderDetailDrawer({
             )}
 
             {rawStatus === 'AWAITING_REVIEW' && (
-              <button
-                type="button"
-                className="p-drawer-primary-btn"
-                onClick={() => changeOrderStatus(order._id, 'COMBO_PHOTOS_APPROVED')}
-              >
-                <CheckCircle size={14} />
-                <span>Bàn giao ảnh chụp</span>
-              </button>
+              <>
+                <span style={{ fontSize: '12.5px', fontWeight: 650, color: '#D97706', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFBEB', padding: '7px 14px', borderRadius: '8px', border: '1px solid #FDE68A' }}>
+                  <Clock size={14} />
+                  <span>Đã gửi ảnh • Chờ khách hàng duyệt nhận</span>
+                </span>
+                <button
+                  type="button"
+                  className="p-card-edit-btn"
+                  style={{ padding: '8px 14px', fontSize: '13px' }}
+                  onClick={() => changeOrderStatus(order._id, 'AWAITING_REVIEW')}
+                  title="Cập nhật link Google Drive hoặc ảnh kết quả đã giao"
+                >
+                  <Camera size={14} />
+                  <span>Cập nhật link ảnh</span>
+                </button>
+              </>
             )}
 
             {(rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') && !isPhoto && (
@@ -2238,7 +2246,7 @@ export function OrderDetailDrawer({
               ) : null
             )}
 
-            {(rawStatus === 'RETURNED' || rawStatus === 'RETURN_PENDING' || rawStatus === 'COMBO_PHOTOS_APPROVED' || (isPhoto && rawStatus === 'AWAITING_REVIEW')) && !isOrderCompleted && (
+            {(rawStatus === 'RETURNED' || rawStatus === 'RETURN_PENDING') && !isOrderCompleted && (
               <button
                 type="button"
                 className="p-drawer-primary-btn"

@@ -9,7 +9,8 @@ import {
   CreditCard,
   Star,
   Download,
-  XCircle
+  XCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { ImageWithFallback } from '../../../../shared/media/ImageWithFallback';
 import '../ProfilePage.css';
@@ -180,6 +181,12 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
                 <Clock size={11} /> ĐANG TRONG THỜI GIAN THUÊ
               </span>
             )}
+
+            {booking.status === 'AWAITING_REVIEW' && (
+              <span className="lume-countdown-badge urgent" style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FCD34D' }}>
+                <Clock size={11} /> ĐÃ CÓ ẢNH • CHỜ BẠN DUYỆT
+              </span>
+            )}
           </div>
         </div>
 
@@ -274,8 +281,26 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
           </button>
         )}
 
+        {/* Review & Approve Photos button */}
+        {booking.status === 'AWAITING_REVIEW' && (
+          <button
+            type="button"
+            className="lume-schedule-action-btn green"
+            style={{
+              backgroundColor: '#047857',
+              color: '#FFFFFF',
+              fontWeight: 800,
+              boxShadow: '0 2px 8px rgba(4, 120, 87, 0.25)'
+            }}
+            onClick={() => onViewDetails(booking)}
+          >
+            <CheckCircle2 size={14} />
+            <span>Duyệt nhận ảnh</span>
+          </button>
+        )}
+
         {/* 7. Cancel Booking */}
-        {!['COMPLETED', 'CANCELLED', 'RETURNED'].includes(booking.status) && (
+        {!['COMPLETED', 'CANCELLED', 'RETURNED', 'AWAITING_REVIEW', 'IN_PROGRESS'].includes(booking.status) && (
           <button
             type="button"
             className="lume-schedule-action-btn danger"

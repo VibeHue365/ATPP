@@ -332,6 +332,8 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
         onLocationChange={() => onOpenLocationChange?.(scheduleItem)}
         onReview={() => onOpenReview?.({ ...item, bookingId: booking._id, booking })}
         onSupport={handleSupport}
+        onConfirmComplete={booking?.status === 'AWAITING_REVIEW' ? handleConfirmComplete : undefined}
+        isConfirming={isConfirming}
       />
     </div>
   );

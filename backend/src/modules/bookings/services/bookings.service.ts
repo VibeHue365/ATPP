@@ -2967,7 +2967,7 @@ export class BookingsService implements OnApplicationBootstrap {
     // Atomic lock: prevents double-processing if cron job runs simultaneously
     const locked = await this.bookingModel.findOneAndUpdate(
       { _id: booking._id, status: BookingStatus.AwaitingReview },
-      { $set: { status: BookingStatus.Completed } },
+      { $set: { status: BookingStatus.Completed, photosApproved: true } },
       { new: false },
     );
 
@@ -3151,6 +3151,17 @@ export class BookingsService implements OnApplicationBootstrap {
     if (!allowed.includes(nextStatus)) {
       throw new BadRequestException(
         `Không được phép chuyển trạng thái đơn hàng từ ${currentStatus} sang ${nextStatus}`,
+      );
+    }
+
+    const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
+    if (
+      currentStatus === BookingStatus.AwaitingReview &&
+      (nextStatus === BookingStatus.Completed || nextStatus === BookingStatus.ComboPhotosApproved) &&
+      !isAdmin
+    ) {
+      throw new BadRequestException(
+        'Đơn hàng đang chờ khách hàng duyệt nhận ảnh. Chỉ khách hàng hoặc hệ thống tự động nghiệm thu sau 48h mới có quyền hoàn tất đơn này.',
       );
     }
 

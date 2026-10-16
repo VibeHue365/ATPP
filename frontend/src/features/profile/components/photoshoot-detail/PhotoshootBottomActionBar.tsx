@@ -1,5 +1,5 @@
 import React from 'react';
-import { XCircle, CalendarClock, MapPin, Star, Headphones } from 'lucide-react';
+import { XCircle, CalendarClock, MapPin, Star, Headphones, CheckCircle2 } from 'lucide-react';
 
 interface PhotoshootBottomActionBarProps {
   status?: string;
@@ -8,6 +8,8 @@ interface PhotoshootBottomActionBarProps {
   onLocationChange?: () => void;
   onReview?: () => void;
   onSupport?: () => void;
+  onConfirmComplete?: () => void;
+  isConfirming?: boolean;
 }
 
 export const PhotoshootBottomActionBar: React.FC<PhotoshootBottomActionBarProps> = ({
@@ -16,7 +18,9 @@ export const PhotoshootBottomActionBar: React.FC<PhotoshootBottomActionBarProps>
   onReschedule,
   onLocationChange,
   onReview,
-  onSupport
+  onSupport,
+  onConfirmComplete,
+  isConfirming = false
 }) => {
   const isCompleted = status === 'COMPLETED';
   const isCancelled = status === 'CANCELLED';
@@ -108,6 +112,31 @@ export const PhotoshootBottomActionBar: React.FC<PhotoshootBottomActionBarProps>
           >
             <CalendarClock size={15} color="#8B1E2D" />
             <span>Đổi lịch chụp</span>
+          </button>
+        )}
+
+        {status === 'AWAITING_REVIEW' && onConfirmComplete && (
+          <button
+            type="button"
+            onClick={onConfirmComplete}
+            disabled={isConfirming}
+            style={{
+              padding: '9px 20px',
+              borderRadius: '10px',
+              backgroundColor: '#047857',
+              color: '#FFFFFF',
+              border: 'none',
+              fontSize: '13px',
+              fontWeight: 800,
+              cursor: isConfirming ? 'not-allowed' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 2px 8px rgba(4, 120, 87, 0.25)'
+            }}
+          >
+            <CheckCircle2 size={16} />
+            <span>{isConfirming ? 'Đang xử lý...' : '✓ Duyệt ảnh & Hoàn tất'}</span>
           </button>
         )}
 
