@@ -385,23 +385,44 @@ export class BookingsSchedulerService {
           itemType: BookingItemType.PhotographyPackage,
         });
 
-        if (!photoItem || !photoItem.shootDate) continue;
+        if (!photoItem) continue;
 
-        let endHour = 23;
-        let endMin = 59;
-        if (photoItem.shootTimeSlot && photoItem.shootTimeSlot.includes('-')) {
-          const parts = photoItem.shootTimeSlot.split('-');
-          if (parts.length >= 2) {
-            const [h, m] = parts[1].trim().split(':').map(Number);
-            if (!isNaN(h)) {
-              endHour = h;
-              endMin = m || 0;
+        let shootEnd: Date | null = null;
+
+        // 1. Look up schedule in BookingSchedule first
+        const schedule = await this.bookingScheduleModel
+          .findOne({
+            bookingId: booking._id,
+            scheduleType: BookingScheduleType.Photoshoot,
+            status: { $ne: BookingScheduleStatus.Cancelled },
+          })
+          .lean();
+
+        if (schedule && schedule.endsAt) {
+          shootEnd = new Date(schedule.endsAt);
+        } else if (schedule && schedule.startsAt) {
+          shootEnd = new Date(
+            new Date(schedule.startsAt).getTime() + 2 * 60 * 60 * 1000,
+          );
+        } else if (photoItem.shootDate) {
+          let endHour = 23;
+          let endMin = 59;
+          if (photoItem.shootTimeSlot && photoItem.shootTimeSlot.includes('-')) {
+            const parts = photoItem.shootTimeSlot.split('-');
+            if (parts.length >= 2) {
+              const [h, m] = parts[1].trim().split(':').map(Number);
+              if (!isNaN(h)) {
+                endHour = h;
+                endMin = m || 0;
+              }
             }
           }
+
+          shootEnd = new Date(photoItem.shootDate);
+          shootEnd.setHours(endHour, endMin, 0, 0);
         }
 
-        const shootEnd = new Date(photoItem.shootDate);
-        shootEnd.setHours(endHour, endMin, 0, 0);
+        if (!shootEnd || isNaN(shootEnd.getTime())) continue;
 
         // 2 hours past shootEnd time
         const overdueDeadline = new Date(

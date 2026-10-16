@@ -8,6 +8,7 @@ interface PhotoshootBottomActionBarProps {
   onLocationChange?: () => void;
   onReview?: () => void;
   onSupport?: () => void;
+  onOpenDispute?: () => void;
   onConfirmComplete?: () => void;
   isConfirming?: boolean;
 }
@@ -19,12 +20,16 @@ export const PhotoshootBottomActionBar: React.FC<PhotoshootBottomActionBarProps>
   onLocationChange,
   onReview,
   onSupport,
+  onOpenDispute,
   onConfirmComplete,
   isConfirming = false
 }) => {
   const isCompleted = status === 'COMPLETED';
   const isCancelled = status === 'CANCELLED';
-  const canModify = !isCompleted && !isCancelled && status !== 'IN_PROGRESS' && status !== 'AWAITING_REVIEW';
+  const isDisputed = status === 'DISPUTED';
+  const isRefunded = status === 'REFUNDED' || status === 'PARTIALLY_REFUNDED';
+  const canModify = !isCompleted && !isCancelled && !isDisputed && !isRefunded && status !== 'IN_PROGRESS' && status !== 'AWAITING_REVIEW';
+  const canDispute = !isDisputed && !isRefunded && !isCancelled && !isCompleted;
 
   return (
     <div
@@ -43,6 +48,11 @@ export const PhotoshootBottomActionBar: React.FC<PhotoshootBottomActionBarProps>
     >
       {/* Left: Cancellation or Notice */}
       <div>
+        {isDisputed && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#DC2626', fontWeight: 700, fontSize: '13px' }}>
+            <span>⚖️ Đơn hàng đang được Admin giải quyết khiếu nại</span>
+          </div>
+        )}
         {canModify && onCancel && (
           <button
             type="button"
@@ -161,6 +171,28 @@ export const PhotoshootBottomActionBar: React.FC<PhotoshootBottomActionBarProps>
           >
             <Star size={15} />
             <span>Đánh giá dịch vụ</span>
+          </button>
+        )}
+
+        {canDispute && onOpenDispute && (
+          <button
+            type="button"
+            onClick={onOpenDispute}
+            style={{
+              padding: '9px 16px',
+              borderRadius: '10px',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <span>Khiếu nại / Báo sự cố</span>
           </button>
         )}
 

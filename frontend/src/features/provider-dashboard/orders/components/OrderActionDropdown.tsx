@@ -154,6 +154,8 @@ export function OrderActionDropdown({
         ],
         RETURN_PENDING: [{ label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }],
         RETURNED: [{ label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' }],
+        DISPUTED: [{ label: '⚖️ Đang tranh chấp (Chờ Admin)', apiStatus: '', icon: <Clock size={14} />, color: '#DC2626', disabled: true }],
+        REFUNDED: [{ label: 'Đã hoàn tiền', apiStatus: '', icon: <CheckCircle size={14} />, color: '#6B7280', disabled: true }],
       }
     : isPhotoOrder
     ? {
@@ -165,6 +167,8 @@ export function OrderActionDropdown({
         CONFIRMED: [photoStartAction, { label: 'Hủy toàn bộ booking', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' }],
         IN_PROGRESS: [...photoSessionSteps],
         AWAITING_REVIEW: [{ label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }],
+        DISPUTED: [{ label: '⚖️ Đang tranh chấp (Chờ Admin)', apiStatus: '', icon: <Clock size={14} />, color: '#DC2626', disabled: true }],
+        REFUNDED: [{ label: 'Đã hoàn tiền', apiStatus: '', icon: <CheckCircle size={14} />, color: '#6B7280', disabled: true }],
       }
     : {
         PENDING_PAYMENT: [
@@ -190,11 +194,13 @@ export function OrderActionDropdown({
         ],
         RETURN_PENDING: [{ label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }],
         RETURNED: [{ label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' }],
+        DISPUTED: [{ label: '⚖️ Đang tranh chấp (Chờ Admin)', apiStatus: '', icon: <Clock size={14} />, color: '#DC2626', disabled: true }],
+        REFUNDED: [{ label: 'Đã hoàn tiền', apiStatus: '', icon: <CheckCircle size={14} />, color: '#6B7280', disabled: true }],
       };
 
   const rawStat = (order.rawStatus || '') as string;
   const steps: OrderAction[] = nextStepsMap[rawStat] || [];
-  const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStat);
+  const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED'].includes(rawStat);
   const pendingReschedule = order.items?.find((item: any) => item?.rescheduleRequest?.status === 'PENDING');
 
   // Auto-close menu if user scrolls or resizes window

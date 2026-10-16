@@ -74,7 +74,7 @@ export class DisputesService {
       description: string;
       evidencePhotos: string[];
       requestedAmount: number;
-      actionType: 'MAINTENANCE' | 'CLEANING';
+      actionType: 'MAINTENANCE' | 'CLEANING' | 'NO_SHOW' | 'OTHER';
     },
   ): Promise<IncidentReport> {
     const booking = await this.bookingModel.findById(dto.bookingId);
@@ -101,9 +101,19 @@ export class DisputesService {
       );
     }
 
-    if (dto.requestedAmount > booking.pricingSummary.depositTotal) {
+    const isPhotoOrNoShow =
+      dto.actionType === 'NO_SHOW' ||
+      booking.bookingType === 'PHOTOGRAPHY' ||
+      bookingItem.itemType === ('PHOTOGRAPHY_PACKAGE' as any);
+
+    const maxCompensationLimit =
+      booking.pricingSummary?.depositTotal && booking.pricingSummary.depositTotal > 0
+        ? booking.pricingSummary.depositTotal
+        : (booking.pricingSummary?.grandTotal || booking.pricingSummary?.subTotal || 0);
+
+    if (dto.requestedAmount > maxCompensationLimit) {
       throw new BadRequestException(
-        `Số tiền yêu cầu đền bù (${dto.requestedAmount.toLocaleString()}đ) không được vượt quá số tiền cọc giữ đồ (${booking.pricingSummary.depositTotal.toLocaleString()}đ)`,
+        `Số tiền yêu cầu đền bù (${dto.requestedAmount.toLocaleString()}đ) không được vượt quá giới hạn đơn hàng (${maxCompensationLimit.toLocaleString()}đ)`,
       );
     }
 
@@ -135,12 +145,21 @@ export class DisputesService {
       throw new BadRequestException('Vui lòng cung cấp ít nhất một bằng chứng');
     }
 
-    const allowedStatuses = [
-      BookingStatus.PickedUp,
-      BookingStatus.ReturnPending,
-      BookingStatus.Returned,
-      BookingStatus.Completed,
-    ];
+    const allowedStatuses = isPhotoOrNoShow
+      ? [
+          BookingStatus.Confirmed,
+          BookingStatus.DepositPaid,
+          BookingStatus.InProgress,
+          BookingStatus.AwaitingReview,
+          BookingStatus.Completed,
+        ]
+      : [
+          BookingStatus.PickedUp,
+          BookingStatus.ReturnPending,
+          BookingStatus.Returned,
+          BookingStatus.Completed,
+        ];
+
     if (!allowedStatuses.includes(booking.status)) {
       throw new BadRequestException(
         'Trạng thái đơn hàng chưa cho phép báo cáo sự cố',
@@ -165,13 +184,13 @@ export class DisputesService {
       incident = await this.incidentModel.create({
         bookingId: booking._id,
         bookingItemId: bookingItem._id,
-        productId: bookingItem.productId as any,
+        productId: (bookingItem.productId as any) || null,
         reportedBy: provider._id,
         description: dto.description,
         actionType: dto.actionType,
         evidencePhotos: dto.evidencePhotos,
         requestedAmount: dto.requestedAmount,
-        status: IncidentStatus.PendingCustomer,
+        status: isPhotoOrNoShow ? IncidentStatus.Disputed : IncidentStatus.PendingCustomer,
       });
     } catch (error: any) {
       if (error?.code === 11000) {
@@ -189,7 +208,10 @@ export class DisputesService {
       (incident as any)._id,
     );
 
-    if (bookingItem.inventoryItemId) {
+    if (
+      bookingItem.inventoryItemId &&
+      (dto.actionType === 'CLEANING' || dto.actionType === 'MAINTENANCE')
+    ) {
       const inventoryStatus =
         dto.actionType === 'CLEANING'
           ? InventoryItemStatus.Cleaning
@@ -200,14 +222,53 @@ export class DisputesService {
       });
     }
 
-    // Cập nhật trạng thái booking tạm thời để khách hàng phản hồi
-    booking.status = BookingStatus.ReturnPending;
-    booking.statusTimeline.push({
-      status: BookingStatus.ReturnPending,
-      changedAt: new Date(),
-      note: `Shop ${provider.businessName} báo cáo sự cố hỏng đồ và yêu cầu đền bù ${dto.requestedAmount.toLocaleString()}đ`,
-    });
-    await booking.save();
+    if (isPhotoOrNoShow) {
+      booking.status = BookingStatus.Disputed;
+      booking.statusTimeline.push({
+        status: BookingStatus.Disputed,
+        changedAt: new Date(),
+        note: `Shop ${provider.businessName} báo cáo sự cố (${dto.actionType}): ${dto.description}`,
+      });
+      await booking.save();
+
+      try {
+        await this.settlementsService.holdSettlementsForBooking(
+          booking._id.toString(),
+          `Provider báo sự cố (${dto.actionType}): ${dto.description}`,
+        );
+      } catch (hErr) {
+        console.warn('Lỗi hold settlement khi provider báo sự cố:', hErr);
+      }
+
+      try {
+        await this.disputeModel.findOneAndUpdate(
+          { bookingId: booking._id },
+          {
+            $setOnInsert: {
+              bookingId: booking._id,
+              bookingItemId: bookingItem._id,
+              openedBy: provider._id,
+              againstProviderId: provider._id,
+              reason: `Shop báo cáo sự cố (${dto.actionType}): ${dto.description}`,
+              evidencePhotos: dto.evidencePhotos,
+              status: DisputeStatus.Open,
+            },
+          },
+          { upsert: true, new: true },
+        );
+      } catch (dErr) {
+        console.warn('Lỗi tạo Dispute record khi provider báo sự cố:', dErr);
+      }
+    } else {
+      // Cập nhật trạng thái booking tạm thời để khách hàng phản hồi
+      booking.status = BookingStatus.ReturnPending;
+      booking.statusTimeline.push({
+        status: BookingStatus.ReturnPending,
+        changedAt: new Date(),
+        note: `Shop ${provider.businessName} báo cáo sự cố hỏng đồ và yêu cầu đền bù ${dto.requestedAmount.toLocaleString()}đ`,
+      });
+      await booking.save();
+    }
 
     return incident;
   }
@@ -788,7 +849,8 @@ export class DisputesService {
     let refundAmount: number;
     let compensationAmount: number;
 
-    const isPhotosDeliveredPhase = booking.bookingType === 'PHOTOGRAPHY' && (
+    const isPhotography = booking.bookingType === 'PHOTOGRAPHY' || (booking as any).itemType === 'PHOTOGRAPHY_PACKAGE';
+    const isPhotosDeliveredPhase = isPhotography && (
       booking.status === BookingStatus.AwaitingReview ||
       Boolean((booking as any).deliveredPhotos?.length) ||
       Boolean((booking as any).deliveryDriveUrl)
@@ -797,11 +859,15 @@ export class DisputesService {
     if (decision === 'SPLIT') {
       refundAmount = splitRefundAmount ?? -1;
       compensationAmount = splitCompensationAmount ?? -1;
-    } else if (isPhotosDeliveredPhase) {
-      // Khi tranh chấp xảy ra SAU KHI Thợ ảnh đã hoàn thành buổi chụp & bàn giao sản phẩm:
+    } else if (isPhotography) {
       if (decision === 'CUSTOMER_RIGHT') {
-        refundAmount = splitRefundAmount ?? Math.round(actualPaidTotal * 0.5);
-        compensationAmount = splitCompensationAmount ?? Math.max(0, actualPaidTotal - refundAmount);
+        if (isPhotosDeliveredPhase) {
+          refundAmount = splitRefundAmount ?? Math.round(actualPaidTotal * 0.5);
+          compensationAmount = splitCompensationAmount ?? Math.max(0, actualPaidTotal - refundAmount);
+        } else {
+          refundAmount = actualPaidTotal;
+          compensationAmount = 0;
+        }
       } else {
         // SHOP_RIGHT: Thợ ảnh đúng → Thợ hưởng 100% tiền chụp, khách không được hoàn
         refundAmount = 0;
@@ -830,7 +896,7 @@ export class DisputesService {
     }
 
     // Giới hạn tổng không vượt quá số tiền thực tế có thể chi trả
-    const limitTotal = isDirectDispute ? actualPaidTotal : depositTotal;
+    const limitTotal = (isPhotography || isDirectDispute) ? actualPaidTotal : depositTotal;
     if (
       refundAmount < 0 ||
       compensationAmount < 0 ||
@@ -1045,13 +1111,35 @@ export class DisputesService {
         resolvedAt: new Date(),
       };
 
-      booking.status = BookingStatus.Completed;
+      let finalBookingStatus: BookingStatus;
+      let finalScheduleStatus: string;
+      if (refundAmount >= actualPaidTotal) {
+        finalBookingStatus = BookingStatus.Refunded;
+        finalScheduleStatus = 'CANCELLED';
+      } else if (refundAmount > 0) {
+        finalBookingStatus = BookingStatus.PartiallyRefunded;
+        finalScheduleStatus = 'COMPLETED';
+      } else {
+        finalBookingStatus = BookingStatus.Completed;
+        finalScheduleStatus = 'COMPLETED';
+      }
+
+      booking.status = finalBookingStatus;
       booking.statusTimeline.push({
-        status: BookingStatus.Completed,
+        status: finalBookingStatus,
         changedAt: new Date(),
         note: `Admin giải quyết tranh chấp. Quyết định: ${decisionLabel}. Hoàn khách: ${refundAmount.toLocaleString('vi-VN')}đ, bồi thường provider: ${compensationAmount.toLocaleString('vi-VN')}đ. Ghi chú: ${notes}`,
       });
       await booking.save();
+
+      try {
+        await this.bookingModel.db.model('BookingSchedule').updateMany(
+          { bookingId: booking._id },
+          { $set: { status: finalScheduleStatus } },
+        );
+      } catch (schErr) {
+        console.warn('Lỗi đồng bộ BookingSchedule khi giải quyết tranh chấp:', schErr);
+      }
 
       // Cập nhật trạng thái hoàn thành, cọc & giải phóng tồn kho cho các sản phẩm áo dài trong đơn
       try {

@@ -142,7 +142,10 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
     RETURNED: 'ĐÃ TRẢ ÁO',
     COMPLETED: 'HOÀN TẤT',
     CANCELLED: 'ĐÃ HỦY',
-    PENDING_PAYMENT: 'CHỜ CỌC'
+    PENDING_PAYMENT: 'CHỜ CỌC',
+    DISPUTED: 'TRANH CHẤP',
+    REFUNDED: 'ĐÃ HOÀN TIỀN',
+    PARTIALLY_REFUNDED: 'HOÀN TIỀN MỘT PHẦN'
   };
 
   const statusLabel = statusLabels[rawStatus] || rawStatus;

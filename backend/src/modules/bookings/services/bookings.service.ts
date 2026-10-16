@@ -2541,7 +2541,7 @@ export class BookingsService implements OnApplicationBootstrap {
     const bookingIds = bookings.map((booking) => booking._id);
     const items = bookingIds.length
       ? await this.bookingItemModel
-          .find({ bookingId: { $in: bookingIds }, providerId: provider._id })
+          .find({ bookingId: { $in: bookingIds } })
           .populate('productId')
           .populate('photographyPackageId')
           .lean()
@@ -2566,6 +2566,8 @@ export class BookingsService implements OnApplicationBootstrap {
         (item as any).name ||
         null;
 
+      const isMyItem = item.providerId?.toString() === provider._id.toString();
+
       if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
         const matchedSchedule = schedules.find(
           (s: any) =>
@@ -2578,6 +2580,7 @@ export class BookingsService implements OnApplicationBootstrap {
           return {
             ...item,
             name: resolvedName,
+            isMyItem,
             shootDate:
               item.shootDate ||
               matchedSchedule.startsAt ||
@@ -2591,6 +2594,7 @@ export class BookingsService implements OnApplicationBootstrap {
       return {
         ...item,
         name: resolvedName,
+        isMyItem,
       };
     });
 

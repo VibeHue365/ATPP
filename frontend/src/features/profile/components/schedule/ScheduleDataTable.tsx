@@ -506,6 +506,38 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
             <span>Xem chi tiết</span>
           </button>
 
+          {/* 1b. Khách xác nhận đã nhận áo khi ở trạng thái PICKUP_PENDING */}
+          {activeDropdown.booking.status === 'PICKUP_PENDING' && (
+            <button
+              type="button"
+              onClick={() => {
+                const booking = activeDropdown.booking;
+                setActiveDropdown(null);
+                onViewDetails(booking);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: '#F5EEF8',
+                color: '#8E44AD',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#EBDDF0')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F5EEF8')}
+            >
+              <CalendarCheck size={14} color="#8E44AD" />
+              <span>Xác nhận nhận áo</span>
+            </button>
+          )}
+
           {/* 2. Mở kho ảnh kết quả */}
           {(activeDropdown.booking.deliveredPhotos?.length > 0 || activeDropdown.booking.deliveryDriveUrl) && (
             <button

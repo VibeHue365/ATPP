@@ -165,12 +165,12 @@ export function OrderDetailDrawer({
     // COMBO (both rental & photography)
     return [
       { label: 'Xác nhận', key: 'CONFIRMED', time: formatShortTime(order.rawOrderDate || order.createdAt, order.orderDate || 'Đã xác nhận') },
-      { label: 'Chuẩn bị áo', key: 'PICKUP_PENDING', time: rf?.readyAt ? formatShortTime(rf.readyAt) : 'Chuẩn bị' },
-      { label: 'Khách nhận áo', key: 'PICKED_UP', time: rf?.pickedUpAt ? formatShortTime(rf.pickedUpAt) : (rf?.pickupDueAt ? formatShortTime(rf.pickupDueAt) : 'Nhận đồ') },
+      { label: 'Chuẩn bị áo', key: 'PREPARE_PENDING', time: rf?.readyAt ? formatShortTime(rf.readyAt) : 'Chuẩn bị' },
+      { label: 'Khách nhận áo', key: 'PICKUP_PENDING', time: rf?.pickedUpAt ? formatShortTime(rf.pickedUpAt) : (rf?.pickupDueAt ? formatShortTime(rf.pickupDueAt) : 'Nhận đồ') },
       { label: 'Đang chụp', key: 'IN_PROGRESS', time: shootDate ? formatShortTime(shootDate) : 'Chụp ảnh', icon: Camera },
-      { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: (order.deliveredPhotos?.length || order.deliveryDriveUrl || ['AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(rawStatus) || isOrderCompleted) ? 'Đã giao' : 'Trả ảnh' },
       { label: 'Khách trả áo', key: 'RETURN_PENDING', time: rf?.returnedAt ? formatShortTime(rf.returnedAt) : (rf?.returnDueAt ? formatShortTime(rf.returnDueAt) : 'Trả đồ') },
-      { label: 'Kiểm tra & Duyệt', key: 'RETURNED', time: rf?.returnedAt ? 'Đã kiểm tra' : 'Kiểm tra' },
+      { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: (order.deliveredPhotos?.length || order.deliveryDriveUrl || ['AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(rawStatus) || isOrderCompleted) ? 'Đã giao' : 'Trả ảnh' },
+      { label: 'Khách duyệt ảnh', key: 'COMBO_PHOTOS_APPROVED', time: (order.photosApproved || isOrderCompleted) ? 'Đã duyệt' : 'Chờ duyệt', icon: Sparkles },
       { label: 'Hoàn tất', key: 'COMPLETED', time: rawStatus === 'COMPLETED' ? (formatShortTime(rf?.completedAt, order.updatedDate || 'Hoàn tất')) : 'Dự kiến' },
     ];
   }, [isAoDai, isPhoto, order, rf, shootDate, rawStatus, isOrderCompleted]);
@@ -212,13 +212,13 @@ export function OrderDetailDrawer({
 
     // COMBO
     if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT') return 0;
-    if (rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') return 0;
-    if (rawStatus === 'PICKUP_PENDING') return 1;
-    if (rawStatus === 'PICKED_UP') return 2;
+    if (rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') return 1;
+    if (rawStatus === 'PICKUP_PENDING') return 2;
+    if (rawStatus === 'PICKED_UP') return 3;
     if (rawStatus === 'IN_PROGRESS') return 3;
-    if (rawStatus === 'AWAITING_REVIEW') return 4;
-    if (rawStatus === 'RETURN_PENDING') return 5;
-    if (rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED') return 6;
+    if (rawStatus === 'RETURN_PENDING' || rawStatus === 'RETURNED') return 4;
+    if (rawStatus === 'AWAITING_REVIEW') return 5;
+    if (rawStatus === 'COMBO_PHOTOS_APPROVED' || order.photosApproved) return 6;
     return 0;
   }, [isOrderCompleted, isAoDai, isPhoto, rawStatus, masterSteps.length, order.photosApproved]);
 
@@ -243,9 +243,11 @@ export function OrderDetailDrawer({
   let photoCurrentIdx = 1;
   if (isOrderCompleted) photoCurrentIdx = 5;
   else if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT' || rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED' || rawStatus === 'PICKUP_PENDING') photoCurrentIdx = 0;
-  else if (rawStatus === 'IN_PROGRESS' || rawStatus === 'PICKED_UP') photoCurrentIdx = 1;
+  else if (rawStatus === 'PICKED_UP') photoCurrentIdx = 0;
+  else if (rawStatus === 'IN_PROGRESS') photoCurrentIdx = 1;
   else if (rawStatus === 'AWAITING_REVIEW') photoCurrentIdx = 2;
-  else if (rawStatus === 'COMBO_PHOTOS_APPROVED' || rawStatus === 'RETURN_PENDING' || rawStatus === 'RETURNED') photoCurrentIdx = 3;
+  else if (rawStatus === 'COMBO_PHOTOS_APPROVED') photoCurrentIdx = 3;
+  else if (rawStatus === 'RETURN_PENDING' || rawStatus === 'RETURNED') photoCurrentIdx = (order.photosApproved ? 4 : 2);
 
   const photoStepsConfig = ['Chờ chụp', 'Đang chụp', 'Bàn giao ảnh', 'Khách duyệt', 'Hoàn tất'];
   const photoSubsteps = photoStepsConfig.map((label, idx) => {
@@ -2177,14 +2179,27 @@ export function OrderDetailDrawer({
             )}
 
             {(rawStatus === 'IN_PROGRESS' || (!rawStatus && isCombo)) && (
-              <button
-                type="button"
-                className="p-drawer-primary-btn"
-                onClick={() => changeOrderStatus(order._id, 'AWAITING_REVIEW')}
-              >
-                <Camera size={14} />
-                <span>Hoàn tất buổi chụp</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  onClick={() => changeOrderStatus(order._id, 'AWAITING_REVIEW')}
+                >
+                  <Camera size={14} />
+                  <span>Hoàn tất buổi chụp / Bàn giao ảnh</span>
+                </button>
+                {isCombo && (
+                  <button
+                    type="button"
+                    className="p-card-edit-btn"
+                    style={{ padding: '8px 14px', fontSize: '13px' }}
+                    onClick={() => changeOrderStatus(order._id, 'RETURN_PENDING')}
+                  >
+                    <Package size={14} />
+                    <span>Khách trả áo dài</span>
+                  </button>
+                )}
+              </>
             )}
 
             {rawStatus === 'AWAITING_REVIEW' && (
@@ -2203,6 +2218,17 @@ export function OrderDetailDrawer({
                   <Camera size={14} />
                   <span>Cập nhật link ảnh</span>
                 </button>
+                {isCombo && (
+                  <button
+                    type="button"
+                    className="p-card-edit-btn"
+                    style={{ padding: '8px 14px', fontSize: '13px' }}
+                    onClick={() => changeOrderStatus(order._id, 'RETURN_PENDING')}
+                  >
+                    <Package size={14} />
+                    <span>Khách trả áo dài</span>
+                  </button>
+                )}
               </>
             )}
 
@@ -2213,37 +2239,64 @@ export function OrderDetailDrawer({
                 onClick={() => changeOrderStatus(order._id, 'PICKUP_PENDING')}
               >
                 <Package size={14} />
-                <span>Báo chờ nhận đồ</span>
+                <span>Báo sẵn sàng nhận đồ</span>
               </button>
             )}
 
             {rawStatus === 'PICKUP_PENDING' && (
-              <span style={{ fontSize: '12.5px', fontWeight: 650, color: '#D97706', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFBEB', padding: '7px 14px', borderRadius: '8px', border: '1px solid #FDE68A' }}>
-                <Clock size={14} />
-                <span>Chờ khách hàng bấm nhận đồ</span>
-              </span>
+              <>
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  onClick={() => changeOrderStatus(order._id, 'PICKED_UP')}
+                >
+                  <Check size={14} />
+                  <span>Xác nhận đã giao áo cho khách</span>
+                </button>
+              </>
             )}
 
             {rawStatus === 'PICKED_UP' && (
-              isCombo && !order.photosApproved ? (
+              <>
+                {isCombo && !order.photosApproved && (
+                  <button
+                    type="button"
+                    className="p-drawer-primary-btn"
+                    onClick={() => changeOrderStatus(order._id, 'SESSION_START')}
+                  >
+                    <Play size={14} />
+                    <span>Bắt đầu buổi chụp</span>
+                  </button>
+                )}
                 <button
                   type="button"
-                  className="p-drawer-primary-btn"
-                  onClick={() => changeOrderStatus(order._id, 'SESSION_START')}
-                >
-                  <Play size={14} />
-                  <span>Bắt đầu buổi chụp</span>
-                </button>
-              ) : !isPhoto ? (
-                <button
-                  type="button"
-                  className="p-drawer-primary-btn"
+                  className={isCombo && !order.photosApproved ? "p-card-edit-btn" : "p-drawer-primary-btn"}
+                  style={isCombo && !order.photosApproved ? { padding: '8px 14px', fontSize: '13px' } : undefined}
                   onClick={() => changeOrderStatus(order._id, 'RETURNED')}
                 >
                   <Check size={14} />
-                  <span>Khách trả đồ</span>
+                  <span>{isCombo ? 'Khách trả áo dài' : 'Khách trả đồ'}</span>
                 </button>
-              ) : null
+              </>
+            )}
+
+            {rawStatus === 'COMBO_PHOTOS_APPROVED' && (
+              <>
+                <span style={{ fontSize: '12.5px', fontWeight: 650, color: '#0369A1', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#E0F2FE', padding: '7px 14px', borderRadius: '8px', border: '1px solid #BAE6FD' }}>
+                  <CheckCircle size={14} />
+                  <span>Khách đã duyệt ảnh</span>
+                </span>
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  style={{ backgroundColor: '#15803D' }}
+                  onClick={handleCompleteOrder}
+                  disabled={isCompleting}
+                >
+                  <CheckCircle size={14} />
+                  <span>{isCompleting ? 'Đang hoàn tất...' : 'Hoàn tất đơn hàng'}</span>
+                </button>
+              </>
             )}
 
             {(rawStatus === 'RETURNED' || rawStatus === 'RETURN_PENDING') && !isOrderCompleted && (

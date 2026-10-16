@@ -18,6 +18,14 @@ interface PhotoshootMainCardProps {
     statusLabel: string;
     reschedulePending?: boolean;
     remainingTimeText?: string;
+    disputeResult?: {
+      decision?: string;
+      decisionLabel?: string;
+      refundAmount?: number;
+      compensationAmount?: number;
+      notes?: string;
+      resolvedAt?: string | Date;
+    };
   };
 }
 
@@ -25,6 +33,8 @@ export const PhotoshootMainCard: React.FC<PhotoshootMainCardProps> = ({ photosho
   if (!photoshootData) return null;
 
   const rawStatus = photoshootData.status;
+  const isDisputed = rawStatus === 'DISPUTED';
+  const isRefunded = rawStatus === 'REFUNDED' || rawStatus === 'PARTIALLY_REFUNDED';
 
   // Compute active step (1 to 5)
   let activeStep = 2;
@@ -56,6 +66,10 @@ export const PhotoshootMainCard: React.FC<PhotoshootMainCardProps> = ({ photosho
   const badgeStyle =
     rawStatus === 'COMPLETED'
       ? { bg: '#ECFDF5', color: '#047857' }
+      : isDisputed
+      ? { bg: '#FEF2F2', color: '#DC2626' }
+      : isRefunded
+      ? { bg: '#F3F4F6', color: '#4B5563' }
       : rawStatus === 'AWAITING_REVIEW'
       ? { bg: '#FEF3C7', color: '#B45309' }
       : rawStatus === 'IN_PROGRESS'
@@ -331,9 +345,21 @@ export const PhotoshootMainCard: React.FC<PhotoshootMainCardProps> = ({ photosho
         {/* Status Alert Banner */}
         <div
           style={{
-            backgroundColor: rawStatus === 'AWAITING_REVIEW' ? '#FFFBEB' : '#EFF6FF',
+            backgroundColor: isDisputed
+              ? '#FEF2F2'
+              : isRefunded
+              ? '#F9FAFB'
+              : rawStatus === 'AWAITING_REVIEW'
+              ? '#FFFBEB'
+              : '#EFF6FF',
             borderRadius: '10px',
-            border: rawStatus === 'AWAITING_REVIEW' ? '1px solid #FED7AA' : '1px solid #BFDBFE',
+            border: isDisputed
+              ? '1px solid #FECACA'
+              : isRefunded
+              ? '1px solid #E5E7EB'
+              : rawStatus === 'AWAITING_REVIEW'
+              ? '1px solid #FED7AA'
+              : '1px solid #BFDBFE',
             padding: '10px 14px',
             display: 'flex',
             alignItems: 'center',
@@ -343,17 +369,79 @@ export const PhotoshootMainCard: React.FC<PhotoshootMainCardProps> = ({ photosho
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertCircle size={16} color={rawStatus === 'AWAITING_REVIEW' ? '#B45309' : '#1D4ED8'} />
-            <span style={{ fontSize: '12.5px', color: rawStatus === 'AWAITING_REVIEW' ? '#92400E' : '#1E40AF', fontWeight: 600 }}>
+            <AlertCircle
+              size={16}
+              color={
+                isDisputed
+                  ? '#DC2626'
+                  : isRefunded
+                  ? '#4B5563'
+                  : rawStatus === 'AWAITING_REVIEW'
+                  ? '#B45309'
+                  : '#1D4ED8'
+              }
+            />
+            <span
+              style={{
+                fontSize: '12.5px',
+                color: isDisputed
+                  ? '#991B1B'
+                  : isRefunded
+                  ? '#374151'
+                  : rawStatus === 'AWAITING_REVIEW'
+                  ? '#92400E'
+                  : '#1E40AF',
+                fontWeight: 600
+              }}
+            >
               {rawStatus === 'DEPOSIT_PAID' && 'Đơn hàng đã đặt cọc thành công. Nhiếp ảnh gia sẽ liên hệ xác nhận lịch trong ít phút.'}
               {rawStatus === 'CONFIRMED' && (photoshootData.remainingTimeText ? `Lịch chụp đã được xác nhận. ${photoshootData.remainingTimeText}.` : 'Lịch chụp đã được xác nhận. Hãy chuẩn bị sẵn sàng cho buổi chụp nhé!')}
               {rawStatus === 'IN_PROGRESS' && 'Buổi chụp ảnh đang diễn ra hoặc thợ đang trong quy trình hậu kỳ & chỉnh sửa ảnh.'}
               {rawStatus === 'AWAITING_REVIEW' && 'Nhiếp ảnh gia đã tải lên kho ảnh kết quả. Bạn có 48 giờ để kiểm tra và duyệt ảnh.'}
               {rawStatus === 'COMPLETED' && 'Đơn chụp ảnh đã hoàn tất trọn vẹn. Cảm ơn bạn đã lựa chọn LUMÉ!'}
               {rawStatus === 'CANCELLED' && 'Đơn chụp ảnh này đã bị hủy.'}
+              {rawStatus === 'DISPUTED' && 'Đơn hàng đang trong quá trình khiếu nại / tranh chấp. Ban quản trị LUMÉ đang kiểm tra và xử lý thỏa đáng cho bạn.'}
+              {rawStatus === 'REFUNDED' && 'Đơn hàng đã được hoàn tiền thành công theo kết quả giải quyết khiếu nại.'}
+              {rawStatus === 'PARTIALLY_REFUNDED' && 'Đơn hàng đã được hoàn tiền một phần theo kết quả thỏa thuận giải quyết.'}
             </span>
           </div>
         </div>
+
+        {/* Dispute Result Box (if resolved by Admin) */}
+        {photoshootData.disputeResult && (
+          <div
+            style={{
+              marginTop: '12px',
+              backgroundColor: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              fontSize: '12.5px',
+            }}
+          >
+            <div style={{ fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+              ⚖️ Kết quả giải quyết tranh chấp từ Admin
+            </div>
+            <div style={{ color: '#475569', marginBottom: '4px' }}>
+              <strong>Phán quyết:</strong> {photoshootData.disputeResult.decisionLabel || photoshootData.disputeResult.decision}
+            </div>
+            {typeof photoshootData.disputeResult.refundAmount === 'number' && photoshootData.disputeResult.refundAmount > 0 && (
+              <div style={{ color: '#047857', marginBottom: '4px' }}>
+                <strong>Số tiền hoàn khách:</strong> {photoshootData.disputeResult.refundAmount.toLocaleString('vi-VN')}đ
+              </div>
+            )}
+            {typeof photoshootData.disputeResult.compensationAmount === 'number' && photoshootData.disputeResult.compensationAmount > 0 && (
+              <div style={{ color: '#0369A1', marginBottom: '4px' }}>
+                <strong>Bồi thường đối tác:</strong> {photoshootData.disputeResult.compensationAmount.toLocaleString('vi-VN')}đ
+              </div>
+            )}
+            {photoshootData.disputeResult.notes && (
+              <div style={{ color: '#64748B', marginTop: '4px', fontStyle: 'italic' }}>
+                Ghi chú: {photoshootData.disputeResult.notes}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

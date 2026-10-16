@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { X, AlertTriangle, Upload } from 'lucide-react';
 import { PhotoshootDetailHeader } from './PhotoshootDetailHeader';
 import { PhotoshootMainCard } from './PhotoshootMainCard';
 import { PhotoshootInfoColumns } from './PhotoshootInfoColumns';
@@ -29,6 +30,12 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
 }) => {
   const toast = useToast();
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
+  const [disputeReason, setDisputeReason] = useState('Chất lượng ảnh không đạt yêu cầu');
+  const [disputeNotes, setDisputeNotes] = useState('');
+  const [disputePhotos, setDisputePhotos] = useState<string[]>([]);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
 
   const item = booking?.items?.[0] || {};
   const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
@@ -98,11 +105,70 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
     AWAITING_REVIEW: 'CHỜ DUYỆT ẢNH',
     COMPLETED: 'HOÀN TẤT',
     CANCELLED: 'ĐÃ HỦY',
-    PENDING_PAYMENT: 'CHỜ CỌC'
+    PENDING_PAYMENT: 'CHỜ CỌC',
+    DISPUTED: 'TRANH CHẤP',
+    REFUNDED: 'ĐÃ HOÀN TIỀN',
+    PARTIALLY_REFUNDED: 'HOÀN TIỀN MỘT PHẦN'
   };
 
   const statusLabel = statusLabels[booking?.status] || booking?.status || 'ĐANG THỰC HIỆN';
   const reschedulePending = item.rescheduleRequest?.status === 'PENDING';
+
+  const handleOpenDispute = () => {
+    setIsDisputeModalOpen(true);
+  };
+
+  const handleDisputePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+      }
+      const res: any = await httpClient.post('/upload', formData);
+      if (res.urls && Array.isArray(res.urls)) {
+        setDisputePhotos(prev => [...prev, ...res.urls]);
+        toast.success('Tải ảnh bằng chứng thành công!');
+      } else if (res.url) {
+        setDisputePhotos(prev => [...prev, res.url]);
+        toast.success('Tải ảnh bằng chứng thành công!');
+      }
+    } catch (err: any) {
+      toast.error('Tải ảnh thất bại: ' + (err.message || ''));
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleSubmitDispute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!disputeNotes.trim()) {
+      toast.error('Vui lòng nhập mô tả chi tiết lý do khiếu nại!');
+      return;
+    }
+    setIsSubmittingDispute(true);
+    try {
+      const combinedNote = `[${disputeReason}] ${disputeNotes.trim()}`;
+      await httpClient.patch(`/api/bookings/${booking._id}/status`, {
+        status: 'DISPUTED',
+        note: combinedNote,
+        evidencePhotos: disputePhotos,
+      });
+      toast.success('Gửi khiếu nại thành công! LUMÉ sẽ liên hệ và giải quyết thỏa đáng.');
+      setIsDisputeModalOpen(false);
+      setDisputeNotes('');
+      setDisputePhotos([]);
+      if (onRefreshBooking) {
+        await onRefreshBooking();
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Gửi khiếu nại thất bại');
+    } finally {
+      setIsSubmittingDispute(false);
+    }
+  };
 
   // Remaining time text
   const calculateRemaining = () => {
@@ -281,7 +347,8 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
           status: booking?.status || 'CONFIRMED',
           statusLabel,
           reschedulePending,
-          remainingTimeText: calculateRemaining()
+          remainingTimeText: calculateRemaining(),
+          disputeResult: booking?.disputeResult
         }}
       />
 
@@ -320,7 +387,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
           });
         }}
         onConfirmComplete={booking?.status === 'AWAITING_REVIEW' ? handleConfirmComplete : undefined}
-        onOpenDisputeOrSupport={handleSupport}
+        onOpenDisputeOrSupport={handleOpenDispute}
         isConfirming={isConfirming}
       />
 
@@ -332,9 +399,217 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
         onLocationChange={() => onOpenLocationChange?.(scheduleItem)}
         onReview={() => onOpenReview?.({ ...item, bookingId: booking._id, booking })}
         onSupport={handleSupport}
+        onOpenDispute={handleOpenDispute}
         onConfirmComplete={booking?.status === 'AWAITING_REVIEW' ? handleConfirmComplete : undefined}
         isConfirming={isConfirming}
       />
+
+      {/* 6. Customer Dispute Modal */}
+      {isDisputeModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px'
+          }}
+          onClick={() => setIsDisputeModalOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '520px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.15)',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertTriangle size={20} color="#DC2626" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1F2937' }}>Khiếu nại dịch vụ chụp ảnh</h3>
+                  <span style={{ fontSize: '12px', color: '#6B7280' }}>Đơn hàng #{code}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDisputeModalOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitDispute} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                  Lý do khiếu nại *
+                </label>
+                <select
+                  value={disputeReason}
+                  onChange={(e) => setDisputeReason(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #D1D5DB',
+                    fontSize: '13px',
+                    color: '#1F2937',
+                    backgroundColor: '#FFFFFF',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="Chất lượng ảnh không đạt yêu cầu">Chất lượng ảnh không đạt yêu cầu</option>
+                  <option value="Thợ ảnh không đến / vắng mặt">Thợ ảnh không đến / vắng mặt</option>
+                  <option value="Thợ ảnh trễ giờ hẹn nghiêm trọng">Thợ ảnh trễ giờ hẹn nghiêm trọng</option>
+                  <option value="Chưa nhận được đủ ảnh theo thỏa thuận">Chưa nhận được đủ ảnh theo thỏa thuận</option>
+                  <option value="Thái độ phục vụ không phù hợp">Thái độ phục vụ không phù hợp</option>
+                  <option value="Khác">Lý do khác</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                  Mô tả chi tiết sự cố *
+                </label>
+                <textarea
+                  rows={4}
+                  value={disputeNotes}
+                  onChange={(e) => setDisputeNotes(e.target.value)}
+                  placeholder="Vui lòng nêu rõ vấn đề bạn gặp phải để LUMÉ và Studio hỗ trợ giải quyết nhanh chóng..."
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #D1D5DB',
+                    fontSize: '13px',
+                    color: '#1F2937',
+                    outline: 'none',
+                    resize: 'vertical',
+                    boxSizing: 'border-box'
+                  }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                  Ảnh bằng chứng (tùy chọn)
+                </label>
+                <label
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: '1px dashed #9CA3AF',
+                    backgroundColor: '#F9FAFB',
+                    cursor: isUploadingPhoto ? 'not-allowed' : 'pointer',
+                    fontSize: '12.5px',
+                    color: '#4B5563',
+                    fontWeight: 600
+                  }}
+                >
+                  <Upload size={14} />
+                  <span>{isUploadingPhoto ? 'Đang tải ảnh...' : 'Tải ảnh bằng chứng'}</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleDisputePhotoUpload}
+                    disabled={isUploadingPhoto}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+
+                {disputePhotos.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                    {disputePhotos.map((url, idx) => (
+                      <div key={idx} style={{ position: 'relative', width: '60px', height: '60px' }}>
+                        <img
+                          src={url}
+                          alt="Bằng chứng"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px', border: '1px solid #E5E7EB' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setDisputePhotos(prev => prev.filter((_, i) => i !== idx))}
+                          style={{
+                            position: 'absolute',
+                            top: '-5px',
+                            right: '-5px',
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            backgroundColor: '#EF4444',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '10px'
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsDisputeModalOpen(false)}
+                  style={{
+                    padding: '9px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid #D1D5DB',
+                    backgroundColor: '#FFFFFF',
+                    color: '#374151',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Đóng
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingDispute}
+                  style={{
+                    padding: '9px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#DC2626',
+                    color: '#FFFFFF',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: isSubmittingDispute ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 8px rgba(220, 38, 38, 0.25)'
+                  }}
+                >
+                  {isSubmittingDispute ? 'Đang gửi...' : 'Gửi khiếu nại'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
