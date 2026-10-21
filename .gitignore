@@ -4,6 +4,8 @@
 # Production build outputs
 **/dist/
 **/dist-ssr/
+**/coverage/
+**/test-results/
 backend/dist/
 frontend/dist/
 
