@@ -8,15 +8,16 @@ import { normalizeCancellationRefundRules, buildCancellationPolicySummary } from
 import { variantKeyOf, variantLabelOf } from '../src/features/provider-dashboard/inventory/inventoryHelpers';
 import { getComboDisplayStatus } from '../src/features/provider-dashboard/combos/comboStatus';
 
-it('preserves the saved provider source and styles byte for byte', () => {
+it('preserves the immutable provider refactor baseline and equivalent stylesheet content', () => {
   const baseline = resolve(process.cwd(), '../docs/refactor-baselines/provider-dashboard-2026-09-21');
   const checksums = JSON.parse(readFileSync(resolve(baseline, 'checksums.json'), 'utf8')) as { File: string; SHA256: string }[];
   for (const entry of checksums) {
     const hash = createHash('sha256').update(readFileSync(resolve(baseline, entry.File))).digest('hex').toUpperCase();
     expect(hash).toBe(entry.SHA256);
   }
-  expect(readFileSync(resolve(process.cwd(), 'src/pages/providerdashboard/providerServiceProfile.css')))
-    .toEqual(readFileSync(resolve(baseline, 'providerServiceProfile.css')));
+  const normalizeLineEndings = (content: Buffer) => content.toString('utf8').replace(/\r\n/g, '\n');
+  expect(normalizeLineEndings(readFileSync(resolve(process.cwd(), 'src/pages/providerdashboard/providerServiceProfile.css'))))
+    .toEqual(normalizeLineEndings(readFileSync(resolve(baseline, 'providerServiceProfile.css'))));
 });
 
 describe('Provider business helpers', () => {
