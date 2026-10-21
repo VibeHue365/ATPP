@@ -8,6 +8,8 @@ import { RentalPickupReturnPanel } from '../../features/rentals/components/Renta
 import { RentalFulfillmentOperationsPanel } from '../../features/rentals/components/RentalFulfillmentOperationsPanel';
 import { API_BASE_URL } from '../../config/env';
 import { downloadPhotosAsZip, downloadSinglePhoto } from '../../utils/downloadUtils';
+import { useToast } from '../feedback/Toast';
+import { ConfirmModal } from '../../utils/confirmModal';
 
 interface BookingDetailModalProps {
   bookingId: string | null;
@@ -123,6 +125,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   onBookingChanged,
   onWriteReview
 }) => {
+  const toast = useToast();
   const getEvidenceUrl = (url: string) =>
     url?.startsWith('http') ? url : `${API_BASE_URL}${url}`;
   const [booking, setBooking] = useState<any>(null);
@@ -178,15 +181,25 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
 
   const handleAgreeIncident = async () => {
     if (!incident?._id) return;
+    const confirmResult = await ConfirmModal.confirm(
+      'Xác nhận đồng ý đền bù?',
+      'Bạn đồng ý bồi thường cho sự cố này. Số tiền bồi thường sẽ được khấu trừ từ tiền cọc của đơn hàng.',
+      {
+        confirmButtonText: 'Đồng ý đền bù',
+        cancelButtonText: 'Xem lại',
+      }
+    );
+    if (!confirmResult.isConfirmed) return;
+
     setRespondingIncident(true);
     try {
       await httpClient.post(`/api/disputes/incidents/${incident._id}/agree`);
-      alert('Bạn đã đồng ý đền bù sự cố. Số tiền đền bù sẽ được khấu trừ từ tiền cọc.');
+      toast.success('Đã đồng ý đền bù sự cố. Số tiền sẽ được khấu trừ từ tiền cọc.');
       fetchBookingDetails();
       fetchIncidentDetails();
       onBookingChanged?.();
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Có lỗi xảy ra khi xử lý. Vui lòng thử lại.');
+      toast.error(err?.response?.data?.message || 'Có lỗi xảy ra khi xử lý. Vui lòng thử lại.');
     } finally {
       setRespondingIncident(false);
     }
@@ -194,15 +207,25 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
 
   const handleDisagreeIncident = async () => {
     if (!incident?._id) return;
+    const confirmResult = await ConfirmModal.confirm(
+      'Gửi khiếu nại sự cố?',
+      'Bạn không đồng ý với mức đền bù này? Đơn hàng sẽ được chuyển sang trạng thái Tranh chấp để Ban quản trị Admin xem xét giải quyết.',
+      {
+        confirmButtonText: 'Gửi khiếu nại',
+        cancelButtonText: 'Quay lại',
+      }
+    );
+    if (!confirmResult.isConfirmed) return;
+
     setRespondingIncident(true);
     try {
       await httpClient.post(`/api/disputes/incidents/${incident._id}/disagree`);
-      alert('Bạn đã gửi khiếu nại. Đơn hàng sẽ được chuyển sang trạng thái Tranh chấp để Admin xem xét.');
+      toast.info('Bạn đã gửi khiếu nại. Đơn hàng chuyển sang trạng thái Tranh chấp để Admin xem xét.');
       fetchBookingDetails();
       fetchIncidentDetails();
       onBookingChanged?.();
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Có lỗi xảy ra khi gửi khiếu nại. Vui lòng thử lại.');
+      toast.error(err?.response?.data?.message || 'Có lỗi xảy ra khi gửi khiếu nại. Vui lòng thử lại.');
     } finally {
       setRespondingIncident(false);
     }
@@ -249,8 +272,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
       );
       await fetchBookingDetails();
       onBookingChanged?.();
+      toast.success(approved ? 'Đã chấp thuận yêu cầu đổi địa điểm.' : 'Đã từ chối yêu cầu đổi địa điểm.');
     } catch (requestError: any) {
-      alert(requestError?.message || 'Không thể xử lý yêu cầu đổi địa điểm.');
+      toast.error(requestError?.message || 'Không thể xử lý yêu cầu đổi địa điểm.');
     } finally {
       setResolvingLocationChangeId(null);
     }

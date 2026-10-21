@@ -1,5 +1,5 @@
-import Swal from 'sweetalert2';
 import type { useToast } from '../../../components/feedback/Toast';
+import { ConfirmModal } from '../../../utils/confirmModal';
 import { categoryService } from '../../categories/services/categoryService';
 import { productsApi } from '../api/providerDashboardApi';
 import type { useProductWizardState } from './useProductWizardState';
@@ -61,20 +61,14 @@ export function createProductDataActions({
   };
 
   const handleDeleteProduct = async (id: string, name: string) => {
-    const result = await Swal.fire({
-      title: 'Xác nhận xóa?',
-      text: `Bạn có chắc chắn muốn xóa áo dài "${name}" không?`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: 'var(--color-primary)',
-      cancelButtonColor: '#9CA3AF',
-      confirmButtonText: 'Đồng ý',
-      cancelButtonText: 'Hủy',
-      background: 'white',
-      customClass: {
-        popup: 'font-body',
+    const result = await ConfirmModal.delete(
+      'Xóa sản phẩm Áo Dài?',
+      `Bạn có chắc chắn muốn xóa áo dài "${name}" không? Sản phẩm sẽ bị gỡ bỏ hoàn toàn khỏi cửa hàng.`,
+      {
+        confirmButtonText: 'Xóa sản phẩm',
+        cancelButtonText: 'Hủy',
       }
-    });
+    );
 
     if (!result.isConfirmed) {
       return;
@@ -82,20 +76,10 @@ export function createProductDataActions({
 
     try {
       await productsApi.remove(id);
-      Swal.fire({
-        title: 'Đã xóa!',
-        text: `Đã xóa thành công sản phẩm "${name}".`,
-        icon: 'success',
-        confirmButtonColor: 'var(--color-primary)',
-      });
+      toast.success(`Đã xóa thành công sản phẩm "${name}".`);
       fetchProducts();
     } catch (err: any) {
-      Swal.fire({
-        title: 'Thất bại!',
-        text: err.message || 'Xóa sản phẩm thất bại.',
-        icon: 'error',
-        confirmButtonColor: 'var(--color-primary)',
-      });
+      toast.error(err.message || 'Xóa sản phẩm thất bại.');
     }
   };
 

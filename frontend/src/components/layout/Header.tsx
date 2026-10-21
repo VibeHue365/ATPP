@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { ROUTES } from '../../config/routes';
-import { Compass, ShoppingBag, LayoutDashboard, LogOut } from 'lucide-react';
+import { ShoppingBag, LayoutDashboard, LogOut } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const { isAuthenticated, user, logout } = useAuth();
@@ -16,9 +16,8 @@ export const Header: React.FC = () => {
   return (
     <header className="vh-header">
       <div className="vh-header-container">
-        <Link to={ROUTES.LANDING} className="vh-logo">
-          <Compass className="vh-logo-icon animate-pulse" size={28} />
-          <span>Silk & Stone</span>
+        <Link to={ROUTES.LANDING} className="vh-logo" style={{ textDecoration: 'none' }}>
+          <img src="/logo-transparent.png" alt="TàGo" style={{ height: '36px', width: 'auto', objectFit: 'contain' }} />
         </Link>
 
         <nav className="vh-header-nav">

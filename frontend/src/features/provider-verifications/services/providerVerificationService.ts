@@ -38,9 +38,27 @@ export const providerVerificationService = {
       requestedCapabilities?: ProviderCapability[];
     },
   ) {
+    const sanitize = (obj: any): any => {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+      const clean: Record<string, any> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (k !== '_id' && v !== null && v !== undefined) {
+          clean[k] = v;
+        }
+      }
+      return clean;
+    };
+
+    const cleanPayload = {
+      ...payload,
+      businessProfile: payload.businessProfile ? sanitize(payload.businessProfile) : undefined,
+      aodaiInfo: payload.aodaiInfo ? sanitize(payload.aodaiInfo) : undefined,
+      photographyInfo: payload.photographyInfo ? sanitize(payload.photographyInfo) : undefined,
+    };
+
     return httpClient.patch<ProviderVerificationDetail>(
       `/provider-verifications/${id}`,
-      payload,
+      cleanPayload,
     );
   },
 

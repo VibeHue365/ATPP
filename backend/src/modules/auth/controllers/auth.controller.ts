@@ -23,6 +23,7 @@ import { RegisterDto } from '../dto/register.dto';
 import { ResendVerificationDto } from '../dto/resend-verification.dto';
 import { ResetPasswordDto } from '../dto/reset-password.dto';
 import { VerifyEmailDto } from '../dto/verify-email.dto';
+import { getPrimaryFrontendUrl } from '../../../common/config/frontend-url.util';
 import { AuthService } from '../services/auth.service';
 
 interface RequestMeta {
@@ -144,10 +145,11 @@ export class AuthController {
       request.user as GoogleOAuthProfile,
       this.context(request),
     );
-    const frontendUrl = this.configService.get<string>(
+    const rawFrontendUrl = this.configService.get<string>(
       'FRONTEND_URL',
       'http://localhost:5173',
     );
+    const frontendUrl = getPrimaryFrontendUrl(rawFrontendUrl);
     const redirectUrl = new URL('/oauth/callback', frontendUrl);
     redirectUrl.searchParams.set('code', result.code);
 

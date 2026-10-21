@@ -23,7 +23,7 @@ interface VoucherTabContentProps {
   submittingCampaign?: boolean;
   hasAodaiCapability?: boolean;
   // Voucher action handlers
-  handleCreateOrUpdateVoucher: (e: React.FormEvent) => Promise<void>;
+  handleCreateOrUpdateVoucher: (e: React.FormEvent) => Promise<boolean | void> | void | Promise<void>;
   handleEditVoucher: (voucher: any) => void;
   handleDeleteVoucher: (id: string) => Promise<void>;
   clearVoucherForm: () => void;

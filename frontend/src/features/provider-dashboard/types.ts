@@ -29,16 +29,35 @@ export interface Order {
   customerNotes?: string;
   pricingSummary?: any;
   paymentSummary?: any;
+  bookingCode?: string;
+  deliveredPhotos?: string[];
+  handoverPhotos?: string[];
+  deliveryDriveUrl?: string;
   pickupDamageReport?: {
     reportedAt: string;
     description: string;
     evidencePhotos: string[];
   } | null;
+  cancellation?: {
+    cancelledBy?: any;
+    reason?: string;
+    cancelledAt?: string | Date;
+    refundAmount?: number;
+  } | null;
+  cancellationReason?: string;
+  cancelReason?: string;
+  statusTimeline?: Array<{
+    status: string;
+    changedAt: string | Date;
+    note?: string;
+    changedBy?: any;
+  }>;
 }
 
 export interface Product {
   _id: string;
   name: string;
+  providerId?: string | { _id?: string; [key: string]: any };
   categoryId: {
     _id: string;
     name: string;
@@ -63,6 +82,8 @@ export interface Product {
     mappedTagCode?: string | null;
   }>;
   status: 'ACTIVE' | 'DRAFT' | 'INACTIVE';
+  moderationStatus?: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'HIDDEN';
+  moderationReason?: string | null;
   taggingDecisionVersion?: number;
 }
 

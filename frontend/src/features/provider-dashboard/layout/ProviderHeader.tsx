@@ -6,6 +6,8 @@ import {
   ChevronDown,
   HelpCircle,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   Settings,
   Store,
@@ -37,6 +39,8 @@ type ProviderHeaderProps = Pick<ReturnType<typeof useProviderNavigationState>,
   getNotiTypeStyle: (type: string) => { bg: string; color: string; icon: string; };
   handleNotiMarkAsRead: (id: string) => Promise<void>;
   getNotiTimeAgo: (dateStr: string) => string;
+  isSidebarCollapsed?: boolean;
+  toggleSidebar?: () => void;
 };
 
 export function ProviderHeader({
@@ -53,14 +57,17 @@ export function ProviderHeader({
   getNotiTimeAgo,
   setCurrentView,
   provider,
+  isSidebarCollapsed = false,
+  toggleSidebar,
 }: ProviderHeaderProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [searchValue, setSearchValue] = useState('');
   const profileRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [imgError, setImgError] = useState(false);
 
   // Outside click to close profile dropdown
   useEffect(() => {
@@ -94,24 +101,48 @@ export function ProviderHeader({
   const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC');
   const shortcutText = isMac ? '⌘ K' : 'Ctrl K';
 
-  const businessName = provider?.businessName || 'Huế Áo Dài Studio';
-  const avatarUrl = provider?.avatar || provider?.logoUrl ? getImageUrl(provider.avatar || provider.logoUrl) : null;
+  const businessName = provider?.businessName || user?.fullName || 'Huế Áo Dài Studio';
+  const rawAvatar =
+    provider?.avatar ||
+    provider?.logoUrl ||
+    (provider as any)?.media?.logoUrl ||
+    user?.avatar ||
+    user?.avatarUrl;
+  const avatarUrl = rawAvatar ? getImageUrl(rawAvatar) : null;
+
+  useEffect(() => {
+    setImgError(false);
+  }, [avatarUrl]);
 
   return (
     <header className="p-header-bar">
-      {/* 1. Left Search Bar */}
-      <div className="p-search-wrapper">
-        <Search size={18} className="p-search-icon" />
-        <input
-          ref={searchInputRef}
-          type="text"
-          className="p-search-input"
-          placeholder="Tìm kiếm đơn đặt lịch, khách hàng, dịch vụ..."
-          value={searchValue}
-          onChange={(e) => setSearchValue(e.target.value)}
-          id="global-provider-search"
-        />
-        <span className="p-search-shortcut-badge">{shortcutText}</span>
+      {/* 1. Left: Toggle Sidebar + Search Bar */}
+      <div className="p-header-left">
+        {toggleSidebar && (
+          <button
+            type="button"
+            className="p-header-toggle-btn"
+            onClick={toggleSidebar}
+            title={isSidebarCollapsed ? "Mở rộng thanh menu (280px)" : "Thu gọn thanh menu (76px)"}
+            aria-label="Toggle sidebar"
+          >
+            {isSidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+          </button>
+        )}
+
+        <div className="p-search-wrapper">
+          <Search size={18} className="p-search-icon" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            className="p-search-input"
+            placeholder="Tìm kiếm đơn đặt lịch, khách hàng, dịch vụ..."
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            id="global-provider-search"
+          />
+          <span className="p-search-shortcut-badge">{shortcutText}</span>
+        </div>
       </div>
 
       {/* 2. Right Actions: Notification Bell + Profile */}
@@ -370,11 +401,16 @@ export function ProviderHeader({
             aria-expanded={isProfileOpen}
             id="btn-header-profile"
           >
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="Avatar" className="p-profile-avatar" />
+            {avatarUrl && !imgError ? (
+              <img
+                src={avatarUrl}
+                alt={businessName}
+                className="p-profile-avatar"
+                onError={() => setImgError(true)}
+              />
             ) : (
-              <div className="p-profile-avatar-fallback">
-                {businessName.charAt(0).toUpperCase()}
+              <div className="p-profile-avatar-fallback" title={businessName}>
+                {businessName.trim().charAt(0).toUpperCase() || 'P'}
               </div>
             )}
             <div className="p-profile-info">
@@ -387,6 +423,29 @@ export function ProviderHeader({
           {/* User Profile Dropdown Menu (Figma #338:106) */}
           {isProfileOpen && (
             <div className="p-profile-dropdown" role="menu">
+              {/* Dropdown User Info Header */}
+              <div className="p-dropdown-header">
+                {avatarUrl && !imgError ? (
+                  <img
+                    src={avatarUrl}
+                    alt={businessName}
+                    className="p-dropdown-avatar"
+                    onError={() => setImgError(true)}
+                  />
+                ) : (
+                  <div className="p-profile-avatar-fallback" style={{ width: 36, height: 36, fontSize: 14 }}>
+                    {businessName.trim().charAt(0).toUpperCase() || 'P'}
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+                  <strong style={{ fontSize: '13px', color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {businessName}
+                  </strong>
+                  <span style={{ fontSize: '11px', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {user?.email || 'Nhà cung cấp'}
+                  </span>
+                </div>
+              </div>
               {/* 1. Thông tin tài khoản */}
               <button
                 className="p-dropdown-item"

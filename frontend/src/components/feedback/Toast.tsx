@@ -13,6 +13,7 @@ interface ToastContextType {
   success: (msg: string) => void;
   error: (msg: string) => void;
   info: (msg: string) => void;
+  warning: (msg: string) => void;
   remove: (id: string) => void;
   show: (msg: string, type?: ToastType) => void;
 }
@@ -45,11 +46,12 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const success = useCallback((msg: string) => add('success', msg), [add]);
   const error = useCallback((msg: string) => add('error', msg), [add]);
   const info = useCallback((msg: string) => add('info', msg), [add]);
+  const warning = useCallback((msg: string) => add('warning', msg), [add]);
   const show = useCallback((msg: string, type: ToastType = 'info') => add(type, msg), [add]);
 
   const value = useMemo(
-    () => ({ success, error, info, remove, show }),
-    [success, error, info, remove, show],
+    () => ({ success, error, info, warning, remove, show }),
+    [success, error, info, warning, remove, show],
   );
 
   return (
@@ -61,6 +63,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             <span className="vh-toast-icon">
               {toast.type === 'success' && <CheckCircle size={20} />}
               {toast.type === 'error' && <AlertCircle size={20} />}
+              {toast.type === 'warning' && <AlertCircle size={20} />}
               {toast.type === 'info' && <Info size={20} />}
             </span>
             <p className="vh-toast-message">{toast.message}</p>

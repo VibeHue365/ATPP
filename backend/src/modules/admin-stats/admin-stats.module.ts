@@ -16,6 +16,7 @@ import {
 } from '../providers/schemas/provider-verification.schema';
 import { Dispute, DisputeSchema } from '../disputes/schemas/dispute.schema';
 import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
+import { ComboPromotion, ComboPromotionSchema } from '../products/schemas/combo-promotion.schema';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
       { name: ProviderVerification.name, schema: ProviderVerificationSchema },
       { name: Dispute.name, schema: DisputeSchema },
       { name: Review.name, schema: ReviewSchema },
+      { name: ComboPromotion.name, schema: ComboPromotionSchema },
     ]),
     AnalyticsModule,
   ],

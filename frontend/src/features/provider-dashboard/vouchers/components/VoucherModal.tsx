@@ -15,7 +15,7 @@ import '../vouchersFigma.css';
 interface VoucherModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (e: React.FormEvent) => Promise<void>;
+  onSubmit: (e: React.FormEvent) => Promise<boolean | void> | void | Promise<void>;
   editingVoucherId: string | null;
   vCode: string;
   setVCode: (val: string) => void;

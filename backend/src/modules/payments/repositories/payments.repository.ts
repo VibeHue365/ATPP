@@ -20,6 +20,7 @@ export class PaymentsRepository {
     return this.paymentModel.findOne({
       bookingId,
       status: PaymentStatus.Pending,
+      purpose: { $ne: PaymentPurpose.DepositRefund },
     });
   }
 
@@ -27,7 +28,11 @@ export class PaymentsRepository {
     bookingIds: Types.ObjectId[],
   ): Promise<PaymentDocument[]> {
     return this.paymentModel
-      .find({ bookingId: { $in: bookingIds }, status: PaymentStatus.Pending })
+      .find({
+        bookingId: { $in: bookingIds },
+        status: PaymentStatus.Pending,
+        purpose: { $ne: PaymentPurpose.DepositRefund },
+      })
       .sort({ createdAt: -1 })
       .exec();
   }
@@ -40,7 +45,10 @@ export class PaymentsRepository {
     bookingIds: Types.ObjectId[],
   ): Promise<PaymentDocument[]> {
     return this.paymentModel
-      .find({ bookingId: { $in: bookingIds }, status: PaymentStatus.Success })
+      .find({
+        bookingId: { $in: bookingIds },
+        status: { $in: [PaymentStatus.Success, PaymentStatus.Processing] },
+      })
       .sort({ createdAt: -1 })
       .populate('bookingId')
       .exec();
@@ -131,6 +139,84 @@ export class PaymentsRepository {
       { paymentCode, status: PaymentStatus.Pending },
       { $set: { status } },
       { new: true, session },
+    );
+  }
+
+  get model(): Model<Payment> {
+    return this.paymentModel;
+  }
+
+  async getRefundableAmount(
+    bookingId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<number> {
+    const pipeline: any[] = [
+      { $match: { bookingId } },
+      {
+        $group: {
+          _id: null,
+          totalPaid: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$status', PaymentStatus.Success] },
+                    { $ne: ['$purpose', PaymentPurpose.DepositRefund] },
+                  ],
+                },
+                '$amount',
+                0,
+              ],
+            },
+          },
+          totalRefundedOrPending: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$purpose', PaymentPurpose.DepositRefund] },
+                    {
+                      $in: [
+                        '$status',
+                        [
+                          PaymentStatus.Pending,
+                          PaymentStatus.Processing,
+                          PaymentStatus.Success,
+                        ],
+                      ],
+                    },
+                  ],
+                },
+                '$amount',
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ];
+
+    const result = session
+      ? await this.paymentModel.aggregate(pipeline).session(session)
+      : await this.paymentModel.aggregate(pipeline);
+
+    if (!result || result.length === 0) return 0;
+    const { totalPaid, totalRefundedOrPending } = result[0];
+    return Math.max(0, (totalPaid || 0) - (totalRefundedOrPending || 0));
+  }
+
+  async cancelPendingPaymentsForBooking(
+    bookingId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<void> {
+    await this.paymentModel.updateMany(
+      {
+        bookingId,
+        status: PaymentStatus.Pending,
+        purpose: { $ne: PaymentPurpose.DepositRefund },
+      },
+      { $set: { status: PaymentStatus.Cancelled } },
+      { session },
     );
   }
 }

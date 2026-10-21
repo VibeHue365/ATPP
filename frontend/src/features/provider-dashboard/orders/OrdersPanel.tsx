@@ -61,6 +61,7 @@ export function OrdersPanel({
   setActivePage,
 }: OrdersPanelProps) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number; bottom: number; left: number } | null>(null);
 
   // Synchronize selected order with updated data when an order is selected
   const activeSelectedOrder = React.useMemo(() => {
@@ -80,7 +81,19 @@ export function OrdersPanel({
 
   const handleOpenActionMenu = (e: React.MouseEvent, order: Order) => {
     e.stopPropagation();
-    setActionMenuId(actionMenuId === order._id ? null : order._id);
+    if (actionMenuId === order._id) {
+      setActionMenuId(null);
+      setMenuAnchor(null);
+    } else {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setMenuAnchor({
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        left: rect.left,
+      });
+      setActionMenuId(order._id);
+    }
   };
 
   const handleOpenIncidentReport = (order: Order) => {
@@ -167,7 +180,12 @@ export function OrdersPanel({
       {activeActionOrder && (
         <OrderActionDropdown
           order={activeActionOrder}
-          onClose={() => setActionMenuId(null)}
+          menuAnchor={menuAnchor}
+          onSelectOrder={handleSelectOrder}
+          onClose={() => {
+            setActionMenuId(null);
+            setMenuAnchor(null);
+          }}
           setSelectedBookingId={setSelectedBookingId}
           setIsDetailModalOpen={setIsDetailModalOpen}
           resolveRescheduleRequest={resolveRescheduleRequest}

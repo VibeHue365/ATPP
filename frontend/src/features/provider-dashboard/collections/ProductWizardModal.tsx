@@ -713,8 +713,8 @@ export function ProductWizardModal({
                     onChange={(e) => setProdStatus(e.target.value as any)}
                     className="pwm-select"
                   >
-                    <option value="DRAFT">Bản nháp (Tạm ẩn - khuyên dùng khi mới tạo)</option>
-                    <option value="ACTIVE">Đang hoạt động (Mở bán & cho thuê ngay)</option>
+                    <option value="DRAFT">Bản nháp (Lưu tạm - chưa gửi duyệt)</option>
+                    <option value="ACTIVE">Đăng bán (Chờ duyệt sau khi hoàn tất)</option>
                     <option value="INACTIVE">Ngừng kinh doanh</option>
                   </select>
                 </div>
@@ -999,7 +999,11 @@ export function ProductWizardModal({
                         )}
                       </h4>
                       <span className={`pwm-preview-status-pill ${(prodStatus || 'DRAFT').toLowerCase()}`}>
-                        {prodStatus === 'ACTIVE' ? 'Đang bán' : prodStatus === 'DRAFT' ? 'Bản nháp' : 'Tạm ngưng'}
+                        {prodStatus === 'ACTIVE'
+                          ? (editingProduct && editingProduct.moderationStatus === 'APPROVED' ? 'Đang bán' : 'Chờ duyệt')
+                          : prodStatus === 'DRAFT'
+                          ? 'Bản nháp'
+                          : 'Tạm ngưng'}
                       </span>
                     </div>
 
@@ -2135,7 +2139,11 @@ export function ProductWizardModal({
                         )}
                       </h4>
                       <span className={`pwm-preview-status-pill ${(prodStatus || 'DRAFT').toLowerCase()}`}>
-                        {prodStatus === 'ACTIVE' ? 'Đang bán' : prodStatus === 'DRAFT' ? 'Bản nháp' : 'Tạm ngưng'}
+                        {prodStatus === 'ACTIVE'
+                          ? (editingProduct && editingProduct.moderationStatus === 'APPROVED' ? 'Đang bán' : 'Chờ duyệt')
+                          : prodStatus === 'DRAFT'
+                          ? 'Bản nháp'
+                          : 'Tạm ngưng'}
                       </span>
                     </div>
 

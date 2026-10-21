@@ -85,6 +85,9 @@ export class ProviderSchedule {
     default: [],
   })
   customSlots: CustomTimeSlot[];
+
+  @Prop({ type: String, default: null })
+  reason?: string | null;
 }
 
 export const ProviderScheduleSchema =

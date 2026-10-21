@@ -21,6 +21,12 @@ export class ProvidersRepository {
     return this.providerModel.findOne({ userId });
   }
 
+  async findByUserIdWithWallet(userId: Types.ObjectId): Promise<ProviderDocument | null> {
+    return this.providerModel
+      .findOne({ userId })
+      .select('+wallet +paymentAccounts');
+  }
+
   async findById(providerId: Types.ObjectId): Promise<ProviderDocument | null> {
     return this.providerModel.findById(providerId);
   }
@@ -91,10 +97,21 @@ export class ProvidersRepository {
     offDays: Date[],
     customSlots: Array<{ timeSlot: string; status: string }>,
     capability: ScheduleCapability | null = null,
+    reason?: string | null,
   ): Promise<ProviderScheduleDocument> {
     // Normalize date to midnight
     const normalizedDate = new Date(specificDate);
     normalizedDate.setHours(0, 0, 0, 0);
+
+    const updateDoc: any = {
+      offDays,
+      customSlots,
+      workingHours: [],
+      capability: capability ?? null,
+    };
+    if (reason !== undefined) {
+      updateDoc.reason = reason;
+    }
 
     const result = await this.scheduleModel
       .findOneAndUpdate(
@@ -104,7 +121,7 @@ export class ProvidersRepository {
           scheduleType: ScheduleType.SpecificDate,
           capability: capability ?? null,
         },
-        { $set: { offDays, customSlots, workingHours: [], capability: capability ?? null } },
+        { $set: updateDoc },
         { upsert: true, new: true },
       )
       .exec();

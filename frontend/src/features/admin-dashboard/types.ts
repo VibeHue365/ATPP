@@ -27,6 +27,65 @@ export interface AdminMetric {
   growth?: AdminTrendPoint[];
 }
 
+export interface OverviewChartPoint {
+  day: string;
+  bookings: number;
+  gmvMillions: number;
+}
+
+export interface ServiceShareItem {
+  id: string;
+  name: string;
+  count: number;
+  percentage: number;
+  color: string;
+}
+
+export interface PartnerRanking {
+  rank: number;
+  name: string;
+  bookings: number;
+  avatar: string;
+}
+
+export interface PendingTaskItem {
+  id: string;
+  title: string;
+  count: number;
+  tab: string;
+  variant: 'red' | 'amber';
+}
+
+export interface ActivityFeedItem {
+  id: string;
+  type: 'booking' | 'product' | 'refund' | 'verification' | 'dispute';
+  actor: string;
+  action: string;
+  timeAgo: string;
+}
+
+export interface SystemAlertItem {
+  id: string;
+  title: string;
+  count: number;
+  severity: 'warning' | 'critical';
+}
+
+export interface AdminOverviewKPIs {
+  totalBookings: { value: number; growth: number };
+  gmv: { value: number; growth: number };
+  activePartners: { value: number; growth: number };
+  pendingApprovals: {
+    total: number;
+    growth: number;
+    partners: number;
+    products: number;
+    combos: number;
+  };
+  pendingRefunds: { value: number; growth: number };
+  openDisputes: { value: number; growth: number };
+}
+
 export interface AdminStats {
   customers?: AdminMetric;
   shops?: AdminMetric;
@@ -38,4 +97,23 @@ export interface AdminStats {
     openDisputes: number;
   };
   userBehavior?: AdminUserBehavior;
+  kpis?: AdminOverviewKPIs;
+  chart?: {
+    period: 'day' | 'week' | 'month';
+    summaryBookings: number;
+    summaryGmv: number;
+    points: OverviewChartPoint[];
+  };
+  services?: {
+    total: number;
+    items: ServiceShareItem[];
+  };
+  tasks?: PendingTaskItem[];
+  topPartners?: PartnerRanking[];
+  activities?: ActivityFeedItem[];
+  alerts?: {
+    warnings: SystemAlertItem[];
+    critical: SystemAlertItem[];
+  };
 }
+

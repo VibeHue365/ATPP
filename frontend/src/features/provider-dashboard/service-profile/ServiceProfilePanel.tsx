@@ -5,11 +5,17 @@ import {
   Plus,
   Save,
   Store,
-  Trash2
+  Trash2,
+  Upload,
+  Image as ImageIcon,
+  Loader2,
 } from 'lucide-react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { SectionLoading } from '../../../components/feedback/AsyncState';
+import { useToast } from '../../../components/feedback/Toast';
 import { PhotographyLocationPicker } from '../../photographers/components/PhotographyLocationPicker';
+import { providerApi } from '../api/providerDashboardApi';
 import type { useProviderSessionState } from '../hooks/useProviderSessionState';
 import type { useProviderProfileState } from './useProviderProfileState';
 
@@ -17,7 +23,7 @@ type ServiceProfilePanelProps = Pick<ReturnType<typeof useProviderSessionState>,
   'isLoadingProvider'
 > &
   Pick<ReturnType<typeof useProviderProfileState>,
-    'profileSection' | 'setProfileSection' | 'businessName' | 'setBusinessName' | 'phone' | 'setPhone' | 'city' | 'setCity' | 'baseLatitude' | 'baseLongitude' | 'addressLine' | 'setAddressLine' | 'setBaseLatitude' | 'setBaseLongitude' | 'serviceRadiusKm' | 'setServiceRadiusKm' | 'useBusinessAddressForPickup' | 'setUseBusinessAddressForPickup' | 'pickupLatitude' | 'pickupLongitude' | 'pickupAddressLine' | 'setPickupAddressLine' | 'setPickupLatitude' | 'setPickupLongitude' | 'setCancellationRefundRules' | 'cancellationRefundRules' | 'cancellationAdditionalNotes' | 'setCancellationAdditionalNotes' | 'isSavingProfile'
+    'profileSection' | 'setProfileSection' | 'businessName' | 'setBusinessName' | 'phone' | 'setPhone' | 'city' | 'setCity' | 'baseLatitude' | 'baseLongitude' | 'addressLine' | 'setAddressLine' | 'setBaseLatitude' | 'setBaseLongitude' | 'serviceRadiusKm' | 'setServiceRadiusKm' | 'useBusinessAddressForPickup' | 'setUseBusinessAddressForPickup' | 'pickupLatitude' | 'pickupLongitude' | 'pickupAddressLine' | 'setPickupAddressLine' | 'setPickupLatitude' | 'setPickupLongitude' | 'setCancellationRefundRules' | 'cancellationRefundRules' | 'cancellationAdditionalNotes' | 'setCancellationAdditionalNotes' | 'isSavingProfile' | 'coverUrl' | 'setCoverUrl'
   > &
 {
   profileHasUnsavedChanges: boolean;
@@ -35,8 +41,44 @@ export function ServiceProfilePanel({
   setUseBusinessAddressForPickup, pickupLatitude, pickupLongitude, pickupAddressLine,
   setPickupAddressLine, setPickupLatitude, setPickupLongitude, setCancellationRefundRules,
   cancellationRefundRules, cancellationAdditionalNotes, setCancellationAdditionalNotes,
-  cancellationPolicySummary, isSavingProfile,
+  cancellationPolicySummary, isSavingProfile, coverUrl, setCoverUrl,
 }: ServiceProfilePanelProps) {
+  const toast = useToast();
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCoverFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Kích thước ảnh không được vượt quá 5MB');
+      return;
+    }
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Chỉ hỗ trợ file ảnh định dạng JPEG, PNG, WEBP');
+      return;
+    }
+
+    setUploadingCover(true);
+    try {
+      const res = await providerApi.uploadCoverImage(file);
+      if (res?.url) {
+        setCoverUrl(res.url);
+        toast.success('Tải ảnh bìa thành công! Hãy nhấn "Lưu thay đổi"');
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Tải ảnh bìa thất bại');
+    } finally {
+      setUploadingCover(false);
+      if (coverInputRef.current) {
+        coverInputRef.current.value = '';
+      }
+    }
+  };
+
   return (
     <main className="provider-service-page">
       <div className="provider-service-header">
@@ -79,6 +121,152 @@ export function ServiceProfilePanel({
                 <label htmlFor="provider-phone">Số điện thoại liên hệ</label>
                 <input id="provider-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ví dụ: 0901 234 567" required />
                 <p className="provider-service-field-note">Dùng để hỗ trợ khách khi phát sinh đơn đặt.</p>
+              </div>
+              <div className="provider-service-field" style={{ gridColumn: '1 / -1' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <label htmlFor="provider-cover-url">Ảnh bìa gian hàng (Cover Banner)</label>
+                  <span style={{ fontSize: 12, color: '#897d75' }}>Tỷ lệ chuẩn 16:9 hoặc dải ngang 3:1 (Tối đa 5MB)</span>
+                </div>
+
+                <input
+                  type="file"
+                  ref={coverInputRef}
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={handleCoverFileSelect}
+                />
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    disabled={uploadingCover}
+                    onClick={() => coverInputRef.current?.click()}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '10px 18px',
+                      borderRadius: 10,
+                      background: '#fff',
+                      border: '1.5px solid #a11e22',
+                      color: '#a11e22',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: uploadingCover ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {uploadingCover ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Đang tải ảnh lên...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={16} />
+                        <span>Tải ảnh từ máy tính</span>
+                      </>
+                    )}
+                  </button>
+
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <input
+                      id="provider-cover-url"
+                      type="text"
+                      value={coverUrl}
+                      onChange={(e) => setCoverUrl(e.target.value)}
+                      placeholder="Hoặc dán trực tiếp link ảnh (https://...)"
+                    />
+                  </div>
+
+                  {coverUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setCoverUrl('')}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 10,
+                        border: '1px solid #e3d7cb',
+                        background: '#fff',
+                        color: '#666',
+                        fontSize: 13,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <Trash2 size={14} /> Xóa ảnh
+                    </button>
+                  )}
+                </div>
+
+                {/* Preview Box */}
+                {coverUrl ? (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      borderRadius: 14,
+                      overflow: 'hidden',
+                      height: 160,
+                      background: `url(${coverUrl}) center/cover no-repeat`,
+                      border: '2px solid rgba(161, 30, 34, 0.15)',
+                      position: 'relative',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'linear-gradient(90deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '0 24px',
+                        color: '#fff',
+                      }}
+                    >
+                      <div>
+                        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.85, display: 'block', marginBottom: 2 }}>
+                          Xem trước trên trang Shop
+                        </span>
+                        <strong style={{ fontSize: 18 }}>{businessName || 'Gian hàng của bạn'}</strong>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => coverInputRef.current?.click()}
+                    style={{
+                      marginTop: 12,
+                      padding: '24px 20px',
+                      borderRadius: 14,
+                      border: '2px dashed #e3d7cb',
+                      background: '#fffdfa',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ width: 44, height: 44, borderRadius: 22, background: '#fff0ef', color: '#a11e22', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <ImageIcon size={22} />
+                    </div>
+                    <div>
+                      <strong style={{ display: 'block', fontSize: 13, color: '#333' }}>
+                        Chưa có ảnh bìa — Nhấn để chọn ảnh từ máy tính
+                      </strong>
+                      <span style={{ fontSize: 12, color: '#888' }}>
+                        Định dạng hỗ trợ: JPG, PNG, WebP (Tối đa 5MB)
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <p className="provider-service-field-note">
+                  Ảnh bìa sẽ hiển thị ở đầu trang cửa hàng công khai của bạn, giúp thu hút khách hàng (tỷ lệ chuẩn 16:9 hoặc dải ngang 3:1).
+                </p>
               </div>
             </div>
           </section>}

@@ -19,6 +19,7 @@ export function useProviderProfileState() {
   const [pickupLatitude, setPickupLatitude] = useState('');
   const [pickupLongitude, setPickupLongitude] = useState('');
   const [profileSection, setProfileSection] = useState<'business' | 'location' | 'policy'>('business');
+  const [coverUrl, setCoverUrl] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   return {
@@ -28,6 +29,6 @@ export function useProviderProfileState() {
     setBaseLatitude, baseLongitude, setBaseLongitude, serviceRadiusKm, setServiceRadiusKm,
     useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupAddressLine, setPickupAddressLine,
     pickupLatitude, setPickupLatitude, pickupLongitude, setPickupLongitude, profileSection,
-    setProfileSection, isSavingProfile, setIsSavingProfile,
+    setProfileSection, coverUrl, setCoverUrl, isSavingProfile, setIsSavingProfile,
   };
 }

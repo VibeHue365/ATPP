@@ -7,7 +7,7 @@ import { ROUTES } from '../../config/routes';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import './PhotographerDetailPage.css';
 import './PhotographerPackageDetail.css';
-import Swal from 'sweetalert2';
+import { ConfirmModal } from '../../utils/confirmModal';
 import { usePhotographerDetail } from '../../features/photographers/hooks/usePhotographerDetail';
 import type { LocationSelection, PhotographerPackage as Package, PhotographyQuote } from '../../features/photographers/types/photographer.types';
 import { photographersApi } from '../../features/photographers/api/photographers.api';
@@ -16,7 +16,13 @@ import type { PhotographySessionDraft } from '../../features/photographers/compo
 import type { PhotographyCalendarDay } from '../../features/photographers/components/PhotographyScheduleSelector';
 import type { PhotographerReview } from '../../features/photographers/components/PhotographerReviews';
 import { PhotographerPackageDetailLayout } from '../../features/photographers/components/PhotographerPackageDetailLayout';
+import {
+  VoucherPickerModal,
+  type ApplicableVoucherItem,
+  type IneligibleVoucherItem,
+} from '../cart/components/VoucherPickerModal';
 type PhotographerAvailabilityStatus = 'AVAILABLE' | 'FULL' | 'NO_SCHEDULE' | 'OFF_DAY' | 'PAST';
+
 
 type MonthlyAvailabilityResponse = {
   month: string;
@@ -63,23 +69,14 @@ export const PhotographerDetailPage: React.FC = () => {
   const handleToggleFavorite = async (favId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isAuthenticated) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Yêu cầu đăng nhập',
-        text: 'Vui lòng đăng nhập để lưu nhiếp ảnh gia yêu thích!',
-        confirmButtonColor: 'var(--color-primary-dark)',
-        confirmButtonText: 'Đăng nhập ngay',
-        showCancelButton: true,
-        cancelButtonText: 'Hủy',
-        background: 'white',
-        customClass: {
-          popup: 'font-body',
-        }
-      }).then((result) => {
-        if (result.isConfirmed) {
-          navigate('/auth/login');
-        }
-      });
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để lưu nhiếp ảnh gia yêu thích!',
+        { confirmButtonText: 'Đăng nhập ngay' }
+      );
+      if (result.isConfirmed) {
+        navigate('/auth/login');
+      }
       return;
     }
     try {
@@ -99,6 +96,29 @@ export const PhotographerDetailPage: React.FC = () => {
   const { photographer, isLoading: loading, error } = usePhotographerDetail(id);
   const [reviews, setReviews] = useState<PhotographerReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState<boolean>(true);
+
+  // Load real reviews for photographer from DB
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchReviews = async () => {
+      if (!id) return;
+      try {
+        setReviewsLoading(true);
+        const data = await httpClient.get<PhotographerReview[]>(`/reviews/provider/${id}`);
+        if (!isCancelled && Array.isArray(data)) {
+          setReviews(data);
+        }
+      } catch (err) {
+        console.warn('Lỗi khi tải đánh giá của nhiếp ảnh gia:', err);
+      } finally {
+        if (!isCancelled) setReviewsLoading(false);
+      }
+    };
+    void fetchReviews();
+    return () => {
+      isCancelled = true;
+    };
+  }, [id]);
 
   // Lightbox States
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -180,6 +200,88 @@ export const PhotographerDetailPage: React.FC = () => {
   const [bookingMode, setBookingMode] = useState<'SINGLE' | 'MULTI'>('SINGLE');
   const [multiSessions, setMultiSessions] = useState<PhotographySessionDraft[]>([]);
   const [agreeTerms, setAgreeTerms] = useState<boolean>(false);
+
+  // Voucher states
+  const [applicableVouchers, setApplicableVouchers] = useState<ApplicableVoucherItem[]>([]);
+  const [ineligibleVouchers, setIneligibleVouchers] = useState<IneligibleVoucherItem[]>([]);
+  const [selectedVoucher, setSelectedVoucher] = useState<ApplicableVoucherItem | null>(null);
+  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
+
+  // Fetch applicable vouchers for selected photography package and quote
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchVouchers = async () => {
+      if (!selectedPkg || !photographer) {
+        setApplicableVouchers([]);
+        setIneligibleVouchers([]);
+        setSelectedVoucher(null);
+        return;
+      }
+
+      const packagePrice = quote?.valid && quote.totals ? quote.totals.totalAmount : selectedPkg.price;
+      const itemsPayload = [
+        {
+          id: 'photo_pkg',
+          photographyPackageId: selectedPkg._id,
+          providerId: photographer._id,
+          itemType: 'PHOTOGRAPHY_PACKAGE' as const,
+          unitPrice: packagePrice,
+          quantity: 1,
+          depositAmount: 0,
+          comboDiscountAmount: 0,
+        },
+      ];
+
+      try {
+        const res: any = await httpClient.post('/promotions/applicable', {
+          bookingType: 'PHOTOGRAPHY',
+          items: itemsPayload,
+          travelFee: 0,
+          serviceFee: 0,
+        });
+
+        if (!isCancelled && res) {
+          const applicable: ApplicableVoucherItem[] = res.applicable || [];
+          const ineligible: IneligibleVoucherItem[] = res.ineligible || [];
+          setApplicableVouchers(applicable);
+          setIneligibleVouchers(ineligible);
+
+          setSelectedVoucher((prev) => {
+            if (!prev) return null;
+            const matched = applicable.find(
+              (item) => item.promotion.code.toUpperCase() === prev.promotion.code.toUpperCase(),
+            );
+            return matched || null;
+          });
+        }
+      } catch (err) {
+        console.error('Lỗi tải voucher cho gói chụp:', err);
+        if (!isCancelled) {
+          setApplicableVouchers([]);
+          setIneligibleVouchers([]);
+          setSelectedVoucher(null);
+        }
+      }
+    };
+
+    fetchVouchers();
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedPkg?._id, quote?.totals?.totalAmount, photographer?._id]);
+
+  const handleApplyManualCode = async (code: string): Promise<boolean> => {
+    const upperCode = code.trim().toUpperCase();
+    const matched = applicableVouchers.find(
+      (item) => item.promotion.code.toUpperCase() === upperCode,
+    );
+    if (matched) {
+      setSelectedVoucher(matched);
+      return true;
+    }
+    return false;
+  };
+
 
   // Calendar navigation & booking state
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
@@ -649,10 +751,17 @@ export const PhotographerDetailPage: React.FC = () => {
   };
   const handleAddBookingToCart = async () => {
     if (!isAuthenticated) {
-      toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
-      navigate(ROUTES.LOGIN, { state: { from: location } });
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để thêm gói chụp vào giỏ hàng!',
+        { confirmButtonText: 'Đăng nhập ngay' },
+      );
+      if (result.isConfirmed) {
+        navigate(ROUTES.LOGIN, { state: { from: location } });
+      }
       return;
     }
+
 
     if (bookingMode === 'MULTI') {
       toast.info('Lịch nhiều buổi cần được giữ chỗ và thanh toán trực tiếp để bảo toàn toàn bộ các buổi chụp.');
@@ -719,10 +828,17 @@ export const PhotographerDetailPage: React.FC = () => {
 
   const handleDirectBooking = async () => {
     if (!isAuthenticated) {
-      toast.error('Vui lòng đăng nhập để thực hiện chức năng này.');
-      navigate(ROUTES.LOGIN, { state: { from: location } });
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để tiếp tục đặt lịch chụp ảnh!',
+        { confirmButtonText: 'Đăng nhập ngay' },
+      );
+      if (result.isConfirmed) {
+        navigate(ROUTES.LOGIN, { state: { from: location } });
+      }
       return;
     }
+
 
     if (!selectedPkg) { toast.error('Vui lòng chọn gói dịch vụ!'); return; }
     if (!isQuoteable) { toast.error('Vui lòng hoàn tất thông tin của tất cả buổi chụp.'); return; }
@@ -780,6 +896,7 @@ export const PhotographerDetailPage: React.FC = () => {
           concept: selectedConcept,
           customRequests: customRequest || undefined,
           referenceImage: referenceImageUrl || undefined,
+          promoCode: selectedVoucher ? selectedVoucher.promotion.code : undefined,
         },
         {
           headers: { 'Idempotency-Key': idempotencyKey },
@@ -810,7 +927,9 @@ export const PhotographerDetailPage: React.FC = () => {
   };
 
   return (
-    <PhotographerPackageDetailLayout
+    <>
+      <PhotographerPackageDetailLayout
+
       photographer={photographer}
       packages={photographer.packages}
       selectedPackage={selectedPkg}
@@ -870,8 +989,38 @@ export const PhotographerDetailPage: React.FC = () => {
       onGenerateRange={generateSessionsForRange}
       onUpdateSession={updateMultiSession}
       onRemoveSession={(clientId) => setMultiSessions((current) => current.filter((session) => session.clientId !== clientId))}
+      selectedVoucher={selectedVoucher}
+      applicableVouchers={applicableVouchers}
+      ineligibleVouchers={ineligibleVouchers}
+      onOpenVoucherPicker={() => {
+        if (!isAuthenticated) {
+          ConfirmModal.requireAuth(
+            'Yêu cầu đăng nhập',
+            'Vui lòng đăng nhập để xem và áp dụng mã giảm giá dành riêng cho bạn!',
+            { confirmButtonText: 'Đăng nhập ngay' },
+          ).then((result) => {
+            if (result.isConfirmed) {
+              navigate(ROUTES.LOGIN, { state: { from: location } });
+            }
+          });
+          return;
+        }
+        setIsVoucherModalOpen(true);
+      }}
+      onRemoveVoucher={() => setSelectedVoucher(null)}
     />
+    <VoucherPickerModal
+      isOpen={isVoucherModalOpen}
+      onClose={() => setIsVoucherModalOpen(false)}
+      applicableList={applicableVouchers}
+      ineligibleList={ineligibleVouchers}
+      selectedVoucherCode={selectedVoucher?.promotion.code || null}
+      onSelectVoucher={(voucher) => setSelectedVoucher(voucher)}
+      onApplyManualCode={handleApplyManualCode}
+    />
+    </>
   );
+
 
 
 };

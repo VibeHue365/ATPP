@@ -44,6 +44,8 @@ export interface SettlementItemInput {
   quantity: number;
   depositAmount?: number;
   comboDiscountAmount?: number;
+  shopVoucherDiscountAmount?: number;
+  platformVoucherDiscountAmount?: number;
 }
 
 export interface CalculatedSettlementPayload {
@@ -394,7 +396,7 @@ export class SettlementCalculationService {
   ): SettlementItemSnapshot {
     const serviceAmount = this.getServiceAmount(item);
     const providerDiscountAmount = this.getProviderDiscountAmount(item);
-    const platformDiscountAmount = 0;
+    const platformDiscountAmount = this.moneyRound(item.platformVoucherDiscountAmount ?? 0);
     const commissionBaseAmount = serviceAmount - providerDiscountAmount;
 
     return {
@@ -416,12 +418,26 @@ export class SettlementCalculationService {
     };
   }
 
+  getCustomerPaidServiceAmount(item: SettlementItemInput): number {
+    const serviceAmount = this.getServiceAmount(item);
+    const providerDiscountAmount = this.getProviderDiscountAmount(item);
+    const platformDiscountAmount = this.moneyRound(
+      item.platformVoucherDiscountAmount ?? 0,
+    );
+    return Math.max(
+      0,
+      serviceAmount - providerDiscountAmount - platformDiscountAmount,
+    );
+  }
+
   private getServiceAmount(item: SettlementItemInput): number {
     return this.moneyRound((item.unitPrice ?? 0) * (item.quantity ?? 1));
   }
 
   private getProviderDiscountAmount(item: SettlementItemInput): number {
-    return this.moneyRound(item.comboDiscountAmount ?? 0);
+    return this.moneyRound(
+      (item.comboDiscountAmount ?? 0) + (item.shopVoucherDiscountAmount ?? 0),
+    );
   }
 
   private resolveItemName(item: SettlementItemInput): string | null {

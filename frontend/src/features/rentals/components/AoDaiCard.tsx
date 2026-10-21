@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import Swal from 'sweetalert2';
+import { ConfirmModal } from '../../../utils/confirmModal';
 import { useAuth } from '../../auth/hooks/useAuth';
 import { FavoriteButton } from '../../../components/common/FavoriteButton';
 import { PriceDisplay } from '../../../components/common/PriceDisplay';
@@ -28,15 +28,11 @@ export const AoDaiCard: React.FC<AoDaiCardProps> = ({ item }) => {
     e.stopPropagation();
 
     if (!user) {
-      const result = await Swal.fire({
-        icon: 'warning',
-        title: 'Yêu cầu đăng nhập',
-        text: 'Vui lòng đăng nhập để lưu sản phẩm yêu thích.',
-        confirmButtonColor: 'var(--landing-primary, #7D3543)',
-        confirmButtonText: 'Đăng nhập ngay',
-        showCancelButton: true,
-        cancelButtonText: 'Hủy',
-      });
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để lưu sản phẩm yêu thích.',
+        { confirmButtonText: 'Đăng nhập ngay' }
+      );
       if (result.isConfirmed) {
         navigate('/login');
       }
@@ -59,17 +55,21 @@ export const AoDaiCard: React.FC<AoDaiCardProps> = ({ item }) => {
       }}
     >
       {/* Image Area Container */}
-      <div className="lume-rental-card__media relative w-full aspect-[3/4] overflow-hidden bg-stone-100">
+      <div className="lume-rental-card__media relative w-full aspect-[4/5] overflow-hidden bg-stone-100">
         <Link 
           to={`/rentals/${item.id}`} 
           className="block w-full h-full text-decoration-none"
           tabIndex={-1}
         >
           <img
-            src={item.image}
+            src={item.image || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600'}
             alt={item.name}
             loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600';
+            }}
+            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 will-change-transform"
           />
         </Link>
 

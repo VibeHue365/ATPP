@@ -55,6 +55,7 @@ export function DisputesPanel() {
 
   // Selection state
   const [selected, setSelected] = useState<Dispute | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(true);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
 
   // Form settlement state
@@ -129,10 +130,13 @@ export function DisputesPanel() {
   };
 
   const isItemResolved = (d: Dispute) =>
-    d.status === 'RESOLVED' || d.status === 'CLOSED' || Boolean((d as any).resolvedAt);
+    d.status === 'RESOLVED' || d.status === 'CLOSED' || Boolean((d as any).resolvedAt) || Boolean((d as any).adminDecision);
 
   const isItemNegotiating = (d: Dispute) =>
-    d.status === 'DISPUTED' || d.status === 'UNDER_REVIEW' || d.actionType === 'INCIDENT_REPORT';
+    !isItemResolved(d) && (d.status === 'UNDER_REVIEW' || (d as any).isNegotiating === true);
+
+  const isItemPending = (d: Dispute) =>
+    !isItemResolved(d) && !isItemNegotiating(d);
 
   const getPriority = (d: Dispute): 'Cao' | 'Trung bình' | 'Thấp' => {
     const amount = d.requestedAmount || getDepositTotal(d);
@@ -167,18 +171,18 @@ export function DisputesPanel() {
   const kpiSuccessRate =
     items.length > 0
       ? (
-          (items.filter((i) => isItemResolved(i)).length / items.length) *
-          100
-        ).toFixed(1)
+        (items.filter((i) => isItemResolved(i)).length / items.length) *
+        100
+      ).toFixed(1)
       : '94.2';
 
   // Status Tab Counts
   const countPending = useMemo(
-    () => items.filter((i) => !isItemResolved(i) && !isItemNegotiating(i)).length,
+    () => items.filter((i) => isItemPending(i)).length,
     [items]
   );
   const countNegotiating = useMemo(
-    () => items.filter((i) => !isItemResolved(i) && isItemNegotiating(i)).length,
+    () => items.filter((i) => isItemNegotiating(i)).length,
     [items]
   );
   const countResolved = useMemo(
@@ -191,13 +195,10 @@ export function DisputesPanel() {
   const filteredDisputes = useMemo(() => {
     return items
       .filter((item) => {
-        const resolved = isItemResolved(item);
-        const negotiating = isItemNegotiating(item);
-
         // Status tab
-        if (statusTab === 'PENDING' && (resolved || negotiating)) return false;
-        if (statusTab === 'NEGOTIATING' && (resolved || !negotiating)) return false;
-        if (statusTab === 'RESOLVED' && !resolved) return false;
+        if (statusTab === 'PENDING' && !isItemPending(item)) return false;
+        if (statusTab === 'NEGOTIATING' && !isItemNegotiating(item)) return false;
+        if (statusTab === 'RESOLVED' && !isItemResolved(item)) return false;
 
         // Service filter
         const service = getServiceType(item);
@@ -259,22 +260,28 @@ export function DisputesPanel() {
       });
   }, [items, statusTab, serviceFilter, sortFilter, priceRangeFilter, searchTerm]);
 
-  // Sync selection when list updates or defaults
+  // Sync selection when list updates or defaults if detail dock is open
   useEffect(() => {
-    if (!selected && filteredDisputes.length > 0) {
+    if (isDetailOpen && !selected && filteredDisputes.length > 0) {
       setSelected(filteredDisputes[0]);
     }
-  }, [filteredDisputes, selected]);
+  }, [filteredDisputes, isDetailOpen, selected]);
 
   // When selected dispute changes, prepare split amounts
   const handleSelectDispute = (dispute: Dispute) => {
     setSelected(dispute);
+    setIsDetailOpen(true);
     setError(null);
     setNotes('');
     setDecision('SHOP_RIGHT');
     const deposit = getDepositTotal(dispute);
     setRefundAmount(Math.round(deposit / 2));
     setCompensationAmount(Math.round(deposit / 2));
+  };
+
+  const handleCloseDetail = () => {
+    setIsDetailOpen(false);
+    setSelected(null);
   };
 
   // Dock Sequential Navigation
@@ -345,8 +352,8 @@ export function DisputesPanel() {
       decision === 'SPLIT'
         ? `${decisionLabels[decision]}: Hoàn khách ${formatCurrency(refundAmount)}, bồi thường đối tác ${formatCurrency(compensationAmount)}.`
         : decision === 'SHOP_RIGHT'
-        ? `Xác nhận ${decisionLabels[decision]}: Hoàn trả 100% tiền cọc và thanh toán cho Đối tác.`
-        : `Xác nhận ${decisionLabels[decision]}: Hoàn trả 100% cọc và bồi hoàn cho Khách hàng.`;
+          ? `Xác nhận ${decisionLabels[decision]}: Hoàn trả 100% tiền cọc và thanh toán cho Đối tác.`
+          : `Xác nhận ${decisionLabels[decision]}: Hoàn trả 100% cọc và bồi hoàn cho Khách hàng.`;
 
     const result = await Swal.fire({
       title: 'Xác nhận phán quyết tranh chấp?',
@@ -660,20 +667,10 @@ export function DisputesPanel() {
       {/* 6. Workspace Layout: Table Left + Inspection Dock Right */}
       <div className="df-workspace">
         {/* Left: Disputes Table */}
-        <div className={`df-table-container ${selected ? 'has-selected' : ''}`}>
+        <div className={`df-table-container ${isDetailOpen && selected ? 'has-selected' : ''}`}>
           <table className="df-table">
             <thead>
               <tr>
-                <th style={{ width: '38px', textAlign: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={
-                      filteredDisputes.length > 0 &&
-                      selectedRowIds.size === filteredDisputes.length
-                    }
-                    onChange={toggleSelectAll}
-                  />
-                </th>
                 <th>Mã khiếu nại</th>
                 <th>Loại dịch vụ</th>
                 <th>Khách hàng</th>
@@ -718,13 +715,6 @@ export function DisputesPanel() {
                       className={isSelected ? 'row-selected' : ''}
                       onClick={() => handleSelectDispute(item)}
                     >
-                      <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleSelectRow(item._id)}
-                        />
-                      </td>
 
                       {/* Mã khiếu nại + Thumbnail */}
                       <td>
@@ -808,13 +798,12 @@ export function DisputesPanel() {
                       {/* Độ ưu tiên */}
                       <td>
                         <span
-                          className={`df-prio-pill ${
-                            priority === 'Cao'
-                              ? 'df-prio-high'
-                              : priority === 'Trung bình'
+                          className={`df-prio-pill ${priority === 'Cao'
+                            ? 'df-prio-high'
+                            : priority === 'Trung bình'
                               ? 'df-prio-med'
                               : 'df-prio-low'
-                          }`}
+                            }`}
                         >
                           {priority}
                         </span>
@@ -872,7 +861,7 @@ export function DisputesPanel() {
         </div>
 
         {/* Right: Inspection & Settlement Dock */}
-        {selected && (
+        {isDetailOpen && selected && (
           <aside className="df-detail-dock">
             {/* Dock Topbar: Sequential Navigation */}
             <div className="df-dock-topbar">
@@ -903,7 +892,7 @@ export function DisputesPanel() {
               <button
                 type="button"
                 className="df-dock-close-btn"
-                onClick={() => setSelected(null)}
+                onClick={handleCloseDetail}
                 title="Đóng bảng chi tiết"
               >
                 <X size={18} />
@@ -933,6 +922,10 @@ export function DisputesPanel() {
                   <span className="df-status-pill df-status-resolved">
                     <span className="df-status-dot" /> Đã giải quyết
                   </span>
+                ) : isItemNegotiating(selected) ? (
+                  <span className="df-status-pill df-status-disputed">
+                    <span className="df-status-dot" /> Đang đối chất
+                  </span>
                 ) : (
                   <span className="df-status-pill df-status-pending">
                     <span className="df-status-dot" /> Chờ xử lý
@@ -940,13 +933,12 @@ export function DisputesPanel() {
                 )}
 
                 <span
-                  className={`df-prio-pill ${
-                    getPriority(selected) === 'Cao'
-                      ? 'df-prio-high'
-                      : getPriority(selected) === 'Trung bình'
+                  className={`df-prio-pill ${getPriority(selected) === 'Cao'
+                    ? 'df-prio-high'
+                    : getPriority(selected) === 'Trung bình'
                       ? 'df-prio-med'
                       : 'df-prio-low'
-                  }`}
+                    }`}
                 >
                   Ưu tiên {getPriority(selected).toLowerCase()}
                 </span>
@@ -959,12 +951,12 @@ export function DisputesPanel() {
                 <span className="df-dock-timestamp">
                   {selected.createdAt
                     ? new Date(selected.createdAt).toLocaleDateString('vi-VN', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                      })
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                    })
                     : '14:32 18/03/2025'}
                 </span>
               </div>
@@ -1158,8 +1150,8 @@ export function DisputesPanel() {
                         <strong>
                           {formatCurrency(
                             selected.bookingId?.pricingSummary?.grandTotal ||
-                              selected.requestedAmount * 2 ||
-                              1800000
+                            selected.requestedAmount * 2 ||
+                            1800000
                           )}
                         </strong>
                       </div>

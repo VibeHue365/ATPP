@@ -19,6 +19,7 @@ import type { PhotographyPackage, PhotographyPackagePayload } from '../types/pho
 import { PhotographyPackageCard } from './PhotographyPackageCard';
 import { PhotographyPackageFormModal } from './PhotographyPackageFormModal';
 import { categoryService } from '../../categories/services/categoryService';
+import { ConfirmModal } from '../../../utils/confirmModal';
 import './photographyPackages.css';
 
 const errorMessage = (error: unknown, fallback: string) =>
@@ -194,11 +195,18 @@ export function PhotographyPackageManager({ enabled }: PhotographyPackageManager
 
   const togglePublication = async (item: PhotographyPackage) => {
     const shouldUnpublish = item.status === 'ACTIVE';
-    if (
-      shouldUnpublish &&
-      !window.confirm(`Tạm ngưng gói chụp “${item.name}”? Khách hàng sẽ tạm thời không thể đặt gói này.`)
-    ) {
-      return;
+    if (shouldUnpublish) {
+      const confirmResult = await ConfirmModal.pause(
+        'Tạm ngưng gói chụp?',
+        `Bạn có chắc chắn muốn tạm ngưng gói chụp “${item.name}”? Khách hàng sẽ tạm thời không thể nhìn thấy và đặt gói dịch vụ này.`,
+        {
+          confirmButtonText: 'Tạm ngưng',
+          cancelButtonText: 'Giữ hoạt động',
+        }
+      );
+      if (!confirmResult.isConfirmed) {
+        return;
+      }
     }
     setBusyId(item._id);
     try {

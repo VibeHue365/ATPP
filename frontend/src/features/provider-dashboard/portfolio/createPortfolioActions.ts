@@ -1,5 +1,6 @@
 import Swal from 'sweetalert2';
 import type { useToast } from '../../../components/feedback/Toast';
+import { ConfirmModal } from '../../../utils/confirmModal';
 import { type PortfolioItemFormValues } from '../../photographers/components/PortfolioItemFormModal';
 import { portfolioApi } from '../api/providerDashboardApi';
 import type { useProviderPortfolioState } from './useProviderPortfolioState';
@@ -29,7 +30,7 @@ export function createPortfolioActions({
       confirmButtonText: 'Thêm ảnh',
       cancelButtonText: 'Hủy',
       background: 'white',
-      inputValidator: (value) => {
+      inputValidator: (value: string) => {
         if (!value) return 'Vui lòng nhập URL ảnh!';
         try { new URL(value); } catch { return 'URL không hợp lệ!'; }
       },
@@ -75,16 +76,14 @@ export function createPortfolioActions({
   };
 
   const handleDeletePortfolioItem = async (itemId: string) => {
-    const result = await Swal.fire({
-      title: 'G\u1EE1 t\u00E1c ph\u1EA9m n\u00E0y?',
-      text: 'T\u00E1c ph\u1EA9m s\u1EBD b\u1ECB g\u1EE1 kh\u1ECFi portfolio c\u1EE7a b\u1EA1n.',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'G\u1EE1 t\u00E1c ph\u1EA9m',
-      cancelButtonText: 'H\u1EE7y b\u1ECF',
-      confirmButtonColor: '#DC2626',
-      cancelButtonColor: '#71717A',
-    });
+    const result = await ConfirmModal.delete(
+      'Gỡ tác phẩm khỏi Portfolio?',
+      'Tác phẩm này sẽ bị gỡ bỏ khỏi hồ sơ năng lực của bạn. Bạn có muốn tiếp tục?',
+      {
+        confirmButtonText: 'Gỡ tác phẩm',
+        cancelButtonText: 'Hủy bỏ',
+      }
+    );
     if (!result.isConfirmed) return;
     try {
       await portfolioApi.deleteItem(itemId);

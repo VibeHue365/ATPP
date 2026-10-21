@@ -28,13 +28,17 @@ import { chatService } from '../../services/chatService';
 
 const getImageUrl = (url?: string | null) => {
   if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
   if (url.includes('/public-media/legacy/')) {
     const parts = url.split('/public-media/legacy/');
     const filename = parts[parts.length - 1];
     return `${API_BASE_URL}/uploads/${filename}`;
   }
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  return `${API_BASE_URL}${url}`;
+  if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
+    const normalized = url.startsWith('/') ? url : `/${url}`;
+    return `${API_BASE_URL}${normalized}`;
+  }
+  return url.startsWith('/') ? url : `/${url}`;
 };
 
 interface ProductFromDb {

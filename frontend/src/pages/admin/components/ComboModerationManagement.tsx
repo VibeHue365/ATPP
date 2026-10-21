@@ -119,8 +119,12 @@ const fallbackImage = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4
 
 const resolveImageUrl = (url?: string): string => {
   if (!url) return fallbackImage;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
+    const normalized = url.startsWith('/') ? url : `/${url}`;
+    return `${API_BASE_URL}${normalized}`;
+  }
+  return url.startsWith('/') ? url : `/${url}`;
 };
 
 const formatVND = (amount?: number): string => {

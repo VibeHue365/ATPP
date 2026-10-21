@@ -6,8 +6,7 @@ import {
   User, 
   LogOut, 
   Menu, 
-  X, 
-  Compass
+  X
 } from 'lucide-react';
 import { API_BASE_URL } from '../config/env';
 
@@ -29,12 +28,6 @@ export const DashboardLayout: React.FC = () => {
   const getAvatarUrl = () => {
     if (user?.avatar) {
       if (user.avatar.startsWith('http')) return user.avatar;
-      // NestJS static uploads: e.g. /uploads/avatars/filename -> let's map to static server url
-      // Since it's stored in uploads/avatars/filename, backend should serve it at static path, e.g. http://localhost:3000/uploads/avatars/...
-      // Let's check backend or serve it relative to API_BASE_URL.
-      // Wait, let's see how avatar path is returned: if it's "170...jpg", it should be loaded from backend server.
-      // Let's use `${API_BASE_URL}/uploads/avatars/${user.avatar}` if it is a relative filename, or adjust accordingly.
-      // Let's make sure we handle it robustly!
       const filename = user.avatar.includes('/') || user.avatar.includes('\\') 
         ? user.avatar.split(/[/\\]/).pop() 
         : user.avatar;
@@ -47,9 +40,8 @@ export const DashboardLayout: React.FC = () => {
     <div className="vh-db-container">
       {/* Mobile Header */}
       <header className="vh-db-mobile-header">
-        <Link to={ROUTES.LANDING} className="vh-db-mobile-logo">
-          <Compass size={24} className="vh-txt-purple" />
-          <span>VibeHue</span>
+        <Link to={ROUTES.LANDING} className="vh-db-mobile-logo" style={{ textDecoration: 'none' }}>
+          <img src="/logo-transparent.png" alt="TàGo" style={{ height: '32px', width: 'auto', objectFit: 'contain' }} />
         </Link>
         <button className="vh-db-mobile-toggle" onClick={() => setMobileOpen(!mobileOpen)}>
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -59,9 +51,11 @@ export const DashboardLayout: React.FC = () => {
       {/* Sidebar - Desktop */}
       <aside className={`vh-db-sidebar ${mobileOpen ? 'vh-db-sidebar-open' : ''}`}>
         <div className="vh-db-sidebar-header">
-          <Link to={ROUTES.LANDING} className="vh-db-logo" onClick={() => setMobileOpen(false)}>
-            <Compass size={28} className="vh-logo-icon" />
-            <span>VibeHue</span>
+          <Link to={ROUTES.LANDING} className="vh-db-logo" onClick={() => setMobileOpen(false)} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ background: '#FFFFFF', borderRadius: '10px', width: '38px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', flexShrink: 0 }}>
+              <img src="/logo-icon.png" alt="TàGo" style={{ width: '26px', height: '26px', objectFit: 'contain' }} />
+            </div>
+            <span style={{ color: '#FFFFFF', fontSize: '20px', fontWeight: 800, letterSpacing: '0.02em' }}>TàGo</span>
           </Link>
         </div>
 

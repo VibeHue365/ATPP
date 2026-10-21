@@ -20,4 +20,8 @@ export class CreatePhotographyHoldDto extends CreatePhotographyQuoteDto {
   @IsString()
   @MaxLength(2048)
   referenceImage?: string;
+
+  @IsOptional()
+  @IsString()
+  promoCode?: string;
 }

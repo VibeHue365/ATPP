@@ -31,16 +31,22 @@ export const PersonalInfoFormCard: React.FC = () => {
     }
   }, [user]);
 
-  // Load address & note if available from preferences
+  // Load address & note if available from preferences or addresses
   useEffect(() => {
     httpClient
       .get<any>('/users/me')
       .then((me) => {
+        const defaultAddr = me?.addresses?.find((a: any) => a.isDefault) || me?.addresses?.[0];
         if (me?.address) setAddress(me.address);
+        else if (defaultAddr?.addressLine) setAddress(defaultAddr.addressLine);
+
         if (me?.preferences?.note) setNote(me.preferences.note);
+        else if (defaultAddr?.note) setNote(defaultAddr.note);
       })
       .catch(() => {
-        setAddress((user as any)?.address || user?.addresses?.[0]?.addressLine || '');
+        const defaultAddr = user?.addresses?.find((a: any) => a.isDefault) || user?.addresses?.[0];
+        setAddress((user as any)?.address || defaultAddr?.addressLine || '');
+        setNote((user as any)?.preferences?.note || defaultAddr?.note || '');
       });
   }, [user]);
 
@@ -54,6 +60,9 @@ export const PersonalInfoFormCard: React.FC = () => {
       } else {
         setDateOfBirth('');
       }
+      const defaultAddr = user?.addresses?.find((a: any) => a.isDefault) || user?.addresses?.[0];
+      setAddress((user as any)?.address || defaultAddr?.addressLine || '');
+      setNote((user as any)?.preferences?.note || defaultAddr?.note || '');
     }
     toast.info('Đã hoàn tác thay đổi');
   };

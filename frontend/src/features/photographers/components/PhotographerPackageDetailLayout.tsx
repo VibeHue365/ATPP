@@ -199,8 +199,45 @@ export const PhotographerPackageDetailLayout: React.FC<PhotographerPackageDetail
           <div className="ppd-detail-grid">
             <PhotographerPackageContent photographer={photographer} selectedPackage={selectedPackage} reviews={reviews} reviewsLoading={reviewsLoading} portfolioImages={selectedImages} onImageClick={onImageClick} />
             <div className="ppd-sidebar-column">
-              <PhotographerPackageBookingCard photographer={photographer} packages={packages} selectedPackage={selectedPackage} selectedDate={selectedDate} startTime={startTime} endTime={endTime} selectedTimeSlot={selectedTimeSlot} quote={quote} quoteError={quoteError} isQuoteLoading={isQuoteLoading} selectedLocation={selectedLocation} locationError={locationError} agreeTerms={agreeTerms} isBusy={isBusy} isBooking={isBooking} canAddToCart={canAddToCart} calendarDate={calendarDate} calendarDays={calendarDays} isCalendarLoading={isCalendarLoading} slots={slots} isSlotBusy={isSlotBusy} onSelectPackage={handlePackageSelection} onPreviousMonth={onPreviousMonth} onNextMonth={onNextMonth} onPreviewDate={onPreviewDate} onConfirmSchedule={onConfirmSchedule} onCancelSchedule={onCancelSchedule} onLocationChange={onLocationChange} onAgreeTermsChange={onAgreeTermsChange} onBookNow={onBookNow} onAddToCart={onAddToCart} />
+              <PhotographerPackageBookingCard
+                photographer={photographer}
+                packages={packages}
+                selectedPackage={selectedPackage}
+                selectedDate={selectedDate}
+                startTime={startTime}
+                endTime={endTime}
+                selectedTimeSlot={selectedTimeSlot}
+                quote={quote}
+                quoteError={quoteError}
+                isQuoteLoading={isQuoteLoading}
+                selectedLocation={selectedLocation}
+                locationError={locationError}
+                agreeTerms={agreeTerms}
+                isBusy={isBusy}
+                isBooking={isBooking}
+                canAddToCart={canAddToCart}
+                calendarDate={calendarDate}
+                calendarDays={calendarDays}
+                isCalendarLoading={isCalendarLoading}
+                slots={slots}
+                isSlotBusy={isSlotBusy}
+                onSelectPackage={handlePackageSelection}
+                onPreviousMonth={onPreviousMonth}
+                onNextMonth={onNextMonth}
+                onPreviewDate={onPreviewDate}
+                onConfirmSchedule={onConfirmSchedule}
+                onCancelSchedule={onCancelSchedule}
+                onLocationChange={onLocationChange}
+                onAgreeTermsChange={onAgreeTermsChange}
+                onBookNow={onBookNow}
+                onAddToCart={onAddToCart}
+                selectedVoucher={props.selectedVoucher}
+                applicableVouchersCount={props.applicableVouchers?.length}
+                onOpenVoucherPicker={props.onOpenVoucherPicker}
+                onRemoveVoucher={props.onRemoveVoucher}
+              />
                {bookingMode === 'SINGLE' && <div className="ppd-duration-panel"><div><span>Thêm thời lượng</span><small>Chỉ áp dụng khi ca sau còn trống liên tục.</small></div><PhotographyDurationControl includedDurationMinutes={includedDurationMinutes} durationMinutes={durationMinutes} overtimeIncrementMinutes={overtimeIncrementMinutes} maxOvertimeMinutes={maxOvertimeMinutes} endTime={endTime} canIncrease={canIncreaseDuration} isCheckingIncrease={isNextDurationQuoteLoading} unavailableReason={increaseUnavailableReason} onDecrease={onDecreaseDuration} onIncrease={onIncreaseDuration} /></div>}
+
                {bookingMode === 'MULTI' && <div className="ppd-multi-session-summary"><div><span className="ppd-multi-session-summary__icon"><Bookmark size={15} /></span><div><strong>Lịch nhiều buổi</strong><small>{completedMultiSessions}/{multiSessions.length} buổi đã đủ ngày và giờ</small></div></div><div className="ppd-multi-session-summary__actions"><button type="button" onClick={openMultiSessionDialog}>Chỉnh sửa</button><button type="button" onClick={onBackToSingle}>Về một buổi</button></div></div>}
                {bookingMode === 'SINGLE' && <button type="button" className="ppd-multi-session-toggle" onClick={openMultiSessionDialog} disabled={!selectedDate || !startTime}><span><Bookmark size={16} /> Đặt nhiều buổi</span><ArrowRight size={15} /></button>}
                <PhotographyMultiSessionDialog open={isMultiSessionDialogOpen} sessions={multiSessions} minDate={new Date().toISOString().slice(0, 10)} includedDurationMinutes={includedDurationMinutes} overtimeIncrementMinutes={overtimeIncrementMinutes} maxOvertimeMinutes={maxOvertimeMinutes} errors={multiSessionErrors} onAdd={onAddSession} onGenerateRange={onGenerateRange} onUpdate={onUpdateSession} onRemove={onRemoveSession} onCancel={cancelMultiSessionDialog} onConfirm={confirmMultiSessionDialog} />

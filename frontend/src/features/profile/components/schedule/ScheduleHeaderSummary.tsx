@@ -113,17 +113,17 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
       </div>
 
       {/* 2. Four Quick Stat Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '14px' }}>
         {/* Card 1: Thuê áo dài */}
         <div
           style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
             border: '1px solid #EFE9E1',
-            padding: '16px 20px',
+            padding: '14px 18px',
             display: 'flex',
             alignItems: 'center',
-            gap: '14px',
+            gap: '12px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)'
           }}
         >
@@ -142,14 +142,16 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
           >
             <Shirt size={20} />
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-              <span style={{ fontSize: '20px', fontWeight: 800, color: '#231F20' }}>
-                {String(stats.activeRentals).padStart(2, '0')}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px', fontWeight: 800, color: '#231F20', lineHeight: 1 }}>
+                {stats.activeRentals ?? 0}
               </span>
-              <span style={{ fontSize: '13px', fontWeight: 700, color: '#231F20' }}>Đang thuê áo dài</span>
+              <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#231F20', whiteSpace: 'nowrap' }}>
+                Đang thuê áo dài
+              </span>
             </div>
-            <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: '#8C827A' }}>
+            <p style={{ margin: '4px 0 0 0', fontSize: '11.5px', color: '#8C827A', whiteSpace: 'nowrap' }}>
               {urgentCount > 0 ? `${urgentCount} đơn cần chú ý` : stats.activeRentals > 0 ? 'Đang hoạt động' : 'Chưa có đơn thuê'}
             </p>
           </div>
@@ -161,10 +163,10 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
             border: '1px solid #EFE9E1',
-            padding: '16px 20px',
+            padding: '14px 18px',
             display: 'flex',
             alignItems: 'center',
-            gap: '14px',
+            gap: '12px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)'
           }}
         >
@@ -183,14 +185,16 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
           >
             <Camera size={20} />
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-              <span style={{ fontSize: '20px', fontWeight: 800, color: '#231F20' }}>
-                {String(stats.upcomingShoots).padStart(2, '0')}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px', fontWeight: 800, color: '#231F20', lineHeight: 1 }}>
+                {stats.upcomingShoots ?? 0}
               </span>
-              <span style={{ fontSize: '13px', fontWeight: 700, color: '#231F20' }}>Lịch chụp sắp tới</span>
+              <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#231F20', whiteSpace: 'nowrap' }}>
+                Lịch chụp sắp tới
+              </span>
             </div>
-            <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: '#8C827A' }}>
+            <p style={{ margin: '4px 0 0 0', fontSize: '11.5px', color: '#8C827A', whiteSpace: 'nowrap' }}>
               {stats.upcomingShoots > 0 ? 'Đã lên lịch thành công' : 'Chưa có lịch chụp'}
             </p>
           </div>
@@ -202,10 +206,10 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
             border: '1px solid #EFE9E1',
-            padding: '16px 20px',
+            padding: '14px 18px',
             display: 'flex',
             alignItems: 'center',
-            gap: '14px',
+            gap: '12px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)'
           }}
         >
@@ -224,14 +228,16 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
           >
             <Package size={20} />
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-              <span style={{ fontSize: '20px', fontWeight: 800, color: '#231F20' }}>
-                {String(stats.upcomingCombos).padStart(2, '0')}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px', fontWeight: 800, color: '#231F20', lineHeight: 1 }}>
+                {stats.upcomingCombos ?? 0}
               </span>
-              <span style={{ fontSize: '13px', fontWeight: 700, color: '#231F20' }}>Combo sắp tới</span>
+              <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#231F20', whiteSpace: 'nowrap' }}>
+                Combo sắp tới
+              </span>
             </div>
-            <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: '#8C827A' }}>
+            <p style={{ margin: '4px 0 0 0', fontSize: '11.5px', color: '#8C827A', whiteSpace: 'nowrap' }}>
               {stats.upcomingCombos > 0 ? 'Trọn gói trang phục & chụp' : 'Chưa có combo'}
             </p>
           </div>
@@ -243,10 +249,10 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
             border: '1px solid #EFE9E1',
-            padding: '16px 20px',
+            padding: '14px 18px',
             display: 'flex',
             alignItems: 'center',
-            gap: '14px',
+            gap: '12px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)'
           }}
         >
@@ -265,14 +271,18 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
           >
             <Heart size={20} />
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-              <span style={{ fontSize: '20px', fontWeight: 800, color: '#231F20' }}>
-                {String(stats.favoritesCount).padStart(2, '0')}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px', fontWeight: 800, color: '#231F20', lineHeight: 1 }}>
+                {stats.favoritesCount ?? 0}
               </span>
-              <span style={{ fontSize: '13px', fontWeight: 700, color: '#231F20' }}>Yêu thích</span>
+              <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#231F20', whiteSpace: 'nowrap' }}>
+                Yêu thích
+              </span>
             </div>
-            <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: '#8C827A' }}>Áo dài & gói chụp</p>
+            <p style={{ margin: '4px 0 0 0', fontSize: '11.5px', color: '#8C827A', whiteSpace: 'nowrap' }}>
+              Áo dài & gói chụp
+            </p>
           </div>
         </div>
       </div>

@@ -55,6 +55,7 @@ type CollectionsPanelProps = Pick<ReturnType<typeof useProviderNavigationState>,
   fetchProducts?: () => Promise<void>;
   inventorySummary?: any[];
   toast?: any;
+  provider?: any;
 };
 
 export function CollectionsPanel({
@@ -82,6 +83,7 @@ export function CollectionsPanel({
   categories = [],
   inventorySummary = [],
   toast,
+  provider,
 }: CollectionsPanelProps) {
   // UI states
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -113,6 +115,74 @@ export function CollectionsPanel({
     return traditionalAoDaiImg || FALLBACK_AODAI_IMAGE;
   };
 
+  // Status badge renderer respecting moderation and lifecycle status
+  const renderProductStatusBadge = (p: Product, extraStyle?: React.CSSProperties) => {
+    // If explicitly draft
+    if (p.status === 'DRAFT') {
+      return (
+        <span className="ps-badge ps-badge-draft" style={extraStyle} title="Bản nháp">
+          ● Dự thảo
+        </span>
+      );
+    }
+
+    // Moderation statuses take precedence
+    if (p.moderationStatus === 'PENDING_REVIEW') {
+      return (
+        <span className="ps-badge ps-badge-pending" style={extraStyle} title="Sản phẩm đang chờ Admin phê duyệt">
+          ⏳ Chờ duyệt
+        </span>
+      );
+    }
+
+    if (p.moderationStatus === 'CHANGES_REQUESTED') {
+      return (
+        <span
+          className="ps-badge ps-badge-changes"
+          style={extraStyle}
+          title={p.moderationReason ? `Yêu cầu sửa đổi: ${p.moderationReason}` : 'Cần bổ sung/chỉnh sửa theo yêu cầu của Admin'}
+        >
+          ⚠ Cần sửa
+        </span>
+      );
+    }
+
+    if (p.moderationStatus === 'REJECTED') {
+      return (
+        <span
+          className="ps-badge ps-badge-rejected"
+          style={extraStyle}
+          title={p.moderationReason ? `Bị từ chối: ${p.moderationReason}` : 'Sản phẩm đã bị từ chối'}
+        >
+          ✕ Từ chối
+        </span>
+      );
+    }
+
+    if (p.moderationStatus === 'HIDDEN' || p.status === 'INACTIVE') {
+      return (
+        <span className="ps-badge ps-badge-hidden" style={extraStyle} title="Sản phẩm tạm ẩn">
+          👁 Ẩn
+        </span>
+      );
+    }
+
+    // Fully approved & active
+    if (p.status === 'ACTIVE') {
+      return (
+        <span className="ps-badge ps-badge-active" style={extraStyle} title="Đang mở bán công khai">
+          ✔ Đang bán
+        </span>
+      );
+    }
+
+    return (
+      <span className="ps-badge ps-badge-hidden" style={extraStyle}>
+        👁 Ẩn
+      </span>
+    );
+  };
+
   // 4 Metric calculations
   const metrics = useMemo(() => {
     const totalProd = prodTotal || products.length;
@@ -121,7 +191,8 @@ export function CollectionsPanel({
     let hidden = 0;
 
     products.forEach((p) => {
-      if (p.status === 'ACTIVE') active++;
+      const isApproved = p.moderationStatus === 'APPROVED' || !p.moderationStatus;
+      if (p.status === 'ACTIVE' && isApproved) active++;
       else if (p.status === 'DRAFT') draft++;
       else hidden++;
     });
@@ -182,6 +253,57 @@ export function CollectionsPanel({
     e.stopPropagation();
     setFavorites((prev) => ({ ...prev, [id]: !prev[id] }));
   };
+
+  // Safe navigation to public product page with status guards & noopener
+  const handleOpenPublicProduct = (p: Product) => {
+    if (!p?._id) {
+      toast?.error?.('Không tìm thấy thông tin sản phẩm.');
+      return;
+    }
+
+    if (p.status === 'DRAFT') {
+      toast?.warning?.('Sản phẩm đang ở trạng thái Bản nháp, chưa được mở bán công khai trên sàn.');
+      return;
+    }
+
+    if (p.moderationStatus === 'PENDING_REVIEW') {
+      toast?.warning?.('Sản phẩm đang chờ Quản trị viên phê duyệt, chưa hiển thị công khai.');
+      return;
+    }
+
+    if (p.moderationStatus === 'CHANGES_REQUESTED') {
+      toast?.warning?.(
+        p.moderationReason
+          ? `Sản phẩm cần chỉnh sửa: ${p.moderationReason}`
+          : 'Sản phẩm cần chỉnh sửa theo yêu cầu của Quản trị viên trước khi hiển thị công khai.'
+      );
+      return;
+    }
+
+    if (p.moderationStatus === 'REJECTED') {
+      toast?.error?.(
+        p.moderationReason
+          ? `Sản phẩm đã bị từ chối: ${p.moderationReason}`
+          : 'Sản phẩm đã bị từ chối duyệt, không thể xem công khai.'
+      );
+      return;
+    }
+
+    if (p.status === 'INACTIVE' || p.moderationStatus === 'HIDDEN') {
+      toast?.warning?.('Sản phẩm đang tạm ẩn. Vui lòng chuyển sang "Hiện sản phẩm" để khách hàng có thể xem.');
+      return;
+    }
+
+    // Sản phẩm hợp lệ & đang mở bán (ACTIVE): Mở trang ở tab mới an toàn chống reverse tabnabbing
+    const publicUrl = `/rentals/${encodeURIComponent(p._id)}`;
+    const newWindow = window.open(publicUrl, '_blank', 'noopener,noreferrer');
+    if (newWindow) {
+      newWindow.opener = null;
+    }
+  };
+
+  const providerId = provider?._id || (typeof selectedProduct?.providerId === 'object' ? selectedProduct?.providerId?._id : selectedProduct?.providerId);
+  const providerStoreUrl = providerId ? `/stores/${encodeURIComponent(providerId)}` : null;
 
   const totalPages = Math.max(1, Math.ceil(prodTotal / (prodLimit || 8)));
 
@@ -464,19 +586,7 @@ export function CollectionsPanel({
                         />
 
                         {/* Status Badge */}
-                        {p.status === 'ACTIVE' ? (
-                          <span className="ps-badge ps-badge-active">
-                            ✔ Đang bán
-                          </span>
-                        ) : p.status === 'DRAFT' ? (
-                          <span className="ps-badge ps-badge-draft">
-                            ● Dự thảo
-                          </span>
-                        ) : (
-                          <span className="ps-badge ps-badge-hidden">
-                            👁 Ẩn
-                          </span>
-                        )}
+                        {renderProductStatusBadge(p)}
 
                         {/* Heart Favorite Button */}
                         <button
@@ -639,19 +749,7 @@ export function CollectionsPanel({
                           </td>
 
                           <td className="ps-td">
-                            {p.status === 'ACTIVE' ? (
-                              <span className="ps-badge ps-badge-active" style={{ position: 'static' }}>
-                                ✔ Đang bán
-                              </span>
-                            ) : p.status === 'DRAFT' ? (
-                              <span className="ps-badge ps-badge-draft" style={{ position: 'static' }}>
-                                ● Dự thảo
-                              </span>
-                            ) : (
-                              <span className="ps-badge ps-badge-hidden" style={{ position: 'static' }}>
-                                👁 Ẩn
-                              </span>
-                            )}
+                            {renderProductStatusBadge(p, { position: 'static' })}
                           </td>
 
                           <td className="ps-td" style={{ textAlign: 'right' }}>
@@ -829,19 +927,7 @@ export function CollectionsPanel({
               {/* Product Meta & Quick Action Buttons */}
               <div className="ps-drawer-info">
                 <div className="ps-drawer-badge-row">
-                  {selectedProduct.status === 'ACTIVE' ? (
-                    <span className="ps-badge ps-badge-active" style={{ position: 'static' }}>
-                      ✔ Đang bán
-                    </span>
-                  ) : selectedProduct.status === 'DRAFT' ? (
-                    <span className="ps-badge ps-badge-draft" style={{ position: 'static' }}>
-                      ● Dự thảo
-                    </span>
-                  ) : (
-                    <span className="ps-badge ps-badge-hidden" style={{ position: 'static' }}>
-                      👁 Ẩn
-                    </span>
-                  )}
+                  {renderProductStatusBadge(selectedProduct, { position: 'static' })}
                 </div>
 
                 <h3 className="ps-drawer-prod-title">{selectedProduct.name}</h3>
@@ -858,10 +944,13 @@ export function CollectionsPanel({
                 <div className="ps-drawer-quick-actions">
                   <button
                     type="button"
-                    onClick={() => {
-                      toast?.info?.('Đang mở trang sản phẩm công khai...');
-                    }}
+                    onClick={() => handleOpenPublicProduct(selectedProduct)}
                     className="ps-btn-quick"
+                    title={
+                      selectedProduct.status !== 'ACTIVE'
+                        ? 'Chỉ có thể xem khi sản phẩm đang mở bán công khai'
+                        : 'Mở trang chi tiết sản phẩm trên web ở tab mới'
+                    }
                   >
                     <ExternalLink size={13} />
                     <span>Xem trên cửa hàng</span>
@@ -928,6 +1017,30 @@ export function CollectionsPanel({
                       </span>
                     </div>
 
+                    {providerStoreUrl && (
+                      <div className="ps-info-row">
+                        <span className="ps-info-label">Cửa hàng</span>
+                        <a
+                          href={providerStoreUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ps-info-value"
+                          style={{
+                            color: '#531320',
+                            fontWeight: 650,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            textDecoration: 'none',
+                          }}
+                          title="Xem trang gian hàng của bạn trên web"
+                        >
+                          <span>Xem toàn bộ gian hàng</span>
+                          <ExternalLink size={12} />
+                        </a>
+                      </div>
+                    )}
+
                     <div className="ps-info-row">
                       <span className="ps-info-label">Mô tả</span>
                       <div className="ps-info-value">
@@ -979,24 +1092,50 @@ export function CollectionsPanel({
                     <div className="ps-info-row">
                       <span className="ps-info-label">Trạng thái</span>
                       <span className="ps-info-value">
-                        <span
-                          className={`ps-badge ${
-                            selectedProduct.status === 'ACTIVE'
-                              ? 'ps-badge-active'
-                              : selectedProduct.status === 'DRAFT'
-                              ? 'ps-badge-draft'
-                              : 'ps-badge-hidden'
-                          }`}
-                          style={{ position: 'static' }}
-                        >
-                          {selectedProduct.status === 'ACTIVE'
-                            ? '✔ Đang bán'
-                            : selectedProduct.status === 'DRAFT'
-                            ? '● Dự thảo'
-                            : '👁 Ẩn'}
-                        </span>
+                        {renderProductStatusBadge(selectedProduct, { position: 'static' })}
                       </span>
                     </div>
+
+                    {selectedProduct.moderationReason && (
+                      <div
+                        style={{
+                          margin: '8px 0',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          backgroundColor:
+                            selectedProduct.moderationStatus === 'REJECTED'
+                              ? '#FEF2F2'
+                              : selectedProduct.moderationStatus === 'CHANGES_REQUESTED'
+                              ? '#FFF7ED'
+                              : '#FFFBEB',
+                          border: `1px solid ${
+                            selectedProduct.moderationStatus === 'REJECTED'
+                              ? '#FECACA'
+                              : selectedProduct.moderationStatus === 'CHANGES_REQUESTED'
+                              ? '#FFEDD5'
+                              : '#FDE68A'
+                          }`,
+                          fontSize: '12px',
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        <strong
+                          style={{
+                            color:
+                              selectedProduct.moderationStatus === 'REJECTED'
+                                ? '#991B1B'
+                                : selectedProduct.moderationStatus === 'CHANGES_REQUESTED'
+                                ? '#C2410C'
+                                : '#B45309',
+                            display: 'block',
+                            marginBottom: '2px',
+                          }}
+                        >
+                          Ghi chú từ quản trị viên:
+                        </strong>
+                        <span style={{ color: '#374151' }}>{selectedProduct.moderationReason}</span>
+                      </div>
+                    )}
 
                     <div className="ps-section-divider" />
 

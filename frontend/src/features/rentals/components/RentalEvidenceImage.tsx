@@ -7,10 +7,14 @@ interface Props {
   itemId: string;
   fileId: string;
   alt: string;
+  style?: React.CSSProperties;
+  className?: string;
+  asLink?: boolean;
+  onPreview?: (url: string) => void;
 }
 
 /** Evidence is fetched as an authenticated blob, never rendered from object storage directly. */
-export const RentalEvidenceImage = ({ bookingId, itemId, fileId, alt }: Props) => {
+export const RentalEvidenceImage = ({ bookingId, itemId, fileId, alt, style, className, asLink = true, onPreview }: Props) => {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -40,6 +44,35 @@ export const RentalEvidenceImage = ({ bookingId, itemId, fileId, alt }: Props) =
     };
   }, [bookingId, fileId, itemId]);
 
-  if (objectUrl) return <a href={objectUrl} target="_blank" rel="noreferrer"><img className="rental-fulfillment__evidence-image" src={objectUrl} alt={alt} /></a>;
-  return <span className="rental-fulfillment__evidence-placeholder">{failed ? 'Không tải được ảnh' : 'Đang tải ảnh…'}</span>;
+  if (objectUrl) {
+    const imgEl = (
+      <img
+        className={className || 'rental-fulfillment__evidence-image'}
+        src={objectUrl}
+        alt={alt}
+        style={style}
+      />
+    );
+    if (onPreview) {
+      return (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            onPreview(objectUrl);
+          }}
+          style={{ width: '100%', height: '100%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          title="Bấm để xem ảnh phóng to"
+        >
+          {imgEl}
+        </div>
+      );
+    }
+    if (!asLink) return imgEl;
+    return (
+      <a href={objectUrl} target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}>
+        {imgEl}
+      </a>
+    );
+  }
+  return <span className="rental-fulfillment__evidence-placeholder" style={style}>{failed ? 'Không tải được ảnh' : 'Đang tải ảnh…'}</span>;
 };

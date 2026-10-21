@@ -81,6 +81,7 @@ export interface UserPreferences {
   };
   preferredLocations: string[];
   preferredOccasions: string[];
+  note?: string | null;
 }
 
 export interface UserAddress {
@@ -134,7 +135,7 @@ export class User {
       },
       phone: { type: String, default: null, trim: true },
       phoneNormalized: { type: String, default: null, trim: true },
-      passwordHash: { type: String, default: null },
+      passwordHash: { type: String, default: null, select: false },
       emailVerified: { type: Boolean, default: false },
       phoneVerified: { type: Boolean, default: false },
       authProviders: [
@@ -202,6 +203,7 @@ export class User {
       },
       preferredLocations: { type: [String], default: [] },
       preferredOccasions: { type: [String], default: [] },
+      note: { type: String, default: null, trim: true },
     },
     default: {},
   })

@@ -222,3 +222,16 @@ export interface PhotographerPackageCategory {
   metadata?: { color?: string | null; occasion?: string | null; season?: string | null };
   packageCount: number;
 }
+
+export interface PhotoshootPackageItem {
+  id: string;
+  name: string;
+  photographerName: string;
+  image: string;
+  durationMinutes: number;
+  price: number;
+  rating: number;
+  reviewCount: number;
+  badge?: string;
+  category?: string;
+}

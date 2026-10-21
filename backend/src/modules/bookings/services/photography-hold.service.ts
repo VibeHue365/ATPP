@@ -51,6 +51,9 @@ import {
   ComboAoDaiHoldItemDto,
   CreatePhotographyComboHoldDto,
 } from '../dto/create-photography-combo-hold.dto';
+import { PromotionsService } from '../../products/services/promotions.service';
+import { VoucherPricingService } from '../../products/services/voucher-pricing.service';
+import { PromotionDocument } from '../../products/schemas/promotion.schema';
 
 const HOLD_DURATION_MS = 10 * 60 * 1000;
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
@@ -112,6 +115,8 @@ export class PhotographyHoldService {
     private readonly inventoryReservationModel: Model<InventoryReservation>,
     @Inject(forwardRef(() => PhotographyQuoteService))
     private readonly quoteService: PhotographyQuoteService,
+    private readonly promotionsService: PromotionsService,
+    private readonly voucherPricingService: VoucherPricingService,
   ) {}
 
   async createHold(
@@ -305,7 +310,6 @@ export class PhotographyHoldService {
     );
     const comboDiscountTotal = photoDiscount + productDiscountTotal;
     const subTotal = quote.totalAmount + productRentalTotal;
-    const grandTotal = subTotal - comboDiscountTotal + productDepositTotal;
     const providerIds = [
       photographyPackage.providerId,
       ...aodaiReservations.map((item) => item.product.providerId),
@@ -314,6 +318,100 @@ export class PhotographyHoldService {
         ids.findIndex((candidate) => candidate.toString() === id.toString()) ===
         index,
     );
+
+    const aodaiPricingItems: Array<{
+      id: string;
+      productId: string;
+      providerId: string;
+      itemType: 'PRODUCT';
+      unitPrice: number;
+      quantity: number;
+      depositAmount: number;
+      comboDiscountAmount: number;
+    }> = [];
+
+    for (const reservation of aodaiReservations) {
+      const totalDiscount = Math.round(
+        reservation.unitPrice * reservation.quantity * 0.1,
+      );
+      let distributedDiscount = 0;
+      for (const [
+        index,
+        inventoryItemId,
+      ] of reservation.inventoryItemIds.entries()) {
+        const itemDiscount =
+          index === reservation.inventoryItemIds.length - 1
+            ? totalDiscount - distributedDiscount
+            : Math.round(totalDiscount / reservation.quantity);
+        distributedDiscount += itemDiscount;
+        aodaiPricingItems.push({
+          id: `aodai_${inventoryItemId.toString()}`,
+          productId: reservation.product._id.toString(),
+          providerId: reservation.product.providerId.toString(),
+          itemType: 'PRODUCT',
+          unitPrice: reservation.unitPrice,
+          quantity: 1,
+          depositAmount: reservation.depositAmount,
+          comboDiscountAmount: itemDiscount,
+        });
+      }
+    }
+
+    const allPricingItems = [
+      {
+        id: 'combo_photo_package',
+        photographyPackageId: photographyPackage._id.toString(),
+        providerId: photographyPackage.providerId.toString(),
+        itemType: 'PHOTOGRAPHY_PACKAGE' as const,
+        unitPrice: quote.totalAmount,
+        quantity: 1,
+        depositAmount: 0,
+        comboDiscountAmount: photoDiscount,
+      },
+      ...aodaiPricingItems,
+    ];
+
+    let promotion: PromotionDocument | null = null;
+    if (dto.promoCode) {
+      promotion = await this.promotionsService.findByCode(dto.promoCode);
+      if (!promotion) {
+        throw new BadRequestException('Mã khuyến mãi không tồn tại.');
+      }
+    }
+
+    const isNewCustomer =
+      (await this.bookingModel
+        .countDocuments({
+          customerId,
+          status: {
+            $in: [
+              BookingStatus.Confirmed,
+              BookingStatus.Completed,
+              BookingStatus.DepositPaid,
+              BookingStatus.PickedUp,
+              BookingStatus.Returned,
+            ],
+          },
+        })
+        .session(session)) === 0;
+
+    const pricingResult = this.voucherPricingService.calculatePricing({
+      bookingType: BookingType.Combo,
+      items: allPricingItems,
+      promotion,
+      userContext: {
+        customerId,
+        isNewCustomer,
+      },
+      travelFee: 0,
+      serviceFee: 0,
+    });
+
+    if (!pricingResult.isValid) {
+      throw new BadRequestException(
+        pricingResult.errorMessage || 'Mã khuyến mãi không hợp lệ.',
+      );
+    }
 
     const booking = new this.bookingModel({
       bookingCode: this.createBookingCode(),
@@ -326,15 +424,19 @@ export class PhotographyHoldService {
       pricingSummary: {
         subTotal,
         depositTotal: productDepositTotal,
-        discountAmount: comboDiscountTotal,
+        discountAmount:
+          comboDiscountTotal + pricingResult.voucherDiscountTotal,
         comboDiscountTotal,
-        voucherDiscountTotal: 0,
+        voucherDiscountTotal: pricingResult.voucherDiscountTotal,
+        platformSubsidyAmount: pricingResult.platformSubsidyAmount,
+        amountDueNow: pricingResult.amountDueNow,
         travelFee: 0,
         overtimeFee: quote.overtimeAmount,
         lateFee: 0,
         damageFee: 0,
-        grandTotal,
+        grandTotal: pricingResult.grandTotal,
       },
+      voucherSnapshot: pricingResult.voucherSnapshot,
       paymentSummary: {
         totalPaid: 0,
         totalRefunded: 0,
@@ -344,11 +446,23 @@ export class PhotographyHoldService {
         {
           status: BookingStatus.PendingPayment,
           changedAt: new Date(),
-          note: 'ÄÃ£ giá»¯ lá»‹ch chá»¥p vÃ  Ã¡o dÃ i, chá» thanh toÃ¡n.',
+          note: 'Đã giữ lịch chụp và áo dài, chờ thanh toán.',
         },
       ],
     });
     await booking.save({ session });
+
+    if (promotion && pricingResult.voucherDiscountTotal > 0) {
+      await this.promotionsService.reserveVoucher(
+        {
+          bookingId: booking._id,
+          promotionId: promotion._id,
+          customerId,
+          discountAmount: pricingResult.voucherDiscountTotal,
+        },
+        session,
+      );
+    }
 
     const photographyPriceVersion = await this.findOrCreatePriceVersion(
       photographyPackage,
@@ -391,6 +505,10 @@ export class PhotographyHoldService {
       scheduleSchemaVersion: 2,
       comboDiscountPercent: 10,
       comboDiscountAmount: photoDiscount,
+      shopVoucherDiscountAmount:
+        pricingResult.itemAllocations[0]?.shopVoucherDiscountAmount || 0,
+      platformVoucherDiscountAmount:
+        pricingResult.itemAllocations[0]?.platformVoucherDiscountAmount || 0,
     });
     await photographyItem.save({ session });
 
@@ -416,6 +534,7 @@ export class PhotographyHoldService {
       { session },
     );
 
+    let aodaiAllocationIndex = 1;
     for (const reservation of aodaiReservations) {
       if (reservation.inventoryItemIds.length !== reservation.quantity) {
         throw new ConflictException(
@@ -439,6 +558,8 @@ export class PhotographyHoldService {
             ? totalDiscount - distributedDiscount
             : Math.round(totalDiscount / reservation.quantity);
         distributedDiscount += itemDiscount;
+        const allocation =
+          pricingResult.itemAllocations[aodaiAllocationIndex++];
         const bookingItem = new this.bookingItemModel({
           bookingId: booking._id,
           providerId: reservation.product.providerId,
@@ -464,6 +585,10 @@ export class PhotographyHoldService {
           priceBreakdown: [],
           comboDiscountPercent: 10,
           comboDiscountAmount: itemDiscount,
+          shopVoucherDiscountAmount:
+            allocation?.shopVoucherDiscountAmount || 0,
+          platformVoucherDiscountAmount:
+            allocation?.platformVoucherDiscountAmount || 0,
         });
         await bookingItem.save({ session });
         await this.inventoryReservationModel.create(
@@ -996,9 +1121,32 @@ export class PhotographyHoldService {
       },
     );
     await this.bookingModel.updateMany(
-      { _id: { $in: bookingIds } },
+      { _id: { $in: bookingIds }, status: BookingStatus.PendingPayment },
+      {
+        $set: { status: BookingStatus.Cancelled, holdExpiresAt: null },
+        $push: {
+          statusTimeline: {
+            status: BookingStatus.Cancelled,
+            changedAt: new Date(),
+            note: 'PAYMENT_EXPIRED',
+          },
+        },
+      },
+    );
+    await this.bookingModel.updateMany(
+      {
+        _id: { $in: bookingIds },
+        status: { $ne: BookingStatus.PendingPayment },
+      },
       { $set: { holdExpiresAt: null } },
     );
+    for (const bId of bookingIds) {
+      try {
+        await this.promotionsService.releaseVoucher(bId);
+      } catch {
+        // Ignore if booking had no active voucher reservation
+      }
+    }
     return result.modifiedCount;
   }
 
@@ -1023,7 +1171,7 @@ export class PhotographyHoldService {
       .session(session)
       .exec();
     if (!photographyPackage) {
-      throw new NotFoundException('GÃ³i chá»¥p khÃ´ng cÃ²n hoáº¡t Ä‘á»™ng.');
+      throw new NotFoundException('Gói chụp không còn hoạt động.');
     }
 
     await this.assertProviderServiceRadius(
@@ -1051,6 +1199,60 @@ export class PhotographyHoldService {
       session,
     );
     const depositTotal = quote.totalAmount; // 100% thanh toán trước cho thợ chụp
+
+    let promotion: PromotionDocument | null = null;
+    if (dto.promoCode) {
+      promotion = await this.promotionsService.findByCode(dto.promoCode);
+      if (!promotion) {
+        throw new BadRequestException('Mã khuyến mãi không tồn tại.');
+      }
+    }
+
+    const isNewCustomer =
+      (await this.bookingModel
+        .countDocuments({
+          customerId,
+          status: {
+            $in: [
+              BookingStatus.Confirmed,
+              BookingStatus.Completed,
+              BookingStatus.DepositPaid,
+              BookingStatus.PickedUp,
+              BookingStatus.Returned,
+            ],
+          },
+        })
+        .session(session)) === 0;
+
+    const pricingResult = this.voucherPricingService.calculatePricing({
+      bookingType: BookingType.Photography,
+      items: [
+        {
+          id: 'photo_package',
+          photographyPackageId: photographyPackage._id.toString(),
+          providerId: photographyPackage.providerId.toString(),
+          itemType: 'PHOTOGRAPHY_PACKAGE',
+          unitPrice: quote.totalAmount,
+          quantity: 1,
+          depositAmount: 0,
+          comboDiscountAmount: 0,
+        },
+      ],
+      promotion,
+      userContext: {
+        customerId,
+        isNewCustomer,
+      },
+      travelFee: 0,
+      serviceFee: 0,
+    });
+
+    if (!pricingResult.isValid) {
+      throw new BadRequestException(
+        pricingResult.errorMessage || 'Mã khuyến mãi không hợp lệ.',
+      );
+    }
+
     const booking = new this.bookingModel({
       bookingCode: this.createBookingCode(),
       customerId,
@@ -1062,13 +1264,18 @@ export class PhotographyHoldService {
       pricingSummary: {
         subTotal: quote.baseAmount + quote.surchargeAmount,
         depositTotal,
-        discountAmount: 0,
+        discountAmount: pricingResult.voucherDiscountTotal,
+        comboDiscountTotal: 0,
+        voucherDiscountTotal: pricingResult.voucherDiscountTotal,
+        platformSubsidyAmount: pricingResult.platformSubsidyAmount,
+        amountDueNow: pricingResult.amountDueNow,
         travelFee: 0,
         overtimeFee: quote.overtimeAmount,
         lateFee: 0,
         damageFee: 0,
-        grandTotal: quote.totalAmount,
+        grandTotal: pricingResult.grandTotal,
       },
+      voucherSnapshot: pricingResult.voucherSnapshot,
       paymentSummary: {
         totalPaid: 0,
         totalRefunded: 0,
@@ -1078,11 +1285,23 @@ export class PhotographyHoldService {
         {
           status: BookingStatus.PendingPayment,
           changedAt: new Date(),
-          note: 'ÄÃ£ giá»¯ lá»‹ch chá»¥p, chá» thanh toÃ¡n.',
+          note: 'Đã giữ lịch chụp, chờ thanh toán.',
         },
       ],
     });
     await booking.save({ session });
+
+    if (promotion && pricingResult.voucherDiscountTotal > 0) {
+      await this.promotionsService.reserveVoucher(
+        {
+          bookingId: booking._id,
+          promotionId: promotion._id,
+          customerId,
+          discountAmount: pricingResult.voucherDiscountTotal,
+        },
+        session,
+      );
+    }
 
     const firstSession = sessions[0];
     const bookingItem = new this.bookingItemModel({
@@ -1120,6 +1339,10 @@ export class PhotographyHoldService {
       },
       priceBreakdown: quote.breakdown,
       scheduleSchemaVersion: 2,
+      shopVoucherDiscountAmount:
+        pricingResult.itemAllocations[0]?.shopVoucherDiscountAmount || 0,
+      platformVoucherDiscountAmount:
+        pricingResult.itemAllocations[0]?.platformVoucherDiscountAmount || 0,
     });
     await bookingItem.save({ session });
 

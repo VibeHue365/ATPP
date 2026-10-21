@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { Transporter } from 'nodemailer';
+import { getPrimaryFrontendUrl } from '../../../common/config/frontend-url.util';
 
 @Injectable()
 export class MailService {
@@ -46,10 +47,11 @@ export class MailService {
   }
 
   async sendPasswordResetLink(email: string, token: string): Promise<void> {
-    const frontendUrl = this.configService.get<string>(
+    const rawFrontendUrl = this.configService.get<string>(
       'FRONTEND_URL',
       'http://localhost:5173',
     );
+    const frontendUrl = getPrimaryFrontendUrl(rawFrontendUrl);
     const resetUrl = `${frontendUrl}/auth/reset-password?token=${encodeURIComponent(token)}`;
     const subject = 'Reset your VibeHue password';
     const text = `Reset your password here: ${resetUrl}. This link expires in 15 minutes.`;

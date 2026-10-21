@@ -23,6 +23,7 @@ describe('ProviderVerificationService OCR', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
   });
 

@@ -216,10 +216,25 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             statusBg = '#ECFDF5';
             statusColor = '#047857';
           } else if (b.status === 'RETURN_PENDING') {
-            statusLabel = 'CHỜ TRẢ ĐỒ';
-            statusSubtext = 'Đang kiểm tra trả đồ combo';
-            statusBg = '#FEF9E7';
-            statusColor = '#F39C12';
+            const hasIncident = Boolean(
+              b.activeIncident ||
+              b.hasIncident ||
+              b.statusTimeline?.some((t: any) =>
+                t.status === 'RETURN_PENDING' &&
+                (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
+              )
+            );
+            if (hasIncident) {
+              statusLabel = 'CHỜ DUYỆT SỰ CỐ';
+              statusSubtext = 'Shop yêu cầu đền bù hư hỏng';
+              statusBg = '#FFF1F2';
+              statusColor = '#E11D48';
+            } else {
+              statusLabel = 'CHỜ TRẢ ĐỒ';
+              statusSubtext = 'Đang kiểm tra trả đồ combo';
+              statusBg = '#FEF9E7';
+              statusColor = '#F39C12';
+            }
           } else if (b.status === 'AWAITING_REVIEW') {
             statusLabel = 'CHỜ DUYỆT ẢNH';
             statusSubtext = 'Đã có ảnh, vui lòng duyệt';
@@ -279,10 +294,25 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             statusBg = '#ECFDF5';
             statusColor = '#047857';
           } else if (b.status === 'RETURN_PENDING') {
-            statusLabel = 'CHỜ TRẢ ĐỒ';
-            statusSubtext = 'Đang kiểm tra trả đồ';
-            statusBg = '#FEF9E7';
-            statusColor = '#F39C12';
+            const hasIncident = Boolean(
+              b.activeIncident ||
+              b.hasIncident ||
+              b.statusTimeline?.some((t: any) =>
+                t.status === 'RETURN_PENDING' &&
+                (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
+              )
+            );
+            if (hasIncident) {
+              statusLabel = 'CHỜ DUYỆT SỰ CỐ';
+              statusSubtext = 'Shop yêu cầu đền bù hư hỏng';
+              statusBg = '#FFF1F2';
+              statusColor = '#E11D48';
+            } else {
+              statusLabel = 'CHỜ TRẢ ĐỒ';
+              statusSubtext = 'Đang kiểm tra trả đồ';
+              statusBg = '#FEF9E7';
+              statusColor = '#F39C12';
+            }
           } else if (b.status === 'RETURNED' || b.status === 'COMPLETED') {
             statusLabel = 'ĐÃ TRẢ';
             statusSubtext = 'Đã trả đúng hạn';

@@ -45,7 +45,7 @@ export interface UpdateProviderProfileDto {
   contact?: ProviderContact;
   address?: ProviderAddress;
   policies?: ProviderPolicies;
-  media?: ProviderMedia;
+  media?: Partial<ProviderMedia>;
   rentalSettings?: Partial<ProviderRentalSettings>;
   photographySettings?: Partial<ProviderPhotographySettings>;
   comboDiscountPercent?: number;
@@ -112,7 +112,13 @@ export class ProvidersService {
       throw new NotFoundException('Provider profile not found');
     }
 
-    const update = this.normalizeLocationUpdate(provider, dto);
+    const update: any = this.normalizeLocationUpdate(provider, dto);
+    if (dto.media) {
+      update.media = {
+        ...provider.media,
+        ...dto.media,
+      };
+    }
     const updated = await this.providersRepository.update(provider._id, update as Partial<Provider>);
     if (!updated) {
       throw new NotFoundException('Failed to update provider profile');
@@ -443,6 +449,7 @@ export class ProvidersService {
     isOffDay: boolean,
     customSlots: Array<{ timeSlot: string; status: string }>,
     capability: ScheduleCapability | null = null,
+    reason?: string | null,
   ): Promise<ProviderScheduleDocument> {
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
@@ -452,6 +459,10 @@ export class ProvidersService {
 
     const specificDate = new Date(dateStr);
     const offDays = isOffDay ? [specificDate] : [];
+    const reasonToSave =
+      isOffDay || (customSlots && customSlots.length > 0)
+        ? (reason?.trim() || null)
+        : null;
 
     return this.providersRepository.upsertSpecificDateSchedule(
       provider._id,
@@ -459,6 +470,7 @@ export class ProvidersService {
       offDays,
       customSlots,
       capability,
+      reasonToSave,
     );
   }
 
@@ -745,7 +757,10 @@ const bookingIds = bookings.map((booking) => booking._id);
    * và 10 settlement gần nhất để hiển thị lịch sử giao dịch.
    */
   async getWallet(userIdStr: string) {
-    const provider = await this.requireProvider(userIdStr);
+    const provider = await this.providersRepository.findByUserIdWithWallet(
+      this.toObjectId(userIdStr),
+    );
+    if (!provider) throw new NotFoundException('Provider profile not found');
 
     const wallet = provider.wallet ?? {
       pendingBalance: 0,

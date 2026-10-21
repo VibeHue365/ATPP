@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import type { PopularLocationItem } from '../data/popular-locations.fixture';
+import type { PopularLocationItem } from '../constants/landing.constants';
 
 export interface LocationCardProps {
   item: PopularLocationItem;
@@ -21,7 +21,7 @@ export const LocationCard: React.FC<LocationCardProps> = ({ item }) => {
           src={item.image}
           alt={`Địa điểm chụp ảnh ${item.name}`}
           loading="lazy"
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 will-change-transform"
         />
       </div>
 

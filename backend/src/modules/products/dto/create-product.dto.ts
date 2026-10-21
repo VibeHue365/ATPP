@@ -47,6 +47,7 @@ export class ColorImagesDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(10)
   @IsString({ each: true })
   images?: string[];
 }
@@ -75,6 +76,7 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(10)
   @IsString({ each: true })
   images?: string[];
 

@@ -202,7 +202,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
       handleMarkAsRead(noti._id);
     }
     if (noti.metadata?.tab) {
-      navigate(`/admin/dashboard-refactored?tab=${noti.metadata.tab}`);
+      navigate(`${ROUTES.ADMIN_DASHBOARD}?tab=${noti.metadata.tab}`);
     } else if (noti.metadata?.url) {
       navigate(noti.metadata.url);
     } else if (noti.metadata?.bookingId) {

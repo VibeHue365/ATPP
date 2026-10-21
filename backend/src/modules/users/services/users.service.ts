@@ -96,12 +96,49 @@ export class UsersService {
     if (dto.dateOfBirth !== undefined)
       update.dateOfBirth = new Date(dto.dateOfBirth);
 
+    const hasAddressOrNote = dto.address !== undefined || dto.note !== undefined;
     const changedFields = Object.keys(update);
-    if (changedFields.length === 0) {
+    if (changedFields.length === 0 && !hasAddressOrNote) {
       throw new BadRequestException('No valid profile fields to update');
     }
 
-    await this.usersRepository.updateProfile(userObjectId, update);
+    if (changedFields.length > 0) {
+      await this.usersRepository.updateProfile(userObjectId, update);
+    }
+
+    if (hasAddressOrNote) {
+      const user = await this.findUserForAddresses(userId);
+      const addresses = this.addressEntries(user);
+      const defaultAddr = addresses.find((a) => a.isDefault) || addresses[0];
+      const trimmedAddress = dto.address !== undefined ? dto.address.trim() : undefined;
+      const trimmedNote = dto.note !== undefined ? dto.note.trim() : undefined;
+
+      if (defaultAddr) {
+        if (trimmedAddress !== undefined && trimmedAddress.length > 0) {
+          defaultAddr.addressLine = trimmedAddress;
+        }
+        if (trimmedNote !== undefined) {
+          defaultAddr.note = trimmedNote || null;
+        }
+      } else if (trimmedAddress && trimmedAddress.length > 0) {
+        addresses.push({
+          label: 'Mặc định',
+          recipientName: dto.fullName || user.profile?.fullName || null,
+          phone: dto.phone || user.auth?.phone || null,
+          addressLine: trimmedAddress,
+          note: trimmedNote || null,
+          isDefault: true,
+        });
+      }
+
+      if (trimmedNote !== undefined) {
+        await this.usersRepository.updatePreferences(userObjectId, {
+          preferences: { note: trimmedNote },
+        });
+      }
+      await user.save();
+    }
+
     return this.getMe(userId, roles);
   }
 
@@ -554,6 +591,33 @@ export class UsersService {
   ): Promise<Record<string, unknown>> {
     const userObjectId = this.toObjectId(userId);
     await this.usersRepository.updatePreferences(userObjectId, dto);
+
+    if (dto.address !== undefined) {
+      const user = await this.findUserForAddresses(userId);
+      const addresses = this.addressEntries(user);
+      const defaultAddr = addresses.find((a) => a.isDefault) || addresses[0];
+      const trimmedAddress = dto.address.trim();
+
+      if (defaultAddr) {
+        if (trimmedAddress) {
+          defaultAddr.addressLine = trimmedAddress;
+        }
+        if (dto.preferences?.note !== undefined) {
+          defaultAddr.note = dto.preferences.note?.trim() || null;
+        }
+      } else if (trimmedAddress) {
+        addresses.push({
+          label: 'Mặc định',
+          recipientName: user.profile?.fullName || null,
+          phone: user.auth?.phone || null,
+          addressLine: trimmedAddress,
+          note: dto.preferences?.note?.trim() || null,
+          isDefault: true,
+        });
+      }
+      await user.save();
+    }
+
     return this.getMe(userId, roles);
   }
 

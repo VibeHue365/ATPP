@@ -26,15 +26,52 @@ export const ProfileReviewModal: React.FC<ProfileReviewModalProps> = ({
       return;
     }
 
+    const toIdStr = (val: any): string | undefined => {
+      if (!val) return undefined;
+      if (typeof val === 'string') return val.trim() || undefined;
+      if (typeof val === 'object' && val._id) return String(val._id);
+      return undefined;
+    };
+
+    const bookingId =
+      toIdStr(item?.bookingId) ||
+      toIdStr(item?.booking?._id) ||
+      toIdStr(item?.booking);
+
+    const bookingItemId =
+      toIdStr(item?.bookingItemId) ||
+      toIdStr(item?.itemId) ||
+      toIdStr(item?._id);
+
+    const productId =
+      toIdStr(item?.productId) ||
+      toIdStr(item?.product?._id) ||
+      toIdStr(item?.product);
+
+    const photographyPackageId =
+      toIdStr(item?.photographyPackageId) ||
+      toIdStr(item?.packageId) ||
+      toIdStr(item?.photographyPackage?._id) ||
+      toIdStr(item?.photographyPackage);
+
+    if (!bookingId) {
+      toast.error('Không tìm thấy mã đơn hàng để gửi đánh giá.');
+      return;
+    }
+    if (!bookingItemId) {
+      toast.error('Không tìm thấy mã dịch vụ trong đơn hàng.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await httpClient.post('/reviews', {
-        bookingId: item.bookingId,
-        bookingItemId: item.itemId || item._id,
+        bookingId,
+        bookingItemId,
         rating,
         comment: comment.trim(),
-        productId: item.productId || undefined,
-        photographyPackageId: item.photographyPackageId || undefined
+        productId,
+        photographyPackageId
       });
 
       toast.success('Gửi đánh giá dịch vụ thành công!');

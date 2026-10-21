@@ -94,7 +94,7 @@ export const ProviderDashboard: React.FC = () => {
     }
   }, [user, isAuthenticated, navigate, toast]);
 
-  const { currentView, setCurrentView, collectionTab, setCollectionTab } = useProviderNavigationState();
+  const { currentView, setCurrentView, collectionTab, setCollectionTab, isSidebarCollapsed, toggleSidebar } = useProviderNavigationState();
 
   const {
     provider, setProvider, selectedBookingId, setSelectedBookingId, isDetailModalOpen,
@@ -208,7 +208,7 @@ export const ProviderDashboard: React.FC = () => {
     setBaseLatitude, baseLongitude, setBaseLongitude, serviceRadiusKm, setServiceRadiusKm,
     useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupAddressLine, setPickupAddressLine,
     pickupLatitude, setPickupLatitude, pickupLongitude, setPickupLongitude, profileSection,
-    setProfileSection, isSavingProfile, setIsSavingProfile,
+    setProfileSection, isSavingProfile, setIsSavingProfile, coverUrl, setCoverUrl,
   } = useProviderProfileState();
 
   const {
@@ -232,6 +232,7 @@ export const ProviderDashboard: React.FC = () => {
 
   const profileHasUnsavedChanges = Boolean(provider) && (
     businessName !== (provider?.businessName ?? '') ||
+    coverUrl !== (provider?.media?.coverUrl ?? '') ||
     phone !== (provider?.contact?.phone ?? '') ||
     addressLine !== (provider?.address?.addressLine ?? '') ||
     city !== (provider?.address?.city ?? '') ||
@@ -284,6 +285,7 @@ export const ProviderDashboard: React.FC = () => {
     setPhone,
     setAddressLine,
     setCity,
+    setCoverUrl,
     setCancellationRefundRules,
     setCancellationAdditionalNotes,
     setComboDiscountPercent,
@@ -324,6 +326,7 @@ export const ProviderDashboard: React.FC = () => {
     cancellationAdditionalNotes,
     setIsSavingProfile,
     provider,
+    coverUrl,
     baseLatitude,
     baseLongitude,
     useBusinessAddressForPickup,
@@ -729,7 +732,7 @@ export const ProviderDashboard: React.FC = () => {
 
   const rentalOperationItems = React.useMemo(() => orders.flatMap((order) =>
     (order.items || [])
-      .filter((item: any) => item?.rentalFulfillment && item.rentalFulfillment.status !== 'COMPLETED' && item.rentalFulfillment.status !== 'CANCELLED')
+      .filter((item: any) => item?.rentalFulfillment && item.rentalFulfillment.status !== 'CANCELLED')
       .map((item: any) => ({ order, item })),
   ), [orders]);
 
@@ -759,12 +762,12 @@ export const ProviderDashboard: React.FC = () => {
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-light-bg)' }}>
       {/* SIDEBAR */}
-      <ProviderSidebar {...{ setCurrentView, currentView, hasAodaiCapability, setCollectionTab, collectionTab, hasPhotographyCapability, navigate, handleLogoutClick }} />
+      <ProviderSidebar {...{ setCurrentView, currentView, hasAodaiCapability, setCollectionTab, collectionTab, hasPhotographyCapability, navigate, handleLogoutClick, isSidebarCollapsed, toggleSidebar }} />
 
       {/* MAIN CONTENT AREA */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh', overflowY: 'auto', backgroundColor: 'var(--color-light-bg)' }}>
         {/* TOP BAR */}
-        <ProviderHeader {...{ notiRef, setIsNotiOpen, isNotiOpen, fetchNotifications, providerUnreadCount, handleNotiMarkAllAsRead, loadingNoti, notifications, getNotiTypeStyle, handleNotiMarkAsRead, getNotiTimeAgo, setCurrentView, provider }} />
+        <ProviderHeader {...{ notiRef, setIsNotiOpen, isNotiOpen, fetchNotifications, providerUnreadCount, handleNotiMarkAllAsRead, loadingNoti, notifications, getNotiTypeStyle, handleNotiMarkAsRead, getNotiTimeAgo, setCurrentView, provider, isSidebarCollapsed, toggleSidebar }} />
 
         {/* CONTENT SWITCH PANEL */}
         {(currentView === 'overview' || currentView === 'analytics') && (
@@ -796,11 +799,11 @@ export const ProviderDashboard: React.FC = () => {
           <RentalOperationsPanel {...{ fetchOrders, loadingOrders, rentalOperationItems, setSelectedBookingId, setIsDetailModalOpen, orders, toast }} />
         )}
         {currentView === 'collections' && (
-          <CollectionsPanel {...{ collectionTab, openAddModal, setCollectionTab, prodSearch, setProdSearch, setProdPage, prodSizeFilter, setProdSizeFilter, prodColorFilter, setProdColorFilter, prodSortBy, setProdSortBy, loadingProducts, products, openEditModal, handleDuplicateProduct, handleDeleteProduct, prodTotal, prodLimit, prodPage, renderInventoryView, categories, fetchProducts, inventorySummary, toast }} />
+          <CollectionsPanel {...{ collectionTab, openAddModal, setCollectionTab, prodSearch, setProdSearch, setProdPage, prodSizeFilter, setProdSizeFilter, prodColorFilter, setProdColorFilter, prodSortBy, setProdSortBy, loadingProducts, products, openEditModal, handleDuplicateProduct, handleDeleteProduct, prodTotal, prodLimit, prodPage, renderInventoryView, categories, fetchProducts, inventorySummary, toast, provider }} />
         )}
 
         {currentView === 'profile' && (
-          <ServiceProfilePanel {...{ profileHasUnsavedChanges, isLoadingProvider, handleUpdateProfile, profileSection, setProfileSection, businessName, setBusinessName, phone, setPhone, city, setCity, baseLatitude, baseLongitude, addressLine, setAddressLine, setBaseLatitude, setBaseLongitude, hasPhotographyCapability, serviceRadiusKm, setServiceRadiusKm, hasAodaiCapability, useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupLatitude, pickupLongitude, pickupAddressLine, setPickupAddressLine, setPickupLatitude, setPickupLongitude, setCancellationRefundRules, cancellationRefundRules, cancellationAdditionalNotes, setCancellationAdditionalNotes, cancellationPolicySummary, isSavingProfile }} />
+          <ServiceProfilePanel {...{ profileHasUnsavedChanges, isLoadingProvider, handleUpdateProfile, profileSection, setProfileSection, businessName, setBusinessName, phone, setPhone, city, setCity, baseLatitude, baseLongitude, addressLine, setAddressLine, setBaseLatitude, setBaseLongitude, hasPhotographyCapability, serviceRadiusKm, setServiceRadiusKm, hasAodaiCapability, useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupLatitude, pickupLongitude, pickupAddressLine, setPickupAddressLine, setPickupLatitude, setPickupLongitude, setCancellationRefundRules, cancellationRefundRules, cancellationAdditionalNotes, setCancellationAdditionalNotes, cancellationPolicySummary, isSavingProfile, coverUrl, setCoverUrl }} />
         )}
 
         {hasPhotographyCapability && currentView === 'photography-packages' && (
@@ -878,7 +881,7 @@ export const ProviderDashboard: React.FC = () => {
 
       {/* Rate customer modal popup */}
       {ratingBooking && (
-        <CustomerRatingModal {...{ handleRateCustomer, setRatingBooking, setCRating, cRating, cComment, setCComment }} />
+        <CustomerRatingModal {...{ handleRateCustomer, setRatingBooking, setCRating, cRating, cComment, setCComment, ratingBooking }} />
       )}
 
       <PortfolioItemFormModal

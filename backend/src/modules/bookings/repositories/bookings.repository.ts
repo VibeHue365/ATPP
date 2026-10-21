@@ -26,6 +26,10 @@ export class BookingsRepository {
     return this.bookingModel.db.startSession();
   }
 
+  get model(): Model<Booking> {
+    return this.bookingModel;
+  }
+
   // --- Booking Operations ---
 
   async findBookingById(

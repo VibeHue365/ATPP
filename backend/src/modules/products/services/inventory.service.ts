@@ -125,11 +125,15 @@ export class InventoryService {
   }
 
   /**
-   * Sinh SKU nối tiếp rồi tạo `count` hiện vật cho một biến thể.
-   * LƯU Ý: cố ý KHÔNG lọc hiện vật đã RETIRED khi dò số thứ tự lớn nhất — hàng đã thanh lý
-   * vẫn nằm trong collection và vẫn giữ chỗ trong dãy số; bỏ chúng ra sẽ sinh lại SKU trùng
-   * và vi phạm unique index của `sku`.
+   * Sinh SKU nguyên tử từ skuCounters của sản phẩm rồi tạo `count` hiện vật cho một biến thể.
+   * Cấp số thứ tự bằng findOneAndUpdate $inc để loại bỏ race condition khi nhập kho đồng thời.
    */
+  private sanitizeBucketKey(size: string, color: string): string {
+    const safeSize = (size || 'DEFAULT').trim().toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    const safeColor = (color || 'DEFAULT').trim().toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    return `${safeSize}_${safeColor}`;
+  }
+
   private async createItemsInSession(
     session: any,
     productId: Types.ObjectId,
@@ -141,25 +145,28 @@ export class InventoryService {
     status?: InventoryItemStatus,
     notes?: string,
   ): Promise<InventoryItemDocument[]> {
-    const existingItems = await this.inventoryItemModel
-      .find({ productId, size: sizeVal, color: colorVal })
-      .session(session);
+    if (count <= 0) return [];
 
-    let maxSeq = 0;
-    existingItems.forEach((item) => {
-      const parts = item.sku.split('-');
-      const num = parseInt(parts[parts.length - 1], 10);
-      if (!isNaN(num) && num > maxSeq) {
-        maxSeq = num;
-      }
-    });
+    const bucketKey = this.sanitizeBucketKey(sizeVal, colorVal);
+    const counterField = `skuCounters.${bucketKey}`;
 
-    const created: InventoryItemDocument[] = [];
+    // Cấp số thứ tự nguyên tử atomic trực tiếp trong MongoDB
+    const updatedProduct = await this.productModel.findOneAndUpdate(
+      { _id: productId },
+      { $inc: { [counterField]: count } },
+      { new: true, upsert: false, session },
+    );
+
+    const endSeq = (updatedProduct?.skuCounters as any)?.[bucketKey] ?? count;
+    const startSeq = endSeq - count + 1;
+
+    const itemsToInsert = [];
     for (let i = 0; i < count; i++) {
-      const seqStr = (maxSeq + 1 + i).toString().padStart(3, '0');
+      const currentSeq = startSeq + i;
+      const seqStr = currentSeq.toString().padStart(3, '0');
       const sku = `AD-${productId.toString().slice(-6)}-${sizeVal}-${colorVal}-${seqStr}`.toUpperCase();
 
-      const [newItem] = await this.inventoryItemModel.create([{
+      itemsToInsert.push({
         productId,
         sku,
         size: sizeVal,
@@ -168,11 +175,20 @@ export class InventoryService {
         conditionStatus: conditionStatus || ConditionStatus.Good,
         status: status || InventoryItemStatus.Available,
         notes: notes || '',
-      }], { session });
-
-      created.push(newItem);
+      });
     }
-    return created;
+
+    try {
+      const created = await this.inventoryItemModel.insertMany(itemsToInsert, { session });
+      return created as unknown as InventoryItemDocument[];
+    } catch (err: any) {
+      if (err.code === 11000) {
+        throw new BadRequestException(
+          'Đã xảy ra xung đột mã sản phẩm (SKU) do có phiên nhập kho khác đang diễn ra cùng lúc. Vui lòng thử lại!',
+        );
+      }
+      throw err;
+    }
   }
 
   /** Bổ sung size/màu/chất liệu vào sản phẩm khi nhập hàng (chỉ thêm, không bao giờ bớt ở đây). */

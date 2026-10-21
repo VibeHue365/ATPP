@@ -1543,23 +1543,18 @@
     padding: 0 4px;
   }
 
-  .p-master-progress-bg {
+  .p-master-progress-track {
     position: absolute;
     top: 13px;
-    left: 24px;
-    right: 24px;
     height: 3px;
     background-color: #E2E8F0;
     z-index: 1;
+    overflow: hidden;
   }
 
   .p-master-progress-fill {
-    position: absolute;
-    top: 13px;
-    left: 24px;
-    height: 3px;
+    height: 100%;
     background-color: #881337;
-    z-index: 2;
     transition: width 0.3s ease;
   }
 
@@ -1680,23 +1675,18 @@
     padding: 0 4px;
   }
 
-  .p-substepper-line {
+  .p-substepper-track-wrap {
     position: absolute;
     top: 9px;
-    left: 14px;
-    right: 14px;
     height: 2px;
     background-color: #E2E8F0;
     z-index: 1;
+    overflow: hidden;
   }
 
   .p-substepper-line-fill {
-    position: absolute;
-    top: 9px;
-    left: 14px;
-    height: 2px;
+    height: 100%;
     background-color: #10B981;
-    z-index: 1;
     transition: width 0.3s ease;
   }
 

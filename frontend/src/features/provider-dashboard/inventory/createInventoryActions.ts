@@ -1,6 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import type { useToast } from '../../../components/feedback/Toast';
+import { ConfirmModal } from '../../../utils/confirmModal';
 import { inventoryApi, productsApi } from '../api/providerDashboardApi';
 import type { useProductWizardState } from '../collections/useProductWizardState';
 import { colorLabels } from '../constants';
@@ -128,16 +129,14 @@ export function createInventoryActions({
   };
 
   const handleDeleteInventoryItem = async (itemId: string) => {
-    const result = await Swal.fire({
-      title: 'Xác nhận thanh lý?',
-      text: 'Hiện vật này sẽ được chuyển sang trạng thái RETIRED và không thể cho thuê tiếp.',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Đồng ý thanh lý',
-      cancelButtonText: 'Hủy bỏ',
-      confirmButtonColor: 'var(--color-primary)',
-      cancelButtonColor: '#71717A'
-    });
+    const result = await ConfirmModal.delete(
+      'Xác nhận thanh lý hiện vật?',
+      'Hiện vật này sẽ được chuyển sang trạng thái RETIRED và không thể cho thuê tiếp.',
+      {
+        confirmButtonText: 'Đồng ý thanh lý',
+        cancelButtonText: 'Hủy bỏ',
+      }
+    );
 
     if (result.isConfirmed) {
       try {
@@ -145,12 +144,7 @@ export function createInventoryActions({
         toast.success('Thanh lý hiện vật thành công!');
         fetchInventoryData({ silent: true });
       } catch (err: any) {
-        Swal.fire({
-          title: 'Không thể thanh lý',
-          text: err.message || 'Lỗi xảy ra khi thanh lý hiện vật.',
-          icon: 'error',
-          confirmButtonColor: 'var(--color-primary)'
-        });
+        toast.error(err.message || 'Lỗi xảy ra khi thanh lý hiện vật.');
       }
     }
   };
@@ -230,16 +224,14 @@ export function createInventoryActions({
   const handleRemoveVariant = async (row: any) => {
     if (variantBusy) return;
     const label = variantLabelOf(row);
-    const result = await Swal.fire({
-      title: 'Xoá biến thể này?',
-      html: `Sẽ gỡ hẳn <b>${label}</b> khỏi sản phẩm <b>${row.productName}</b> và thanh lý <b>${row.total}</b> chiếc.<br/><br/>Khách sẽ không còn nhìn thấy lựa chọn này nữa. Nếu chỉ muốn tạm hết hàng, hãy dùng "Sửa số lượng" và đặt về 0.`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Xoá biến thể',
-      cancelButtonText: 'Hủy bỏ',
-      confirmButtonColor: '#DC2626',
-      cancelButtonColor: '#71717A',
-    });
+    const result = await ConfirmModal.delete(
+      'Xóa biến thể này?',
+      `Sẽ gỡ hẳn ${label} khỏi sản phẩm "${row.productName}" và thanh lý ${row.total} chiếc. Khách hàng sẽ không còn thấy biến thể này để đặt hàng.`,
+      {
+        confirmButtonText: 'Xóa biến thể',
+        cancelButtonText: 'Hủy bỏ',
+      }
+    );
     if (!result.isConfirmed) return;
 
     setVariantBusy(true);
@@ -248,14 +240,9 @@ export function createInventoryActions({
         body: JSON.stringify(variantKeyOf(row)),
       });
       await refreshAfterVariantChange();
-      toast.success(res?.message || 'Đã xoá biến thể!');
+      toast.success(res?.message || 'Đã xóa biến thể thành công!');
     } catch (err: any) {
-      Swal.fire({
-        title: 'Không thể xoá biến thể',
-        text: err.message || 'Lỗi xảy ra khi xoá biến thể.',
-        icon: 'error',
-        confirmButtonColor: 'var(--color-primary)',
-      });
+      toast.error(err.message || 'Lỗi xảy ra khi xóa biến thể.');
     } finally {
       setVariantBusy(false);
     }

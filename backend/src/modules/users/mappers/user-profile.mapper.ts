@@ -8,6 +8,7 @@ export class UserProfileMapper {
     user: User & { _id: Types.ObjectId },
     roles: string[],
   ): Record<string, unknown> {
+    const defaultAddr = (user.addresses || []).find((a) => a.isDefault) || user.addresses?.[0];
     return {
       id: user._id.toString(),
       email: user.auth.email,
@@ -19,6 +20,8 @@ export class UserProfileMapper {
       hasCompletedOnboarding: user.hasCompletedOnboarding,
       preferences: user.preferences,
       favorites: user.favorites || [],
+      address: defaultAddr?.addressLine || null,
+      note: user.preferences?.note || defaultAddr?.note || null,
       addresses: (user.addresses || []).map((address) => ({
         id: (address as unknown as { _id?: Types.ObjectId })._id?.toString(),
         label: address.label,

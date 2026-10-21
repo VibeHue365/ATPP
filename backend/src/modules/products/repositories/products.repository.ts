@@ -318,7 +318,35 @@ export class ProductsRepository {
     return this.productModel
       .findById(id)
       .populate('categoryId')
-      .populate('providerId')
+      .populate(
+        'providerId',
+        'businessName status address media rating contact comboDiscountPercent',
+      )
+      .exec();
+  }
+
+  /**
+   * The admin moderation queue combines Ao dai products and photography
+   * packages, so moderation must resolve an id against both collections.
+   */
+  async findModerationItemById(id: Types.ObjectId): Promise<any | null> {
+    const product = await this.productModel
+      .findById(id)
+      .populate('categoryId')
+      .populate(
+        'providerId',
+        'businessName status address media rating contact comboDiscountPercent',
+      )
+      .exec();
+    if (product) return product;
+
+    return this.packageModel
+      .findById(id)
+      .populate('categoryId')
+      .populate(
+        'providerId',
+        'businessName status address media rating contact comboDiscountPercent',
+      )
       .exec();
   }
 
@@ -330,7 +358,10 @@ export class ProductsRepository {
         moderationStatus: ProductModerationStatus.Approved,
       })
       .populate('categoryId')
-      .populate('providerId')
+      .populate(
+        'providerId',
+        'businessName status address media rating contact comboDiscountPercent',
+      )
       .exec();
   }
 

@@ -73,9 +73,9 @@ export class BookingsController {
   @Post()
   async create(
     @CurrentUser() user: AuthUser,
-    @Body() body: any,
+    @Body() body: CreateBookingDto | CreateProductBookingDto,
   ): Promise<BookingDocument> {
-    if (body && Array.isArray(body.items)) {
+    if ('items' in body && Array.isArray(body.items)) {
       if (body.bookingType !== BookingType.AoDaiRental) {
         throw new BadRequestException(
           'Photography và combo phải được tạo qua API giữ lịch chuyên dụng.',
@@ -221,15 +221,13 @@ export class BookingsController {
   async cancel(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() body: any,
+    @Body() dto: CancelBookingDto,
   ) {
-    const reason =
-      body?.reason || (typeof body === 'string' ? body : undefined);
     return this.bookingsService.cancelBooking(
       id,
       user.sub,
       user.roles || [],
-      reason,
+      dto?.reason,
     );
   }
 
@@ -313,8 +311,9 @@ export class BookingsController {
   async customerConfirmPickup(
     @Param('id') id: string,
     @CurrentUser() user: AuthUser,
+    @Body() body?: { evidencePhotos?: string[] },
   ) {
-    return this.bookingsService.customerConfirmPickup(id, user.sub);
+    return this.bookingsService.customerConfirmPickup(id, user.sub, body?.evidencePhotos);
   }
 
   @Post(':id/customer-report-damage')

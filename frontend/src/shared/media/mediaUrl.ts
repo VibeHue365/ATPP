@@ -20,7 +20,11 @@ export const getMediaUrl = (value?: string | null): string | undefined => {
   const baseUrl = API_BASE_URL.replace(/\/$/, '');
   const normalizedPath = url.startsWith('/') ? url : `/${url}`;
 
-  return `${baseUrl}${normalizedPath}`;
+  if (normalizedPath.startsWith('/uploads/')) {
+    return `${baseUrl}${normalizedPath}`;
+  }
+
+  return normalizedPath;
 };
 
 export const getMediaUrls = (values?: Array<string | null | undefined>): string[] =>

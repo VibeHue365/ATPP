@@ -6,6 +6,7 @@ import { ROUTES } from '../../../config/routes';
 import { SectionHeader } from '../../../components/common/SectionHeader';
 import type { ComboDeal } from '../types/combo.types';
 import { ComboCard } from './ComboCard';
+import { ComboCardSkeleton } from './ComboCardSkeleton';
 
 export const ComboDealsSection: React.FC = () => {
   const [combos, setCombos] = useState<ComboDeal[]>([]);
@@ -69,8 +70,10 @@ export const ComboDealsSection: React.FC = () => {
 
         {/* States & 2-Card Grid */}
         {loading ? (
-          <div className="py-12 text-center text-xs font-semibold text-stone-500">
-            Đang tải các combo khuyến mãi...
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {Array.from({ length: 2 }).map((_, idx) => (
+              <ComboCardSkeleton key={`combo-skel-${idx}`} />
+            ))}
           </div>
         ) : error ? (
           <div className="py-12 text-center text-xs font-semibold text-stone-500">
@@ -81,7 +84,7 @@ export const ComboDealsSection: React.FC = () => {
             Hiện chưa có combo ưu đãi nào.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lume-reveal-grid">
             {combos.slice(0, 2).map((combo, idx) => (
               <ComboCard key={combo._id} combo={combo} index={idx} />
             ))}

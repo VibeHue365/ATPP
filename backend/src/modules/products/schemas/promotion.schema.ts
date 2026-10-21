@@ -69,6 +69,18 @@ export class Promotion {
     index: true,
   })
   status: PromotionStatus;
+
+  @Prop({ type: Number, default: null, min: 1 })
+  usageLimitPerUser?: number | null;
+
+  @Prop({ type: String, enum: ['ALL', 'NEW_CUSTOMER'], default: 'ALL' })
+  audience?: 'ALL' | 'NEW_CUSTOMER';
+
+  @Prop({ type: [String], default: [] })
+  applicableBookingTypes?: string[];
+
+  @Prop({ type: [String], default: [] })
+  requiredTiers?: string[];
 }
 
 export const PromotionSchema = SchemaFactory.createForClass(Promotion);

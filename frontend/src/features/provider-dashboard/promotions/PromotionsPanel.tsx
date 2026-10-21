@@ -28,7 +28,7 @@ type PromotionsPanelProps = Pick<ReturnType<typeof useProviderSessionState>,
   handleAddVoucher: (e: FormEvent<Element>) => Promise<void>;
   handleDeleteVoucher: (id: string) => Promise<void>;
   hasPhotographyCapability: boolean | undefined;
-  handleCreateOrUpdateCombo: (e: FormEvent<Element>) => Promise<void>;
+  handleCreateOrUpdateCombo: (e: FormEvent<Element>) => Promise<boolean | void>;
   clearComboForm: () => void;
   handleEditCombo: (combo: any) => void;
   handleDeleteCombo: (id: string) => Promise<void>;

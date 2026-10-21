@@ -243,14 +243,18 @@ export const PhotographyLocationPicker = ({
           </div>
           {results.length > 0 && <div className="pd-location-search-results">{results.map((result) => <button type="button" key={result.place_id} onClick={() => chooseResult(result)}>{result.display_name}</button>)}</div>}
         </label>
-        <label>
-          Vĩ độ
-          <input value={latitude} onChange={(event) => updateLatitude(event.target.value)} inputMode="decimal" placeholder="16.4520" />
-        </label>
-        <label>
-          Kinh độ
-          <input value={longitude} onChange={(event) => updateLongitude(event.target.value)} inputMode="decimal" placeholder="107.5610" />
-        </label>
+        {!compact && (
+          <>
+            <label>
+              Vĩ độ
+              <input value={latitude} onChange={(event) => updateLatitude(event.target.value)} inputMode="decimal" placeholder="16.4520" />
+            </label>
+            <label>
+              Kinh độ
+              <input value={longitude} onChange={(event) => updateLongitude(event.target.value)} inputMode="decimal" placeholder="107.5610" />
+            </label>
+          </>
+        )}
       </div>
       <div ref={mapContainerRef} className="pd-location-map" aria-label="Bản đồ chọn địa điểm" />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>

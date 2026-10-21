@@ -27,19 +27,15 @@ export const LandingFooter: React.FC = () => {
           <div className="md:col-span-5 flex flex-col gap-3">
             <Link 
               to="/" 
-              aria-label="LUMÉ - Áo dài & Chụp ảnh"
-              className="flex items-center gap-3 text-decoration-none group self-start"
+              aria-label="TàGo - Áo dài & Chụp ảnh"
+              className="inline-flex items-center text-decoration-none group self-start"
             >
-              <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center font-serif font-black text-lg text-white shadow-sm transition-transform group-hover:scale-105">
-                L
-              </div>
-              <div className="flex flex-col">
-                <span className="font-header font-black text-lg tracking-tight leading-none text-white">
-                  LUMÉ
-                </span>
-                <span className="text-[9px] font-bold tracking-widest uppercase mt-0.5 text-stone-200">
-                  ÁO DÀI & CHỤP ẢNH
-                </span>
+              <div className="bg-white rounded-xl px-3.5 py-1.5 shadow-sm transition-transform group-hover:scale-105 inline-flex items-center justify-center">
+                <img 
+                  src="/logo-transparent.png" 
+                  alt="TàGo" 
+                  className="h-8 md:h-9 w-auto object-contain" 
+                />
               </div>
             </Link>
 
@@ -146,7 +142,7 @@ export const LandingFooter: React.FC = () => {
         {/* Bottom Bar Divider */}
         <div className="mt-12 pt-6 border-t border-white/20 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-300">
           <div>
-            © {currentYear} LUMÉ. Tất cả quyền được bảo lưu.
+            © {currentYear} TàGo. Tất cả quyền được bảo lưu.
           </div>
           <div className="flex items-center gap-6">
             <span className="text-stone-300">Trải nghiệm di sản Việt</span>

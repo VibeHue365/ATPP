@@ -87,6 +87,9 @@ const emptyBusinessProfile: ProviderBusinessProfile = {
   address: '',
   province: '',
   description: '',
+  taxCode: '',
+  businessType: '',
+  avatar: '',
 };
 
 const emptyAodaiInfo: AodaiInfo = {
@@ -113,10 +116,10 @@ function normalizeVerificationDetail(
     requestedCapabilities: Array.isArray(detail.requestedCapabilities)
       ? detail.requestedCapabilities
       : [],
-    businessProfile: detail.businessProfile ?? {},
-    aodaiInfo: detail.aodaiInfo ?? {},
+    businessProfile: detail.businessProfile ? (({ _id, ...rest }: any) => rest)(detail.businessProfile) : {},
+    aodaiInfo: detail.aodaiInfo ? (({ _id, ...rest }: any) => rest)(detail.aodaiInfo) : {},
     photographyInfo: {
-      ...(detail.photographyInfo ?? {}),
+      ...(detail.photographyInfo ? (({ _id, ...rest }: any) => rest)(detail.photographyInfo) : {}),
       photographyStyles: Array.isArray(detail.photographyInfo?.photographyStyles)
         ? detail.photographyInfo.photographyStyles
         : [],
@@ -282,6 +285,18 @@ export const BecomeProviderPage: React.FC = () => {
   useEffect(() => {
     void loadCurrentVerification();
   }, []);
+
+  // Scroll to top and scroll active step into view when activeStep changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const timer = setTimeout(() => {
+      const activeStepEl = document.querySelector('.vh-provider-step.active');
+      if (activeStepEl) {
+        activeStepEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [activeStep]);
 
   // Fetch provinces when editing Step 1
   useEffect(() => {
@@ -564,19 +579,30 @@ export const BecomeProviderPage: React.FC = () => {
     setVerification(normalized);
   };
 
+  const [pollCount, setPollCount] = useState(0);
+
   useEffect(() => {
     const isOcrPending = verification?.documents.some((document) => {
       const executionStatus = document.current?.ocr?.executionStatus;
-      return ['NOT_STARTED', 'PROCESSING', 'TIMEOUT'].includes(executionStatus ?? '');
+      return executionStatus === 'NOT_STARTED' || executionStatus === 'PROCESSING';
     });
-    if (!isOcrPending || !verificationId) return;
+    if (!isOcrPending || !verificationId) {
+      setPollCount(0);
+      return;
+    }
+
+    if (pollCount >= 40) {
+      // Reached maximum polls (~3.5 minutes), stop polling
+      return;
+    }
 
     const intervalId = window.setInterval(() => {
+      setPollCount((prev) => prev + 1);
       void refreshVerification(verificationId);
     }, 5000);
 
     return () => window.clearInterval(intervalId);
-  }, [verification, verificationId]);
+  }, [verification, verificationId, pollCount]);
   const stepFromVerification = (detail: ProviderVerificationDetail) => {
     if (!['DRAFT', 'NEEDS_CHANGES'].includes(detail.status)) return 4;
     if (detail.requestedCapabilities.length === 0) return 0;
@@ -695,9 +721,20 @@ export const BecomeProviderPage: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      const { _id: bpId, ...cleanBusinessProfile } = businessProfile as any;
-      const { _id: adId, ...cleanAodaiInfo } = updatedAodaiInfo as any;
-      const { _id: phId, ...cleanPhotographyInfo } = updatedPhotographyInfo as any;
+      const sanitizePayload = (obj?: Record<string, any>) => {
+        if (!obj) return undefined;
+        const res: Record<string, any> = {};
+        for (const [k, v] of Object.entries(obj)) {
+          if (k !== '_id' && v !== null && v !== undefined) {
+            res[k] = v;
+          }
+        }
+        return res;
+      };
+
+      const cleanBusinessProfile = sanitizePayload(businessProfile as any);
+      const cleanAodaiInfo = sanitizePayload(updatedAodaiInfo as any);
+      const cleanPhotographyInfo = sanitizePayload(updatedPhotographyInfo as any);
 
       const detail = await providerVerificationService.update(verificationId, {
         businessProfile: cleanBusinessProfile,
@@ -761,21 +798,58 @@ export const BecomeProviderPage: React.FC = () => {
     }
   };
 
-  // const runOcr = async (documentType: ProviderDocumentType) => {
-  //   if (!verificationId) return;
-  //   setActionLoading(`ocr-${documentType}`);
-  //   setError(null);
-  //   setSuccess(null);
-  //   try {
-  //     await providerVerificationService.runOcr(verificationId, documentType);
-  //     await refreshVerification();
-  //     setSuccess(`Đã chạy đối chiếu trích xuất thông tin OCR cho ${documentLabels[documentType]}.`);
-  //   } catch (err) {
-  //     setError(messageFromError(err));
-  //   } finally {
-  //     setActionLoading(null);
-  //   }
-  // };
+  const retryOcr = async (documentType: ProviderDocumentType) => {
+    if (!verificationId) return;
+    setActionLoading(`ocr-${documentType}`);
+    setError(null);
+    setSuccess(null);
+    try {
+      await providerVerificationService.runOcr(verificationId, documentType);
+      await refreshVerification();
+      setSuccess(`Đã gửi yêu cầu chạy lại OCR cho ${documentLabels[documentType]}.`);
+    } catch (err) {
+      setError(messageFromError(err));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const applyOcrToProfile = async (field: 'ownerName' | 'taxCode', value: string) => {
+    if (!verificationId || !value) return;
+    try {
+      setActionLoading('apply-ocr');
+      const frontDoc = verification?.documents.find((d) => d.documentType === 'IDENTITY_CARD_FRONT')?.current;
+      const extFields = frontDoc?.extractedFields as Record<string, any> | undefined;
+
+      const extAddr =
+        typeof extFields?.address === 'object' && extFields?.address !== null
+          ? extFields.address.value
+          : typeof extFields?.address === 'string'
+            ? extFields.address
+            : null;
+
+      const { _id: _ignored, ...cleanProfile } = businessProfile as any;
+      const updatedBusinessProfile = {
+        ...cleanProfile,
+        [field]: value,
+      };
+
+      if (field === 'ownerName' && extAddr && !updatedBusinessProfile.address) {
+        updatedBusinessProfile.address = extAddr;
+      }
+
+      setBusinessProfile(updatedBusinessProfile);
+      await providerVerificationService.update(verificationId, {
+        businessProfile: updatedBusinessProfile,
+      });
+      await refreshVerification();
+      setSuccess(`Đã cập nhật ${field === 'ownerName' ? 'họ và tên' + (extAddr ? ' và địa chỉ' : '') : 'mã số thuế'} vào hồ sơ theo kết quả OCR.`);
+    } catch (err) {
+      setError(messageFromError(err));
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const viewDocument = async (documentType: ProviderDocumentType) => {
     if (!verificationId) return;
@@ -1018,6 +1092,8 @@ export const BecomeProviderPage: React.FC = () => {
               actionLoading={actionLoading}
               onUpload={uploadDocument}
               onViewDocument={viewDocument}
+              onRetryOcr={retryOcr}
+              onApplyOcrToProfile={applyOcrToProfile}
               onContinue={() => setActiveStep(4)}
               onBack={() => setActiveStep(2)}
             />
@@ -1601,6 +1677,8 @@ function DocumentStepV2({
   actionLoading,
   onUpload,
   onViewDocument,
+  onRetryOcr,
+  onApplyOcrToProfile,
   onContinue,
   onBack,
 }: {
@@ -1609,6 +1687,8 @@ function DocumentStepV2({
   actionLoading: string | null;
   onUpload: (documentType: ProviderDocumentType, file?: File) => void;
   onViewDocument: (documentType: ProviderDocumentType) => void;
+  onRetryOcr?: (documentType: ProviderDocumentType) => void;
+  onApplyOcrToProfile?: (field: 'ownerName' | 'taxCode', value: string) => void;
   onContinue: () => void;
   onBack: () => void;
 }) {
@@ -1673,6 +1753,8 @@ function DocumentStepV2({
                   actionLoading={actionLoading}
                   onUpload={onUpload}
                   onView={onViewDocument}
+                  onRetryOcr={onRetryOcr}
+                  onApplyOcrToProfile={onApplyOcrToProfile}
                   verificationId={verification.verificationId}
                 />
               ))}
@@ -1701,6 +1783,8 @@ function DocumentStepV2({
                   actionLoading={actionLoading}
                   onUpload={onUpload}
                   onView={onViewDocument}
+                  onRetryOcr={onRetryOcr}
+                  onApplyOcrToProfile={onApplyOcrToProfile}
                   verificationId={verification.verificationId}
                 />
               ))}
@@ -1729,6 +1813,8 @@ function DocumentStepV2({
                   actionLoading={actionLoading}
                   onUpload={onUpload}
                   onView={onViewDocument}
+                  onRetryOcr={onRetryOcr}
+                  onApplyOcrToProfile={onApplyOcrToProfile}
                   verificationId={verification.verificationId}
                 />
               ))}
@@ -1749,6 +1835,21 @@ function DocumentStepV2({
   );
 }
 
+const ocrWarningLabels: Record<string, string> = {
+  IMAGE_TOO_DARK: 'Ảnh quá tối, hãy chụp ở nơi đủ sáng.',
+  IMAGE_TOO_BRIGHT: 'Ảnh quá sáng hoặc bị chói lóa.',
+  IMAGE_LOW_CONTRAST: 'Độ tương phản thấp, chữ mờ nhạt.',
+  IMAGE_BLURRY: 'Ảnh bị mờ nét, hãy giữ chắc tay khi chụp.',
+  OCR_TEXT_EMPTY: 'Không nhận diện được văn bản trong ảnh.',
+  OCR_ID_NUMBER_NOT_FOUND: 'Chưa đọc được số căn cước/giấy tờ.',
+  OWNER_NAME_UNCERTAIN: 'Họ tên trên giấy tờ có sai lệch nhỏ so với hồ sơ.',
+  OWNER_NAME_MISMATCH: 'Họ tên trên giấy tờ không trùng khớp với hồ sơ.',
+  OCR_LOW_CONFIDENCE: 'Độ sắc nét/tin cậy chữ viết ở mức thấp.',
+  ID_NUMBER_INCONSISTENT: 'Cấu trúc số định danh chưa hợp lệ.',
+  OCR_HEARTBEAT_TIMEOUT: 'Quá trình OCR quá hạn xử lý.',
+  PDF_OCR_REQUIRES_MANUAL_REVIEW: 'Tài liệu PDF sẽ được Admin thẩm định thủ công.',
+};
+
 function UploadDropZone({
   documentType,
   label,
@@ -1758,6 +1859,8 @@ function UploadDropZone({
   actionLoading,
   onUpload,
   onView,
+  onRetryOcr,
+  onApplyOcrToProfile,
   verificationId,
 }: {
   documentType: ProviderDocumentType;
@@ -1768,6 +1871,8 @@ function UploadDropZone({
   actionLoading: string | null;
   onUpload: (documentType: ProviderDocumentType, file?: File) => void;
   onView: (documentType: ProviderDocumentType) => void;
+  onRetryOcr?: (documentType: ProviderDocumentType) => void;
+  onApplyOcrToProfile?: (field: 'ownerName' | 'taxCode', value: string) => void;
   verificationId?: string;
 }) {
   const current = document?.current;
@@ -1777,15 +1882,50 @@ function UploadDropZone({
   const ocrNextAction = current?.ocr?.nextAction;
   const ocrStatusMessage =
     ocrNextAction === 'WAIT_FOR_OCR'
-      ? 'OCR is queued or processing. This page refreshes automatically.'
-      : ocrNextAction === 'UPLOAD_AGAIN'
-        ? 'Hệ thống không thể xác minh tài liệu này. Vui lòng tải lên hình ảnh rõ nét hơn.'
-        : ocrNextAction === 'SUBMIT_WITH_MANUAL_REVIEW'
-          ? 'OCR needs manual review. You can continue and submit the application.'
-          : ocrNextAction === 'READY_TO_SUBMIT' ? 'OCR verification is complete.' : null;
+      ? 'Hệ thống đang xử lý OCR. Trang sẽ tự động cập nhật kết quả.'
+      : ocrNextAction === 'RETRY_OCR'
+        ? 'Quá trình OCR quá hạn. Bạn có thể nhấn thử lại OCR hoặc tải lại ảnh.'
+        : ocrNextAction === 'UPLOAD_AGAIN'
+          ? 'Hệ thống không thể xác minh tài liệu này. Vui lòng tải lên hình ảnh rõ nét hơn.'
+          : ocrNextAction === 'SUBMIT_WITH_MANUAL_REVIEW'
+            ? 'OCR cần duyệt tay. Bạn vẫn có thể tiếp tục và nộp hồ sơ, Admin sẽ kiểm tra.'
+            : ocrNextAction === 'READY_TO_SUBMIT' ? 'Xác thực OCR hoàn tất.' : null;
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+
+  const extractedName =
+    typeof current?.extractedFields?.fullName === 'object' && current?.extractedFields?.fullName !== null
+      ? ((current.extractedFields.fullName as { value?: string }).value ?? null)
+      : typeof current?.extractedFields?.fullName === 'string'
+        ? current.extractedFields.fullName
+        : null;
+
+  const extractedId =
+    typeof current?.extractedFields?.idNumberMasked === 'object' && current?.extractedFields?.idNumberMasked !== null
+      ? ((current.extractedFields.idNumberMasked as { value?: string }).value ?? null)
+      : typeof current?.extractedFields?.idNumberMasked === 'string'
+        ? current.extractedFields.idNumberMasked
+        : null;
+
+  const extractedAddress =
+    typeof current?.extractedFields?.address === 'object' && current?.extractedFields?.address !== null
+      ? ((current.extractedFields.address as { value?: string }).value ?? null)
+      : typeof current?.extractedFields?.address === 'string'
+        ? current.extractedFields.address
+        : null;
+
+  const extractedDob =
+    typeof current?.extractedFields?.dateOfBirth === 'object' && current?.extractedFields?.dateOfBirth !== null
+      ? ((current.extractedFields.dateOfBirth as { value?: string }).value ?? null)
+      : typeof current?.extractedFields?.dateOfBirth === 'string'
+        ? current.extractedFields.dateOfBirth
+        : null;
+
+  const warnings =
+    current?.ocr?.warningCodes && current.ocr.warningCodes.length > 0
+      ? current.ocr.warningCodes
+      : (current?.mismatchFlags ?? []);
 
   useEffect(() => {
     if (!isUploaded || !verificationId) {
@@ -1890,7 +2030,12 @@ function UploadDropZone({
             </span>
             {ocrStatusMessage && (
               <small
-                style={{ display: 'block', marginTop: 6, color: ocrNextAction === 'UPLOAD_AGAIN' ? '#B42318' : '#475467', fontWeight: 600 }}
+                style={{
+                  display: 'block',
+                  marginTop: 6,
+                  color: ocrNextAction === 'UPLOAD_AGAIN' || ocrNextAction === 'RETRY_OCR' ? '#B42318' : '#475467',
+                  fontWeight: 600,
+                }}
               >
                 {ocrStatusMessage}
               </small>
@@ -1912,6 +2057,110 @@ function UploadDropZone({
           </div>
         </div>
       </div>
+
+      {/* Render OCR Results Card */}
+      {isUploaded && current?.ocr && current.ocr.executionStatus !== 'NOT_STARTED' && (
+        <div className="vh-ocr-results-card" style={{ marginTop: 12 }}>
+          <div className="vh-ocr-results-header">
+            <span className="vh-ocr-tag">Kết quả đối chiếu OCR</span>
+            <span className={`vh-ocr-badge ${current.ocrStatus ? current.ocrStatus.toLowerCase() : 'ocr_processing'}`}>
+              {ocrStatusLabel(current.ocrStatus || '')}
+            </span>
+          </div>
+          <div className="vh-ocr-results-details">
+            {typeof current.ocrConfidence === 'number' && current.ocrConfidence > 0 && (
+              <div className="vh-ocr-detail-row">
+                <span>Độ tin cậy nhận diện:</span>
+                <strong>{Math.round(current.ocrConfidence * 100)}%</strong>
+              </div>
+            )}
+
+            {(extractedId || extractedName || extractedDob || extractedAddress) && (
+              <div className="vh-ocr-extracted-info">
+                {extractedId && (
+                  <div className="vh-ocr-detail-row">
+                    <span>Số giấy tờ nhận diện:</span>
+                    <strong>{extractedId}</strong>
+                  </div>
+                )}
+                {extractedName && (
+                  <div className="vh-ocr-detail-row">
+                    <span>Họ và tên nhận diện:</span>
+                    <strong>{extractedName}</strong>
+                  </div>
+                )}
+                {extractedDob && (
+                  <div className="vh-ocr-detail-row">
+                    <span>Ngày sinh:</span>
+                    <strong>{extractedDob}</strong>
+                  </div>
+                )}
+                {extractedAddress && (
+                  <div className="vh-ocr-detail-row">
+                    <span>Nơi thường trú:</span>
+                    <strong>{extractedAddress}</strong>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Opt-in Apply Name and Address to Profile */}
+            {extractedName && documentType === 'IDENTITY_CARD_FRONT' && onApplyOcrToProfile && (
+              <div style={{ textAlign: 'right', marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="vh-btn vh-btn-ghost vh-btn-sm"
+                  onClick={() => onApplyOcrToProfile('ownerName', extractedName)}
+                  style={{
+                    fontSize: 12,
+                    padding: '6px 12px',
+                    color: '#047857',
+                    background: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    borderRadius: 6,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <span>⚡</span> Áp dụng thông tin CCCD vào hồ sơ
+                </button>
+              </div>
+            )}
+
+            {/* Warnings list */}
+            {warnings.length > 0 && (
+              <div className="vh-ocr-mismatches">
+                <strong style={{ fontSize: 12, color: '#92400e', marginBottom: 4 }}>Lưu ý cần kiểm tra:</strong>
+                {warnings.map((code: string) => (
+                  <div key={code} style={{ fontSize: 12, color: '#78350f', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>•</span>
+                    <span>{ocrWarningLabels[code] || code}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Retry OCR button */}
+            {(ocrNextAction === 'RETRY_OCR' || current.ocrStatus === 'OCR_FAILED' || current.ocr.executionStatus === 'TIMEOUT') && onRetryOcr && (
+              <div style={{ marginTop: 8 }}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onRetryOcr(documentType)}
+                  isLoading={actionLoading === `ocr-${documentType}`}
+                  leftIcon={<RefreshCw size={14} />}
+                >
+                  Thử lại OCR
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1959,6 +2208,18 @@ function ReviewStep({
         <SummaryItem label="Số giấy tờ thiếu" value={verification.missingDocuments.length > 0 ? `${verification.missingDocuments.length} tài liệu bắt buộc` : 'Đã đủ tài liệu'} />
         <SummaryItem label="Ngày khởi tạo" value={formatDate(verification.createdAt || '')} />
       </div>
+
+      {verification.missingDocuments && verification.missingDocuments.length > 0 && (
+        <div className="vh-provider-alert warning animate-fade-in" style={{ marginTop: 16 }}>
+          <AlertCircle size={18} />
+          <div>
+            <strong>Hồ sơ còn thiếu giấy tờ bắt buộc:</strong>
+            <p style={{ margin: '4px 0 0 0', fontSize: 13 }}>
+              Vui lòng quay lại Bước 4 để tải lên: <strong>{verification.missingDocuments.map((d: any) => documentLabels[d as ProviderDocumentType] || d).join(', ')}</strong>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {verification.ocrWarnings && verification.ocrWarnings.length > 0 && (
         <div className="vh-provider-alert warning animate-fade-in">

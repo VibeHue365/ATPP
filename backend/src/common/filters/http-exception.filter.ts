@@ -28,6 +28,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const body = this.getExceptionBody(exception);
     const message = this.normalizeMessage(body);
 
+    if (statusCode === HttpStatus.INTERNAL_SERVER_ERROR) {
+      console.error(
+        `[HttpExceptionFilter] 500 Internal Error at ${request.originalUrl ?? request.url}:`,
+        exception,
+      );
+    }
+
     response.status(statusCode).json({
       statusCode,
       errorCode:

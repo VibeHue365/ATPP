@@ -68,6 +68,15 @@ export class UsersRepository {
     });
   }
 
+  findUserByEmailWithPassword(emailNormalized: string): Promise<UserDocument | null> {
+    return this.userModel
+      .findOne({
+        'auth.emailNormalized': emailNormalized,
+        deletedAt: null,
+      })
+      .select('+auth.passwordHash');
+  }
+
   findActiveUserByEmail(emailNormalized: string): Promise<UserDocument | null> {
     return this.userModel.findOne({
       'auth.emailNormalized': emailNormalized,
@@ -78,6 +87,12 @@ export class UsersRepository {
 
   findUserById(userId: Types.ObjectId): Promise<UserDocument | null> {
     return this.userModel.findOne({ _id: userId, deletedAt: null });
+  }
+
+  findUserByIdWithPassword(userId: Types.ObjectId): Promise<UserDocument | null> {
+    return this.userModel
+      .findOne({ _id: userId, deletedAt: null })
+      .select('+auth.passwordHash');
   }
 
   async listUsersForAdmin(
@@ -446,6 +461,9 @@ export class UsersRepository {
       }
       if (prefs.preferredOccasions !== undefined) {
         updateQuery['preferences.preferredOccasions'] = prefs.preferredOccasions;
+      }
+      if (prefs.note !== undefined) {
+        updateQuery['preferences.note'] = prefs.note;
       }
     }
 

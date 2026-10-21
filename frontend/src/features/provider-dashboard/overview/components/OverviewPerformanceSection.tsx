@@ -6,31 +6,65 @@ import {
   Sparkles,
   ChevronRight,
 } from 'lucide-react';
+import type { ProviderOverviewPerformance } from '../types';
 
 interface PerformanceSectionProps {
-  averageRating?: number;
-  cancelRate?: number;
-  completionRate?: number;
+  performance?: ProviderOverviewPerformance;
   onNavigate?: (view: any) => void;
 }
 
 export const OverviewPerformanceSection: React.FC<PerformanceSectionProps> = ({
-  averageRating,
-  cancelRate,
-  completionRate = 95,
+  performance,
   onNavigate,
 }) => {
-  const ratingDisplay = averageRating != null ? `${averageRating.toFixed(1)} / 5` : '5.0 / 5';
-  const cancelRateDisplay = cancelRate != null ? `${cancelRate}%` : '0%';
-  const completionDisplay = `${completionRate}%`;
+  const ratingDisplay =
+    performance && performance.totalReviews > 0
+      ? `${performance.averageRating.toFixed(1)} / 5`
+      : '5.0 / 5';
+
+  const reviewsNote =
+    performance && performance.totalReviews > 0
+      ? `Dựa trên ${performance.totalReviews} lượt đánh giá thực tế`
+      : 'Chưa có đánh giá nào từ khách hàng';
+
+  const completionDisplay =
+    performance?.completionRate != null
+      ? `${performance.completionRate}%`
+      : '—';
+
+  const completionNote =
+    performance?.completionRate != null
+      ? 'Tỷ lệ hoàn tất dịch vụ đạt chuẩn'
+      : 'Chưa có đơn hàng hoàn tất';
+
+  const cancelRateDisplay =
+    performance?.cancelRate != null ? `${performance.cancelRate}%` : '0%';
+
+  const cancelRateTrend =
+    performance?.cancelRate != null && performance?.cancelRatePrev != null
+      ? performance.cancelRate <= performance.cancelRatePrev
+        ? '↓ Tối ưu'
+        : '↑ Cần chú ý'
+      : 'Duy trì mức thấp';
+
+  const isVerified = performance?.isVerified ?? false;
 
   return (
     <section className="po-performance-card" aria-label="Hiệu suất hoạt động">
       <div className="po-performance-header">
         <div>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Chỉ số hiệu suất & Uy tín</h3>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--po-text-muted)' }}>
-            Theo dõi mức độ hài lòng của khách hàng và chất lượng vận hành dịch vụ của bạn.
+          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+            Chỉ số hiệu suất & Uy tín
+          </h3>
+          <p
+            style={{
+              margin: '4px 0 0',
+              fontSize: '13px',
+              color: 'var(--po-text-muted)',
+            }}
+          >
+            Theo dõi mức độ hài lòng của khách hàng và chất lượng vận hành dịch vụ
+            của bạn trên TàGo.
           </p>
         </div>
         <button
@@ -45,8 +79,15 @@ export const OverviewPerformanceSection: React.FC<PerformanceSectionProps> = ({
 
       <div className="po-performance-grid">
         {/* 1. Đánh giá trung bình */}
-        <div className="po-perf-item" onClick={() => onNavigate?.('reviews')} style={{ cursor: 'pointer' }}>
-          <div className="po-perf-icon-box" style={{ background: '#FEF3C7', color: '#B45309' }}>
+        <div
+          className="po-perf-item"
+          onClick={() => onNavigate?.('reviews')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div
+            className="po-perf-icon-box"
+            style={{ background: '#FEF3C7', color: '#B45309' }}
+          >
             <Star size={20} fill="#B45309" />
           </div>
           <div className="po-perf-details">
@@ -54,27 +95,40 @@ export const OverviewPerformanceSection: React.FC<PerformanceSectionProps> = ({
             <div className="po-perf-val-row">
               <span className="po-perf-value">{ratingDisplay}</span>
             </div>
-            <span className="po-perf-note">Từ đánh giá của khách hàng</span>
+            <span className="po-perf-note">{reviewsNote}</span>
           </div>
         </div>
 
         {/* 2. Tỷ lệ hoàn thành đơn */}
-        <div className="po-perf-item" onClick={() => onNavigate?.('orders')} style={{ cursor: 'pointer' }}>
-          <div className="po-perf-icon-box" style={{ background: '#ECFDF5', color: '#16A34A' }}>
+        <div
+          className="po-perf-item"
+          onClick={() => onNavigate?.('orders')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div
+            className="po-perf-icon-box"
+            style={{ background: '#ECFDF5', color: '#16A34A' }}
+          >
             <CheckCircle2 size={20} />
           </div>
           <div className="po-perf-details">
             <span className="po-perf-label">Tỷ lệ hoàn thành</span>
             <div className="po-perf-val-row">
               <span className="po-perf-value">{completionDisplay}</span>
-              <span className="po-perf-trend-green">↑ Rất tốt</span>
+              {performance?.completionRate != null && (
+                <span className="po-perf-trend-green">↑ Đạt chuẩn</span>
+              )}
             </div>
-            <span className="po-perf-note">Đơn phục vụ trọn vẹn</span>
+            <span className="po-perf-note">{completionNote}</span>
           </div>
         </div>
 
         {/* 3. Tỷ lệ hủy đơn */}
-        <div className="po-perf-item" onClick={() => onNavigate?.('orders')} style={{ cursor: 'pointer' }}>
+        <div
+          className="po-perf-item"
+          onClick={() => onNavigate?.('orders')}
+          style={{ cursor: 'pointer' }}
+        >
           <div className="po-perf-icon-box green-bg">
             <RotateCcw size={20} />
           </div>
@@ -82,23 +136,35 @@ export const OverviewPerformanceSection: React.FC<PerformanceSectionProps> = ({
             <span className="po-perf-label">Tỷ lệ hủy đơn</span>
             <div className="po-perf-val-row">
               <span className="po-perf-value">{cancelRateDisplay}</span>
-              <span className="po-perf-trend-green">↓ Tối ưu</span>
+              <span className="po-perf-trend-green">{cancelRateTrend}</span>
             </div>
-            <span className="po-perf-note">Duy trì mức thấp</span>
+            <span className="po-perf-note">Duy trì đơn hàng phục vụ trọn vẹn</span>
           </div>
         </div>
 
         {/* 4. Huy hiệu chất lượng */}
-        <div className="po-perf-item" onClick={() => onNavigate?.('profile')} style={{ cursor: 'pointer' }}>
-          <div className="po-perf-icon-box" style={{ background: '#FFF1F2', color: '#881337' }}>
+        <div
+          className="po-perf-item"
+          onClick={() => onNavigate?.('profile')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div
+            className="po-perf-icon-box"
+            style={{ background: '#FFF1F2', color: '#881337' }}
+          >
             <Sparkles size={20} />
           </div>
           <div className="po-perf-details">
             <span className="po-perf-label">Hồ sơ đối tác</span>
             <div className="po-perf-val-row">
-              <span className="po-perf-value" style={{ fontSize: '18px', color: '#881337' }}>Đã xác thực</span>
+              <span
+                className="po-perf-value"
+                style={{ fontSize: '18px', color: '#881337' }}
+              >
+                {isVerified ? 'Đã xác thực' : 'Chờ xác thực'}
+              </span>
             </div>
-            <span className="po-perf-note">Huy hiệu uy tín LUMÉ</span>
+            <span className="po-perf-note">Huy hiệu đối tác TàGo</span>
           </div>
         </div>
 
@@ -114,9 +180,12 @@ export const OverviewPerformanceSection: React.FC<PerformanceSectionProps> = ({
               🏆
             </div>
             <div className="po-encouragement-text">
-              <span className="po-encouragement-heading">Duy trì phong độ tuyệt vời!</span>
+              <span className="po-encouragement-heading">
+                Duy trì phong độ tuyệt vời!
+              </span>
               <span className="po-encouragement-desc">
-                Cập nhật gói dịch vụ thường xuyên và phản hồi khách nhanh chóng giúp tăng 35% lượt đặt lịch.
+                Cập nhật gói dịch vụ thường xuyên và phản hồi khách nhanh chóng
+                giúp tăng 35% lượt đặt lịch thành công trên TàGo.
               </span>
             </div>
           </div>

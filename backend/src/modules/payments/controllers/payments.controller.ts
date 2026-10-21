@@ -13,7 +13,12 @@ import {
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import { getPrimaryFrontendUrl } from '../../../common/config/frontend-url.util';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { Permissions } from '../../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { PaymentsService } from '../services/payments.service';
@@ -37,8 +42,10 @@ export class PaymentsController {
   ) {}
 
   private ensureSimulatorEnabled() {
-    if (this.configService.get<string>('NODE_ENV') === 'production') {
-      throw new NotFoundException();
+    const nodeEnv = this.configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV;
+    const isSimExplicitlyEnabled = this.configService.get<string>('ENABLE_PAYMENT_SIMULATOR') === 'true';
+    if (nodeEnv === 'production' || (!isSimExplicitlyEnabled && nodeEnv !== 'development')) {
+      throw new NotFoundException('Cổng thanh toán giả lập không khả dụng trên môi trường này.');
     }
   }
 
@@ -80,17 +87,19 @@ export class PaymentsController {
   }
 
   @Post(':code/confirm')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles('ADMIN')
+  @Permissions('payment:manage')
   async confirmManual(
-    @CurrentUser() user: AuthUser,
     @Param('code') code: string,
   ) {
-    await this.paymentsService.getPaymentStatus(code, user.sub);
     return this.paymentsService.confirmPayment(code);
   }
 
   @Post('settlement/:bookingId/resolve-dispute')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles('ADMIN')
+  @Permissions('dispute:manage')
   async resolveDispute(
     @Param('bookingId') bookingId: string,
     @Body() dto: ResolveDisputeDto,
@@ -239,7 +248,7 @@ export class PaymentsController {
       const bookingCode = booking?.bookingCode || 'N/A';
       const amount = payment.amount;
       const memo = `VIBEHUE PAY ${payment.paymentCode}`;
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const frontendUrl = getPrimaryFrontendUrl(process.env.FRONTEND_URL);
 
       const html = `
         <!DOCTYPE html>

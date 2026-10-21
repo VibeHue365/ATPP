@@ -14,6 +14,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { getMediaUrl } from '../../../shared/media/mediaUrl';
+import { ConfirmModal } from '../../../utils/confirmModal';
 import type { PhotographyPackage } from '../types/photographyPackage.types';
 
 export interface PhotographyPackageCardProps {
@@ -47,9 +48,17 @@ export function PhotographyPackageCard({
   const coverImage = photographyPackage.images?.[0];
   const imagesCount = photographyPackage.images?.length || 0;
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!onDelete) return;
-    if (window.confirm(`Bạn có chắc muốn xóa gói chụp "${photographyPackage.name}"? Hành động này không thể hoàn tác.`)) {
+    const result = await ConfirmModal.delete(
+      'Xóa gói chụp ảnh?',
+      `Bạn có chắc muốn xóa gói chụp “${photographyPackage.name}”? Hành động này không thể hoàn tác.`,
+      {
+        confirmButtonText: 'Xóa ngay',
+        cancelButtonText: 'Hủy',
+      }
+    );
+    if (result.isConfirmed) {
       onDelete(photographyPackage);
     }
   };
