@@ -27,6 +27,7 @@ import {
 } from '../dto/admin-users.dto';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
+import { UpdateNotificationSettingsDto } from '../dto/update-notification-settings.dto';
 import { CreateUserAddressDto, UpdateUserAddressDto } from '../dto/user-address.dto';
 import { UserProfileMapper } from '../mappers/user-profile.mapper';
 import { UsersRepository } from '../repositories/users.repository';
@@ -619,6 +620,37 @@ export class UsersService {
     }
 
     return this.getMe(userId, roles);
+  }
+
+  async getNotificationSettings(userId: string): Promise<{
+    marketingEmail: boolean;
+    appPush: boolean;
+  }> {
+    const user = await this.usersRepository.findUserById(this.toObjectId(userId));
+    if (!user) throw new NotFoundException('User not found');
+
+    return {
+      marketingEmail: user.notificationPreferences?.marketingEmail !== false,
+      appPush: user.notificationPreferences?.appPush !== false,
+    };
+  }
+
+  async updateNotificationSettings(
+    userId: string,
+    dto: UpdateNotificationSettingsDto,
+  ): Promise<{ marketingEmail: boolean; appPush: boolean }> {
+    const userObjectId = this.toObjectId(userId);
+    const user = await this.usersRepository.findUserById(userObjectId);
+    if (!user) throw new NotFoundException('User not found');
+
+    await this.usersRepository.updateNotificationSettings(userObjectId, dto);
+    return {
+      marketingEmail:
+        dto.marketingEmail ??
+        (user.notificationPreferences?.marketingEmail !== false),
+      appPush:
+        dto.appPush ?? (user.notificationPreferences?.appPush !== false),
+    };
   }
 
   async toggleFavorite(

@@ -19,6 +19,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
+import { UpdateNotificationSettingsDto } from '../dto/update-notification-settings.dto';
 import { CreateUserAddressDto, UpdateUserAddressDto } from '../dto/user-address.dto';
 import { UsersService } from '../services/users.service';
 
@@ -135,6 +136,19 @@ export class UsersController {
       dto,
       user.roles,
     );
+  }
+
+  @Get('notification-settings')
+  getNotificationSettings(@CurrentUser() user: AuthUser) {
+    return this.usersService.getNotificationSettings(user.sub);
+  }
+
+  @Patch('notification-settings')
+  updateNotificationSettings(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateNotificationSettingsDto,
+  ) {
+    return this.usersService.updateNotificationSettings(user.sub, dto);
   }
 
   @Patch('me/favorites')

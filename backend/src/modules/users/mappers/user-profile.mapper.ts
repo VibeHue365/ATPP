@@ -19,6 +19,10 @@ export class UserProfileMapper {
       roles,
       hasCompletedOnboarding: user.hasCompletedOnboarding,
       preferences: user.preferences,
+      notificationPreferences: user.notificationPreferences ?? {
+        marketingEmail: true,
+        appPush: true,
+      },
       favorites: user.favorites || [],
       address: defaultAddr?.addressLine || null,
       note: user.preferences?.note || defaultAddr?.note || null,
