@@ -57,7 +57,6 @@ export function DisputesPanel() {
   const [selected, setSelected] = useState<Dispute | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isDrawerMaximized, setIsDrawerMaximized] = useState(false);
-  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
 
   // Form settlement state
   const [decision, setDecision] = useState<DisputeDecision>('SHOP_RIGHT');
@@ -301,24 +300,6 @@ export function DisputesPanel() {
   const handleNextDispute = () => {
     if (selectedIndex < filteredDisputes.length - 1) {
       handleSelectDispute(filteredDisputes[selectedIndex + 1]);
-    }
-  };
-
-  // Checkbox row toggles
-  const toggleSelectRow = (id: string) => {
-    setSelectedRowIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedRowIds.size === filteredDisputes.length) {
-      setSelectedRowIds(new Set());
-    } else {
-      setSelectedRowIds(new Set(filteredDisputes.map((d) => d._id)));
     }
   };
 
@@ -697,7 +678,6 @@ export function DisputesPanel() {
               ) : (
                 filteredDisputes.map((item) => {
                   const isSelected = selected?._id === item._id;
-                  const isChecked = selectedRowIds.has(item._id);
                   const dCode = getDisputeCode(item);
                   const bCode = getBookingCode(item);
                   const service = getServiceType(item);

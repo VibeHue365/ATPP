@@ -14,8 +14,6 @@ import {
   SlidersHorizontal,
   Star,
   Ban,
-  MoreVertical,
-  Check,
   Calendar,
   EyeOff,
   Maximize2,
@@ -64,7 +62,6 @@ export function ReportedReviewsPanel() {
   const [selected, setSelected] = useState<ReportedReview | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
 
   // Filter & tab state
   const [statusTab, setStatusTab] = useState<'ALL' | 'PENDING' | 'UNDER_REVIEW' | 'RESOLVED'>('ALL');
@@ -247,24 +244,6 @@ export function ReportedReviewsPanel() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isDetailOpen]);
-
-  // Row selection checkbox
-  const toggleSelectRow = (id: string) => {
-    setSelectedRowIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedRowIds.size === paginatedItems.length) {
-      setSelectedRowIds(new Set());
-    } else {
-      setSelectedRowIds(new Set(paginatedItems.map((d) => d._id)));
-    }
-  };
 
   // Dock Sequential Navigation
   const selectedIndex = useMemo(() => {
