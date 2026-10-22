@@ -45,7 +45,7 @@ export interface UpdateProviderProfileDto {
   contact?: ProviderContact;
   address?: ProviderAddress;
   policies?: ProviderPolicies;
-  media?: ProviderMedia;
+  media?: Partial<ProviderMedia>;
   rentalSettings?: Partial<ProviderRentalSettings>;
   photographySettings?: Partial<ProviderPhotographySettings>;
   comboDiscountPercent?: number;
@@ -112,7 +112,13 @@ export class ProvidersService {
       throw new NotFoundException('Provider profile not found');
     }
 
-    const update = this.normalizeLocationUpdate(provider, dto);
+    const update: any = this.normalizeLocationUpdate(provider, dto);
+    if (dto.media) {
+      update.media = {
+        ...provider.media,
+        ...dto.media,
+      };
+    }
     const updated = await this.providersRepository.update(provider._id, update as Partial<Provider>);
     if (!updated) {
       throw new NotFoundException('Failed to update provider profile');
@@ -751,7 +757,10 @@ const bookingIds = bookings.map((booking) => booking._id);
    * và 10 settlement gần nhất để hiển thị lịch sử giao dịch.
    */
   async getWallet(userIdStr: string) {
-    const provider = await this.requireProvider(userIdStr);
+    const provider = await this.providersRepository.findByUserIdWithWallet(
+      this.toObjectId(userIdStr),
+    );
+    if (!provider) throw new NotFoundException('Provider profile not found');
 
     const wallet = provider.wallet ?? {
       pendingBalance: 0,

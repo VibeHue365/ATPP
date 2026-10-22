@@ -272,7 +272,6 @@ export const AccessControl: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [verificationFilter, setVerificationFilter] = useState('');
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   // ----------------------------------------------------
   // SCREEN 2: MATRIX STATE
@@ -348,13 +347,11 @@ export const AccessControl: React.FC = () => {
         setMetrics(res.metrics);
       }
 
-      // Auto-select user for right dock if none or current selected is not in list
-      if (userList.length > 0) {
-        const found = userList.find((u) => u.id === selectedUser?.id);
-        if (!found) {
-          // If Trần Thị Mai exists, select her like Figma, otherwise select first
-          const defaultUser = userList.find((u) => u.userCode === 'USR028') || userList[0];
-          setSelectedUser(defaultUser);
+      // Keep selected user in sync if one is currently open
+      if (selectedUser) {
+        const found = userList.find((u) => u.id === selectedUser.id);
+        if (found) {
+          setSelectedUser(found);
         }
       }
     } catch (err: any) {
@@ -746,8 +743,8 @@ export const AccessControl: React.FC = () => {
     let list = permissions;
     if (permSearchQuery.trim()) {
       const q = permSearchQuery.toLowerCase().trim();
-      list = list.filter((p) => 
-        p.name.toLowerCase().includes(q) || 
+      list = list.filter((p) =>
+        p.name.toLowerCase().includes(q) ||
         p.code.toLowerCase().includes(q) ||
         (p.description && p.description.toLowerCase().includes(q))
       );
@@ -1014,10 +1011,6 @@ export const AccessControl: React.FC = () => {
                 </div>
 
                 <div className="ac-toolbar-right">
-                  <button className="ac-btn-primary">
-                    <Plus size={15} />
-                    <span>Tạo tài khoản</span>
-                  </button>
                   <button className="ac-btn-secondary">
                     <Download size={15} />
                     <span>Xuất dữ liệu</span>
@@ -1030,21 +1023,6 @@ export const AccessControl: React.FC = () => {
                 <table className="ac-table">
                   <thead>
                     <tr>
-                      <th style={{ width: '40px' }}>
-                        <input
-                          type="checkbox"
-                          checked={
-                            users.length > 0 && selectedUserIds.length === users.length
-                          }
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedUserIds(users.map((u) => u.id));
-                            } else {
-                              setSelectedUserIds([]);
-                            }
-                          }}
-                        />
-                      </th>
                       <th style={{ width: '40px' }}>#</th>
                       <th>Người dùng</th>
                       <th>Liên hệ</th>
@@ -1080,21 +1058,6 @@ export const AccessControl: React.FC = () => {
                             className={isSelected ? 'selected' : ''}
                             onClick={() => setSelectedUser(u)}
                           >
-                            <td onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={selectedUserIds.includes(u.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedUserIds((prev) => [...prev, u.id]);
-                                  } else {
-                                    setSelectedUserIds((prev) =>
-                                      prev.filter((id) => id !== u.id)
-                                    );
-                                  }
-                                }}
-                              />
-                            </td>
                             <td>{(page - 1) * limit + idx + 1}</td>
                             <td>
                               <div className="ac-user-cell">
@@ -1128,44 +1091,40 @@ export const AccessControl: React.FC = () => {
                             </td>
                             <td>
                               <span
-                                className={`ac-role-badge ${
-                                  roleCode === 'ADMIN'
-                                    ? 'ac-role-admin'
-                                    : roleCode === 'PROVIDER'
+                                className={`ac-role-badge ${roleCode === 'ADMIN'
+                                  ? 'ac-role-admin'
+                                  : roleCode === 'PROVIDER'
                                     ? 'ac-role-provider'
                                     : roleCode === 'SUPPORT'
-                                    ? 'ac-role-support'
-                                    : 'ac-role-customer'
-                                }`}
+                                      ? 'ac-role-support'
+                                      : 'ac-role-customer'
+                                  }`}
                               >
                                 {roleCode}
                               </span>
                             </td>
                             <td>
                               <span
-                                className={`ac-status-badge ${
-                                  u.status === 'ACTIVE'
-                                    ? 'ac-status-active'
-                                    : 'ac-status-suspended'
-                                }`}
+                                className={`ac-status-badge ${u.status === 'ACTIVE'
+                                  ? 'ac-status-active'
+                                  : 'ac-status-suspended'
+                                  }`}
                               >
                                 <span
-                                  className={`ac-status-dot ${
-                                    u.status === 'ACTIVE'
-                                      ? 'ac-status-dot-active'
-                                      : 'ac-status-dot-suspended'
-                                  }`}
+                                  className={`ac-status-dot ${u.status === 'ACTIVE'
+                                    ? 'ac-status-dot-active'
+                                    : 'ac-status-dot-suspended'
+                                    }`}
                                 />
                                 {u.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
                               </span>
                             </td>
                             <td>
                               <span
-                                className={`ac-verify-badge ${
-                                  u.emailVerified
-                                    ? 'ac-verify-verified'
-                                    : 'ac-verify-unverified'
-                                }`}
+                                className={`ac-verify-badge ${u.emailVerified
+                                  ? 'ac-verify-verified'
+                                  : 'ac-verify-unverified'
+                                  }`}
                               >
                                 {u.emailVerified ? (
                                   <>
@@ -1276,288 +1235,320 @@ export const AccessControl: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Right Col: Chi tiết người dùng Dock (Figma Node 330-9268) */}
-            {selectedUser && (
-              <div className="ac-detail-dock">
-                <div className="ac-dock-header">
-                  <h3 className="ac-dock-title">Chi tiết người dùng</h3>
-                  <button className="ac-dock-close" onClick={() => setSelectedUser(null)}>
+          {/* Slide-over User Detail Drawer (matching Product Moderation style) */}
+          {selectedUser && (
+            <>
+              <div className="ac-drawer-backdrop" onClick={() => setSelectedUser(null)} />
+              <aside className="ac-detail-drawer">
+                <div className="ac-drawer-header">
+                  <div className="ac-drawer-header-left">
+                    <h3 className="ac-drawer-title">Chi tiết tài khoản & phân quyền</h3>
+                    <span className="ac-drawer-sub">
+                      ID: {selectedUser.userCode || `USR${selectedUser.id.slice(-3).toUpperCase()}`}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="ac-drawer-close-btn"
+                    onClick={() => setSelectedUser(null)}
+                    title="Đóng chi tiết"
+                  >
                     <X size={18} />
                   </button>
                 </div>
 
-                {/* Profile Header */}
-                <div className="ac-dock-profile">
-                  <img
-                    src={
-                      selectedUser.avatarUrl ||
-                      'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=160&q=80'
-                    }
-                    alt={selectedUser.fullName}
-                    className="ac-dock-avatar"
-                  />
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
-                        {selectedUser.fullName}
-                      </h4>
-                      <span
-                        className={`ac-status-badge ${
-                          selectedUser.status === 'ACTIVE'
+                <div className="ac-drawer-body">
+
+                  {/* Profile Header */}
+                  <div className="ac-dock-profile">
+                    <img
+                      src={
+                        selectedUser.avatarUrl ||
+                        'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=160&q=80'
+                      }
+                      alt={selectedUser.fullName}
+                      className="ac-dock-avatar"
+                    />
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
+                          {selectedUser.fullName}
+                        </h4>
+                        <span
+                          className={`ac-status-badge ${selectedUser.status === 'ACTIVE'
                             ? 'ac-status-active'
                             : 'ac-status-suspended'
-                        }`}
-                        style={{ fontSize: '10px', padding: '2px 6px' }}
-                      >
-                        {selectedUser.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8', margin: '4px 0 6px 0' }}>
-                      ID: {selectedUser.userCode || `USR${selectedUser.id.slice(-3).toUpperCase()}`}
-                    </div>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <span className="ac-role-badge ac-role-provider">
-                        {selectedUser.roles[0] || 'PROVIDER'}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          color: '#64748b',
-                          background: '#f1f5f9',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                        }}
-                      >
-                        {selectedUser.roles.includes('PROVIDER') ? 'Đối tác Studio' : 'Thành viên'}
-                      </span>
+                            }`}
+                          style={{ fontSize: '10px', padding: '2px 6px' }}
+                        >
+                          {selectedUser.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', margin: '4px 0 6px 0' }}>
+                        ID: {selectedUser.userCode || `USR${selectedUser.id.slice(-3).toUpperCase()}`}
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <span className="ac-role-badge ac-role-provider">
+                          {selectedUser.roles[0] || 'PROVIDER'}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            color: '#64748b',
+                            background: '#f1f5f9',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                          }}
+                        >
+                          {selectedUser.roles.includes('PROVIDER') ? 'Đối tác Studio' : 'Thành viên'}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Sub-tabs */}
-                <div className="ac-dock-subtabs">
-                  <button
-                    className={`ac-dock-subtab-btn ${
-                      dockSubTab === 'OVERVIEW' ? 'active' : ''
-                    }`}
-                    onClick={() => setDockSubTab('OVERVIEW')}
-                  >
-                    Tổng quan
-                  </button>
-                  <button
-                    className={`ac-dock-subtab-btn ${dockSubTab === 'ROLES' ? 'active' : ''}`}
-                    onClick={() => setDockSubTab('ROLES')}
-                  >
-                    Vai trò & Quyền
-                  </button>
-                  <button
-                    className={`ac-dock-subtab-btn ${dockSubTab === 'LOGS' ? 'active' : ''}`}
-                    onClick={() => setDockSubTab('LOGS')}
-                  >
-                    Nhật ký hoạt động
-                  </button>
-                </div>
-
-                {/* Subtab: Vai trò & Quyền */}
-                {dockSubTab === 'ROLES' && (
-                  <div>
-                    {/* Header + Action */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '10px',
-                      }}
+                  {/* Sub-tabs */}
+                  <div className="ac-dock-subtabs">
+                    <button
+                      className={`ac-dock-subtab-btn ${dockSubTab === 'OVERVIEW' ? 'active' : ''
+                        }`}
+                      onClick={() => setDockSubTab('OVERVIEW')}
                     >
-                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                        Vai trò hiện tại
-                      </span>
-                      <button
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#881337',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                        }}
-                        onClick={() => handleChangeRole(selectedUser)}
-                      >
-                        <Edit size={12} />
-                        <span>Thay đổi vai trò</span>
-                      </button>
-                    </div>
+                      Tổng quan
+                    </button>
+                    <button
+                      className={`ac-dock-subtab-btn ${dockSubTab === 'ROLES' ? 'active' : ''}`}
+                      onClick={() => setDockSubTab('ROLES')}
+                    >
+                      Vai trò & Quyền
+                    </button>
+                    <button
+                      className={`ac-dock-subtab-btn ${dockSubTab === 'LOGS' ? 'active' : ''}`}
+                      onClick={() => setDockSubTab('LOGS')}
+                    >
+                      Nhật ký hoạt động
+                    </button>
+                  </div>
 
-                    {/* Role Card */}
-                    <div className="ac-dock-role-card">
-                      <div className="ac-dock-role-header">
-                        <div className="ac-dock-role-icon">
-                          <Store size={20} />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
-                            {selectedUser.roles[0] || 'PROVIDER'}
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#64748b' }}>
-                            Đối tác cung cấp dịch vụ (Studio chụp ảnh, Shop áo dài)
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="ac-dock-meta-row">
-                        <span className="ac-dock-meta-label">Ngày gán vai trò:</span>
-                        <span className="ac-dock-meta-val">15/06/2024</span>
-                      </div>
-                      <div className="ac-dock-meta-row">
-                        <span className="ac-dock-meta-label">Người gán:</span>
-                        <span className="ac-dock-meta-val">System Admin</span>
-                      </div>
-                      <div className="ac-dock-meta-row" style={{ marginBottom: 0 }}>
-                        <span className="ac-dock-meta-label">Ghi chú:</span>
-                        <span className="ac-dock-meta-val">Đối tác đã hoàn tất KYC</span>
-                      </div>
-                    </div>
-
-                    {/* Callout Notice */}
-                    <div className="ac-callout-notice">
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
-                        <div>
-                          Quyền truy cập của người dùng được quản lý theo vai trò. Để chỉnh sửa
-                          chi tiết quyền, vui lòng vào trang Vai trò & Quyền hạn.
-                        </div>
-                      </div>
-                      <span
-                        className="ac-callout-link"
-                        onClick={() => {
-                          setSelectedRoleCode(selectedUser.roles[0] || 'PROVIDER');
-                          setActiveTab('MATRIX');
-                        }}
-                      >
-                        Xem toàn bộ quyền của {selectedUser.roles[0] || 'PROVIDER'} &rarr;
-                      </span>
-                    </div>
-
-                    {/* Key Permissions Checklist (6 items matching Figma) */}
+                  {/* Subtab: Vai trò & Quyền */}
+                  {dockSubTab === 'ROLES' && (
                     <div>
+                      {/* Header + Action */}
                       <div
                         style={{
-                          fontSize: '13px',
-                          fontWeight: 700,
-                          color: '#0f172a',
-                          marginBottom: '8px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '10px',
                         }}
                       >
-                        Các quyền tiêu biểu (6)
-                      </div>
-                      <ul className="ac-perm-checklist">
-                        {prominentPermissions.map((permText, i) => (
-                          <li key={i} className="ac-perm-check-item">
-                            <CheckCircle2 size={16} className="ac-perm-check-icon" />
-                            <span>{permText}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Bottom Actions */}
-                    <div className="ac-dock-actions">
-                      <button
-                        className="ac-btn-outline-gray"
-                        onClick={() => toast.info('Chức năng chỉnh sửa thông tin người dùng')}
-                      >
-                        <Edit size={14} />
-                        <span>Chỉnh sửa người dùng</span>
-                      </button>
-                      {selectedUser.status === 'ACTIVE' ? (
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
+                          Vai trò hiện tại
+                        </span>
                         <button
-                          className="ac-btn-outline-red"
-                          onClick={() => handleLockUser(selectedUser)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#881337',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                          onClick={() => handleChangeRole(selectedUser)}
                         >
-                          <Lock size={14} />
-                          <span>Khóa tài khoản</span>
+                          <Edit size={12} />
+                          <span>Thay đổi vai trò</span>
                         </button>
-                      ) : (
+                      </div>
+
+                      {/* Role Card */}
+                      <div className="ac-dock-role-card">
+                        <div className="ac-dock-role-header">
+                          <div className="ac-dock-role-icon">
+                            <Store size={20} />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
+                              {selectedUser.roles[0] || 'PROVIDER'}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#64748b' }}>
+                              Đối tác cung cấp dịch vụ (Studio chụp ảnh, Shop áo dài)
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="ac-dock-meta-row">
+                          <span className="ac-dock-meta-label">Ngày gán vai trò:</span>
+                          <span className="ac-dock-meta-val">15/06/2024</span>
+                        </div>
+                        <div className="ac-dock-meta-row">
+                          <span className="ac-dock-meta-label">Người gán:</span>
+                          <span className="ac-dock-meta-val">System Admin</span>
+                        </div>
+                        <div className="ac-dock-meta-row" style={{ marginBottom: 0 }}>
+                          <span className="ac-dock-meta-label">Ghi chú:</span>
+                          <span className="ac-dock-meta-val">Đối tác đã hoàn tất KYC</span>
+                        </div>
+                      </div>
+
+                      {/* Callout Notice */}
+                      <div className="ac-callout-notice">
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
+                          <div>
+                            Quyền truy cập của người dùng được quản lý theo vai trò. Để chỉnh sửa
+                            chi tiết quyền, vui lòng vào trang Vai trò & Quyền hạn.
+                          </div>
+                        </div>
+                        <span
+                          className="ac-callout-link"
+                          onClick={() => {
+                            setSelectedRoleCode(selectedUser.roles[0] || 'PROVIDER');
+                            setActiveTab('MATRIX');
+                          }}
+                        >
+                          Xem toàn bộ quyền của {selectedUser.roles[0] || 'PROVIDER'} &rarr;
+                        </span>
+                      </div>
+
+                      {/* Key Permissions Checklist (6 items matching Figma) */}
+                      <div>
+                        <div
+                          style={{
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            color: '#0f172a',
+                            marginBottom: '8px',
+                          }}
+                        >
+                          Các quyền tiêu biểu (6)
+                        </div>
+                        <ul className="ac-perm-checklist">
+                          {prominentPermissions.map((permText, i) => (
+                            <li key={i} className="ac-perm-check-item">
+                              <CheckCircle2 size={16} className="ac-perm-check-icon" />
+                              <span>{permText}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Bottom Actions */}
+                      <div className="ac-dock-actions">
                         <button
                           className="ac-btn-outline-gray"
-                          style={{ color: '#059669', borderColor: '#a7f3d0' }}
-                          onClick={() => handleUnlockUser(selectedUser)}
+                          onClick={() => toast.info('Chức năng chỉnh sửa thông tin người dùng')}
                         >
-                          <Unlock size={14} />
-                          <span>Mở khóa tài khoản</span>
+                          <Edit size={14} />
+                          <span>Chỉnh sửa người dùng</span>
                         </button>
-                      )}
+                        {selectedUser.status === 'ACTIVE' ? (
+                          <button
+                            className="ac-btn-outline-red"
+                            onClick={() => handleLockUser(selectedUser)}
+                          >
+                            <Lock size={14} />
+                            <span>Khóa tài khoản</span>
+                          </button>
+                        ) : (
+                          <button
+                            className="ac-btn-outline-gray"
+                            style={{ color: '#059669', borderColor: '#a7f3d0' }}
+                            onClick={() => handleUnlockUser(selectedUser)}
+                          >
+                            <Unlock size={14} />
+                            <span>Mở khóa tài khoản</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Subtab: Tổng quan */}
-                {dockSubTab === 'OVERVIEW' && (
-                  <div style={{ fontSize: '13px', color: '#334155' }}>
-                    <div style={{ marginBottom: '14px' }}>
-                      <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
-                        EMAIL
+                  {/* Subtab: Tổng quan */}
+                  {dockSubTab === 'OVERVIEW' && (
+                    <div style={{ fontSize: '13px', color: '#334155' }}>
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
+                          EMAIL
+                        </div>
+                        <div style={{ fontWeight: 600 }}>{selectedUser.email}</div>
                       </div>
-                      <div style={{ fontWeight: 600 }}>{selectedUser.email}</div>
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
+                          SỐ ĐIỆN THOẠI
+                        </div>
+                        <div style={{ fontWeight: 600 }}>
+                          {selectedUser.phone || 'Chưa cập nhật'}
+                        </div>
+                      </div>
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
+                          NGÀY TẠO TÀI KHOẢN
+                        </div>
+                        <div style={{ fontWeight: 600 }}>
+                          {formatDate(selectedUser.createdAt)}
+                        </div>
+                      </div>
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
+                          TRẠNG THÁI XÁC MINH
+                        </div>
+                        <div style={{ fontWeight: 600, color: '#059669' }}>
+                          {selectedUser.emailVerified ? 'Đã xác minh Email & SĐT' : 'Chưa xác minh'}
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ marginBottom: '14px' }}>
-                      <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
-                        SỐ ĐIỆN THOẠI
-                      </div>
-                      <div style={{ fontWeight: 600 }}>
-                        {selectedUser.phone || 'Chưa cập nhật'}
-                      </div>
-                    </div>
-                    <div style={{ marginBottom: '14px' }}>
-                      <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
-                        NGÀY TẠO TÀI KHOẢN
-                      </div>
-                      <div style={{ fontWeight: 600 }}>
-                        {formatDate(selectedUser.createdAt)}
-                      </div>
-                    </div>
-                    <div style={{ marginBottom: '14px' }}>
-                      <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
-                        TRẠNG THÁI XÁC MINH
-                      </div>
-                      <div style={{ fontWeight: 600, color: '#059669' }}>
-                        {selectedUser.emailVerified ? 'Đã xác minh Email & SĐT' : 'Chưa xác minh'}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Subtab: Nhật ký hoạt động */}
-                {dockSubTab === 'LOGS' && (
-                  <div style={{ fontSize: '12px' }}>
-                    <div style={{ padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
-                      <div style={{ fontWeight: 600, color: '#0f172a' }}>
-                        Đăng nhập thành công
+                  {/* Subtab: Nhật ký hoạt động */}
+                  {dockSubTab === 'LOGS' && (
+                    <div style={{ fontSize: '12px' }}>
+                      <div style={{ padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <div style={{ fontWeight: 600, color: '#0f172a' }}>
+                          Đăng nhập thành công
+                        </div>
+                        <div style={{ color: '#64748b' }}>
+                          IP: 14.232.208.12 • Trình duyệt: Chrome 127
+                        </div>
+                        <div style={{ color: '#94a3b8', fontSize: '11px' }}>
+                          {formatDate(selectedUser.lastLoginAt)}
+                        </div>
                       </div>
-                      <div style={{ color: '#64748b' }}>
-                        IP: 14.232.208.12 • Trình duyệt: Chrome 127
-                      </div>
-                      <div style={{ color: '#94a3b8', fontSize: '11px' }}>
-                        {formatDate(selectedUser.lastLoginAt)}
+                      <div style={{ padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <div style={{ fontWeight: 600, color: '#0f172a' }}>
+                          Cập nhật mật khẩu
+                        </div>
+                        <div style={{ color: '#64748b' }}>Hệ thống gửi mã OTP qua Email</div>
+                        <div style={{ color: '#94a3b8', fontSize: '11px' }}>15/07/2024 10:20</div>
                       </div>
                     </div>
-                    <div style={{ padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
-                      <div style={{ fontWeight: 600, color: '#0f172a' }}>
-                        Cập nhật mật khẩu
-                      </div>
-                      <div style={{ color: '#64748b' }}>Hệ thống gửi mã OTP qua Email</div>
-                      <div style={{ color: '#94a3b8', fontSize: '11px' }}>15/07/2024 10:20</div>
-                    </div>
+                  )}
+                </div>
+
+                {/* Drawer Footer */}
+                <div className="ac-drawer-footer">
+                  <div style={{ fontSize: '13px', color: '#64748b' }}>
+                    Trạng thái:{' '}
+                    <strong style={{ color: selectedUser.status === 'ACTIVE' ? '#10b981' : '#ef4444' }}>
+                      {selectedUser.status === 'ACTIVE' ? 'Đang hoạt động' : 'Tạm khóa'}
+                    </strong>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+                  <button
+                    type="button"
+                    className="ac-btn-primary"
+                    style={{ height: '36px', fontSize: '12px' }}
+                    onClick={() => setSelectedUser(null)}
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </aside>
+            </>
+          )}
         </>
       )}
 
@@ -1677,19 +1668,19 @@ export const AccessControl: React.FC = () => {
                     role.code === 'ADMIN'
                       ? { background: '#fef3c7', color: '#b45309' }
                       : role.code === 'PROVIDER'
-                      ? { background: '#f3e8ff', color: '#7e22ce' }
-                      : role.code === 'CUSTOMER'
-                      ? { background: '#dbeafe', color: '#1d4ed8' }
-                      : { background: '#ffedd5', color: '#c2410c' };
+                        ? { background: '#f3e8ff', color: '#7e22ce' }
+                        : role.code === 'CUSTOMER'
+                          ? { background: '#dbeafe', color: '#1d4ed8' }
+                          : { background: '#ffedd5', color: '#c2410c' };
 
                   const progressColor =
                     role.code === 'ADMIN'
                       ? '#b45309'
                       : role.code === 'PROVIDER'
-                      ? '#7e22ce'
-                      : role.code === 'CUSTOMER'
-                      ? '#1d4ed8'
-                      : '#c2410c';
+                        ? '#7e22ce'
+                        : role.code === 'CUSTOMER'
+                          ? '#1d4ed8'
+                          : '#c2410c';
 
                   const rolePermCount =
                     role.code === 'ADMIN'
@@ -2035,8 +2026,8 @@ export const AccessControl: React.FC = () => {
                                       const isChecked = isAdminRole
                                         ? true
                                         : isTargetRole
-                                        ? rolePermissions.includes(p.code)
-                                        : Boolean(r.permissions?.includes(p.code));
+                                          ? rolePermissions.includes(p.code)
+                                          : Boolean(r.permissions?.includes(p.code));
 
                                       return (
                                         <td

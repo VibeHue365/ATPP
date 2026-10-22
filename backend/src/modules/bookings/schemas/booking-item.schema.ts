@@ -220,6 +220,12 @@ export class BookingItem {
 
   @Prop({ type: Number, default: 0 })
   comboDiscountAmount: number;
+
+  @Prop({ type: Number, default: 0 })
+  shopVoucherDiscountAmount: number;
+
+  @Prop({ type: Number, default: 0 })
+  platformVoucherDiscountAmount: number;
 }
 
 export const BookingItemSchema = SchemaFactory.createForClass(BookingItem);

@@ -153,9 +153,161 @@ button.ppd-calendar-day.is-available:hover, button.ppd-calendar-day.is-selected 
 .ppd-breakdown-row { color: var(--ppd-secondary); font-size: 11px; }
 .ppd-breakdown-row strong { color: var(--ppd-ink); }
 .ppd-error { margin: 10px 0 0; padding: 9px 10px; border-radius: 8px; background: #fff0f1; color: #a32940; font-size: 11px; line-height: 1.45; }
-.ppd-booking-total { padding: 17px 0 12px; color: var(--ppd-secondary); font-size: 13px; }
-.ppd-booking-total strong { color: var(--ppd-primary-dark); font-size: 21px; }
+
+/* Voucher Entry in Photographer Package Booking */
+.ppd-voucher-section { padding: 14px 0; border-bottom: 1px solid #f2e7e8; }
+.ppd-voucher-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px dashed var(--ppd-primary);
+  border-radius: 10px;
+  background: #fff8f9;
+  color: var(--ppd-ink);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+.ppd-voucher-trigger:hover {
+  background: var(--ppd-soft);
+  border-color: var(--ppd-primary-dark);
+}
+.ppd-voucher-trigger__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ppd-voucher-trigger__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--ppd-soft);
+  color: var(--ppd-primary);
+}
+.ppd-voucher-trigger__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ppd-voucher-trigger__copy strong {
+  font-size: 12px;
+  color: var(--ppd-ink);
+}
+.ppd-voucher-trigger__copy small {
+  font-size: 11px;
+  color: var(--ppd-primary);
+  font-weight: 600;
+}
+.ppd-voucher-applied {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1.5px solid var(--ppd-primary);
+  border-radius: 10px;
+  background: #fffcfd;
+}
+.ppd-voucher-applied__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ppd-voucher-applied__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(181, 43, 71, 0.1);
+  color: var(--ppd-primary);
+}
+.ppd-voucher-applied__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ppd-voucher-applied__copy strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ppd-primary-dark);
+}
+.ppd-voucher-applied__copy small {
+  font-size: 11px;
+  color: #27ae60;
+  font-weight: 600;
+}
+.ppd-voucher-applied__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ppd-voucher-btn-change {
+  background: transparent;
+  border: none;
+  color: var(--ppd-primary);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.ppd-voucher-btn-change:hover {
+  text-decoration: underline;
+}
+.ppd-voucher-btn-remove {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: #f5f0f1;
+  color: var(--ppd-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.ppd-voucher-btn-remove:hover {
+  background: var(--ppd-soft);
+  color: var(--ppd-primary);
+}
+.ppd-booking-total {
+  padding: 14px 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ppd-booking-total__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ppd-secondary);
+}
+.ppd-booking-total__row--discount {
+  color: #27ae60;
+  font-weight: 600;
+}
+.ppd-booking-total__row--discount strong {
+  color: #27ae60;
+  font-size: 13px;
+}
+.ppd-booking-total__row--main {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--ppd-border);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ppd-ink);
+}
+.ppd-booking-total__row--main strong {
+  color: var(--ppd-primary-dark);
+  font-size: 21px;
+}
 .ppd-terms { display: flex; align-items: flex-start; gap: 7px; margin-bottom: 12px; color: var(--ppd-secondary); font-size: 11px; line-height: 1.4; }
+
 .ppd-terms input { accent-color: var(--ppd-primary); flex-shrink: 0; margin-top: 2px; }
 .ppd-primary-button, .ppd-secondary-button { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; border-radius: 9px; padding: 11px 14px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 750; transition: .2s ease; }
 .ppd-primary-button { border: 1px solid var(--ppd-primary); background: var(--ppd-primary); color: #fff; }

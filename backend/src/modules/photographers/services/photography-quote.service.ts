@@ -1,4 +1,4 @@
-import {
+    import {
   BadRequestException,
   forwardRef,
   Inject,
@@ -400,58 +400,86 @@ export class PhotographyQuoteService {
     dateKeys: string[],
   ): Promise<Map<string, TimeRange[]>> {
     const rangesByDate = new Map<string, TimeRange[]>();
-    await Promise.all(
-      dateKeys.map(async (dateKey) => {
-        rangesByDate.set(
-          dateKey,
-          await this.getWorkingRangesForDate(providerId, dateKey),
-        );
-      }),
+    if (!dateKeys || dateKeys.length === 0) {
+      return rangesByDate;
+    }
+
+    const sortedKeys = [...dateKeys].sort();
+    const minDate = new Date(`${sortedKeys[0]}T00:00:00.000Z`);
+    const maxDate = new Date(
+      new Date(`${sortedKeys[sortedKeys.length - 1]}T00:00:00.000Z`).getTime() +
+        24 * 60 * 60 * 1000,
     );
+
+    // 2 queries duy nhất: 1 cho toàn bộ ngày cụ thể trong dải, 1 cho toàn bộ lịch lặp
+    const [specificSchedules, recurringSchedules] = await Promise.all([
+      this.providerScheduleModel
+        .find({
+          providerId,
+          scheduleType: ScheduleType.SpecificDate,
+          specificDate: { $gte: minDate, $lt: maxDate },
+        })
+        .sort({ _id: 1 })
+        .lean()
+        .exec(),
+      this.providerScheduleModel
+        .find({
+          providerId,
+          scheduleType: ScheduleType.Recurring,
+        })
+        .sort({ _id: 1 })
+        .lean()
+        .exec(),
+    ]);
+
+    // Giữ document đầu tiên khớp với hành vi của findOne ở code cũ
+    const specificMap = new Map<string, any>();
+    for (const s of specificSchedules) {
+      if (!s.specificDate) continue;
+      const sKey = new Date(s.specificDate).toISOString().slice(0, 10);
+      if (!specificMap.has(sKey)) {
+        specificMap.set(sKey, s);
+      }
+    }
+
+    const recurringMap = new Map<number, any>();
+    for (const r of recurringSchedules) {
+      if (typeof r.dayOfWeek === 'number' && !recurringMap.has(r.dayOfWeek)) {
+        recurringMap.set(r.dayOfWeek, r);
+      }
+    }
+
+    for (const dateKey of dateKeys) {
+      const specificSchedule = specificMap.get(dateKey);
+
+      if (
+        specificSchedule?.offDays?.some(
+          (offDay: any) =>
+            this.getBusinessTimeParts(new Date(offDay)).date === dateKey,
+        )
+      ) {
+        rangesByDate.set(dateKey, []);
+        continue;
+      }
+
+      if (specificSchedule?.customSlots?.length) {
+        const slots = specificSchedule.customSlots
+          .filter((slot: any) => slot.status === 'AVAILABLE')
+          .map((slot: any) => this.parseRange(slot.timeSlot))
+          .filter((range: any): range is TimeRange => Boolean(range));
+        rangesByDate.set(dateKey, slots);
+        continue;
+      }
+
+      const weekday = new Date(`${dateKey}T12:00:00+07:00`).getUTCDay();
+      const recurringSchedule = recurringMap.get(weekday);
+      const ranges = (recurringSchedule?.workingHours ?? [])
+        .map((range: any) => this.parseRange(`${range.start}-${range.end}`))
+        .filter((range: any): range is TimeRange => Boolean(range));
+      rangesByDate.set(dateKey, ranges);
+    }
+
     return rangesByDate;
-  }
-
-  private async getWorkingRangesForDate(
-    providerId: Types.ObjectId,
-    dateKey: string,
-  ): Promise<TimeRange[]> {
-    const dayStart = new Date(`${dateKey}T00:00:00.000Z`);
-    const nextDayStart = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
-    const specificSchedule = await this.providerScheduleModel
-      .findOne({
-        providerId,
-        scheduleType: ScheduleType.SpecificDate,
-        specificDate: { $gte: dayStart, $lt: nextDayStart },
-      })
-      .lean()
-      .exec();
-
-    if (
-      specificSchedule?.offDays?.some(
-        (offDay) => this.getBusinessTimeParts(new Date(offDay)).date === dateKey,
-      )
-    ) {
-      return [];
-    }
-    if (specificSchedule?.customSlots?.length) {
-      return specificSchedule.customSlots
-        .filter((slot) => slot.status === 'AVAILABLE')
-        .map((slot) => this.parseRange(slot.timeSlot))
-        .filter((range): range is TimeRange => Boolean(range));
-    }
-
-    const weekday = new Date(`${dateKey}T12:00:00+07:00`).getUTCDay();
-    const recurringSchedule = await this.providerScheduleModel
-      .findOne({
-        providerId,
-        scheduleType: ScheduleType.Recurring,
-        dayOfWeek: weekday,
-      })
-      .lean()
-      .exec();
-    return (recurringSchedule?.workingHours ?? [])
-      .map((range) => this.parseRange(`${range.start}-${range.end}`))
-      .filter((range): range is TimeRange => Boolean(range));
   }
 
   private async getBusyRanges(

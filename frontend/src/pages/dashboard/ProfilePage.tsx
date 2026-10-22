@@ -348,8 +348,43 @@ export const ProfilePage: React.FC = () => {
     return savings;
   }, [bookings]);
 
-  // 5. Dynamic Special Offers tailored to membership tier
+  // 5. Dynamic Special Offers from DB (with tier-based fallback for cold start)
+  const [dbOffers, setDbOffers] = useState<SpecialOfferItem[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchOffers = async () => {
+      try {
+        const rawTier = quickStats.membershipTier.includes('Diamond')
+          ? 'DIAMOND'
+          : quickStats.membershipTier.includes('Gold')
+            ? 'GOLD'
+            : 'SILVER';
+        const res: any = await httpClient.get(`/promotions/public?tier=${rawTier}`);
+        if (active && Array.isArray(res) && res.length > 0) {
+          const mapped: SpecialOfferItem[] = res.map((p: any) => ({
+            id: p._id || p.id,
+            code: p.code,
+            title: p.name || `Ưu đãi ${p.code}`,
+            description: p.description || 'Áp dụng cho các đơn đặt trên Lumé',
+            expiryDate: p.endDate ? new Date(p.endDate).toLocaleDateString('vi-VN') : 'Vô thời hạn',
+            type: p.discountType === 'PERCENTAGE' ? 'DISCOUNT_PERCENT' : 'DISCOUNT_FIXED',
+            discountValue: p.discountType === 'PERCENTAGE' ? `${p.discountValue}%` : `${Number(p.discountValue).toLocaleString('vi-VN')}đ`,
+          }));
+          setDbOffers(mapped);
+        }
+      } catch (err) {
+        console.warn('Không thể tải danh sách ưu đãi từ DB:', err);
+      }
+    };
+    void fetchOffers();
+    return () => {
+      active = false;
+    };
+  }, [quickStats.membershipTier]);
+
   const specialOffers: SpecialOfferItem[] = useMemo(() => {
+    if (dbOffers.length > 0) return dbOffers;
     const year = new Date().getFullYear();
     if (quickStats.membershipTier === 'Diamond Member') {
       return [
@@ -416,7 +451,7 @@ export const ProfilePage: React.FC = () => {
         discountValue: '100.000đ'
       }
     ];
-  }, [quickStats.membershipTier]);
+  }, [dbOffers, quickStats.membershipTier]);
 
   // Actions
   const handleContinuePayment = async (bookingId: string) => {
@@ -441,14 +476,20 @@ export const ProfilePage: React.FC = () => {
 
   const handleLogout = async () => {
     const result = await Swal.fire({
-      title: 'Đăng xuất?',
-      text: 'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản LUMÉ không?',
-      icon: 'question',
+      title: 'Đăng xuất tài khoản?',
+      text: 'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản LUMÉ không? Phiên làm việc sẽ kết thúc an toàn.',
+      iconHtml: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="vh-logout-icon-svg"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>`,
       showCancelButton: true,
-      confirmButtonColor: '#8B1E2D',
-      cancelButtonColor: '#9CA3AF',
       confirmButtonText: 'Đăng xuất',
-      cancelButtonText: 'Ở lại'
+      cancelButtonText: 'Ở lại',
+      reverseButtons: true,
+      focusCancel: true,
+      customClass: {
+        popup: 'vh-swal-popup vh-swal-logout',
+        icon: 'vh-swal-logout-icon',
+        confirmButton: 'vh-swal-logout-confirm',
+        cancelButton: 'vh-swal-logout-cancel',
+      }
     });
 
     if (result.isConfirmed) {
@@ -562,6 +603,17 @@ export const ProfilePage: React.FC = () => {
                       setRescheduleItem(item);
                     }}
                     onOpenCancel={(b) => setBookingToCancel(b)}
+                    onRefreshBooking={async () => {
+                      await fetchBookings(true);
+                      try {
+                        const data = await httpClient.get<any[]>('/api/bookings');
+                        const list = Array.isArray(data) ? data : [];
+                        const updated = list.find((b: any) => b._id === viewingRentalBooking._id);
+                        if (updated) setViewingRentalBooking(updated);
+                      } catch (e) {
+                        console.error(e);
+                      }
+                    }}
                   />
                 )
               ) : (
@@ -615,6 +667,7 @@ export const ProfilePage: React.FC = () => {
           onContinuePayment={handleContinuePayment}
           onOpenReview={(item) => setReviewingItem(item)}
           onOpenLocationChange={(sched) => setLocationChangeSchedule(sched)}
+          onRefreshBooking={() => fetchBookings(true)}
         />
       )}
 

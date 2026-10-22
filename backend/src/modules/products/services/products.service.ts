@@ -363,6 +363,41 @@ export class ProductsService implements OnModuleInit {
     };
   }
 
+  async listPublicStores(): Promise<any[]> {
+    const providerModel = this.connection.model('Provider');
+    const providers = await providerModel
+      .find({
+        status: { $in: ['ACTIVE', 'Active', 'approved', 'APPROVED'] },
+      })
+      .select('businessName capabilities contact address media rating policies comboDiscountPercent')
+      .lean()
+      .exec();
+
+    let countMap = new Map<string, number>();
+    try {
+      const productModel = this.connection.model(Product.name);
+      const counts = await productModel.aggregate([
+        { $match: { status: 'ACTIVE', moderationStatus: 'APPROVED' } },
+        { $group: { _id: '$providerId', productCount: { $sum: 1 } } },
+      ]);
+      countMap = new Map(counts.map((c: any) => [c._id?.toString(), c.productCount]));
+    } catch {
+      // Ignore aggregate error if product collection is empty
+    }
+
+    return providers.map((p: any) => ({
+      _id: p._id,
+      businessName: p.businessName,
+      capabilities: p.capabilities || [],
+      contact: p.contact,
+      address: p.address,
+      media: p.media,
+      rating: p.rating,
+      comboDiscountPercent: p.comboDiscountPercent,
+      productCount: countMap.get(p._id?.toString()) || 0,
+    }));
+  }
+
   async getProductById(productId: string): Promise<any | null> {
     if (!Types.ObjectId.isValid(productId)) return null;
     const product = await this.productsRepository.findPublicById(
@@ -774,23 +809,24 @@ export class ProductsService implements OnModuleInit {
     // Create real inventory items only from the provider's declared variants.
     // No variants => no stock is fabricated (the old default-of-2 behaviour is
     // intentionally removed so onboarding never invents phantom inventory).
-    if (variants) {
+    if (variants && variants.length > 0) {
       const inventoryItemModel = this.connection.model('InventoryItem');
-      const seqByBucket = new Map<string, number>();
+      const itemsToInsert: any[] = [];
+      const countersObj: Record<string, number> = {};
       for (const variant of variants) {
         const sizeVal = variant.size.trim().toUpperCase();
         const colorVal = normalizeColor(variant.color);
         const materialVal = variant.material ? variant.material.trim() : null;
         const quantity =
           variant.quantity && variant.quantity > 0 ? variant.quantity : 1;
-        const bucket = `${sizeVal}_${colorVal}`;
-        let seq = seqByBucket.get(bucket) || 0;
+        const bucket = `${sizeVal}_${colorVal}`.replace(/[^A-Z0-9]/g, '_');
+        let seq = countersObj[bucket] || 0;
         for (let i = 0; i < quantity; i++) {
           seq += 1;
           const seqStr = seq.toString().padStart(3, '0');
           const sku =
             `AD-${product._id.toString().slice(-6)}-${sizeVal}-${colorVal}-${seqStr}`.toUpperCase();
-          await inventoryItemModel.create({
+          itemsToInsert.push({
             productId: product._id,
             sku,
             size: sizeVal,
@@ -800,7 +836,14 @@ export class ProductsService implements OnModuleInit {
             status: 'AVAILABLE',
           });
         }
-        seqByBucket.set(bucket, seq);
+        countersObj[bucket] = seq;
+      }
+      if (itemsToInsert.length > 0) {
+        await inventoryItemModel.insertMany(itemsToInsert);
+        await this.connection.model('Product').updateOne(
+          { _id: product._id },
+          { $set: { skuCounters: countersObj } },
+        );
       }
     }
 

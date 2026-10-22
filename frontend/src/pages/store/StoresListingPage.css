@@ -1,0 +1,478 @@
+/* Stylesheet for StoresListingPage - TàGo Showroom & Studio Directory */
+
+.stores-page {
+  padding-bottom: 60px;
+}
+
+/* 1. Filter & Search Controls Card */
+.stores-controls-card {
+  background: #FFFFFF;
+  border: 1px solid #EADDCD;
+  border-radius: 20px;
+  padding: 20px 24px;
+  margin-bottom: 32px;
+  box-shadow: 0 4px 20px rgba(83, 19, 32, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.stores-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.stores-search-icon {
+  position: absolute;
+  left: 16px;
+  color: #94A3B8;
+  pointer-events: none;
+}
+
+.stores-search-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 44px 0 46px;
+  border-radius: 12px;
+  border: 1.5px solid #E2E8F0;
+  font-size: 14.5px;
+  color: #1E293B;
+  background-color: #FAF6F0;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.stores-search-input:focus {
+  outline: none;
+  border-color: #531320;
+  background-color: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(83, 19, 32, 0.1);
+}
+
+.stores-clear-search-btn {
+  position: absolute;
+  right: 14px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #94A3B8;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.stores-clear-search-btn:hover {
+  color: #1E293B;
+}
+
+.stores-filters-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.stores-tabs-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stores-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 650;
+  color: #64748B;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.stores-tab-btn:hover {
+  background-color: #FAF4EB;
+  color: #531320;
+  border-color: #E5DFD5;
+}
+
+.stores-tab-btn.active {
+  background-color: #531320;
+  color: #FFFFFF;
+  border-color: #531320;
+  box-shadow: 0 4px 12px rgba(83, 19, 32, 0.25);
+}
+
+.stores-city-select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.stores-city-icon {
+  position: absolute;
+  left: 12px;
+  color: #7A1C2E;
+  pointer-events: none;
+}
+
+.stores-city-select {
+  height: 38px;
+  padding: 0 32px 0 34px;
+  border-radius: 999px;
+  border: 1px solid #E2E8F0;
+  background-color: #FAF6F0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.stores-city-select:focus {
+  border-color: #531320;
+}
+
+/* 2. Stores Grid */
+.stores-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+@media (max-width: 1024px) {
+  .stores-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .stores-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* 3. Showroom Card */
+.stores-card {
+  background: #FFFFFF;
+  border: 1px solid #EADBCE;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.stores-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 16px 36px rgba(83, 19, 32, 0.12);
+  border-color: #D4A373;
+}
+
+.stores-card-banner {
+  position: relative;
+  width: 100%;
+  height: 140px;
+  background-color: #F1F5F9;
+  overflow: hidden;
+}
+
+.stores-card-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s ease;
+}
+
+.stores-card:hover .stores-card-banner-img {
+  transform: scale(1.05);
+}
+
+.stores-card-banner-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 100%);
+}
+
+.stores-card-badges {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  z-index: 2;
+}
+
+.stores-badge-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(6px);
+  color: #059669;
+  font-size: 11px;
+  font-weight: 750;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.stores-badge-discount {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #B91C1C;
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 750;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.stores-card-avatar-wrap {
+  position: absolute;
+  bottom: -24px;
+  left: 20px;
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  background: #FFFFFF;
+  border: 3px solid #FFFFFF;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  overflow: hidden;
+  z-index: 3;
+}
+
+.stores-card-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.stores-card-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #FAF4EB;
+}
+
+/* Card Body */
+.stores-card-body {
+  padding: 32px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.stores-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.stores-card-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: #1E293B;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.stores-card-rating {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+}
+
+.stores-rating-val {
+  font-weight: 800;
+  color: #1E293B;
+}
+
+.stores-reviews-count {
+  color: #64748B;
+  font-weight: 500;
+}
+
+.stores-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.stores-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.stores-tag.rental {
+  background-color: #FEF3C7;
+  color: #92400E;
+}
+
+.stores-tag.photo {
+  background-color: #E0E7FF;
+  color: #3730A3;
+}
+
+.stores-tag.combo {
+  background-color: #FCE7F3;
+  color: #9D174D;
+}
+
+.stores-card-info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 10px 12px;
+  background-color: #FAF6F0;
+  border-radius: 10px;
+}
+
+.stores-info-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.stores-info-icon {
+  color: #7A1C2E;
+  flex-shrink: 0;
+}
+
+.stores-info-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stores-card-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stores-action-btn {
+  flex: 1;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 750;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  border: none;
+}
+
+.stores-action-btn.primary {
+  background-color: #531320;
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(83, 19, 32, 0.2);
+}
+
+.stores-action-btn.primary:hover {
+  background-color: #7A1C2E;
+  transform: translateY(-1px);
+}
+
+.stores-action-btn.secondary {
+  background-color: #FFFFFF;
+  color: #531320;
+  border: 1.5px solid #EADDCD;
+}
+
+.stores-action-btn.secondary:hover {
+  background-color: #FAF6F0;
+  border-color: #531320;
+}
+
+/* Skeleton Loading */
+.stores-card-skeleton {
+  height: 380px;
+  background-color: #F1F5F9;
+  border-radius: 20px;
+}
+
+/* Empty State */
+.stores-empty-state {
+  text-align: center;
+  padding: 64px 20px;
+  background: #FFFFFF;
+  border-radius: 20px;
+  border: 1px dashed #CBD5E1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stores-empty-icon {
+  color: #94A3B8;
+  margin-bottom: 16px;
+}
+
+.stores-empty-state h3 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1E293B;
+  margin: 0 0 8px;
+}
+
+.stores-empty-state p {
+  font-size: 14px;
+  color: #64748B;
+  margin: 0 0 20px;
+  max-width: 420px;
+}
+
+.stores-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 10px;
+  background-color: #531320;
+  color: #FFFFFF;
+  border: none;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}

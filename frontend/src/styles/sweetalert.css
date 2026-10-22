@@ -1,0 +1,405 @@
+/* ==========================================================================
+   VibeHue / LUMÉ - SweetAlert2 Modern Design System
+   Elevates all alert, confirm, and prompt dialogs with luxury heritage aesthetics.
+   ========================================================================== */
+
+/* --- Backdrop & Overlay --- */
+.swal2-container {
+  z-index: 100000 !important;
+  font-family: var(--font-body, 'Inter', -apple-system, BlinkMacSystemFont, sans-serif) !important;
+}
+
+.swal2-container.swal2-backdrop-show,
+.swal2-container.swal2-noanimation {
+  background: rgba(18, 14, 15, 0.52) !important;
+  backdrop-filter: blur(8px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(180%) !important;
+  transition: backdrop-filter 0.3s ease, background 0.3s ease !important;
+}
+
+/* --- Modal Popup Card --- */
+.swal2-popup {
+  background: #FFFFFF !important;
+  border-radius: 24px !important;
+  padding: 32px 28px 28px !important;
+  box-shadow:
+    0 24px 60px -12px rgba(45, 41, 38, 0.18),
+    0 12px 28px -8px rgba(45, 41, 38, 0.08),
+    0 0 0 1px rgba(0, 0, 0, 0.04) !important;
+  border: 1px solid rgba(226, 218, 208, 0.75) !important;
+  width: min(92vw, 420px) !important;
+  max-width: 420px !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  position: relative !important;
+  font-family: var(--font-body, 'Inter', sans-serif) !important;
+  text-align: center !important;
+}
+
+/* Gentle entrance animation */
+.swal2-popup.swal2-show {
+  animation: vhSwalPopIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+.swal2-popup.swal2-hide {
+  animation: vhSwalPopOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+}
+
+@keyframes vhSwalPopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes vhSwalPopOut {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.92) translateY(10px);
+  }
+}
+
+/* --- Icon System --- */
+.swal2-icon {
+  width: 60px !important;
+  height: 60px !important;
+  margin: 4px auto 18px auto !important;
+  border: none !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+  transition: transform 0.25s ease !important;
+}
+
+.swal2-icon .swal2-icon-content {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 26px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  font-family: var(--font-header, 'Inter', sans-serif) !important;
+}
+
+/* Question Icon */
+.swal2-icon.swal2-question {
+  background: #FFF1F2 !important;
+  color: #991B1B !important;
+  box-shadow: 0 0 0 8px #FFE4E6 !important;
+}
+
+.swal2-icon.swal2-question .swal2-icon-content {
+  color: #991B1B !important;
+}
+
+/* Warning Icon */
+.swal2-icon.swal2-warning {
+  background: #FFFBEB !important;
+  color: #D97706 !important;
+  box-shadow: 0 0 0 8px #FEF3C7 !important;
+}
+
+.swal2-icon.swal2-warning .swal2-icon-content {
+  color: #D97706 !important;
+  font-size: 28px !important;
+}
+
+/* Success Icon */
+.swal2-icon.swal2-success {
+  background: #ECFDF5 !important;
+  color: #059669 !important;
+  box-shadow: 0 0 0 8px #D1FAE5 !important;
+  border-color: transparent !important;
+}
+
+.swal2-icon.swal2-success [class^='swal2-success-line'] {
+  background-color: #059669 !important;
+}
+
+.swal2-icon.swal2-success .swal2-success-ring {
+  border-color: rgba(5, 150, 105, 0.25) !important;
+}
+
+/* Error Icon */
+.swal2-icon.swal2-error {
+  background: #FEF2F2 !important;
+  color: #DC2626 !important;
+  box-shadow: 0 0 0 8px #FEE2E2 !important;
+  border-color: transparent !important;
+}
+
+.swal2-icon.swal2-error [class^='swal2-x-mark-line'] {
+  background-color: #DC2626 !important;
+}
+
+/* Info Icon */
+.swal2-icon.swal2-info {
+  background: #EFF6FF !important;
+  color: #2563EB !important;
+  box-shadow: 0 0 0 8px #DBEAFE !important;
+}
+
+.swal2-icon.swal2-info .swal2-icon-content {
+  color: #2563EB !important;
+}
+
+/* Dedicated Logout Icon Badge */
+.vh-swal-logout-icon,
+.swal2-icon.vh-swal-logout-icon {
+  background: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%) !important;
+  color: #8B1E2D !important;
+  box-shadow: 0 0 0 8px rgba(255, 228, 230, 0.75), 0 4px 12px rgba(139, 30, 45, 0.1) !important;
+  width: 62px !important;
+  height: 62px !important;
+}
+
+.vh-swal-logout-icon svg,
+.swal2-icon.vh-swal-logout-icon svg {
+  color: #8B1E2D !important;
+  stroke: #8B1E2D !important;
+  width: 28px !important;
+  height: 28px !important;
+  display: block !important;
+}
+
+/* Dedicated Pause Icon Badge */
+.vh-swal-pause-icon,
+.swal2-icon.vh-swal-pause-icon {
+  background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%) !important;
+  color: #D97706 !important;
+  box-shadow: 0 0 0 8px rgba(254, 243, 199, 0.75), 0 4px 12px rgba(217, 119, 6, 0.1) !important;
+  width: 62px !important;
+  height: 62px !important;
+}
+
+.vh-swal-pause-icon svg,
+.swal2-icon.vh-swal-pause-icon svg {
+  color: #D97706 !important;
+  stroke: #D97706 !important;
+  width: 28px !important;
+  height: 28px !important;
+  display: block !important;
+}
+
+/* Dedicated Auth / Login Icon Badge */
+.vh-swal-auth-icon,
+.swal2-icon.vh-swal-auth-icon {
+  background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%) !important;
+  color: #2563EB !important;
+  box-shadow: 0 0 0 8px rgba(219, 234, 254, 0.75), 0 4px 12px rgba(37, 99, 235, 0.1) !important;
+  width: 62px !important;
+  height: 62px !important;
+}
+
+.vh-swal-auth-icon svg,
+.swal2-icon.vh-swal-auth-icon svg {
+  color: #2563EB !important;
+  stroke: #2563EB !important;
+  width: 28px !important;
+  height: 28px !important;
+  display: block !important;
+}
+
+/* --- Header & Title --- */
+.swal2-title {
+  font-family: var(--font-header, 'Inter', sans-serif) !important;
+  font-size: 1.32rem !important;
+  font-weight: 700 !important;
+  color: #1E1B19 !important;
+  margin: 4px 0 8px 0 !important;
+  padding: 0 8px !important;
+  line-height: 1.35 !important;
+  letter-spacing: -0.02em !important;
+}
+
+/* --- Content / Message --- */
+.swal2-html-container {
+  font-family: var(--font-body, 'Inter', sans-serif) !important;
+  font-size: 0.935rem !important;
+  font-weight: 400 !important;
+  color: #57534E !important;
+  line-height: 1.55 !important;
+  margin: 0 0 24px 0 !important;
+  padding: 0 8px !important;
+}
+
+/* --- Actions Container & Buttons --- */
+.swal2-actions {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 12px !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  justify-content: stretch !important;
+  align-items: center !important;
+}
+
+.swal2-actions button.swal2-styled {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  border-radius: 12px !important;
+  font-family: var(--font-body, 'Inter', sans-serif) !important;
+  font-size: 0.925rem !important;
+  font-weight: 600 !important;
+  margin: 0 !important;
+  padding: 0 16px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  letter-spacing: 0.01em !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  outline: none !important;
+}
+
+.swal2-actions button.swal2-styled:not([style*="display: none"]) {
+  display: inline-flex;
+}
+
+/* Deny ("No") button is never used in VibeHue / LUMÉ; completely hide by default */
+.swal2-actions button.swal2-deny {
+  display: none !important;
+}
+
+/* Ensure buttons hidden internally by SweetAlert2 are never forced visible */
+.swal2-actions button[style*="display: none"],
+.swal2-actions button.swal2-styled[style*="display: none"],
+.swal2-actions button.swal2-hide,
+.swal2-styled[style*="display: none"] {
+  display: none !important;
+}
+
+/* Confirm Button (Primary VibeHue Burgundy) */
+.swal2-styled.swal2-confirm {
+  background: linear-gradient(135deg, #8B1E2D 0%, #721622 100%) !important;
+  color: #FFFFFF !important;
+  border: 1px solid rgba(139, 30, 45, 0.25) !important;
+  box-shadow: 0 4px 14px rgba(139, 30, 45, 0.28) !important;
+}
+
+.swal2-styled.swal2-confirm:hover {
+  background: linear-gradient(135deg, #9C2234 0%, #7E1826 100%) !important;
+  box-shadow: 0 6px 18px rgba(139, 30, 45, 0.38) !important;
+  transform: translateY(-1px) !important;
+}
+
+.swal2-styled.swal2-confirm:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 8px rgba(139, 30, 45, 0.2) !important;
+}
+
+.swal2-styled.swal2-confirm:focus-visible {
+  box-shadow: 0 0 0 3px rgba(139, 30, 45, 0.35) !important;
+}
+
+/* Cancel Button (Soft Neutral Secondary) */
+.swal2-styled.swal2-cancel {
+  background: #F5F5F4 !important;
+  color: #57534E !important;
+  border: 1px solid #E7E5E4 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.swal2-styled.swal2-cancel:hover {
+  background: #E7E5E4 !important;
+  color: #1C1917 !important;
+  border-color: #D6D3D1 !important;
+  transform: translateY(-1px) !important;
+}
+
+.swal2-styled.swal2-cancel:active {
+  transform: translateY(0) !important;
+  background: #D6D3D1 !important;
+}
+
+.swal2-styled.swal2-cancel:focus-visible {
+  box-shadow: 0 0 0 3px rgba(120, 113, 108, 0.25) !important;
+}
+
+/* Close button (top-right X) */
+.swal2-close {
+  position: absolute !important;
+  top: 16px !important;
+  right: 16px !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #A8A29E !important;
+  font-size: 20px !important;
+  font-family: inherit !important;
+  transition: all 0.2s ease !important;
+}
+
+.swal2-close:hover {
+  color: #1C1917 !important;
+  background: #F5F5F4 !important;
+}
+
+/* Form inputs inside SweetAlert (admin modals etc.) */
+.swal2-input,
+.swal2-textarea,
+.swal2-select {
+  border-radius: 10px !important;
+  border: 1px solid #E7E5E4 !important;
+  background: #FAFAF9 !important;
+  color: #1C1917 !important;
+  font-family: var(--font-body, 'Inter', sans-serif) !important;
+  font-size: 0.9rem !important;
+  padding: 10px 14px !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.swal2-input:focus,
+.swal2-textarea:focus,
+.swal2-select:focus {
+  border-color: #8B1E2D !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 0 0 3px rgba(139, 30, 45, 0.12) !important;
+  outline: none !important;
+}
+
+/* Danger Confirm Button Variant */
+.swal2-styled.vh-swal-danger-confirm {
+  background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%) !important;
+  color: #FFFFFF !important;
+  border: 1px solid rgba(220, 38, 38, 0.3) !important;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.28) !important;
+}
+
+.swal2-styled.vh-swal-danger-confirm:hover {
+  background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%) !important;
+  box-shadow: 0 6px 18px rgba(220, 38, 38, 0.38) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Pause / Suspend Confirm Button Variant */
+.swal2-styled.vh-swal-pause-confirm {
+  background: linear-gradient(135deg, #D97706 0%, #B45309 100%) !important;
+  color: #FFFFFF !important;
+  border: 1px solid rgba(217, 119, 6, 0.3) !important;
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.28) !important;
+}
+
+.swal2-styled.vh-swal-pause-confirm:hover {
+  background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important;
+  box-shadow: 0 6px 18px rgba(217, 119, 6, 0.38) !important;
+  transform: translateY(-1px) !important;
+}

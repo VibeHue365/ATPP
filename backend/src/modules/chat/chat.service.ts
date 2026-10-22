@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ChatRoom, ChatRoomDocument } from './schemas/chat-room.schema';
@@ -18,6 +18,37 @@ export class ChatService {
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
   ) {}
+
+  async assertUserInRoom(
+    roomId: string,
+    userId: string,
+    userRoles: string[] = [],
+  ): Promise<ChatRoomDocument> {
+    if (!Types.ObjectId.isValid(roomId)) {
+      throw new BadRequestException('ID phòng chat không hợp lệ');
+    }
+    const roomObjectId = new Types.ObjectId(roomId);
+
+    const room = await this.chatRoomModel.findById(roomObjectId).exec();
+    if (!room) {
+      throw new NotFoundException('Không tìm thấy cuộc trò chuyện này');
+    }
+
+    const isParticipant = room.participants.some(
+      (p) => p.toString() === userId,
+    );
+    const isAdmin = (userRoles || []).some(
+      (r) => r.toUpperCase() === 'ADMIN',
+    );
+
+    if (!isParticipant && !isAdmin) {
+      throw new ForbiddenException(
+        'Bạn không có quyền truy cập hoặc gửi tin nhắn trong cuộc trò chuyện này',
+      );
+    }
+
+    return room;
+  }
 
   async getRooms(userId: string) {
     const userObjectId = new Types.ObjectId(userId);
@@ -107,7 +138,8 @@ export class ChatService {
       .map((provider) => provider.userId)
       .filter(
         (partnerUserId): partnerUserId is Types.ObjectId =>
-          Boolean(partnerUserId) && !excludedUserIds.has(partnerUserId.toString()),
+          Boolean(partnerUserId) &&
+          !excludedUserIds.has(partnerUserId.toString()),
       );
 
     if (candidateUserIds.length === 0) return [];
@@ -117,7 +149,9 @@ export class ChatService {
       .select('_id profile.fullName profile.avatarUrl')
       .lean()
       .exec();
-    const usersById = new Map(users.map((user) => [user._id.toString(), user]));
+    const usersById = new Map(
+      users.map((user) => [user._id.toString(), user]),
+    );
 
     return providers.flatMap((provider) => {
       const partnerUserId = provider.userId?.toString();
@@ -127,31 +161,46 @@ export class ChatService {
       if (!partnerUser) return [];
 
       const media = provider.media as
-        | { logoUrl?: string | null; coverUrl?: string | null; images?: string[] }
+        | {
+            logoUrl?: string | null;
+            coverUrl?: string | null;
+            images?: string[];
+          }
         | undefined;
-      const legacyPortfolio = (provider as any).portfolio as string[] | undefined;
+      const legacyPortfolio = (provider as any).portfolio as
+        | string[]
+        | undefined;
 
-      return [{
-        _id: provider._id,
-        userId: partnerUser._id,
-        businessName:
-          provider.businessName || partnerUser.profile?.fullName || 'Đối tác',
-        capabilities: provider.capabilities || [],
-        avatarUrl:
-          partnerUser.profile?.avatarUrl ||
-          media?.logoUrl ||
-          media?.coverUrl ||
-          media?.images?.[0] ||
-          legacyPortfolio?.[0] ||
-          null,
-      }];
+      return [
+        {
+          _id: provider._id,
+          userId: partnerUser._id,
+          businessName:
+            provider.businessName ||
+            partnerUser.profile?.fullName ||
+            'Đối tác',
+          capabilities: provider.capabilities || [],
+          avatarUrl:
+            partnerUser.profile?.avatarUrl ||
+            media?.logoUrl ||
+            media?.coverUrl ||
+            media?.images?.[0] ||
+            legacyPortfolio?.[0] ||
+            null,
+        },
+      ];
     });
   }
 
-  async getMessages(roomId: string, limit: number = 50, skip: number = 0) {
-    if (!Types.ObjectId.isValid(roomId)) {
-      throw new BadRequestException('Invalid room id');
-    }
+  async getMessages(
+    roomId: string,
+    userId: string,
+    userRoles: string[] = [],
+    limit: number = 50,
+    skip: number = 0,
+  ) {
+    await this.assertUserInRoom(roomId, userId, userRoles);
+
     const messages = await this.chatMessageModel
       .find({ roomId: new Types.ObjectId(roomId) })
       .sort({ createdAt: 1 }) // Order from oldest to newest for visual flow
@@ -226,10 +275,23 @@ export class ChatService {
   }
 
   async createMessage(roomId: string, senderId: string, messageText: string, attachments: string[] = []) {
+    await this.assertUserInRoom(roomId, senderId);
+
+    const cleanText = (messageText || '').trim();
+    if (!cleanText && (!attachments || attachments.length === 0)) {
+      throw new BadRequestException('Nội dung tin nhắn không được để trống.');
+    }
+    if (cleanText.length > 2000) {
+      throw new BadRequestException('Nội dung tin nhắn vượt quá giới hạn 2000 ký tự.');
+    }
+    if (attachments && attachments.length > 5) {
+      throw new BadRequestException('Mỗi tin nhắn chỉ được đính kèm tối đa 5 tệp.');
+    }
+
     const message = await this.chatMessageModel.create({
       roomId: new Types.ObjectId(roomId),
       senderId: new Types.ObjectId(senderId),
-      messageText,
+      messageText: cleanText,
       attachments,
       isRead: false,
       readBy: [new Types.ObjectId(senderId)],
@@ -249,6 +311,8 @@ export class ChatService {
   }
 
   async markRoomAsRead(roomId: string, userId: string) {
+    await this.assertUserInRoom(roomId, userId);
+
     const roomObjectId = new Types.ObjectId(roomId);
     const userObjectId = new Types.ObjectId(userId);
 

@@ -168,6 +168,7 @@ export class Provider {
       },
     ],
     default: [],
+    select: false,
   })
   paymentAccounts: PaymentAccount[];
 
@@ -197,7 +198,7 @@ export class Provider {
   @Prop({ type: Number, default: 0 })
   comboDiscountPercent: number;
 
-  @Prop({ type: Number, default: 0 })
+  @Prop({ type: Number, default: 0, select: false })
   violationCount: number;
 
   /**
@@ -215,6 +216,7 @@ export class Provider {
       lastUpdatedAt:    { type: Date,   default: null },
     },
     default: { pendingBalance: 0, availableBalance: 0, totalEarned: 0, lastUpdatedAt: null },
+    select: false,
   })
   wallet: {
     pendingBalance:   number;

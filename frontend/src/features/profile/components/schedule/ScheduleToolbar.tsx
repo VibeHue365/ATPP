@@ -22,7 +22,7 @@ export const ScheduleToolbar: React.FC<ScheduleToolbarProps> = ({
   const getActionBtnText = () => {
     if (activeCategory === 'PHOTOSHOOT') return '+ Đặt lịch chụp mới';
     if (activeCategory === 'COMBO') return '+ Đặt combo mới';
-    return '+ Thuê áo dài mới';
+    return 'Thuê áo dài mới';
   };
 
   const handleAction = () => {
@@ -92,9 +92,9 @@ export const ScheduleToolbar: React.FC<ScheduleToolbarProps> = ({
             cursor: 'pointer'
           }}
         >
-          <option value="NEAR_DUE">Sắp xếp: Gần hết hạn ⌄</option>
-          <option value="NEWEST">Sắp xếp: Mới nhất ⌄</option>
-          <option value="OLDEST">Sắp xếp: Cũ nhất ⌄</option>
+          <option value="NEAR_DUE">Sắp xếp: Gần hết hạn</option>
+          <option value="NEWEST">Sắp xếp: Mới nhất</option>
+          <option value="OLDEST">Sắp xếp: Cũ nhất</option>
         </select>
 
         {/* Primary Action Button */}

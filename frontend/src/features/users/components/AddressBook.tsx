@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
+import { ConfirmModal } from '../../../utils/confirmModal';
 
 interface SavedAddress {
   id: string;
@@ -226,11 +227,19 @@ export const AddressBook: React.FC = () => {
   };
 
   const remove = async (address: SavedAddress) => {
-    if (!window.confirm(`Xóa địa chỉ “${address.label}”?`)) return;
+    const result = await ConfirmModal.delete(
+      'Xóa địa chỉ nhận hàng?',
+      `Bạn có chắc chắn muốn xóa địa chỉ “${address.label}”? Thao tác này không thể hoàn tác.`,
+      {
+        confirmButtonText: 'Xóa địa chỉ',
+        cancelButtonText: 'Hủy',
+      }
+    );
+    if (!result.isConfirmed) return;
     try {
       await httpClient.delete(`/users/me/addresses/${address.id}`);
       await loadAddresses();
-      toast.success('Đã xóa địa chỉ.');
+      toast.success('Đã xóa địa chỉ thành công.');
     } catch (error: any) {
       toast.error(error.message || 'Không thể xóa địa chỉ.');
     }

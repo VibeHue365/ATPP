@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { ConfirmModal } from '../../utils/confirmModal';
 
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
@@ -10,7 +11,8 @@ import { ROUTES } from '../../config/routes';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { checkProductAvailability } from '../../features/rentals/services/productAvailabilityService';
 import { useProductAvailability } from '../../features/rentals/hooks/useProductAvailability';
-import { VirtualTryOn3DModal } from '../../features/virtual-tryon-3d/components/VirtualTryOn3DModal';
+import { VirtualTryOn2DModal } from '../../features/virtual-tryon-2d/components/VirtualTryOn2DModal';
+import { photographersApi } from '../../features/photographers/api/photographers.api';
 
 // Local modular components & utilities
 import type {
@@ -275,6 +277,56 @@ export const ProductDetailPage: React.FC = () => {
     fetchProductDetails();
   }, [id]);
 
+  // Load suggested photographers from DB (same city or top rated)
+  useEffect(() => {
+    let active = true;
+    const fetchSuggested = async () => {
+      try {
+        const city = product?.providerId?.address?.city || undefined;
+        let res = await photographersApi.getAll({
+          limit: 4,
+          location: city,
+          sort: 'rating_desc',
+        });
+
+        // Fallback: If no photographers in this specific city, get top-rated overall
+        if ((!res?.data || res.data.length === 0) && city) {
+          res = await photographersApi.getAll({
+            limit: 4,
+            sort: 'rating_desc',
+          });
+        }
+
+        if (active && res?.data && res.data.length > 0) {
+          const mapped: SuggestedPhotographer[] = res.data.slice(0, 4).map((p: any) => {
+            const pkg = p.defaultPackage || (p.packages && p.packages[0]);
+            const rawImg = p.coverImage || p.media?.coverUrl || pkg?.images?.[0] || '';
+            const priceVal = pkg?.price ?? p.price;
+            return {
+              id: p._id,
+              name: p.businessName || 'Nhiếp ảnh gia',
+              rating: typeof p.rating?.averageRating === 'number' ? p.rating.averageRating : 5.0,
+              count: p.rating?.totalReviews ?? (p.reviewCount || 0),
+              desc: p.quote || pkg?.name || 'Gói chụp ảnh áo dài chuyên nghiệp',
+              price: priceVal ? `${Number(priceVal).toLocaleString('vi-VN')}đ` : 'Liên hệ',
+              image: getImageUrl(rawImg),
+            };
+          });
+          setSuggestedPhotographers(mapped);
+        }
+      } catch (e) {
+        console.warn('Lỗi khi tải gợi ý thợ chụp ảnh:', e);
+      }
+    };
+
+    if (product?._id) {
+      void fetchSuggested();
+    }
+    return () => {
+      active = false;
+    };
+  }, [product]);
+
   // Color change update main image
   useEffect(() => {
     const next = imagesForColor(product, selectedColor);
@@ -297,19 +349,14 @@ export const ProductDetailPage: React.FC = () => {
 
   const handleToggleFavorite = async () => {
     if (!user) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Yêu cầu đăng nhập',
-        text: 'Vui lòng đăng nhập để lưu sản phẩm yêu thích!',
-        confirmButtonColor: 'var(--color-primary)',
-        confirmButtonText: 'Đăng nhập ngay',
-        showCancelButton: true,
-        cancelButtonText: 'Hủy',
-      }).then((result) => {
-        if (result.isConfirmed) {
-          navigate('/login');
-        }
-      });
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để lưu sản phẩm Áo Dài yêu thích!',
+        { confirmButtonText: 'Đăng nhập ngay' }
+      );
+      if (result.isConfirmed) {
+        navigate('/login');
+      }
       return;
     }
     try {
@@ -1004,6 +1051,17 @@ export const ProductDetailPage: React.FC = () => {
 
   // Add to cart & Rent now
   const handleAddToCart = async () => {
+    if (!isAuthenticated) {
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để thêm trang phục vào giỏ hàng!',
+        { confirmButtonText: 'Đăng nhập ngay' },
+      );
+      if (result.isConfirmed) {
+        navigate(ROUTES.LOGIN, { state: { from: location } });
+      }
+      return;
+    }
     if (!validateBookingForm()) return;
     const rentalFrom = rentalMode === 'DAILY' ? startDate : singleDate;
     const rentalTo = rentalMode === 'DAILY' ? endDate : singleDate;
@@ -1064,7 +1122,19 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   const handleBookingSubmit = async () => {
+    if (!isAuthenticated) {
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để tiếp tục đặt thuê trang phục!',
+        { confirmButtonText: 'Đăng nhập ngay' },
+      );
+      if (result.isConfirmed) {
+        navigate(ROUTES.LOGIN, { state: { from: location } });
+      }
+      return;
+    }
     if (!validateBookingForm()) return;
+
     const rentalFrom = rentalMode === 'DAILY' ? startDate : singleDate;
     const rentalTo = rentalMode === 'DAILY' ? endDate : singleDate;
     try {
@@ -1298,7 +1368,7 @@ export const ProductDetailPage: React.FC = () => {
       </div>
 
       {/* Interactive Modals */}
-      <VirtualTryOn3DModal
+      <VirtualTryOn2DModal
         isOpen={isAiStylingOpen}
         onClose={() => setIsAiStylingOpen(false)}
         productImage={getImageUrl(product.images?.[0] || '')}

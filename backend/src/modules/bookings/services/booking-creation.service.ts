@@ -8,6 +8,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
+  Booking,
   BookingDocument,
   BookingStatus,
   BookingType,
@@ -17,7 +18,8 @@ import { BookingItem, BookingItemType } from '../schemas/booking-item.schema';
 import { Product } from '../../products/schemas/product.schema';
 import { PhotographyPackage } from '../../products/schemas/photography-package.schema';
 import { PromotionsService } from '../../products/services/promotions.service';
-import { DiscountType } from '../../products/schemas/promotion.schema';
+import { VoucherPricingService } from '../../products/services/voucher-pricing.service';
+import { DiscountType, PromotionDocument } from '../../products/schemas/promotion.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { ProductsService } from '../../products/services/products.service';
 import {
@@ -53,6 +55,8 @@ import { BookingsRepository } from '../repositories/bookings.repository';
 export class BookingCreationService {
   constructor(
     private readonly bookingsRepository: BookingsRepository,
+    @InjectModel(Booking.name)
+    private readonly bookingModel: Model<BookingDocument>,
     @InjectModel(Product.name)
     private readonly productModel: Model<Product>,
     @InjectModel(PhotographyPackage.name)
@@ -70,6 +74,7 @@ export class BookingCreationService {
     private readonly notificationsService: NotificationsService,
     @InjectModel(Provider.name)
     private readonly providerModel: Model<Provider>,
+    private readonly voucherPricingService: VoucherPricingService,
   ) {}
 
   private normalizeColor(colorStr?: string | null): string {
@@ -660,48 +665,57 @@ export class BookingCreationService {
       );
       let voucherDiscountTotal = 0;
 
-      const subTotalAfterCombo = Math.max(subTotal - comboDiscountTotal, 0);
-
+      let promotion: PromotionDocument | null = null;
       if (dto.promoCode) {
-        try {
-          const promotion = await this.promotionsService.validatePromotion(
-            dto.promoCode,
-            subTotalAfterCombo,
-            Array.from(providerIdsSet),
-          );
-          promotionId = promotion._id;
-
-          if (promotion.discountType === DiscountType.Percentage) {
-            voucherDiscountTotal = Math.round(
-              (subTotalAfterCombo * promotion.discountValue) / 100,
-            );
-            if (
-              promotion.maxDiscountAmount &&
-              voucherDiscountTotal > promotion.maxDiscountAmount
-            ) {
-              voucherDiscountTotal = promotion.maxDiscountAmount;
-            }
-          } else {
-            voucherDiscountTotal = promotion.discountValue;
-          }
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          throw new BadRequestException(`Failed to apply coupon: ${msg}`);
+        promotion = await this.promotionsService.findByCode(dto.promoCode);
+        if (!promotion) {
+          throw new BadRequestException('Mã khuyến mãi không tồn tại.');
         }
       }
 
-      const discountAmount = comboDiscountTotal + voucherDiscountTotal;
+      const isNewCustomer =
+        (await this.bookingModel.countDocuments({
+          customerId,
+          status: {
+            $in: [
+              BookingStatus.Confirmed,
+              BookingStatus.Completed,
+              BookingStatus.DepositPaid,
+              BookingStatus.PickedUp,
+              BookingStatus.Returned,
+            ],
+          },
+        })) === 0;
 
-      let depositTotal = 0;
-      for (const item of itemDetails) {
-        depositTotal += (item.depositAmount || 0) * (item.quantity || 1);
+      const pricingResult = this.voucherPricingService.calculatePricing({
+        bookingType: dto.bookingType || 'AODAI_RENTAL',
+        items: itemDetails.map((item, idx) => ({
+          id: `item_${idx}`,
+          productId: item.productId?.toString(),
+          providerId: item.providerId ? item.providerId.toString() : '',
+          itemType:
+            item.itemType === BookingItemType.Product
+              ? 'PRODUCT'
+              : 'PHOTOGRAPHY_PACKAGE',
+          unitPrice: item.unitPrice ?? 0,
+          quantity: item.quantity || 1,
+          depositAmount: item.depositAmount || 0,
+          comboDiscountAmount: item.comboDiscountAmount || 0,
+        })),
+        promotion,
+        userContext: {
+          customerId,
+          isNewCustomer,
+        },
+        travelFee,
+        serviceFee: 0,
+      });
+
+      if (!pricingResult.isValid) {
+        throw new BadRequestException(
+          pricingResult.errorMessage || 'Mã khuyến mãi không hợp lệ.',
+        );
       }
-      const serviceFee = 0;
-      const productDepositTotal = itemDetails
-        .filter((i) => i.itemType === BookingItemType.Product)
-        .reduce((sum, i) => sum + (i.depositAmount || 0) * (i.quantity || 1), 0);
-      const grandTotal =
-        Math.max(subTotal - discountAmount + travelFee, 0) + productDepositTotal;
 
       booking = await this.bookingsRepository.createBooking(
         {
@@ -713,18 +727,23 @@ export class BookingCreationService {
           bookingType: dto.bookingType || BookingType.AoDaiRental,
           status: BookingStatus.PendingPayment,
           pricingSummary: {
-            subTotal,
-            depositTotal: productDepositTotal,
-            discountAmount,
-            comboDiscountTotal,
-            voucherDiscountTotal,
-            travelFee,
+            subTotal: pricingResult.subTotal,
+            depositTotal: pricingResult.depositTotal,
+            discountAmount:
+              pricingResult.comboDiscountTotal +
+              pricingResult.voucherDiscountTotal,
+            comboDiscountTotal: pricingResult.comboDiscountTotal,
+            voucherDiscountTotal: pricingResult.voucherDiscountTotal,
+            platformSubsidyAmount: pricingResult.platformSubsidyAmount,
+            amountDueNow: pricingResult.amountDueNow,
+            travelFee: pricingResult.travelFee,
             overtimeFee: 0,
             lateFee: 0,
             damageFee: 0,
-            serviceFee,
-            grandTotal,
+            serviceFee: pricingResult.serviceFee,
+            grandTotal: pricingResult.grandTotal,
           },
+          voucherSnapshot: pricingResult.voucherSnapshot,
           paymentSummary: {
             totalPaid: 0,
             totalRefunded: 0,
@@ -741,10 +760,28 @@ export class BookingCreationService {
         session,
       );
 
-      for (const detail of itemDetails) {
+      if (promotion && pricingResult.voucherDiscountTotal > 0) {
+        await this.promotionsService.reserveVoucher(
+          {
+            bookingId: booking._id,
+            promotionId: promotion._id,
+            customerId,
+            discountAmount: pricingResult.voucherDiscountTotal,
+          },
+          session,
+        );
+      }
+
+      for (let i = 0; i < itemDetails.length; i++) {
+        const detail = itemDetails[i];
+        const allocation = pricingResult.itemAllocations[i];
         const savedItem = await this.bookingsRepository.createBookingItem(
           {
             ...detail,
+            shopVoucherDiscountAmount:
+              allocation?.shopVoucherDiscountAmount || 0,
+            platformVoucherDiscountAmount:
+              allocation?.platformVoucherDiscountAmount || 0,
             bookingId: booking._id,
           },
           session,

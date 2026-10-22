@@ -97,10 +97,19 @@ export function OrderTableRow({
   }, [order]);
 
   const depositSubline = React.useMemo(() => {
-    if (order.depositTotal && order.depositTotal > 0 && order.rawStatus !== 'COMPLETED') {
-      return 'Đã cọc 50%';
+    if (order.rawStatus === 'COMPLETED' || order.status === 'HOÀN THÀNH') {
+      return 'Đã thanh toán đủ';
     }
-    return order.rawStatus === 'COMPLETED' ? 'Đã thanh toán' : 'Chờ thanh toán';
+    if (order.rawStatus === 'PENDING' || order.rawStatus === 'PENDING_PAYMENT') {
+      return 'Chờ thanh toán';
+    }
+    if (order.bookingType === 'PHOTOGRAPHY') {
+      return 'Đã cọc 20%';
+    }
+    if (order.bookingType === 'COMBO') {
+      return 'Đã cọc Escrow';
+    }
+    return 'Đã thanh toán';
   }, [order]);
 
   return (

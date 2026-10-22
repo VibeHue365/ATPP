@@ -1,5 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import type { BannerPlacement } from '../../features/banners/types';
+import { useBanner } from '../../features/banners/hooks/useBanner';
 
 export interface BreadcrumbItem {
   label: string;
@@ -9,6 +11,7 @@ export interface BreadcrumbItem {
 export interface StatItem {
   value: string | number;
   label: string;
+  href?: string;
 }
 
 interface ListingHeroProps {
@@ -17,6 +20,8 @@ interface ListingHeroProps {
   title: string;
   description: string;
   stats: StatItem[];
+  placement?: BannerPlacement;
+  backgroundImage?: string;
 }
 
 export const ListingHero: React.FC<ListingHeroProps> = ({
@@ -25,7 +30,24 @@ export const ListingHero: React.FC<ListingHeroProps> = ({
   title,
   description,
   stats,
+  placement,
+  backgroundImage,
 }) => {
+  const { imageUrl: bannerUrl, customTitle, customSubtitle } = useBanner(placement);
+  const activeBg = backgroundImage || bannerUrl;
+
+  const displayTitle = customTitle || title;
+  const displayDesc = customSubtitle || description;
+
+  const heroStyle: React.CSSProperties = activeBg
+    ? {
+        backgroundImage: `linear-gradient(90deg, rgba(20, 6, 9, 0.88) 0%, rgba(20, 6, 9, 0.52) 55%, rgba(0, 0, 0, 0.22) 100%), url(${activeBg})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }
+    : {};
+
   return (
     <div className="unified-hero-section">
       {/* 1. Breadcrumbs */}
@@ -48,21 +70,37 @@ export const ListingHero: React.FC<ListingHeroProps> = ({
       </nav>
 
       {/* 2. Unified Hero Card Box */}
-      <div className="unified-hero-card">
+      <div
+        className={`unified-hero-card ${activeBg ? 'has-banner-image' : ''}`}
+        style={heroStyle}
+      >
         <div className="unified-hero-left">
           <span className="unified-hero-eyebrow">{eyebrow}</span>
-          <h1 className="unified-hero-title">{title}</h1>
-          <p className="unified-hero-desc">{description}</p>
+          <h1 className="unified-hero-title">{displayTitle}</h1>
+          <p className="unified-hero-desc">{displayDesc}</p>
         </div>
 
         {stats.length > 0 && (
           <div className="unified-hero-stats">
-            {stats.slice(0, 3).map((stat, idx) => (
-              <div key={idx} className="unified-hero-stat-item">
-                <span className="unified-hero-stat-value">{stat.value}</span>
-                <span className="unified-hero-stat-label">{stat.label}</span>
-              </div>
-            ))}
+            {stats.slice(0, 3).map((stat, idx) =>
+              stat.href ? (
+                <Link
+                  key={idx}
+                  to={stat.href}
+                  className="unified-hero-stat-item hover:opacity-80 transition-opacity"
+                  style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                  title={`Xem ${stat.label}`}
+                >
+                  <span className="unified-hero-stat-value">{stat.value}</span>
+                  <span className="unified-hero-stat-label">{stat.label} ↗</span>
+                </Link>
+              ) : (
+                <div key={idx} className="unified-hero-stat-item">
+                  <span className="unified-hero-stat-value">{stat.value}</span>
+                  <span className="unified-hero-stat-label">{stat.label}</span>
+                </div>
+              )
+            )}
           </div>
         )}
       </div>

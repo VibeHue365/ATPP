@@ -67,6 +67,14 @@ export class UpdateProviderProfileDto {
   @Max(100)
   @IsOptional()
   comboDiscountPercent?: number;
+
+  @IsOptional()
+  @IsObject()
+  media?: {
+    logoUrl?: string | null;
+    coverUrl?: string | null;
+    images?: string[];
+  };
 }
 
 export class AddPortfolioImageDto {

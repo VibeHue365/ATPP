@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   Search,
   RefreshCw,
-  MoreVertical,
   X,
   Phone,
   MessageSquare,
@@ -30,7 +29,6 @@ import { toLocalDateKey } from '../shared/dateHelpers';
 import { getImageUrl } from '../shared/mediaHelpers';
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../assets/images/onboarding_traditional.webp';
-import { httpClient } from '../../../services/httpClient';
 import { RentalEvidenceImage } from '../../rentals/components/RentalEvidenceImage';
 import './rentalOperationsFigma.css';
 
@@ -56,7 +54,7 @@ export function RentalOperationsPanel({
   rentalOperationItems,
   setSelectedBookingId,
   setIsDetailModalOpen,
-  toast,
+  toast: _toast,
   onOpenChat,
 }: RentalOperationsPanelProps) {
   // Reset scroll on mount to ensure top Hero Banner and Metric Cards are shown
@@ -80,22 +78,6 @@ export function RentalOperationsPanel({
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [activeDrawerTab, setActiveDrawerTab] = useState<'overview' | 'products' | 'schedule' | 'payment' | 'evidence'>('overview');
   const [isGuidelineModalOpen, setIsGuidelineModalOpen] = useState<boolean>(false);
-  const [isActionBusy, setIsActionBusy] = useState<boolean>(false);
-  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
-  const [evidencePreviews, setEvidencePreviews] = useState<string[]>([]);
-  const [conditionNote, setConditionNote] = useState<string>('');
-
-  const [isSettlementModalOpen, setIsSettlementModalOpen] = useState<boolean>(false);
-  const [settlementChoice, setSettlementChoice] = useState<'NORMAL' | 'ISSUE'>('NORMAL');
-  const [chargeType, setChargeType] = useState<'damageFee' | 'lateFee' | 'compensationAmount'>('damageFee');
-  const [deductAmount, setDeductAmount] = useState<number>(0);
-  const [issueReason, setIssueReason] = useState<string>('');
-
-  const resetEvidence = () => {
-    setEvidenceFiles([]);
-    setEvidencePreviews([]);
-    setConditionNote('');
-  };
 
   // Helper date calculations
   const todayKey = toLocalDateKey();
@@ -278,136 +260,6 @@ export function RentalOperationsPanel({
     };
   };
 
-  // Step advancement action
-  const handleAdvanceStep = async () => {
-    if (!currentItem) return;
-    const { order, item } = currentItem;
-    const fulfillment = item.rentalFulfillment || {};
-    const status = fulfillment.status || 'PENDING';
-    const basePath = `/bookings/${order._id}/items/${item._id}/rental`;
-
-    // Phương án B: Bắt buộc phải có ít nhất 1 ảnh bằng chứng trước khi giao hoặc nhận lại áo
-    if (status === 'READY_FOR_PICKUP' && evidenceFiles.length === 0) {
-      setActiveDrawerTab('evidence');
-      toast?.info?.('Vui lòng chụp hoặc tải ít nhất 1 ảnh hiện trạng áo tại tab "Bằng chứng" trước khi xác nhận đã giao để bảo vệ quyền lợi tiền cọc!');
-      return;
-    }
-
-    if (status === 'PICKED_UP' && evidenceFiles.length === 0) {
-      setActiveDrawerTab('evidence');
-      toast?.info?.('Vui lòng chụp hoặc tải ít nhất 1 ảnh kiểm tra áo tại tab "Bằng chứng" trước khi xác nhận nhận lại áo để đối soát tiền cọc!');
-      return;
-    }
-
-    setIsActionBusy(true);
-    try {
-      if (status === 'PENDING') {
-        await httpClient.post(`${basePath}/ready`, {});
-        toast?.success?.('Đã chuyển sang trạng thái Sẵn sàng giao áo!');
-      } else if (status === 'READY_FOR_PICKUP') {
-        // 1. Tải ảnh lên endpoint bằng chứng
-        const formData = new FormData();
-        evidenceFiles.forEach((file) => formData.append('images', file));
-        const uploadRes: any = await httpClient.post(`${basePath}/evidence`, formData);
-        const fileIds: string[] = (uploadRes?.files || uploadRes?.data?.files || []).map((f: any) => f.fileId).filter(Boolean);
-
-        if (!fileIds.length) {
-          throw new Error('Tải ảnh bằng chứng thất bại. Vui lòng thử lại.');
-        }
-
-        // 2. Xác nhận đã giao kèm fileIds bằng chứng
-        await httpClient.post(`${basePath}/picked-up`, {
-          fileIds,
-          conditionNote: conditionNote.trim() || undefined,
-        });
-        toast?.success?.('Bàn giao áo dài thành công! Ảnh bằng chứng hiện trạng đã được lưu trữ.');
-        resetEvidence();
-      } else if (status === 'PICKED_UP') {
-        // 1. Tải ảnh lên endpoint bằng chứng
-        const formData = new FormData();
-        evidenceFiles.forEach((file) => formData.append('images', file));
-        const uploadRes: any = await httpClient.post(`${basePath}/evidence`, formData);
-        const fileIds: string[] = (uploadRes?.files || uploadRes?.data?.files || []).map((f: any) => f.fileId).filter(Boolean);
-
-        if (!fileIds.length) {
-          throw new Error('Tải ảnh bằng chứng thất bại. Vui lòng thử lại.');
-        }
-
-        // 2. Xác nhận đã nhận lại kèm fileIds bằng chứng
-        await httpClient.post(`${basePath}/returned`, {
-          fileIds,
-          conditionNote: conditionNote.trim() || undefined,
-        });
-        toast?.success?.('Xác nhận đã nhận lại áo từ khách thành công! Đã lưu ảnh đối soát cọc.');
-        resetEvidence();
-      } else if (status === 'RETURNED') {
-        const hasProposedCharges = Object.values(fulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED');
-        if (hasProposedCharges || fulfillment?.issueStatus === 'REPORTED') {
-          toast?.info?.('Đơn thuê đang có đề xuất khấu trừ cọc chờ Admin xét duyệt.');
-          return;
-        }
-        setSettlementChoice('NORMAL');
-        setChargeType('damageFee');
-        setDeductAmount(0);
-        setIssueReason('');
-        setIsSettlementModalOpen(true);
-        return;
-      }
-      await fetchOrders();
-    } catch (err: any) {
-      toast?.error?.(err?.message || 'Thao tác không thành công.');
-    } finally {
-      setIsActionBusy(false);
-    }
-  };
-
-  const handleConfirmSettlement = async () => {
-    if (!currentItem) return;
-    const { order, item } = currentItem;
-    const basePath = `/bookings/${order._id}/items/${item._id}/rental`;
-    const depositAmt = item.depositAmount || 0;
-
-    setIsActionBusy(true);
-    try {
-      if (settlementChoice === 'NORMAL') {
-        await httpClient.post(`${basePath}/complete`, { inventoryStatus: 'AVAILABLE' });
-        toast?.success?.('Đã hoàn tất tất toán & hoàn lại 100% tiền cọc cho khách hàng!');
-        setIsSettlementModalOpen(false);
-        setIsDrawerOpen(false);
-      } else {
-        const amountNum = Number(deductAmount);
-        if (!amountNum || amountNum <= 0) {
-          toast?.error?.('Vui lòng nhập số tiền khấu trừ hợp lệ lớn hơn 0.');
-          return;
-        }
-        if (amountNum > depositAmt) {
-          toast?.error?.(`Số tiền khấu trừ không được vượt quá tiền cọc của món đồ (${depositAmt.toLocaleString('vi-VN')} đ).`);
-          return;
-        }
-        if (!issueReason.trim()) {
-          toast?.error?.('Vui lòng nhập lý do / mô tả chi tiết hư hỏng.');
-          return;
-        }
-
-        await httpClient.post(`${basePath}/charges`, {
-          chargeType,
-          amount: Math.round(amountNum),
-          reason: issueReason.trim(),
-        });
-        toast?.success?.('Đã gửi đề xuất khấu trừ cọc! Đơn chuyển sang trạng thái chờ duyệt giải quyết sự cố.');
-        setIsSettlementModalOpen(false);
-        setIsDrawerOpen(false);
-      }
-      await fetchOrders();
-    } catch (err: any) {
-      toast?.error?.(err?.message || 'Thao tác không thành công.');
-      await fetchOrders();
-      setIsSettlementModalOpen(false);
-    } finally {
-      setIsActionBusy(false);
-    }
-  };
-
   return (
     <div className="ro-wrapper">
       {/* LEFT/CENTER MAIN COLUMN */}
@@ -417,7 +269,7 @@ export function RentalOperationsPanel({
           <div className="ro-hero-left">
             <h1>Giao &amp; nhận áo dài</h1>
             <p>
-              Quản lý hiện vật áo dài theo từng đơn hàng. Theo dõi tình trạng, xác nhận giao nhận và xử lý sự cố.
+              Theo dõi và thống kê hiện vật áo dài theo từng đơn hàng. Xem tiến độ bàn giao, kiểm tra lịch trình và ảnh bằng chứng giao nhận (chế độ chỉ xem dữ liệu).
             </p>
           </div>
           <div className="ro-hero-right">
@@ -629,7 +481,7 @@ export function RentalOperationsPanel({
                 <th className="ro-th">NGÀY NHẬN</th>
                 <th className="ro-th">NGÀY TRẢ</th>
                 <th className="ro-th">TRẠNG THÁI</th>
-                <th className="ro-th" style={{ textAlign: 'right' }}>THAO TÁC</th>
+                <th className="ro-th" style={{ textAlign: 'right' }}>CHI TIẾT</th>
               </tr>
             </thead>
             <tbody>
@@ -668,7 +520,6 @@ export function RentalOperationsPanel({
                       key={key}
                       onClick={() => {
                         setSelectedItemKey(key);
-                        resetEvidence();
                         setIsDrawerOpen(true);
                       }}
                       className={`ro-tr ${isSelected ? 'selected' : ''}`}
@@ -751,32 +602,19 @@ export function RentalOperationsPanel({
                         <span className="ro-status-sub">{statusInfo.sub}</span>
                       </td>
 
-                      {/* 7. Thao tác */}
+                      {/* 7. Chi tiết */}
                       <td className="ro-td" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedItemKey(key);
-                            resetEvidence();
                             setIsDrawerOpen(true);
                           }}
                           className="ro-btn-action"
-                          style={status === 'COMPLETED' ? { backgroundColor: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB' } : undefined}
+                          style={{ backgroundColor: '#F8F5F1', color: '#8B1E2D', border: '1px solid #DED7CB', fontWeight: 600 }}
                         >
-                          {status === 'COMPLETED' ? 'Chi tiết' : 'Xử lý'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedBookingId(order._id);
-                            setIsDetailModalOpen(true);
-                          }}
-                          className="ro-btn-more"
-                          title="Tùy chọn khác"
-                        >
-                          <MoreVertical size={16} />
+                          Chi tiết
                         </button>
                       </td>
                     </tr>
@@ -837,7 +675,6 @@ export function RentalOperationsPanel({
           <div
             className="ro-drawer-overlay"
             onClick={() => {
-              resetEvidence();
               setIsDrawerOpen(false);
             }}
           />
@@ -850,7 +687,6 @@ export function RentalOperationsPanel({
               <button
                 type="button"
                 onClick={() => {
-                  resetEvidence();
                   setIsDrawerOpen(false);
                 }}
                 className="ro-drawer-close"
@@ -873,569 +709,447 @@ export function RentalOperationsPanel({
                   }
                 }}
               />
-            <div style={{ flex: 1 }}>
-              <h4 className="ro-summary-title">
-                {typeof currentItem.item.productId === 'object' ? currentItem.item.productId?.name : currentItem.item.name || currentItem.order.productName || 'Combo Cố Đô'}
-              </h4>
-              <div className="ro-summary-badges">
-                <span className="ro-badge-type ro-badge-combo">
-                  {currentItem.order.bookingType === 'COMBO' ? 'Combo' : 'Áo dài'}
-                </span>
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    backgroundColor: '#FEF3C7',
-                    color: '#B45309',
-                  }}
-                >
-                  {getStatusBadge(currentItem.item.rentalFulfillment).label}
-                </span>
-              </div>
-              <div className="ro-summary-meta">
-                📅 {parseSafeDate(currentItem.order.startDate).toLocaleDateString('vi-VN')} -{' '}
-                {parseSafeDate(currentItem.order.endDate).toLocaleDateString('vi-VN')}<br />
-                Tổng đơn: <strong>{(currentItem.order.totalAmount || 2800000).toLocaleString('vi-VN')}đ</strong> | Đã cọc:{' '}
-                <strong style={{ color: '#059669' }}>
-                  {(currentItem.order.depositTotal || (currentItem.order.totalAmount ? Math.round(currentItem.order.totalAmount * 0.5) : 1400000)).toLocaleString('vi-VN')}đ (50%)
-                </strong>
-              </div>
-            </div>
-          </div>
-
-          {/* Drawer Navigation Tabs */}
-          <div className="ro-drawer-tabs">
-            <button
-              type="button"
-              onClick={() => setActiveDrawerTab('overview')}
-              className={`ro-drawer-tab-btn ${activeDrawerTab === 'overview' ? 'active' : ''}`}
-            >
-              Tổng quan
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveDrawerTab('products')}
-              className={`ro-drawer-tab-btn ${activeDrawerTab === 'products' ? 'active' : ''}`}
-            >
-              Sản phẩm
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveDrawerTab('schedule')}
-              className={`ro-drawer-tab-btn ${activeDrawerTab === 'schedule' ? 'active' : ''}`}
-            >
-              Lịch trình
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveDrawerTab('payment')}
-              className={`ro-drawer-tab-btn ${activeDrawerTab === 'payment' ? 'active' : ''}`}
-            >
-              Thanh toán
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveDrawerTab('evidence')}
-              className={`ro-drawer-tab-btn ${activeDrawerTab === 'evidence' ? 'active' : ''}`}
-            >
-              Bằng chứng
-            </button>
-          </div>
-
-          {/* Drawer Scrollable Body */}
-          <div className="ro-drawer-body">
-            {activeDrawerTab === 'overview' && (
-              <>
-                {/* 1. Customer Info */}
-                <div className="ro-section-card">
-                  <div className="ro-section-header">
-                    <User size={14} />
-                    <span>Thông tin khách hàng</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div className="ro-cust-avatar" style={{ width: 44, height: 44, fontSize: 16, background: 'linear-gradient(135deg, #F59E0B, #D97706)' }}>
-                      {currentItem.order.customerName ? currentItem.order.customerName[0] : 'K'}
-                    </div>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <strong style={{ fontSize: '14px', color: '#111827' }}>
-                          {currentItem.order.customerName || 'Nguyễn Thảo My'}
-                        </strong>
-                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', backgroundColor: '#F3E8FF', color: '#7E22CE' }}>
-                          Khách hàng thân thiết
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>
-                        📞 {currentItem.order.customerPhone || '0901 234 567'}<br />
-                        ✉️ {currentItem.order.customerEmail || 'thaomy@gmail.com'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="ro-contact-buttons">
-                    <button
-                      type="button"
-                      onClick={onOpenChat}
-                      className="ro-btn-contact"
-                    >
-                      <MessageSquare size={14} />
-                      <span>Nhắn tin</span>
-                    </button>
-                    <a
-                      href={`tel:${currentItem.order.customerPhone || '0901234567'}`}
-                      className="ro-btn-contact"
-                      style={{ textDecoration: 'none' }}
-                    >
-                      <Phone size={14} />
-                      <span>Gọi điện</span>
-                    </a>
-                  </div>
-                </div>
-
-                {/* 2. Schedule Info */}
-                <div className="ro-section-card">
-                  <div className="ro-section-header">
-                    <Calendar size={14} />
-                    <span>Thông tin lịch thuê</span>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12.5px', marginBottom: '10px' }}>
-                    <div>
-                      <span style={{ color: '#6B7280', fontSize: '11px', display: 'block' }}>Ngày nhận</span>
-                      <strong>
-                        {parseSafeDate(currentItem.order.startDate).toLocaleDateString('vi-VN')} · 08:00
-                      </strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#6B7280', fontSize: '11px', display: 'block' }}>Ngày trả</span>
-                      <strong>
-                        {parseSafeDate(currentItem.order.endDate).toLocaleDateString('vi-VN')} · 18:00
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#4B5563', borderTop: '1px solid #EBE4D8', paddingTop: '8px' }}>
-                    <MapPin size={15} style={{ color: '#DC2626', flexShrink: 0, marginTop: 2 }} />
-                    <div style={{ flex: 1 }}>
-                      <strong>Địa điểm nhận:</strong> {currentItem.order.pickupLocation || 'Số 23 Đặng Thái Thân, TP. Huế'}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedBookingId(currentItem.order._id);
-                        setIsDetailModalOpen(true);
-                      }}
-                      style={{ background: 'none', border: 'none', color: '#881337', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      Xem chi tiết
-                    </button>
-                  </div>
-                </div>
-
-                {/* 3. Stepper Progress */}
-                <div className="ro-section-card">
-                  <div className="ro-section-header">
-                    <Clock size={14} />
-                    <span>Tiến trình giao &amp; nhận áo dài</span>
-                  </div>
-
-                  {(() => {
-                    const status = currentItem.item.rentalFulfillment?.status || 'PENDING';
-                    const steps = [
-                      { key: 'PENDING', label: 'Chờ chuẩn bị' },
-                      { key: 'READY_FOR_PICKUP', label: 'Sẵn sàng giao' },
-                      { key: 'PICKED_UP', label: 'Khách đang thuê' },
-                      { key: 'RETURNED', label: 'Đã nhận lại' },
-                      { key: 'COMPLETED', label: 'Hoàn tất' },
-                    ];
-                    const activeIdx = Math.max(0, steps.findIndex((s) => s.key === status));
-
-                    return (
-                      <div className="ro-stepper">
-                        {steps.map((st, idx) => {
-                          const isDone = idx < activeIdx;
-                          const isActive = idx === activeIdx;
-
-                          return (
-                            <div key={st.key} className="ro-stepper-item">
-                              <div
-                                className={`ro-stepper-circle ${isActive ? 'active' : ''} ${isDone ? 'done' : ''}`}
-                              >
-                                {isDone ? '✓' : idx + 1}
-                              </div>
-                              <span
-                                className={`ro-stepper-label ${isActive ? 'active' : ''}`}
-                              >
-                                {st.label}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Step Action Alert Box with Checklist */}
-                  <div className="ro-step-action-box">
-                    <div style={{ position: 'relative', zIndex: 2 }}>
-                      <div className="ro-step-action-title">
-                        {currentItem.item.rentalFulfillment?.status === 'READY_FOR_PICKUP'
-                          ? 'Bước hiện tại: Sẵn sàng giao áo cho khách'
-                          : currentItem.item.rentalFulfillment?.status === 'PICKED_UP'
-                          ? 'Bước hiện tại: Khách đang trong thời gian thuê'
-                          : currentItem.item.rentalFulfillment?.status === 'RETURNED'
-                          ? Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED'
-                            ? 'Bước hiện tại: Đang chờ duyệt khấu trừ bồi thường cọc'
-                            : 'Bước hiện tại: Đã nhận lại áo, kiểm tra giặt ủi'
-                          : 'Bước hiện tại: Chờ chuẩn bị áo dài'}
-                      </div>
-                      <div className="ro-step-action-desc">
-                        {Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED'
-                          ? 'Yêu cầu trừ cọc do hư hỏng / vi phạm hợp đồng đã được ghi nhận và đang chờ Admin xử lý.'
-                          : 'Hãy kiểm tra sản phẩm, chuẩn bị đúng mẫu, size và phụ kiện đi kèm theo hợp đồng.'}
-                      </div>
-
-                      {(Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED') && (
-                        <div style={{ backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', padding: '10px 12px', marginTop: '10px' }}>
-                          <div style={{ color: '#991B1B', fontWeight: 600, fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <AlertTriangle size={15} />
-                            Đã gửi đề xuất khấu trừ cọc
-                          </div>
-                          <div style={{ color: '#B91C1C', fontSize: '11.5px', marginTop: '4px', lineHeight: 1.4 }}>
-                            Hệ thống tạm khóa hoàn tất tất toán để bảo vệ quyền lợi hai bên trong quá trình giải quyết bồi thường.
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="ro-checklist-item">
-                        <CheckCircle2 size={15} />
-                        <span>Kiểm tra sản phẩm trong kho</span>
-                      </div>
-                      <div className="ro-checklist-item">
-                        <CheckCircle2 size={15} />
-                        <span>Chuẩn bị phụ kiện (mấn, quạt, túi, ...)</span>
-                      </div>
-                      <div className="ro-checklist-item">
-                        <CheckCircle2 size={15} />
-                        <span>Đóng gói sẵn sàng</span>
-                      </div>
-                    </div>
-                    <Package
-                      size={72}
-                      style={{
-                        position: 'absolute',
-                        right: 8,
-                        bottom: -4,
-                        color: '#D97706',
-                        opacity: 0.15,
-                        pointerEvents: 'none',
-                        zIndex: 1,
-                      }}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* TAB: SẢN PHẨM */}
-            {activeDrawerTab === 'products' && (
-              <div className="ro-section-card">
-                <div className="ro-section-header">
-                  <Shirt size={14} />
-                  <span>Danh sách hiện vật trong đơn</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {(currentItem.order.items || [currentItem.item]).map((it: any, idx: number) => (
-                    <div
-                      key={it._id || idx}
-                      style={{
-                        padding: '10px',
-                        background: '#FFFFFF',
-                        border: '1px solid #EBE4D8',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        gap: '10px',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <img
-                        src={resolveProductImg(it)}
-                        alt="Product"
-                        style={{ width: 44, height: 44, borderRadius: 6, objectFit: 'cover', backgroundColor: '#F3F4F6' }}
-                        onError={(e) => {
-                          const el = e.target as HTMLImageElement;
-                          if (el.src !== FALLBACK_AODAI_IMAGE) {
-                            el.src = FALLBACK_AODAI_IMAGE;
-                          }
-                        }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <strong style={{ fontSize: '13px', color: '#111827', display: 'block' }}>
-                          {typeof it.productId === 'object' ? it.productId?.name : it.name || 'Áo dài'}
-                        </strong>
-                        <span style={{ fontSize: '11.5px', color: '#6B7280' }}>
-                          Size: {it.size || 'M'} · Màu: {it.color || 'Trắng'} · SKU: {it.sku || 'AD-001'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* TAB: LỊCH TRÌNH */}
-            {activeDrawerTab === 'schedule' && (
-              <div className="ro-section-card">
-                <div className="ro-section-header">
-                  <Clock size={14} />
-                  <span>Mốc thời gian quan trọng</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12.5px' }}>
-                  <div>
-                    <strong>Nhận áo:</strong> {parseSafeDate(currentItem.order.startDate).toLocaleString('vi-VN')}
-                  </div>
-                  <div>
-                    <strong>Hạn trả áo:</strong> {parseSafeDate(currentItem.order.endDate).toLocaleString('vi-VN')}
-                  </div>
-                  <div>
-                    <strong>Trạng thái:</strong> {getStatusBadge(currentItem.item.rentalFulfillment).label}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: THANH TOÁN */}
-            {activeDrawerTab === 'payment' && (
-              <div className="ro-section-card">
-                <div className="ro-section-header">
-                  <DollarSign size={14} />
-                  <span>Chi tiết thanh toán &amp; Ký quỹ</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Tổng giá trị đơn:</span>
-                    <strong>{(currentItem.order.totalAmount || 2800000).toLocaleString('vi-VN')}đ</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669' }}>
-                    <span>Đã đặt cọc đảm bảo:</span>
-                    <strong>{(currentItem.order.depositTotal || 1400000).toLocaleString('vi-VN')}đ</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #EBE4D8', paddingTop: '6px' }}>
-                    <span>Ký quỹ VibeHue:</span>
-                    <span style={{ color: '#059669', fontWeight: 700 }}>Đã bảo đảm</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: BẰNG CHỨNG */}
-            {activeDrawerTab === 'evidence' && (
-              <div className="ro-section-card">
-                <div className="ro-section-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <ImageIcon size={14} />
-                    <span>Ảnh minh chứng giao nhận</span>
-                  </div>
-                  <span style={{ fontSize: '11px', color: '#DC2626', fontWeight: 700, marginLeft: 'auto' }}>
-                    * Bắt buộc khi giao &amp; nhận
+              <div style={{ flex: 1 }}>
+                <h4 className="ro-summary-title">
+                  {typeof currentItem.item.productId === 'object' ? currentItem.item.productId?.name : currentItem.item.name || currentItem.order.productName || 'Combo Cố Đô'}
+                </h4>
+                <div className="ro-summary-badges">
+                  <span className="ro-badge-type ro-badge-combo">
+                    {currentItem.order.bookingType === 'COMBO' ? 'Combo' : 'Áo dài'}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: '#FEF3C7',
+                      color: '#B45309',
+                    }}
+                  >
+                    {getStatusBadge(currentItem.item.rentalFulfillment).label}
                   </span>
                 </div>
-                <p style={{ fontSize: '12px', color: '#6B7280', margin: '0 0 10px 0' }}>
-                  Chụp hoặc tải ảnh hiện trạng áo dài lúc bàn giao cho khách và khi nhận lại để đối soát tiền cọc (tối đa 5 ảnh).
-                </p>
+                <div className="ro-summary-meta">
+                  📅 {parseSafeDate(currentItem.order.startDate).toLocaleDateString('vi-VN')} -{' '}
+                  {parseSafeDate(currentItem.order.endDate).toLocaleDateString('vi-VN')}<br />
+                  Tổng đơn: <strong>{(currentItem.order.totalAmount || 2800000).toLocaleString('vi-VN')}đ</strong> | Đã cọc:{' '}
+                  <strong style={{ color: '#059669' }}>
+                    {(currentItem.order.depositTotal || (currentItem.order.totalAmount ? Math.round(currentItem.order.totalAmount * 0.5) : 1400000)).toLocaleString('vi-VN')}đ (50%)
+                  </strong>
+                </div>
+              </div>
+            </div>
 
-                {/* Existing Evidence Photos */}
-                {((currentItem.item?.rentalFulfillment?.pickupEvidence?.files?.length || 0) > 0 || (currentItem.item?.rentalFulfillment?.returnEvidence?.files?.length || 0) > 0) && (
-                  <div style={{ marginBottom: '14px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>Ảnh đã lưu trong đơn:</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                      {[
-                        ...(currentItem.item?.rentalFulfillment?.pickupEvidence?.files || []),
-                        ...(currentItem.item?.rentalFulfillment?.returnEvidence?.files || [])
-                      ].map((ef: any, idx: number) => (
-                        <div key={idx} style={{ aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB', position: 'relative' }}>
-                          {ef.fileId?.startsWith('http') ? (
-                            <img src={ef.fileId} alt={`Evidence ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          ) : (
-                            <RentalEvidenceImage
-                              bookingId={currentItem.order._id}
-                              itemId={currentItem.item._id}
-                              fileId={ef.fileId}
-                              alt={`Evidence ${idx + 1}`}
-                            />
-                          )}
+            {/* Drawer Navigation Tabs */}
+            <div className="ro-drawer-tabs">
+              <button
+                type="button"
+                onClick={() => setActiveDrawerTab('overview')}
+                className={`ro-drawer-tab-btn ${activeDrawerTab === 'overview' ? 'active' : ''}`}
+              >
+                Tổng quan
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveDrawerTab('products')}
+                className={`ro-drawer-tab-btn ${activeDrawerTab === 'products' ? 'active' : ''}`}
+              >
+                Sản phẩm
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveDrawerTab('schedule')}
+                className={`ro-drawer-tab-btn ${activeDrawerTab === 'schedule' ? 'active' : ''}`}
+              >
+                Lịch trình
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveDrawerTab('payment')}
+                className={`ro-drawer-tab-btn ${activeDrawerTab === 'payment' ? 'active' : ''}`}
+              >
+                Thanh toán
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveDrawerTab('evidence')}
+                className={`ro-drawer-tab-btn ${activeDrawerTab === 'evidence' ? 'active' : ''}`}
+              >
+                Bằng chứng
+              </button>
+            </div>
+
+            {/* Drawer Scrollable Body */}
+            <div className="ro-drawer-body">
+              {activeDrawerTab === 'overview' && (
+                <>
+                  {/* 1. Customer Info */}
+                  <div className="ro-section-card">
+                    <div className="ro-section-header">
+                      <User size={14} />
+                      <span>Thông tin khách hàng</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div className="ro-cust-avatar" style={{ width: 44, height: 44, fontSize: 16, background: 'linear-gradient(135deg, #F59E0B, #D97706)' }}>
+                        {currentItem.order.customerName ? currentItem.order.customerName[0] : 'K'}
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <strong style={{ fontSize: '14px', color: '#111827' }}>
+                            {currentItem.order.customerName || 'Nguyễn Thảo My'}
+                          </strong>
+                          <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', backgroundColor: '#F3E8FF', color: '#7E22CE' }}>
+                            Khách hàng thân thiết
+                          </span>
                         </div>
-                      ))}
+                        <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>
+                          📞 {currentItem.order.customerPhone || '0901 234 567'}<br />
+                          ✉️ {currentItem.order.customerEmail || 'thaomy@gmail.com'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="ro-contact-buttons">
+                      <button
+                        type="button"
+                        onClick={onOpenChat}
+                        className="ro-btn-contact"
+                      >
+                        <MessageSquare size={14} />
+                        <span>Nhắn tin</span>
+                      </button>
+                      <a
+                        href={`tel:${currentItem.order.customerPhone || '0901234567'}`}
+                        className="ro-btn-contact"
+                        style={{ textDecoration: 'none' }}
+                      >
+                        <Phone size={14} />
+                        <span>Gọi điện</span>
+                      </a>
                     </div>
                   </div>
-                )}
 
-                {/* New Evidence Uploads */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '12px' }}>
-                  {evidencePreviews.map((preview, pIdx) => (
-                    <div key={pIdx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #D1D5DB' }}>
-                      <img src={preview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  {/* 2. Schedule Info */}
+                  <div className="ro-section-card">
+                    <div className="ro-section-header">
+                      <Calendar size={14} />
+                      <span>Thông tin lịch thuê</span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12.5px', marginBottom: '10px' }}>
+                      <div>
+                        <span style={{ color: '#6B7280', fontSize: '11px', display: 'block' }}>Ngày nhận</span>
+                        <strong>
+                          {parseSafeDate(currentItem.order.startDate).toLocaleDateString('vi-VN')} · 08:00
+                        </strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#6B7280', fontSize: '11px', display: 'block' }}>Ngày trả</span>
+                        <strong>
+                          {parseSafeDate(currentItem.order.endDate).toLocaleDateString('vi-VN')} · 18:00
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#4B5563', borderTop: '1px solid #EBE4D8', paddingTop: '8px' }}>
+                      <MapPin size={15} style={{ color: '#DC2626', flexShrink: 0, marginTop: 2 }} />
+                      <div style={{ flex: 1 }}>
+                        <strong>Địa điểm nhận:</strong> {currentItem.order.pickupLocation || 'Số 23 Đặng Thái Thân, TP. Huế'}
+                      </div>
                       <button
                         type="button"
                         onClick={() => {
-                          setEvidenceFiles((prev) => prev.filter((_, i) => i !== pIdx));
-                          setEvidencePreviews((prev) => prev.filter((_, i) => i !== pIdx));
+                          setSelectedBookingId(currentItem.order._id);
+                          setIsDetailModalOpen(true);
                         }}
-                        style={{
-                          position: 'absolute',
-                          top: 4,
-                          right: 4,
-                          width: 20,
-                          height: 20,
-                          borderRadius: '50%',
-                          backgroundColor: 'rgba(0,0,0,0.6)',
-                          color: '#fff',
-                          border: 'none',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '12px'
-                        }}
+                        style={{ background: 'none', border: 'none', color: '#881337', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
                       >
-                        ✕
+                        Xem chi tiết
                       </button>
                     </div>
-                  ))}
+                  </div>
 
-                  {evidenceFiles.length < 5 && (
-                    <label style={{ aspectRatio: '1', border: '1.5px dashed #D97706', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#D97706', cursor: 'pointer', backgroundColor: '#FFFBEB' }}>
-                      <Camera size={20} />
-                      <span style={{ fontSize: '10.5px', marginTop: 4, fontWeight: 700 }}>+ Chụp / Tải ảnh</span>
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        multiple
-                        style={{ display: 'none' }}
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          if (!files.length) return;
-                          const available = 5 - evidenceFiles.length;
-                          const toAdd = files.slice(0, available);
-                          setEvidenceFiles((prev) => [...prev, ...toAdd]);
-                          const newPreviews = toAdd.map((f) => URL.createObjectURL(f));
-                          setEvidencePreviews((prev) => [...prev, ...newPreviews]);
+                  {/* 3. Stepper Progress */}
+                  <div className="ro-section-card">
+                    <div className="ro-section-header">
+                      <Clock size={14} />
+                      <span>Tiến trình giao &amp; nhận áo dài</span>
+                    </div>
+
+                    {(() => {
+                      const status = currentItem.item.rentalFulfillment?.status || 'PENDING';
+                      const steps = [
+                        { key: 'PENDING', label: 'Chờ chuẩn bị' },
+                        { key: 'READY_FOR_PICKUP', label: 'Sẵn sàng giao' },
+                        { key: 'PICKED_UP', label: 'Khách đang thuê' },
+                        { key: 'RETURNED', label: 'Đã nhận lại' },
+                        { key: 'COMPLETED', label: 'Hoàn tất' },
+                      ];
+                      const activeIdx = Math.max(0, steps.findIndex((s) => s.key === status));
+
+                      return (
+                        <div className="ro-stepper">
+                          {steps.map((st, idx) => {
+                            const isDone = idx < activeIdx;
+                            const isActive = idx === activeIdx;
+
+                            return (
+                              <div key={st.key} className="ro-stepper-item">
+                                <div
+                                  className={`ro-stepper-circle ${isActive ? 'active' : ''} ${isDone ? 'done' : ''}`}
+                                >
+                                  {isDone ? '✓' : idx + 1}
+                                </div>
+                                <span
+                                  className={`ro-stepper-label ${isActive ? 'active' : ''}`}
+                                >
+                                  {st.label}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Step Action Alert Box with Checklist */}
+                    <div className="ro-step-action-box">
+                      <div style={{ position: 'relative', zIndex: 2 }}>
+                        <div className="ro-step-action-title">
+                          {currentItem.item.rentalFulfillment?.status === 'READY_FOR_PICKUP'
+                            ? 'Bước hiện tại: Sẵn sàng giao áo cho khách'
+                            : currentItem.item.rentalFulfillment?.status === 'PICKED_UP'
+                              ? 'Bước hiện tại: Khách đang trong thời gian thuê'
+                              : currentItem.item.rentalFulfillment?.status === 'RETURNED'
+                                ? Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED'
+                                  ? 'Bước hiện tại: Đang chờ duyệt khấu trừ bồi thường cọc'
+                                  : 'Bước hiện tại: Đã nhận lại áo, kiểm tra giặt ủi'
+                                : 'Bước hiện tại: Chờ chuẩn bị áo dài'}
+                        </div>
+                        <div className="ro-step-action-desc">
+                          {Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED'
+                            ? 'Yêu cầu trừ cọc do hư hỏng / vi phạm hợp đồng đã được ghi nhận và đang chờ Admin xử lý.'
+                            : 'Hãy kiểm tra sản phẩm, chuẩn bị đúng mẫu, size và phụ kiện đi kèm theo hợp đồng.'}
+                        </div>
+
+                        {(Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED') && (
+                          <div style={{ backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', padding: '10px 12px', marginTop: '10px' }}>
+                            <div style={{ color: '#991B1B', fontWeight: 600, fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <AlertTriangle size={15} />
+                              Đã gửi đề xuất khấu trừ cọc
+                            </div>
+                            <div style={{ color: '#B91C1C', fontSize: '11.5px', marginTop: '4px', lineHeight: 1.4 }}>
+                              Hệ thống tạm khóa hoàn tất tất toán để bảo vệ quyền lợi hai bên trong quá trình giải quyết bồi thường.
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="ro-checklist-item">
+                          <CheckCircle2 size={15} />
+                          <span>Kiểm tra sản phẩm trong kho</span>
+                        </div>
+                        <div className="ro-checklist-item">
+                          <CheckCircle2 size={15} />
+                          <span>Chuẩn bị phụ kiện (mấn, quạt, túi, ...)</span>
+                        </div>
+                        <div className="ro-checklist-item">
+                          <CheckCircle2 size={15} />
+                          <span>Đóng gói sẵn sàng</span>
+                        </div>
+                      </div>
+                      <Package
+                        size={72}
+                        style={{
+                          position: 'absolute',
+                          right: 8,
+                          bottom: -4,
+                          color: '#D97706',
+                          opacity: 0.15,
+                          pointerEvents: 'none',
+                          zIndex: 1,
                         }}
                       />
-                    </label>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* TAB: SẢN PHẨM */}
+              {activeDrawerTab === 'products' && (
+                <div className="ro-section-card">
+                  <div className="ro-section-header">
+                    <Shirt size={14} />
+                    <span>Danh sách hiện vật trong đơn</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {(currentItem.order.items || [currentItem.item]).map((it: any, idx: number) => (
+                      <div
+                        key={it._id || idx}
+                        style={{
+                          padding: '10px',
+                          background: '#FFFFFF',
+                          border: '1px solid #EBE4D8',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          gap: '10px',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <img
+                          src={resolveProductImg(it)}
+                          alt="Product"
+                          style={{ width: 44, height: 44, borderRadius: 6, objectFit: 'cover', backgroundColor: '#F3F4F6' }}
+                          onError={(e) => {
+                            const el = e.target as HTMLImageElement;
+                            if (el.src !== FALLBACK_AODAI_IMAGE) {
+                              el.src = FALLBACK_AODAI_IMAGE;
+                            }
+                          }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <strong style={{ fontSize: '13px', color: '#111827', display: 'block' }}>
+                            {typeof it.productId === 'object' ? it.productId?.name : it.name || 'Áo dài'}
+                          </strong>
+                          <span style={{ fontSize: '11.5px', color: '#6B7280' }}>
+                            Size: {it.size || 'M'} · Màu: {it.color || 'Trắng'} · SKU: {it.sku || 'AD-001'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: LỊCH TRÌNH */}
+              {activeDrawerTab === 'schedule' && (
+                <div className="ro-section-card">
+                  <div className="ro-section-header">
+                    <Clock size={14} />
+                    <span>Mốc thời gian quan trọng</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12.5px' }}>
+                    <div>
+                      <strong>Nhận áo:</strong> {parseSafeDate(currentItem.order.startDate).toLocaleString('vi-VN')}
+                    </div>
+                    <div>
+                      <strong>Hạn trả áo:</strong> {parseSafeDate(currentItem.order.endDate).toLocaleString('vi-VN')}
+                    </div>
+                    <div>
+                      <strong>Trạng thái:</strong> {getStatusBadge(currentItem.item.rentalFulfillment).label}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: THANH TOÁN */}
+              {activeDrawerTab === 'payment' && (
+                <div className="ro-section-card">
+                  <div className="ro-section-header">
+                    <DollarSign size={14} />
+                    <span>Chi tiết thanh toán &amp; Ký quỹ</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Tổng giá trị đơn:</span>
+                      <strong>{(currentItem.order.totalAmount || 2800000).toLocaleString('vi-VN')}đ</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669' }}>
+                      <span>Đã đặt cọc đảm bảo:</span>
+                      <strong>{(currentItem.order.depositTotal || 1400000).toLocaleString('vi-VN')}đ</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #EBE4D8', paddingTop: '6px' }}>
+                      <span>Ký quỹ VibeHue:</span>
+                      <span style={{ color: '#059669', fontWeight: 700 }}>Đã bảo đảm</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: BẰNG CHỨNG */}
+              {/* TAB: BẰNG CHỨNG */}
+              {activeDrawerTab === 'evidence' && (
+                <div className="ro-section-card">
+                  <div className="ro-section-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <ImageIcon size={14} />
+                      <span>Ảnh minh chứng giao nhận</span>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#6B7280', margin: '0 0 10px 0' }}>
+                    Hình ảnh hiện trạng áo dài được lưu trữ trong quá trình bàn giao và nhận lại để đối soát tiền cọc.
+                  </p>
+
+                  {/* Existing Evidence Photos */}
+                  {((currentItem.item?.rentalFulfillment?.pickupEvidence?.files?.length || 0) > 0 ||
+                    (currentItem.item?.rentalFulfillment?.returnEvidence?.files?.length || 0) > 0 ||
+                    (currentItem.order?.handoverPhotos?.length || 0) > 0) ? (
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '8px' }}>
+                        Hình ảnh đã lưu trữ:
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                        {[
+                          ...(currentItem.item?.rentalFulfillment?.pickupEvidence?.files || []),
+                          ...(currentItem.item?.rentalFulfillment?.returnEvidence?.files || []),
+                          ...(currentItem.order?.handoverPhotos || []).map((url: string) => ({ fileId: url }))
+                        ].map((ef: any, idx: number) => (
+                          <div key={idx} style={{ aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB', position: 'relative' }}>
+                            {ef.fileId?.startsWith('http') ? (
+                              <img src={ef.fileId} alt={`Evidence ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <RentalEvidenceImage
+                                bookingId={currentItem.order._id}
+                                itemId={currentItem.item._id}
+                                fileId={ef.fileId}
+                                alt={`Evidence ${idx + 1}`}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '24px 16px', textAlign: 'center', background: '#F9FAFB', borderRadius: '8px', border: '1px dashed #D1D5DB', color: '#6B7280', fontSize: '12.5px' }}>
+                      <Camera size={28} style={{ opacity: 0.35, marginBottom: '6px' }} />
+                      <p style={{ margin: 0, fontWeight: 500 }}>Chưa có ảnh bàn giao nào được lưu trữ cho đơn này.</p>
+                    </div>
                   )}
                 </div>
+              )}
+            </div>
 
-                <div style={{ marginTop: '10px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '4px' }}>
-                    Ghi chú hiện trạng áo (tùy chọn):
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={conditionNote}
-                    onChange={(e) => setConditionNote(e.target.value)}
-                    placeholder="VD: Áo mới 100%, đầy đủ phụ kiện mấn quạt..."
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #D1D5DB',
-                      fontSize: '12.5px',
-                      fontFamily: 'inherit',
-                      resize: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
+            {/* Drawer Sticky Footer Actions */}
+            <div className="ro-drawer-footer">
+              <a
+                href={`tel:${currentItem.order.customerPhone || '0901234567'}`}
+                className="ro-btn-contact"
+                style={{ textDecoration: 'none', padding: '9px 14px' }}
+              >
+                <Phone size={14} />
+                <span>Liên hệ khách</span>
+              </a>
 
-                {evidenceFiles.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={handleAdvanceStep}
-                    disabled={isActionBusy}
-                    className="ro-btn-advance"
-                    style={{ marginTop: '12px', width: '100%', justifyContent: 'center' }}
-                  >
-                    <span>
-                      {currentItem.item.rentalFulfillment?.status === 'READY_FOR_PICKUP'
-                        ? `Xác nhận giao áo với ${evidenceFiles.length} ảnh ➔`
-                        : currentItem.item.rentalFulfillment?.status === 'PICKED_UP'
-                        ? `Xác nhận nhận lại áo với ${evidenceFiles.length} ảnh ➔`
-                        : 'Lưu thay đổi ➔'}
-                    </span>
-                  </button>
-                ) : (
-                  <p style={{ fontSize: '11.5px', color: '#B45309', backgroundColor: '#FEF3C7', padding: '8px 10px', borderRadius: '6px', margin: '10px 0 0 0' }}>
-                    💡 Cần tải ít nhất 1 ảnh hiện trạng để xác nhận giao hoặc nhận lại đồ.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
 
-          {/* Drawer Sticky Footer Actions */}
-          <div className="ro-drawer-footer">
-            <button
-              type="button"
-              onClick={() => {
-                toast?.info?.('Đang kết nối tới quản trị viên để hỗ trợ hủy đơn.');
-              }}
-              className="ro-btn-cancel-order"
-            >
-              Hủy đơn
-            </button>
-
-            <a
-              href={`tel:${currentItem.order.customerPhone || '0901234567'}`}
-              className="ro-btn-contact"
-              style={{ textDecoration: 'none', padding: '9px 12px' }}
-            >
-              <Phone size={14} />
-              <span>Liên hệ khách</span>
-            </a>
-
-            {(() => {
-              const fulfillment = currentItem.item.rentalFulfillment || {};
-              const status = fulfillment.status;
-              const hasProposedCharges = Object.values(fulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED');
-              const isCompleted = status === 'COMPLETED';
-              const isPendingReview = hasProposedCharges || fulfillment?.issueStatus === 'REPORTED';
-
-              return (
-                <button
-                  type="button"
-                  onClick={handleAdvanceStep}
-                  disabled={isActionBusy || isCompleted || isPendingReview}
-                  className="ro-btn-advance"
-                  style={
-                    isCompleted
-                      ? { opacity: 0.7, cursor: 'default', backgroundColor: '#059669' }
-                      : isPendingReview
-                      ? { opacity: 0.7, cursor: 'not-allowed', backgroundColor: '#DC2626' }
-                      : undefined
-                  }
-                >
-                  <span>
-                    {status === 'READY_FOR_PICKUP'
-                      ? 'Xác nhận đã giao ➔'
-                      : status === 'PICKED_UP'
-                      ? 'Xác nhận đã nhận lại ➔'
-                      : status === 'RETURNED'
-                      ? isPendingReview
-                        ? 'Chờ duyệt trừ cọc'
-                        : 'Hoàn tất tất toán ➔'
-                      : status === 'COMPLETED'
-                      ? '✓ Đã hoàn tất'
-                      : 'Đã chuẩn bị xong ➔'}
-                  </span>
-                </button>
-              );
-            })()}
-          </div>
-        </aside>
-      </>
+              <button
+                type="button"
+                onClick={() => setIsDrawerOpen(false)}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  backgroundColor: '#FFFFFF',
+                  color: '#374151',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Đóng
+              </button>
+            </div>
+          </aside>
+        </>
       )}
 
       {/* Guideline Modal (Quy tắc vận hành & Ký quỹ an toàn) */}
@@ -1500,246 +1214,6 @@ export function RentalOperationsPanel({
                 }}
               >
                 Đã hiểu
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Settlement & Dispute Modal (Nghiệm thu & Tất toán đơn thuê áo dài) */}
-      {isSettlementModalOpen && currentItem && (
-        <div className="ro-drawer-backdrop" onClick={() => !isActionBusy && setIsSettlementModalOpen(false)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: '620px',
-              width: '92%',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              backgroundColor: '#FFFFFF',
-              borderRadius: '18px',
-              padding: '24px 28px',
-              margin: 'auto',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-              position: 'relative',
-            }}
-          >
-            {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', paddingBottom: '14px', borderBottom: '1px solid #F3F4F6' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#111827' }}>
-                  Nghiệm thu &amp; Tất toán đơn thuê
-                </h3>
-                <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#6B7280' }}>
-                  Đơn hàng: #{currentItem.order.bookingCode || currentItem.order._id?.slice(-8)} — {currentItem.order.customerName}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => !isActionBusy && setIsSettlementModalOpen(false)}
-                style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', padding: '4px' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Current Item Quick Info */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 14px', background: '#F9FAFB', borderRadius: '12px', marginBottom: '18px', border: '1px solid #E5E7EB' }}>
-              <img
-                src={resolveProductImg(currentItem.item)}
-                alt="Product"
-                style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #E5E7EB' }}
-              />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: '13.5px', color: '#1F2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {currentItem.item.productName || 'Áo dài truyền thống'}
-                </div>
-                <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>
-                  Tiền đặt cọc của món đồ: <strong style={{ color: '#047857' }}>{(currentItem.item.depositAmount || 0).toLocaleString('vi-VN')} đ</strong>
-                </div>
-              </div>
-            </div>
-
-            {/* Selection Choices */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-              {/* Option A: Normal / Intact */}
-              <div
-                onClick={() => setSettlementChoice('NORMAL')}
-                style={{
-                  border: settlementChoice === 'NORMAL' ? '2px solid #059669' : '1px solid #E5E7EB',
-                  backgroundColor: settlementChoice === 'NORMAL' ? '#F0FDF4' : '#FFFFFF',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '12px',
-                }}
-              >
-                <div style={{ marginTop: '2px', color: settlementChoice === 'NORMAL' ? '#059669' : '#9CA3AF' }}>
-                  <CheckCircle2 size={20} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: settlementChoice === 'NORMAL' ? '#065F46' : '#1F2937' }}>
-                    Áo dài nguyên vẹn (Hoàn 100% cọc)
-                  </div>
-                  <div style={{ fontSize: '12.5px', color: '#4B5563', marginTop: '3px', lineHeight: 1.5 }}>
-                    Sản phẩm đạt chuẩn sau kiểm tra giặt ủi, đầy đủ phụ kiện. Hệ thống sẽ tự động hoàn trả <strong>{(currentItem.item.depositAmount || 0).toLocaleString('vi-VN')} đ</strong> tiền cọc cho khách hàng.
-                  </div>
-                </div>
-              </div>
-
-              {/* Option B: Issue / Charge */}
-              <div
-                onClick={() => setSettlementChoice('ISSUE')}
-                style={{
-                  border: settlementChoice === 'ISSUE' ? '2px solid #DC2626' : '1px solid #E5E7EB',
-                  backgroundColor: settlementChoice === 'ISSUE' ? '#FEF2F2' : '#FFFFFF',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '12px',
-                }}
-              >
-                <div style={{ marginTop: '2px', color: settlementChoice === 'ISSUE' ? '#DC2626' : '#9CA3AF' }}>
-                  <AlertTriangle size={20} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: settlementChoice === 'ISSUE' ? '#991B1B' : '#1F2937' }}>
-                    Phát hiện sự cố / Hư hỏng (Đề xuất khấu trừ cọc)
-                  </div>
-                  <div style={{ fontSize: '12.5px', color: '#4B5563', marginTop: '3px', lineHeight: 1.5 }}>
-                    Sản phẩm bị rách, sứt chỉ, ố bẩn nặng không giặt được, thiếu phụ kiện hoặc khách trả quá hạn. Yêu cầu khấu trừ bồi thường từ tiền cọc.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Sub-form if Option B is active */}
-            {settlementChoice === 'ISSUE' && (
-              <div style={{ backgroundColor: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '12px', padding: '16px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: '#9A3412', marginBottom: '6px' }}>
-                    Loại vi phạm / Lý do khấu trừ
-                  </label>
-                  <select
-                    value={chargeType}
-                    onChange={(e: any) => setChargeType(e.target.value)}
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #FDBA74', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#1F2937', outline: 'none' }}
-                  >
-                    <option value="damageFee">Rách áo / Hư hỏng sản phẩm / Vết ố nặng</option>
-                    <option value="lateFee">Khách trả trễ hạn so với thỏa thuận</option>
-                    <option value="compensationAmount">Mất phụ kiện / Hư hỏng toàn bộ sản phẩm</option>
-                  </select>
-                </div>
-
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <label style={{ fontSize: '12.5px', fontWeight: 600, color: '#9A3412' }}>
-                      Số tiền đề xuất trừ cọc (VNĐ)
-                    </label>
-                    <span style={{ fontSize: '11.5px', color: '#C2410C' }}>
-                      Tối đa: {(currentItem.item.depositAmount || 0).toLocaleString('vi-VN')} đ
-                    </span>
-                  </div>
-                  <input
-                    type="number"
-                    min={1}
-                    max={currentItem.item.depositAmount || 0}
-                    value={deductAmount || ''}
-                    onChange={(e) => setDeductAmount(Number(e.target.value))}
-                    placeholder="Nhập số tiền cần khấu trừ..."
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #FDBA74', fontSize: '13.5px', backgroundColor: '#FFFFFF', color: '#1F2937', outline: 'none', boxSizing: 'border-box' }}
-                  />
-
-                  {/* Quick percentage chips */}
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                    {[0.2, 0.5, 1].map((ratio) => {
-                      const val = Math.round((currentItem.item.depositAmount || 0) * ratio);
-                      return (
-                        <button
-                          key={ratio}
-                          type="button"
-                          onClick={() => setDeductAmount(val)}
-                          style={{
-                            fontSize: '11px',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            border: '1px solid #FDBA74',
-                            backgroundColor: deductAmount === val ? '#F97316' : '#FFFFFF',
-                            color: deductAmount === val ? '#FFFFFF' : '#9A3412',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {ratio === 1 ? '100% Cọc' : `${ratio * 100}% Cọc`} ({val.toLocaleString('vi-VN')}đ)
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: '#9A3412', marginBottom: '6px' }}>
-                    Lý do / Mô tả chi tiết vết hư hại (Bắt buộc)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={issueReason}
-                    onChange={(e) => setIssueReason(e.target.value)}
-                    placeholder="Mô tả cụ thể vị trí rách, vết ố bẩn hoặc các chi tiết phụ kiện bị thiếu..."
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #FDBA74', fontSize: '13px', backgroundColor: '#FFFFFF', color: '#1F2937', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Modal Actions Footer */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setIsSettlementModalOpen(false)}
-                disabled={isActionBusy}
-                style={{
-                  padding: '9px 18px',
-                  borderRadius: '8px',
-                  border: '1px solid #D1D5DB',
-                  backgroundColor: '#FFFFFF',
-                  color: '#374151',
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                }}
-              >
-                Hủy bỏ
-              </button>
-
-              <button
-                type="button"
-                onClick={handleConfirmSettlement}
-                disabled={isActionBusy}
-                style={{
-                  padding: '9px 22px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  backgroundColor: settlementChoice === 'NORMAL' ? '#059669' : '#DC2626',
-                  color: '#FFFFFF',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  cursor: isActionBusy ? 'not-allowed' : 'pointer',
-                  opacity: isActionBusy ? 0.7 : 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                {isActionBusy && <RefreshCw size={14} className="ro-spin" />}
-                <span>
-                  {settlementChoice === 'NORMAL' ? 'Xác nhận & Hoàn 100% Cọc' : 'Gửi yêu cầu trừ cọc'}
-                </span>
               </button>
             </div>
           </div>

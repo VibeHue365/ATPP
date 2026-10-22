@@ -166,7 +166,7 @@ export class AuthService {
     const loginRateLimitKey = `auth:login:${email}:${this.rateLimitService.ipKey(
       context.ipAddress,
     )}`;
-    let user = await this.usersRepository.findUserByEmail(email);
+    let user = await this.usersRepository.findUserByEmailWithPassword(email);
 
     if (!user || !user.auth.passwordHash) {
       await this.rateLimitService.assertRateLimit(

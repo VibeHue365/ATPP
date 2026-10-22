@@ -1,15 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Star, Clock } from 'lucide-react';
+import { Star, Clock, Camera } from 'lucide-react';
 import { ROUTES } from '../../../config/routes';
 import { PriceDisplay } from '../../../components/common/PriceDisplay';
-import type { PhotoshootPackageItem } from '../data/photoshoot-package.fixture';
+import type { PhotoshootPackageItem } from '../types/photographer.types';
 
 export interface PhotoshootPackageCardProps {
   item: PhotoshootPackageItem;
 }
 
 export const PhotoshootPackageCard: React.FC<PhotoshootPackageCardProps> = ({ item }) => {
+  const [imageError, setImageError] = useState(false);
+
   const ratingValue: number =
     typeof item.rating === 'number'
       ? item.rating
@@ -33,18 +35,25 @@ export const PhotoshootPackageCard: React.FC<PhotoshootPackageCardProps> = ({ it
       }}
     >
       {/* Image Area Container */}
-      <div className="lume-photoshoot-card__media relative w-full aspect-[3/4] overflow-hidden bg-stone-100">
+      <div className="lume-photoshoot-card__media relative w-full aspect-[16/11] overflow-hidden bg-stone-100">
         <Link 
           to={ROUTES.PHOTOGRAPHERS} 
           className="block w-full h-full text-decoration-none"
           tabIndex={-1}
         >
-          <img
-            src={item.image}
-            alt={item.name}
-            loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 will-change-transform"
-          />
+          {item.image && !imageError ? (
+            <img
+              src={item.image}
+              alt={item.name}
+              loading="lazy"
+              className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 will-change-transform"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-stone-100 text-stone-400 gap-1">
+              <Camera size={32} strokeWidth={1.5} />
+            </div>
+          )}
         </Link>
 
         {/* Badge Overlay */}
@@ -74,7 +83,7 @@ export const PhotoshootPackageCard: React.FC<PhotoshootPackageCardProps> = ({ it
             </span>
 
             <span 
-              className="line-clamp-1 font-medium text-[10px]"
+              className="line-clamp-1 font-semibold text-[11px]"
               style={{ color: 'var(--landing-text-muted)' }}
             >
               {item.photographerName}
@@ -122,8 +131,8 @@ export const PhotoshootPackageCard: React.FC<PhotoshootPackageCardProps> = ({ it
 
           <Link
             to={ROUTES.PHOTOGRAPHERS}
-            className="text-xs font-bold inline-flex items-center gap-1 hover:underline text-decoration-none"
-            style={{ color: 'var(--landing-primary)' }}
+            className="lume-photoshoot-card__availability px-3.5 py-1.5 rounded-full text-xs font-bold transition-all text-decoration-none inline-flex items-center justify-center"
+            style={{ backgroundColor: 'var(--landing-primary)' }}
           >
             <span>Đặt lịch</span>
           </Link>

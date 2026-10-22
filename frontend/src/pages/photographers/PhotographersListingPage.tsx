@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CalendarDays, Camera, Check, ChevronDown, Map, MapPin, Search, Sparkles, Users } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { ConfirmModal } from '../../utils/confirmModal';
 import { useToast } from '../../components/feedback/Toast';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../features/auth/hooks/useAuth';
@@ -10,12 +10,13 @@ import { categoryService } from '../../features/categories/services/categoryServ
 import type { Category } from '../../features/categories/types';
 import { PhotographerCard } from '../../features/photographers/components/PhotographerCard';
 import { usePhotographers } from '../../features/photographers/hooks/usePhotographers';
-import { PhotographyLocationPicker } from '../../features/photographers/components/PhotographyLocationPicker';
 import type { LocationSelection, PhotographerDiscoverySort, PhotographerPackageCategory } from '../../features/photographers/types/photographer.types';
 import { ROUTES } from '../../config/routes';
 import { ListingHero } from '../../components/common/ListingHero';
 import { UnifiedSearchBar, type SearchFieldConfig } from '../../components/common/UnifiedSearchBar';
 import { ListingCategoryTabs } from '../../components/common/ListingCategoryTabs';
+import { CustomSelect } from '../../components/common/CustomSelect';
+import { ServiceDatePicker } from '../../components/common/ServiceDatePicker';
 import './PhotographersListingPage.css';
 
 const sortOptions: Array<{ value: PhotographerDiscoverySort; label: string }> = [
@@ -86,13 +87,22 @@ export const PhotographersListingPage: React.FC = () => {
   const [searchInput, setSearchInput] = useState(searchParams.get('q') ?? '');
   const [compareList, setCompareList] = useState<string[]>([]);
   const [customerLocation, setCustomerLocation] = useState<LocationSelection | null>(null);
-  const [isDiscoveryMapOpen, setIsDiscoveryMapOpen] = useState(false);
   const [searchRadiusKm, setSearchRadiusKm] = useState(15);
-  const [shootDate, setShootDate] = useState('');
-  const [groupSize, setGroupSize] = useState('');
+  const [shootDate, setShootDate] = useState(searchParams.get('date') ?? '');
+  const [groupSize, setGroupSize] = useState(searchParams.get('people') ?? searchParams.get('groupSize') ?? '');
   const [isLocating, setIsLocating] = useState(false);
   const hasAoDaiInCart = cart.some((item) => item.itemType === 'PRODUCT');
   const queryString = searchParams.toString();
+
+  // Synchronize search params from URL when navigating
+  useEffect(() => {
+    const d = searchParams.get('date');
+    if (d) setShootDate(d);
+    const p = searchParams.get('people') || searchParams.get('groupSize');
+    if (p) setGroupSize(p);
+    const qVal = searchParams.get('q');
+    if (qVal !== null) setSearchInput(qVal);
+  }, [queryString]);
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     type: true,
@@ -114,6 +124,34 @@ export const PhotographersListingPage: React.FC = () => {
     occasion?: boolean;
     style?: boolean;
   }>({});
+
+  const formatOccasionName = (val?: string): string => {
+    if (!val) return '';
+    const map: Record<string, string> = {
+      GRADUATION: 'Kỷ yếu',
+      WEDDING: 'Cưới hỏi',
+      FESTIVAL: 'Lễ hội',
+      EVENT: 'Sự kiện',
+      TRAVEL: 'Du lịch',
+      COUPLE: 'Cặp đôi',
+      FAMILY: 'Gia đình',
+      CONCEPT: 'Nghệ thuật',
+    };
+    return map[val.toUpperCase()] || val;
+  };
+
+  const formatStyleName = (val?: string): string => {
+    if (!val) return '';
+    const map: Record<string, string> = {
+      TRADITIONAL: 'Truyền thống',
+      MODERN: 'Cách tân',
+      EDGY: 'Phá cách',
+      VINTAGE: 'Cổ điển',
+      INDIE: 'Indie',
+      MINIMALIST: 'Tối giản',
+    };
+    return map[val.toUpperCase()] || val;
+  };
 
   const discoveryParams = useMemo(() => {
     const params = new URLSearchParams(queryString);
@@ -214,6 +252,27 @@ export const PhotographersListingPage: React.FC = () => {
     setSearchParams(next);
   };
 
+  // Automatically map concept from Landing Page to packageCategoryId
+  useEffect(() => {
+    const concept = searchParams.get('concept');
+    if (!concept || searchParams.get('packageCategoryId') || packageCategories.length === 0) return;
+
+    const matched = packageCategories.find((cat) => {
+      const lowerName = cat.name.toLowerCase();
+      const lowerSlug = (cat.slug || '').toLowerCase();
+      if (concept === 'ky-yeu' && (lowerName.includes('kỷ yếu') || lowerSlug.includes('ky-yeu'))) return true;
+      if (concept === 'cuoi' && (lowerName.includes('cưới') || lowerSlug.includes('cuoi'))) return true;
+      if (concept === 'ngoai-canh' && (lowerName.includes('ngoại cảnh') || lowerSlug.includes('ngoai-canh'))) return true;
+      if (concept === 'studio' && (lowerName.includes('studio') || lowerSlug.includes('studio'))) return true;
+      if (concept === 'cap-doi' && (lowerName.includes('đôi') || lowerName.includes('couple'))) return true;
+      return false;
+    });
+
+    if (matched) {
+      updateQuery({ packageCategoryId: matched.id });
+    }
+  }, [packageCategories, queryString]);
+
   const clearFilters = () => {
     setSearchInput('');
     setSearchParams({ sort: 'rating_desc' });
@@ -224,7 +283,7 @@ export const PhotographersListingPage: React.FC = () => {
     if (!navigator.geolocation) { toast.error('Trình duyệt không hỗ trợ lấy vị trí hiện tại.'); return; }
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (position) => { setCustomerLocation({ address: 'Vị trí hiện tại', latitude: position.coords.latitude, longitude: position.coords.longitude }); setIsDiscoveryMapOpen(true); setIsLocating(false); },
+      (position) => { setCustomerLocation({ address: 'Vị trí hiện tại', latitude: position.coords.latitude, longitude: position.coords.longitude }); setIsLocating(false); },
       () => { setIsLocating(false); toast.error('Không thể lấy vị trí. Hãy cho phép quyền vị trí rồi thử lại.'); },
       { enableHighAccuracy: true, timeout: 10_000 },
     );
@@ -233,15 +292,11 @@ export const PhotographersListingPage: React.FC = () => {
   const handleToggleFavorite = async (id: string, event: React.MouseEvent) => {
     event.stopPropagation();
     if (!user) {
-      const result = await Swal.fire({
-        icon: 'warning',
-        title: 'Yêu cầu đăng nhập',
-        text: 'Vui lòng đăng nhập để lưu nhiếp ảnh gia yêu thích.',
-        confirmButtonColor: '#7a1519',
-        confirmButtonText: 'Đăng nhập ngay',
-        showCancelButton: true,
-        cancelButtonText: 'Hủy',
-      });
+      const result = await ConfirmModal.requireAuth(
+        'Yêu cầu đăng nhập',
+        'Vui lòng đăng nhập để lưu nhiếp ảnh gia yêu thích.',
+        { confirmButtonText: 'Đăng nhập ngay' }
+      );
       if (result.isConfirmed) navigate('/login');
       return;
     }
@@ -269,7 +324,6 @@ export const PhotographersListingPage: React.FC = () => {
     setCompareList((current) => current.filter((item) => item !== id));
   };
   const totalPackageCount = packageCategoryCards.reduce((total, category) => total + category.packageCount, 0);
-  const today = new Date().toISOString().slice(0, 10);
   const submitQuickSearch = (event: React.FormEvent) => {
     event.preventDefault();
     updateQuery({ q: searchInput.trim() || undefined });
@@ -280,55 +334,74 @@ export const PhotographersListingPage: React.FC = () => {
 
   const photoSearchFields: SearchFieldConfig[] = [
     {
+      label: 'Từ khóa',
+      icon: <Search size={13} />,
+      content: (
+        <input
+          type="text"
+          className="unified-search-input"
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          placeholder="Tên thợ ảnh, studio..."
+        />
+      ),
+    },
+    {
       label: 'Khu vực',
       icon: <MapPin size={13} />,
       content: (
-        <>
-          <select
-            className="unified-search-select"
-            value={discoveryParams.location ?? ''}
-            onChange={(event) => updateQuery({ location: event.target.value || undefined })}
-          >
-            <option value="">Tất cả khu vực</option>
-            <option value="Huế">Huế</option>
-            <option value="Đà Nẵng">Đà Nẵng</option>
-            <option value="Hội An">Hội An</option>
-          </select>
-          <ChevronDown size={14} className="unified-search-arrow" />
-        </>
+        <CustomSelect
+          value={discoveryParams.location ?? ''}
+          onChange={(val) => updateQuery({ location: val || undefined })}
+          options={[
+            { value: '', label: 'Tất cả khu vực' },
+            { value: 'Huế', label: 'Huế' },
+            { value: 'Đà Nẵng', label: 'Đà Nẵng' },
+            { value: 'Hội An', label: 'Hội An' },
+          ]}
+        />
       ),
     },
     {
       label: 'Loại hình chụp',
       icon: <Camera size={13} />,
       content: (
-        <>
-          <select
-            className="unified-search-select"
-            value={selectedPackageCategory}
-            onChange={(event) => updateQuery({ packageCategoryId: event.target.value || undefined })}
-          >
-            <option value="">Tất cả loại hình</option>
-            {packageCategories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-          <ChevronDown size={14} className="unified-search-arrow" />
-        </>
+        <CustomSelect
+          value={selectedPackageCategory}
+          onChange={(val) => updateQuery({ packageCategoryId: val || undefined })}
+          options={[
+            { value: '', label: 'Tất cả loại hình' },
+            ...packageCategories.map((category) => ({
+              value: category.id,
+              label: category.name,
+            })),
+          ]}
+        />
       ),
     },
     {
-      label: 'Ngày chụp',
+      label: 'Ngày & Ca chụp',
       icon: <CalendarDays size={13} />,
       content: (
-        <input
-          type="date"
-          min={today}
-          className="unified-search-input"
-          value={shootDate}
-          onChange={(event) => setShootDate(event.target.value)}
+        <ServiceDatePicker
+          serviceType="photographer"
+          value={{
+            rentalType: 'HOURLY',
+            startDate: shootDate,
+            endDate: shootDate,
+            singleDate: shootDate,
+            startTime: '08:00',
+            endTime: '10:30',
+            timeSlot: searchParams.get('timeSlot') || '08:00 - 10:30',
+          }}
+          onChange={(val) => {
+            const chosen = val.singleDate || val.startDate;
+            setShootDate(chosen);
+            const params = new URLSearchParams(searchParams);
+            if (chosen) params.set('date', chosen);
+            if (val.timeSlot) params.set('timeSlot', val.timeSlot);
+            setSearchParams(params, { replace: true });
+          }}
         />
       ),
     },
@@ -336,20 +409,17 @@ export const PhotographersListingPage: React.FC = () => {
       label: 'Số người',
       icon: <Users size={13} />,
       content: (
-        <>
-          <select
-            className="unified-search-select"
-            value={groupSize}
-            onChange={(event) => setGroupSize(event.target.value)}
-          >
-            <option value="">Không giới hạn</option>
-            <option value="1">1 người</option>
-            <option value="2">2 người</option>
-            <option value="3-5">3–5 người</option>
-            <option value="6+">Từ 6 người</option>
-          </select>
-          <ChevronDown size={14} className="unified-search-arrow" />
-        </>
+        <CustomSelect
+          value={groupSize}
+          onChange={(val) => setGroupSize(val)}
+          options={[
+            { value: '', label: 'Không giới hạn' },
+            { value: '1', label: '1 người' },
+            { value: '2', label: '2 người' },
+            { value: '3-5', label: '3–5 người' },
+            { value: '6+', label: 'Từ 6 người' },
+          ]}
+        />
       ),
     },
   ];
@@ -364,10 +434,11 @@ export const PhotographersListingPage: React.FC = () => {
   ];
 
   return (
-    <div className="unified-listing-page">
+    <div className="unified-listing-page photo-listing-page">
       <main className="unified-listing-container">
         {/* 1. Unified Hero */}
         <ListingHero
+          placement="PHOTOGRAPHER"
           breadcrumbs={[
             { label: 'Trang chủ', href: '/' },
             { label: 'Chụp ảnh' },
@@ -395,23 +466,6 @@ export const PhotographersListingPage: React.FC = () => {
           activeTab={selectedPackageCategory || ''}
           onSelectTab={(tabId) => updateQuery({ packageCategoryId: tabId || undefined })}
         />
-
-        {isDiscoveryMapOpen && (
-          <section className="photo-map-panel" aria-label="Tìm photographer theo vị trí">
-            <div>
-              <h2>Tìm quanh địa điểm của bạn</h2>
-              <p>Chọn vị trí để xem những photographer phù hợp trong bán kính mong muốn.</p>
-            </div>
-            {customerLocation && <button type="button" onClick={() => setCustomerLocation(null)}>Bỏ vị trí</button>}
-            <PhotographyLocationPicker
-              value={customerLocation}
-              onSelect={setCustomerLocation}
-              title="Chọn vị trí"
-              hint="Nhập địa chỉ hoặc dùng vị trí hiện tại."
-              radiusKm={searchRadiusKm}
-            />
-          </section>
-        )}
 
         <div className="unified-main-layout">
           <aside className="photo-filter-panel">
@@ -446,7 +500,7 @@ export const PhotographersListingPage: React.FC = () => {
                 <div className="photo-profile-chips">
                   {userPrefOccasion && !disabledProfilePrefs.occasion && (
                     <span className="photo-profile-chip">
-                      <span>Dịp {userPrefOccasion}</span>
+                      <span>Dịp {formatOccasionName(userPrefOccasion)}</span>
                       <button
                         type="button"
                         className="photo-profile-chip-remove"
@@ -459,7 +513,7 @@ export const PhotographersListingPage: React.FC = () => {
                   )}
                   {userPrefStyle && !disabledProfilePrefs.style && (
                     <span className="photo-profile-chip">
-                      <span>Gu {userPrefStyle}</span>
+                      <span>Gu {formatStyleName(userPrefStyle)}</span>
                       <button
                         type="button"
                         className="photo-profile-chip-remove"
@@ -720,17 +774,17 @@ export const PhotographersListingPage: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={selectedPriceRange === value}
-                            onChange={() =>
-                              updateQuery(
-                                value === 'under2'
-                                  ? { minPrice: undefined, maxPrice: '1999999' }
-                                  : value === '2to5'
-                                  ? { minPrice: '2000000', maxPrice: '5000000' }
-                                  : selectedPriceRange === value
-                                  ? { minPrice: undefined, maxPrice: undefined }
-                                  : { minPrice: '5000001', maxPrice: undefined }
-                              )
-                            }
+                            onChange={() => {
+                              if (selectedPriceRange === value) {
+                                updateQuery({ minPrice: undefined, maxPrice: undefined });
+                              } else if (value === 'under2') {
+                                updateQuery({ minPrice: undefined, maxPrice: '1999999' });
+                              } else if (value === '2to5') {
+                                updateQuery({ minPrice: '2000000', maxPrice: '5000000' });
+                              } else {
+                                updateQuery({ minPrice: '5000001', maxPrice: undefined });
+                              }
+                            }}
                           />
                           <div className="photo-custom-checkbox">
                             {selectedPriceRange === value && <Check size={12} color="#FFFFFF" />}
@@ -863,7 +917,6 @@ export const PhotographersListingPage: React.FC = () => {
           </section>
         </div>
       </main>
-      <button type="button" onClick={() => setIsDiscoveryMapOpen((open) => !open)} className={`photo-map-toggle ${isDiscoveryMapOpen ? 'is-active' : ''}`}><Map size={17} />{isDiscoveryMapOpen ? 'Ẩn bản đồ' : 'Xem bản đồ'}</button>
     </div>
   );
 };

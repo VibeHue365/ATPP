@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import './PhotographyScheduleSelector.css';
 
 const calendarStatusLabel = {
   AVAILABLE: 'Còn lịch',
@@ -37,6 +38,10 @@ interface PhotographyScheduleSelectorProps {
   onSelectDate: (date: string) => void;
   onSelectSlot: (slot: PhotographyTimeSlot) => void;
   isSlotBusy: (slot: PhotographyTimeSlot) => boolean;
+  hideTitle?: boolean;
+  title?: string;
+  stepNumber?: number | string;
+  subtitle?: string;
 }
 
 export const PhotographyScheduleSelector: React.FC<PhotographyScheduleSelectorProps> = ({
@@ -52,6 +57,10 @@ export const PhotographyScheduleSelector: React.FC<PhotographyScheduleSelectorPr
   onSelectDate,
   onSelectSlot,
   isSlotBusy,
+  hideTitle = false,
+  title = 'Lịch & khung giờ',
+  stepNumber = 2,
+  subtitle = 'Chọn thời gian phù hợp để ghi lại những khoảnh khắc đẹp nhất.',
 }) => {
   const futureDays = calendarDays.filter((day) => !day.isEmpty && day.availabilityStatus !== 'PAST');
   const hasAvailableDay = futureDays.some((day) => day.isAvailable);
@@ -59,13 +68,21 @@ export const PhotographyScheduleSelector: React.FC<PhotographyScheduleSelectorPr
 
   return (
   <section className="pd-schedule-section">
-    <h2 className="pd-section-title">
-      <span className="pd-section-title-num">2</span>
-      <span>Lịch & khung giờ</span>
-    </h2>
-    <p style={{ fontSize: '13.5px', color: 'var(--color-text-secondary)', marginBottom: '24px', marginLeft: '36px', textAlign: 'left' }}>
-      Chọn thời gian phù hợp để ghi lại những khoảnh khắc đẹp nhất.
-    </p>
+    {!hideTitle && (
+      <>
+        <h2 className="pd-section-title">
+          {stepNumber !== undefined && (
+            <span className="pd-section-title-num">{stepNumber}</span>
+          )}
+          <span>{title}</span>
+        </h2>
+        {subtitle && (
+          <p style={{ fontSize: '13.5px', color: 'var(--color-text-secondary)', marginBottom: '24px', marginLeft: stepNumber !== undefined ? '36px' : '0', textAlign: 'left' }}>
+            {subtitle}
+          </p>
+        )}
+      </>
+    )}
     
     <div className="pd-schedule-layout">
       {/* Cột trái: Lịch tháng */}

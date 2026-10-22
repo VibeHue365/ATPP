@@ -1,5 +1,6 @@
 import React from 'react';
 import type { useToast } from '../../../components/feedback/Toast';
+import { ConfirmModal } from '../../../utils/confirmModal';
 import { promotionsApi } from '../api/providerDashboardApi';
 import type { useProviderInventoryState } from '../inventory/useProviderInventoryState';
 import { toLocalDateKey } from '../shared/dateHelpers';
@@ -41,23 +42,23 @@ export function createPromotionActions({
     setVEndDate('');
   };
 
-  const handleCreateOrUpdateVoucher = async (e: React.FormEvent) => {
+  const handleCreateOrUpdateVoucher = async (e: React.FormEvent): Promise<boolean> => {
     e.preventDefault();
     if (!vCode.trim()) {
       toast.error('Vui lòng nhập mã voucher');
-      return;
+      return false;
     }
     if (!vName.trim()) {
       toast.error('Vui lòng nhập tên chương trình voucher');
-      return;
+      return false;
     }
     if (vValue === '' || Number(vValue) <= 0) {
       toast.error('Giá trị giảm giá phải lớn hơn 0');
-      return;
+      return false;
     }
     if (vType === 'PERCENTAGE' && (Number(vValue) < 1 || Number(vValue) > 100)) {
       toast.error('Phần trăm giảm giá phải từ 1% đến 100%');
-      return;
+      return false;
     }
 
     const payload: any = {
@@ -84,8 +85,10 @@ export function createPromotionActions({
       clearVoucherForm();
       setIsVoucherModalOpen(false);
       fetchProviderData();
+      return true;
     } catch (err: any) {
       toast.error(err.message || 'Thao tác voucher thất bại');
+      return false;
     }
   };
 
@@ -108,7 +111,15 @@ export function createPromotionActions({
   const handleAddVoucher = handleCreateOrUpdateVoucher;
 
   const handleDeleteVoucher = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa mã voucher này?')) return;
+    const result = await ConfirmModal.delete(
+      'Xóa mã Voucher?',
+      'Bạn có chắc chắn muốn xóa mã ưu đãi này? Khách hàng sẽ không còn áp dụng được mã sau khi xóa.',
+      {
+        confirmButtonText: 'Xóa voucher',
+        cancelButtonText: 'Hủy',
+      }
+    );
+    if (!result.isConfirmed) return;
     try {
       await promotionsApi.deleteVoucher(id);
       toast.success('Đã xóa mã ưu đãi thành công!');
@@ -118,11 +129,11 @@ export function createPromotionActions({
     }
   };
 
-  const handleCreateOrUpdateCombo = async (e: React.FormEvent) => {
+  const handleCreateOrUpdateCombo = async (e: React.FormEvent): Promise<boolean> => {
     e.preventDefault();
     if (!cProductId || !cPackageId) {
       toast.error('Vui lòng chọn cả áo dài và gói chụp ảnh');
-      return;
+      return false;
     }
 
     const selectedPkg = photoPackages.find(p => p._id === cPackageId);
@@ -130,7 +141,7 @@ export function createPromotionActions({
       const maxPeopleAllowed = selectedPkg.maxPeople || 1;
       if (Number(cShootPeopleCount || 1) > maxPeopleAllowed) {
         toast.error(`Số người chụp trong combo (${cShootPeopleCount}) không được lớn hơn số người chụp tối đa của gói chụp ảnh (${maxPeopleAllowed} người)`);
-        return;
+        return false;
       }
     }
 
@@ -141,27 +152,27 @@ export function createPromotionActions({
       : 0;
     if (selectedAoDaiStock > 0 && Number(cAoDaiQuantity || 1) > selectedAoDaiStock) {
       toast.error(`Số lượng áo dài trong combo (${cAoDaiQuantity}) không được vượt quá số lượng tồn kho khả dụng (${selectedAoDaiStock})`);
-      return;
+      return false;
     }
     if (!cName.trim()) {
       toast.error('Vui lòng nhập tên combo');
-      return;
+      return false;
     }
     if (cDiscount === '' || cDiscount < 1 || cDiscount > 80) {
       toast.error('Phần trăm giảm giá phải nằm trong khoảng 1 - 80%');
-      return;
+      return false;
     }
     if (!cValidFrom || !cValidTo) {
       toast.error('Vui lòng chọn khoảng thời gian hiệu lực của combo');
-      return;
+      return false;
     }
     if (cValidFrom > cValidTo) {
       toast.error('Ngày bắt đầu không được lớn hơn ngày kết thúc');
-      return;
+      return false;
     }
     if (cMaxUsage === '' || Number(cMaxUsage) < 1) {
       toast.error('Số lượng giới hạn combo phải lớn hơn hoặc bằng 1');
-      return;
+      return false;
     }
 
     const payload: any = {
@@ -191,8 +202,10 @@ export function createPromotionActions({
       }
       clearComboForm();
       fetchProviderData();
+      return true;
     } catch (err: any) {
       toast.error(err.message || 'Thao tác combo thất bại');
+      return false;
     }
   };
 
@@ -217,7 +230,15 @@ export function createPromotionActions({
   };
 
   const handleDeleteCombo = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa combo khuyến mãi này?')) return;
+    const result = await ConfirmModal.delete(
+      'Xóa combo khuyến mãi?',
+      'Bạn có chắc chắn muốn xóa gói combo ưu đãi này khỏi danh sách khuyến mãi?',
+      {
+        confirmButtonText: 'Xóa combo',
+        cancelButtonText: 'Hủy',
+      }
+    );
+    if (!result.isConfirmed) return;
     try {
       await promotionsApi.deleteCombo(id);
       toast.success('Xóa combo thành công!');

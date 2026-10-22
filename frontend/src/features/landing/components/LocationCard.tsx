@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import type { PopularLocationItem } from '../data/popular-locations.fixture';
+import type { PopularLocationItem } from '../constants/landing.constants';
 
 export interface LocationCardProps {
   item: PopularLocationItem;

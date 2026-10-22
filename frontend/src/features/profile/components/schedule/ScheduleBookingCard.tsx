@@ -258,11 +258,11 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
         )}
 
         {/* 6. Review Service */}
-        {booking.status === 'COMPLETED' && (
+        {['COMPLETED', 'RETURNED'].includes(booking.status) && (
           <button
             type="button"
             className="lume-schedule-action-btn primary"
-            onClick={() => onOpenReview(item)}
+            onClick={() => onOpenReview({ ...item, bookingId: booking._id, booking })}
           >
             <Star size={14} />
             <span>Đánh giá dịch vụ</span>

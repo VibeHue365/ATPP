@@ -10,6 +10,10 @@ import type {
 } from '../components/PhotographyScheduleSelector';
 import type { PhotographerReview } from '../components/PhotographerReviews';
 import type { PhotographySessionDraft } from '../components/PhotographyMultiSessionEditor';
+import type {
+  ApplicableVoucherItem,
+  IneligibleVoucherItem,
+} from '../../../pages/cart/components/VoucherPickerModal';
 
 export interface PhotographerPackageDetailLayoutProps {
   photographer: PhotographerDetails;
@@ -72,4 +76,10 @@ export interface PhotographerPackageDetailLayoutProps {
   onGenerateRange: (from: string, to: string) => void;
   onUpdateSession: (clientId: string, patch: Partial<Omit<PhotographySessionDraft, 'clientId'>>) => void;
   onRemoveSession: (clientId: string) => void;
+  selectedVoucher?: ApplicableVoucherItem | null;
+  applicableVouchers?: ApplicableVoucherItem[];
+  ineligibleVouchers?: IneligibleVoucherItem[];
+  onOpenVoucherPicker?: () => void;
+  onRemoveVoucher?: () => void;
 }
+

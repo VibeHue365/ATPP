@@ -1,6 +1,6 @@
 import React from 'react';
-import Swal from 'sweetalert2';
 import type { useToast } from '../../../components/feedback/Toast';
+import { ConfirmModal } from '../../../utils/confirmModal';
 import { promotionsApi } from '../api/providerDashboardApi';
 import { toLocalDateKey } from '../shared/dateHelpers';
 import type { useProviderCampaignState } from './useProviderCampaignState';
@@ -83,16 +83,14 @@ export function createCampaignActions({
   };
 
   const handleDeactivateCampaign = async () => {
-    const result = await Swal.fire({
-      title: 'Tắt chương trình khuyến mãi?',
-      text: 'Tất cả sản phẩm sẽ quay về giá gốc ngay lập tức.',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Tắt khuyến mãi',
-      cancelButtonText: 'Giữ nguyên',
-      confirmButtonColor: '#DC2626',
-      cancelButtonColor: '#71717A',
-    });
+    const result = await ConfirmModal.pause(
+      'Tắt chương trình khuyến mãi?',
+      'Tất cả sản phẩm trong chương trình sẽ quay về giá gốc ngay lập tức. Bạn có muốn tiếp tục?',
+      {
+        confirmButtonText: 'Tắt khuyến mãi',
+        cancelButtonText: 'Giữ nguyên',
+      }
+    );
     if (!result.isConfirmed) return;
 
     setSubmittingCampaign(true);

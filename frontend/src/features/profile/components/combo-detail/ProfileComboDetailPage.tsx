@@ -219,7 +219,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
       await httpClient.post(`/bookings/${booking._id}/confirm-complete`, {});
       toast.success('Đã duyệt ảnh thành công! Cảm ơn bạn đã trải nghiệm dịch vụ.');
       if (onRefreshBooking) await onRefreshBooking();
-      if (onOpenReview) onOpenReview(photoItem);
+      if (onOpenReview) onOpenReview({ ...photoItem, bookingId: booking?._id, booking });
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi xác nhận.');
     } finally {
@@ -964,7 +964,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
           {rawStatus === 'COMPLETED' && onOpenReview && (
             <button
               type="button"
-              onClick={() => onOpenReview(photoItem)}
+              onClick={() => onOpenReview({ ...photoItem, bookingId: booking?._id, booking })}
               style={{
                 padding: '9px 18px',
                 borderRadius: '10px',

@@ -66,11 +66,17 @@ export const LoginForm: React.FC = () => {
         const fromState = (location.state as any)?.from;
         let destination: string = ROUTES.LANDING;
         if (typeof fromState === 'string' && fromState.trim()) {
-          destination = fromState;
+          destination = fromState.trim();
         } else if (fromState?.pathname) {
           destination = `${fromState.pathname}${fromState.search || ''}${fromState.hash || ''}`;
         }
-        if (destination.startsWith('/auth')) {
+        // Phòng chống Open Redirect: chỉ cho phép đường dẫn nội bộ hợp lệ
+        if (
+          !destination.startsWith('/') ||
+          destination.startsWith('//') ||
+          destination.includes('://') ||
+          destination.startsWith('/auth')
+        ) {
           destination = ROUTES.LANDING;
         }
         navigate(destination as any, { replace: true });

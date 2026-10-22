@@ -195,7 +195,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
       await httpClient.post(`/bookings/${booking._id}/confirm-complete`, {});
       toast.success('Cảm ơn bạn đã nghiệm thu! Đơn chụp ảnh đã hoàn thành.');
       if (onRefreshBooking) await onRefreshBooking();
-      if (onOpenReview) onOpenReview(item);
+      if (onOpenReview) onOpenReview({ ...item, bookingId: booking._id, booking });
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi xác nhận.');
     } finally {
@@ -300,7 +300,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
         onCancel={() => onOpenCancel?.(booking)}
         onReschedule={() => onOpenReschedule?.(item)}
         onLocationChange={() => onOpenLocationChange?.(scheduleItem)}
-        onReview={() => onOpenReview?.(item)}
+        onReview={() => onOpenReview?.({ ...item, bookingId: booking._id, booking })}
         onSupport={handleSupport}
       />
     </div>

@@ -5,10 +5,12 @@ import {
   forwardRef,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import {
   Payment,
   PaymentDocument,
@@ -21,12 +23,16 @@ import {
   BookingType,
   PaymentStatus as BookingPaymentStatus,
 } from '../../bookings/schemas/booking.schema';
+import { BookingItemType } from '../../bookings/schemas/booking-item.schema';
 import { BookingEscrow, EscrowStatus } from '../schemas/booking-escrow.schema';
 import {
   SettlementTransfer,
   SettlementTransferStatus,
 } from '../schemas/settlement-transfer.schema';
-import { PayOSRefundService } from './payos-refund.service';
+import {
+  PayOSRefundService,
+  PayOSRefundRejectedError,
+} from './payos-refund.service';
 import { MockBankingService } from './mock-banking.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { RentalDepositRefundCoordinatorService } from '../../bookings/services/rental-deposit-refund-coordinator.service';
@@ -37,7 +43,10 @@ import { SettlementRepository } from '../repositories/settlement.repository';
 import { TransferRepository } from '../repositories/transfer.repository';
 import { SettlementTransferMapper } from '../mappers/settlement-transfer.mapper';
 import { SettlementsService } from '../../settlements/services/settlements.service';
+import { SettlementStatus } from '../../settlements/constants/settlement-status.enum';
 import { PhotographyHoldService } from '../../bookings/services/photography-hold.service';
+import { PromotionsService } from '../../products/services/promotions.service';
+import { getPrimaryFrontendUrl } from '../../../common/config/frontend-url.util';
 
 interface PaymentAccountDoc {
   bankName?: string;
@@ -87,6 +96,7 @@ export class PaymentsService {
     private readonly photographyHoldService: PhotographyHoldService,
     @Inject(forwardRef(() => RentalDepositRefundCoordinatorService))
     private readonly depositCoordinator: RentalDepositRefundCoordinatorService,
+    private readonly promotionsService: PromotionsService,
   ) {}
 
   async createPaymentLink(
@@ -119,9 +129,15 @@ export class PaymentsService {
     }
 
     let amount = 0;
-    if (purpose === PaymentPurpose.DepositPayment) {
+    if (
+      purpose === PaymentPurpose.DepositPayment &&
+      booking.pricingSummary?.amountDueNow !== undefined &&
+      booking.pricingSummary?.amountDueNow !== null
+    ) {
+      amount = booking.pricingSummary.amountDueNow;
+    } else if (purpose === PaymentPurpose.DepositPayment) {
       if (booking.bookingType === BookingType.Combo) {
-        // Combo deposit = 100% Product rental + 100% Product deposit + 100% Photographer fee + serviceFee - comboDiscount
+        // Combo deposit = 100% Product rental + 100% Product deposit + 100% Photographer fee + serviceFee - comboDiscount - voucherDiscount
         const items = await this.bookingModel.db
           .model('BookingItem')
           .find({ bookingId: booking._id });
@@ -147,7 +163,8 @@ export class PaymentsService {
           prodRentalTotal +
           prodDepositTotal +
           photoDepositTotal -
-          (booking.pricingSummary.comboDiscountTotal || 0);
+          (booking.pricingSummary.comboDiscountTotal || 0) -
+          (booking.pricingSummary.voucherDiscountTotal || 0);
       } else if (booking.bookingType === BookingType.Photography) {
         amount =
           booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
@@ -167,13 +184,36 @@ export class PaymentsService {
         booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
     }
 
+    const frontendBase = getPrimaryFrontendUrl(process.env.FRONTEND_URL);
+
+    // Đơn 0 đồng (sau khi áp voucher 100% hoặc được sàn bù phần lẻ)
     if (amount <= 0) {
-      throw new BadRequestException('Payment amount must be greater than 0');
+      const paymentCode = `PAY0D_${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
+      const orderCode = Math.floor(100000 + Math.random() * 900000);
+      const checkoutUrl = `${frontendBase}/checkout/result?paymentCode=${paymentCode}`;
+
+      const zeroPayment = await this.paymentsRepository.createPayment({
+        bookingId,
+        paymentCode,
+        amount: 0,
+        purpose,
+        paymentMethod: 'PAYOS_SIMULATOR',
+        status: PaymentStatus.Success,
+        payos: {
+          orderCode,
+          paymentLinkId: `zero_${paymentCode}`,
+          checkoutUrl,
+          qrCode: `zero_${paymentCode}`,
+          description: `Don hang 0 dong ${booking.bookingCode}`,
+        },
+      });
+
+      await this.finalizeAfterPayment(zeroPayment);
+      return zeroPayment;
     }
 
     const paymentCode = `PAY${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
     const orderCode = Math.floor(100000 + Math.random() * 900000);
-    const frontendBase = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
     const checkoutUrl = `${frontendBase}/checkout/result?paymentCode=${paymentCode}`;
 
     const payment = await this.paymentsRepository.createPayment({
@@ -356,6 +396,258 @@ export class PaymentsService {
     return this.transferMapper.toProviderResponseList(transfers);
   }
 
+  async getRefundableAmount(
+    bookingId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<number> {
+    return this.paymentsRepository.getRefundableAmount(bookingId, session);
+  }
+
+  async cancelPendingPaymentsForBooking(
+    bookingId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<void> {
+    await this.paymentsRepository.cancelPendingPaymentsForBooking(
+      bookingId,
+      session,
+    );
+  }
+
+  async createRefundIntents(
+    bookingId: Types.ObjectId,
+    amountToRefund: number,
+    reason: string,
+    session?: ClientSession,
+  ): Promise<PaymentDocument[]> {
+    if (amountToRefund <= 0) return [];
+
+    const refundable = await this.getRefundableAmount(bookingId, session);
+    const targetRefund = Math.min(amountToRefund, refundable);
+    if (targetRefund <= 0) {
+      this.logger.warn(
+        `Không thể tạo refund intent cho booking ${bookingId}: số tiền yêu cầu ${amountToRefund}, nhưng số tiền có thể hoàn là ${refundable}`,
+      );
+      return [];
+    }
+
+    const paidPayments = await this.paymentsRepository.model
+      .find({
+        bookingId,
+        status: PaymentStatus.Success,
+        purpose: { $ne: PaymentPurpose.DepositRefund },
+      })
+      .sort({ paidAt: -1, createdAt: -1 })
+      .session(session || null)
+      .exec();
+
+    if (paidPayments.length === 0) {
+      this.logger.warn(
+        `Không tìm thấy giao dịch thanh toán thành công nào cho booking ${bookingId} để hoàn tiền.`,
+      );
+      return [];
+    }
+
+    const intents: PaymentDocument[] = [];
+    let remainingToRefund = targetRefund;
+
+    for (const p of paidPayments) {
+      const existingRefunds = await this.paymentsRepository.model
+        .find({
+          originalPaymentId: p._id,
+          purpose: PaymentPurpose.DepositRefund,
+          status: {
+            $in: [
+              PaymentStatus.Pending,
+              PaymentStatus.Processing,
+              PaymentStatus.Success,
+            ],
+          },
+        })
+        .session(session || null)
+        .exec();
+
+      const alreadyRefunded = existingRefunds.reduce(
+        (sum, r) => sum + (r.amount || 0),
+        0,
+      );
+      const availableFromThisPayment = Math.max(0, p.amount - alreadyRefunded);
+      if (availableFromThisPayment <= 0) continue;
+
+      const chunk = Math.min(availableFromThisPayment, remainingToRefund);
+      if (chunk <= 0) break;
+
+      const refundPaymentCode = `REF-${new Types.ObjectId().toString()}`;
+      try {
+        const [created] = await this.paymentsRepository.model.create(
+          [
+            {
+              bookingId,
+              paymentCode: refundPaymentCode,
+              amount: chunk,
+              purpose: PaymentPurpose.DepositRefund,
+              paymentMethod: 'PAYOS_REFUND',
+              status: PaymentStatus.Pending,
+              originalPaymentId: p._id,
+              refundReason: reason,
+              retryCount: 0,
+              needsManualReview: false,
+            },
+          ],
+          { session },
+        );
+
+        intents.push(created);
+        remainingToRefund -= chunk;
+      } catch (err: any) {
+        if (err.code === 11000) {
+          this.logger.warn(
+            `Refund intent cho originalPaymentId ${p._id} với lý do ${reason} đã tồn tại. Bỏ qua duplicate.`,
+          );
+        } else {
+          throw err;
+        }
+      }
+
+      if (remainingToRefund <= 0) break;
+    }
+
+    return intents;
+  }
+
+  async executeRefundIntent(
+    paymentCode: string,
+  ): Promise<PaymentDocument | null> {
+    const intent = await this.paymentsRepository.model.findOneAndUpdate(
+      {
+        paymentCode,
+        status: PaymentStatus.Pending,
+        needsManualReview: { $ne: true },
+      },
+      {
+        $set: { status: PaymentStatus.Processing },
+      },
+      { new: true },
+    );
+
+    if (!intent) {
+      return this.paymentsRepository.findPaymentByCode(paymentCode);
+    }
+
+    const originalPayment = intent.originalPaymentId
+      ? await this.paymentsRepository.model.findById(intent.originalPaymentId)
+      : null;
+
+    const orderCode = originalPayment?.payos?.orderCode;
+    if (!orderCode) {
+      this.logger.error(
+        `Refund intent ${paymentCode} không có orderCode hợp lệ từ payment gốc. Yêu cầu Admin can thiệp.`,
+      );
+      return this.paymentsRepository.model.findOneAndUpdate(
+        { paymentCode },
+        {
+          $set: {
+            status: PaymentStatus.Pending,
+            needsManualReview: true,
+            lastError: 'Không tìm thấy payOS orderCode từ giao dịch gốc.',
+          },
+        },
+        { new: true },
+      );
+    }
+
+    try {
+      this.logger.log(
+        `Thực thi hoàn tiền PayOS cho ${paymentCode}: orderCode=${orderCode}, amount=${intent.amount}`,
+      );
+      await this.refundService.refundPayment(orderCode, intent.amount);
+
+      const updated = await this.paymentsRepository.model.findOneAndUpdate(
+        { paymentCode },
+        {
+          $set: {
+            status: PaymentStatus.Success,
+            paidAt: new Date(),
+            lastError: null,
+          },
+        },
+        { new: true },
+      );
+
+      if (updated?.bookingId) {
+        const remainingRefundable = await this.getRefundableAmount(
+          updated.bookingId,
+        );
+        if (remainingRefundable <= 0) {
+          const escrow = await this.escrowRepository.findByBookingId(
+            updated.bookingId,
+          );
+          if (escrow && escrow.status === EscrowStatus.Held) {
+            escrow.status = EscrowStatus.Refunded;
+            await escrow.save();
+          }
+        }
+      }
+
+      return updated;
+    } catch (err: any) {
+      if (err instanceof PayOSRefundRejectedError) {
+        const nextRetryCount = (intent.retryCount || 0) + 1;
+        const needsReview = nextRetryCount >= 5;
+        this.logger.warn(
+          `PayOS từ chối hoàn tiền cho ${paymentCode} (lần ${nextRetryCount}): ${err.message}`,
+        );
+        return this.paymentsRepository.model.findOneAndUpdate(
+          { paymentCode },
+          {
+            $set: {
+              status: PaymentStatus.Pending,
+              lastError: err.message,
+              retryCount: nextRetryCount,
+              needsManualReview: needsReview,
+            },
+          },
+          { new: true },
+        );
+      }
+
+      this.logger.error(
+        `Lỗi mạng/timeout khi gọi hoàn tiền PayOS cho ${paymentCode}: ${err.message}`,
+        err.stack,
+      );
+      return this.paymentsRepository.model.findOneAndUpdate(
+        { paymentCode },
+        {
+          $set: {
+            status: PaymentStatus.Processing,
+            lastError: `Lỗi kết nối / timeout: ${err.message}`,
+            needsManualReview: true,
+          },
+        },
+        { new: true },
+      );
+    }
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async retryRefunds(): Promise<void> {
+    const pendingRefunds = await this.paymentsRepository.model
+      .find({
+        purpose: PaymentPurpose.DepositRefund,
+        status: PaymentStatus.Pending,
+        needsManualReview: { $ne: true },
+      })
+      .limit(20)
+      .exec();
+
+    for (const p of pendingRefunds) {
+      try {
+        await this.executeRefundIntent(p.paymentCode);
+      } catch (err) {
+        this.logger.warn(`Cron retry refund ${p.paymentCode} thất bại: ${err}`);
+      }
+    }
+  }
+
   async confirmPayment(paymentCode: string): Promise<PaymentDocument> {
     const candidate =
       await this.paymentsRepository.findPaymentByCode(paymentCode);
@@ -375,9 +667,37 @@ export class PaymentsService {
       );
     }
     if (booking.status === BookingStatus.Cancelled) {
-      throw new BadRequestException(
-        'Đơn đặt lịch đã bị hủy, không thể tiếp tục xác nhận thanh toán.',
+      const payment = await this.paymentsRepository.confirmPayment(paymentCode);
+      await this.bookingModel.updateOne(
+        { _id: candidate.bookingId },
+        {
+          $set: {
+            paymentReviewRequired: true,
+            paymentReviewReason:
+              'Thanh toán ghi nhận sau khi đơn đã hủy. Hệ thống tự động xếp hàng hoàn tiền.',
+          },
+        },
       );
+      try {
+        const intents = await this.createRefundIntents(
+          candidate.bookingId,
+          candidate.amount,
+          'LATE_PAYMENT_CLOSED_BOOKING',
+        );
+        for (const intent of intents) {
+          this.executeRefundIntent(intent.paymentCode).catch((err) =>
+            this.logger.warn(
+              `Thực thi hoàn tiền trễ ${intent.paymentCode} lỗi: ${err}`,
+            ),
+          );
+        }
+      } catch (err) {
+        this.logger.error(
+          `Lỗi khi tạo refund intent cho late payment ${paymentCode}:`,
+          err,
+        );
+      }
+      return payment || candidate;
     }
     const payment =
       candidate.status === PaymentStatus.Success
@@ -394,6 +714,11 @@ export class PaymentsService {
       );
     }
 
+    await this.finalizeAfterPayment(payment);
+    return payment;
+  }
+
+  async finalizeAfterPayment(payment: PaymentDocument): Promise<void> {
     const successfulPayments = (await this.bookingModel.db
       .model('Payment')
       .find({ bookingId: payment.bookingId, status: PaymentStatus.Success })
@@ -410,177 +735,204 @@ export class PaymentsService {
       { new: true },
     );
 
-    if (updatedBooking) {
-      const holdConfirmation =
-        await this.photographyHoldService.confirmForBooking(payment.bookingId);
-      const isPaid =
-        updatedBooking.paymentSummary.totalPaid >=
-        updatedBooking.pricingSummary.grandTotal;
+    if (!updatedBooking) return;
 
-      let isConfirmedEligible = false;
+    const holdConfirmation =
+      await this.photographyHoldService.confirmForBooking(payment.bookingId);
+
+    const subsidy = updatedBooking.pricingSummary?.platformSubsidyAmount || 0;
+    const isPaid =
+      totalPaid + subsidy >= updatedBooking.pricingSummary.grandTotal;
+
+    let isConfirmedEligible = false;
+    if (updatedBooking.bookingType === BookingType.Photography) {
+      isConfirmedEligible =
+        totalPaid >=
+        (updatedBooking.pricingSummary.amountDueNow ??
+          updatedBooking.pricingSummary.depositTotal);
+    } else if (updatedBooking.bookingType === BookingType.Combo) {
+      const items = await this.bookingModel.db
+        .model('BookingItem')
+        .find({ bookingId: updatedBooking._id });
+      const photoItems = items.filter(
+        (i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE',
+      );
+      const photoRemainingTotal = photoItems.reduce(
+        (sum: number, i: any) =>
+          sum + Math.round(i.unitPrice * 0.7) * i.quantity,
+        0,
+      );
+
+      isConfirmedEligible =
+        totalPaid + subsidy >=
+        updatedBooking.pricingSummary.grandTotal - photoRemainingTotal;
+    } else {
+      isConfirmedEligible = isPaid;
+    }
+
+    let newStatus = updatedBooking.status;
+    if (isConfirmedEligible && holdConfirmation.confirmed) {
       if (updatedBooking.bookingType === BookingType.Photography) {
-        isConfirmedEligible =
-          updatedBooking.paymentSummary.totalPaid >=
-          updatedBooking.pricingSummary.depositTotal;
-      } else if (updatedBooking.bookingType === BookingType.Combo) {
-        const items = await this.bookingModel.db
-          .model('BookingItem')
-          .find({ bookingId: updatedBooking._id });
-        const photoItems = items.filter(
-          (i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE',
-        );
-        const photoRemainingTotal = photoItems.reduce(
-          (sum: number, i: any) =>
-            sum + Math.round(i.unitPrice * 0.7) * i.quantity,
-          0,
-        );
-
-        isConfirmedEligible =
-          updatedBooking.paymentSummary.totalPaid >=
-          updatedBooking.pricingSummary.grandTotal - photoRemainingTotal;
+        newStatus = BookingStatus.DepositPaid;
       } else {
-        isConfirmedEligible = isPaid;
+        newStatus = BookingStatus.Confirmed;
       }
+    }
 
-      let newStatus = updatedBooking.status;
-      if (isConfirmedEligible && holdConfirmation.confirmed) {
-        // Photography bookings stay at DEPOSIT_PAID after deposit payment
-        // so the photographer can review and accept/reject the booking
-        if (updatedBooking.bookingType === BookingType.Photography) {
-          newStatus = BookingStatus.DepositPaid;
-        } else {
-          newStatus = BookingStatus.Confirmed;
+    const newPaymentStatus = isPaid
+      ? BookingPaymentStatus.Paid
+      : totalPaid > 0
+        ? BookingPaymentStatus.PartiallyPaid
+        : BookingPaymentStatus.Unpaid;
+
+    // Trọng tài trạng thái cấp booking: Chỉ bên nào thấy đúng trạng thái cũ mới được cập nhật
+    const moved = await this.bookingModel.findOneAndUpdate(
+      { _id: payment.bookingId, status: updatedBooking.status },
+      {
+        $set: {
+          status: newStatus,
+          'paymentSummary.paymentStatus': newPaymentStatus,
+        },
+        $push: {
+          statusTimeline: {
+            status: newStatus,
+            changedAt: new Date(),
+            note: 'Thanh toán thành công đơn hàng',
+          },
+        },
+      },
+      { new: true },
+    );
+
+    if (!moved) {
+      await this.handlePaymentOnClosedBooking(payment.bookingId);
+      return;
+    }
+
+    if (
+      newStatus === BookingStatus.Confirmed ||
+      newStatus === BookingStatus.DepositPaid
+    ) {
+      // 1. Chuyển voucher RESERVED -> REDEEMED
+      const r = await this.promotionsService.redeemVoucher(payment.bookingId);
+      if (!r) {
+        const redemption =
+          await this.promotionsService.findRedemptionByBooking(
+            payment.bookingId,
+          );
+        if (redemption?.status === 'RELEASED') {
+          await this.bookingModel.updateOne(
+            { _id: payment.bookingId },
+            {
+              $set: {
+                paymentReviewRequired: true,
+                paymentReviewReason:
+                  'Tiền về sau khi lượt voucher đã bị hệ thống nhả tự động.',
+              },
+            },
+          );
         }
       }
 
-      const newPaymentStatus = isPaid
-        ? BookingPaymentStatus.Paid
-        : updatedBooking.paymentSummary.totalPaid > 0
-          ? BookingPaymentStatus.PartiallyPaid
-          : BookingPaymentStatus.Unpaid;
+      // 2. Khóa giữ tồn kho
+      const reservationModel = this.bookingModel.db.model(
+        'InventoryReservation',
+      );
+      await reservationModel.updateMany(
+        { bookingId: payment.bookingId },
+        {
+          $set: { status: 'CONFIRMED' },
+          $unset: { expiresAt: 1 },
+        },
+      );
 
+    }
+
+    if (!holdConfirmation.confirmed) {
       await this.bookingModel.updateOne(
         { _id: payment.bookingId },
         {
           $set: {
-            status: newStatus,
-            'paymentSummary.paymentStatus': newPaymentStatus,
-          },
-          $push: {
-            statusTimeline: {
-              status: newStatus,
-              changedAt: new Date(),
-              note: 'Thanh toán thành công đơn hàng',
-            },
+            paymentReviewRequired: true,
+            paymentReviewReason:
+              'Lịch giữ chỗ hoặc trang phục đã hết hạn trước khi thanh toán hoàn tất.',
           },
         },
       );
+    }
 
-      if (
-        newStatus === BookingStatus.Confirmed ||
-        newStatus === BookingStatus.DepositPaid
-      ) {
-        const reservationModel = this.bookingModel.db.model(
-          'InventoryReservation',
+    try {
+      if (holdConfirmation.paymentReviewRequired) {
+        await this.notificationsService.createNotification(
+          updatedBooking.customerId.toString(),
+          'Thanh toán đang chờ kiểm tra',
+          'Hệ thống đã ghi nhận ' +
+            payment.amount.toLocaleString('vi-VN') +
+            'đ cho đơn ' +
+            updatedBooking.bookingCode +
+            ', nhưng lịch chụp giữ chỗ đã hết hạn. Chúng tôi sẽ liên hệ để xác nhận lại lịch hoặc hỗ trợ hoàn tiền.',
+          NotificationType.Payment,
+          { bookingId: updatedBooking._id, paymentReviewRequired: true },
         );
-        await reservationModel.updateMany(
-          { bookingId: payment.bookingId },
-          {
-            $set: { status: 'CONFIRMED' },
-            $unset: { expiresAt: 1 },
-          },
+      } else {
+        await this.notificationsService.createNotification(
+          updatedBooking.customerId.toString(),
+          'Thanh toán thành công',
+          'Bạn đã thanh toán thành công số tiền ' +
+            payment.amount.toLocaleString('vi-VN') +
+            'đ cho đơn hàng ' +
+            updatedBooking.bookingCode +
+            '.',
+          NotificationType.Payment,
+          { bookingId: updatedBooking._id },
         );
 
-        // Photography only: credit provider pendingBalance with estimated net amount.
-        // estimatedNetAmount = 80% of grandTotal (assuming ~20% platform commission).
-        // Stored on booking so settleBooking can deduct the exact same figure later.
-        if (
-          newStatus === BookingStatus.Confirmed &&
-          updatedBooking.bookingType === BookingType.Photography
-        ) {
-          const ESTIMATED_COMMISSION_RATE = 0.2;
-          const estimatedNetAmt = Math.round(
-            updatedBooking.pricingSummary.grandTotal *
-              (1 - ESTIMATED_COMMISSION_RATE),
-          );
-          // Persist on booking for ghost-balance prevention
-          await this.bookingModel.updateOne(
-            { _id: updatedBooking._id },
-            { $set: { estimatedNetAmount: estimatedNetAmt } },
-          );
-          // Credit pending wallet using atomic $inc
-          if (updatedBooking.providerIds.length > 0) {
-            const providerModel = this.bookingModel.db.model('Provider');
-            await providerModel.updateMany(
-              { _id: { $in: updatedBooking.providerIds } },
-              {
-                $inc: { 'wallet.pendingBalance': estimatedNetAmt },
-                $set: { 'wallet.lastUpdatedAt': new Date() },
-              },
+        if (updatedBooking.providerIds?.length) {
+          const providers = await this.bookingModel.db
+            .model('Provider')
+            .find({ _id: { $in: updatedBooking.providerIds } })
+            .select('userId')
+            .lean();
+
+          for (const provider of providers as Array<{ userId?: Types.ObjectId }>) {
+            if (!provider.userId) continue;
+            await this.notificationsService.createNotification(
+              provider.userId.toString(),
+              'Lịch đặt mới được thanh toán',
+              `Đơn đặt lịch ${updatedBooking.bookingCode} đã được khách hàng thanh toán cọc thành công.`,
+              NotificationType.Booking,
+              { bookingId: updatedBooking._id },
             );
           }
         }
       }
-
-      try {
-        if (holdConfirmation.paymentReviewRequired) {
-          await this.notificationsService.createNotification(
-            updatedBooking.customerId.toString(),
-            'Thanh toán đang chờ kiểm tra',
-            'Hệ thống đã ghi nhận ' +
-              payment.amount.toLocaleString('vi-VN') +
-              'đ cho đơn ' +
-              updatedBooking.bookingCode +
-              ', nhưng lịch chụp giữ chỗ đã hết hạn. Chúng tôi sẽ liên hệ để xác nhận lại lịch hoặc hỗ trợ hoàn tiền.',
-            NotificationType.Payment,
-            { bookingId: updatedBooking._id, paymentReviewRequired: true },
-          );
-        } else {
-          await this.notificationsService.createNotification(
-            updatedBooking.customerId.toString(),
-            'Thanh toán thành công',
-            'Bạn đã thanh toán thành công số tiền ' +
-              payment.amount.toLocaleString('vi-VN') +
-              'đ cho đơn hàng ' +
-              updatedBooking.bookingCode +
-              '.',
-            NotificationType.Payment,
-            { bookingId: updatedBooking._id },
-          );
-
-          if (updatedBooking.providerIds && updatedBooking.providerIds.length > 0) {
-            const providers = await this.bookingModel.db
-              .model('Provider')
-              .find({ _id: { $in: updatedBooking.providerIds } })
-              .select('userId')
-              .lean();
-
-            for (const prov of providers as any[]) {
-              if (prov.userId) {
-                await this.notificationsService.createNotification(
-                  prov.userId.toString(),
-                  'Lịch đặt mới được thanh toán',
-                  `Đơn đặt lịch ${updatedBooking.bookingCode} đã được khách hàng thanh toán cọc thành công.`,
-                  NotificationType.Booking,
-                  { bookingId: updatedBooking._id },
-                );
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.error('Failed to create payment/booking notifications:', e);
-      }
-
-      // Tạo Escrow Entry ghi nhận tiền ký quỹ
-      await this.createEscrowEntry(
-        updatedBooking._id,
-        updatedBooking.pricingSummary.grandTotal,
-        updatedBooking.pricingSummary.depositTotal,
-      );
+    } catch (e) {
+      console.error('Failed to create payment/booking notifications:', e);
     }
 
-    return payment;
+    // Tạo Escrow Entry ghi nhận tiền ký quỹ
+    await this.createEscrowEntry(
+      updatedBooking._id,
+      updatedBooking.pricingSummary.grandTotal,
+      updatedBooking.pricingSummary.depositTotal,
+    );
+  }
+
+  async handlePaymentOnClosedBooking(bookingId: Types.ObjectId): Promise<void> {
+    const current = await this.bookingModel.findById(bookingId);
+    if (current?.paymentSummary?.paymentStatus === BookingPaymentStatus.Paid) {
+      return;
+    }
+    await this.bookingModel.updateOne(
+      { _id: bookingId },
+      {
+        $set: {
+          paymentReviewRequired: true,
+          paymentReviewReason:
+            'Thanh toán ghi nhận trên đơn đã đóng hoặc hết hạn. Chờ đối soát hoàn tiền.',
+        },
+      },
+    );
   }
 
   async cancelPayment(paymentCode: string): Promise<PaymentDocument> {
@@ -651,6 +1003,7 @@ export class PaymentsService {
             { $set: { status: releasedStatus }, $unset: { expiresAt: 1 } },
             { session },
           );
+        await this.promotionsService.releaseVoucher(bookingId, session);
       });
       const finalPayment: PaymentDocument | null = result;
       if (!finalPayment) throw new NotFoundException('Payment not found');
@@ -719,6 +1072,64 @@ export class PaymentsService {
     );
   }
 
+  async creditWalletsForBooking(bookingId: Types.ObjectId): Promise<void> {
+    const settlementModel = this.bookingModel.db.model('Settlement');
+    const settlements = (await settlementModel
+      .find({
+        bookingId,
+        status: {
+          $in: [SettlementStatus.ReadyToSettle, SettlementStatus.OnHold],
+        },
+        walletCreditedAt: null,
+      })
+      .exec()) as Array<{
+      _id: Types.ObjectId;
+      providerId: Types.ObjectId;
+      payableAmount?: number;
+      netAmount?: number;
+      settlementCode?: string;
+    }>;
+
+    if (!settlements || settlements.length === 0) {
+      return;
+    }
+
+    const providerModel = this.bookingModel.db.model('Provider');
+    const now = new Date();
+
+    for (const s of settlements) {
+      const payableAmt = s.payableAmount || 0;
+      const netAmt = s.netAmount || 0;
+
+      const updated = await settlementModel.findOneAndUpdate(
+        { _id: s._id, walletCreditedAt: null },
+        {
+          $set: {
+            walletCreditedAt: now,
+            walletCreditedAmount: payableAmt,
+          },
+        },
+        { new: true },
+      );
+
+      if (updated) {
+        await providerModel.updateOne(
+          { _id: s.providerId },
+          {
+            $inc: {
+              'wallet.availableBalance': payableAmt,
+              'wallet.totalEarned': netAmt,
+            },
+            $set: { 'wallet.lastUpdatedAt': now },
+          },
+        );
+        this.logger.log(
+          `Cộng ví Provider ${s.providerId}: +${payableAmt} availableBalance, +${netAmt} totalEarned từ Settlement ${s.settlementCode || s._id}`,
+        );
+      }
+    }
+  }
+
   async settleBooking(bookingIdStr: string): Promise<any> {
     const bookingId = new Types.ObjectId(bookingIdStr);
     const booking = await this.bookingModel.findById(bookingId);
@@ -726,7 +1137,7 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     }
 
-    // Cập nhật trạng thái Escrow sang Settled một cách atomic để chặn các request song song (nếu có)
+    // 1. Chặn đứng đơn đã hủy hoặc escrow không ở trạng thái Held
     const escrow = await this.escrowRepository.trySettleEscrow(bookingId);
     if (!escrow) {
       const currentEscrow =
@@ -734,67 +1145,58 @@ export class PaymentsService {
       if (currentEscrow && currentEscrow.status === EscrowStatus.Settled) {
         return { message: 'Booking already settled' };
       }
-      this.logger.warn(
-        `Escrow record not found or not in Held status for booking ${bookingIdStr}, proceeding with settlement.`,
+      throw new ConflictException(
+        `Escrow của đơn đặt lịch không ở trạng thái Held (hiện tại: ${currentEscrow?.status || 'NOT_FOUND'}), không thể chia tiền.`,
       );
     }
 
     try {
-      // 1. Chuyển khoản trực tiếp chia tiền dịch vụ cho các Provider
+      // 2. Tạo Settlement cho các Provider (nếu chưa có)
       await this.executeProfitSplit(booking);
 
-      // 2. Tự động hoàn cọc giữ đồ (depositTotal) cho khách hàng (chỉ dành cho thuê áo dài / combo, không hoàn tiền cọc giữ chỗ chụp ảnh)
-      if (
-        booking.bookingType !== BookingType.Photography &&
-        booking.pricingSummary.depositTotal > 0
-      ) {
+      // 3. Tự động hoàn cọc giữ đồ áo dài (chỉ tính cọc áo dài, không lấy depositTotal của chụp ảnh)
+      if (booking.bookingType !== BookingType.Photography) {
         try {
-          const depositAmt = (booking as any).rentalDepositRefund?.amount || booking.pricingSummary.depositTotal || 0;
-          if (depositAmt > 0 && (booking as any).rentalDepositRefund?.status !== 'NO_REFUND') {
-            await this.refundDeposit(bookingIdStr, depositAmt);
+          const items = await this.bookingModel.db
+            .model('BookingItem')
+            .find({ bookingId: booking._id })
+            .lean()
+            .exec();
+          const rentalItems = items.filter(
+            (i: any) =>
+              i.itemType === 'PRODUCT' || i.itemType === BookingItemType.Product,
+          );
+          const rentalDepositTotal = rentalItems.reduce(
+            (sum: number, i: any) => sum + (i.depositAmount || 0),
+            0,
+          );
+          const depositAmt =
+            (booking as any).rentalDepositRefund?.amount ?? rentalDepositTotal;
+
+          if (
+            depositAmt > 0 &&
+            (booking as any).rentalDepositRefund?.status !== 'NO_REFUND'
+          ) {
+            const intents = await this.createRefundIntents(
+              booking._id,
+              depositAmt,
+              'RENTAL_DEPOSIT_RETURN',
+            );
+            for (const intent of intents) {
+              await this.executeRefundIntent(intent.paymentCode);
+            }
           }
         } catch (coordErr) {
           this.logger.error(
-            `Error coordinating deposit refund during settleBooking for ${bookingIdStr}:`,
+            `Lỗi khi hoàn cọc giữ đồ trong settleBooking cho ${bookingIdStr}:`,
             coordErr,
           );
         }
       }
 
-      // 3. Update provider wallet: move pending → available.
-      //    deduct by estimatedNetAmount (stored at CONFIRMED time) to prevent ghost-balance,
-      //    credit available by actual netAmount (grandTotal - commission).
-      //    For photography bookings only (ao dai uses a different escrow flow).
-      if (booking.providerIds && booking.providerIds.length > 0) {
-        const COMMISSION_RATE = 0.2;
-        const actualNetAmount = Math.round(
-          booking.pricingSummary.grandTotal * (1 - COMMISSION_RATE),
-        );
-        // Use the stored estimate to deduct (prevents ghost-balance drift).
-        // Only deduct if an estimate was actually credited (e.g. Photography bookings).
-        const hasEstimatedCredit =
-          (booking as any).estimatedNetAmount !== undefined
-            ? (booking as any).estimatedNetAmount > 0
-            : booking.bookingType === BookingType.Photography;
-        const estimatedDeduction = hasEstimatedCredit
-          ? ((booking as any).estimatedNetAmount ?? actualNetAmount)
-          : 0;
-        const providerModel = this.bookingModel.db.model('Provider');
-        const incFields: Record<string, number> = {
-          'wallet.availableBalance': +actualNetAmount, // credit actual
-          'wallet.totalEarned': +actualNetAmount, // cumulative (only grows)
-        };
-        if (estimatedDeduction > 0) {
-          incFields['wallet.pendingBalance'] = -estimatedDeduction;
-        }
-        await providerModel.updateMany(
-          { _id: { $in: booking.providerIds } },
-          {
-            $inc: incFields,
-            $set: { 'wallet.lastUpdatedAt': new Date() },
-          },
-        );
-      }
+      // 4. Cộng ví chuẩn xác cho từng Provider theo từng Settlement (thay thế khối cũ L836)
+      await this.creditWalletsForBooking(bookingId);
+
     } catch (err) {
       // Revert lại trạng thái Held nếu gặp lỗi để có thể retry
       await this.escrowRepository.updateEscrowStatus(
@@ -805,7 +1207,7 @@ export class PaymentsService {
     }
 
     return {
-      message: 'Settlement completed and deposit refunded successfully',
+      message: 'Settlement completed and wallets credited successfully',
     };
   }
 
@@ -819,79 +1221,77 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     }
 
+    const refundable = await this.getRefundableAmount(bookingId);
     const amountToRefund =
       refundAmount !== undefined
         ? refundAmount
-        : booking.pricingSummary.depositTotal;
+        : Math.min(booking.pricingSummary?.depositTotal || 0, refundable);
+
     if (amountToRefund <= 0) {
       return { message: 'No deposit to refund' };
     }
 
-    const payment =
-      (await this.paymentsRepository.findDepositPaymentByBooking(bookingId)) ||
-      (await this.paymentsRepository.findPendingPaymentByBooking(bookingId)) ||
-      (await this.paymentsRepository.findByBookingIds([bookingId]))[0];
+    const intents = await this.createRefundIntents(
+      bookingId,
+      amountToRefund,
+      'DEPOSIT_REFUND',
+    );
 
-    const orderCode =
-      payment?.payos?.orderCode || Math.floor(100000 + Math.random() * 900000);
+    let lastResult: any = {
+      status: 'PENDING',
+      amount: amountToRefund,
+      orderCode: 0,
+    };
 
-    let refundResult: any = { status: 'COMPLETED', amount: amountToRefund, orderCode };
-    try {
-      refundResult = await this.refundService.refundPayment(
-        orderCode,
-        amountToRefund,
-      );
-    } catch (refundErr) {
-      this.logger.warn(
-        `PayOS gateway refund call warning for booking ${bookingIdStr}: ${refundErr}`,
-      );
-    }
-
-    // Create a Payment record representing the deposit refund for transaction history
-    try {
-      const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
-      await this.paymentsRepository.createPayment({
-        bookingId,
-        paymentCode: refundPaymentCode,
-        amount: amountToRefund,
-        purpose: PaymentPurpose.DepositRefund,
-        paymentMethod: 'PAYOS_REFUND',
-        status: PaymentStatus.Success,
-        paidAt: new Date(),
-      });
-    } catch (createRefundErr) {
-      this.logger.error(
-        `Failed to create refund payment record for booking ${bookingIdStr}:`,
-        createRefundErr,
-      );
+    for (const intent of intents) {
+      const res = await this.executeRefundIntent(intent.paymentCode);
+      if (res?.status === PaymentStatus.Success) {
+        lastResult = {
+          status: 'COMPLETED',
+          amount: intent.amount,
+          orderCode: intent.originalPaymentId,
+          refundId: intent.paymentCode,
+        };
+      } else {
+        lastResult = {
+          status: res?.status || 'PENDING',
+          amount: intent.amount,
+          orderCode: intent.originalPaymentId,
+          refundId: intent.paymentCode,
+          error: res?.lastError,
+        };
+      }
     }
 
     const escrow = await this.escrowRepository.findByBookingId(bookingId);
-    if (escrow) {
-      escrow.status =
-        refundAmount !== undefined &&
-        refundAmount < booking.pricingSummary.depositTotal
-          ? EscrowStatus.DisputedResolved
-          : EscrowStatus.Refunded;
+    if (escrow && escrow.status === EscrowStatus.Held) {
+      const remainingRefundable = await this.getRefundableAmount(bookingId);
+      if (remainingRefundable <= 0) {
+        escrow.status = EscrowStatus.Refunded;
+      } else {
+        escrow.status = EscrowStatus.DisputedResolved;
+      }
       await escrow.save();
     }
 
-    try {
-      const customerId = (
-        (booking.customerId as any)?._id || booking.customerId
-      ).toString();
-      await this.notificationsService.createNotification(
-        customerId,
-        'Hoàn tiền cọc thành công',
-        `Hệ thống đã hoàn trả thành công số tiền cọc ${amountToRefund.toLocaleString('vi-VN')}đ cho đơn hàng ${booking.bookingCode}. Tiền sẽ về tài khoản của bạn theo quy định ngân hàng.`,
-        NotificationType.Refund,
-        { bookingId: booking._id, refundAmount: amountToRefund },
-      );
-    } catch (e) {
-      this.logger.warn('Failed to send refundDeposit notification:', e);
+    if (lastResult.status === 'COMPLETED') {
+      try {
+        const customerId = (
+          (booking.customerId as any)?._id || booking.customerId
+        ).toString();
+        await this.notificationsService.createNotification(
+          customerId,
+          'Hoàn tiền cọc thành công',
+          `Hệ thống đã hoàn trả thành công số tiền cọc ${amountToRefund.toLocaleString('vi-VN')}đ cho đơn hàng ${booking.bookingCode}. Tiền sẽ về tài khoản của bạn theo quy định ngân hàng.`,
+          NotificationType.Refund,
+          { bookingId: booking._id, refundAmount: amountToRefund },
+        );
+      } catch (error) {
+        this.logger.warn('Failed to send refundDeposit notification:', error);
+      }
     }
 
-    return refundResult;
+    return lastResult;
   }
 
   async resolveDispute(

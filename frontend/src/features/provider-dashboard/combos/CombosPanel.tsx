@@ -101,12 +101,12 @@ type CombosPanelProps = Pick<
     hasPhotographyCapability: boolean | undefined;
     openCampaignModal: () => void;
     handleDeactivateCampaign: () => Promise<void>;
-    handleAddVoucher: (e: FormEvent<Element>) => Promise<void>;
+    handleAddVoucher: (e: FormEvent<Element>) => Promise<boolean | void>;
     handleDeleteVoucher: (id: string) => Promise<void>;
-    handleCreateOrUpdateVoucher?: (e: FormEvent<Element>) => Promise<void>;
+    handleCreateOrUpdateVoucher?: (e: FormEvent<Element>) => Promise<boolean | void>;
     handleEditVoucher?: (voucher: any) => void;
     clearVoucherForm?: () => void;
-    handleCreateOrUpdateCombo: (e: FormEvent<Element>) => Promise<void>;
+    handleCreateOrUpdateCombo: (e: FormEvent<Element>) => Promise<boolean | void>;
     clearComboForm: () => void;
     handleEditCombo: (combo: any) => void;
     handleDeleteCombo: (id: string) => Promise<void>;
@@ -294,8 +294,10 @@ export const CombosPanel: React.FC<CombosPanelProps> = ({
   };
 
   const handleComboSubmit = async (e: React.FormEvent) => {
-    await handleCreateOrUpdateCombo(e);
-    setIsModalOpen(false);
+    const success = await handleCreateOrUpdateCombo(e);
+    if (success !== false) {
+      setIsModalOpen(false);
+    }
   };
 
   // Metrics calculation

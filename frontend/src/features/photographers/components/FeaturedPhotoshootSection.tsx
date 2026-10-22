@@ -4,13 +4,14 @@ import { ArrowRight } from 'lucide-react';
 import { ROUTES } from '../../../config/routes';
 import { SectionHeader } from '../../../components/common/SectionHeader';
 import { photographersApi } from '../../photographers/api/photographers.api';
-import { FEATURED_PHOTOSHOOT_PACKAGES_FIXTURE, type PhotoshootPackageItem } from '../data/photoshoot-package.fixture';
+import { getMediaUrl } from '../../../shared/media/mediaUrl';
+import type { PhotoshootPackageItem } from '../types/photographer.types';
 import { PhotoshootPackageCard } from './PhotoshootPackageCard';
 import { PhotoshootCardSkeleton } from './PhotoshootCardSkeleton';
 
 export const FeaturedPhotoshootSection: React.FC = () => {
-  const [items, setItems] = useState<PhotoshootPackageItem[]>(FEATURED_PHOTOSHOOT_PACKAGES_FIXTURE);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [items, setItems] = useState<PhotoshootPackageItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let active = true;
@@ -32,29 +33,33 @@ export const FeaturedPhotoshootSection: React.FC = () => {
               typeof p.reviewCount === 'number'
                 ? p.reviewCount
                 : typeof rawRating === 'object' && rawRating !== null
-                ? rawRating.totalReviews ?? (idx * 4 + 12)
-                : (idx * 4 + 12);
+                ? rawRating.totalReviews ?? 0
+                : 0;
+
+            const pkg = p.defaultPackage || (p.packages && p.packages[0]);
+            const pkgImg =
+              getMediaUrl(p.coverImage) ||
+              getMediaUrl(pkg?.images?.[0]) ||
+              getMediaUrl(p.media?.coverUrl) ||
+              '';
 
             return {
-              id: p.id || p._id || `featured-photoshoot-${idx}`,
-              name: p.name || 'Gói chụp ảnh nghệ thuật',
-              photographerName: p.providerName || p.businessName || 'LUMÉ Studio',
-              price: p.price || 500000,
+              id: pkg?._id || p._id || p.id || `featured-photoshoot-${idx}`,
+              name: pkg?.name || p.name || 'Gói chụp ảnh',
+              photographerName: p.businessName || p.providerName || 'Nhiếp ảnh gia',
+              price: pkg?.price ?? p.price ?? 0,
               rating: parsedRating,
               reviewCount: parsedReviews,
-              durationMinutes: p.durationMinutes || 90,
-              image:
-                p.coverImage ||
-                (p.images && p.images[0]) ||
-                FEATURED_PHOTOSHOOT_PACKAGES_FIXTURE[idx % FEATURED_PHOTOSHOOT_PACKAGES_FIXTURE.length].image,
-              badge: idx === 0 ? 'BÁN CHẠY' : idx === 1 ? 'MỚI' : 'NỔI BẬT',
+              durationMinutes: pkg?.includedDurationMinutes ?? p.durationMinutes ?? 60,
+              image: pkgImg,
+              badge: p.badge,
               category: p.categoryName || 'Chụp ảnh',
             };
           });
           setItems(mapped);
         }
       } catch (err) {
-        console.warn('Dùng dữ liệu dự phòng cho FeaturedPhotoshootSection:', err);
+        console.error('Lỗi khi tải gói chụp ảnh nổi bật:', err);
       } finally {
         if (active) setLoading(false);
       }

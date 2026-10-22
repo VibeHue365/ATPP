@@ -210,7 +210,7 @@ export const ProviderDashboard: React.FC = () => {
     setBaseLatitude, baseLongitude, setBaseLongitude, serviceRadiusKm, setServiceRadiusKm,
     useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupAddressLine, setPickupAddressLine,
     pickupLatitude, setPickupLatitude, pickupLongitude, setPickupLongitude, profileSection,
-    setProfileSection, isSavingProfile, setIsSavingProfile,
+    setProfileSection, isSavingProfile, setIsSavingProfile, coverUrl, setCoverUrl,
   } = useProviderProfileState();
 
   const {
@@ -234,6 +234,7 @@ export const ProviderDashboard: React.FC = () => {
 
   const profileHasUnsavedChanges = Boolean(provider) && (
     businessName !== (provider?.businessName ?? '') ||
+    coverUrl !== (provider?.media?.coverUrl ?? '') ||
     phone !== (provider?.contact?.phone ?? '') ||
     addressLine !== (provider?.address?.addressLine ?? '') ||
     city !== (provider?.address?.city ?? '') ||
@@ -286,6 +287,7 @@ export const ProviderDashboard: React.FC = () => {
     setPhone,
     setAddressLine,
     setCity,
+    setCoverUrl,
     setCancellationRefundRules,
     setCancellationAdditionalNotes,
     setComboDiscountPercent,
@@ -326,6 +328,7 @@ export const ProviderDashboard: React.FC = () => {
     cancellationAdditionalNotes,
     setIsSavingProfile,
     provider,
+    coverUrl,
     baseLatitude,
     baseLongitude,
     useBusinessAddressForPickup,
@@ -834,11 +837,11 @@ export const ProviderDashboard: React.FC = () => {
           <RentalOperationsPanel {...{ fetchOrders, loadingOrders, rentalOperationItems, setSelectedBookingId, setIsDetailModalOpen, orders, toast }} onOpenChat={() => setCurrentView('chat')} />
         )}
         {currentView === 'collections' && (
-          <CollectionsPanel {...{ collectionTab, openAddModal, setCollectionTab, prodSearch, setProdSearch, setProdPage, prodSizeFilter, setProdSizeFilter, prodColorFilter, setProdColorFilter, prodSortBy, setProdSortBy, loadingProducts, products, openEditModal, handleDuplicateProduct, handleDeleteProduct, prodTotal, prodLimit, prodPage, renderInventoryView, categories, fetchProducts, inventorySummary, toast }} />
+          <CollectionsPanel {...{ collectionTab, openAddModal, setCollectionTab, prodSearch, setProdSearch, setProdPage, prodSizeFilter, setProdSizeFilter, prodColorFilter, setProdColorFilter, prodSortBy, setProdSortBy, loadingProducts, products, openEditModal, handleDuplicateProduct, handleDeleteProduct, prodTotal, prodLimit, prodPage, renderInventoryView, categories, fetchProducts, inventorySummary, toast, provider }} />
         )}
 
         {currentView === 'profile' && (
-          <ServiceProfilePanel {...{ profileHasUnsavedChanges, isLoadingProvider, handleUpdateProfile, profileSection, setProfileSection, businessName, setBusinessName, phone, setPhone, city, setCity, baseLatitude, baseLongitude, addressLine, setAddressLine, setBaseLatitude, setBaseLongitude, hasPhotographyCapability, serviceRadiusKm, setServiceRadiusKm, hasAodaiCapability, useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupLatitude, pickupLongitude, pickupAddressLine, setPickupAddressLine, setPickupLatitude, setPickupLongitude, setCancellationRefundRules, cancellationRefundRules, cancellationAdditionalNotes, setCancellationAdditionalNotes, cancellationPolicySummary, isSavingProfile }} />
+          <ServiceProfilePanel {...{ profileHasUnsavedChanges, isLoadingProvider, handleUpdateProfile, profileSection, setProfileSection, businessName, setBusinessName, phone, setPhone, city, setCity, baseLatitude, baseLongitude, addressLine, setAddressLine, setBaseLatitude, setBaseLongitude, hasPhotographyCapability, serviceRadiusKm, setServiceRadiusKm, hasAodaiCapability, useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupLatitude, pickupLongitude, pickupAddressLine, setPickupAddressLine, setPickupLatitude, setPickupLongitude, setCancellationRefundRules, cancellationRefundRules, cancellationAdditionalNotes, setCancellationAdditionalNotes, cancellationPolicySummary, isSavingProfile, coverUrl, setCoverUrl }} />
         )}
 
         {hasPhotographyCapability && currentView === 'photography-packages' && (

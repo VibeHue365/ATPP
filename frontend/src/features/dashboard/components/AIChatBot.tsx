@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { httpClient } from '../../../services/httpClient';
 import { ArrowUp, Sparkles, Brain, Cpu, Image, X } from 'lucide-react';
+import { useToast } from '../../../components/feedback/Toast';
 
 interface RecommendedProduct {
   _id?: string;
@@ -26,6 +27,7 @@ interface AIChatBotProps {
 }
 
 export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
+  const toast = useToast();
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: 'ai',
@@ -51,12 +53,12 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Vui lòng chọn tệp hình ảnh hợp lệ.');
+      toast.warning('Vui lòng chọn tệp hình ảnh hợp lệ.');
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('Kích thước ảnh tối đa là 5MB.');
+      toast.warning('Kích thước ảnh tối đa là 5MB.');
       return;
     }
 

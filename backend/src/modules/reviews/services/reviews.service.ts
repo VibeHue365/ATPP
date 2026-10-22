@@ -95,15 +95,24 @@ export class ReviewsService {
       );
     }
 
-    // Only allow review when booking is COMPLETED
-    if (booking.status !== BookingStatus.Completed) {
+    // Allow review when booking is COMPLETED or RETURNED
+    if (
+      booking.status !== BookingStatus.Completed &&
+      booking.status !== BookingStatus.Returned
+    ) {
       throw new BadRequestException(
-        'Chỉ có thể đánh giá sau khi đơn hàng được hoàn thành. Đơn hàng hiện tại chưa ở trạng thái Hoàn thành.',
+        'Chỉ có thể đánh giá sau khi đơn hàng được hoàn thành hoặc đã trả đồ. Đơn hàng hiện tại chưa ở trạng thái hoàn tất.',
       );
     }
 
     // Determine the provider
-    const providerId = booking.providerIds[0];
+    let providerId = booking.providerIds?.[0];
+    if (!providerId) {
+      const bItem = await this.bookingItemModel.findById(bookingItemId);
+      if (bItem?.providerId) {
+        providerId = bItem.providerId;
+      }
+    }
     if (!providerId) {
       throw new BadRequestException('Booking has no provider associated');
     }
@@ -121,15 +130,24 @@ export class ReviewsService {
     await this.bookingItemModel.findByIdAndUpdate(bookingItemId, {
       isReviewed: true,
     });
+    await this.bookingModel.updateOne(
+      { _id: bookingId, 'items._id': bookingItemId },
+      { $set: { 'items.$.isReviewed': true } },
+    );
 
     // Recalculate ratings
     await this.updateProviderRating(providerId);
-    if (dto.productId) {
-      await this.updateProductRating(new Types.ObjectId(dto.productId));
-    } else if (dto.photographyPackageId) {
-      await this.updatePhotoPackageRating(
-        new Types.ObjectId(dto.photographyPackageId),
-      );
+    let targetProductId = dto.productId ? new Types.ObjectId(dto.productId) : null;
+    let targetPkgId = dto.photographyPackageId ? new Types.ObjectId(dto.photographyPackageId) : null;
+    if (!targetProductId && !targetPkgId) {
+      const bItem = await this.bookingItemModel.findById(bookingItemId);
+      if (bItem?.productId) targetProductId = bItem.productId;
+      if (bItem?.photographyPackageId) targetPkgId = bItem.photographyPackageId;
+    }
+    if (targetProductId) {
+      await this.updateProductRating(targetProductId);
+    } else if (targetPkgId) {
+      await this.updatePhotoPackageRating(targetPkgId);
     }
 
     return review;
@@ -213,7 +231,7 @@ export class ReviewsService {
   async getReviewsForProvider(providerIdStr: string): Promise<Review[]> {
     return this.reviewModel
       .find({ providerId: new Types.ObjectId(providerIdStr) })
-      .populate('customerId')
+      .populate('customerId', 'profile.fullName profile.avatarUrl')
       .sort({ createdAt: -1 });
   }
 
@@ -235,7 +253,7 @@ export class ReviewsService {
 
     return this.reviewModel
       .find({ bookingItemId: { $in: bookingItemIds } })
-      .populate('customerId')
+      .populate('customerId', 'profile.fullName profile.avatarUrl')
       .sort({ createdAt: -1 });
   }
 
@@ -363,11 +381,11 @@ export class ReviewsService {
     const customerId = new Types.ObjectId(customerIdStr);
     const prodId = new Types.ObjectId(productId);
 
-    // Tìm tất cả booking COMPLETED của customer
+    // Tìm tất cả booking COMPLETED hoặc RETURNED của customer
     const completedBookings = await this.bookingModel
       .find({
         customerId,
-        status: BookingStatus.Completed,
+        status: { $in: [BookingStatus.Completed, BookingStatus.Returned] },
       })
       .select('_id providerIds');
 
@@ -459,9 +477,16 @@ export class ReviewsService {
     const reviews = await this.reviewModel
       .find({ isReported: true })
       .populate('customerId', 'profile.fullName auth.email profile.avatarUrl')
-      .populate('providerId', 'businessName partnerCode profile.avatarUrl')
+      .populate('providerId', 'businessName partnerCode media.logoUrl media.coverUrl profile.avatarUrl')
       .populate('bookingId', 'bookingCode createdAt customerId')
-      .populate('bookingItemId', 'name coverImage')
+      .populate({
+        path: 'bookingItemId',
+        select: 'name coverImage productId photographyPackageId',
+        populate: [
+          { path: 'productId', select: 'name coverImage images media' },
+          { path: 'photographyPackageId', select: 'name coverImage coverImageUrl images media' },
+        ],
+      })
       .sort({ reportedAt: -1, createdAt: -1 })
       .exec();
 

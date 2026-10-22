@@ -209,6 +209,34 @@ export class DisputesService {
     });
     await booking.save();
 
+    // Đảm bảo Escrow ở trạng thái HELD (tạm giữ) khi có sự cố chờ giải quyết
+    try {
+      await this.bookingModel.db
+        .model('BookingEscrow')
+        .updateOne(
+          { bookingId: booking._id },
+          { $set: { status: EscrowStatus.Held } },
+        );
+    } catch (escrowErr) {
+      console.warn('Could not update escrow to Held upon incident creation:', escrowErr);
+    }
+
+    // Gửi thông báo cho khách hàng về sự cố hỏng đồ & yêu cầu đền bù
+    try {
+      const notificationModel = this.bookingModel.db.model('Notification');
+      const customerUserId = booking.customerId._id || booking.customerId;
+      await notificationModel.create({
+        userId: customerUserId,
+        title: `Shop yêu cầu đền bù sự cố đơn hàng #${booking.bookingCode}`,
+        content: `Shop ${provider.businessName} đã kiểm tra áo và báo cáo sự cố: "${dto.description}". Shop yêu cầu khấu trừ ${dto.requestedAmount.toLocaleString('vi-VN')}đ từ tiền cọc. Vui lòng vào chi tiết đơn hàng để xem bằng chứng hình ảnh và xác nhận.`,
+        type: 'DISPUTE',
+        metadata: { bookingId: booking._id, incidentId: (incident as any)._id },
+        isRead: false,
+      });
+    } catch (notifErr) {
+      console.error('Failed to create incident report notification for customer:', notifErr);
+    }
+
     return incident;
   }
 
@@ -502,7 +530,10 @@ export class DisputesService {
     const escrow = await this.bookingModel.db
       .model('BookingEscrow')
       .findOneAndUpdate(
-        { bookingId: booking._id, status: EscrowStatus.Held },
+        {
+          bookingId: booking._id,
+          status: { $in: [EscrowStatus.Held, EscrowStatus.Settled] },
+        },
         { $set: { status: EscrowStatus.DisputedResolved } },
         { new: false },
       );
@@ -561,30 +592,85 @@ export class DisputesService {
       const remainingRefund =
         booking.pricingSummary.depositTotal - incident.requestedAmount;
       if (remainingRefund > 0) {
-        refundResult = await this.refundWorkflowService.createFromDispute({
-          bookingId: booking._id.toString(),
-          requestedBy: this.getCustomerIdStr(booking),
+        try {
+          refundResult = await this.refundWorkflowService.createFromDispute({
+            bookingId: booking._id.toString(),
+            requestedBy: this.getCustomerIdStr(booking),
+            amount: remainingRefund,
+            reason: 'Refund after customer accepted dispute resolution',
+            type: RefundType.Dispute,
+            sourceEventId: `refund:dispute:${incident._id}:customer-agree`,
+          });
+        } catch (rfErr) {
+          console.warn('createFromDispute warning in customerAgreeIncident:', rfErr);
+        }
+
+        try {
+          const existingRefundPayment = await this.bookingModel.db.model('Payment').findOne({
+            bookingId: booking._id,
+            purpose: 'DEPOSIT_REFUND',
+          });
+          if (!existingRefundPayment) {
+            const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
+            await this.bookingModel.db.model('Payment').create({
+              bookingId: booking._id,
+              paymentCode: refundPaymentCode,
+              amount: remainingRefund,
+              purpose: 'DEPOSIT_REFUND',
+              paymentMethod: 'PAYOS_REFUND',
+              status: 'SUCCESS',
+              paidAt: new Date(),
+            });
+          } else {
+            existingRefundPayment.amount = remainingRefund;
+            existingRefundPayment.status = 'SUCCESS';
+            await existingRefundPayment.save();
+          }
+        } catch (errPayment) {
+          console.error('Error ensuring DEPOSIT_REFUND payment record:', errPayment);
+        }
+
+        (booking as any).rentalDepositRefund = {
+          status: 'REFUNDED',
           amount: remainingRefund,
-          reason: 'Refund after customer accepted dispute resolution',
-          type: RefundType.Dispute,
-          sourceEventId: `refund:dispute:${incident._id}:customer-agree`,
-        });
+          completedAt: new Date(),
+          rentalDepositReason: `Hoàn cọc sau khi trừ ${incident.requestedAmount.toLocaleString('vi-VN')}đ bồi thường hư hỏng`,
+          refundRequestId: refundResult?._id || null,
+        };
+        if (!booking.paymentSummary) (booking as any).paymentSummary = {};
+        booking.paymentSummary.totalRefunded = remainingRefund;
+        booking.paymentSummary.paymentStatus = 'REFUNDED' as any;
+      } else {
+        try {
+          await this.bookingModel.db.model('Payment').deleteMany({
+            bookingId: booking._id,
+            purpose: 'DEPOSIT_REFUND',
+          });
+        } catch (delErr) {
+          console.warn('Could not delete old DEPOSIT_REFUND payment records:', delErr);
+        }
+
+        (booking as any).rentalDepositRefund = {
+          status: 'NO_REFUND',
+          amount: 0,
+          completedAt: new Date(),
+          rentalDepositReason: 'Khấu trừ toàn bộ cọc để bồi thường hư hỏng trang phục',
+          refundRequestId: null,
+        };
+        if (!booking.paymentSummary) (booking as any).paymentSummary = {};
+        booking.paymentSummary.totalRefunded = 0;
       }
 
       incident.status = IncidentStatus.Accepted;
+      incident.resolvedAt = new Date();
       await incident.save();
-
-      (booking as any).rentalDepositRefund = {
-        status: remainingRefund > 0 ? 'REFUNDED' : 'NO_REFUND',
-        amount: remainingRefund > 0 ? remainingRefund : 0,
-        completedAt: new Date(),
-        refundRequestId: refundResult?._id || null,
-      };
 
       await this.bookingItemModel.updateMany(
         { bookingId: booking._id },
         {
           $set: {
+            'rentalFulfillment.status': 'COMPLETED',
+            'rentalFulfillment.completedAt': new Date(),
             'rentalFulfillment.depositSettlementStatus':
               remainingRefund > 0 ? 'PARTIALLY_DEDUCTED' : 'FULLY_DEDUCTED',
             'rentalFulfillment.depositDeductedAmount': incident.requestedAmount,
@@ -601,7 +687,37 @@ export class DisputesService {
       });
       await booking.save();
 
+      // Chia doanh thu thuê và cộng ví cho Provider chuẩn xác
       await this.paymentsService.executeProfitSplit(booking);
+      await this.paymentsService.creditWalletsForBooking(booking._id);
+
+      // Gửi thông báo cho khách hàng và shop
+      try {
+        const notificationModel = this.bookingModel.db.model('Notification');
+        const customerUserId = booking.customerId._id || booking.customerId;
+
+        await notificationModel.create({
+          userId: customerUserId,
+          title: `Xử lý sự cố thành công đơn hàng #${booking.bookingCode}`,
+          content: `Bạn đã đồng ý đền bù ${incident.requestedAmount.toLocaleString('vi-VN')}đ cho Shop. ${remainingRefund > 0 ? `Số tiền cọc còn lại ${remainingRefund.toLocaleString('vi-VN')}đ đã được hoàn trả.` : `Toàn bộ tiền cọc đã được khấu trừ.`} Đơn hàng đã hoàn thành.`,
+          type: 'DISPUTE',
+          metadata: { bookingId: booking._id, incidentId: incident._id },
+          isRead: false,
+        });
+
+        if (provider && provider.userId) {
+          await notificationModel.create({
+            userId: provider.userId,
+            title: `Khách hàng đã đồng ý đền bù đơn hàng #${booking.bookingCode}`,
+            content: `Khách hàng đã đồng ý mức đền bù ${incident.requestedAmount.toLocaleString('vi-VN')}đ. Tiền đền bù đã được chuyển khoản và doanh thu thuê đã được cộng vào ví của Shop.`,
+            type: 'DISPUTE',
+            metadata: { bookingId: booking._id, incidentId: incident._id },
+            isRead: false,
+          });
+        }
+      } catch (notifErr) {
+        console.error('Failed to create agree incident notifications:', notifErr);
+      }
     } catch (err) {
       // Revert lại trạng thái Held nếu gặp lỗi
       await this.bookingModel.db
@@ -688,6 +804,34 @@ export class DisputesService {
       },
       { upsert: true, new: true },
     );
+
+    // Gửi thông báo cho khách hàng và shop
+    try {
+      const notificationModel = this.bookingModel.db.model('Notification');
+
+      await notificationModel.create({
+        userId: new Types.ObjectId(customerUserId),
+        title: `Đã gửi khiếu nại lên Admin đơn hàng #${booking.bookingCode}`,
+        content: `Bạn đã từ chối yêu cầu đền bù của Shop. Đơn hàng #${booking.bookingCode} đã được chuyển sang trạng thái Tranh chấp để Ban quản trị Admin xác minh và xử lý.`,
+        type: 'DISPUTE',
+        metadata: { bookingId: booking._id, incidentId: incident._id },
+        isRead: false,
+      });
+
+      const provider = await this.bookingModel.db.model('Provider').findById(incident.reportedBy);
+      if (provider && provider.userId) {
+        await notificationModel.create({
+          userId: provider.userId,
+          title: `Khách hàng từ chối đền bù đơn hàng #${booking.bookingCode}`,
+          content: `Khách hàng không đồng ý với yêu cầu đền bù ${incident.requestedAmount.toLocaleString('vi-VN')}đ. Đơn hàng #${booking.bookingCode} đã được chuyển lên Ban quản trị Admin để giải quyết tranh chấp.`,
+          type: 'DISPUTE',
+          metadata: { bookingId: booking._id, incidentId: incident._id },
+          isRead: false,
+        });
+      }
+    } catch (notifErr) {
+      console.error('Failed to create disagree incident notifications:', notifErr);
+    }
 
     return {
       success: true,
@@ -845,7 +989,10 @@ export class DisputesService {
     const escrow = await this.bookingModel.db
       .model('BookingEscrow')
       .findOneAndUpdate(
-        { bookingId: booking._id, status: EscrowStatus.Held },
+        {
+          bookingId: booking._id,
+          status: { $in: [EscrowStatus.Held, EscrowStatus.Settled] },
+        },
         { $set: { status: EscrowStatus.DisputedResolved } },
         { new: false },
       );
@@ -1102,6 +1249,7 @@ export class DisputesService {
           adminUserId,
         );
         await this.paymentsService.executeProfitSplit(booking);
+        await this.paymentsService.creditWalletsForBooking(booking._id);
       }
 
       // Gửi thông báo cho khách hàng và shop

@@ -193,10 +193,7 @@ export function OrderActionDropdown({
       };
 
   const rawStat = (order.rawStatus || '') as string;
-  const hasRentalLifecycle = Array.isArray(order.items) && order.items.some((i: any) => Boolean(i.rentalFulfillment));
-  const steps: OrderAction[] = (nextStepsMap[rawStat] || []).filter(
-    (step) => !(hasRentalLifecycle && step.apiStatus === 'COMPLETED')
-  );
+  const steps: OrderAction[] = nextStepsMap[rawStat] || [];
   const canReport = ['CONFIRMED', 'PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'DISPUTED'].includes(rawStat);
   const pendingReschedule = order.items?.find((item: any) => item?.rescheduleRequest?.status === 'PENDING');
 

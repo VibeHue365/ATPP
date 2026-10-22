@@ -193,6 +193,12 @@ export class Product {
     default: { averageRating: 0, totalReviews: 0 },
   })
   rating: ProductRating;
+
+  /**
+   * Bộ đếm sequence atomic theo từng biến thể (size_color) để sinh SKU an toàn.
+   */
+  @Prop({ type: Object, default: {} })
+  skuCounters?: Record<string, number>;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
