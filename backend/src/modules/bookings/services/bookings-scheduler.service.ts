@@ -259,6 +259,61 @@ export class BookingsSchedulerService {
     await this.processBookingItemReminders(now);
   }
 
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async handleReviewReminders() {
+    this.logger.log('Running post-service review reminders cron-job...');
+    const now = new Date();
+    const reminderCutoff = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+    const oldestEligible = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    try {
+      const bookings = await this.bookingModel
+        .find({
+          status: { $in: [BookingStatus.Completed, BookingStatus.Returned] },
+          statusTimeline: {
+            $elemMatch: {
+              status: { $in: [BookingStatus.Completed, BookingStatus.Returned] },
+              changedAt: { $gte: oldestEligible, $lte: reminderCutoff },
+            },
+          },
+        })
+        .select('_id bookingCode customerId status statusTimeline')
+        .lean();
+
+      for (const booking of bookings) {
+        const hasUnreviewedItem = await this.bookingItemModel.exists({
+          bookingId: booking._id,
+          isReviewed: { $ne: true },
+        });
+        if (!hasUnreviewedItem) continue;
+
+        const customerId = (
+          (booking.customerId as any)?._id || booking.customerId
+        ).toString();
+        const reminderKey = `review_reminder_${booking._id}`;
+        const alreadySent = await this.notificationModel.findOne({
+          userId: new Types.ObjectId(customerId),
+          'metadata.reminderKey': reminderKey,
+        });
+        if (alreadySent) continue;
+
+        await this.notificationsService.createNotification(
+          customerId,
+          'Chia sẻ trải nghiệm của bạn',
+          `Đơn hàng ${booking.bookingCode} đã hoàn thành. Hãy dành ít phút đánh giá sản phẩm và dịch vụ để giúp VibeHue phục vụ bạn tốt hơn!`,
+          NotificationType.Booking,
+          {
+            bookingId: booking._id,
+            reminderKey,
+            action: 'REVIEW_BOOKING',
+          },
+        );
+      }
+    } catch (error) {
+      this.logger.error('Error in handleReviewReminders:', error);
+    }
+  }
+
   private async processBookingScheduleReminders(now: Date) {
     const start24h = new Date(now.getTime() + 23.5 * 60 * 60 * 1000);
     const end24h = new Date(now.getTime() + 24.5 * 60 * 60 * 1000);

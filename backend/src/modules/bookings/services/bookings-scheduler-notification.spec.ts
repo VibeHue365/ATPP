@@ -44,6 +44,7 @@ describe('BookingsSchedulerService - Notification & Reminders', () => {
 
   const mockBookingItemModel = {
     find: jest.fn(),
+    exists: jest.fn(),
   };
 
   const mockBookingScheduleModel = {
@@ -386,6 +387,69 @@ describe('BookingsSchedulerService - Notification & Reminders', () => {
           reminderKey: `prov_photo_24h_${itemId}`,
         }),
       );
+    });
+  });
+
+  describe('handleReviewReminders', () => {
+    it('should remind the customer two hours after completion when an item is not reviewed', async () => {
+      const now = new Date(2026, 0, 10, 12, 0, 0);
+      jest.useFakeTimers().setSystemTime(now);
+      const completedAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+      mockBookingModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            {
+              _id: mockBookingId,
+              bookingCode: 'BKG-REVIEW',
+              customerId: mockCustomerId,
+              status: BookingStatus.Completed,
+              statusTimeline: [
+                { status: BookingStatus.Completed, changedAt: completedAt },
+              ],
+            },
+          ]),
+        }),
+      });
+      mockBookingItemModel.exists.mockResolvedValue({
+        _id: new Types.ObjectId(),
+      });
+      mockNotificationModel.findOne.mockResolvedValue(null);
+
+      await service.handleReviewReminders();
+
+      expect(notificationsService.createNotification).toHaveBeenCalledWith(
+        mockCustomerId,
+        'Chia sẻ trải nghiệm của bạn',
+        expect.stringContaining('BKG-REVIEW'),
+        NotificationType.Booking,
+        expect.objectContaining({
+          bookingId: mockBookingId,
+          reminderKey: `review_reminder_${mockBookingId}`,
+          action: 'REVIEW_BOOKING',
+        }),
+      );
+    });
+
+    it('should skip the reminder when all booking items are already reviewed', async () => {
+      mockBookingModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            {
+              _id: mockBookingId,
+              bookingCode: 'BKG-REVIEWED',
+              customerId: mockCustomerId,
+              status: BookingStatus.Completed,
+              statusTimeline: [],
+            },
+          ]),
+        }),
+      });
+      mockBookingItemModel.exists.mockResolvedValue(null);
+
+      await service.handleReviewReminders();
+
+      expect(notificationsService.createNotification).not.toHaveBeenCalled();
     });
   });
 });
