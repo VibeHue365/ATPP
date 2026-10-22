@@ -18,6 +18,8 @@ import {
   Check,
   Calendar,
   EyeOff,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';
 import { adminReportedReviewsApi } from '../api/adminReportedReviewsApi';
@@ -58,8 +60,10 @@ const formatDateOnly = (value?: string | Date) => {
 export function ReportedReviewsPanel() {
   const { error, items, metrics, loading, refresh } = useReportedReviews();
 
-  // Selection state
+  // Selection & drawer state
   const [selected, setSelected] = useState<ReportedReview | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
 
   // Filter & tab state
@@ -109,6 +113,38 @@ export function ReportedReviewsPanel() {
     if (review.reportStatus === 'UNDER_REVIEW') return 'UNDER_REVIEW';
     if (review.reportStatus === 'RESOLVED' || review.reportStatus === 'DISMISSED') return 'RESOLVED';
     return 'PENDING';
+  };
+
+  const getCustomerAvatar = (review: ReportedReview) => {
+    const avatar = review.customerId?.profile?.avatarUrl;
+    if (avatar && avatar.trim()) return avatar;
+    const name = getCustomerName(review);
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=f1f5f9&color=475569&bold=true`;
+  };
+
+  const getProviderAvatar = (review: ReportedReview) => {
+    const logo =
+      review.providerId?.media?.logoUrl ||
+      review.providerId?.profile?.avatarUrl ||
+      review.providerId?.media?.coverUrl;
+    if (logo && logo.trim()) return logo;
+
+    const itemCover =
+      review.bookingItemId?.coverImage ||
+      review.bookingItemId?.productId?.coverImage ||
+      review.bookingItemId?.productId?.images?.[0] ||
+      review.bookingItemId?.photographyPackageId?.coverImageUrl ||
+      review.bookingItemId?.photographyPackageId?.coverImage;
+    if (itemCover && itemCover.trim()) return itemCover;
+
+    const name = getProviderName(review);
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=fff1f2&color=be123c&bold=true`;
+  };
+
+  const getReporterAvatar = (review: ReportedReview) => {
+    if (review.reporterAvatar && review.reporterAvatar.trim()) return review.reporterAvatar;
+    const name = getReporterName(review);
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=f8fafc&color=334155&bold=true`;
   };
 
   // KPIs
@@ -191,12 +227,26 @@ export function ReportedReviewsPanel() {
 
   const totalPages = Math.ceil(filteredItems.length / pageSize) || 1;
 
-  // Auto-select first item
+  // Sync selected item if drawer is open and data updates
   useEffect(() => {
-    if (!selected && filteredItems.length > 0) {
-      setSelected(filteredItems[0]);
+    if (isDetailOpen && selected) {
+      const stillExists = filteredItems.find((d) => d._id === selected._id);
+      if (stillExists) {
+        setSelected(stillExists);
+      }
     }
-  }, [filteredItems, selected]);
+  }, [filteredItems, isDetailOpen, selected]);
+
+  // Keyboard shortcut: Esc to close slide-over inspection drawer
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isDetailOpen) {
+        setIsDetailOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isDetailOpen]);
 
   // Row selection checkbox
   const toggleSelectRow = (id: string) => {
@@ -550,21 +600,11 @@ export function ReportedReviewsPanel() {
       {/* 6. Workspace Layout (Table Left + Detail Dock Right) */}
       <div className="rr-workspace">
         {/* Left: Table Container */}
-        <div className={`rr-table-container ${selected ? 'has-selected' : ''}`}>
+        <div className="rr-table-container">
           <table className="rr-table">
             <thead>
               <tr>
-                <th style={{ width: '38px', textAlign: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={
-                      paginatedItems.length > 0 &&
-                      selectedRowIds.size === paginatedItems.length
-                    }
-                    onChange={toggleSelectAll}
-                  />
-                </th>
-                <th style={{ width: '30px' }}>#</th>
+                <th style={{ width: '36px', textAlign: 'center' }}>#</th>
                 <th>Nội dung đánh giá</th>
                 <th>Khách hàng</th>
                 <th>Đối tác / Sản phẩm</th>
@@ -577,7 +617,7 @@ export function ReportedReviewsPanel() {
             <tbody>
               {paginatedItems.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '48px 20px', color: '#94a3b8' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '48px 20px', color: '#94a3b8' }}>
                     <AlertCircle size={32} style={{ margin: '0 auto 8px', color: '#cbd5e1' }} />
                     <p style={{ margin: 0, fontWeight: 600, color: '#64748b' }}>
                       Không tìm thấy báo cáo đánh giá nào phù hợp với bộ lọc.
@@ -586,27 +626,23 @@ export function ReportedReviewsPanel() {
                 </tr>
               ) : (
                 paginatedItems.map((review, idx) => {
-                  const isSelected = selected?._id === review._id;
-                  const isChecked = selectedRowIds.has(review._id);
+                  const isSelected = selected?._id === review._id && isDetailOpen;
                   const stt = (currentPage - 1) * pageSize + idx + 1;
                   const status = getReportStatus(review);
                   const rating = review.rating || 5;
+                  const custName = getCustomerName(review);
+                  const provName = getProviderName(review);
 
                   return (
                     <tr
                       key={review._id}
                       className={isSelected ? 'row-selected' : ''}
-                      onClick={() => setSelected(review)}
+                      onClick={() => {
+                        setSelected(review);
+                        setIsDetailOpen(true);
+                      }}
                     >
-                      <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleSelectRow(review._id)}
-                        />
-                      </td>
-
-                      <td style={{ color: '#64748b', fontWeight: 600 }}>{stt}</td>
+                      <td style={{ color: '#64748b', fontWeight: 600, textAlign: 'center' }}>{stt}</td>
 
                       {/* Nội dung đánh giá + Sao vàng */}
                       <td>
@@ -631,12 +667,15 @@ export function ReportedReviewsPanel() {
                       <td>
                         <div className="rr-party-cell">
                           <img
-                            src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80"
-                            alt="Khách hàng"
+                            src={getCustomerAvatar(review)}
+                            alt={custName}
                             className="rr-party-avatar"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=f1f5f9&color=475569`;
+                            }}
                           />
                           <div className="rr-party-info">
-                            <span className="rr-party-name">{getCustomerName(review)}</span>
+                            <span className="rr-party-name">{custName}</span>
                             <span className="rr-party-code">{getCustomerCode(review)}</span>
                           </div>
                         </div>
@@ -646,12 +685,15 @@ export function ReportedReviewsPanel() {
                       <td>
                         <div className="rr-party-cell">
                           <img
-                            src="https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=80&auto=format&fit=crop&q=80"
-                            alt="Đối tác"
+                            src={getProviderAvatar(review)}
+                            alt={provName}
                             className="rr-party-avatar"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(provName)}&background=fff1f2&color=be123c`;
+                            }}
                           />
                           <div className="rr-party-info">
-                            <span className="rr-party-name">{getProviderName(review)}</span>
+                            <span className="rr-party-name">{provName}</span>
                             <span className="rr-party-code">{getProviderCode(review)}</span>
                           </div>
                         </div>
@@ -692,14 +734,16 @@ export function ReportedReviewsPanel() {
                       <td style={{ textAlign: 'center' }}>
                         <button
                           type="button"
-                          className="rr-action-btn"
-                          title="Xem chi tiết"
+                          className="rr-filter-btn"
+                          style={{ padding: '5px 12px', fontSize: '11.5px', margin: 0, display: 'inline-flex' }}
+                          title="Xem chi tiết báo cáo"
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelected(review);
+                            setIsDetailOpen(true);
                           }}
                         >
-                          <MoreVertical size={14} />
+                          Chi tiết
                         </button>
                       </td>
                     </tr>
@@ -769,259 +813,331 @@ export function ReportedReviewsPanel() {
           </div>
         </div>
 
-        {/* Right: Inspection & Detail Dock */}
-        {selected && (
-          <aside className="rr-detail-dock">
-            {/* Dock Topbar */}
-            <div className="rr-dock-topbar">
-              <h3>Chi tiết báo cáo</h3>
-              <div className="rr-dock-paginator">
-                <button
-                  type="button"
-                  className="rr-dock-arrow"
-                  disabled={selectedIndex <= 0}
-                  onClick={handlePrevReport}
-                  title="Báo cáo trước"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                <span>
-                  {selectedIndex + 1} / {filteredItems.length}
+      </div>
+
+      {/* Slide-Over Inspection Drawer */}
+      {isDetailOpen && selected && (
+        <>
+          <div className="rr-drawer-backdrop" onClick={() => setIsDetailOpen(false)} />
+          <aside className={`rr-detail-drawer ${isMaximized ? 'maximized' : ''}`}>
+            {/* Drawer Header */}
+            <div className="rr-drawer-header">
+              <div className="rr-drawer-title-wrap">
+                <div className="rr-drawer-heading-row">
+                  <h2 className="rr-drawer-title">Chi tiết báo cáo</h2>
+                  <span className="rr-drawer-code">{getReportCode(selected)}</span>
+                  {getReportStatus(selected) === 'PENDING' && (
+                    <span className="rr-status-pill rr-status-pending">
+                      <span className="rr-status-dot" /> Chờ xử lý
+                    </span>
+                  )}
+                  {getReportStatus(selected) === 'UNDER_REVIEW' && (
+                    <span className="rr-status-pill rr-status-under-review">
+                      <span className="rr-status-dot" /> Đang xem xét
+                    </span>
+                  )}
+                  {getReportStatus(selected) === 'RESOLVED' && (
+                    <span className="rr-status-pill rr-status-resolved">
+                      <span className="rr-status-dot" /> Đã xử lý
+                    </span>
+                  )}
+                </div>
+                <span className="rr-drawer-timestamp">
+                  Thời gian báo cáo: {formatReportedTime(selected.reportedAt)}
                 </span>
+              </div>
+
+              <div className="rr-drawer-controls">
+                {filteredItems.length > 1 && (
+                  <div className="rr-drawer-nav-group">
+                    <button
+                      type="button"
+                      className="rr-drawer-nav-btn"
+                      disabled={selectedIndex <= 0}
+                      onClick={handlePrevReport}
+                      title="Báo cáo trước"
+                    >
+                      <ChevronLeft size={14} />
+                      <span>Trước</span>
+                    </button>
+                    <span className="rr-drawer-nav-counter">
+                      {selectedIndex + 1} / {filteredItems.length}
+                    </span>
+                    <button
+                      type="button"
+                      className="rr-drawer-nav-btn"
+                      disabled={selectedIndex >= filteredItems.length - 1}
+                      onClick={handleNextReport}
+                      title="Báo cáo tiếp theo"
+                    >
+                      <span>Tiếp</span>
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                )}
+
                 <button
                   type="button"
-                  className="rr-dock-arrow"
-                  disabled={selectedIndex >= filteredItems.length - 1}
-                  onClick={handleNextReport}
-                  title="Báo cáo tiếp theo"
+                  className="rr-drawer-icon-btn"
+                  onClick={() => setIsMaximized(!isMaximized)}
+                  title={isMaximized ? 'Thu nhỏ giao diện' : 'Phóng to toàn màn hình'}
                 >
-                  <ChevronRight size={14} />
+                  {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                </button>
+
+                <button
+                  type="button"
+                  className="rr-drawer-icon-btn"
+                  onClick={() => setIsDetailOpen(false)}
+                  title="Đóng (Phím Esc)"
+                >
+                  <X size={16} />
                 </button>
               </div>
             </div>
 
-            {/* Dock Header Info */}
-            <div className="rr-dock-header-info">
-              <div className="rr-dock-header-row">
-                {getReportStatus(selected) === 'PENDING' && (
-                  <span className="rr-status-pill rr-status-pending">
-                    <span className="rr-status-dot" /> Chờ xử lý
-                  </span>
-                )}
-                {getReportStatus(selected) === 'UNDER_REVIEW' && (
-                  <span className="rr-status-pill rr-status-under-review">
-                    <span className="rr-status-dot" /> Đang xem xét
-                  </span>
-                )}
-                {getReportStatus(selected) === 'RESOLVED' && (
-                  <span className="rr-status-pill rr-status-resolved">
-                    <span className="rr-status-dot" /> Đã xử lý
-                  </span>
-                )}
-                <span className="rr-dock-report-code">{getReportCode(selected)}</span>
-              </div>
-              <div className="rr-dock-report-time">
-                Báo cáo lúc: {formatReportedTime(selected.reportedAt)}
-              </div>
-            </div>
+            {/* Drawer Body (2 Columns) */}
+            <div className="rr-drawer-body">
+              <div className="rr-drawer-grid-2col">
+                {/* Left Column */}
+                <div className="rr-drawer-col">
+                  {/* Card 1: Review Content */}
+                  <div className="rr-card-box">
+                    <h4 className="rr-card-title">Nội dung đánh giá bị báo cáo</h4>
 
-            {/* Dock Body */}
-            <div className="rr-dock-body">
-              {/* Section 1: Nội dung đánh giá bị báo cáo */}
-              <div className="rr-card-box">
-                <h4 className="rr-card-title">Nội dung đánh giá bị báo cáo</h4>
-
-                <div className="rr-review-user-row">
-                  <div className="rr-user-identity">
-                    <img
-                      src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80"
-                      alt="avatar"
-                      className="rr-party-avatar"
-                    />
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>
-                          {getCustomerName(selected)}
-                        </span>
-                        <span className="rr-customer-tag">Khách hàng</span>
-                      </div>
-                      <span style={{ fontSize: '11px', color: '#64748b' }}>
-                        {formatReportedTime(selected.createdAt || selected.reportedAt)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="rr-stars">
-                    {Array.from({ length: 5 }).map((_, sIdx) => (
-                      <Star
-                        key={sIdx}
-                        size={13}
-                        fill={sIdx < (selected.rating || 5) ? '#f59e0b' : 'none'}
-                        color={sIdx < (selected.rating || 5) ? '#f59e0b' : '#cbd5e1'}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rr-review-comment-box">
-                  "{selected.comment || 'Dịch vụ quá tệ, lừa đảo. Không nên đặt ở đây!!! Nhân viên thái độ rất kém, đồ cũ và dơ.'}"
-                </div>
-
-                {selected.images && selected.images.length > 0 && (
-                  <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', marginTop: '2px' }}>
-                    {selected.images.map((img, i) => (
-                      <img
-                        key={i}
-                        src={img}
-                        alt="Đính kèm"
-                        style={{
-                          width: '64px',
-                          height: '64px',
-                          borderRadius: '6px',
-                          objectFit: 'cover',
-                          border: '1px solid #e2e8f0',
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Section 2: Thông tin liên quan (2 mini cards) */}
-              <div className="rr-two-cards-grid">
-                {/* Đối tác / Sản phẩm */}
-                <div className="rr-mini-card">
-                  <span className="rr-mini-card-head">Đối tác / Sản phẩm</span>
-                  <div className="rr-mini-card-body">
-                    <img
-                      src="https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=80&auto=format&fit=crop&q=80"
-                      alt="thumb"
-                      style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover' }}
-                    />
-                    <div>
-                      <div className="rr-mini-card-title">{getProviderName(selected)}</div>
-                      <div style={{ fontSize: '10.5px', color: '#64748b' }}>{getProviderCode(selected)}</div>
-                      <a href={`/admin/partners`} target="_blank" rel="noreferrer" className="rr-mini-card-link">
-                        Xem trang
-                      </a>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Đơn đặt lịch */}
-                <div className="rr-mini-card">
-                  <span className="rr-mini-card-head">Đơn đặt lịch</span>
-                  <div className="rr-mini-card-body">
-                    <div
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '6px',
-                        background: '#fff1f2',
-                        color: '#be123c',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                      }}
-                    >
-                      <Calendar size={17} />
-                    </div>
-                    <div>
-                      <div className="rr-mini-card-title">{getBookingCode(selected)}</div>
-                      <div style={{ fontSize: '10.5px', color: '#64748b' }}>
-                        {formatDateOnly(selected.bookingId?.createdAt || selected.createdAt)}
-                      </div>
-                      <a href={`/admin/bookings`} target="_blank" rel="noreferrer" className="rr-mini-card-link">
-                        Xem chi tiết
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 3: Thông tin báo cáo */}
-              <div className="rr-card-box">
-                <h4 className="rr-card-title">Thông tin báo cáo</h4>
-
-                <div className="rr-report-meta-row">
-                  <div>
-                    <span style={{ fontSize: '10.5px', color: '#64748b', display: 'block', fontWeight: 700 }}>
-                      Người báo cáo:
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                      <img
-                        src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&auto=format&fit=crop&q=80"
-                        alt="reporter"
-                        style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }}
-                      />
-                      <strong style={{ fontSize: '12px', color: '#0f172a' }}>{getReporterName(selected)}</strong>
-                      <span style={{ fontSize: '10.5px', color: '#64748b' }}>{getReporterCode(selected)}</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '10.5px', color: '#64748b', display: 'block', fontWeight: 700 }}>
-                      Lý do báo cáo:
-                    </span>
-                    <span className="rr-reason-badge" style={{ marginTop: '2px' }}>
-                      <Flag size={11} /> {getReportReason(selected)}
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <span style={{ fontSize: '10.5px', color: '#64748b', display: 'block', fontWeight: 700, marginBottom: '4px' }}>
-                    Mô tả thêm:
-                  </span>
-                  <div className="rr-report-desc-box">
-                    "{selected.reportDescription || 'Sử dụng từ ngữ thô tục, xúc phạm đối tác. Đề nghị kiểm tra và gỡ bỏ.'}"
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 4: Lịch sử xử lý */}
-              <div className="rr-card-box">
-                <h4 className="rr-card-title">Lịch sử xử lý</h4>
-
-                <div className="rr-timeline-list">
-                  <div className="rr-timeline-item">
-                    <div className="rr-timeline-dot" />
-                    <div className="rr-timeline-time">{formatReportedTime(selected.reportedAt)}</div>
-                    <div className="rr-timeline-desc">
-                      Khách hàng {getReporterName(selected)} đã gửi báo cáo.
-                    </div>
-                  </div>
-
-                  <div className="rr-timeline-item" style={{ paddingBottom: 0 }}>
-                    <div className="rr-timeline-dot" />
-                    <div className="rr-timeline-time">
-                      {formatReportedTime(new Date(new Date(selected.reportedAt || 0).getTime() + 8 * 60 * 1000))}
-                    </div>
-                    <div className="rr-timeline-desc">Hệ thống tiếp nhận báo cáo.</div>
-                  </div>
-
-                  {selected.historyTimeline &&
-                    selected.historyTimeline.map((item, hIdx) => (
-                      <div key={hIdx} className="rr-timeline-item" style={{ paddingTop: '10px' }}>
-                        <div className="rr-timeline-dot" style={{ borderColor: '#059669' }} />
-                        <div className="rr-timeline-time">{formatReportedTime(item.timestamp)}</div>
-                        <div className="rr-timeline-desc" style={{ color: '#065f46', fontWeight: 600 }}>
-                          {item.title}: {item.description}
+                    <div className="rr-review-user-row">
+                      <div className="rr-user-identity">
+                        <img
+                          src={getCustomerAvatar(selected)}
+                          alt={getCustomerName(selected)}
+                          className="rr-party-avatar"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(getCustomerName(selected))}&background=f1f5f9&color=475569`;
+                          }}
+                        />
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>
+                              {getCustomerName(selected)}
+                            </span>
+                            <span className="rr-customer-tag">Khách hàng</span>
+                          </div>
+                          <span style={{ fontSize: '11px', color: '#64748b' }}>
+                            {formatReportedTime(selected.createdAt || selected.reportedAt)}
+                          </span>
                         </div>
                       </div>
-                    ))}
+
+                      <div className="rr-stars">
+                        {Array.from({ length: 5 }).map((_, sIdx) => (
+                          <Star
+                            key={sIdx}
+                            size={14}
+                            fill={sIdx < (selected.rating || 5) ? '#f59e0b' : 'none'}
+                            color={sIdx < (selected.rating || 5) ? '#f59e0b' : '#cbd5e1'}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rr-review-comment-box">
+                      "{selected.comment || 'Dịch vụ quá tệ, lừa đảo. Không nên đặt ở đây!!! Nhân viên thái độ rất kém, đồ cũ và dơ.'}"
+                    </div>
+
+                    {selected.images && selected.images.length > 0 && (
+                      <div style={{ marginTop: '4px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', display: 'block', marginBottom: '6px' }}>
+                          Ảnh đính kèm từ khách hàng:
+                        </span>
+                        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto' }}>
+                          {selected.images.map((img, i) => (
+                            <img
+                              key={i}
+                              src={img}
+                              alt="Đính kèm"
+                              style={{
+                                width: '70px',
+                                height: '70px',
+                                borderRadius: '8px',
+                                objectFit: 'cover',
+                                border: '1px solid #e2e8f0',
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card 2: 2 Mini Cards */}
+                  <div className="rr-two-cards-grid">
+                    <div className="rr-mini-card">
+                      <span className="rr-mini-card-head">Đối tác / Sản phẩm</span>
+                      <div className="rr-mini-card-body">
+                        <img
+                          src={getProviderAvatar(selected)}
+                          alt={getProviderName(selected)}
+                          style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }}
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(getProviderName(selected))}&background=fff1f2&color=be123c`;
+                          }}
+                        />
+                        <div>
+                          <div className="rr-mini-card-title">{getProviderName(selected)}</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>{getProviderCode(selected)}</div>
+                          <a href="/admin/dashboard?tab=product-moderation" target="_blank" rel="noreferrer" className="rr-mini-card-link">
+                            Xem sản phẩm
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rr-mini-card">
+                      <span className="rr-mini-card-head">Đơn đặt lịch</span>
+                      <div className="rr-mini-card-body">
+                        <div
+                          style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '6px',
+                            background: '#fff1f2',
+                            color: '#be123c',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Calendar size={18} />
+                        </div>
+                        <div>
+                          <div className="rr-mini-card-title">{getBookingCode(selected)}</div>
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>
+                            {formatDateOnly(selected.bookingId?.createdAt || selected.createdAt)}
+                          </div>
+                          <a href="/admin/dashboard?tab=disputes" target="_blank" rel="noreferrer" className="rr-mini-card-link">
+                            Xem đơn hàng
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Report Details */}
+                  <div className="rr-card-box">
+                    <h4 className="rr-card-title">Thông tin báo cáo</h4>
+
+                    <div className="rr-report-meta-row">
+                      <div>
+                        <span style={{ fontSize: '10.5px', color: '#64748b', display: 'block', fontWeight: 700 }}>
+                          Người báo cáo:
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                          <img
+                            src={getReporterAvatar(selected)}
+                            alt={getReporterName(selected)}
+                            style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(getReporterName(selected))}&background=f8fafc&color=334155`;
+                            }}
+                          />
+                          <strong style={{ fontSize: '12px', color: '#0f172a' }}>{getReporterName(selected)}</strong>
+                          <span style={{ fontSize: '10.5px', color: '#64748b' }}>{getReporterCode(selected)}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span style={{ fontSize: '10.5px', color: '#64748b', display: 'block', fontWeight: 700 }}>
+                          Lý do báo cáo:
+                        </span>
+                        <span className="rr-reason-badge" style={{ marginTop: '2px' }}>
+                          <Flag size={11} /> {getReportReason(selected)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '10.5px', color: '#64748b', display: 'block', fontWeight: 700, marginBottom: '4px' }}>
+                        Mô tả thêm từ người báo cáo:
+                      </span>
+                      <div className="rr-report-desc-box">
+                        "{selected.reportDescription || 'Sử dụng từ ngữ thô tục, xúc phạm đối tác. Đề nghị kiểm tra và gỡ bỏ.'}"
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column */}
+                <div className="rr-drawer-col">
+                  {/* Card: Guide / Policy */}
+                  <div className="rr-card-box" style={{ background: '#f8fafc', borderColor: '#e2e8f0' }}>
+                    <h4 className="rr-card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <HelpCircle size={15} color="#be123c" /> Hướng dẫn phán quyết kiểm duyệt
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: '#334155' }}>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <strong style={{ color: '#059669', minWidth: '85px' }}>Bỏ qua:</strong>
+                        <span>Nếu đánh giá phản ánh đúng trải nghiệm của khách, không chứa ngôn từ thô tục/xúc phạm.</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <strong style={{ color: '#d97706', minWidth: '85px' }}>Đang xem xét:</strong>
+                        <span>Cần thêm thông tin từ đối tác hoặc liên hệ khách hàng để làm rõ tranh chấp.</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <strong style={{ color: '#be123c', minWidth: '85px' }}>Ẩn đánh giá:</strong>
+                        <span>Đánh giá chứa nội dung vi phạm tiêu chuẩn cộng đồng, tạm ẩn khỏi trang sản phẩm.</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <strong style={{ color: '#881337', minWidth: '85px' }}>Xác nhận xử lý:</strong>
+                        <span>Khẳng định vi phạm nặng, gỡ bỏ vĩnh viễn và áp dụng chế tài theo chính sách.</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card: Timeline */}
+                  <div className="rr-card-box">
+                    <h4 className="rr-card-title">Tiến trình & Lịch sử xử lý</h4>
+
+                    <div className="rr-timeline-list">
+                      <div className="rr-timeline-item">
+                        <div className="rr-timeline-dot" />
+                        <div className="rr-timeline-time">{formatReportedTime(selected.reportedAt)}</div>
+                        <div className="rr-timeline-desc">
+                          Khách hàng {getReporterName(selected)} đã gửi báo cáo vi phạm.
+                        </div>
+                      </div>
+
+                      <div className="rr-timeline-item" style={{ paddingBottom: 0 }}>
+                        <div className="rr-timeline-dot" />
+                        <div className="rr-timeline-time">
+                          {formatReportedTime(new Date(new Date(selected.reportedAt || 0).getTime() + 8 * 60 * 1000))}
+                        </div>
+                        <div className="rr-timeline-desc">Hệ thống tiếp nhận báo cáo vào danh sách kiểm duyệt.</div>
+                      </div>
+
+                      {selected.historyTimeline &&
+                        selected.historyTimeline.map((item, hIdx) => (
+                          <div key={hIdx} className="rr-timeline-item" style={{ paddingTop: '10px' }}>
+                            <div className="rr-timeline-dot" style={{ borderColor: '#059669' }} />
+                            <div className="rr-timeline-time">{formatReportedTime(item.timestamp)}</div>
+                            <div className="rr-timeline-desc" style={{ color: '#065f46', fontWeight: 600 }}>
+                              {item.title}: {item.description}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Section 5: Action Buttons (2 Rows) */}
-            <div className="rr-dock-actions">
-              {/* Row 1: Khác, Bỏ qua, Xác nhận */}
-              <div className="rr-actions-row">
+            {/* Drawer Sticky Footer with Moderation Actions */}
+            <div className="rr-drawer-footer">
+              <div className="rr-footer-left">
                 <button
                   type="button"
-                  className="rr-btn-more"
+                  className="rr-footer-btn-review"
+                  disabled={isHandling}
                   onClick={() =>
                     handleAction(
                       'UNDER_REVIEW',
@@ -1031,12 +1147,13 @@ export function ReportedReviewsPanel() {
                   }
                   title="Chuyển trạng thái Đang xem xét"
                 >
-                  <MoreVertical size={14} style={{ display: 'inline' }} /> Khác
+                  <Clock size={15} />
+                  <span>Đang xem xét</span>
                 </button>
 
                 <button
                   type="button"
-                  className="rr-btn-dismiss"
+                  className="rr-footer-btn-dismiss"
                   disabled={isHandling}
                   onClick={() =>
                     handleAction(
@@ -1045,33 +1162,17 @@ export function ReportedReviewsPanel() {
                       'Báo cáo không vi phạm tiêu chuẩn, giữ nguyên đánh giá.'
                     )
                   }
+                  title="Giữ nguyên đánh giá, đóng báo cáo"
                 >
-                  <X size={14} />
-                  <span>Bỏ qua</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="rr-btn-acknowledge"
-                  disabled={isHandling}
-                  onClick={() =>
-                    handleAction(
-                      'CONFIRM',
-                      'Xác nhận báo cáo vi phạm?',
-                      'Xác nhận nội dung đánh giá có vi phạm tiêu chuẩn cộng đồng.'
-                    )
-                  }
-                >
-                  <Check size={14} />
-                  <span>Xác nhận</span>
+                  <X size={15} />
+                  <span>Bỏ qua báo cáo</span>
                 </button>
               </div>
 
-              {/* Row 2: Ẩn đánh giá, Xác nhận xử lý */}
-              <div className="rr-actions-row">
+              <div className="rr-footer-right">
                 <button
                   type="button"
-                  className="rr-btn-hide"
+                  className="rr-footer-btn-hide"
                   disabled={isHandling}
                   onClick={() =>
                     handleAction(
@@ -1080,14 +1181,15 @@ export function ReportedReviewsPanel() {
                       'Ẩn đánh giá do ngôn từ không phù hợp với tiêu chuẩn.'
                     )
                   }
+                  title="Tạm ẩn đánh giá khỏi hiển thị công khai"
                 >
-                  <EyeOff size={14} />
+                  <EyeOff size={15} />
                   <span>Ẩn đánh giá</span>
                 </button>
 
                 <button
                   type="button"
-                  className="rr-btn-resolve"
+                  className="rr-footer-btn-resolve"
                   disabled={isHandling}
                   onClick={() =>
                     handleAction(
@@ -1096,15 +1198,16 @@ export function ReportedReviewsPanel() {
                       'Xác nhận xử lý báo cáo và gỡ bỏ đánh giá vi phạm.'
                     )
                   }
+                  title="Xác nhận vi phạm và hoàn tất xử lý"
                 >
-                  <CheckCircle2 size={14} />
+                  <CheckCircle2 size={15} />
                   <span>Xác nhận xử lý</span>
                 </button>
               </div>
             </div>
           </aside>
-        )}
-      </div>
+        </>
+      )}
 
       {/* MODAL: Hướng Dẫn Quy Trình Xử Lý Báo Cáo */}
       {showGuideModal && (
