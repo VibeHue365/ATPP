@@ -55,7 +55,8 @@ export function DisputesPanel() {
 
   // Selection state
   const [selected, setSelected] = useState<Dispute | null>(null);
-  const [isDetailOpen, setIsDetailOpen] = useState(true);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isDrawerMaximized, setIsDrawerMaximized] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
 
   // Form settlement state
@@ -260,12 +261,13 @@ export function DisputesPanel() {
       });
   }, [items, statusTab, serviceFilter, sortFilter, priceRangeFilter, searchTerm]);
 
-  // Sync selection when list updates or defaults if detail dock is open
+  // Keep selected dispute updated if list updates
   useEffect(() => {
-    if (isDetailOpen && !selected && filteredDisputes.length > 0) {
-      setSelected(filteredDisputes[0]);
+    if (selected) {
+      const current = filteredDisputes.find((d) => d._id === selected._id);
+      if (current) setSelected(current);
     }
-  }, [filteredDisputes, isDetailOpen, selected]);
+  }, [filteredDisputes]);
 
   // When selected dispute changes, prepare split amounts
   const handleSelectDispute = (dispute: Dispute) => {
@@ -664,10 +666,10 @@ export function DisputesPanel() {
         </div>
       )}
 
-      {/* 6. Workspace Layout: Table Left + Inspection Dock Right */}
+      {/* 6. Workspace Layout: Table */}
       <div className="df-workspace">
         {/* Left: Disputes Table */}
-        <div className={`df-table-container ${isDetailOpen && selected ? 'has-selected' : ''}`}>
+        <div className="df-table-container">
           <table className="df-table">
             <thead>
               <tr>
@@ -859,106 +861,120 @@ export function DisputesPanel() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Right: Inspection & Settlement Dock */}
-        {isDetailOpen && selected && (
-          <aside className="df-detail-dock">
-            {/* Dock Topbar: Sequential Navigation */}
-            <div className="df-dock-topbar">
-              <div className="df-dock-paginator">
-                <button
-                  type="button"
-                  className="df-dock-arrow"
-                  disabled={selectedIndex <= 0}
-                  onClick={handlePrevDispute}
-                  title="Khiếu nại trước"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                <span>
-                  {selectedIndex + 1} / {filteredDisputes.length}
-                </span>
-                <button
-                  type="button"
-                  className="df-dock-arrow"
-                  disabled={selectedIndex >= filteredDisputes.length - 1}
-                  onClick={handleNextDispute}
-                  title="Khiếu nại tiếp theo"
-                >
-                  <ChevronRight size={14} />
-                </button>
+      {/* 7. Slide-over Detail Modal / Inspection Drawer (matching Product Moderation style) */}
+      {isDetailOpen && selected && (
+        <>
+          <div className="df-drawer-backdrop" onClick={handleCloseDetail} />
+          <aside className={`df-detail-drawer ${isDrawerMaximized ? 'maximized' : ''}`}>
+            {/* Drawer Header */}
+            <div className="df-drawer-header">
+              <div className="df-drawer-title-wrap">
+                <div className="df-dock-badges-row">
+                  {getServiceType(selected) === 'RENTAL' && (
+                    <span className="df-badge-aodai">
+                      <Shirt size={12} /> Áo dài
+                    </span>
+                  )}
+                  {getServiceType(selected) === 'PHOTO' && (
+                    <span className="df-badge-photo">
+                      <Camera size={12} /> Chụp ảnh
+                    </span>
+                  )}
+                  {getServiceType(selected) === 'COMBO' && (
+                    <span className="df-badge-combo">
+                      <Sparkles size={12} /> Combo
+                    </span>
+                  )}
+
+                  {isItemResolved(selected) ? (
+                    <span className="df-status-pill df-status-resolved">
+                      <span className="df-status-dot" /> Đã giải quyết
+                    </span>
+                  ) : isItemNegotiating(selected) ? (
+                    <span className="df-status-pill df-status-disputed">
+                      <span className="df-status-dot" /> Đang đối chất
+                    </span>
+                  ) : (
+                    <span className="df-status-pill df-status-pending">
+                      <span className="df-status-dot" /> Chờ xử lý
+                    </span>
+                  )}
+
+                  <span
+                    className={`df-prio-pill ${getPriority(selected) === 'Cao'
+                      ? 'df-prio-high'
+                      : getPriority(selected) === 'Trung bình'
+                        ? 'df-prio-med'
+                        : 'df-prio-low'
+                      }`}
+                  >
+                    Ưu tiên {getPriority(selected).toLowerCase()}
+                  </span>
+                </div>
+
+                <div className="df-drawer-heading-row">
+                  <h3 className="df-drawer-title">
+                    Chi tiết khiếu nại {getDisputeCode(selected)}
+                  </h3>
+                  <span className="df-drawer-timestamp">
+                    {selected.createdAt
+                      ? new Date(selected.createdAt).toLocaleDateString('vi-VN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                      })
+                      : '14:32 18/03/2025'}
+                  </span>
+                </div>
               </div>
 
-              <button
-                type="button"
-                className="df-dock-close-btn"
-                onClick={handleCloseDetail}
-                title="Đóng bảng chi tiết"
-              >
-                <X size={18} />
-              </button>
-            </div>
+              {/* Navigation Controls, Maximize & Close */}
+              <div className="df-drawer-controls">
+                <div className="df-dock-paginator">
+                  <button
+                    type="button"
+                    className="df-dock-arrow"
+                    disabled={selectedIndex <= 0}
+                    onClick={handlePrevDispute}
+                    title="Khiếu nại trước"
+                  >
+                    <ChevronLeft size={14} /> Trước
+                  </button>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>
+                    {selectedIndex + 1} / {filteredDisputes.length}
+                  </span>
+                  <button
+                    type="button"
+                    className="df-dock-arrow"
+                    disabled={selectedIndex >= filteredDisputes.length - 1}
+                    onClick={handleNextDispute}
+                    title="Khiếu nại tiếp theo"
+                  >
+                    Tiếp <ChevronRight size={14} />
+                  </button>
+                </div>
 
-            {/* Dock Header Info */}
-            <div className="df-dock-header-info">
-              <div className="df-dock-badges-row">
-                {getServiceType(selected) === 'RENTAL' && (
-                  <span className="df-badge-aodai">
-                    <Shirt size={12} /> Áo dài
-                  </span>
-                )}
-                {getServiceType(selected) === 'PHOTO' && (
-                  <span className="df-badge-photo">
-                    <Camera size={12} /> Chụp ảnh
-                  </span>
-                )}
-                {getServiceType(selected) === 'COMBO' && (
-                  <span className="df-badge-combo">
-                    <Sparkles size={12} /> Combo
-                  </span>
-                )}
-
-                {isItemResolved(selected) ? (
-                  <span className="df-status-pill df-status-resolved">
-                    <span className="df-status-dot" /> Đã giải quyết
-                  </span>
-                ) : isItemNegotiating(selected) ? (
-                  <span className="df-status-pill df-status-disputed">
-                    <span className="df-status-dot" /> Đang đối chất
-                  </span>
-                ) : (
-                  <span className="df-status-pill df-status-pending">
-                    <span className="df-status-dot" /> Chờ xử lý
-                  </span>
-                )}
-
-                <span
-                  className={`df-prio-pill ${getPriority(selected) === 'Cao'
-                    ? 'df-prio-high'
-                    : getPriority(selected) === 'Trung bình'
-                      ? 'df-prio-med'
-                      : 'df-prio-low'
-                    }`}
+                <button
+                  type="button"
+                  className="df-drawer-icon-btn"
+                  onClick={() => setIsDrawerMaximized(!isDrawerMaximized)}
+                  title={isDrawerMaximized ? 'Thu nhỏ' : 'Phóng to'}
                 >
-                  Ưu tiên {getPriority(selected).toLowerCase()}
-                </span>
-              </div>
+                  <Maximize2 size={16} />
+                </button>
 
-              <div className="df-dock-title-row">
-                <h3 className="df-dock-booking-title">
-                  Chi tiết khiếu nại {getDisputeCode(selected)}
-                </h3>
-                <span className="df-dock-timestamp">
-                  {selected.createdAt
-                    ? new Date(selected.createdAt).toLocaleDateString('vi-VN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                    })
-                    : '14:32 18/03/2025'}
-                </span>
+                <button
+                  type="button"
+                  className="df-drawer-icon-btn"
+                  onClick={handleCloseDetail}
+                  title="Đóng bảng chi tiết"
+                >
+                  <X size={18} />
+                </button>
               </div>
             </div>
 
@@ -1002,10 +1018,12 @@ export function DisputesPanel() {
             </div>
 
             {/* Dock Body Content */}
-            <div className="df-dock-body">
+            <div className="df-drawer-body">
               {/* TAB 1: TỔNG QUAN */}
               {dockSubTab === 'OVERVIEW' && (
-                <>
+                <div className="df-drawer-grid-2col">
+                  {/* CỘT TRÁI: Chứng cứ & Thông tin đơn hàng & Đối ứng */}
+                  <div className="df-drawer-col">
                   {/* Evidence Sub-filters */}
                   <div className="df-evidence-subfilters">
                     <button
@@ -1198,10 +1216,32 @@ export function DisputesPanel() {
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Section: Phán quyết của Admin */}
-                  <div className="df-decision-section">
-                    <h4 className="df-decision-title">Phán quyết của Admin</h4>
+                {/* CỘT PHẢI: Ký quỹ Escrow & Quyết định Admin */}
+                <div className="df-drawer-col">
+                    {/* Ribbon ký quỹ nổi bật */}
+                    <div className="df-escrow-ribbon">
+                      <div className="df-escrow-ribbon-left">
+                        <div className="df-escrow-ribbon-icon">
+                          <Scale size={20} />
+                        </div>
+                        <div>
+                          <div className="df-escrow-ribbon-label">Tiền ký quỹ Escrow bảo đảm</div>
+                          <div className="df-escrow-ribbon-amount">
+                            {formatCurrency(getDepositTotal(selected))}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="df-escrow-ribbon-badge">
+                        <ShieldAlert size={14} />
+                        <span>Đang tạm giữ an toàn</span>
+                      </div>
+                    </div>
+
+                    {/* Section: Phán quyết của Admin */}
+                    <div className="df-decision-section">
+                      <h4 className="df-decision-title">Phán quyết của Admin</h4>
 
                     {isItemResolved(selected) ? (
                       <div
@@ -1384,7 +1424,8 @@ export function DisputesPanel() {
                       </>
                     )}
                   </div>
-                </>
+                </div>
+              </div>
               )}
 
               {/* TAB 2: BẰNG CHỨNG */}
@@ -1669,9 +1710,61 @@ export function DisputesPanel() {
                 </div>
               )}
             </div>
+
+            {/* 4. Drawer Fixed Footer */}
+            <div className="df-drawer-footer">
+              <div className="df-drawer-footer-left">
+                <span style={{ fontSize: '13px', color: '#475569' }}>
+                  Tiền ký quỹ tạm giữ:{' '}
+                  <strong style={{ color: '#be123c', fontSize: '14px' }}>
+                    {formatCurrency(getDepositTotal(selected))}
+                  </strong>
+                </span>
+                <span style={{ color: '#cbd5e1' }}>•</span>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>
+                  Phán quyết: <strong>{decisionLabels[decision]}</strong>
+                </span>
+              </div>
+
+              <div className="df-drawer-footer-actions">
+                <button
+                  type="button"
+                  className="df-btn-draft"
+                  onClick={handleCloseDetail}
+                >
+                  Đóng
+                </button>
+                {!isItemResolved(selected) && (
+                  <>
+                    <button
+                      type="button"
+                      className="df-btn-draft"
+                      onClick={handleSaveDraft}
+                    >
+                      Lưu nháp
+                    </button>
+                    <button
+                      type="button"
+                      className="df-btn-confirm"
+                      disabled={isResolving}
+                      onClick={() => void handleResolve()}
+                    >
+                      {isResolving ? (
+                        'Đang thực thi phán quyết...'
+                      ) : (
+                        <>
+                          <CheckCircle2 size={15} />
+                          <span>Xác nhận phán quyết</span>
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </aside>
-        )}
-      </div>
+        </>
+      )}
 
       {/* MODAL 1: Side-by-side Large Comparison Modal */}
       {showComparisonModal && selected && (
