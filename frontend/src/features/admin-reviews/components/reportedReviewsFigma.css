@@ -355,26 +355,20 @@
   color: #e11d48;
 }
 
-/* 6. Workspace Layout (Table Left + Detail Dock Right) */
+/* 6. Workspace Layout (Full-width Table) */
 .rr-workspace {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
+  display: block;
+  width: 100%;
   position: relative;
 }
 
 .rr-table-container {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-.rr-table-container.has-selected {
-  flex: 1.15;
 }
 
 /* Table */
@@ -623,121 +617,307 @@
 }
 
 /* ==========================================================================
-   7. Right Inspection & Detail Dock (Figma Node 325-8432)
+/* ==========================================================================
+   7. Slide-Over Inspection Drawer (matching Product Moderation style)
    ========================================================================== */
-.rr-detail-dock {
-  width: min(480px, 40vw);
+.rr-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 998;
+  animation: rrDrawerFade 0.2s ease-out;
+}
+
+@keyframes rrDrawerFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.rr-detail-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(1080px, 95vw);
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  z-index: 999;
+  box-shadow: -12px 0 45px rgba(0, 0, 0, 0.18);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  position: sticky;
-  top: 20px;
-  max-height: calc(100vh - 120px);
+  animation: rrDrawerSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@media (max-width: 1180px) {
-  .rr-detail-dock {
-    width: 100%;
-    position: relative;
-    top: 0;
-    max-height: none;
+.rr-detail-drawer.maximized {
+  width: min(1400px, 98vw);
+}
+
+@keyframes rrDrawerSlideIn {
+  from {
+    transform: translateX(100%);
   }
-  .rr-workspace {
-    flex-direction: column;
+  to {
+    transform: translateX(0);
   }
 }
 
-/* Dock Topbar */
-.rr-dock-topbar {
+.rr-drawer-header {
+  padding: 16px 28px;
+  border-bottom: 1px solid #f1f5f9;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
-  border-bottom: 1px solid #f1f5f9;
   background: #ffffff;
+  flex-shrink: 0;
+  gap: 16px;
 }
 
-.rr-dock-topbar h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 800;
-  color: #0f172a;
+.rr-drawer-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 
-.rr-dock-paginator {
+.rr-drawer-heading-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rr-drawer-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.rr-drawer-code {
+  font-size: 13.5px;
   font-weight: 700;
+  color: #64748b;
+  font-family: ui-monospace, monospace;
+}
+
+.rr-drawer-timestamp {
+  font-size: 12px;
   color: #64748b;
 }
 
-.rr-dock-arrow {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  width: 26px;
-  height: 26px;
+.rr-drawer-controls {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.rr-drawer-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+}
+
+.rr-drawer-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
   cursor: pointer;
-  color: #475569;
   transition: all 0.15s ease;
 }
 
-.rr-dock-arrow:hover:not(:disabled) {
+.rr-drawer-nav-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.rr-drawer-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rr-drawer-nav-counter {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+.rr-drawer-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 6px;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rr-drawer-icon-btn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+/* Drawer Scrollable Body & 2-Col Grid */
+.rr-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+  background: #fcfbf9;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rr-drawer-grid-2col {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .rr-drawer-grid-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rr-drawer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Drawer Sticky Footer */
+.rr-drawer-footer {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  z-index: 10;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.rr-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rr-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rr-footer-btn-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rr-footer-btn-review:hover {
   background: #f1f5f9;
   color: #0f172a;
 }
 
-.rr-dock-arrow:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-/* Dock Header Info */
-.rr-dock-header-info {
-  padding: 12px 18px;
-  background: #ffffff;
-  border-bottom: 1px solid #f1f5f9;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.rr-dock-header-row {
-  display: flex;
+.rr-footer-btn-dismiss {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-}
-
-.rr-dock-report-code {
+  gap: 6px;
+  padding: 9px 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
   font-size: 13px;
-  font-weight: 800;
-  color: #0f172a;
-  font-family: ui-monospace, monospace;
-}
-
-.rr-dock-report-time {
-  font-size: 11.5px;
+  font-weight: 600;
   color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-/* Dock Scrollable Body */
-.rr-dock-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  background: #fcfbf9;
+.rr-footer-btn-dismiss:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.rr-footer-btn-hide {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  background: #ffffff;
+  border: 1px solid #be123c;
+  color: #be123c;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rr-footer-btn-hide:hover {
+  background: #fff1f2;
+}
+
+.rr-footer-btn-resolve {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  background: #881337;
+  border: 1px solid #881337;
+  color: #ffffff;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(136, 19, 55, 0.2);
+}
+
+.rr-footer-btn-resolve:hover:not(:disabled) {
+  background: #700f2b;
+  border-color: #700f2b;
+}
+
+.rr-footer-btn-resolve:disabled,
+.rr-footer-btn-hide:disabled,
+.rr-footer-btn-dismiss:disabled,
+.rr-footer-btn-review:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Section 1: Nội dung đánh giá bị báo cáo */
