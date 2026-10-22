@@ -1,0 +1,208 @@
+﻿Summary,Issue key,Issue id,Issue Type,Status,Project key,Project name,Project type,Project lead,Project lead id,Project description,Priority,Resolution,Assignee,Assignee Id,Reporter,Reporter Id,Creator,Creator Id,Created,Updated,Last Viewed,Resolved,Due date,Votes,Description,Environment,Original estimate,Remaining Estimate,Time Spent,Work Ratio,Σ Original Estimate,Σ Remaining Estimate,Σ Time Spent,Security Level,Custom field (Budget),Custom field (Budget),Custom field (Category),Custom field (Development),Custom field (Issue color),Custom field (Rank),Custom field (Start date),Custom field (Team),Custom field (Vulnerability),Status category,Status category changed
+[VIB-72] [UC-I01] Real-time Booking Status Notifications (Push & Email),VS-86,10649,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,High,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,22/Oct/26 8:52 PM,,,0,"User Story:
+As a Customer, I want to receive Push Notifications and Email alerts upon status changes (Confirmed, Delivered), So that I stay updated.
+
+Acceptance Criteria:
+• Pass: Given Shop clicking 'Confirm Booking', When event fires, Then sends HTML Email + Push Notification to customer phone.
+• Fail: Given Customer opted out of emails, When status changes, Then sends Push Notification only.
+
+Technical Notes:
+• NotificationsService.sendBookingNotification() | Nodemailer Template Engine",,0,0,0,,0,0,0,,,,,,,0|i001kv:,,,,To Do,
+[VIB-77] [UC-K05] Top Rented Products Analytics Report,VS-104,10653,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Medium,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a Shop, I want to view Top 5 most rented Ao Dai items, So that I can stock up on high-demand inventory.
+
+Acceptance Criteria:
+• Pass: Given query for Top products, When calling API, Then returns HTTP 200 OK showing Top 5 items ordered by rental count descending.
+• Fail: Given a new shop with 0 rentals, When querying, Then returns data: [].
+
+Technical Notes:
+• GET /api/v1/admin-stats/top-products | Aggregation $sort: { rentalCount: -1 }",,0,0,0,,0,0,0,,,,,,,0|i001lr:,,,,To Do,
+[VIB-68] Real-time WebSocket Gateway Setup (Socket.io Gateway),VS-83,10665,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,High,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a Lead Dev, I want to set up a Socket.io WebSocket Gateway in NestJS, So that real-time messaging & notifications are enabled.
+
+Acceptance Criteria:
+• Pass: Given valid JWT token in handshake auth: { token }, When connecting socket, Then server accepts connection and joins user room.
+• Fail: Given invalid token, When connecting, Then server disconnects socket with Unauthorized error.
+
+Technical Notes:
+• @WebSocketGateway({ cors: true }) | ChatGateway | Redis Adapter",,0,0,0,,0,0,0,,,,,,,0|i001of:,,,,To Do,
+[VIB-67] AD-DB-05 Database Schemas for Real-time Chat & Notifications,VS-82,10675,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,High,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a Data Engineer, I want to create collections chat_rooms, chat_messages, and notifications, So that real-time chat logs and push alerts are stored cleanly.
+
+Acceptance Criteria:
+• Pass: Given active MongoDB connection, When app boots, Then chat_rooms and notifications collections initialize with indexed fields.
+• Fail: Given malformed message payload, When saving, Then Mongoose throws ValidationError.
+
+Technical Notes:
+• Schemas: chat_room.schema.ts, chat_message.schema.ts, notification.schema.ts",,0,0,0,,0,0,0,,,,,,,0|i001qn:,,,,To Do,
+"[VIB-73] [UC-I02] Financial, Refund & Payout Status Alerts (Push Notifications)",VS-87,10676,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,High,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a User / Provider, I want to receive alerts when payments, deposits, refunds, or wallet payout requests are approved/rejected, So that I am informed of financial status.
+
+Acceptance Criteria:
+• Pass: Given 500k deposit refunded to card, When event fires, Then sends notification 'Received 500,000 VND deposit refund for booking BK100'.
+• Fail: Given Admin approves wallet payout request, When event fires, Then sends notification 'Your withdrawal request of 1,000,000 VND has been approved'.
+
+Technical Notes:
+• Event Listeners: payment.success, refund.completed, payout.approved, payout.rejected",,0,0,0,,0,0,0,,,,,,,0|i001qv:,,,,To Do,
+[VIB-74] [UC-I03] Automated Shoot Schedule Reminders (Cronjob 24h & 2h Alerts),VS-88,10677,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,High,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a Customer / Photographer, I want to receive reminders 24h and 2h prior to a shoot, So that I arrive on time.
+
+Acceptance Criteria:
+• Pass: Given shoot scheduled at 9:00 tomorrow, When cronjob scans at 9:00 today, Then automatically dispatches reminders to client and photographer.
+• Fail: Given a cancelled booking, When cronjob scans, Then skips reminder dispatch.
+
+Technical Notes:
+• @Cron(CronExpression.EVERY_HOUR) | BookingsSchedulerService.scanUpcomingBookings()",,0,0,0,,0,0,0,,,,,,,0|i001r3:,,,,To Do,
+[VIB-86] [UC-K20] Active Stores & Listed Products Overview,VS-113,10680,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Medium,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As an Admin, I want to view total active shops and listed products count, So that platform catalog size is monitored.
+
+Acceptance Criteria:
+• Pass: Given 30 active shops and 450 items, When viewing overview, Then returns HTTP 200 OK { totalShops: 30, totalProducts: 450 }.
+• Fail: Given large DB, When querying, Then response serves under 100ms utilizing Mongo count index.
+
+Technical Notes:
+• GET /api/v1/admin-stats/shops-overview | Mongoose .estimatedDocumentCount()",,0,0,0,,0,0,0,,,,,,,0|i001rr:,,,,To Do,
+[VIB-87] [UC-K21] Photographer Partner Network & Completed Shoots Count,VS-114,10681,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Medium,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As an Admin, I want to view total partner photographers and total completed shoots, So that I can report metrics to executive team.
+
+Acceptance Criteria:
+• Pass: Given querying photographer overview, When API executes, Then returns HTTP 200 OK { totalPhotographers: 15, completedShoots: 120 }.
+• Fail: Given filter location=HUE, When querying, Then counts Hue-based photographers only.
+
+Technical Notes:
+• GET /api/v1/admin-stats/photographers-overview | AdminStatsService.getPhotographersOverview()",,0,0,0,,0,0,0,,,,,,,0|i001rz:,,,,To Do,
+[VIB-76] [UC-K04] Rental Bookings & Revenue Analytics Dashboard,VS-103,10683,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,High,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a Shop / Admin, I want to view total rental order counts and total revenue charts by month, So that business growth is tracked.
+
+Acceptance Criteria:
+• Pass: Given Shop JWT, When viewing dashboard, Then returns HTTP 200 OK with order count (50), revenue (15,000,000 VND), and daily chart payload.
+• Fail: Given filter from=2026-01-01&to=2026-01-31, When querying, Then returns precise January analytics data.
+
+Technical Notes:
+• GET /api/v1/admin-stats/rental-bookings | MongoDB Aggregation Pipeline",,0,0,0,,0,0,0,,,,,,,0|i001sf:,,,,To Do,
+[VIB-82] [UC-K11] Popular Concept Preference Analytics,VS-109,10684,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Medium,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As an Admin / Photographer, I want to view ranking of most booked photoshoot concepts, So that top-demand concepts are expanded.
+
+Acceptance Criteria:
+• Pass: Given platform booking data, When viewing concept stats, Then returns Top 5 concepts (e.g. 1. Hue Royal Concept - 40% share).
+• Fail: Given filtering by Q1/2026, When querying, Then returns precise Q1 rankings.
+
+Technical Notes:
+• GET /api/v1/admin-stats/popular-concepts | Aggregation on bookings.conceptId",,0,0,0,,0,0,0,,,,,,,0|i001sn:,,,,To Do,
+[VIB-84] [UC-K13] Booking Conversion & Cancellation Rate Analytics,VS-111,10685,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Medium,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As an Admin, I want to view completion rate vs cancellation rate percentages, So that operational bottlenecks are resolved.
+
+Acceptance Criteria:
+• Pass: Given 100 total bookings (80 Completed, 15 Cancelled, 5 Disputed), When viewing metrics, Then returns completionRate: 80%, cancellationRate: 15%, disputeRate: 5%.
+• Fail: Given no bookings, When querying, Then returns all metrics at 0%.
+
+Technical Notes:
+• GET /api/v1/admin-stats/booking-conversion | AdminStatsService.getConversionMetrics()",,0,0,0,,0,0,0,,,,,,,0|i001sv:,,,,To Do,
+[VIB-88] [UC-K23] Platform Net Revenue & Commission Summary,VS-115,10686,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,High,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As an Admin / CFO, I want to view total net platform revenue (Commissions + Platform Fees) post-payout, So that company financial health is monitored.
+
+Acceptance Criteria:
+• Pass: Given total platform GMV 100,000,000 VND, When viewing revenue report, Then returns HTTP 200 OK { totalGMV: 100000000, platformRevenue: 11500000, totalPayout: 88500000 }.
+• Fail: Given a non-CFO/Admin user attempting access, When requesting, Then returns HTTP 403 Forbidden.
+
+Technical Notes:
+• GET /api/v1/admin-stats/financial-summary | SettlementsService.getFinancialSummary()",,0,0,0,,0,0,0,,,,,,,0|i001t3:,,,,To Do,
+[VIB-81] [UC-K10] Photographer Calendar Schedule View,VS-108,10687,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,High,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a Photographer, I want to view my upcoming shoot schedule in a Calendar View, So that I manage my work dates.
+
+Acceptance Criteria:
+• Pass: Given 3 scheduled shoots in October, When opening Calendar view, Then dates 5, 10, and 15 display green markers with location details.
+• Fail: Given a cancelled shoot, When viewing calendar, Then cancelled slot displays in grey strikethrough.
+
+Technical Notes:
+• GET /api/v1/photographers/schedules/calendar | PhotographersService.getCalendar()",,0,0,0,,0,0,0,,,,,,,0|i001tb:,,,,To Do,
+[VIB-83] [UC-K12] Low-Rating Photographer Performance Alert Report,VS-110,10688,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Medium,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As an Admin, I want to report photographers with ratings <3.5 stars, So that quality warnings or suspensions are issued.
+
+Acceptance Criteria:
+• Pass: Given 2 photographers with rating 3.2, When running report, Then displays list of 2 photographers with negative review details.
+• Fail: Given no photographers <3.5 stars, When querying report, Then returns data: [].
+
+Technical Notes:
+• GET /api/v1/admin/photographers/low-rating | @Roles(UserRole.ADMIN)",,0,0,0,,0,0,0,,,,,,,0|i001tj:,,,,To Do,
+[VIB-85] [UC-K19] Customer Growth & Daily Active Users (DAU / MAU),VS-112,10689,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Medium,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As an Admin, I want to track daily new user registrations and active user metrics, So that marketing ROI is evaluated.
+
+Acceptance Criteria:
+• Pass: Given 7-day date range, When opening growth report, Then returns HTTP 200 OK with bar chart payload of daily new users.
+• Fail: Given clicking 'Export Excel', When API processes, Then downloads .xlsx file containing user growth logs.
+
+Technical Notes:
+• GET /api/v1/admin-stats/user-growth | AdminStatsService.getUserGrowth()",,0,0,0,,0,0,0,,,,,,,0|i001tr:,,,,To Do,
+"[VIB-89] [UC-K25] User Behavior Analytics (High Views, Zero Bookings & Search Terms)",VS-116,10690,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Low,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a Product Manager, I want to view high-view items with 0 bookings and top search terms, So that pricing and search terms are optimized.
+
+Acceptance Criteria:
+• Pass: Given Item X with 500 views and 0 bookings, When behavior engine runs, Then lists Item X under 'Review Pricing / Photo Quality' with HTTP 200 OK.
+• Fail: Given term 'Nhat Binh Ao Dai' searched 1,000 times, When reviewing search logs, Then ranks 'Nhat Binh Ao Dai' as #1 Hot Search.
+
+Technical Notes:
+• GET /api/v1/analytics/user-behavior | Model: Analytics",,0,0,0,,0,0,0,,,,,,,0|i001tz:,,,,To Do,
+[VIB-70] [UC-M01] Real-time Chat between Customer and Provider (Shop / Photographer),VS-84,10691,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,High,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a Customer, I want to chat in real-time and send photo attachments to Shop/Photographer, So that we coordinate booking details.
+
+Acceptance Criteria:
+• Pass: Given User A and User B in room_123, When A sends 'Is size M available?', Then B receives message instantly via socket event receive_message.
+• Fail: Given an attached photo, When sending, Then photo uploads to MinIO and renders as thumbnail in chat room.
+
+Technical Notes:
+• chat_rooms, chat_messages Collections | Events: send_message, receive_message",,0,0,0,,0,0,0,,,,,,,0|i001u7:,,,,To Do,
+[VIB-71] [UC-M05] Real-time Unread Message Badge Notifications,VS-85,10692,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Medium,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a User, I want to see unread message counter badges increment on the chat icon, So that I never miss partner messages.
+
+Acceptance Criteria:
+• Pass: Given user outside active chat room, When new message arrives, Then unread badge counter increments by +1.
+• Fail: Given user entering chat room, When room loads, Then unread counter for that room resets to 0.
+
+Technical Notes:
+• Socket Event unread_count_update | Model: ChatRoom",,0,0,0,,0,0,0,,,,,,,0|i001uf:,,,,To Do,
+[VIB-75] [UC-I04] Post-service Review & System Engagement Alerts,VS-89,10693,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Low,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a Customer, I want to receive a review reminder after order completion, So that I can share my experience and earn rewards.
+
+Acceptance Criteria:
+• Pass: Given booking completed 2 hours ago, When trigger executes, Then sends notification 'Share your feedback to receive 20k voucher!'.
+• Fail: Given customer submitted review previously, When scanning, Then skips reminder.
+
+Technical Notes:
+• NotificationsService.sendReviewReminder()",,0,0,0,,0,0,0,,,,,,,0|i001un:,,,,To Do,
+[VIB-69] [UC-I05] Notification Channel Preference Config (Email / App Push Toggle),VS-90,10694,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Low,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a User, I want to toggle marketing emails on/off in Settings, So that I control communication preferences.
+
+Acceptance Criteria:
+• Pass: Given User toggling Off marketing emails, When saving settings, Then notificationPreferences.marketingEmail sets to false with HTTP 200 OK.
+• Fail: Given marketing emails disabled, When a dispute event occurs, Then system critical emails still deliver.
+
+Technical Notes:
+• PATCH /api/v1/users/notification-settings | Model: User",,0,0,0,,0,0,0,,,,,,,0|i001uv:,,,,To Do,
+[VIB-78] [UC-K06] Inventory Breakdown Analytics (State Percentage Chart),VS-105,10696,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,Medium,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a Shop, I want to view percentage breakdown of items Available, Rented, Cleaning, or Damaged, So that stock status is clear.
+
+Acceptance Criteria:
+• Pass: Given a shop with 20 items, When viewing inventory report, Then returns HTTP 200 OK showing 10 Available (50%), 8 In Use (40%), 2 Cleaning (10%).
+• Fail: Given expired token, When requesting, Then returns HTTP 401 Unauthorized.
+
+Technical Notes:
+• GET /api/v1/admin-stats/inventory-breakdown | AdminStatsService.getInventoryBreakdown()",,0,0,0,,0,0,0,,,,,,,0|i001vb:,,,,To Do,
+[VIB-79] [UC-K08] Revenue Growth Trends & Wallet Balance Analytics,VS-106,10697,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,High,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As an Admin / Shop, I want to compare revenue growth rates across months and view current wallet balance, So that strategic planning is data-driven.
+
+Acceptance Criteria:
+• Pass: Given groupBy=MONTH, When querying, Then returns 12-month array with revenue totals, MoM % growth rates, and wallet balance with HTTP 200 OK.
+• Fail: Given groupBy=INVALID, When querying, Then returns HTTP 400 Bad Request.
+
+Technical Notes:
+• GET /api/v1/admin-stats/revenue-trends | AdminStatsService.getRevenueTrends()",,0,0,0,,0,0,0,,,,,,,0|i001vj:,,,,To Do,
+[VIB-80] [UC-K09] Photographer Earnings & Commission Analytics,VS-107,10698,Task,To Do,VS,VibeHue365_SE35,business,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,,High,,Đạt 5.Tiến,712020:42527dd0-5a2f-4c9a-aa28-f32a26eefd11,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,Lee Ngoc,712020:f4fa11f7-6205-4013-9a43-4c7fe44ebf09,25/Aug/26 2:24 PM,25/Aug/26 2:24 PM,,,,0,"User Story:
+As a Photographer, I want to view gross earnings, platform commission paid, and net payout totals, So that I track my income.
+
+Acceptance Criteria:
+• Pass: Given 10 completed shoots, When querying earnings, Then returns gross earnings, 12% commission paid, and net payout total with HTTP 200 OK.
+• Fail: Given no shoots, When querying, Then returns totalEarnings: 0.
+
+Technical Notes:
+• GET /api/v1/photographers/earnings | PhotographersService.getEarnings()",,0,0,0,,0,0,0,,,,,,,0|i001vr:,,,,To Do,
