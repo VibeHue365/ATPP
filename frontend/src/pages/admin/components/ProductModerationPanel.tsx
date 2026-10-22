@@ -990,13 +990,6 @@ export const ProductModerationPanel: React.FC = () => {
             <table className="lume-product-mod-table">
               <thead>
                 <tr>
-                  <th style={{ width: 36, textAlign: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={items.length > 0 && selectedIds.size === items.length}
-                      onChange={handleToggleSelectAll}
-                    />
-                  </th>
                   <th style={{ width: 36 }}>#</th>
                   <th>Ảnh</th>
                   <th>Tên sản phẩm / Gói dịch vụ</th>
@@ -1006,19 +999,18 @@ export const ProductModerationPanel: React.FC = () => {
                   <th>Ngày đăng ˅</th>
                   <th>Giá (VNĐ)</th>
                   <th>Trạng thái</th>
-                  <th style={{ textAlign: 'center', width: 48 }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={11} style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
                       Đang tải danh sách kiểm duyệt từ cơ sở dữ liệu MongoDB Atlas...
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={11} style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
                       Không có sản phẩm hoặc gói dịch vụ nào phù hợp với bộ lọc hiện tại.
                     </td>
                   </tr>
@@ -1044,15 +1036,6 @@ export const ProductModerationPanel: React.FC = () => {
                           }
                         }}
                       >
-                        {/* Checkbox */}
-                        <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.has(item.id || item._id)}
-                            onChange={(e) => handleToggleSelectRow(item.id || item._id, e as any)}
-                          />
-                        </td>
-
                         {/* # index */}
                         <td style={{ color: '#94a3b8', fontWeight: 600 }}>{rowNumber}</td>
 
@@ -1113,127 +1096,6 @@ export const ProductModerationPanel: React.FC = () => {
 
                         {/* Trạng thái */}
                         <td>{renderStatusBadge(item.moderationStatus)}</td>
-
-                        {/* Action Menu */}
-                        <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                          <div style={{ position: 'relative', display: 'inline-block' }}>
-                            <button
-                              type="button"
-                              className="lume-mod-page-btn"
-                              style={{ width: 28, height: 28 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveActionMenuId((prev) => (prev === item._id ? null : item._id));
-                              }}
-                            >
-                              <MoreHorizontal size={14} />
-                            </button>
-
-                            {activeActionMenuId === item._id && (
-                              <div
-                                style={{
-                                  position: 'absolute',
-                                  right: 0,
-                                  top: '100%',
-                                  background: '#ffffff',
-                                  border: '1px solid #e2e8f0',
-                                  borderRadius: '8px',
-                                  boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-                                  padding: '4px',
-                                  zIndex: 50,
-                                  minWidth: '150px',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: '2px',
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  type="button"
-                                  className="lume-mod-tab-item"
-                                  style={{
-                                    padding: '6px 10px',
-                                    fontSize: '12px',
-                                    borderRadius: '6px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                  }}
-                                  onClick={() => {
-                                    setActiveActionMenuId(null);
-                                    setActiveProduct(item);
-                                    setActiveGalleryIndex(0);
-                                    setIsDetailOpen(true);
-                                  }}
-                                >
-                                  <Eye size={13} color="#881337" />
-                                  <span>Xem chi tiết</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  className="lume-mod-tab-item"
-                                  style={{
-                                    padding: '6px 10px',
-                                    fontSize: '12px',
-                                    borderRadius: '6px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                  }}
-                                  onClick={() => {
-                                    setActiveActionMenuId(null);
-                                    handleApprove(item);
-                                  }}
-                                >
-                                  <Check size={13} color="#16a34a" />
-                                  <span>Phê duyệt</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  className="lume-mod-tab-item"
-                                  style={{
-                                    padding: '6px 10px',
-                                    fontSize: '12px',
-                                    borderRadius: '6px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                  }}
-                                  onClick={() => {
-                                    setActiveActionMenuId(null);
-                                    setRevisionModalProduct(item);
-                                  }}
-                                >
-                                  <AlertCircle size={13} color="#ea580c" />
-                                  <span>Yêu cầu sửa</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  className="lume-mod-tab-item"
-                                  style={{
-                                    padding: '6px 10px',
-                                    fontSize: '12px',
-                                    borderRadius: '6px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    color: '#dc2626',
-                                  }}
-                                  onClick={() => {
-                                    setActiveActionMenuId(null);
-                                    setRejectModalProduct(item);
-                                  }}
-                                >
-                                  <X size={13} color="#dc2626" />
-                                  <span>Từ chối</span>
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </td>
                       </tr>
                     );
                   })
@@ -1449,105 +1311,6 @@ export const ProductModerationPanel: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Card: Chi tiết dịch vụ / Thuộc tính áo dài */}
-                {activeProduct.itemType === 'PHOTOGRAPHY' ? (
-                  <div className="lume-product-card">
-                    <h4 className="lume-product-card-title">Nội dung gói dịch vụ bao gồm</h4>
-                    <div className="lume-product-inclusions-grid">
-                      <div className="lume-product-inc-card">
-                        <div className="lume-product-inc-icon"><Camera size={15} /></div>
-                        <div>
-                          <div>Nhiếp ảnh gia chuyên nghiệp</div>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>Trang thiết bị hiện đại</div>
-                        </div>
-                      </div>
-
-                      <div className="lume-product-inc-card">
-                        <div className="lume-product-inc-icon"><Sparkles size={15} /></div>
-                        <div>
-                          <div>{activeProduct.editedPhotosCount || 80}+ ảnh hoàn thiện</div>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>Photoshop chuyên nghiệp</div>
-                        </div>
-                      </div>
-
-                      <div className="lume-product-inc-card">
-                        <div className="lume-product-inc-icon"><Clock size={15} /></div>
-                        <div>
-                          <div>{activeProduct.durationHours || 2} giờ chụp hình</div>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>Thời gian linh hoạt</div>
-                        </div>
-                      </div>
-
-                      <div className="lume-product-inc-card">
-                        <div className="lume-product-inc-icon"><Calendar size={15} /></div>
-                        <div>
-                          <div>Trả ảnh trong {activeProduct.deliveryDays || 3} ngày</div>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>Qua Google Drive / Cloud</div>
-                        </div>
-                      </div>
-
-                      <div className="lume-product-inc-card" style={{ gridColumn: 'span 2' }}>
-                        <div className="lume-product-inc-icon"><MapPin size={15} /></div>
-                        <div>
-                          <div>Địa điểm chụp: {activeProduct.location || 'Studio & Ngoại cảnh nội thành Huế'}</div>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>Hỗ trợ tạo dáng & stylist tận tình</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="lume-product-card">
-                    <h4 className="lume-product-card-title">Quy cách & Đặc tính áo dài</h4>
-                    <div className="lume-product-inclusions-grid">
-                      <div className="lume-product-inc-card">
-                        <div className="lume-product-inc-icon"><Shirt size={15} /></div>
-                        <div>
-                          <div>Kích cỡ sẵn có</div>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>
-                            {activeProduct.sizes && activeProduct.sizes.length > 0
-                              ? activeProduct.sizes.join(', ')
-                              : 'S, M, L, XL'}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="lume-product-inc-card">
-                        <div className="lume-product-inc-icon"><Layers size={15} /></div>
-                        <div>
-                          <div>Chất liệu vải</div>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>
-                            {activeProduct.materials && activeProduct.materials.length > 0
-                              ? activeProduct.materials.join(', ')
-                              : 'Lụa tơ tằm / Gấm cao cấp'}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="lume-product-inc-card">
-                        <div className="lume-product-inc-icon"><Tag size={15} /></div>
-                        <div>
-                          <div>Màu sắc</div>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>
-                            {activeProduct.colors && activeProduct.colors.length > 0
-                              ? activeProduct.colors.join(', ')
-                              : 'Đa dạng sắc thái cổ phong'}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="lume-product-inc-card">
-                        <div className="lume-product-inc-icon"><ShieldCheck size={15} /></div>
-                        <div>
-                          <div>Tiền đặt cọc bảo đảm</div>
-                          <div style={{ fontSize: 11, color: '#881337', fontWeight: 700 }}>
-                            {formatVND(activeProduct.depositAmount || 0)} VNĐ
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {/* Card: Tiêu chuẩn thẩm định 5 bước */}
                 <div className="lume-product-card">
                   <h4 className="lume-product-card-title">Hồ sơ thẩm định chất lượng tiêu chuẩn</h4>
@@ -1595,7 +1358,7 @@ export const ProductModerationPanel: React.FC = () => {
                 </div>
               </div>
 
-              {/* CỘT PHẢI: Pricing Ribbon + Subtabs + Partner Profile + Specs Grid + Moderation History */}
+              {/* CỘT PHẢI: Pricing Ribbon + Subtabs + Partner Profile + Inclusions/Specs + Specs Grid */}
               <div className="lume-product-drawer-col">
                 {/* Quick Pricing Ribbon */}
                 <div className="lume-product-pricing-ribbon">
@@ -1693,6 +1456,111 @@ export const ProductModerationPanel: React.FC = () => {
                         <ShieldCheck size={14} /> Đã KYC
                       </span>
                     </div>
+
+                    {/* Card: Nội dung gói dịch vụ / Quy cách đặc tính áo dài */}
+                    {activeProduct.itemType === 'PHOTOGRAPHY' ? (
+                      <div className="lume-product-card">
+                        <h4 className="lume-product-card-title">
+                          <Camera size={15} color="#881337" />
+                          <span>Nội dung gói dịch vụ bao gồm</span>
+                        </h4>
+                        <div className="lume-product-inclusions-grid">
+                          <div className="lume-product-inc-card">
+                            <div className="lume-product-inc-icon"><Camera size={16} /></div>
+                            <div className="lume-product-inc-card-content">
+                              <div className="lume-product-inc-title">Nhiếp ảnh gia chuyên nghiệp</div>
+                              <div className="lume-product-inc-sub">Trang thiết bị hiện đại</div>
+                            </div>
+                          </div>
+
+                          <div className="lume-product-inc-card">
+                            <div className="lume-product-inc-icon"><Sparkles size={16} /></div>
+                            <div className="lume-product-inc-card-content">
+                              <div className="lume-product-inc-title">{activeProduct.editedPhotosCount || 80}+ ảnh hoàn thiện</div>
+                              <div className="lume-product-inc-sub">Photoshop chuyên nghiệp</div>
+                            </div>
+                          </div>
+
+                          <div className="lume-product-inc-card">
+                            <div className="lume-product-inc-icon"><Clock size={16} /></div>
+                            <div className="lume-product-inc-card-content">
+                              <div className="lume-product-inc-title">{activeProduct.durationHours || 2} giờ chụp hình</div>
+                              <div className="lume-product-inc-sub">Thời gian linh hoạt</div>
+                            </div>
+                          </div>
+
+                          <div className="lume-product-inc-card">
+                            <div className="lume-product-inc-icon"><Calendar size={16} /></div>
+                            <div className="lume-product-inc-card-content">
+                              <div className="lume-product-inc-title">Trả ảnh trong {activeProduct.deliveryDays || 3} ngày</div>
+                              <div className="lume-product-inc-sub">Qua Google Drive / Cloud</div>
+                            </div>
+                          </div>
+
+                          <div className="lume-product-inc-card" style={{ gridColumn: '1 / -1' }}>
+                            <div className="lume-product-inc-icon"><MapPin size={16} /></div>
+                            <div className="lume-product-inc-card-content">
+                              <div className="lume-product-inc-title">Địa điểm chụp: {activeProduct.location || 'Studio & Ngoại cảnh nội thành Huế'}</div>
+                              <div className="lume-product-inc-sub">Hỗ trợ tạo dáng & stylist tận tình</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="lume-product-card">
+                        <h4 className="lume-product-card-title">
+                          <Shirt size={15} color="#881337" />
+                          <span>Quy cách & Đặc tính áo dài</span>
+                        </h4>
+                        <div className="lume-product-inclusions-grid">
+                          <div className="lume-product-inc-card">
+                            <div className="lume-product-inc-icon"><Shirt size={16} /></div>
+                            <div className="lume-product-inc-card-content">
+                              <div className="lume-product-inc-title">Kích cỡ sẵn có</div>
+                              <div className="lume-product-inc-sub">
+                                {activeProduct.sizes && activeProduct.sizes.length > 0
+                                  ? activeProduct.sizes.join(', ')
+                                  : 'S, M, L, XL'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="lume-product-inc-card">
+                            <div className="lume-product-inc-icon"><Layers size={16} /></div>
+                            <div className="lume-product-inc-card-content">
+                              <div className="lume-product-inc-title">Chất liệu vải</div>
+                              <div className="lume-product-inc-sub">
+                                {activeProduct.materials && activeProduct.materials.length > 0
+                                  ? activeProduct.materials.join(', ')
+                                  : 'Lụa tơ tằm / Gấm cao cấp'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="lume-product-inc-card">
+                            <div className="lume-product-inc-icon"><Tag size={16} /></div>
+                            <div className="lume-product-inc-card-content">
+                              <div className="lume-product-inc-title">Màu sắc</div>
+                              <div className="lume-product-inc-sub">
+                                {activeProduct.colors && activeProduct.colors.length > 0
+                                  ? activeProduct.colors.join(', ')
+                                  : 'Đa dạng sắc thái cổ phong'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="lume-product-inc-card">
+                            <div className="lume-product-inc-icon"><ShieldCheck size={16} /></div>
+                            <div className="lume-product-inc-card-content">
+                              <div className="lume-product-inc-title">Tiền đặt cọc bảo đảm</div>
+                              <div className="lume-product-inc-sub" style={{ color: '#881337', fontWeight: 700 }}>
+                                {formatVND(activeProduct.depositAmount || 0)} VNĐ
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Specs Grid */}
                     <div className="lume-product-spec-grid">
