@@ -10,10 +10,8 @@ import {
   SlidersHorizontal,
   ChevronLeft,
   ChevronRight,
-  MoreHorizontal,
   Check,
   X,
-  Eye,
   HelpCircle,
   ShieldCheck,
   Maximize2,
@@ -156,13 +154,11 @@ export const ProductModerationPanel: React.FC = () => {
   const [providersList, setProvidersList] = useState<Array<{ id: string; name: string }>>([]);
 
   // Selection & Slide-Over Inspection Drawer
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeProduct, setActiveProduct] = useState<ModerationItem | null>(null);
   const [activeGalleryIndex, setActiveGalleryIndex] = useState<number>(0);
   const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
   const [isMaximized, setIsMaximized] = useState<boolean>(false);
   const [detailSubtab, setDetailSubtab] = useState<'info' | 'standards' | 'terms' | 'reputation'>('info');
-  const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
   const [approvedCustomTags, setApprovedCustomTags] = useState<string[]>([]);
 
   useEffect(() => {
@@ -246,12 +242,6 @@ export const ProductModerationPanel: React.FC = () => {
   const [revisionNotes, setRevisionNotes] = useState<string>('');
   const [processingAction, setProcessingAction] = useState<boolean>(false);
 
-  // Close context dropdown on outside click
-  useEffect(() => {
-    const handleDocClick = () => setActiveActionMenuId(null);
-    document.addEventListener('click', handleDocClick);
-    return () => document.removeEventListener('click', handleDocClick);
-  }, []);
 
   // Fetch filter options (Categories & Providers)
   useEffect(() => {
@@ -441,24 +431,6 @@ export const ProductModerationPanel: React.FC = () => {
     fetchProducts();
   }, [fetchProducts]);
 
-  // Checkbox handlers
-  const handleToggleSelectAll = () => {
-    if (selectedIds.size === items.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(items.map((i) => i.id || i._id)));
-    }
-  };
-
-  const handleToggleSelectRow = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   // Moderation Actions
   const handleApprove = async (product: ModerationItem, selectedCustomTags?: string[]) => {

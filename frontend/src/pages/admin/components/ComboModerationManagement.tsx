@@ -186,7 +186,6 @@ export const ComboModerationManagement: React.FC = () => {
   const [pageSize, setPageSize] = useState<number>(8);
 
   // Selection & Detail
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedCombo, setSelectedCombo] = useState<ComboItem | null>(null);
   const [isMaximized, setIsMaximized] = useState<boolean>(false);
   const [activeGalleryIndex, setActiveGalleryIndex] = useState<number>(0);
@@ -364,27 +363,7 @@ export const ComboModerationManagement: React.FC = () => {
     setPage(1);
   };
 
-  // Checkbox Selection
-  const handleToggleSelectAll = () => {
-    if (selectedIds.size === combos.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(combos.map((c) => c._id)));
-    }
-  };
 
-  const handleToggleSelectRow = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
 
   // Row selection for detail dock
   const handleRowClick = (combo: ComboItem) => {
@@ -912,14 +891,6 @@ export const ComboModerationManagement: React.FC = () => {
             <table className="lume-combo-table">
               <thead>
                 <tr>
-                  <th style={{ width: 40, textAlign: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={combos.length > 0 && selectedIds.size === combos.length}
-                      onChange={handleToggleSelectAll}
-                      style={{ cursor: 'pointer' }}
-                    />
-                  </th>
                   <th style={{ width: 45, textAlign: 'center' }}>#</th>
                   <th style={{ width: 64 }}>Ảnh</th>
                   <th style={{ minWidth: 220 }}>Tên combo / Mã combo</th>
@@ -949,7 +920,6 @@ export const ComboModerationManagement: React.FC = () => {
                 ) : (
                   combos.map((combo, idx) => {
                     const isSelected = selectedCombo?._id === combo._id;
-                    const isChecked = selectedIds.has(combo._id);
                     const rowNum = (page - 1) * pageSize + idx + 1;
                     const thumbUrl = resolveImageUrl(
                       combo.images?.[0] || combo.image || combo.productId?.images?.[0] || combo.photographyPackageId?.images?.[0]
@@ -961,15 +931,6 @@ export const ComboModerationManagement: React.FC = () => {
                         className={isSelected ? 'selected' : ''}
                         onClick={() => handleRowClick(combo)}
                       >
-                        {/* Checkbox */}
-                        <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => handleToggleSelectRow(combo._id, e as any)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        </td>
 
                         {/* Row Index */}
                         <td style={{ textAlign: 'center', color: '#64748b', fontWeight: 600 }}>{rowNum}</td>
