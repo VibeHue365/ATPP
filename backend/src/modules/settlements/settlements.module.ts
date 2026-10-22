@@ -8,6 +8,7 @@ import {
 } from '../bookings/schemas/booking-item.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { Provider, ProviderSchema } from '../providers/schemas/provider.schema';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { SystemPoliciesModule } from '../system-policies/system-policies.module';
 import { AdminSettlementsController } from './controllers/admin-settlements.controller';
 import { ProviderSettlementsController } from './controllers/provider-settlements.controller';
@@ -30,7 +31,12 @@ export const settlementModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [settlementModels, SystemPoliciesModule, SecurityLogModule],
+  imports: [
+    settlementModels,
+    SystemPoliciesModule,
+    SecurityLogModule,
+    NotificationsModule,
+  ],
   controllers: [AdminSettlementsController, ProviderSettlementsController],
   providers: [
     SettlementAccessPolicy,

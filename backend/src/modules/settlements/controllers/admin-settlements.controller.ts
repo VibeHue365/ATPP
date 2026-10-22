@@ -21,6 +21,7 @@ import {
   MarkSettlementSettledDto,
   QuerySettlementsDto,
   RegenerateSettlementsDto,
+  RejectSettlementDto,
   ReleaseSettlementDto,
 } from '../dto/settlement.dto';
 import { SettlementQueryService } from '../services/settlement-query.service';
@@ -99,6 +100,22 @@ export class AdminSettlementsController {
     @Req() request: RequestMeta,
   ) {
     return this.settlementsService.releaseSettlement(
+      user.sub,
+      id,
+      dto,
+      this.context(request),
+    );
+  }
+
+  @Patch(':id/reject')
+  @Permissions('settlement:manage')
+  reject(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: RejectSettlementDto,
+    @Req() request: RequestMeta,
+  ) {
+    return this.settlementsService.rejectSettlement(
       user.sub,
       id,
       dto,

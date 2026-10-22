@@ -93,6 +93,13 @@ export class ReleaseSettlementDto {
   reason: string;
 }
 
+export class RejectSettlementDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(300)
+  reason: string;
+}
+
 export class MarkSettlementSettledDto {
   @IsString()
   @IsNotEmpty()
