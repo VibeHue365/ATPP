@@ -634,27 +634,173 @@
   border-color: #F8CAD1;
 }
 
+/* Badge 'Shop có X gói' trên góc ảnh */
+.photo-package-grid .pl-card-badge-count {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(24, 24, 27, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+
+.photo-package-grid .pl-badge-icon {
+  color: #F59E0B;
+  flex-shrink: 0;
+}
+
 .photo-package-grid .pl-card-body {
-  padding: 14px 16px 15px;
+  padding: 13px 15px 14px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
   flex: 1;
   background: #FFFFFF;
+}
+
+/* Hàng tiêu đề chọn gói */
+.photo-package-grid .pl-card-selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: -2px;
+}
+
+.photo-package-grid .pl-selector-label {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: #71717A;
+}
+
+.photo-package-grid .pl-selector-counter {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #8D1D34;
+}
+
+/* Container bao bọc pills & thanh trượt mini */
+.photo-package-grid .pl-card-pills-container {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+}
+
+/* Thanh pills chọn nhanh gói dịch vụ: chính xác 2 slot vừa vặn 100% chiều rộng card, không bao giờ tràn */
+.photo-package-grid .pl-card-pills-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.photo-package-grid .pl-pkg-pill {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #E4E4E7;
+  background: #F4F4F5;
+  color: #3F3F46;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.photo-package-grid .pl-pkg-pill:hover {
+  border-color: #DEB2BC;
+  background: #FFF5F7;
+  color: #8D1D34;
+}
+
+.photo-package-grid .pl-pkg-pill.is-active {
+  background: #8D1D34;
+  color: #FFFFFF;
+  border-color: #8D1D34;
+  font-weight: 750;
+  box-shadow: 0 2px 6px rgba(141, 29, 52, 0.25);
+}
+
+/* Thanh slider mini trực tiếp dưới pills (khớp hình mẫu thiết kế) */
+.photo-package-grid .pl-pills-slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 1px 0 2px;
+}
+
+.photo-package-grid .pl-pills-slider-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #71717A;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.photo-package-grid .pl-pills-slider-btn:hover {
+  color: #8D1D34;
+  background: #F4F4F5;
+}
+
+.photo-package-grid .pl-pills-slider-track {
+  flex: 0 1 110px;
+  height: 6px;
+  background: #E4E4E7;
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.photo-package-grid .pl-pills-slider-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #8E8E93;
+  border-radius: 999px;
+  transition: left 0.22s cubic-bezier(0.4, 0, 0.2, 1), width 0.22s ease;
 }
 
 .photo-package-grid .pl-card-name {
   margin: 0;
   font-size: 14.5px;
   font-weight: 750;
-  color: #241B1E;
+  color: #18181B;
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-height: 41px;
+  min-height: 40px;
   transition: color 0.18s ease;
 }
 
@@ -662,11 +808,62 @@
   color: #8D1D34;
 }
 
+.photo-package-grid .pl-card-specs-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.photo-package-grid .pl-spec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #F4F4F5;
+  color: #52525B;
+  border: 1px solid #E4E4E7;
+  padding: 3.5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.photo-package-grid .pl-spec-icon {
+  color: #71717A;
+  flex-shrink: 0;
+}
+
+.photo-package-grid .pl-spec-chip--match {
+  background: #FDF2F4;
+  border-color: #F8D5DC;
+  color: #8D1D34;
+  font-weight: 600;
+}
+
+.photo-package-grid .pl-match-sparkle {
+  color: #B52B47;
+  flex-shrink: 0;
+}
+
 .photo-package-grid .pl-card-price-rating-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-top: 2px;
+}
+
+.photo-package-grid .pl-card-price-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.photo-package-grid .pl-card-price-label {
+  font-size: 10.5px;
+  font-weight: 550;
+  color: #71717A;
+  margin-bottom: 1px;
 }
 
 .photo-package-grid .pl-card-price-line {
@@ -676,16 +873,10 @@
 }
 
 .photo-package-grid .pl-card-price-amount {
-  font-size: 16.5px;
+  font-size: 18px;
   font-weight: 800;
   color: #8D1E2D;
   letter-spacing: -0.015em;
-}
-
-.photo-package-grid .pl-card-price-unit {
-  font-size: 11.5px;
-  font-weight: 500;
-  color: #8A777C;
 }
 
 .photo-package-grid .pl-card-rating-badge {
@@ -694,7 +885,7 @@
   gap: 3.5px;
   background: #FFFBEB;
   border: 1px solid #FDE68A;
-  padding: 2.5px 7px;
+  padding: 3px 8px;
   border-radius: 12px;
   font-size: 11px;
   font-weight: 750;
@@ -718,44 +909,7 @@
   opacity: 0.85;
 }
 
-.photo-package-grid .pl-card-specs-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.photo-package-grid .pl-spec-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: #FAF5F6;
-  color: #645358;
-  border: 1px solid #EFE4E7;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 550;
-  white-space: nowrap;
-}
-
-.photo-package-grid .pl-spec-icon {
-  color: #968187;
-  flex-shrink: 0;
-}
-
-.photo-package-grid .pl-spec-chip--match {
-  background: #FDF2F4;
-  border-color: #F8D5DC;
-  color: #8D1D34;
-  font-weight: 600;
-}
-
-.photo-package-grid .pl-match-sparkle {
-  color: #B52B47;
-  flex-shrink: 0;
-}
-
+/* Hàng Studio và các nút chuyển đổi gói dịch vụ */
 .photo-package-grid .pl-card-shop-row {
   display: flex;
   align-items: center;
@@ -763,26 +917,26 @@
   gap: 8px;
   margin-top: auto;
   padding-top: 10px;
-  border-top: 1px solid #F4EBECE6;
+  border-top: 1px solid #F4F4F5;
 }
 
 .photo-package-grid .pl-card-provider-group {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
   flex: 1;
 }
 
 .photo-package-grid .pl-card-provider-icon {
-  color: #A39096;
+  color: #71717A;
   flex-shrink: 0;
 }
 
 .photo-package-grid .pl-card-provider {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 650;
-  color: #4A3E42;
+  color: #3F3F46;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -793,21 +947,11 @@
   color: #8D1D34;
 }
 
-.photo-package-grid .pl-card-verified-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: #16A34A;
-  color: #FFFFFF;
-  flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(22, 163, 74, 0.28);
-}
-
-.photo-package-grid .pl-verified-check {
-  display: block;
+.photo-package-grid .pl-card-verified-dot {
+  font-size: 11px;
+  font-weight: 800;
+  color: #10B981;
+  margin: 0 1px;
 }
 
 .photo-package-grid .pl-card-location {
@@ -816,15 +960,42 @@
   gap: 3.5px;
   font-size: 11.5px;
   font-weight: 500;
-  color: #8A7A80;
+  color: #71717A;
   white-space: nowrap;
   flex-shrink: 0;
-  text-align: right;
 }
 
-.photo-package-grid .pl-location-icon {
-  color: #A39096;
+.photo-package-grid .pl-card-nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   flex-shrink: 0;
+}
+
+.photo-package-grid .pl-card-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #E4E4E7;
+  background: #F4F4F5;
+  color: #52525B;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.photo-package-grid .pl-card-nav-btn:hover {
+  background: #8D1D34;
+  border-color: #8D1D34;
+  color: #FFFFFF;
+  transform: scale(1.08);
+  box-shadow: 0 2px 6px rgba(141, 29, 52, 0.25);
+}
+
+.photo-package-grid .pl-card-nav-btn:active {
+  transform: scale(0.95);
 }
 /* Use the same compact search-control language as the Áo dài catalogue. */
 .photo-listing-page .photo-quick-search {
