@@ -121,15 +121,18 @@ export const ProductVariantsBooking: React.FC<ProductVariantsBookingProps> = ({
       {/* Sizes Selection */}
       {product.sizes && product.sizes.length > 0 && (
         <div>
-          <span
-            style={{
-              fontSize: '13px',
-              fontWeight: 700,
-              color: 'var(--color-text-primary)',
-            }}
-          >
-            KÍCH CỠ: {selectedSize}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+            <span
+              style={{
+                fontSize: '13px',
+                fontWeight: 700,
+                color: 'var(--color-text-primary)',
+              }}
+            >
+              KÍCH CỠ: {selectedSize}
+            </span>
+            <a className="product-chart-view-link" href="#product-size-chart">Xem bảng size</a>
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '8px' }}>
             {product.sizes.map((s) => {
               const isSelected = selectedSize === s;

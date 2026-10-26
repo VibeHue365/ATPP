@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { SizeRecommendationService } from './services/size-recommendation.service';
+import { AuthModule } from '../auth/auth.module';
+import { SizeChartImageService } from './services/size-chart-image.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Product, ProductSchema } from './schemas/product.schema';
 import {
@@ -48,6 +51,8 @@ import {
   PromotionRedemptionSchema,
 } from './schemas/promotion-redemption.schema';
 import { VoucherPricingService } from './services/voucher-pricing.service';
+import { SizeChartService } from './services/size-chart.service';
+import { SizeChartController } from './controllers/size-chart.controller';
 
 export const productModels = MongooseModule.forFeature([
   { name: Product.name, schema: ProductSchema },
@@ -64,8 +69,9 @@ export const productModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [productModels, UsersModule, CategoriesModule, SmartTaggingModule, StorageModule],
+  imports: [productModels, UsersModule, CategoriesModule, SmartTaggingModule, StorageModule, AuthModule],
   controllers: [
+    SizeChartController,
     PromotionsController,
     ProductsController,
     AdminProductsModerationController,
@@ -74,6 +80,9 @@ export const productModels = MongooseModule.forFeature([
     ComboPromotionController,
   ],
   providers: [
+    SizeRecommendationService,
+    SizeChartImageService,
+    SizeChartService,
     PromotionsService,
     VoucherPricingService,
     ProductsService,

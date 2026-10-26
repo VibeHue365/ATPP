@@ -641,16 +641,18 @@ export class ProductsRepository {
     id: Types.ObjectId,
     data: any,
     expectedStatus?: ProductModerationStatus,
+    chartSnapshot?: { version: number; sizes: string[] },
   ): Promise<any | null> {
     const filter = expectedStatus
       ? { _id: id, moderationStatus: expectedStatus }
       : { _id: id };
     const prod = await this.productModel
-      .findOneAndUpdate(filter, data, { new: true })
+      .findOneAndUpdate(chartSnapshot ? { ...filter, sizeChartVersion: chartSnapshot.version, sizes: chartSnapshot.sizes } : filter, data, { new: true })
       .populate('categoryId')
       .populate('providerId')
       .exec();
     if (prod) return prod;
+    if (chartSnapshot) return null;
 
     const pkg = await this.packageModel
       .findOneAndUpdate(filter, data, { new: true })

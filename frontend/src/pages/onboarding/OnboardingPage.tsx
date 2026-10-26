@@ -13,7 +13,6 @@ import {
 import { ROUTES } from '../../config/routes';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { useToast } from '../../components/feedback/Toast';
-import { calculateRecommendedSize } from '../../utils/sizeHelper';
 
 // Import images
 import traditionalImg from '../../assets/images/onboarding_traditional.webp';
@@ -33,6 +32,12 @@ interface Step2Data {
   size: 'S' | 'M' | 'L' | 'XL' | 'XXL' | null;
   height: string;
   weight: string;
+  chest: string;
+  waist: string;
+  hip: string;
+  shoulder: string;
+  bicep: string;
+  fitPreference: 'SLIM' | 'REGULAR' | 'COMFORT' | null;
   materials: MaterialPreference[];
 }
 
@@ -49,6 +54,12 @@ interface OnboardingPreferences {
     preferredSize?: unknown;
     height?: unknown;
     weight?: unknown;
+    chest?: unknown;
+    waist?: unknown;
+    hip?: unknown;
+    shoulder?: unknown;
+    bicep?: unknown;
+    fitPreference?: unknown;
   };
 }
 
@@ -67,6 +78,12 @@ interface OnboardingUpdatePayload {
       preferredSize: Step2Data['size'];
       height: number | null;
       weight: number | null;
+      chest: number | null;
+      waist: number | null;
+      hip: number | null;
+      shoulder: number | null;
+      bicep: number | null;
+      fitPreference: Step2Data['fitPreference'];
     };
     preferredLocations: string[];
   };
@@ -80,7 +97,7 @@ export const OnboardingPage: React.FC = () => {
 
   const [step1, setStep1] = useState<Step1Data>({ styles: [] });
   const [step2, setStep2] = useState<Step2Data>({
-    colorTone: null, size: null, height: '', weight: '', materials: [],
+    colorTone: null, size: null, height: '', weight: '', chest: '', waist: '', hip: '', shoulder: '', bicep: '', fitPreference: null, materials: [],
   });
   const [step3, setStep3] = useState<Step3Data>({ purposes: [] });
 
@@ -96,7 +113,7 @@ export const OnboardingPage: React.FC = () => {
     httpClient.get<CurrentUserResponse>('/users/me').then((me) => {
       if (!active) return;
       const p = me?.preferences;
-      const hasData = p && (p.preferredAoDaiStyles?.length || p.favoriteColors?.length || p.preferredMaterials?.length || p.sizeInfo?.preferredSize || p.preferredOccasions?.length);
+      const hasData = p && (p.preferredAoDaiStyles?.length || p.favoriteColors?.length || p.preferredMaterials?.length || p.sizeInfo || p.preferredOccasions?.length);
       if (!hasData) return;
       setIsEditing(true);
       setStep1({
@@ -109,6 +126,12 @@ export const OnboardingPage: React.FC = () => {
         size: (p.sizeInfo?.preferredSize ?? null) as Step2Data['size'],
         height: p.sizeInfo?.height != null ? String(p.sizeInfo.height) : '',
         weight: p.sizeInfo?.weight != null ? String(p.sizeInfo.weight) : '',
+        chest: p.sizeInfo?.chest != null ? String(p.sizeInfo.chest) : '',
+        waist: p.sizeInfo?.waist != null ? String(p.sizeInfo.waist) : '',
+        hip: p.sizeInfo?.hip != null ? String(p.sizeInfo.hip) : '',
+        shoulder: p.sizeInfo?.shoulder != null ? String(p.sizeInfo.shoulder) : '',
+        bicep: p.sizeInfo?.bicep != null ? String(p.sizeInfo.bicep) : '',
+        fitPreference: ['SLIM', 'REGULAR', 'COMFORT'].includes(String(p.sizeInfo?.fitPreference)) ? p.sizeInfo?.fitPreference as Step2Data['fitPreference'] : null,
         materials: (p.preferredMaterials || []).map((value: unknown) =>
           String(value).toUpperCase() as MaterialPreference,
         ),
@@ -131,6 +154,11 @@ export const OnboardingPage: React.FC = () => {
     setSubmitting(true);
     setErrorMsg(null);
     try {
+      if (!isSkipped) {
+        for (const key of ['height', 'weight', 'chest', 'waist', 'hip', 'shoulder', 'bicep'] as const) {
+          if (step2[key] && (!Number.isFinite(Number(step2[key])) || Number(step2[key]) <= 0 || Number(step2[key]) > (key === 'weight' ? 1000 : 300))) throw new Error('Invalid measurements');
+        }
+      }
       const payload: OnboardingUpdatePayload = {
         hasCompletedOnboarding: true,
       };
@@ -145,6 +173,12 @@ export const OnboardingPage: React.FC = () => {
             preferredSize: step2.size || null,
             height: step2.height ? Number(step2.height) : null,
             weight: step2.weight ? Number(step2.weight) : null,
+            chest: step2.chest ? Number(step2.chest) : null,
+            waist: step2.waist ? Number(step2.waist) : null,
+            hip: step2.hip ? Number(step2.hip) : null,
+            shoulder: step2.shoulder ? Number(step2.shoulder) : null,
+            bicep: step2.bicep ? Number(step2.bicep) : null,
+            fitPreference: step2.fitPreference,
           },
           preferredLocations: []
         };
@@ -160,7 +194,9 @@ export const OnboardingPage: React.FC = () => {
       navigate(ROUTES.RENTALS);
     } catch (err) {
       console.error('Failed to save onboarding preferences:', err);
-      setErrorMsg('Không thể lưu thông tin. Vui lòng kiểm tra kết nối mạng và thử lại.');
+      setErrorMsg(err instanceof Error && err.message === 'Invalid measurements'
+        ? 'Số đo chưa hợp lệ. Hãy nhập số dương; số đo chiều dài không quá 300 cm, cân nặng không quá 1000 kg.'
+        : 'Không thể lưu thông tin. Vui lòng kiểm tra kết nối mạng và thử lại.');
       setSubmitting(false);
     }
   };
@@ -388,7 +424,7 @@ export const OnboardingPage: React.FC = () => {
               </div>
 
               <h3 style={{ fontFamily: 'var(--font-header)', fontSize: '24px', fontWeight: 700, margin: '32px 0 16px 0' }}>Kích thước & Số đo</h3>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '12px' }}>Size tiêu chuẩn</span>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '12px' }}>Size thường mặc (tham khảo)</span>
               <div style={{ display: 'flex', gap: '12px', marginBottom: '32px' }}>
                 {(['S', 'M', 'L', 'XL', 'XXL'] as const).map((sz) => (
                   <button key={sz} onClick={() => setStep2(p => ({ ...p, size: sz }))} style={{
@@ -404,6 +440,11 @@ export const OnboardingPage: React.FC = () => {
                 {[
                   { label: 'Chiều cao (cm)', key: 'height' as const },
                   { label: 'Cân nặng (kg)', key: 'weight' as const },
+                  { label: 'Vòng ngực (cm)', key: 'chest' as const },
+                  { label: 'Vòng eo (cm)', key: 'waist' as const },
+                  { label: 'Vòng mông (cm)', key: 'hip' as const },
+                  { label: 'Ngang vai (cm)', key: 'shoulder' as const },
+                  { label: 'Vòng bắp tay (cm)', key: 'bicep' as const },
                 ].map((m) => (
                   <div key={m.key} style={{ display: 'flex', flexDirection: 'column' }}>
                     <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{m.label}</label>
@@ -413,32 +454,13 @@ export const OnboardingPage: React.FC = () => {
                 ))}
               </div>
 
-              {(() => {
-                const recommended = calculateRecommendedSize(step2.height, step2.weight);
-                if (!recommended) return null;
-                const isMismatch = step2.size && step2.size !== recommended;
-                return (
-                  <div style={{ 
-                    marginTop: '24px', 
-                    padding: '12px 16px', 
-                    borderRadius: '6px', 
-                    fontSize: '13px', 
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    backgroundColor: isMismatch ? '#FFF3CD' : '#D1E7DD',
-                    color: isMismatch ? '#664D03' : '#0F5132',
-                    border: isMismatch ? '1px solid #FFE69C' : '1px solid #BADBCC'
-                  }}>
-                    {isMismatch ? (
-                      <span>⚠️ Kích thước cơ thể có vẻ phù hợp với size <strong>{recommended}</strong>. Vui lòng kiểm tra lại chiều cao/cân nặng hoặc chọn size tương ứng.</span>
-                    ) : (
-                      <span>✓ Kích thước và size đã chọn phù hợp với vóc dáng của bạn.</span>
-                    )}
-                  </div>
-                );
-              })()}
+              <label style={{ display: 'block', marginTop: '20px' }}>Sở thích mặc
+                <select aria-label="Sở thích mặc" value={step2.fitPreference ?? ''} onChange={e => setStep2(p => ({ ...p, fitPreference: (e.target.value || null) as Step2Data['fitPreference'] }))}>
+                  <option value="">Chưa chọn</option><option value="SLIM">Ôm</option><option value="REGULAR">Vừa</option><option value="COMFORT">Thoải mái</option>
+                </select>
+              </label>
+              <p style={{ fontSize: '13px', lineHeight: 1.6 }}>Các số đo cơ thể là tùy chọn. Hệ thống không suy đoán chúng từ chiều cao/cân nặng; size được đối chiếu theo bảng riêng của từng mẫu áo.</p>
+              <details><summary>Hướng dẫn đo cơ thể</summary><p>Dùng thước dây đo cả vòng ngực tại phần nở nhất, eo tại phần nhỏ nhất, mông tại phần nở nhất và bắp tay tại phần rộng nhất. Ngang vai đo từ mỏm vai này sang mỏm vai kia. Giữ thước ngang, không siết và không tự cộng độ rộng.</p></details>
             </div>
           )}
 

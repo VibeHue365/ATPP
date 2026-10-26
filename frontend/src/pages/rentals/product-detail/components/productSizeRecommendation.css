@@ -1,0 +1,97 @@
+.product-size-recommendation {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--color-text-primary, #292524);
+}
+.product-size-recommendation p {
+  margin: 12px 0;
+}
+.size-recommendation-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  border: 0;
+  padding: 0;
+  margin: 18px 0;
+}
+.size-recommendation-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.size-recommendation-fields input,
+.size-recommendation-fields select {
+  padding: 10px;
+  border: 1px solid #d5c2ad;
+  border-radius: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  background: white;
+  color: #292524;
+}
+.size-recommendation-fields input[aria-invalid="true"] {
+  border-color: #b45309;
+  background: #fffaf2;
+}
+.size-recommendation-fields select[aria-invalid="true"] {
+  border-color: #b45309;
+  background: #fffaf2;
+}
+.size-recommendation-field-hint {
+  color: #92400e;
+  font-size: 12px;
+}
+.size-recommendation-guidance {
+  padding: 10px 12px;
+  border: 1px solid #f3d3a4;
+  border-radius: 8px;
+  background: #fffbeb;
+}
+.product-size-recommendation details {
+  margin: 12px 0;
+}
+.product-size-recommendation summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.size-recommendation-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.size-recommendation-actions button {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #d5c2ad;
+  background: var(--color-primary-dark, #684935);
+  color: white;
+  cursor: pointer;
+}
+.size-recommendation-actions button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.size-recommendation-error {
+  color: #b91c1c;
+}
+.size-recommendation-nearest {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid #e9d4c4;
+  border-radius: 10px;
+  background: #fff9f2;
+}
+.size-recommendation-nearest h4 {
+  margin: 0;
+  color: #8b4513;
+}
+.size-recommendation-nearest ul {
+  margin: 4px 0 10px;
+  padding-left: 20px;
+}
+@media (max-width: 420px) {
+  .size-recommendation-fields {
+    grid-template-columns: 1fr;
+  }
+}

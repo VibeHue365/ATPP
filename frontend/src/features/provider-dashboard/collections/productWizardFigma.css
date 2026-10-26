@@ -998,6 +998,50 @@
   margin: 0;
 }
 
+.pwm-step2-heading .pwm-size-chart-step-hint,
+.pwm-size-chart-step-hint {
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border: 1px solid #e7d8bd;
+  border-radius: 10px;
+  background: #fffaf0;
+  color: #65451c;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pwm-size-chart-prepare {
+  padding: 16px 20px;
+  border: 1px solid #e7d8bd;
+  border-radius: 14px;
+  background: #fffaf0;
+  color: #27272a;
+}
+
+.pwm-size-chart-prepare p {
+  margin: 8px 0 14px;
+  font-size: 13px;
+}
+
+.pwm-size-chart-prepare button {
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #881337;
+  color: #fff;
+  cursor: pointer;
+}
+
+.pwm-size-chart-prepare button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+.pwm-attr-card[inert],
+.pwm-matrix-card[inert] {
+  opacity: .65;
+}
+
 /* Attributes Card */
 .pwm-attr-card {
   background: #FFFFFF;

@@ -2,6 +2,7 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import type { useToast } from '../../../components/feedback/Toast';
 import { inventoryApi, productsApi } from '../api/providerDashboardApi';
+import { sizeChartApi } from '../size-chart/sizeChartApi';
 import { colorLabels, DEFAULT_PRODUCT_IMAGE, TAG_TO_EVENT_SLUG, TAG_TO_OCCASION, TAG_TO_STYLE, TAG_TO_STYLE_SLUG } from '../constants';
 import type { Product, VariantRow } from '../types';
 import { emptyVariant, normalizeCategoryIds, normalizeVariants } from './productHelpers';
@@ -310,6 +311,32 @@ export function createProductWizardActions({
     return true;
   };
 
+  const handlePrepareSizeChart = async () => {
+    if (editingProduct || createdDraftId) return;
+    if (!validateWizardStep1()) return;
+    const normalized = normalizeVariants(variants);
+    if (normalized.length === 0) {
+      toast.error('Cần ít nhất 1 dòng biến thể hợp lệ (size + màu) trước khi nhập bảng size.');
+      return;
+    }
+    setSavingDraft(true);
+    try {
+      const created: any = await productsApi.create({
+        ...buildBasePayload(),
+        status: 'DRAFT',
+        variants: normalized,
+      });
+      setCreatedDraftId(created._id);
+      if (normalized.length !== variants.length) {
+        toast.success('Đã gộp các biến thể trùng size/màu/chất liệu.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Lưu biến thể thất bại. Vui lòng thử lại.');
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   const handleWizardNext = async () => {
     if (wizardStep === 1) {
       if (!validateWizardStep1()) return;
@@ -319,33 +346,23 @@ export function createProductWizardActions({
     if (wizardStep === 2) {
       // Edit mode: biến thể được quản lý ở tab Tồn kho, chỉ cần sang bước gắn thẻ.
       if (editingProduct) { setWizardStep(3); return; }
-      const normalized = normalizeVariants(variants);
-      if (normalized.length === 0) {
-        toast.error('Cần ít nhất 1 dòng biến thể hợp lệ (size + màu)');
+      if (!createdDraftId) {
+        await handlePrepareSizeChart();
         return;
       }
-      // Tạo bản NHÁP ẨN để AI có productId mà gắn thẻ (khách chưa nhìn thấy).
-      setSavingDraft(true);
       try {
-        if (createdDraftId) {
-          // Nháp đã tồn tại (quay lại rồi tiến tới): chỉ cập nhật thông tin cơ bản.
-          await productsApi.update(createdDraftId, buildBasePayload());
-        } else {
-          const created: any = await productsApi.create({
-            ...buildBasePayload(),
-            status: 'DRAFT',
-            variants: normalized,
-          });
-          setCreatedDraftId(created._id);
-          if (normalized.length !== variants.length) {
-            toast.success('Đã gộp các biến thể trùng size/màu/chất liệu.');
-          }
+        const response = await sizeChartApi.get(createdDraftId);
+        const declaredSizes = new Set(response.sizes.map(size => size.trim().toUpperCase()));
+        const chart = response.sizeChart;
+        if (chart?.status !== 'CONFIRMED' || chart.rows.length !== declaredSizes.size || chart.rows.some(row => !declaredSizes.has(row.size))) {
+          toast.error('Hãy lưu và xác nhận bảng size ở bước 2 trước khi tiếp tục.');
+          return;
         }
+        // Keep images and product details current for the existing AI tagging step.
+        await productsApi.update(createdDraftId, buildBasePayload());
         setWizardStep(3);
       } catch (err: any) {
-        toast.error(err.message || 'Lưu bản nháp thất bại. Vui lòng thử lại.');
-      } finally {
-        setSavingDraft(false);
+        toast.error(err.message || 'Không kiểm tra được bảng size. Vui lòng thử lại.');
       }
     }
   };
@@ -361,6 +378,15 @@ export function createProductWizardActions({
     try {
       const targetId = editingProduct?._id ?? createdDraftId;
       if (!targetId) return;
+      if (!editingProduct || editingProduct.sizeChartPolicyVersion === 1) {
+        const response = await sizeChartApi.get(targetId);
+        const chart = response.sizeChart;
+        const declaredSizes = new Set(response.sizes.map(size => size.trim().toUpperCase()));
+        if (chart?.status !== 'CONFIRMED' || chart.rows.length !== declaredSizes.size || chart.rows.some(row => !declaredSizes.has(row.size))) {
+          toast.error('Hãy lưu và xác nhận bảng size riêng của mẫu áo trước khi gửi duyệt.');
+          return;
+        }
+      }
       // Trường phái & dịp lễ suy ngược từ thẻ đã chọn (thẻ là nguồn sự thật);
       // nếu chưa mở bước thẻ (edit nhanh giá/mô tả) thì giữ nguyên giá trị cũ.
       const styleFromTags = activeTagCodes.map(code => TAG_TO_STYLE[code]).find(Boolean);
@@ -431,6 +457,6 @@ export function createProductWizardActions({
     loadEditInvSummary, openAddModal, openEditModal, handleDuplicateProduct, handleWizardCancel,
     handleImageChange, removeImage, handleVideoChange, removeVideo, updateVariantRow, removeVariantRow,
     addVariantRow, colorsNeedingImages, handleColorImageChange, removeColorImage, handleWizardFinish,
-    handleWizardBack, handleWizardNext,
+    handleWizardBack, handleWizardNext, handlePrepareSizeChart,
   };
 }

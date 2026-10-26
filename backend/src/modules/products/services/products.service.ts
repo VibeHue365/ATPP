@@ -9,6 +9,7 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 import { ProductsRepository } from '../repositories/products.repository';
+import { isSizeChartReady } from './size-chart.rules';
 import { UsersRepository } from '../../users/repositories/users.repository';
 import {
   Product,
@@ -791,6 +792,7 @@ export class ProductsService implements OnModuleInit {
       basePrice: dto.basePrice,
       depositAmount: dto.depositAmount,
       sizes: productSizes,
+      sizeChartPolicyVersion: 1,
       colors: productColors,
       materials: productMaterials,
       status: dto.status || ProductStatus.Active,
@@ -1102,6 +1104,10 @@ export class ProductsService implements OnModuleInit {
       throw new BadRequestException('Unsupported moderation action');
     }
 
+    if (dto.action === ProductModerationStatus.Approved && product.sizeChartPolicyVersion === 1 && !isSizeChartReady(product.sizeChart, product.sizes)) {
+      throw new BadRequestException('Confirm a complete product size chart before publishing this product');
+    }
+
     const expectedStatus =
       dto.action === ProductModerationStatus.Hidden
         ? ProductModerationStatus.Approved
@@ -1162,11 +1168,11 @@ export class ProductsService implements OnModuleInit {
         mappedTagCode: tag.mappedTagCode ?? null,
       }));
     }
-    const updated = await this.productsRepository.moderate(
-      id,
-      updateData,
-      expectedStatus,
-    );
+    const updated = dto.action === ProductModerationStatus.Approved && product.sizeChartPolicyVersion === 1
+      ? await this.productsRepository.moderate(id, updateData, expectedStatus, {
+        version: product.sizeChartVersion, sizes: product.sizes,
+      })
+      : await this.productsRepository.moderate(id, updateData, expectedStatus);
 
 
     if (!updated) {

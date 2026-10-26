@@ -23,6 +23,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { SmartTagEditor } from '../../smart-tagging/components/SmartTagEditor';
+import { SizeChartEditor } from '../size-chart/SizeChartEditor';
 import { productsApi } from '../api/providerDashboardApi';
 import {
   colorLabels,
@@ -123,6 +124,7 @@ type ProductWizardModalProps = Pick<
     handleWizardFinish: () => Promise<void>;
     handleWizardBack: () => void;
     handleWizardNext: () => Promise<void>;
+    handlePrepareSizeChart: () => Promise<void>;
   };
 
 export function ProductWizardModal({
@@ -184,6 +186,7 @@ export function ProductWizardModal({
   handleWizardFinish,
   handleWizardBack,
   handleWizardNext,
+  handlePrepareSizeChart,
   savingDraft,
   activeTagCodes,
 }: ProductWizardModalProps) {
@@ -193,6 +196,7 @@ export function ProductWizardModal({
   const [materialOrigin, setMaterialOrigin] = useState<string>('');
   const [fitTips, setFitTips] = useState<string>('');
   const [customTagError, setCustomTagError] = useState('');
+  const [sizeChartPending, setSizeChartPending] = useState(false);
   const [priceHistory, setPriceHistory] = useState<ProductPriceHistoryItem[]>([]);
   const [priceHistoryOpen, setPriceHistoryOpen] = useState(false);
   const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
@@ -492,7 +496,7 @@ export function ProductWizardModal({
 
   const stepsList = [
     { n: 1, title: 'Thông tin cơ bản', sub: 'Tên, mô tả, hình ảnh' },
-    { n: 2, title: 'Biến thể & Tồn kho', sub: 'Kích cỡ, màu sắc, số lượng' },
+    { n: 2, title: 'Biến thể & Bảng size', sub: 'Kích cỡ, số đo, tồn kho' },
     { n: 3, title: 'Thẻ thông minh AI', sub: 'Kiểu dáng, phong cách, dịp sử dụng' },
   ];
 
@@ -1101,6 +1105,12 @@ export function ProductWizardModal({
             </div>
           )}
 
+          {wizardStep === 2 && editingProduct?._id && <SizeChartEditor
+            key={editingProduct._id}
+            productId={editingProduct._id}
+            onPendingChange={setSizeChartPending}
+          />}
+
           {wizardStep === 2 && (
             editingProduct ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -1388,10 +1398,16 @@ export function ProductWizardModal({
                   <div className="pwm-step2-heading">
                     <h4>2. Thiết lập biến thể &amp; Tồn kho</h4>
                     <p>Tạo các biến thể (size, màu sắc, chất liệu) và khai báo số lượng hiện có trong kho.</p>
+                    <p className="pwm-size-chart-step-hint">
+                      Chọn size và màu, kiểm tra ma trận biến thể, rồi lưu nháp để nhập số đo hoặc tải ảnh bảng size ngay tại bước này.
+                    </p>
                   </div>
 
                   {/* Attribute Selectors Card */}
-                  <div className="pwm-attr-card">
+                  {createdDraftId && <p className="pwm-size-chart-step-hint">
+                    Biến thể đã lưu cho bản nháp. Hãy nhập và xác nhận bảng size bên dưới. Bạn có thể chỉnh tồn kho sau khi tạo sản phẩm.
+                  </p>}
+                  <div className="pwm-attr-card" inert={Boolean(createdDraftId)}>
                     <h5 className="pwm-attr-card-title">Chọn thuộc tính biến thể</h5>
                     <p className="pwm-attr-card-sub">Chọn các tùy chọn áp dụng cho sản phẩm này</p>
 
@@ -1469,8 +1485,22 @@ export function ProductWizardModal({
                     </div>
                   </div>
 
+                  {!createdDraftId ? (
+                    <div className="pwm-size-chart-prepare">
+                      <strong>Bảng số đo theo từng size</strong>
+                      <p>Kiểm tra các biến thể và số lượng bên dưới trước khi lưu. Bản nháp này chưa hiển thị cho khách.</p>
+                      <button type="button" onClick={() => void handlePrepareSizeChart()} disabled={savingDraft}>
+                        {savingDraft ? 'Đang lưu biến thể...' : 'Lưu biến thể để nhập bảng size'}
+                      </button>
+                    </div>
+                  ) : <SizeChartEditor
+                    key={createdDraftId}
+                    productId={createdDraftId}
+                    onPendingChange={setSizeChartPending}
+                  />}
+
                   {/* Variant Matrix Table Card */}
-                  <div className="pwm-matrix-card">
+                  <div className="pwm-matrix-card" inert={Boolean(createdDraftId)}>
                     <div className="pwm-matrix-header">
                       <div className="pwm-matrix-header-info">
                         <h4>Ma trận biến thể ({variants.length})</h4>
@@ -2260,6 +2290,7 @@ export function ProductWizardModal({
                   <button
                     type="button"
                     onClick={handleWizardBack}
+                    disabled={sizeChartPending}
                     className="pwm-btn-back"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
@@ -2270,6 +2301,7 @@ export function ProductWizardModal({
                 <button
                   type="button"
                   onClick={handleWizardFinish}
+                  disabled={sizeChartPending}
                   className="pwm-btn-next"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
@@ -2283,6 +2315,7 @@ export function ProductWizardModal({
                   <button
                     type="button"
                     onClick={handleWizardBack}
+                    disabled={sizeChartPending}
                     className="pwm-btn-back"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
@@ -2295,7 +2328,7 @@ export function ProductWizardModal({
                   <button
                     type="button"
                     onClick={handleWizardNext}
-                    disabled={savingDraft}
+                    disabled={savingDraft || sizeChartPending}
                     className="pwm-btn-next"
                   >
                     <span>{savingDraft ? 'Đang lưu...' : 'Tiếp tục'}</span>
@@ -2307,7 +2340,7 @@ export function ProductWizardModal({
                   <button
                     type="button"
                     onClick={handleWizardFinish}
-                    disabled={activeTagCodes.length < 1}
+                    disabled={sizeChartPending || activeTagCodes.length < 1}
                     className="pwm-btn-next"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >

@@ -9,6 +9,8 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  Min,
+  Max,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -29,6 +31,20 @@ class SizeInfoDto {
   @IsOptional()
   @IsString()
   bodyShape?: string | null;
+
+  // User circumference measurements are always in cm, never inferred.
+  @IsOptional() @IsNumber() @Min(1) @Max(300)
+  chest?: number | null;
+  @IsOptional() @IsNumber() @Min(1) @Max(300)
+  waist?: number | null;
+  @IsOptional() @IsNumber() @Min(1) @Max(300)
+  hip?: number | null;
+  @IsOptional() @IsNumber() @Min(1) @Max(300)
+  shoulder?: number | null;
+  @IsOptional() @IsNumber() @Min(1) @Max(300)
+  bicep?: number | null;
+  @IsOptional() @IsIn(['SLIM', 'REGULAR', 'COMFORT'])
+  fitPreference?: 'SLIM' | 'REGULAR' | 'COMFORT' | null;
 }
 
 class BudgetRangeDto {

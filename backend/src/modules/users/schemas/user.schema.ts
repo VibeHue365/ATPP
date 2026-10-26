@@ -74,6 +74,12 @@ export interface UserPreferences {
     weight?: number | null;
     preferredSize?: string | null;
     bodyShape?: string | null;
+    chest?: number | null;
+    waist?: number | null;
+    hip?: number | null;
+    shoulder?: number | null;
+    bicep?: number | null;
+    fitPreference?: 'SLIM' | 'REGULAR' | 'COMFORT' | null;
   };
   budgetRange: {
     min?: number | null;
@@ -196,6 +202,12 @@ export class User {
         weight: { type: Number, default: null },
         preferredSize: { type: String, default: null },
         bodyShape: { type: String, default: null },
+        chest: { type: Number, min: 1, max: 300, default: null },
+        waist: { type: Number, min: 1, max: 300, default: null },
+        hip: { type: Number, min: 1, max: 300, default: null },
+        shoulder: { type: Number, min: 1, max: 300, default: null },
+        bicep: { type: Number, min: 1, max: 300, default: null },
+        fitPreference: { type: String, enum: ['SLIM', 'REGULAR', 'COMFORT', null], default: null },
       },
       budgetRange: {
         min: { type: Number, default: null },

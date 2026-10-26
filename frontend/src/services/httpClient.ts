@@ -2,6 +2,8 @@ import { API_BASE_URL } from '../config/env';
 import { tokenStorage } from './tokenStorage';
 import { translateError } from '../utils/errorTranslator';
 
+type RequestOptions = RequestInit & { timeoutMs?: number };
+
 class HttpClient {
   private isRefreshing = false;
   private refreshSubscribers: ((token: string | null) => void)[] = [];
@@ -16,7 +18,8 @@ class HttpClient {
     this.refreshSubscribers = [];
   }
 
-  async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    const { timeoutMs: customTimeoutMs, ...fetchOptions } = options;
     const url = `${API_BASE_URL}${path}`;
     const headers = new Headers(options.headers);
 
@@ -31,13 +34,13 @@ class HttpClient {
       headers.set('Content-Type', 'application/json');
     }
 
-    const timeoutMs = options.method === 'GET' ? 10_000 : 20_000;
+    const timeoutMs = customTimeoutMs ?? (options.method === 'GET' ? 10_000 : 20_000);
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const signal = options.signal
       ? AbortSignal.any([options.signal, timeoutSignal])
       : timeoutSignal;
     const config: RequestInit = {
-      ...options,
+      ...fetchOptions,
       headers,
       signal,
     };
@@ -167,7 +170,7 @@ class HttpClient {
     return request;
   }
 
-  post<T>(path: string, body?: any, options?: Omit<RequestInit, 'method' | 'body'>): Promise<T> {
+  post<T>(path: string, body?: any, options?: Omit<RequestOptions, 'method' | 'body'>): Promise<T> {
     return this.request<T>(path, {
       ...options,
       method: 'POST',

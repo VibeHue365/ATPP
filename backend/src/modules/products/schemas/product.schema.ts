@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { SizeChart, SizeChartSchema } from './size-chart.schema';
 
 export type ProductDocument = HydratedDocument<Product>;
 
@@ -96,6 +97,16 @@ export class Product {
 
   @Prop({ type: [String], default: [] })
   sizes: string[];
+
+  // Missing marker identifies pre-VIB-92 products. Never default this to 1.
+  @Prop({ type: Number, enum: [1], immutable: true })
+  sizeChartPolicyVersion?: number;
+
+  @Prop({ type: Number, default: 0 })
+  sizeChartVersion: number;
+
+  @Prop({ type: SizeChartSchema, default: null })
+  sizeChart?: SizeChart | null;
 
   @Prop({ type: [String], default: [] })
   colors: string[];

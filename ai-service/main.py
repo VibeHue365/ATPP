@@ -6,8 +6,10 @@ from chatbot.chatbot_engine import ChatbotEngine
 from chatbot.normalization import extract_age_and_range, extract_gender
 from tagging.schemas import TaggingRequest, TaggingResponse
 from tagging.tagging_engine import suggest_tags
+from size_chart import router as size_chart_router
 
 app    = FastAPI(title="AI Style Matching", version="2.0")
+app.include_router(size_chart_router)
 chatbot = ChatbotEngine()
 
 app.add_middleware(

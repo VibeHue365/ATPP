@@ -17,7 +17,6 @@ import { photographersApi } from '../../features/photographers/api/photographers
 // Local modular components & utilities
 import type {
   CalendarDay,
-  FitPreference,
   InfoTab,
   ProductDetail,
   ProviderScheduleInfo,
@@ -39,7 +38,6 @@ import {
   getDayDuration,
   getHourDuration,
 } from './product-detail/utils/timeSlotUtils';
-import { calculateSizeLocally } from './product-detail/utils/aiSizeCalculator';
 
 import { ProductGallery } from './product-detail/components/ProductGallery';
 import { ProductHeaderInfo } from './product-detail/components/ProductHeaderInfo';
@@ -50,6 +48,7 @@ import { ProductInfoTabs } from './product-detail/components/ProductInfoTabs';
 import { ProductSuggestedPhotographers } from './product-detail/components/ProductSuggestedPhotographers';
 import { ProductReviewsSection } from './product-detail/components/ProductReviewsSection';
 import { ProductAiSizeModal } from './product-detail/components/ProductAiSizeModal';
+import { ProductSizeChartSection } from './product-detail/components/ProductSizeChartSection';
 import { ProductWriteReviewModal } from './product-detail/components/ProductWriteReviewModal';
 import { ProductMobileStickyBar } from './product-detail/components/ProductMobileStickyBar';
 
@@ -118,16 +117,6 @@ export const ProductDetailPage: React.FC = () => {
   const [isAiStylingOpen, setIsAiStylingOpen] = useState<boolean>(false);
   const [isAiSizeOpen, setIsAiSizeOpen] = useState<boolean>(false);
   const [isWriteReviewOpen, setIsWriteReviewOpen] = useState<boolean>(false);
-
-  // AI Size Form
-  const [aiHeight, setAiHeight] = useState<number | ''>(160);
-  const [aiWeight, setAiWeight] = useState<number | ''>(50);
-  const [aiChest, setAiChest] = useState<number | ''>(84);
-  const [aiWaist, setAiWaist] = useState<number | ''>(66);
-  const [aiFitPref, setAiFitPref] = useState<FitPreference>('COMFORT');
-  const [aiResultSize, setAiResultSize] = useState<string>('');
-  const [aiReason, setAiReason] = useState<string>('');
-  const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
 
   // Write Review Form
   const [writeRating, setWriteRating] = useState<number>(5);
@@ -943,62 +932,6 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   // AI Size Calculation
-  const handleAiSizeCalculation = async () => {
-    const h = Math.max(100, Math.min(250, Number(aiHeight) || 160));
-    const w = Math.max(20, Math.min(200, Number(aiWeight) || 50));
-    const c = Math.max(40, Math.min(150, Number(aiChest) || 84));
-    const e = Math.max(30, Math.min(150, Number(aiWaist) || 66));
-
-    setAiHeight(h);
-    setAiWeight(w);
-    setAiChest(c);
-    setAiWaist(e);
-
-    setIsAiLoading(true);
-    setAiResultSize('');
-    setAiReason('');
-
-    const computedSize = calculateSizeLocally(h, w, c, e, aiFitPref, product?.sizes);
-
-    try {
-      let prompt = '';
-      if (computedSize === 'CUSTOM') {
-        prompt = `Tôi muốn thuê áo dài "${product?.name}". Số đo: cao ${h}cm, nặng ${w}kg, vòng eo ${e}cm, vòng ngực ${c}cm. Tôi thích mặc kiểu ${aiFitPref === 'SLIM' ? 'ôm sát tôn dáng' : 'rộng rãi thoải mái'}. Số đo này vượt quá bảng size may sẵn tiêu chuẩn hoặc vượt quá các size hiện có của sản phẩm này (${product?.sizes?.join(', ') || 'S, M, L'}). Hãy tư vấn cho tôi lý do tôi cần liên hệ trực tiếp với cửa hàng để được đặt may đo hoặc chỉnh sửa theo số đo cơ thể, và khuyên tôi không nên thuê các size may sẵn hiện có. Hãy trả lời ngắn gọn trong 2-3 câu.`;
-      } else {
-        prompt = `Tôi muốn thuê áo dài "${product?.name}". Số đo: cao ${h}cm, nặng ${w}kg, vòng eo ${e}cm, vòng ngực ${c}cm. Tôi thích mặc kiểu ${aiFitPref === 'SLIM' ? 'ôm sát tôn dáng' : 'rộng rãi thoải mái'}. Hãy tư vấn xem tôi nên chọn size nào trong các size khả dụng: ${product?.sizes?.join(', ') || 'S, M, L'}. Hãy khuyên dùng size ${computedSize} và giải thích lý do cụ thể trong 2-3 câu ngắn gọn.`;
-      }
-
-      const response: any = await httpClient.post('/ai/chat', { message: prompt });
-      setAiResultSize(computedSize);
-
-      if (computedSize === 'CUSTOM') {
-        setAiReason(
-          response.answer ||
-            `Số đo bạn nhập (cân nặng ${w}kg, vòng eo ${e}cm) vượt quá bảng size may sẵn tiêu chuẩn của áo dài này. Chúng tôi khuyên bạn nên liên hệ trực tiếp với VibeHue để đặt may hoặc chỉnh sửa số đo riêng nhằm đảm bảo sự vừa vặn và thoải mái cao nhất.`,
-        );
-      } else {
-        setAiReason(
-          response.answer ||
-            `Dựa trên số đo chiều cao ${h}cm và cân nặng ${w}kg, kích cỡ tối ưu cho bạn là Size ${computedSize}. Size này sẽ giúp bạn thoải mái cử động và giữ phom dáng áo đẹp nhất.`,
-        );
-      }
-    } catch (err) {
-      console.error('Lỗi khi gọi AI tư vấn size:', err);
-      setAiResultSize(computedSize);
-      if (computedSize === 'CUSTOM') {
-        setAiReason(
-          `Số đo bạn nhập (cân nặng ${w}kg, vòng eo ${e}cm) vượt quá bảng size may sẵn tiêu chuẩn của áo dài này. Chúng tôi khuyên bạn nên liên hệ trực tiếp với VibeHue để đặt may hoặc chỉnh sửa số đo riêng.`,
-        );
-      } else {
-        setAiReason(
-          `Dựa trên phân tích số đo chiều cao ${h}cm, cân nặng ${w}kg và sở thích mặc của bạn, chuyên gia khuyên dùng Size ${computedSize} để ôm vừa vặn vòng eo ${e}cm của bạn.`,
-        );
-      }
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
   // Validation helper for booking & cart
   const validateBookingForm = (): boolean => {
     if (!selectedColor) {
@@ -1336,6 +1269,8 @@ export const ProductDetailPage: React.FC = () => {
           </div>
         </div>
 
+        <ProductSizeChartSection productId={product._id} selectedSize={selectedSize} />
+
         {/* Bottom: Tabs */}
         <ProductInfoTabs
           product={product}
@@ -1379,30 +1314,11 @@ export const ProductDetailPage: React.FC = () => {
         isOpen={isAiSizeOpen}
         onClose={() => setIsAiSizeOpen(false)}
         productName={product.name}
-        aiHeight={aiHeight}
-        setAiHeight={setAiHeight}
-        aiWeight={aiWeight}
-        setAiWeight={setAiWeight}
-        aiChest={aiChest}
-        setAiChest={setAiChest}
-        aiWaist={aiWaist}
-        setAiWaist={setAiWaist}
-        aiFitPref={aiFitPref}
-        setAiFitPref={setAiFitPref}
-        aiResultSize={aiResultSize}
-        aiReason={aiReason}
-        isAiLoading={isAiLoading}
-        onCalculate={handleAiSizeCalculation}
+        productId={product._id}
+        isAuthenticated={isAuthenticated}
         onApplySize={(size) => {
           setSelectedSize(size);
           toast.success(`Đã áp dụng đề xuất Size ${size}!`);
-          setIsAiSizeOpen(false);
-        }}
-        onContactCustom={() => {
-          toast.info(
-            'Vui lòng liên hệ hotline hoặc nhắn tin trực tiếp để được tư vấn thiết kế may đo riêng!',
-          );
-          window.open('https://zalo.me/', '_blank');
           setIsAiSizeOpen(false);
         }}
       />

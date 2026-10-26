@@ -55,6 +55,7 @@ export interface Order {
 }
 
 export interface Product {
+  sizeChartPolicyVersion?: number;
   _id: string;
   name: string;
   providerId?: string | { _id?: string; [key: string]: any };

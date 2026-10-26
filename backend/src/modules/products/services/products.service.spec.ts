@@ -6,6 +6,7 @@ import {
   ProductStatus,
 } from '../schemas/product.schema';
 import { ProductsService } from './products.service';
+import { ChartSource, MeasurementType } from '../dto/size-chart.dto';
 
 describe('ProductsService moderation', () => {
   const providerId = new Types.ObjectId();
@@ -79,6 +80,37 @@ describe('ProductsService moderation', () => {
     };
   }
 
+  it('blocks publication of new products without a confirmed chart, including incomplete confirmed data', async () => {
+    for (const sizeChart of [null, { status: 'DRAFT' }, { status: 'CONFIRMED', rows: [] }]) {
+      const { service, productsRepository } = createService({
+        findModerationItemById: jest.fn().mockResolvedValue({
+          _id: productId, sizes: ['M'], sizeChartPolicyVersion: 1, sizeChart,
+          moderationStatus: ProductModerationStatus.PendingReview,
+        }),
+      });
+      await expect(service.moderateProduct(userId, productId.toString(), { action: ProductModerationStatus.Approved })).rejects.toThrow(BadRequestException);
+      expect(productsRepository.moderate).not.toHaveBeenCalled();
+    }
+  });
+
+  it('permits publication with a complete confirmed chart and guards the atomic write by chart version', async () => {
+    const product = {
+      _id: productId, sizes: ['M'], sizeChartPolicyVersion: 1, sizeChartVersion: 2,
+      moderationStatus: ProductModerationStatus.PendingReview,
+      sizeChart: {
+        version: 2, sourceRevision: 1, source: ChartSource.Manual, measurementType: MeasurementType.Body,
+        lengthUnit: 'CM', weightUnit: 'KG', status: 'CONFIRMED', fitRules: [],
+        requiredMeasurements: ['chest'], rows: [{ size: 'M', chest: { min: 86, max: 89 } }],
+      },
+    };
+    const { service, productsRepository } = createService({
+      findModerationItemById: jest.fn().mockResolvedValue(product),
+      moderate: jest.fn().mockResolvedValue(product),
+    });
+    await service.moderateProduct(userId, productId.toString(), { action: ProductModerationStatus.Approved });
+    expect(productsRepository.moderate).toHaveBeenCalledWith(productId, expect.any(Object), ProductModerationStatus.PendingReview, { version: 2, sizes: ['M'] });
+  });
+
   it('creates every provider product in pending review', async () => {
     const product = {
       _id: productId,
@@ -104,6 +136,7 @@ describe('ProductsService moderation', () => {
         moderationStatus: ProductModerationStatus.PendingReview,
         taggingRevision: 1,
         taggingDecisionVersion: 0,
+        sizeChartPolicyVersion: 1,
       }),
     );
     expect(priceVersionModel.create).toHaveBeenCalledWith({
