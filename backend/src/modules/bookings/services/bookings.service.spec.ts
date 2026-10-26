@@ -19,6 +19,8 @@ import { PaymentsService } from '../../payments/services/payments.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { BadRequestException } from '@nestjs/common';
 import { BookingsRepository } from '../repositories/bookings.repository';
+import { PromotionsService } from '../../products/services/promotions.service';
+import { SettlementCalculationService } from '../../settlements/services/settlement-calculation.service';
 
 describe('Bookings Service Unit Tests', () => {
   let bookingStatusService: BookingStatusService;
@@ -87,12 +89,25 @@ describe('Bookings Service Unit Tests', () => {
       find: jest.fn(),
       findById: jest.fn(),
       findOneAndUpdate: jest.fn(),
+      db: {
+        model: jest.fn().mockReturnValue({
+          findOne: jest.fn().mockReturnValue({
+            session: jest.fn().mockResolvedValue(null),
+          }),
+        }),
+      },
     };
 
     mockPaymentsService = {
       refundDeposit: jest.fn().mockResolvedValue({ success: true }),
       cancelSettlementsForBooking: jest.fn().mockResolvedValue(undefined),
       executeAutoTransfer: jest.fn().mockResolvedValue({ success: true }),
+      getRefundableAmount: jest.fn().mockResolvedValue(0),
+      cancelPendingPaymentsForBooking: jest.fn().mockResolvedValue(undefined),
+      createRefundIntents: jest
+        .fn()
+        .mockResolvedValue([{ paymentCode: 'RF-TEST-1' }]),
+      executeRefundIntent: jest.fn().mockResolvedValue(undefined),
     };
 
     mockNotificationsService = {
@@ -100,6 +115,14 @@ describe('Bookings Service Unit Tests', () => {
     };
 
     mockBookingsRepository = {
+      // Cancellation uses a conditional update to avoid concurrent transitions.
+      model: {
+        findOneAndUpdate: jest
+          .fn()
+          .mockImplementation((filter: any, update: any) =>
+            Promise.resolve({ _id: filter._id, ...update.$set }),
+          ),
+      },
       startSession: jest.fn().mockResolvedValue(mockSession),
       findBookingById: jest.fn().mockImplementation((id, session) => {
         const result = mockBookingModel.findById(id);
@@ -230,6 +253,18 @@ describe('Bookings Service Unit Tests', () => {
           provide: NotificationsService,
           useValue: mockNotificationsService as unknown,
         },
+        {
+          provide: PromotionsService,
+          useValue: { releaseVoucher: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: SettlementCalculationService,
+          useValue: {
+            getCustomerPaidServiceAmount: jest.fn(
+              (item: { totalPrice?: number }) => item.totalPrice ?? 0,
+            ),
+          },
+        },
       ],
     }).compile();
 
@@ -283,7 +318,9 @@ describe('Bookings Service Unit Tests', () => {
         { bookingId: mockBooking._id },
         { $set: { status: ReservationStatus.Cancelled } },
       );
-      expect(mockPaymentsService.refundDeposit).not.toHaveBeenCalled();
+      expect(mockPaymentsService.getRefundableAmount).not.toHaveBeenCalled();
+      expect(mockPaymentsService.createRefundIntents).not.toHaveBeenCalled();
+      expect(mockSession.commitTransaction).toHaveBeenCalled();
     });
 
     it('Test 2: should refund successfully when customer cancels CONFIRMED booking within free cancellation hours', async () => {
@@ -332,6 +369,8 @@ describe('Bookings Service Unit Tests', () => {
         session: jest.fn().mockResolvedValue({}),
       });
 
+      mockPaymentsService.getRefundableAmount.mockResolvedValue(500000);
+
       const result = (await bookingStatusService.cancelBooking(
         mockBooking._id.toString(),
         customerId.toString(),
@@ -342,9 +381,14 @@ describe('Bookings Service Unit Tests', () => {
       expect(result.success).toBe(true);
       expect(result.isFreeCancel).toBe(true);
       expect(result.refundAmount).toBe(500000);
-      expect(mockPaymentsService.refundDeposit).toHaveBeenCalledWith(
-        mockBooking._id.toString(),
+      expect(mockPaymentsService.createRefundIntents).toHaveBeenCalledWith(
+        mockBooking._id,
         500000,
+        'BOOKING_CANCEL',
+        mockSession,
+      );
+      expect(mockPaymentsService.executeRefundIntent).toHaveBeenCalledWith(
+        'RF-TEST-1',
       );
     });
 

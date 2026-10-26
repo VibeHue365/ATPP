@@ -11,6 +11,7 @@ describe('SettlementsService', () => {
     insertMany: jest.fn(),
     deleteMany: jest.fn(),
     findOneAndUpdate: jest.fn(),
+    db: { startSession: jest.fn(), model: jest.fn() },
   };
   const bookingModel = {
     findById: jest.fn(),
@@ -57,10 +58,11 @@ describe('SettlementsService', () => {
     bookingItemModel.find.mockReturnValue({ populate: firstPopulate });
   }
 
-  function mockExisting(items: unknown[]) {
-    settlementModel.find.mockReturnValue({
-      sort: jest.fn().mockResolvedValue(items),
-    });
+  /** The service reads existing rows directly, then reloads the sorted result. */
+  function mockSettlementReads(existing: unknown[], reloaded: unknown[] = existing) {
+    settlementModel.find
+      .mockReturnValueOnce(Promise.resolve(existing))
+      .mockReturnValueOnce({ sort: jest.fn().mockResolvedValue(reloaded) });
   }
 
   it('does not create settlements before the booking is completed', async () => {
@@ -105,7 +107,7 @@ describe('SettlementsService', () => {
 
     bookingModel.findById.mockResolvedValue(currentBooking);
     mockItems(sourceItems);
-    mockExisting([]);
+    mockSettlementReads([], created);
     paymentModel.findOne.mockReturnValue({ sort: jest.fn().mockResolvedValue(null) });
     calculationService.calculateSettlementsForBooking.mockResolvedValue(payloads);
     codeService.generateSettlementCode
@@ -121,31 +123,44 @@ describe('SettlementsService', () => {
         expect.objectContaining({ settlementCode: 'STL-1', providerId: providerA }),
         expect.objectContaining({ settlementCode: 'STL-2', providerId: providerB }),
       ]),
-      { ordered: true },
+      { ordered: false },
     );
 
-    mockExisting(created);
+    mockItems(sourceItems);
+    settlementModel.find.mockReturnValueOnce(Promise.resolve(created));
     await expect(
       service.createSettlementsForBooking(currentBooking._id.toString()),
     ).resolves.toEqual(created);
     expect(settlementModel.insertMany).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects a partial settlement state instead of creating duplicates', async () => {
+  it('creates only the missing provider settlement for a partial state', async () => {
     const currentBooking = booking(
       BookingStatus.Completed,
       BookingPaymentStatus.Paid,
     );
     const providerA = new Types.ObjectId();
     const providerB = new Types.ObjectId();
+    const existingA = { providerId: providerA, settlementCode: 'STL-A' };
+    const createdB = { providerId: providerB, settlementCode: 'STL-B' };
     bookingModel.findById.mockResolvedValue(currentBooking);
     mockItems([{ providerId: providerA }, { providerId: providerB }]);
-    mockExisting([{ providerId: providerA }]);
+    mockSettlementReads([existingA], [existingA, createdB]);
+    paymentModel.findOne.mockReturnValue({ sort: jest.fn().mockResolvedValue(null) });
+    calculationService.calculateSettlementsForBooking.mockResolvedValue([
+      { bookingId: currentBooking._id, providerId: providerA },
+      { bookingId: currentBooking._id, providerId: providerB },
+    ]);
+    codeService.generateSettlementCode.mockResolvedValueOnce('STL-B');
+    settlementModel.insertMany.mockResolvedValue([createdB]);
 
     await expect(
       service.createSettlementsForBooking(currentBooking._id.toString()),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(settlementModel.insertMany).not.toHaveBeenCalled();
+    ).resolves.toEqual([existingA, createdB]);
+    expect(settlementModel.insertMany).toHaveBeenCalledWith(
+      [expect.objectContaining({ providerId: providerB, settlementCode: 'STL-B' })],
+      { ordered: false },
+    );
   });
 
   it('holds and releases only from the expected lifecycle status', async () => {
@@ -199,6 +214,11 @@ describe('SettlementsService', () => {
     settlementModel.findById.mockResolvedValue(ready);
     adjustmentModel.find.mockReturnValue({ sort: jest.fn().mockResolvedValue([]) });
     settlementModel.findOneAndUpdate.mockResolvedValue(settled);
+    const session = {
+      withTransaction: jest.fn(async (work: () => Promise<void>) => work()),
+      endSession: jest.fn().mockResolvedValue(undefined),
+    };
+    settlementModel.db.startSession.mockResolvedValue(session);
 
     await expect(
       service.markSettled(actorId, settlementId.toString(), {
@@ -216,7 +236,8 @@ describe('SettlementsService', () => {
           payoutReference: 'BANK-REF-001',
         }),
       }),
-      { new: true },
+      { new: true, session },
     );
+    expect(session.endSession).toHaveBeenCalledTimes(1);
   });
 });

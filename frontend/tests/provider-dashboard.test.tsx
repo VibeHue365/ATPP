@@ -229,18 +229,28 @@ describe('Provider dashboard behavior', () => {
       });
 
       it('keeps the socket subscription stable across tabs and removes it on unmount', async () => {
+        // The overview panel owns its own listener, so count listeners that are still attached.
+        const activeHandlers = () => {
+          const attached = mocks.socket.on.mock.calls.filter(([event]) => event === 'booking_updated').map(([, fn]) => fn);
+          for (const [event, fn] of mocks.socket.off.mock.calls) {
+            const index = event === 'booking_updated' ? attached.indexOf(fn) : -1;
+            if (index >= 0) attached.splice(index, 1);
+          }
+          return attached;
+        };
         const view = render(<Dashboard />);
         await settle();
-        const handler = mocks.socket.on.mock.calls.find(([event]) => event === 'booking_updated')?.[1];
-        expect(handler).toBeTypeOf('function');
+        expect(activeHandlers().length).toBeGreaterThan(0);
         fireEvent.click(within(view.container.querySelector('aside')!).getByRole('button', { name: 'Đơn hàng', exact: true }));
         await settle();
-        expect(mocks.socket.on.mock.calls.filter(([event]) => event === 'booking_updated')).toHaveLength(1);
+        const [handler, ...extra] = activeHandlers();
+        expect(extra).toHaveLength(0);
         mocks.requests = [];
         await act(async () => { handler({ bookingId: 'booking-test', status: 'CONFIRMED' }); });
         expect(mocks.requests.filter(item => item.path === '/bookings/provider')).toHaveLength(1);
         view.unmount();
         expect(mocks.socket.off).toHaveBeenCalledWith('booking_updated', handler);
+        expect(activeHandlers()).toHaveLength(0);
       });
 
       it('polls notifications every 30 seconds and clears the timer on unmount', async () => {

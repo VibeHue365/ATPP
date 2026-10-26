@@ -99,6 +99,7 @@ describe('ChatService', () => {
   it('creates a message and updates room activity', async () => {
     const { service, roomModel, messageModel } = create();
     const messageId = new Types.ObjectId();
+    roomModel.findById.mockReturnValue(query({ participants: [userId, partnerId] }));
     messageModel.create.mockResolvedValue({ _id: messageId });
     await service.createMessage(
       roomId.toString(),
@@ -124,7 +125,8 @@ describe('ChatService', () => {
   });
 
   it('marks only other users messages as read', async () => {
-    const { service, messageModel } = create();
+    const { service, roomModel, messageModel } = create();
+    roomModel.findById.mockReturnValue(query({ participants: [userId, partnerId] }));
     await service.markRoomAsRead(roomId.toString(), userId.toString());
     expect(messageModel.updateMany).toHaveBeenCalledWith(
       { roomId, senderId: { $ne: userId }, readBy: { $ne: userId } },

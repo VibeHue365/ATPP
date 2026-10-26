@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { DiscountType, PromotionStatus } from '../schemas/promotion.schema';
 import { PromotionsService } from './promotions.service';
@@ -24,9 +24,14 @@ describe('PromotionsService', () => {
       find: jest.fn(),
       deleteOne: jest.fn(),
       findOneAndUpdate: jest.fn(),
+      findById: jest.fn(),
+      findByIdAndUpdate: jest.fn(),
       updateOne: jest.fn(),
     };
-    return { service: new PromotionsService(model as never), model };
+    return {
+      service: new PromotionsService(model as never, {} as never, {} as never),
+      model,
+    };
   }
 
   it('creates an uppercase active provider voucher', async () => {
@@ -50,7 +55,7 @@ describe('PromotionsService', () => {
     const { service, model } = create();
     model.findOne.mockResolvedValue({ _id: promotionId });
     await expect(service.createPromotion(null, dto)).rejects.toThrow(
-      'Voucher code already exists',
+      'Mã voucher đã tồn tại.',
     );
     expect(model.findOne).toHaveBeenCalledWith({ code: 'TET2026' });
   });
@@ -58,15 +63,16 @@ describe('PromotionsService', () => {
   it('updates normalized code and date fields only for the owner', async () => {
     const { service, model } = create();
     const updated = { _id: promotionId, code: 'NEWCODE' };
-    model.findOneAndUpdate.mockResolvedValue(updated);
+    model.findById.mockResolvedValue({ _id: promotionId, providerId, usedCount: 0 });
+    model.findByIdAndUpdate.mockResolvedValue(updated);
     await expect(
       service.updatePromotion(promotionId.toString(), providerId.toString(), {
         code: 'newcode',
         startDate: '2026-02-01T00:00:00.000Z',
       }),
     ).resolves.toBe(updated);
-    expect(model.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: promotionId, providerId },
+    expect(model.findByIdAndUpdate).toHaveBeenCalledWith(
+      promotionId,
       {
         $set: {
           code: 'NEWCODE',
@@ -79,13 +85,23 @@ describe('PromotionsService', () => {
 
   it('rejects update or deletion outside provider ownership', async () => {
     const { service, model } = create();
-    model.findOneAndUpdate.mockResolvedValue(null);
-    model.deleteOne.mockResolvedValue({ deletedCount: 0 });
+    model.findById.mockResolvedValue({
+      _id: promotionId,
+      providerId: new Types.ObjectId(),
+      usedCount: 0,
+    });
     await expect(
       service.updatePromotion(promotionId.toString(), providerId.toString(), {
         name: 'No',
       }),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.deletePromotion(promotionId.toString(), providerId.toString()),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(model.findByIdAndUpdate).not.toHaveBeenCalled();
+    expect(model.deleteOne).not.toHaveBeenCalled();
+
+    model.findById.mockResolvedValue(null);
     await expect(
       service.deletePromotion(promotionId.toString(), providerId.toString()),
     ).rejects.toBeInstanceOf(NotFoundException);

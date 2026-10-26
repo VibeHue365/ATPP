@@ -7,6 +7,11 @@ describe('Catalog, discovery and AI direct use-case contracts', () => {
   const provider = { sub: 'provider-1', email: 'shop@example.com', roles: ['PROVIDER'] } as any;
 
   const productController = (service: any) => new ProductsController(service, {} as any, {} as any, {} as any);
+  const customer = { sub: 'customer-1', email: 'customer@example.com', roles: ['CUSTOMER'] } as any;
+  const aiController = (service: any) => {
+    const rateLimit = { assertRateLimit: jest.fn().mockResolvedValue(undefined) };
+    return { controller: new AiController(service, rateLimit as any), rateLimit };
+  };
 
   it('UC-18 deletes a provider-owned Ao Dai product', async () => {
     const service = { deleteProduct: jest.fn().mockResolvedValue({ message: 'Product deleted' }) };
@@ -60,31 +65,35 @@ describe('Catalog, discovery and AI direct use-case contracts', () => {
 
   it('UC-30 submits an image to the visual-match service', async () => {
     const service = { visualMatch: jest.fn().mockResolvedValue([{ productId: 'product-1', score: 0.91 }]) };
-    const controller = new AiController(service as any);
+    const { controller, rateLimit } = aiController(service);
     const payload = { image_base64: 'base64-image', mime_type: 'image/jpeg' };
-    await controller.visualMatch(payload);
+    await controller.visualMatch(customer, payload);
+    expect(rateLimit.assertRateLimit).toHaveBeenCalledWith('ai_match_customer-1', 20, 60);
     expect(service.visualMatch).toHaveBeenCalledWith(payload);
   });
 
   it('UC-30 supports image-assisted chat with product recommendations', async () => {
     const service = { chatWithImage: jest.fn().mockResolvedValue({ answer: 'Mẫu tương tự', recommended_products: ['product-1'] }) };
-    const controller = new AiController(service as any);
-    await controller.chatWithImage({ message: 'Tìm áo tương tự', image_base64: 'base64-image', mime_type: 'image/png' });
+    const { controller, rateLimit } = aiController(service);
+    await controller.chatWithImage(customer, { message: 'Tìm áo tương tự', image_base64: 'base64-image', mime_type: 'image/png' } as any);
+    expect(rateLimit.assertRateLimit).toHaveBeenCalledWith('ai_chat_img_customer-1', 10, 60);
     expect(service.chatWithImage).toHaveBeenCalledWith('Tìm áo tương tự', 'base64-image', 'image/png');
   });
 
   it('UC-31 requests recommendation using budget and concept context', async () => {
     const service = { contextRecommend: jest.fn().mockResolvedValue({ suggested_products: ['product-1'] }) };
-    const controller = new AiController(service as any);
+    const { controller, rateLimit } = aiController(service);
     const payload = { budget: 1500000, location_context: 'Huế', concept: 'cổ điển' };
-    await controller.contextRecommend(payload);
+    await controller.contextRecommend(customer, payload);
+    expect(rateLimit.assertRateLimit).toHaveBeenCalledWith('ai_visual_customer-1', 20, 60);
     expect(service.contextRecommend).toHaveBeenCalledWith(payload);
   });
 
   it('UC-32 sends consultation questions to the AI chatbot service', async () => {
     const service = { chat: jest.fn().mockResolvedValue({ answer: 'Tiền cọc được hoàn sau đối soát.' }) };
-    const controller = new AiController(service as any);
-    await controller.chat({ message: 'Chính sách hoàn cọc thế nào?' });
+    const { controller, rateLimit } = aiController(service);
+    await controller.chat(customer, { message: 'Chính sách hoàn cọc thế nào?' } as any);
+    expect(rateLimit.assertRateLimit).toHaveBeenCalledWith('ai_chat_customer-1', 20, 60);
     expect(service.chat).toHaveBeenCalledWith('Chính sách hoàn cọc thế nào?');
   });
 });

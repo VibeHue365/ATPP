@@ -20,11 +20,16 @@ describe('AuthService', () => {
     };
     const usersRepository = {
       findUserByEmail: jest.fn().mockResolvedValue(null),
+      findUserByEmailWithPassword: jest.fn(),
       existsByPhone: jest.fn().mockResolvedValue(false),
       createUser: jest.fn().mockResolvedValue({ _id: userId }),
       restoreExpiredSuspension: jest.fn(),
       markLoggedIn: jest.fn().mockResolvedValue(undefined),
     };
+    // Login now loads the password hash explicitly; reuse the same fixture.
+    usersRepository.findUserByEmailWithPassword.mockImplementation(
+      (email: string) => usersRepository.findUserByEmail(email),
+    );
     const configService = {
       get: jest.fn((key: string) =>
         key === 'AUTH_DEMO_TOKENS_ENABLED' && options.demoTokens

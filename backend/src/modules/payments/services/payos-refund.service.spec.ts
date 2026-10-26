@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { ConfigService } from '@nestjs/config';
-import { PayOSRefundService } from './payos-refund.service';
+import {
+  PayOSRefundRejectedError,
+  PayOSRefundService,
+} from './payos-refund.service';
 
 describe('PayOSRefundService', () => {
   const originalFetch = global.fetch;
@@ -19,7 +22,7 @@ describe('PayOSRefundService', () => {
   it('simulates a refund when credentials are missing', async () => {
     const result = await service().refundPayment(123, 500000);
     expect(result).toMatchObject({
-      status: 'REFUNDED',
+      status: 'REFUNDED_MOCK',
       amount: 500000,
       orderCode: 123,
     });
@@ -58,7 +61,7 @@ describe('PayOSRefundService', () => {
     );
   });
 
-  it('falls back safely when payOS rejects or the network fails', async () => {
+  it('reports a payOS rejection instead of simulating a refund', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
       status: 500,
@@ -71,10 +74,6 @@ describe('PayOSRefundService', () => {
         PAYOS_CLIENT_ID: 'client',
         PAYOS_API_KEY: 'api-key',
       }).refundPayment(789, 100000),
-    ).resolves.toMatchObject({
-      status: 'REFUNDED_SIMULATED',
-      amount: 100000,
-      orderCode: 789,
-    });
+    ).rejects.toEqual(new PayOSRefundRejectedError('refund rejected'));
   });
 });

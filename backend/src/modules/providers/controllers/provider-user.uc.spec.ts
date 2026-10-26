@@ -99,9 +99,9 @@ describe('Provider and profile direct use-case contracts', () => {
   it('UC-62 creates a provider-specific off-day schedule', async () => {
     const service = { updateSpecificDateSchedule: jest.fn().mockResolvedValue({ date: '2026-10-10', isOffDay: true }) };
     const controller = new ProvidersController(service as any);
-    const dto = { date: '2026-10-10', isOffDay: true, customSlots: [], capability: 'PHOTOGRAPHY' } as any;
+    const dto = { date: '2026-10-10', isOffDay: true, customSlots: [], capability: 'PHOTOGRAPHY', reason: 'Nghỉ lễ' } as any;
     await controller.updateSpecificDate(provider, dto);
-    expect(service.updateSpecificDateSchedule).toHaveBeenCalledWith('provider-1', '2026-10-10', true, [], 'PHOTOGRAPHY');
+    expect(service.updateSpecificDateSchedule).toHaveBeenCalledWith('provider-1', '2026-10-10', true, [], 'PHOTOGRAPHY', 'Nghỉ lễ');
   });
 
   it('UC-62 updates recurring working hours for one weekday', async () => {
