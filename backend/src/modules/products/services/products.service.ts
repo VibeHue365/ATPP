@@ -29,6 +29,8 @@ import { SmartTaggingService } from '../../smart-tagging/services/smart-tagging.
 import { SmartTagEntityType } from '../../smart-tagging/constants/smart-tag.constants';
 import { PublicMediaService } from '../../storage/services/public-media.service';
 import { normalizeColor } from '../utils/color.util';
+import { applyCampaignToRate, toPublicCampaign } from '../utils/campaign-pricing.util';
+import { DiscountCampaign } from '../schemas/discount-campaign.schema';
 import {
   PriceTargetType,
   PriceVersion,
@@ -93,6 +95,16 @@ export class ProductsService implements OnModuleInit {
     return plain;
   }
 
+  /**
+   * Gắn chiến dịch giá của shop vào sản phẩm. Chiến dịch áp theo ngày thuê nên `discountedPrice`
+   * chỉ là giá nếu thuê HÔM NAY; giá thật được tính lại khi khách chọn ngày.
+   */
+  private attachCampaign(plain: any, campaign: DiscountCampaign | null | undefined): any {
+    plain.activeCampaign = campaign ? toPublicCampaign(campaign) : null;
+    plain.discountedPrice = applyCampaignToRate(plain.basePrice, campaign, new Date());
+    return plain;
+  }
+
   async getAllActiveProducts(options?: {
     search?: string;
     minPrice?: number;
@@ -139,21 +151,7 @@ export class ProductsService implements OnModuleInit {
         typeof plain.providerId === 'object' && plain.providerId
           ? plain.providerId._id.toString()
           : plain.providerId.toString();
-      const campaign = campaigns[pId];
-      if (campaign) {
-        plain.activeCampaign = {
-          occasion: campaign.occasion,
-          discountPercent: campaign.discountPercent,
-          endDate: campaign.endDate,
-        };
-        plain.discountedPrice = Math.round(
-          plain.basePrice * (1 - campaign.discountPercent / 100),
-        );
-      } else {
-        plain.activeCampaign = null;
-        plain.discountedPrice = plain.basePrice;
-      }
-      return plain;
+      return this.attachCampaign(plain, campaigns[pId]);
     });
 
     this.publicProductsCache.set(cacheKey, {
@@ -253,18 +251,7 @@ export class ProductsService implements OnModuleInit {
         typeof plain.providerId === 'object' && plain.providerId
           ? plain.providerId._id.toString()
           : plain.providerId.toString();
-      const campaign = campaigns[providerId];
-      plain.activeCampaign = campaign
-        ? {
-          occasion: campaign.occasion,
-          discountPercent: campaign.discountPercent,
-          endDate: campaign.endDate,
-        }
-        : null;
-      plain.discountedPrice = campaign
-        ? Math.round(plain.basePrice * (1 - campaign.discountPercent / 100))
-        : plain.basePrice;
-      return plain;
+      return this.attachCampaign(plain, campaigns[providerId]);
     });
     const safeLimit = Math.min(Math.max(limit, 1), 24);
     const response = {
@@ -353,13 +340,7 @@ export class ProductsService implements OnModuleInit {
       policies: provider.policies,
       rentalSettings: provider.rentalSettings,
       comboDiscountPercent: provider.comboDiscountPercent,
-      activeCampaign: campaign
-        ? {
-          occasion: campaign.occasion,
-          discountPercent: campaign.discountPercent,
-          endDate: campaign.endDate,
-        }
-        : null,
+      activeCampaign: campaign ? toPublicCampaign(campaign) : null,
     };
   }
 
@@ -410,19 +391,7 @@ export class ProductsService implements OnModuleInit {
         ? plain.providerId._id
         : plain.providerId;
     const campaign = await this.campaignService.getActiveCampaign(pId);
-    if (campaign) {
-      plain.activeCampaign = {
-        occasion: campaign.occasion,
-        discountPercent: campaign.discountPercent,
-        endDate: campaign.endDate,
-      };
-      plain.discountedPrice = Math.round(
-        plain.basePrice * (1 - campaign.discountPercent / 100),
-      );
-    } else {
-      plain.activeCampaign = null;
-      plain.discountedPrice = plain.basePrice;
-    }
+    this.attachCampaign(plain, campaign);
     const [withBadges] = await this.attachPublicBadges([product]);
     plain.badges = withBadges.badges;
     return plain;
@@ -461,20 +430,7 @@ export class ProductsService implements OnModuleInit {
 
     const items = result.items.map((product) => {
       const plain = product.toObject() as any;
-      if (campaign) {
-        plain.activeCampaign = {
-          occasion: campaign.occasion,
-          discountPercent: campaign.discountPercent,
-          endDate: campaign.endDate,
-        };
-        plain.discountedPrice = Math.round(
-          plain.basePrice * (1 - campaign.discountPercent / 100),
-        );
-      } else {
-        plain.activeCampaign = null;
-        plain.discountedPrice = plain.basePrice;
-      }
-      return plain;
+      return this.attachCampaign(plain, campaign);
     });
 
     return { items, total: result.total };

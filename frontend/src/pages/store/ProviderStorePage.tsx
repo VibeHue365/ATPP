@@ -25,6 +25,12 @@ import type { PublicSmartTagBadge } from '../../features/smart-tagging/types/sma
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { useToast } from '../../components/feedback/Toast';
 import { chatService } from '../../services/chatService';
+import {
+  formatCampaignPercent,
+  formatCampaignRange,
+  isSurchargeCampaign,
+  type PricingCampaign,
+} from '../../shared/pricing/campaignPricing';
 
 const getImageUrl = (url?: string | null) => {
   if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
@@ -56,11 +62,7 @@ interface ProductFromDb {
     averageRating: number;
     totalReviews: number;
   };
-  activeCampaign?: {
-    occasion: string;
-    discountPercent: number;
-    endDate: string;
-  } | null;
+  activeCampaign?: (PricingCampaign & { occasion: string }) | null;
   discountedPrice?: number;
 }
 
@@ -101,11 +103,7 @@ interface StoreInfo {
       city?: string;
     };
   };
-  activeCampaign?: {
-    occasion: string;
-    discountPercent: number;
-    endDate: string;
-  } | null;
+  activeCampaign?: (PricingCampaign & { occasion: string }) | null;
 }
 
 const ITEMS_PER_PAGE = 12;
@@ -235,8 +233,8 @@ export const ProviderStorePage: React.FC = () => {
         return true;
       })
       .sort((a, b) => {
-        const priceA = a.discountedPrice ?? a.basePrice;
-        const priceB = b.discountedPrice ?? b.basePrice;
+        const priceA = a.basePrice;
+        const priceB = b.basePrice;
         if (sortBy === 'price-asc') return priceA - priceB;
         if (sortBy === 'price-desc') return priceB - priceA;
         if (sortBy === 'rating') return (b.rating?.averageRating || 0) - (a.rating?.averageRating || 0);
@@ -485,7 +483,12 @@ export const ProviderStorePage: React.FC = () => {
                     <div style={{ fontSize: 12, opacity: 0.9, textTransform: 'uppercase', fontWeight: 600 }}>
                       {store.activeCampaign.occasion || 'Khuyến mãi đặc biệt'}
                     </div>
-                    <div style={{ fontSize: 18, fontWeight: 800 }}>Giảm {store.activeCampaign.discountPercent}% toàn gian hàng</div>
+                    <div style={{ fontSize: 18, fontWeight: 800 }}>
+                      {isSurchargeCampaign(store.activeCampaign) ? 'Phụ thu' : 'Giảm'} {store.activeCampaign.discountPercent}% toàn gian hàng
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.9 }}>
+                      Áp dụng cho ngày thuê {formatCampaignRange(store.activeCampaign)}
+                    </div>
                   </div>
                 </div>
               )}
@@ -705,7 +708,8 @@ export const ProviderStorePage: React.FC = () => {
                   }}
                 >
                   {paginatedProducts.map((p) => {
-                    const finalPrice = p.discountedPrice ?? p.basePrice;
+                    // Giá áp chiến dịch phụ thuộc ngày thuê, nên thẻ hiện giá gốc kèm nhãn chiến dịch.
+                    const finalPrice = p.basePrice;
                     const hasDiscount = p.activeCampaign && p.activeCampaign.discountPercent > 0;
                     return (
                       <div
@@ -762,7 +766,7 @@ export const ProviderStorePage: React.FC = () => {
                                 boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                               }}
                             >
-                              -{p.activeCampaign!.discountPercent}%
+                              {formatCampaignPercent(p.activeCampaign!)}
                             </div>
                           )}
                         </div>
@@ -802,8 +806,8 @@ export const ProviderStorePage: React.FC = () => {
                               {finalPrice.toLocaleString('vi-VN')}đ
                             </span>
                             {hasDiscount && (
-                              <span style={{ fontSize: 13, color: '#999', textDecoration: 'line-through' }}>
-                                {p.basePrice.toLocaleString('vi-VN')}đ
+                              <span style={{ fontSize: 12, color: '#999' }}>
+                                {formatCampaignPercent(p.activeCampaign!)} ngày {formatCampaignRange(p.activeCampaign!)}
                               </span>
                             )}
                             <span style={{ fontSize: 12, color: '#888', marginLeft: 'auto' }}>/ ngày</span>

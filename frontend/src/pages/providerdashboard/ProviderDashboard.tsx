@@ -139,8 +139,8 @@ export const ProviderDashboard: React.FC = () => {
   } = useProviderInventoryState();
 
   const {
-    isCampaignModalOpen, setIsCampaignModalOpen, campaignOccasion, setCampaignOccasion, campaignPercent,
-    setCampaignPercent, campaignStart, setCampaignStart, campaignEnd, setCampaignEnd, activeCampaign,
+    isCampaignModalOpen, setIsCampaignModalOpen, campaignOccasion, setCampaignOccasion, campaignType, setCampaignType,
+    campaignPercent, setCampaignPercent, campaignStart, setCampaignStart, campaignEnd, setCampaignEnd, activeCampaign,
     setActiveCampaign, submittingCampaign, setSubmittingCampaign,
   } = useProviderCampaignState();
 
@@ -561,11 +561,13 @@ export const ProviderDashboard: React.FC = () => {
   const { fetchActiveCampaign, openCampaignModal, handleDeactivateCampaign, handleCreateCampaign } = createCampaignActions({
     setActiveCampaign,
     setCampaignOccasion,
+    setCampaignType,
     setCampaignPercent,
     setCampaignStart,
     setCampaignEnd,
     setIsCampaignModalOpen,
     campaignOccasion,
+    campaignType,
     toast,
     campaignPercent,
     campaignStart,
@@ -867,7 +869,7 @@ export const ProviderDashboard: React.FC = () => {
       </div>
 
       {/* -------------------- MODAL: CAMPAIGN MANAGEMENT -------------------- */}
-      <CampaignModal {...{ isCampaignModalOpen, setIsCampaignModalOpen, handleCreateCampaign, activeCampaign, handleDeactivateCampaign, campaignOccasion, setCampaignOccasion, campaignPercent, setCampaignPercent, campaignStart, setCampaignStart, campaignEnd, setCampaignEnd, submittingCampaign }} />
+      <CampaignModal {...{ isCampaignModalOpen, setIsCampaignModalOpen, handleCreateCampaign, activeCampaign, handleDeactivateCampaign, campaignOccasion, setCampaignOccasion, campaignType, setCampaignType, campaignPercent, setCampaignPercent, campaignStart, setCampaignStart, campaignEnd, setCampaignEnd, submittingCampaign }} />
 
       {/* -------------------- MODALS: CREATE & EDIT PRODUCT -------------------- */}
       <ProductWizardModal {...{ isModalOpen, handleWizardCancel, editingProduct, wizardStep, setWizardStep, prodName, setProdName, prodCategoryId, setProdCategoryId, categories, prodStatus, setProdStatus, prodBasePrice, setProdBasePrice, prodDepositAmount, setProdDepositAmount, prodDescription, setProdDescription, handleImageChange, uploadingImages, prodImages, removeImage, handleVideoChange, uploadingVideos, prodVideos, removeVideo, setAddInvProductId, setIsAddInventoryOpen, editInvSummary, prodSizes, setProdSizes, prodColors, setProdColors, prodMaterials, setProdMaterials, prodCustomTags, setProdCustomTags, customTagInput, setCustomTagInput, variantBusy, setVariantEditRow, setVariantEditQty, handleRemoveVariant, variants, setVariants, updateVariantRow, removeVariantRow, addVariantRow, colorsNeedingImages, prodColorImages, uploadingColor, handleColorImageChange, removeColorImage, createdDraftId, setActiveTagCodes, handleWizardFinish, handleWizardBack, handleWizardNext, savingDraft, activeTagCodes }} />

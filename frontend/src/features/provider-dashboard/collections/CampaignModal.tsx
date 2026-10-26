@@ -1,9 +1,10 @@
 import type { FormEvent } from 'react';
 import { Modal } from '../../../components/common/Modal';
 import type { useProviderCampaignState } from './useProviderCampaignState';
+import { formatCampaignPercent } from '../../../shared/pricing/campaignPricing';
 
 type CampaignModalProps = Pick<ReturnType<typeof useProviderCampaignState>,
-  'isCampaignModalOpen' | 'setIsCampaignModalOpen' | 'activeCampaign' | 'campaignOccasion' | 'setCampaignOccasion' | 'campaignPercent' | 'setCampaignPercent' | 'campaignStart' | 'setCampaignStart' | 'campaignEnd' | 'setCampaignEnd' | 'submittingCampaign'
+  'isCampaignModalOpen' | 'setIsCampaignModalOpen' | 'activeCampaign' | 'campaignOccasion' | 'setCampaignOccasion' | 'campaignType' | 'setCampaignType' | 'campaignPercent' | 'setCampaignPercent' | 'campaignStart' | 'setCampaignStart' | 'campaignEnd' | 'setCampaignEnd' | 'submittingCampaign'
 > &
 {
   handleCreateCampaign: (e: FormEvent<Element>) => Promise<void>;
@@ -12,9 +13,10 @@ type CampaignModalProps = Pick<ReturnType<typeof useProviderCampaignState>,
 
 export function CampaignModal({
   isCampaignModalOpen, setIsCampaignModalOpen, handleCreateCampaign, activeCampaign,
-  handleDeactivateCampaign, campaignOccasion, setCampaignOccasion, campaignPercent, setCampaignPercent,
-  campaignStart, setCampaignStart, campaignEnd, setCampaignEnd, submittingCampaign,
+  handleDeactivateCampaign, campaignOccasion, setCampaignOccasion, campaignType, setCampaignType,
+  campaignPercent, setCampaignPercent, campaignStart, setCampaignStart, campaignEnd, setCampaignEnd, submittingCampaign,
 }: CampaignModalProps) {
+  const isSurcharge = campaignType === 'SURCHARGE';
   return (
     <Modal
       isOpen={isCampaignModalOpen}
@@ -25,7 +27,7 @@ export function CampaignModal({
       <form onSubmit={handleCreateCampaign} style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
         {activeCampaign && (
           <div style={{ padding: '12px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '6px', fontSize: '13px', color: '#B91C1C', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span style={{ fontWeight: 700 }}>Đang chạy chiến dịch: {activeCampaign.occasion} (-{activeCampaign.discountPercent}%)</span>
+            <span style={{ fontWeight: 700 }}>Đang chạy chiến dịch: {activeCampaign.occasion} ({formatCampaignPercent(activeCampaign)})</span>
             <span>Thời gian: {new Date(activeCampaign.startDate).toLocaleDateString('vi-VN')} - {new Date(activeCampaign.endDate).toLocaleDateString('vi-VN')}</span>
             <button
               type="button"
@@ -53,11 +55,28 @@ export function CampaignModal({
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>PHẦN TRĂM GIẢM GIÁ (%) *</label>
+          <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>LOẠI CHƯƠNG TRÌNH *</label>
+          <select
+            value={campaignType}
+            onChange={(e) => setCampaignType(e.target.value === 'SURCHARGE' ? 'SURCHARGE' : 'DISCOUNT')}
+            style={{ padding: '10px', border: '1px solid var(--color-light-border)', borderRadius: '6px', fontSize: '14px', outline: 'none', backgroundColor: 'white' }}
+          >
+            <option value="DISCOUNT">Giảm giá toàn shop</option>
+            <option value="SURCHARGE">Phụ thu dịp lễ (cao điểm)</option>
+          </select>
+          <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+            Áp dụng cho mọi sản phẩm của shop, cả thuê theo ngày và theo giờ, khi <b>ngày thuê</b> của khách nằm trong khoảng ngày bên dưới.
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+            {isSurcharge ? 'PHẦN TRĂM PHỤ THU (%) *' : 'PHẦN TRĂM GIẢM GIÁ (%) *'}
+          </label>
           <input
             type="number"
             min="1"
-            max="90"
+            max={isSurcharge ? '100' : '90'}
             placeholder="10"
             value={campaignPercent}
             onChange={(e) => setCampaignPercent(e.target.value)}

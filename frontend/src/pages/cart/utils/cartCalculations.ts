@@ -1,5 +1,11 @@
 import type { CartItem } from '../../../context/CartContext';
 import type { EnrichedCartItem, CartTotals } from '../types';
+import {
+  applyCampaignToRate,
+  calculateDailyRentalTotal,
+  countRentalDays,
+  resolveHourlyRate,
+} from '../../../shared/pricing/campaignPricing';
 
 export const isMongoObjectId = (id?: string | null): boolean => /^[a-f\d]{24}$/i.test(id || '');
 
@@ -74,15 +80,17 @@ export const enrichCartItems = (cart: CartItem[], realProductList: any[]): Enric
           (item.productId && p._id.toString() === item.productId.toString()),
       );
       if (dbProduct) {
-        let days = 1;
+        // Ngày không hợp lệ thì tính 1 ngày (giống backend).
         const rentalFrom = item.rentalFrom || item.startDate;
         const rentalTo = item.rentalTo || item.endDate;
+        let pricingFrom: string | Date = new Date();
+        let pricingTo: string | Date = pricingFrom;
         if (rentalFrom && rentalTo) {
           const start = new Date(rentalFrom);
           const end = new Date(rentalTo);
           if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
-            const diffTime = Math.abs(end.getTime() - start.getTime());
-            days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            pricingFrom = rentalFrom;
+            pricingTo = rentalTo;
           }
         }
 
@@ -97,13 +105,17 @@ export const enrichCartItems = (cart: CartItem[], realProductList: any[]): Enric
           hours = Math.max((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60), 2);
         }
 
-        const discountedBasePrice = dbProduct.discountedPrice || dbProduct.basePrice;
-        const hourlyRate = dbProduct.hourlyPrice || Math.round(discountedBasePrice * 0.3) || 80000;
-        const basePrice = item.rentalType === 'HOURLY' ? hourlyRate * hours : discountedBasePrice * days;
+        // Chiến dịch giá của shop (giảm/phụ thu) áp theo ngày thuê, cùng công thức với backend.
+        const campaign = dbProduct.activeCampaign;
+        const baseHourlyRate = resolveHourlyRate(dbProduct.basePrice, dbProduct.hourlyPrice);
+        const basePrice =
+          item.rentalType === 'HOURLY'
+            ? applyCampaignToRate(baseHourlyRate, campaign, rentalFrom || new Date()) * hours
+            : calculateDailyRentalTotal(dbProduct.basePrice, campaign, pricingFrom, pricingTo).total;
         const originalBasePrice =
           item.rentalType === 'HOURLY'
-            ? (dbProduct.hourlyPrice || Math.round(dbProduct.basePrice * 0.3) || 80000) * hours
-            : dbProduct.basePrice * days;
+            ? baseHourlyRate * hours
+            : dbProduct.basePrice * countRentalDays(pricingFrom, pricingTo);
 
         return {
           ...item,

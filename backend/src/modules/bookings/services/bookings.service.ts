@@ -1268,10 +1268,13 @@ export class BookingsService implements OnApplicationBootstrap {
 
           const rType = item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY';
           if (rType === 'HOURLY') {
-            const hourlyRate =
-              product.hourlyPrice ||
-              Math.round(product.basePrice * 0.3) ||
-              80000;
+            // Chiến dịch giá (giảm/phụ thu) áp theo ngày thuê, cả với thuê theo giờ.
+            const hourlyRate = await this.campaignService.calculateHourlyRate(
+              product.basePrice,
+              product.hourlyPrice,
+              product.providerId,
+              item.shootDate ?? new Date(),
+            );
             let durationHours = 2;
             if (item.shootTimeSlot) {
               const parts = item.shootTimeSlot.split('-');
@@ -1292,7 +1295,9 @@ export class BookingsService implements OnApplicationBootstrap {
             }
             unitPrice = hourlyRate * durationHours;
           } else {
-            let durationDays = 1;
+            // Không đủ ngày hợp lệ thì tính 1 ngày (giữ hành vi cũ); chiến dịch áp theo từng ngày thuê.
+            let rentalFrom = new Date();
+            let rentalTo = rentalFrom;
             if (item.rentalFrom && item.rentalTo) {
               const start = new Date(item.rentalFrom);
               const end = new Date(item.rentalTo);
@@ -1301,16 +1306,17 @@ export class BookingsService implements OnApplicationBootstrap {
                 !isNaN(end.getTime()) &&
                 end >= start
               ) {
-                const diffTime = Math.abs(end.getTime() - start.getTime());
-                durationDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                rentalFrom = start;
+                rentalTo = end;
               }
             }
-            const discountedDaily =
-              await this.campaignService.getDiscountedPrice(
-                product.basePrice,
-                product.providerId,
-              );
-            unitPrice = discountedDaily * durationDays;
+            const { total } = await this.campaignService.calculateDailyRental(
+              product.basePrice,
+              product.providerId,
+              rentalFrom,
+              rentalTo,
+            );
+            unitPrice = total;
           }
 
           let reservedFrom: Date | null = null;
@@ -1821,10 +1827,7 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     let subTotal = 0;
-    let unitPrice = await this.campaignService.getDiscountedPrice(
-      product.basePrice,
-      product.providerId,
-    );
+    let unitPrice = product.basePrice;
     let rentalFrom: Date | null = null;
     let rentalTo: Date | null = null;
     let shootDate: Date | null = null;
@@ -1838,8 +1841,13 @@ export class BookingsService implements OnApplicationBootstrap {
           'Yêu cầu giờ bắt đầu và giờ kết thúc khi thuê theo giờ',
         );
       }
-      const hourlyRate =
-        product.hourlyPrice || Math.round(product.basePrice * 0.3) || 80000;
+      // Chiến dịch giá (giảm/phụ thu) áp theo ngày thuê, cả với thuê theo giờ.
+      const hourlyRate = await this.campaignService.calculateHourlyRate(
+        product.basePrice,
+        product.hourlyPrice,
+        product.providerId,
+        start,
+      );
 
       const [sh, sm] = startTime.split(':').map(Number);
       const [eh, em] = endTime.split(':').map(Number);
@@ -1874,15 +1882,16 @@ export class BookingsService implements OnApplicationBootstrap {
         throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu');
       }
 
-      const durationDays =
-        Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
-        1;
-
-      unitPrice = await this.campaignService.getDiscountedPrice(
-        product.basePrice,
-        product.providerId,
-      );
-      subTotal = unitPrice * durationDays * quantity;
+      // Chiến dịch giá áp theo từng ngày thuê; unitPrice giữ nghĩa giá một ngày (trung bình).
+      const { total, days: durationDays } =
+        await this.campaignService.calculateDailyRental(
+          product.basePrice,
+          product.providerId,
+          start,
+          end,
+        );
+      unitPrice = Math.round(total / durationDays);
+      subTotal = total * quantity;
       rentalFrom = start;
       rentalTo = end;
     }

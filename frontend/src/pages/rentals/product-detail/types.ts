@@ -1,4 +1,5 @@
 import type { PublicSmartTagBadge } from '../../../features/smart-tagging/types/smartTag.types';
+import type { PricingCampaign } from '../../../shared/pricing/campaignPricing';
 
 export interface ProductDetail {
   _id: string;
@@ -32,11 +33,7 @@ export interface ProductDetail {
     };
     comboDiscountPercent?: number;
   };
-  activeCampaign?: {
-    occasion: string;
-    discountPercent: number;
-    endDate: string;
-  } | null;
+  activeCampaign?: (PricingCampaign & { occasion: string }) | null;
   discountedPrice?: number;
   badges?: PublicSmartTagBadge[];
   customTags?: Array<{

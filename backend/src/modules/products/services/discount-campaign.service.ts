@@ -4,6 +4,13 @@ import { Model, Types } from 'mongoose';
 import { DiscountCampaign, DiscountCampaignDocument } from '../schemas/discount-campaign.schema';
 import { UsersRepository } from '../../users/repositories/users.repository';
 import { CreateCampaignDto } from '../dto/create-campaign.dto';
+import {
+  applyCampaignToRate,
+  calculateDailyRentalTotal,
+  getStartOfVnDay,
+  resolveHourlyRate,
+  toVnDayKey,
+} from '../utils/campaign-pricing.util';
 
 @Injectable()
 export class DiscountCampaignService {
@@ -23,16 +30,21 @@ export class DiscountCampaignService {
 
   async createCampaign(userId: string, dto: CreateCampaignDto): Promise<DiscountCampaign> {
     const providerId = await this.getProviderId(userId);
+    const type = dto.type ?? 'DISCOUNT';
+
+    if (type === 'DISCOUNT' && dto.discountPercent > 90) {
+      throw new BadRequestException('Phần trăm giảm giá tối đa là 90%.');
+    }
 
     const start = new Date(dto.startDate);
     const end = new Date(dto.endDate);
-    const now = new Date();
 
-    if (end <= start) {
-      throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
+    // Ngày bắt đầu và kết thúc đều được tính, nên dịp lễ một ngày (14/2, 8/3, 20/10...) hợp lệ.
+    if (toVnDayKey(end) < toVnDayKey(start)) {
+      throw new BadRequestException('Ngày kết thúc không được trước ngày bắt đầu.');
     }
 
-    if (end <= now) {
+    if (toVnDayKey(end) < toVnDayKey(new Date())) {
       throw new BadRequestException('Ngày kết thúc không được ở quá khứ.');
     }
 
@@ -46,6 +58,7 @@ export class DiscountCampaignService {
     return this.campaignModel.create({
       providerId,
       occasion: dto.occasion,
+      type,
       discountPercent: dto.discountPercent,
       startDate: start,
       endDate: end,
@@ -53,29 +66,29 @@ export class DiscountCampaignService {
     });
   }
 
+  /**
+   * Chiến dịch đang chạy HOẶC sắp diễn ra (chưa qua ngày kết thúc). Chiến dịch áp theo ngày thuê,
+   * nên khách đặt trước cần thấy nó ngay từ lúc tạo; ngày nào bị áp giá thì do ngày thuê quyết định.
+   */
   async getActiveCampaign(providerId: string | Types.ObjectId): Promise<DiscountCampaign | null> {
-    const now = new Date();
     const pId = typeof providerId === 'string' ? new Types.ObjectId(providerId) : providerId;
 
     return this.campaignModel.findOne({
       providerId: pId,
       isActive: true,
-      startDate: { $lte: now },
-      endDate: { $gte: now },
+      endDate: { $gte: getStartOfVnDay() },
     }).sort({ createdAt: -1 });
   }
 
   async getActiveCampaignsForProviders(providerIds: Types.ObjectId[]): Promise<Record<string, DiscountCampaign>> {
     if (!providerIds.length) return {};
-    const now = new Date();
 
     const campaigns = await this.campaignModel.find({
       providerId: { $in: providerIds },
       isActive: true,
-      startDate: { $lte: now },
-      endDate: { $gte: now },
+      endDate: { $gte: getStartOfVnDay() },
     })
-      .select('providerId occasion discountPercent endDate createdAt')
+      .select('providerId occasion type discountPercent startDate endDate createdAt')
       .sort({ createdAt: -1 })
       .lean()
       .exec();
@@ -91,10 +104,26 @@ export class DiscountCampaignService {
     return result;
   }
 
-  async getDiscountedPrice(basePrice: number, providerId: string | Types.ObjectId): Promise<number> {
+  /** Tổng tiền thuê theo ngày của một sản phẩm, áp chiến dịch cho từng ngày thuê. */
+  async calculateDailyRental(
+    basePrice: number,
+    providerId: string | Types.ObjectId,
+    from: Date | string,
+    to: Date | string,
+  ): Promise<{ total: number; days: number }> {
     const campaign = await this.getActiveCampaign(providerId);
-    if (!campaign) return basePrice;
-    return Math.round(basePrice * (1 - campaign.discountPercent / 100));
+    return calculateDailyRentalTotal(basePrice, campaign, from, to);
+  }
+
+  /** Giá một giờ thuê vào ngày `day`: 30% giá ngày, rồi áp chiến dịch nếu ngày đó thuộc chiến dịch. */
+  async calculateHourlyRate(
+    basePrice: number,
+    hourlyPrice: number | null | undefined,
+    providerId: string | Types.ObjectId,
+    day: Date | string,
+  ): Promise<number> {
+    const campaign = await this.getActiveCampaign(providerId);
+    return applyCampaignToRate(resolveHourlyRate(basePrice, hourlyPrice), campaign, day);
   }
 
   async getActiveCampaignForProviderUser(userId: string): Promise<DiscountCampaign | null> {

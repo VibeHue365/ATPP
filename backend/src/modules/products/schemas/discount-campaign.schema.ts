@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import type { CampaignType } from '../utils/campaign-pricing.util';
 
 export type DiscountCampaignDocument = HydratedDocument<DiscountCampaign>;
 
@@ -11,7 +12,12 @@ export class DiscountCampaign {
   @Prop({ required: true, trim: true })
   occasion: string;
 
-  @Prop({ required: true, min: 1, max: 90 })
+  // DISCOUNT: giảm giá; SURCHARGE: phụ thu dịp lễ. Chiến dịch cũ không có trường này = DISCOUNT.
+  @Prop({ type: String, enum: ['DISCOUNT', 'SURCHARGE'], default: 'DISCOUNT' })
+  type: CampaignType;
+
+  // Phần trăm giảm (1-90) hoặc phụ thu (1-100) tuỳ theo `type`.
+  @Prop({ required: true, min: 1, max: 100 })
   discountPercent: number;
 
   @Prop({ required: true, type: Date, index: true })

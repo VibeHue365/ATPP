@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { CreateCampaignDto } from '../dto/create-campaign.dto';
+import { toPublicCampaign } from '../utils/campaign-pricing.util';
 
 @Controller(['campaigns', 'api/campaigns'])
 export class DiscountCampaignController {
@@ -35,10 +36,6 @@ export class DiscountCampaignController {
   async getBanner(@Query('providerId') providerId: string) {
     const campaign = await this.campaignService.getActiveCampaign(providerId);
     if (!campaign) return null;
-    return {
-      occasion: campaign.occasion,
-      discountPercent: campaign.discountPercent,
-      endDate: campaign.endDate,
-    };
+    return toPublicCampaign(campaign);
   }
 }

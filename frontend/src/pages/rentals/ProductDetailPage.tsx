@@ -40,6 +40,14 @@ import {
   getHourDuration,
 } from './product-detail/utils/timeSlotUtils';
 import { calculateSizeLocally } from './product-detail/utils/aiSizeCalculator';
+import {
+  applyCampaignToRate,
+  calculateDailyRentalTotal,
+  formatCampaignRange,
+  isCampaignDay,
+  isSurchargeCampaign,
+  resolveHourlyRate,
+} from '../../shared/pricing/campaignPricing';
 
 import { ProductGallery } from './product-detail/components/ProductGallery';
 import { ProductHeaderInfo } from './product-detail/components/ProductHeaderInfo';
@@ -681,22 +689,24 @@ export const ProductDetailPage: React.FC = () => {
     }
   };
 
-  // Price calculations
+  // Price calculations — chiến dịch giá của shop (giảm/phụ thu) áp theo NGÀY THUÊ đã chọn,
+  // cùng công thức với backend. Chưa chọn ngày thì hiện giá gốc.
   const numericComputedPrice = useMemo((): number => {
     if (!product) return 0;
-    const base = product.activeCampaign && product.discountedPrice
-      ? product.discountedPrice
-      : product.basePrice;
+    const campaign = product.activeCampaign;
 
     if (rentalMode === 'DAILY') {
-      const days = getDayDuration(startDate, endDate);
-      return base * days;
+      if (!startDate || !endDate) return product.basePrice * getDayDuration(startDate, endDate);
+      return calculateDailyRentalTotal(product.basePrice, campaign, startDate, endDate).total;
     } else {
       const hours = getHourDuration(startTime, endTime);
-      const hourlyRate = product.hourlyPrice || Math.round(base * 0.3) || 80000;
+      const baseHourlyRate = resolveHourlyRate(product.basePrice, product.hourlyPrice);
+      const hourlyRate = singleDate
+        ? applyCampaignToRate(baseHourlyRate, campaign, singleDate)
+        : baseHourlyRate;
       return hourlyRate * hours;
     }
-  }, [product, rentalMode, startDate, endDate, startTime, endTime]);
+  }, [product, rentalMode, startDate, endDate, singleDate, startTime, endTime]);
 
   const getDisplayPrice = (): string => {
     if (!product) return '0đ';
@@ -1086,13 +1096,7 @@ export const ProductDetailPage: React.FC = () => {
       return;
     }
 
-    const days = getDayDuration(startDate, endDate);
-    const hours = getHourDuration(startTime, endTime);
-    const base = product?.activeCampaign && product?.discountedPrice
-      ? product.discountedPrice
-      : (product?.basePrice || 0);
-    const hourlyRate = product?.hourlyPrice || Math.round(base * 0.3) || 80000;
-    const computedPrice = rentalMode === 'DAILY' ? base * days : hourlyRate * hours;
+    const computedPrice = numericComputedPrice;
 
     const cartPayload = {
       itemType: 'PRODUCT' as const,
@@ -1158,13 +1162,7 @@ export const ProductDetailPage: React.FC = () => {
       return;
     }
 
-    const days = getDayDuration(startDate, endDate);
-    const hours = getHourDuration(startTime, endTime);
-    const baseForBooking = product?.activeCampaign && product?.discountedPrice
-      ? product.discountedPrice
-      : (product?.basePrice || 0);
-    const hourlyRate = product?.hourlyPrice || Math.round(baseForBooking * 0.3) || 80000;
-    const computedPrice = rentalMode === 'DAILY' ? baseForBooking * days : hourlyRate * hours;
+    const computedPrice = numericComputedPrice;
 
     const cartPayload = {
       itemType: 'PRODUCT' as const,
@@ -1243,18 +1241,20 @@ export const ProductDetailPage: React.FC = () => {
         <div className="vh-pd-campaign-wrapper">
           <div className="vh-pd-campaign-card">
             <div className="vh-pd-campaign-discount">
-              -{product.activeCampaign.discountPercent}%
+              {isSurchargeCampaign(product.activeCampaign) ? '+' : '-'}{product.activeCampaign.discountPercent}%
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: '15px', fontWeight: 800 }}>
-                Ưu đãi {product.activeCampaign.occasion} · Giảm {product.activeCampaign.discountPercent}%
+                {isSurchargeCampaign(product.activeCampaign)
+                  ? `Phụ thu ${product.activeCampaign.occasion} · +${product.activeCampaign.discountPercent}%`
+                  : `Ưu đãi ${product.activeCampaign.occasion} · Giảm ${product.activeCampaign.discountPercent}%`}
               </div>
               <div style={{ fontSize: '12.5px', fontWeight: 500, opacity: 0.92, marginTop: '2px' }}>
-                Áp dụng đến hết ngày {new Date(product.activeCampaign.endDate).toLocaleDateString('vi-VN')} — đặt ngay kẻo lỡ!
+                Áp dụng cho ngày thuê {formatCampaignRange(product.activeCampaign)} — giá được tính theo ngày bạn chọn.
               </div>
             </div>
             <span className="vh-pd-campaign-badge">
-              ĐANG DIỄN RA
+              {isCampaignDay(product.activeCampaign, new Date()) ? 'ĐANG DIỄN RA' : 'SẮP DIỄN RA'}
             </span>
           </div>
         </div>

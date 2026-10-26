@@ -11,6 +11,7 @@ import {
   TrendingUp,
   X
 } from 'lucide-react';
+import { formatCampaignPercent } from '../../../../shared/pricing/campaignPricing';
 import { VoucherCard } from './VoucherCard';
 import { VoucherModal } from './VoucherModal';
 import '../vouchersFigma.css';
@@ -207,12 +208,12 @@ export const VoucherTabContent: React.FC<VoucherTabContentProps> = ({
               </div>
               <h3 className="vc-campaign-title">
                 {activeCampaign
-                  ? `🎉 ${activeCampaign.occasion || 'Khuyến mãi đặc biệt'} (-${activeCampaign.discountPercent}%)`
+                  ? `🎉 ${activeCampaign.occasion || 'Khuyến mãi đặc biệt'} (${formatCampaignPercent(activeCampaign)})`
                   : 'Tạo Chiến Dịch Giảm Giá Toàn Cửa Hàng Theo %'}
               </h3>
               <p className="vc-campaign-meta">
                 {activeCampaign
-                  ? `Áp dụng tự động cho toàn bộ áo dài từ ${new Date(
+                  ? `Áp dụng tự động cho toàn bộ áo dài có ngày thuê từ ${new Date(
                       activeCampaign.startDate
                     ).toLocaleDateString('vi-VN')} đến ${new Date(
                       activeCampaign.endDate

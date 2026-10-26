@@ -6,7 +6,7 @@ import { toLocalDateKey } from '../shared/dateHelpers';
 import type { useProviderCampaignState } from './useProviderCampaignState';
 
 type Dependencies = Pick<ReturnType<typeof useProviderCampaignState>,
-  'setActiveCampaign' | 'setCampaignOccasion' | 'setCampaignPercent' | 'setCampaignStart' | 'setCampaignEnd' | 'setIsCampaignModalOpen' | 'campaignOccasion' | 'campaignPercent' | 'campaignStart' | 'campaignEnd' | 'setSubmittingCampaign'
+  'setActiveCampaign' | 'setCampaignOccasion' | 'setCampaignType' | 'setCampaignPercent' | 'setCampaignStart' | 'setCampaignEnd' | 'setIsCampaignModalOpen' | 'campaignOccasion' | 'campaignType' | 'campaignPercent' | 'campaignStart' | 'campaignEnd' | 'setSubmittingCampaign'
 > &
 {
   toast: ReturnType<typeof useToast>;
@@ -15,8 +15,8 @@ type Dependencies = Pick<ReturnType<typeof useProviderCampaignState>,
 
 /** Recreated each render so handlers retain the dashboard's existing closure semantics. */
 export function createCampaignActions({
-  setActiveCampaign, setCampaignOccasion, setCampaignPercent, setCampaignStart, setCampaignEnd,
-  setIsCampaignModalOpen, campaignOccasion, toast, campaignPercent, campaignStart, campaignEnd,
+  setActiveCampaign, setCampaignOccasion, setCampaignType, setCampaignPercent, setCampaignStart, setCampaignEnd,
+  setIsCampaignModalOpen, campaignOccasion, campaignType, toast, campaignPercent, campaignStart, campaignEnd,
   setSubmittingCampaign, fetchProducts,
 }: Dependencies) {
   const fetchActiveCampaign = async () => {
@@ -25,6 +25,7 @@ export function createCampaignActions({
       if (res && res._id) {
         setActiveCampaign(res);
         setCampaignOccasion(res.occasion);
+        setCampaignType(res.type === 'SURCHARGE' ? 'SURCHARGE' : 'DISCOUNT');
         setCampaignPercent(res.discountPercent.toString());
         setCampaignStart(new Date(res.startDate).toISOString().split('T')[0]);
         setCampaignEnd(new Date(res.endDate).toISOString().split('T')[0]);
@@ -53,8 +54,13 @@ export function createCampaignActions({
       return;
     }
     const percent = parseInt(campaignPercent, 10);
-    if (isNaN(percent) || percent < 1 || percent > 90) {
-      toast.error('Phần trăm giảm giá phải từ 1% đến 90%');
+    const maxPercent = campaignType === 'SURCHARGE' ? 100 : 90;
+    if (isNaN(percent) || percent < 1 || percent > maxPercent) {
+      toast.error(
+        campaignType === 'SURCHARGE'
+          ? 'Phần trăm phụ thu phải từ 1% đến 100%'
+          : 'Phần trăm giảm giá phải từ 1% đến 90%',
+      );
       return;
     }
     if (!campaignStart || !campaignEnd) {
@@ -66,11 +72,12 @@ export function createCampaignActions({
     try {
       await promotionsApi.createCampaign({
         occasion: campaignOccasion.trim(),
+        type: campaignType,
         discountPercent: percent,
         startDate: new Date(campaignStart).toISOString(),
         endDate: new Date(campaignEnd).toISOString(),
       });
-      toast.success('Tạo chiến dịch khuyến mãi thành công');
+      toast.success(campaignType === 'SURCHARGE' ? 'Tạo chiến dịch phụ thu thành công' : 'Tạo chiến dịch khuyến mãi thành công');
       setIsCampaignModalOpen(false);
       fetchActiveCampaign();
       fetchProducts();
@@ -99,6 +106,7 @@ export function createCampaignActions({
       toast.success('Đã tắt khuyến mãi thành công, các sản phẩm quay về giá gốc');
       setActiveCampaign(null);
       setCampaignOccasion('');
+      setCampaignType('DISCOUNT');
       setCampaignPercent('10');
       const today = new Date();
       const nextWeek = new Date();

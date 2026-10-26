@@ -4,6 +4,7 @@ import {
   X
 } from 'lucide-react';
 import type { FormEvent } from 'react';
+import { formatCampaignPercent } from '../../../shared/pricing/campaignPricing';
 import type { useProviderCampaignState } from '../collections/useProviderCampaignState';
 import type { useProviderSessionState } from '../hooks/useProviderSessionState';
 import type { useProviderInventoryState } from '../inventory/useProviderInventoryState';
@@ -75,14 +76,14 @@ export function PromotionsPanel({
                     color: 'white', border: 'none', transition: 'var(--transition-smooth)',
                   }}
                 >
-                  <Tag size={16} /> {activeCampaign ? `Đang chạy: ${activeCampaign.occasion} (-${activeCampaign.discountPercent}%)` : 'Tạo chiến dịch giảm giá'}
+                  <Tag size={16} /> {activeCampaign ? `Đang chạy: ${activeCampaign.occasion} (${formatCampaignPercent(activeCampaign)})` : 'Tạo chiến dịch giảm giá'}
                 </button>
               </div>
 
               {activeCampaign ? (
                 <div style={{ padding: '14px 18px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <span style={{ fontWeight: 800, fontSize: '14px', color: '#B91C1C' }}>🎉 {activeCampaign.occasion} (-{activeCampaign.discountPercent}%)</span>
+                    <span style={{ fontWeight: 800, fontSize: '14px', color: '#B91C1C' }}>🎉 {activeCampaign.occasion} ({formatCampaignPercent(activeCampaign)})</span>
                     <div style={{ fontSize: '12px', color: '#991B1B', marginTop: '4px' }}>
                       Áp dụng từ: {new Date(activeCampaign.startDate).toLocaleDateString('vi-VN')} đến {new Date(activeCampaign.endDate).toLocaleDateString('vi-VN')}
                     </div>

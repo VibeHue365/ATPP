@@ -24,6 +24,12 @@ import { UnifiedSearchBar, type SearchFieldConfig } from "../../components/commo
 import { ListingCategoryTabs } from "../../components/common/ListingCategoryTabs";
 import { CustomSelect } from "../../components/common/CustomSelect";
 import { ServiceDatePicker } from "../../components/common/ServiceDatePicker";
+import {
+  formatCampaignPercent,
+  formatCampaignRange,
+  isSurchargeCampaign,
+  type PricingCampaign,
+} from "../../shared/pricing/campaignPricing";
 
 import "./AoDaiListingPage.css";
 
@@ -71,11 +77,7 @@ interface ProductFromDb {
     address?: { city?: string };
   };
   badges?: Array<{ code: string; label: string; tone?: string }>;
-  activeCampaign?: {
-    occasion: string;
-    discountPercent: number;
-    endDate?: string;
-  } | null;
+  activeCampaign?: (PricingCampaign & { occasion: string }) | null;
   discountedPrice?: number;
   recommendation?: {
     score: number;
@@ -452,9 +454,11 @@ export const AoDaiListingPage: React.FC = () => {
   }, [products, totalCount]);
 
 
-  // 3. Featured live campaign (if any active on platform)
+  // 3. Featured campaign for the promo strip — chỉ chiến dịch giảm giá; phụ thu hiện trên thẻ sản phẩm.
   const featuredCampaign = useMemo(() => {
-    const withCampaign = products.find((p) => p.activeCampaign);
+    const withCampaign = products.find(
+      (p) => p.activeCampaign && !isSurchargeCampaign(p.activeCampaign),
+    );
     return withCampaign?.activeCampaign || null;
   }, [products]);
 
@@ -541,7 +545,7 @@ export const AoDaiListingPage: React.FC = () => {
   // Helper for card badge - only status/highlight badges, not categories
   const getCardBadge = (product: ProductFromDb, index: number) => {
     if (product.activeCampaign) {
-      return `-${product.activeCampaign.discountPercent}%`;
+      return formatCampaignPercent(product.activeCampaign);
     }
     if (product.badges && product.badges.length > 0) {
       const label = product.badges[0].label;
@@ -1192,7 +1196,7 @@ export const AoDaiListingPage: React.FC = () => {
                 </span>
                 <h4 className="lume-promo-headline">
                   {featuredCampaign
-                    ? `Giảm ${featuredCampaign.discountPercent}% trực tiếp vào giá thuê khi đặt trước`
+                    ? `Giảm ${featuredCampaign.discountPercent}% giá thuê cho ngày thuê ${formatCampaignRange(featuredCampaign)}`
                     : "Gói thuê 3 ngày ưu đãi chỉ từ 390.000đ"}
                 </h4>
               </div>
@@ -1248,7 +1252,8 @@ export const AoDaiListingPage: React.FC = () => {
                     provider?.city ||
                     "Huế";
                   const providerId = provider?._id || (typeof product.providerId === "string" ? product.providerId : undefined);
-                  const currentPrice = product.discountedPrice || product.basePrice;
+                  // Giá áp chiến dịch phụ thuộc ngày thuê, nên thẻ hiện giá gốc kèm nhãn chiến dịch.
+                  const currentPrice = product.basePrice;
 
                   return (
                     <article
@@ -1348,9 +1353,9 @@ export const AoDaiListingPage: React.FC = () => {
                             {currentPrice.toLocaleString("vi-VN")}đ
                           </span>
                           <span className="lume-price-unit">/ ngày</span>
-                          {product.discountedPrice && product.basePrice > product.discountedPrice && (
-                            <span className="lume-price-original">
-                              {product.basePrice.toLocaleString("vi-VN")}đ
+                          {product.activeCampaign && (
+                            <span className="lume-price-unit">
+                              · {formatCampaignPercent(product.activeCampaign)} ngày {formatCampaignRange(product.activeCampaign)}
                             </span>
                           )}
                         </div>
