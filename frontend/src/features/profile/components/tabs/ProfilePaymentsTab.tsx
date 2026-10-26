@@ -479,7 +479,7 @@ export const ProfilePaymentsTab: React.FC = () => {
                     >
                       {/* Mã GD / Đơn */}
                       <td style={{ padding: '14px', verticalAlign: 'middle' }}>
-                        {bookingCode}
+                        {bookingCode || displayCode}
                       </td>
 
                       {/* Thời gian */}

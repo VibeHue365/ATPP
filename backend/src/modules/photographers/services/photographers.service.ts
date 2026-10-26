@@ -37,28 +37,33 @@ export class PhotographersService {
     void this.getPublicPhotographers().catch(() => undefined);
   }
 
-  private publicPhotographersCache?: {
+  private static publicPhotographersCache?: {
     value: Record<string, unknown>[];
     expiresAt: number;
   };
-  private publicPhotographersInFlight?: Promise<Record<string, unknown>[]>;
+  private static publicPhotographersInFlight?: Promise<Record<string, unknown>[]>;
+
+  static clearPublicCache(): void {
+    PhotographersService.publicPhotographersCache = undefined;
+    PhotographersService.publicPhotographersInFlight = undefined;
+  }
 
   private async getPublicPhotographers(): Promise<Record<string, unknown>[]> {
     const now = Date.now();
-    if (this.publicPhotographersCache && this.publicPhotographersCache.expiresAt > now) {
-      return this.publicPhotographersCache.value;
+    if (PhotographersService.publicPhotographersCache && PhotographersService.publicPhotographersCache.expiresAt > now) {
+      return PhotographersService.publicPhotographersCache.value;
     }
-    if (this.publicPhotographersInFlight) return this.publicPhotographersInFlight;
+    if (PhotographersService.publicPhotographersInFlight) return PhotographersService.publicPhotographersInFlight;
 
-    this.publicPhotographersInFlight = this.loadPublicPhotographers()
+    PhotographersService.publicPhotographersInFlight = this.loadPublicPhotographers()
       .then((value) => {
-        this.publicPhotographersCache = { value, expiresAt: Date.now() + 120_000 };
+        PhotographersService.publicPhotographersCache = { value, expiresAt: Date.now() + 120_000 };
         return value;
       })
       .finally(() => {
-        this.publicPhotographersInFlight = undefined;
+        PhotographersService.publicPhotographersInFlight = undefined;
       });
-    return this.publicPhotographersInFlight;
+    return PhotographersService.publicPhotographersInFlight;
   }
   
   async findAll(query: PhotographerDiscoveryQueryDto = {}) {
@@ -477,11 +482,13 @@ export class PhotographersService {
     }
 
     if (query.q) {
+      const packageTexts = packages.map((pkg: any) => `${pkg.name ?? ''} ${pkg.description ?? ''}`);
       const searchableText = [
         businessName,
         address?.city ?? '',
         address?.district ?? '',
         ...concepts.map((badge) => badge.label ?? ''),
+        ...packageTexts,
       ]
         .map((value) => this.normalizeText(value))
         .join(' ');

@@ -874,8 +874,12 @@ export const PhotographersListingPage: React.FC = () => {
                       isFavorite={favorites.includes(photographer.id)}
                       isCompared={compareList.includes(photographer.id)}
                       hasAoDaiInCart={hasAoDaiInCart}
-                      onOpen={() =>
-                        navigate(`/photographers/${photographer.providerId || photographer.id}`)
+                      onOpen={(packageId) =>
+                        navigate(
+                          `/photographers/${photographer.providerId || photographer.id}${
+                            packageId ? `?packageId=${packageId}` : ''
+                          }`,
+                        )
                       }
                       onCompareChange={(event) =>
                         handleCompareToggle(photographer.id, event)

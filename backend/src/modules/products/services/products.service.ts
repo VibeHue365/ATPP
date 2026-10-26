@@ -24,6 +24,7 @@ import { UpdateProductDto } from '../dto/update-product.dto';
 import { DiscountCampaignService } from './discount-campaign.service';
 import { CategoriesService } from '../../categories/services/categories.service';
 import { ServiceCategoryType } from '../../categories/schemas/category.schema';
+import { PhotographersService } from '../../photographers/services/photographers.service';
 import { ModerateProductDto, QueryModerationProductsDto } from '../dto/product-moderation.dto';
 import { SmartTagPublicProjectionService } from '../../smart-tagging/services/smart-tag-public-projection.service';
 import { SmartTaggingService } from '../../smart-tagging/services/smart-tagging.service';
@@ -1182,6 +1183,7 @@ export class ProductsService implements OnModuleInit {
     }
 
     this.clearPublicFacetsCache();
+    PhotographersService.clearPublicCache();
     return updated;
   }
 

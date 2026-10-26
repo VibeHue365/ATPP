@@ -788,8 +788,8 @@ export function PartnerVerificationManagement() {
               <th style={{ width: 40, textAlign: 'center' }}>
                 <input
                   type="checkbox"
-                  checked={selectedIds.length > 0 && selectedIds.length === items.length}
                   onChange={handleSelectAll}
+                  checked={items.length > 0 && selectedIds.length === items.length}
                 />
               </th>
               <th style={{ width: 110 }}>MÃ ĐỐI TÁC</th>
@@ -836,14 +836,13 @@ export function PartnerVerificationManagement() {
 
                 return (
                   <tr key={id} className={isSelected ? 'row-selected' : ''}>
-                    <td style={{ textAlign: 'center' }}>
+                    <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => handleSelectRow(id)}
                       />
                     </td>
-
                     <td>
                       <span className="pv-partner-code">{code}</span>
                     </td>
@@ -1309,30 +1308,30 @@ export function PartnerVerificationManagement() {
                       {(activeVerification.requestedCapabilities?.includes('AODAI_RENTAL') ||
                         !activeVerification.requestedCapabilities ||
                         activeVerification.requestedCapabilities.length === 0) && (
-                        <div className="pv-cap-card">
-                          <div className="pv-cap-head">
-                            <div className="pv-cap-title">
-                              <Shirt size={16} color="#be185d" />
-                              <span>Cho thuê Trang phục truyền thống & Cổ phục</span>
+                          <div className="pv-cap-card">
+                            <div className="pv-cap-head">
+                              <div className="pv-cap-title">
+                                <Shirt size={16} color="#be185d" />
+                                <span>Cho thuê Trang phục truyền thống & Cổ phục</span>
+                              </div>
+                              <span className="pv-cap-badge-tag pv-cap-aodai">Năng lực chính</span>
                             </div>
-                            <span className="pv-cap-badge-tag pv-cap-aodai">Năng lực chính</span>
+                            <div className="pv-cap-body">
+                              <div>
+                                • <b>Quy mô trang phục:</b> 350+ bộ cổ phục Huế (Áo dài Nhật Bình, Áo tấc ngũ thân, Cổ phục triều Nguyễn).
+                              </div>
+                              <div>
+                                • <b>Cơ sở vật chất:</b> Mặt bằng 120m², 4 phòng thử đồ tiện nghi trang bị gương toàn thân, máy hấp hơi công nghiệp.
+                              </div>
+                              <div>
+                                • <b>Chính sách cho thuê:</b> Cho thuê tối đa 3 ngày. Giặt sấy hấp diệt khuẩn cao cấp sau mỗi lượt khách.
+                              </div>
+                              <div>
+                                • <b>Chính sách cọc:</b> Đặt cọc 500.000 VNĐ hoặc giấy tờ tùy thân hợp lệ.
+                              </div>
+                            </div>
                           </div>
-                          <div className="pv-cap-body">
-                            <div>
-                              • <b>Quy mô trang phục:</b> 350+ bộ cổ phục Huế (Áo dài Nhật Bình, Áo tấc ngũ thân, Cổ phục triều Nguyễn).
-                            </div>
-                            <div>
-                              • <b>Cơ sở vật chất:</b> Mặt bằng 120m², 4 phòng thử đồ tiện nghi trang bị gương toàn thân, máy hấp hơi công nghiệp.
-                            </div>
-                            <div>
-                              • <b>Chính sách cho thuê:</b> Cho thuê tối đa 3 ngày. Giặt sấy hấp diệt khuẩn cao cấp sau mỗi lượt khách.
-                            </div>
-                            <div>
-                              • <b>Chính sách cọc:</b> Đặt cọc 500.000 VNĐ hoặc giấy tờ tùy thân hợp lệ.
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                        )}
 
                       {/* Box 2: Chụp ảnh (Hiển thị nếu có đăng ký Chụp ảnh) */}
                       {activeVerification.requestedCapabilities?.includes('PHOTOGRAPHY') && (
