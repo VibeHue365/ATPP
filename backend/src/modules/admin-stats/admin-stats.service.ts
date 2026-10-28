@@ -18,6 +18,8 @@ import { Dispute, DisputeDocument, DisputeStatus } from '../disputes/schemas/dis
 import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
 import { ProductModerationStatus } from '../products/schemas/product.schema';
 import { ComboPromotion, ComboPromotionDocument, ComboPromotionStatus } from '../products/schemas/combo-promotion.schema';
+import { InventoryItem, InventoryItemDocument } from '../products/schemas/inventory-item.schema';
+import type { AuthUser } from '../../common/decorators/current-user.decorator';
 
 @Injectable()
 export class AdminStatsService {
@@ -41,6 +43,8 @@ export class AdminStatsService {
     private readonly reviewModel: Model<ReviewDocument>,
     @InjectModel(ComboPromotion.name)
     private readonly comboPromotionModel: Model<ComboPromotionDocument>,
+    @InjectModel(InventoryItem.name)
+    private readonly inventoryItemModel: Model<InventoryItemDocument>,
     private readonly analyticsService: AnalyticsService,
   ) { }
 
@@ -1380,4 +1384,369 @@ export class AdminStatsService {
     await booking.save();
     return { success: true, bookingId: booking._id, status: booking.status };
   }
+
+  /**
+   * Helper to resolve provider/shop ID for stats queries based on query params and currentUser.
+   */
+  async resolveProviderId(
+    queryProviderId?: string,
+    currentUser?: AuthUser,
+  ): Promise<Types.ObjectId | null> {
+    const isAdmin = currentUser?.roles?.some(
+      (r) => r.toUpperCase() === 'ADMIN',
+    );
+
+    if (isAdmin) {
+      if (queryProviderId && Types.ObjectId.isValid(queryProviderId)) {
+        return new Types.ObjectId(queryProviderId);
+      }
+      return null;
+    }
+
+    if (currentUser?.sub) {
+      if (Types.ObjectId.isValid(currentUser.sub)) {
+        const userObjectId = new Types.ObjectId(currentUser.sub);
+        const provider = await this.providerModel.findOne({ userId: userObjectId });
+        if (provider) {
+          return provider._id;
+        }
+        const directProvider = await this.providerModel.findById(userObjectId);
+        if (directProvider) {
+          return directProvider._id;
+        }
+      }
+    }
+
+    if (queryProviderId && Types.ObjectId.isValid(queryProviderId)) {
+      return new Types.ObjectId(queryProviderId);
+    }
+
+    return null;
+  }
+
+  /**
+   * VS-103: UC-K04 Rental Bookings & Revenue Analytics Dashboard
+   * GET /api/v1/admin-stats/rental-bookings | MongoDB Aggregation Pipeline
+   */
+  async getRentalBookings(
+    query: {
+      from?: string;
+      to?: string;
+      startDate?: string;
+      endDate?: string;
+      shopId?: string;
+      providerId?: string;
+    },
+    currentUser?: AuthUser,
+  ) {
+    const targetProviderId = await this.resolveProviderId(
+      query.shopId || query.providerId,
+      currentUser,
+    );
+
+    const fromStr = query.from || query.startDate;
+    const toStr = query.to || query.endDate;
+
+    let start: Date;
+    let end: Date;
+
+    if (fromStr && toStr) {
+      const sStr = fromStr.includes('T') ? fromStr : `${fromStr}T00:00:00.000Z`;
+      const eStr = toStr.includes('T') ? toStr : `${toStr}T23:59:59.999Z`;
+      start = new Date(sStr);
+      end = new Date(eStr);
+    } else if (fromStr) {
+      const sStr = fromStr.includes('T') ? fromStr : `${fromStr}T00:00:00.000Z`;
+      start = new Date(sStr);
+      end = new Date();
+    } else {
+      const now = new Date();
+      start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+      end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+    }
+
+    const matchStage: any = {
+      bookingType: { $in: ['AODAI_RENTAL', 'RENTAL'] },
+      status: { $ne: 'CANCELLED' },
+      createdAt: { $gte: start, $lte: end },
+    };
+
+    if (targetProviderId) {
+      matchStage.$or = [
+        { providerId: targetProviderId },
+        { providerIds: targetProviderId },
+      ];
+    }
+
+    const [summaryResult, dailyPoints] = await Promise.all([
+      this.bookingModel.aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: null,
+            orderCount: { $sum: 1 },
+            totalRevenue: {
+              $sum: {
+                $ifNull: ['$pricingSummary.grandTotal', 0],
+              },
+            },
+          },
+        },
+      ]),
+      this.bookingModel.aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: '%Y-%m-%d',
+                date: '$createdAt',
+                timezone: 'Asia/Bangkok',
+              },
+            },
+            count: { $sum: 1 },
+            revenue: {
+              $sum: {
+                $ifNull: ['$pricingSummary.grandTotal', 0],
+              },
+            },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+    ]);
+
+    const orderCount = summaryResult[0]?.orderCount ?? 0;
+    let revenue = summaryResult[0]?.totalRevenue ?? 0;
+
+    if (revenue === 0 && orderCount > 0 && targetProviderId) {
+      const bookings = await this.bookingModel.find(matchStage).select('_id');
+      const bookingIds = bookings.map((b) => b._id);
+      const items = await this.bookingItemModel
+        .find({
+          bookingId: { $in: bookingIds },
+          providerId: targetProviderId,
+        })
+        .lean();
+      revenue = items.reduce(
+        (sum, item) => sum + (item.unitPrice || 0) * (item.quantity || 1),
+        0,
+      );
+    }
+
+    const dailyChart = dailyPoints.map((p) => {
+      const parts = String(p._id).split('-');
+      const day = parts[2] || p._id;
+      return {
+        date: p._id,
+        day,
+        count: p.count,
+        orderCount: p.count,
+        revenue: p.revenue,
+      };
+    });
+
+    return {
+      orderCount,
+      revenue,
+      totalOrders: orderCount,
+      totalRevenue: revenue,
+      dailyChart,
+      chart: dailyChart,
+      from: start.toISOString(),
+      to: end.toISOString(),
+    };
+  }
+
+  /**
+   * VS-104: UC-K05 Top Rented Products Analytics Report
+   * GET /api/v1/admin-stats/top-products | Aggregation $sort: { rentalCount: -1 }
+   */
+  async getTopProducts(
+    query: {
+      shopId?: string;
+      providerId?: string;
+      limit?: number | string;
+    },
+    currentUser?: AuthUser,
+  ) {
+    const targetProviderId = await this.resolveProviderId(
+      query.shopId || query.providerId,
+      currentUser,
+    );
+
+    const limit = query.limit ? Math.max(1, Number(query.limit)) : 5;
+
+    const itemMatch: any = {
+      productId: { $ne: null },
+    };
+    if (targetProviderId) {
+      itemMatch.providerId = targetProviderId;
+    }
+
+    const popularItems = await this.bookingItemModel.aggregate([
+      { $match: itemMatch },
+      {
+        $lookup: {
+          from: 'bookings',
+          localField: 'bookingId',
+          foreignField: '_id',
+          as: 'booking',
+        },
+      },
+      { $unwind: { path: '$booking', preserveNullAndEmptyArrays: true } },
+      {
+        $match: {
+          'booking.status': { $ne: 'CANCELLED' },
+        },
+      },
+      {
+        $group: {
+          _id: '$productId',
+          rentalCount: { $sum: { $ifNull: ['$quantity', 1] } },
+        },
+      },
+      { $sort: { rentalCount: -1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'products',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'product',
+        },
+      },
+      { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+    ]);
+
+    if (!popularItems || popularItems.length === 0) {
+      return {
+        data: [],
+        items: [],
+        total: 0,
+      };
+    }
+
+    const data = popularItems.map((item, index) => ({
+      rank: index + 1,
+      productId: item._id?.toString(),
+      _id: item._id?.toString(),
+      name: item.product?.name || `Sản phẩm #${index + 1}`,
+      rentalCount: item.rentalCount,
+      count: item.rentalCount,
+      image: item.product?.images?.[0] || '/hong_lien_hoa.png',
+      images: item.product?.images || [],
+      basePrice: item.product?.basePrice ?? 0,
+      category: item.product?.category || '',
+    }));
+
+    return {
+      data,
+      items: data,
+      total: data.length,
+    };
+  }
+
+  /**
+   * VS-105: UC-K06 Inventory Breakdown Analytics (State Percentage Chart)
+   * GET /api/v1/admin-stats/inventory-breakdown | AdminStatsService.getInventoryBreakdown()
+   */
+  async getInventoryBreakdown(
+    query: {
+      shopId?: string;
+      providerId?: string;
+    },
+    currentUser?: AuthUser,
+  ) {
+    const targetProviderId = await this.resolveProviderId(
+      query.shopId || query.providerId,
+      currentUser,
+    );
+
+    let itemFilter: any = {};
+    if (targetProviderId) {
+      const providerProducts = await this.productModel
+        .find({ providerId: targetProviderId })
+        .select('_id')
+        .lean();
+      const productIds = providerProducts.map((p) => p._id);
+      itemFilter = {
+        $or: [
+          { providerId: targetProviderId },
+          { productId: { $in: productIds } },
+        ],
+      };
+    }
+
+    const rows = await this.inventoryItemModel.aggregate<{
+      _id: string;
+      count: number;
+    }>([
+      { $match: itemFilter },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]);
+
+    const totalItems = rows.reduce((sum, r) => sum + r.count, 0);
+
+    const statusNameMap: Record<string, string> = {
+      AVAILABLE: 'Available',
+      RENTED: 'In Use',
+      CLEANING: 'Cleaning',
+      MAINTENANCE: 'Maintenance',
+      DAMAGED: 'Damaged',
+      LOST: 'Lost',
+    };
+
+    const breakdown = rows.map((row) => {
+      const percentage =
+        totalItems > 0 ? Math.round((row.count / totalItems) * 100) : 0;
+      const statusKey = String(row._id || '').toUpperCase();
+      return {
+        status: statusKey,
+        name: statusNameMap[statusKey] || statusKey,
+        count: row.count,
+        percentage,
+        percentageFormatted: `${percentage}%`,
+        color:
+          statusKey === 'AVAILABLE'
+            ? 'available'
+            : statusKey === 'RENTED'
+            ? 'rental'
+            : 'maintenance',
+      };
+    });
+
+    const getStatusInfo = (key: string, defaultName: string) => {
+      const found = breakdown.find((b) => b.status === key);
+      return {
+        status: key,
+        name: defaultName,
+        count: found?.count ?? 0,
+        percentage: found?.percentage ?? 0,
+        percentageFormatted: `${found?.percentage ?? 0}%`,
+      };
+    };
+
+    const available = getStatusInfo('AVAILABLE', 'Available');
+    const inUse = getStatusInfo('RENTED', 'In Use');
+    const cleaning = getStatusInfo('CLEANING', 'Cleaning');
+    const maintenance = getStatusInfo('MAINTENANCE', 'Maintenance');
+    const damaged = getStatusInfo('DAMAGED', 'Damaged');
+
+    return {
+      total: totalItems,
+      totalItems,
+      breakdown,
+      data: breakdown,
+      items: breakdown,
+      available,
+      inUse,
+      rented: inUse,
+      cleaning,
+      maintenance,
+      damaged,
+    };
+  }
 }
+

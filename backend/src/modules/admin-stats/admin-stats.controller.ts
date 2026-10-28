@@ -8,14 +8,61 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { AdminStatsService } from './admin-stats.service';
 
-@Controller('admin/stats')
+@Controller(['admin/stats', 'admin-stats', 'api/v1/admin-stats'])
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
-@Roles('ADMIN')
-@Permissions('dashboard:read')
 export class AdminStatsController {
   constructor(private readonly adminStatsService: AdminStatsService) {}
 
+  @Get('rental-bookings')
+  @Roles('ADMIN', 'PROVIDER', 'SHOP')
+  @Permissions()
+  async getRentalBookings(
+    @CurrentUser() user: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('shopId') shopId?: string,
+    @Query('providerId') providerId?: string,
+  ) {
+    return this.adminStatsService.getRentalBookings(
+      { from: from || startDate, to: to || endDate, shopId, providerId },
+      user,
+    );
+  }
+
+  @Get('top-products')
+  @Roles('ADMIN', 'PROVIDER', 'SHOP')
+  @Permissions()
+  async getTopProducts(
+    @CurrentUser() user: AuthUser,
+    @Query('shopId') shopId?: string,
+    @Query('providerId') providerId?: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.adminStatsService.getTopProducts(
+      { shopId, providerId, limit },
+      user,
+    );
+  }
+
+  @Get('inventory-breakdown')
+  @Roles('ADMIN', 'PROVIDER', 'SHOP')
+  @Permissions()
+  async getInventoryBreakdown(
+    @CurrentUser() user: AuthUser,
+    @Query('shopId') shopId?: string,
+    @Query('providerId') providerId?: string,
+  ) {
+    return this.adminStatsService.getInventoryBreakdown(
+      { shopId, providerId },
+      user,
+    );
+  }
+
   @Get()
+  @Roles('ADMIN')
+  @Permissions('dashboard:read')
   async getStats(
     @CurrentUser() user: AuthUser,
     @Query('period') period = 'month',
@@ -25,6 +72,8 @@ export class AdminStatsController {
   }
 
   @Get('customers')
+  @Roles('ADMIN')
+  @Permissions('dashboard:read')
   async getCustomers(
     @CurrentUser() user: AuthUser,
     @Query('page') page = 1,
@@ -35,6 +84,8 @@ export class AdminStatsController {
   }
 
   @Get('providers')
+  @Roles('ADMIN')
+  @Permissions('dashboard:read')
   async getProviders(
     @CurrentUser() user: AuthUser,
     @Query('page') page = 1,
@@ -45,6 +96,8 @@ export class AdminStatsController {
   }
 
   @Get('bookings')
+  @Roles('ADMIN')
+  @Permissions('dashboard:read')
   async getBookings(
     @CurrentUser() user: AuthUser,
     @Query('page') page = 1,
@@ -70,6 +123,8 @@ export class AdminStatsController {
   }
 
   @Get('transactions')
+  @Roles('ADMIN')
+  @Permissions('dashboard:read')
   async getTransactions(
     @CurrentUser() user: AuthUser,
     @Query('page') page = 1,
@@ -80,6 +135,7 @@ export class AdminStatsController {
   }
 
   @Patch('customers/:id/ban')
+  @Roles('ADMIN')
   @Permissions('user:manage')
   async banCustomer(
     @CurrentUser() user: AuthUser,
@@ -90,6 +146,7 @@ export class AdminStatsController {
   }
 
   @Patch('customers/:id/unban')
+  @Roles('ADMIN')
   @Permissions('user:manage')
   async unbanCustomer(
     @CurrentUser() user: AuthUser,
@@ -100,6 +157,8 @@ export class AdminStatsController {
   }
 
   @Patch('bookings/:id/status')
+  @Roles('ADMIN')
+  @Permissions('dashboard:read')
   async updateBookingStatus(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,

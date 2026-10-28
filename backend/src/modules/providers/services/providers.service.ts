@@ -474,7 +474,7 @@ export class ProvidersService {
     );
   }
 
-  async getProviderAnalytics(userIdStr: string, period = 'month') {
+  async getProviderAnalytics(userIdStr: string, period = 'month', from?: string, to?: string) {
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
     if (!provider) {
@@ -482,6 +482,17 @@ export class ProvidersService {
     }
 
     const providerId = provider._id;
+
+    // Date range filter support (VS-103)
+    const dateFilter: any = {};
+    if (from && to) {
+      const sStr = from.includes('T') ? from : `${from}T00:00:00.000Z`;
+      const eStr = to.includes('T') ? to : `${to}T23:59:59.999Z`;
+      dateFilter.createdAt = { $gte: new Date(sStr), $lte: new Date(eStr) };
+    } else if (from) {
+      const sStr = from.includes('T') ? from : `${from}T00:00:00.000Z`;
+      dateFilter.createdAt = { $gte: new Date(sStr) };
+    }
 
     // 1. UC-K04 & UC-K09: Doanh thu & hoa hồng
     const bookings = await this.bookingModel.find({
@@ -495,9 +506,10 @@ export class ProvidersService {
           'RETURNED',
         ],
       },
+      ...dateFilter,
     } as any);
 
-const bookingIds = bookings.map((booking) => booking._id);
+    const bookingIds = bookings.map((booking) => booking._id);
     const revenueItems = bookingIds.length
       ? await this.bookingItemModel.find({ bookingId: { $in: bookingIds }, providerId } as any).lean()
       : [];
@@ -509,17 +521,31 @@ const bookingIds = bookings.map((booking) => booking._id);
     const totalRevenue = Array.from(revenueByBooking.values()).reduce((sum, amount) => sum + amount, 0);
     const commissionFee = Math.round(totalRevenue * 0.15);
 
+    // VS-103: Thống kê riêng cho dịch vụ thuê (Ao Dai Rental)
+    const rentalBookings = bookings.filter((b: any) => {
+      const bType = String(b.bookingType || '').toUpperCase();
+      return bType === 'AODAI_RENTAL' || bType === 'RENTAL';
+    });
+    const rentalBookingIds = new Set(rentalBookings.map((b) => b._id.toString()));
+    const rentalRevenue = Array.from(revenueByBooking.entries()).reduce((sum, [bId, amt]) => {
+      return rentalBookingIds.has(bId) ? sum + amt : sum;
+    }, 0);
+    const rentalOrderCount = rentalBookings.length;
+
     // 2. UC-K13: Tỷ lệ đặt lịch thành công & hủy lịch
     const allBookingsCount = await this.bookingModel.countDocuments({
       providerIds: providerId,
+      ...dateFilter,
     } as any);
     const successBookingsCount = await this.bookingModel.countDocuments({
       providerIds: providerId,
       status: 'COMPLETED',
+      ...dateFilter,
     } as any);
     const cancelledBookingsCount = await this.bookingModel.countDocuments({
       providerIds: providerId,
       status: 'CANCELLED',
+      ...dateFilter,
     } as any);
 
     const successRate = allBookingsCount
@@ -529,12 +555,12 @@ const bookingIds = bookings.map((booking) => booking._id);
       ? Math.round((cancelledBookingsCount / allBookingsCount) * 1000) / 10
       : 0;
 
-    // 3. UC-K05: Sản phẩm phổ biến nhất (Top 3)
+    // 3. UC-K05 & VS-104: Sản phẩm phổ biến nhất (Top 5 theo shop)
     const popularItems = await this.bookingItemModel.aggregate([
       { $match: { providerId } },
-      { $group: { _id: '$productId', count: { $sum: 1 } } },
+      { $group: { _id: '$productId', count: { $sum: { $ifNull: ['$quantity', 1] } } } },
       { $sort: { count: -1 } },
-      { $limit: 3 },
+      { $limit: 5 },
     ]);
 
     const popularProducts = [];
@@ -543,31 +569,69 @@ const bookingIds = bookings.map((booking) => booking._id);
         const prod = await this.productModel.findById(item._id);
         if (prod) {
           popularProducts.push({
+            productId: prod._id.toString(),
+            _id: prod._id.toString(),
             name: prod.name,
             image: prod.images?.[0] || '/hong_lien_hoa.png',
             count: item.count,
+            rentalCount: item.count,
           });
         }
       }
     }
-    // 4. UC-K06: Quản lý tồn kho / Trạng thái sản phẩm
+
+    // 4. UC-K06 & VS-105: Quản lý tồn kho / Trạng thái sản phẩm kèm tỷ lệ phần trăm
     const totalProducts = await this.productModel.countDocuments({
       providerId,
     } as any);
-    const inventoryStatus = await this.bookingModel.db
+
+    const providerProducts = await this.productModel.find({ providerId }).select('_id');
+    const providerProductIds = providerProducts.map((p) => p._id);
+
+    const invRawRows: Array<{ _id: string; count: number }> = await this.bookingModel.db
       .model('InventoryItem')
       .aggregate([
-        { $match: { providerId } },
+        {
+          $match: {
+            $or: [
+              { providerId },
+              { productId: { $in: providerProductIds } },
+            ],
+          },
+        },
         { $group: { _id: '$status', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
-      ])
-      .then((rows: Array<{ _id: string; count: number }>) => rows.map((row) => ({
-        name: row._id,
-        status: row._id,
+      ]);
+
+    const totalInvItems = invRawRows.reduce((sum, r) => sum + r.count, 0);
+
+    const statusNameMap: Record<string, string> = {
+      AVAILABLE: 'Available',
+      RENTED: 'In Use',
+      CLEANING: 'Cleaning',
+      MAINTENANCE: 'Maintenance',
+      DAMAGED: 'Damaged',
+    };
+
+    const inventoryStatus = invRawRows.map((row) => {
+      const percentage = totalInvItems > 0 ? Math.round((row.count / totalInvItems) * 100) : 0;
+      const statusKey = String(row._id || '').toUpperCase();
+      return {
+        name: statusNameMap[statusKey] || statusKey,
+        status: statusKey,
         count: row.count,
+        percentage,
+        percentageFormatted: `${percentage}%`,
         detail: '',
-        color: row._id === 'AVAILABLE' ? 'available' : row._id === 'RENTED' ? 'rental' : 'maintenance',
-      })));
+        color:
+          statusKey === 'AVAILABLE'
+            ? 'available'
+            : statusKey === 'RENTED'
+            ? 'rental'
+            : 'maintenance',
+      };
+    });
+
 
     // 5. UC-K08: Doanh thu theo thời gian (Tuần, Tháng, Năm)
     const revenueGrowth = [];
@@ -733,8 +797,15 @@ const bookingIds = bookings.map((booking) => booking._id);
       upcomingSchedules,
       popularConcepts,
       averageRating: avgRating,
+      rentalStats: {
+        orderCount: rentalOrderCount,
+        revenue: rentalRevenue,
+      },
+      rentalOrderCount,
+      rentalRevenue,
     };
   }
+
 
   private toObjectId(id: string): Types.ObjectId {
     if (!Types.ObjectId.isValid(id)) {

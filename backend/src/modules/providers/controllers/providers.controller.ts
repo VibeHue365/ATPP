@@ -82,8 +82,17 @@ export class ProvidersController {
   async getAnalytics(
     @CurrentUser() user: AuthUser,
     @Query('period') period?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
-    return this.providersService.getProviderAnalytics(user.sub, period);
+    return this.providersService.getProviderAnalytics(
+      user.sub,
+      period,
+      from || startDate,
+      to || endDate,
+    );
   }
 
   /** GET /providers/me/wallet — Xem số dư ví thợ ảnh */
