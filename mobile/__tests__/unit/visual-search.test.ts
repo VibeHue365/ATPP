@@ -11,7 +11,7 @@ jest.mock('expo-image-manipulator', () => ({
 }));
 
 import { aiApi } from '@/apis/aiApi';
-import { prepareSearchImage, resizeTarget, similarityLabel } from '@/utils/visualSearchImage';
+import { describeResults, prepareSearchImage, resizeTarget, similarityLabel } from '@/utils/visualSearchImage';
 
 describe('visual search on mobile (VIB-93)', () => {
   beforeEach(() => {
@@ -24,6 +24,19 @@ describe('visual search on mobile (VIB-93)', () => {
     expect(resizeTarget(2000, 1000)).toEqual({ width: 512 });
     expect(resizeTarget(1000, 3000)).toEqual({ height: 512 });
     expect(resizeTarget(400, 300)).toBeNull();
+  });
+
+  it('tells whether the exact design exists or only look-alikes were found', () => {
+    expect(describeResults([0.91, 0.7])).toEqual({
+      exactMatch: true,
+      title: 'Tìm thấy mẫu rất giống đang cho thuê',
+      subtitle: null,
+    });
+    expect(describeResults([0.72, 0.66, 0.65])).toEqual({
+      exactMatch: false,
+      title: 'Chưa có đúng mẫu này trên nền tảng',
+      subtitle: 'Dưới đây là 3 mẫu tương tự đang cho thuê.',
+    });
   });
 
   it('labels 80% and above as very similar', () => {

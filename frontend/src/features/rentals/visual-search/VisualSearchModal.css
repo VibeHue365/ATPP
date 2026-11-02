@@ -70,17 +70,36 @@
   font-weight: 700;
 }
 
-.visual-search__hint,
-.visual-search__summary {
+.visual-search__hint {
   margin: 0 0 12px;
   color: var(--landing-text-muted);
   font-size: 14px;
   line-height: 1.6;
 }
 
-.visual-search__summary {
-  font-weight: 700;
+.visual-search__headline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--landing-surface-soft);
+  font-size: 13px;
+  color: var(--landing-text-muted);
+}
+
+.visual-search__headline strong {
   color: var(--landing-text-primary);
+  font-size: 14px;
+}
+
+.visual-search__headline.is-exact {
+  background: var(--landing-primary-soft);
+}
+
+.visual-search__headline.is-exact strong {
+  color: var(--landing-primary);
 }
 
 .visual-search__status {

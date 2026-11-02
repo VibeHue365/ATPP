@@ -77,11 +77,27 @@ describe('VisualSearchModal (VIB-93)', () => {
     openModalAndUpload(photo());
 
     expect(await screen.findByText('Rất giống 91%')).toBeTruthy();
+    expect(screen.getByText('Tìm thấy mẫu rất giống đang cho thuê')).toBeTruthy();
     expect(screen.getByText('Tương tự 70%')).toBeTruthy();
     expect(screen.getByText('+20%')).toBeTruthy();
     expect(screen.getByText('Huế Áo Dài Studio')).toBeTruthy();
     expect(screen.getByText('Áo dài đỏ thêu phượng').closest('a')?.getAttribute('href')).toBe('/rentals/p1');
     expect(searchCalls).toEqual([['small-jpeg', 'image/jpeg']]);
+  });
+
+  it('says the design is not on the platform when only look-alikes are found', async () => {
+    searchImpl = async () => ({
+      message: null,
+      items: [
+        { _id: 'p1', name: 'Áo dài hồng', basePrice: 200000, images: [], visualScore: 0.72 },
+        { _id: 'p2', name: 'Áo dài đỏ', basePrice: 300000, images: [], visualScore: 0.66 },
+      ],
+    });
+
+    openModalAndUpload(photo());
+
+    expect(await screen.findByText('Chưa có đúng mẫu này trên nền tảng')).toBeTruthy();
+    expect(screen.getByText('Dưới đây là 2 mẫu tương tự đang cho thuê.')).toBeTruthy();
   });
 
   it('shows the no-match message when the photo has no Ao Dai', async () => {

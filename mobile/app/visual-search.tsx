@@ -11,7 +11,7 @@ import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useToast } from '@/contexts/ToastContext';
 import type { VisualSearchResult } from '@/types/ai';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { prepareSearchImage, similarityLabel, VERY_SIMILAR_SCORE } from '@/utils/visualSearchImage';
+import { describeResults, prepareSearchImage, similarityLabel, VERY_SIMILAR_SCORE } from '@/utils/visualSearchImage';
 
 type SearchState =
   | { status: 'idle' }
@@ -93,7 +93,7 @@ export default function VisualSearchScreen() {
         <Text style={styles.hint}>Hãy thử ảnh khác hoặc dùng bộ lọc màu sắc, kiểu dáng.</Text>
       </View>}
       {state.status === 'done' && state.result.items.length > 0 && <>
-        <Text style={styles.summary}>{state.result.items.length} mẫu tương tự đang cho thuê</Text>
+        <ResultsHeadline scores={state.result.items.map((item) => item.visualScore)}/>
         <View style={styles.grid}>
           {state.result.items.map((product) => <ProductCard
             key={product._id}
@@ -104,6 +104,14 @@ export default function VisualSearchScreen() {
       </>}
     </ScrollView>
   </SafeAreaView>;
+}
+
+function ResultsHeadline({ scores }: { scores: number[] }) {
+  const { exactMatch, title, subtitle } = describeResults(scores);
+  return <View style={[styles.headline, exactMatch && styles.headlineExact]}>
+    <Text style={[styles.headlineTitle, exactMatch && styles.headlineTitleExact]}>{title}</Text>
+    {subtitle ? <Text style={styles.headlineSubtitle}>{subtitle}</Text> : null}
+  </View>;
 }
 
 function SourceButton({ icon, label, disabled, onPress }: {
@@ -140,6 +148,10 @@ const styles = StyleSheet.create({
   error: { marginTop: 16, padding: 12, borderRadius: Radius.md, backgroundColor: Colors.errorSoft, color: Colors.error, fontFamily: FontFamily.bodyMedium, fontSize: 12 },
   empty: { alignItems: 'center', gap: 6, marginTop: 24 },
   emptyTitle: { fontFamily: FontFamily.bodySemiBold, fontSize: 13, color: Colors.text, textAlign: 'center' },
-  summary: { fontFamily: FontFamily.bodySemiBold, fontSize: 13, color: Colors.text, marginTop: 20, marginBottom: 12 },
+  headline: { marginTop: 20, marginBottom: 12, padding: 12, borderRadius: Radius.md, backgroundColor: Colors.surfaceSoft, gap: 2 },
+  headlineExact: { backgroundColor: Colors.primarySoft },
+  headlineTitle: { fontFamily: FontFamily.bodySemiBold, fontSize: 13, color: Colors.text },
+  headlineTitleExact: { color: Colors.primary },
+  headlineSubtitle: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
 });

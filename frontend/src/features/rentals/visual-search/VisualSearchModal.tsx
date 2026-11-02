@@ -9,6 +9,7 @@ import {
 } from '../../../shared/pricing/campaignPricing';
 import { prepareSearchImage, validateSearchImage } from './prepareSearchImage';
 import {
+  describeResults,
   searchAoDaiByImage,
   VERY_SIMILAR_SCORE,
   type VisualSearchProduct,
@@ -134,9 +135,7 @@ export const VisualSearchModal: React.FC<VisualSearchModalProps> = ({ isOpen, on
             )}
             {state.status === 'done' && state.result.items.length > 0 && (
               <>
-                <p className="visual-search__summary">
-                  {state.result.items.length} mẫu tương tự đang cho thuê
-                </p>
+                <ResultsHeadline scores={state.result.items.map((item) => item.visualScore)} />
                 <div className="visual-search__grid">
                   {state.result.items.map((product) => (
                     <VisualSearchResultCard key={product._id} product={product} onOpen={handleClose} />
@@ -148,6 +147,16 @@ export const VisualSearchModal: React.FC<VisualSearchModalProps> = ({ isOpen, on
         </div>
       </div>
     </Modal>
+  );
+};
+
+const ResultsHeadline: React.FC<{ scores: number[] }> = ({ scores }) => {
+  const { exactMatch, title, subtitle } = describeResults(scores);
+  return (
+    <div className={`visual-search__headline${exactMatch ? ' is-exact' : ''}`}>
+      <strong>{title}</strong>
+      {subtitle && <span>{subtitle}</span>}
+    </div>
   );
 };
 

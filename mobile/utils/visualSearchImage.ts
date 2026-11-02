@@ -17,6 +17,18 @@ export function resizeTarget(width: number, height: number, maxSide = SEARCH_IMA
   return width >= height ? { width: maxSide } : { height: maxSide };
 }
 
+/** Headline over the results: an exact design was found, or only look-alikes (same rule as the web). */
+export function describeResults(scores: number[]): { exactMatch: boolean; title: string; subtitle: string | null } {
+  const exactMatch = scores.some((score) => score >= VERY_SIMILAR_SCORE);
+  return exactMatch
+    ? { exactMatch, title: 'Tìm thấy mẫu rất giống đang cho thuê', subtitle: null }
+    : {
+        exactMatch,
+        title: 'Chưa có đúng mẫu này trên nền tảng',
+        subtitle: `Dưới đây là ${scores.length} mẫu tương tự đang cho thuê.`,
+      };
+}
+
 export function similarityLabel(score: number) {
   return `${score >= VERY_SIMILAR_SCORE ? 'Rất giống' : 'Tương tự'} ${Math.round(score * 100)}%`;
 }

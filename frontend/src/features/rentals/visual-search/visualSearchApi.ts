@@ -19,7 +19,19 @@ export interface VisualSearchResult {
   message: string | null;
 }
 
-export const searchAoDaiByImage = (imageBase64: string, mimeType: string) =>
+/** Headline over the results: an exact design was found, or only look-alikes. */
+export function describeResults(scores: number[]): { exactMatch: boolean; title: string; subtitle: string | null } {
+  const exactMatch = scores.some((score) => score >= VERY_SIMILAR_SCORE);
+  return exactMatch
+    ? { exactMatch, title: 'Tìm thấy mẫu rất giống đang cho thuê', subtitle: null }
+    : {
+        exactMatch,
+        title: 'Chưa có đúng mẫu này trên nền tảng',
+        subtitle: `Dưới đây là ${scores.length} mẫu tương tự đang cho thuê.`,
+      };
+}
+
+export const searchAoDaiByImage =(imageBase64: string, mimeType: string) =>
   httpClient.post<VisualSearchResult>('/ai/visual-search/match', {
     image_base64: imageBase64,
     mime_type: mimeType,
