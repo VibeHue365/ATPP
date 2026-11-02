@@ -40,7 +40,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Cho phép LUMÉ truy cập ảnh để bạn đổi ảnh đại diện.",
+          "photosPermission": "Cho phép LUMÉ truy cập ảnh để bạn đổi ảnh đại diện, gửi ảnh và tìm áo dài bằng hình ảnh.",
+          "cameraPermission": "Cho phép LUMÉ dùng camera để chụp áo dài và tìm mẫu tương tự.",
           "microphonePermission": false
         }
       ],
