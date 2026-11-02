@@ -933,4 +933,108 @@ export class ProvidersService {
       netPayout: summary.netPayout,
     };
   }
+
+  /** VS-108: calendar events for the authenticated photographer. */
+  async getPhotographerCalendar(
+    userIdStr: string,
+    month?: string,
+    from?: string,
+    to?: string,
+  ) {
+    const provider = await this.requireProvider(userIdStr);
+    let start: Date;
+    let end: Date;
+
+    if (month) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        throw new BadRequestException('month must use YYYY-MM format');
+      }
+      const [year, monthIndex] = month.split('-').map(Number);
+      start = new Date(Date.UTC(year, monthIndex - 1, 1));
+      end = new Date(Date.UTC(year, monthIndex, 1));
+    } else {
+      const now = new Date();
+      start = from ? new Date(`${from}T00:00:00.000Z`) : new Date(now.setHours(0, 0, 0, 0));
+      end = to
+        ? new Date(`${to}T23:59:59.999Z`)
+        : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 3, 1));
+    }
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+      throw new BadRequestException('Invalid calendar date range');
+    }
+
+    const BookingSchedule = this.bookingModel.db.model('BookingSchedule');
+    const schedules = await BookingSchedule.aggregate([
+      {
+        $match: {
+          providerId: provider._id,
+          scheduleType: 'PHOTOSHOOT',
+        },
+      },
+      { $addFields: { eventDate: { $ifNull: ['$startsAt', '$scheduledDate'] } } },
+      { $match: { eventDate: { $gte: start, $lt: end } } },
+      {
+        $lookup: {
+          from: 'bookings',
+          localField: 'bookingId',
+          foreignField: '_id',
+          as: 'booking',
+        },
+      },
+      { $unwind: { path: '$booking', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'booking_items',
+          localField: 'bookingItemId',
+          foreignField: '_id',
+          as: 'bookingItem',
+        },
+      },
+      { $unwind: { path: '$bookingItem', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 1,
+          bookingId: 1,
+          eventDate: 1,
+          providerLocalDate: 1,
+          startsAt: 1,
+          endsAt: 1,
+          timeSlot: 1,
+          scheduleStatus: '$status',
+          bookingStatus: '$booking.status',
+          bookingCode: '$booking.bookingCode',
+          location: {
+            $ifNull: [
+              '$locationAddress',
+              { $ifNull: ['$bookingItem.shootLocation', '$bookingItem.shootLocationSnapshot.address'] },
+            ],
+          },
+        },
+      },
+      { $sort: { eventDate: 1, startsAt: 1 } },
+    ]);
+
+    const events = schedules.map((schedule: any) => {
+      const cancelled =
+        schedule.scheduleStatus === 'CANCELLED' ||
+        schedule.bookingStatus === 'CANCELLED';
+      const date = schedule.providerLocalDate || new Date(schedule.eventDate).toISOString().slice(0, 10);
+      return {
+        id: schedule._id?.toString(),
+        bookingId: schedule.bookingId?.toString(),
+        bookingCode: schedule.bookingCode || '',
+        date,
+        startsAt: schedule.startsAt || schedule.eventDate,
+        endsAt: schedule.endsAt || null,
+        timeSlot: schedule.timeSlot || null,
+        location: schedule.location || '',
+        status: cancelled ? 'CANCELLED' : schedule.scheduleStatus || 'CONFIRMED',
+        cancelled,
+        markerColor: cancelled ? 'gray' : 'green',
+        textDecoration: cancelled ? 'line-through' : 'none',
+      };
+    });
+
+    return { month: month || null, from: start.toISOString(), to: end.toISOString(), events, data: events };
+  }
 }

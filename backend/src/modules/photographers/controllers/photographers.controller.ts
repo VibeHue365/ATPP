@@ -25,6 +25,17 @@ export class PhotographersController {
     return this.providersService.getEarnings(user.sub);
   }
 
+  @Get('schedules/calendar')
+  @UseGuards(JwtAuthGuard)
+  async getCalendar(
+    @CurrentUser() user: AuthUser,
+    @Query('month') month?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.providersService.getPhotographerCalendar(user.sub, month, from, to);
+  }
+
   @Get()
   async findAll(@Query() query: PhotographerDiscoveryQueryDto) {
     return this.photographersService.findAll(query);

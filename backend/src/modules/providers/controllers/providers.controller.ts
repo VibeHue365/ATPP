@@ -107,6 +107,16 @@ export class ProvidersController {
     return this.providersService.getEarnings(user.sub);
   }
 
+  @Get('me/schedules/calendar')
+  async getCalendar(
+    @CurrentUser() user: AuthUser,
+    @Query('month') month?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.providersService.getPhotographerCalendar(user.sub, month, from, to);
+  }
+
   @Patch('me')
   async updateMe(
     @CurrentUser() user: AuthUser,

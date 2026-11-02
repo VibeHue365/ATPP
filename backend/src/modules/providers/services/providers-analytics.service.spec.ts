@@ -256,4 +256,41 @@ describe('ProvidersService.getProviderAnalytics (VS-103, VS-104, VS-105)', () =>
       });
     });
   });
+
+  describe('VS-108: Photographer Calendar Schedule View', () => {
+    it('returns dated location events and marks cancelled shoots for grey strike-through rendering', async () => {
+      bookingModel.db.model = jest.fn().mockReturnValue({
+        aggregate: jest.fn().mockResolvedValue([
+          {
+            _id: new Types.ObjectId(),
+            bookingId: new Types.ObjectId(),
+            eventDate: new Date('2026-10-05T02:00:00.000Z'),
+            providerLocalDate: '2026-10-05',
+            location: 'Kinh thành Huế',
+            scheduleStatus: 'CONFIRMED',
+            bookingStatus: 'CONFIRMED',
+          },
+          {
+            _id: new Types.ObjectId(),
+            bookingId: new Types.ObjectId(),
+            eventDate: new Date('2026-10-10T02:00:00.000Z'),
+            providerLocalDate: '2026-10-10',
+            location: 'Đại Nội',
+            scheduleStatus: 'CANCELLED',
+            bookingStatus: 'CANCELLED',
+          },
+        ]),
+      });
+
+      const result = await service.getPhotographerCalendar(userId.toString(), '2026-10');
+
+      expect(result.events).toHaveLength(2);
+      expect(result.events[0]).toMatchObject({
+        date: '2026-10-05', location: 'Kinh thành Huế', markerColor: 'green', cancelled: false,
+      });
+      expect(result.events[1]).toMatchObject({
+        markerColor: 'gray', textDecoration: 'line-through', cancelled: true,
+      });
+    });
+  });
 });
