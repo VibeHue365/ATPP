@@ -159,7 +159,7 @@ describe('PhotographyHoldService.confirmForBooking', () => {
       expect.anything(),
     );
   });
-  it('selects a physical Ao Dai inventory item only when every photo day is within the rental range', async () => {
+  const reserveComboAoDai = async (activeCampaign: unknown = null) => {
     const productId = new Types.ObjectId();
     const inventoryId = new Types.ObjectId();
     const product = {
@@ -221,6 +221,9 @@ describe('PhotographyHoldService.confirmForBooking', () => {
       inventoryModel as any,
       inventoryReservationModel as any,
       {} as any,
+      {} as any,
+      {} as any,
+      { getActiveCampaign: jest.fn().mockResolvedValue(activeCampaign) } as any,
     );
 
     const result = await (service as any).reserveComboAoDaiItem(
@@ -243,6 +246,11 @@ describe('PhotographyHoldService.confirmForBooking', () => {
       new Date(Date.now() + 60_000),
       {} as any,
     );
+    return { result, inventoryId, inventoryModel };
+  };
+
+  it('selects a physical Ao Dai inventory item only when every photo day is within the rental range', async () => {
+    const { result, inventoryId, inventoryModel } = await reserveComboAoDai();
 
     expect(result.inventoryItemIds).toEqual([inventoryId]);
     expect(result.unitPrice).toBe(1_000_000);
@@ -250,5 +258,17 @@ describe('PhotographyHoldService.confirmForBooking', () => {
       { _id: inventoryId },
       expect.anything(),
     );
+  });
+
+  it('applies the shop campaign to the combo Ao Dai price per rental day (VIB-43)', async () => {
+    // Phụ thu 20% chỉ ngày 21/07: 500k (20/07) + 600k (21/07).
+    const { result } = await reserveComboAoDai({
+      type: 'SURCHARGE',
+      discountPercent: 20,
+      startDate: new Date('2026-07-21T00:00:00.000Z'),
+      endDate: new Date('2026-07-25T00:00:00.000Z'),
+    });
+
+    expect(result.unitPrice).toBe(1_100_000);
   });
 });

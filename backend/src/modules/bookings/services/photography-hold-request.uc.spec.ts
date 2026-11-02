@@ -48,6 +48,7 @@ function createService(
     quoteService as any,
     {} as any,
     {} as any,
+    {} as any,
   );
   const transaction = jest
     .spyOn(service as any, 'withTransactionRetry')

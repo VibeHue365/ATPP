@@ -53,6 +53,8 @@ import {
 } from '../dto/create-photography-combo-hold.dto';
 import { PromotionsService } from '../../products/services/promotions.service';
 import { VoucherPricingService } from '../../products/services/voucher-pricing.service';
+import { DiscountCampaignService } from '../../products/services/discount-campaign.service';
+import { applyCampaignToRate } from '../../products/utils/campaign-pricing.util';
 import { PromotionDocument } from '../../products/schemas/promotion.schema';
 
 const HOLD_DURATION_MS = 10 * 60 * 1000;
@@ -117,6 +119,7 @@ export class PhotographyHoldService {
     private readonly quoteService: PhotographyQuoteService,
     private readonly promotionsService: PromotionsService,
     private readonly voucherPricingService: VoucherPricingService,
+    private readonly discountCampaignService: DiscountCampaignService,
   ) {}
 
   async createHold(
@@ -796,7 +799,11 @@ export class PhotographyHoldService {
       rentalFrom,
       rentalTo,
       quantity,
-      unitPrice: product.basePrice * rentalDurationDays,
+      unitPrice: await this.calculateComboRentalPrice(
+        product,
+        rentalFrom,
+        rentalDurationDays,
+      ),
       depositAmount: product.depositAmount,
       selectedSize,
       selectedColor,
@@ -1745,6 +1752,27 @@ export class PhotographyHoldService {
         Math.sin(longitudeDelta / 2) ** 2;
     return 2 * 6371 * Math.asin(Math.sqrt(a));
   }
+  // Giá áo trong combo áp chiến dịch giá của shop theo từng ngày thuê (VIB-43),
+  // giống thuê lẻ; giảm 10% combo tính sau trên giá này.
+  private async calculateComboRentalPrice(
+    product: Product,
+    rentalFrom: Date,
+    rentalDurationDays: number,
+  ): Promise<number> {
+    const campaign = await this.discountCampaignService.getActiveCampaign(
+      product.providerId,
+    );
+    let total = 0;
+    for (let day = 0; day < rentalDurationDays; day += 1) {
+      total += applyCampaignToRate(
+        product.basePrice,
+        campaign,
+        new Date(rentalFrom.getTime() + day * 86_400_000),
+      );
+    }
+    return total;
+  }
+
   private toRentalRange(
     rentalFromValue: string,
     rentalToValue: string,
