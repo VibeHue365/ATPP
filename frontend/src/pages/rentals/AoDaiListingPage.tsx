@@ -12,6 +12,7 @@ import {
   Tag,
   Layers,
   Search,
+  Camera,
 } from "lucide-react";
 import { httpClient } from "../../services/httpClient";
 import { API_BASE_URL } from "../../config/env";
@@ -31,6 +32,7 @@ import {
   type PricingCampaign,
 } from "../../shared/pricing/campaignPricing";
 
+import { VisualSearchModal } from "../../features/rentals/visual-search/VisualSearchModal";
 import "./AoDaiListingPage.css";
 
 const DEFAULT_AODAI_IMAGE = "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=600&q=80";
@@ -148,6 +150,7 @@ export const AoDaiListingPage: React.FC = () => {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
   const [searchLocation, setSearchLocation] = useState<string>(initialLocation === 'all' ? '' : initialLocation);
   const [rentalType, setRentalType] = useState<string>("Theo ngày");
+  const [isVisualSearchOpen, setIsVisualSearchOpen] = useState(false);
   const [rentalDate, setRentalDate] = useState<string>(initialDate);
   const [selectedSearchSize, setSelectedSearchSize] = useState<string>("");
 
@@ -573,13 +576,24 @@ export const AoDaiListingPage: React.FC = () => {
       label: 'Từ khóa',
       icon: <Search size={13} />,
       content: (
-        <input
-          type="text"
-          className="unified-search-input"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Tên áo, kiểu dáng..."
-        />
+        <div className="unified-search-control">
+          <input
+            type="text"
+            className="unified-search-input"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Tên áo, kiểu dáng..."
+          />
+          <button
+            type="button"
+            className="visual-search-trigger"
+            onClick={() => setIsVisualSearchOpen(true)}
+            title="Tìm bằng hình ảnh"
+            aria-label="Tìm áo dài bằng hình ảnh"
+          >
+            <Camera size={15} />
+          </button>
+        </div>
       ),
     },
     {
@@ -1426,6 +1440,10 @@ export const AoDaiListingPage: React.FC = () => {
           </main>
         </div>
       </div>
+      <VisualSearchModal
+        isOpen={isVisualSearchOpen}
+        onClose={() => setIsVisualSearchOpen(false)}
+      />
     </div>
   );
 };
