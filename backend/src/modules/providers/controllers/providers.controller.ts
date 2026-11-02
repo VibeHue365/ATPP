@@ -101,6 +101,12 @@ export class ProvidersController {
     return this.providersService.getWallet(user.sub);
   }
 
+  /** GET /providers/me/earnings — photographer earnings and commission summary */
+  @Get('me/earnings')
+  async getEarnings(@CurrentUser() user: AuthUser) {
+    return this.providersService.getEarnings(user.sub);
+  }
+
   @Patch('me')
   async updateMe(
     @CurrentUser() user: AuthUser,

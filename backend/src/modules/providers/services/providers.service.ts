@@ -868,4 +868,69 @@ export class ProvidersService {
       })),
     };
   }
+
+  /**
+   * VS-107: completed photography/combo settlements are the source of truth
+   * for earnings.  This avoids reporting unpaid or cancelled bookings as
+   * income and returns zeros for a new photographer.
+   */
+  async getEarnings(userIdStr: string) {
+    const provider = await this.requireProvider(userIdStr);
+    const Settlement = this.bookingModel.db.model('Settlement');
+    const rows = await Settlement.aggregate([
+      {
+        $match: {
+          providerId: provider._id,
+          status: 'SETTLED',
+        },
+      },
+      {
+        $lookup: {
+          from: 'bookings',
+          localField: 'bookingId',
+          foreignField: '_id',
+          as: 'booking',
+        },
+      },
+      { $unwind: '$booking' },
+      {
+        $match: {
+          'booking.status': 'COMPLETED',
+          'booking.bookingType': { $in: ['PHOTOGRAPHY', 'COMBO'] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          completedShoots: { $sum: 1 },
+          grossEarnings: { $sum: { $ifNull: ['$grossAmount', 0] } },
+          platformCommission: { $sum: { $ifNull: ['$commissionAmount', 0] } },
+          netPayout: { $sum: { $ifNull: ['$payableAmount', '$netAmount'] } },
+        },
+      },
+    ]);
+
+    const summary = rows[0] ?? {
+      completedShoots: 0,
+      grossEarnings: 0,
+      platformCommission: 0,
+      netPayout: 0,
+    };
+    const commissionRate =
+      summary.grossEarnings > 0
+        ? Number(
+            ((summary.platformCommission / summary.grossEarnings) * 100).toFixed(2),
+          )
+        : 0;
+
+    return {
+      completedShoots: summary.completedShoots,
+      grossEarnings: summary.grossEarnings,
+      totalEarnings: summary.grossEarnings,
+      platformCommission: summary.platformCommission,
+      commissionPaid: summary.platformCommission,
+      commissionRate,
+      netPayout: summary.netPayout,
+    };
+  }
 }

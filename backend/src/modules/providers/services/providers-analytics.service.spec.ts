@@ -219,4 +219,41 @@ describe('ProvidersService.getProviderAnalytics (VS-103, VS-104, VS-105)', () =>
       ]);
     });
   });
+
+  describe('VS-107: Photographer Earnings & Commission Analytics', () => {
+    it('returns completed-shoot earnings, actual commission, and net payout', async () => {
+      const aggregate = jest.fn().mockResolvedValue([
+        {
+          completedShoots: 10,
+          grossEarnings: 10000000,
+          platformCommission: 1200000,
+          netPayout: 8800000,
+        },
+      ]);
+      bookingModel.db.model = jest.fn().mockReturnValue({ aggregate });
+
+      const result = await service.getEarnings(userId.toString());
+
+      expect(result).toMatchObject({
+        completedShoots: 10,
+        grossEarnings: 10000000,
+        platformCommission: 1200000,
+        netPayout: 8800000,
+        commissionRate: 12,
+      });
+    });
+
+    it('returns zero totals when the photographer has no completed shoots', async () => {
+      bookingModel.db.model = jest.fn().mockReturnValue({
+        aggregate: jest.fn().mockResolvedValue([]),
+      });
+
+      await expect(service.getEarnings(userId.toString())).resolves.toMatchObject({
+        completedShoots: 0,
+        totalEarnings: 0,
+        platformCommission: 0,
+        netPayout: 0,
+      });
+    });
+  });
 });
