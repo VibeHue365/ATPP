@@ -117,3 +117,22 @@ export interface AdminStats {
   };
 }
 
+export interface BookingConversionMetrics {
+  totalBookings: number;
+  completedBookings: number;
+  cancelledBookings: number;
+  disputedBookings: number;
+  completionRate: number;
+  cancellationRate: number;
+  disputeRate: number;
+  from?: string;
+  to?: string;
+}
+
+export interface ShopsOverviewMetrics {
+  totalShops: number;
+  totalProducts: number;
+  activeShops: number;
+  listedProducts: number;
+}
+

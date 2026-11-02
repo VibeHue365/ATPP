@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { adminStatsApi } from '../api/adminStatsApi';
-import type { AdminStats } from '../types';
+import type { AdminStats, BookingConversionMetrics, ShopsOverviewMetrics } from '../types';
 
 export interface OverviewChartPoint {
   day: string;
@@ -79,6 +79,8 @@ export interface AdminOverviewData {
     warnings: SystemAlertItem[];
     critical: SystemAlertItem[];
   };
+  bookingConversion: BookingConversionMetrics;
+  shopsOverview: ShopsOverviewMetrics;
 }
 
 const OVERVIEW_CACHE_TTL_MS = 60_000;
@@ -103,7 +105,15 @@ export function useAdminOverviewData() {
     setError(null);
 
     try {
-      const backendStats: AdminStats = await adminStatsApi.get(period);
+      const [backendStats, bookingConversion, shopsOverview]: [
+        AdminStats,
+        BookingConversionMetrics,
+        ShopsOverviewMetrics,
+      ] = await Promise.all([
+        adminStatsApi.get(period),
+        adminStatsApi.getBookingConversion(),
+        adminStatsApi.getShopsOverview(),
+      ]);
       const totalBookingsCount = backendStats.bookings?.total ?? 0;
       const totalRevenue = backendStats.revenue?.total ?? 0;
       const totalPartners =
@@ -167,6 +177,8 @@ export function useAdminOverviewData() {
         topPartners,
         activities,
         alerts,
+        bookingConversion,
+        shopsOverview,
       };
       overviewCache.set(period, { data: nextData, loadedAt: Date.now() });
       setData(nextData);

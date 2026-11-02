@@ -11,6 +11,7 @@ export interface OverviewKpiCardProps {
   growthType: 'up-green' | 'up-red';
   growthDesc?: string;
   breakdown?: string;
+  hideGrowth?: boolean;
   onClick?: () => void;
 }
 
@@ -24,6 +25,7 @@ export const OverviewKpiCard: React.FC<OverviewKpiCardProps> = ({
   growthType,
   growthDesc = 'so với tháng trước',
   breakdown,
+  hideGrowth = false,
   onClick,
 }) => {
   return (
@@ -46,19 +48,23 @@ export const OverviewKpiCard: React.FC<OverviewKpiCardProps> = ({
 
       <div className="lume-kpi-card__value">{value}</div>
 
-      <div className="lume-kpi-card__footer">
-        <span
-          className={`lume-kpi-card__trend ${
-            growthType === 'up-green'
-              ? 'lume-kpi-card__trend--up-green'
-              : 'lume-kpi-card__trend--up-red'
-          }`}
-        >
-          <ArrowUpRight size={13} strokeWidth={2.5} />
-          {growth.toFixed(1)}%
-        </span>
-        <span className="lume-kpi-card__trend-desc">{growthDesc}</span>
-      </div>
+      {!hideGrowth && (
+        <div className="lume-kpi-card__footer">
+          <span
+            className={`lume-kpi-card__trend ${
+              growthType === 'up-green'
+                ? 'lume-kpi-card__trend--up-green'
+                : 'lume-kpi-card__trend--up-red'
+            }`}
+          >
+            <ArrowUpRight size={13} strokeWidth={2.5} />
+            {growth.toFixed(1)}%
+          </span>
+          <span className="lume-kpi-card__trend-desc">{growthDesc}</span>
+        </div>
+      )}
+
+      {hideGrowth && <span className="lume-kpi-card__trend-desc">{growthDesc}</span>}
 
       {breakdown && (
         <div className="lume-kpi-card__breakdown">{breakdown}</div>

@@ -5,6 +5,7 @@ import {
   CalendarRange,
   DollarSign,
   FileCheck,
+  Package,
   RefreshCw,
   RotateCcw,
   Store,
@@ -14,6 +15,7 @@ import { OverviewKpiCard } from './OverviewKpiCard';
 import { OverviewComboChart } from './OverviewComboChart';
 import { OverviewServiceDonut } from './OverviewServiceDonut';
 import { OverviewActionWidgets } from './OverviewActionWidgets';
+import { OverviewBookingConversion } from './OverviewBookingConversion';
 import './overviewFigmaTheme.css';
 
 export interface OverviewPanelProps {
@@ -159,6 +161,32 @@ export const OverviewPanel: React.FC<OverviewPanelProps> = ({ onNavigateTab }) =
               iconColor="#DC2626"
               onClick={() => onNavigateTab?.('disputes')}
             />
+
+            <OverviewKpiCard
+              label="Cửa hàng hoạt động"
+              value={formatNumber(data.shopsOverview.activeShops)}
+              growth={0}
+              growthType="up-green"
+              growthDesc="shop cho thuê áo dài"
+              hideGrowth
+              icon={Store}
+              iconBg="#ECFDF5"
+              iconColor="#059669"
+              onClick={() => onNavigateTab?.('providers')}
+            />
+
+            <OverviewKpiCard
+              label="Sản phẩm đang đăng"
+              value={formatNumber(data.shopsOverview.listedProducts)}
+              growth={0}
+              growthType="up-green"
+              growthDesc="sản phẩm active"
+              hideGrowth
+              icon={Package}
+              iconBg="#EFF6FF"
+              iconColor="#2563EB"
+              onClick={() => onNavigateTab?.('product-moderation')}
+            />
           </div>
 
           {/* Charts Row: Combo Chart + Donut Chart */}
@@ -176,6 +204,11 @@ export const OverviewPanel: React.FC<OverviewPanelProps> = ({ onNavigateTab }) =
               items={data.services.items}
             />
           </div>
+
+          <OverviewBookingConversion
+            data={data.bookingConversion}
+            formatNumber={formatNumber}
+          />
 
           {/* 4 Action & Alert Widgets */}
           <OverviewActionWidgets
