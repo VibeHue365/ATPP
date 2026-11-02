@@ -61,6 +61,9 @@ describe('PhotographyHoldService.confirmForBooking', () => {
       {} as any,
       inventoryReservationModel as any,
       {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
     );
     return {
       service,
@@ -159,7 +162,10 @@ describe('PhotographyHoldService.confirmForBooking', () => {
       expect.anything(),
     );
   });
-  const reserveComboAoDai = async (activeCampaign: unknown = null) => {
+  const reserveComboAoDai = async (
+    activeCampaign: unknown = null,
+    rental = { from: '2026-07-20', to: '2026-07-21' },
+  ) => {
     const productId = new Types.ObjectId();
     const inventoryId = new Types.ObjectId();
     const product = {
@@ -231,15 +237,15 @@ describe('PhotographyHoldService.confirmForBooking', () => {
         productId: productId.toString(),
         selectedSize: 'm',
         selectedColor: 'red',
-        rentalFrom: '2026-07-20',
-        rentalTo: '2026-07-21',
+        rentalFrom: rental.from,
+        rentalTo: rental.to,
       },
       [
         {
           clientId: 'session-1',
           startsAt: new Date('2026-07-20T03:00:00.000Z'),
           endsAt: new Date('2026-07-20T04:00:00.000Z'),
-          providerLocalDate: '2026-07-20',
+          providerLocalDate: rental.from,
           durationMinutes: 60,
         },
       ],
@@ -270,5 +276,24 @@ describe('PhotographyHoldService.confirmForBooking', () => {
     });
 
     expect(result.unitPrice).toBe(1_100_000);
+  });
+
+  it('accepts an Ao Dai still being cleaned for a later rental day, like regular rentals', async () => {
+    const { inventoryModel } = await reserveComboAoDai(null, {
+      from: '2099-07-20',
+      to: '2099-07-21',
+    });
+
+    expect(inventoryModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({ status: { $ne: 'MAINTENANCE' } }),
+    );
+  });
+
+  it('only accepts AVAILABLE Ao Dai when the rental starts today or earlier', async () => {
+    const { inventoryModel } = await reserveComboAoDai();
+
+    expect(inventoryModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'AVAILABLE' }),
+    );
   });
 });

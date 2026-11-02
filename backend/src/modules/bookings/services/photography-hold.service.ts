@@ -717,12 +717,19 @@ export class PhotographyHoldService {
     }
 
     const quantity = dto.quantity ?? 1;
+    // Same rule as regular rentals and the availability check: an Ao Dai still
+    // being cleaned can be reserved for a later rental day, but not for today.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isTodayOrPast = rentalFrom <= today;
     const inventoryItems = await this.inventoryItemModel
       .find({
         productId: product._id,
         size: selectedSize,
         color: selectedColor,
-        status: InventoryItemStatus.Available,
+        status: isTodayOrPast
+          ? InventoryItemStatus.Available
+          : { $ne: InventoryItemStatus.Maintenance },
         conditionStatus: {
           $nin: [ConditionStatus.Locked, ConditionStatus.Retired],
         },

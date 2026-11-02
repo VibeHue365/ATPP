@@ -19,6 +19,7 @@ import {
 } from '../../features/combos/components/ComboSidebarFilter';
 import { ComboFigmaCard } from '../../features/combos/components/ComboFigmaCard';
 import { calculateComboPricing, resolveImageUrl } from '../../features/combos/mappers/combo.mapper';
+import { heroBudgetRange } from '../../features/combos/mappers/heroBudget';
 import type { FigmaComboItem } from '../../features/combos/types/combo.types';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import './ComboListingPage.css';
@@ -313,13 +314,10 @@ export const ComboListingPage: React.FC = () => {
       params.delete('people');
     }
 
-    if (heroBudget === 'under_2m') {
-      setSidebarFilters((prev) => ({ ...prev, maxPrice: 2000000, presetPrice: 'under_1m' }));
-    } else if (heroBudget === '2m_3m') {
-      setSidebarFilters((prev) => ({ ...prev, minPrice: 2000000, maxPrice: 3000000, presetPrice: '2m_3m' }));
-    } else if (heroBudget === 'above_3m') {
-      setSidebarFilters((prev) => ({ ...prev, minPrice: 3000000, maxPrice: 5000000, presetPrice: 'above_3m' }));
-    }
+    setSidebarFilters((prev) => ({
+      ...prev,
+      ...heroBudgetRange(heroBudget, DEFAULT_SIDEBAR_VALUES.minPrice, DEFAULT_SIDEBAR_VALUES.maxPrice),
+    }));
     setSearchParams(params, { replace: true });
     setCurrentPage(1);
   };
