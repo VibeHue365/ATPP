@@ -1885,5 +1885,160 @@ export class AdminStatsService {
       currentWalletBalance: walletBalance,
     };
   }
+
+  /** VS-109: Top five most booked photoshoot concepts/packages. */
+  async getPopularConcepts(
+    query: {
+      from?: string;
+      to?: string;
+      period?: string;
+      shopId?: string;
+      providerId?: string;
+    },
+    currentUser?: AuthUser,
+  ) {
+    const providerId = await this.resolveProviderId(
+      query.shopId || query.providerId,
+      currentUser,
+    );
+    const { filter: dateFilter, from, to } = this.analyticsDateRange(
+      query.from,
+      query.to,
+      query.period,
+    );
+    const bookingMatch: any = {
+      bookingType: { $in: ['PHOTOGRAPHY', 'COMBO'] },
+      status: { $ne: 'CANCELLED' },
+      ...dateFilter,
+    };
+    if (providerId) bookingMatch.providerIds = providerId;
+
+    const results = await this.bookingModel.aggregate([
+      { $match: bookingMatch },
+      {
+        $lookup: {
+          from: 'booking_items',
+          localField: '_id',
+          foreignField: 'bookingId',
+          as: 'item',
+        },
+      },
+      { $unwind: '$item' },
+      {
+        $match: {
+          'item.photographyPackageId': { $ne: null },
+          ...(providerId ? { 'item.providerId': providerId } : {}),
+        },
+      },
+      {
+        $group: {
+          _id: '$item.photographyPackageId',
+          bookingCount: { $sum: 1 },
+        },
+      },
+      {
+        $facet: {
+          concepts: [
+            { $sort: { bookingCount: -1, _id: 1 } },
+            { $limit: 5 },
+            {
+              $lookup: {
+                from: 'photography_packages',
+                localField: '_id',
+                foreignField: '_id',
+                as: 'concept',
+              },
+            },
+            { $unwind: { path: '$concept', preserveNullAndEmptyArrays: true } },
+          ],
+          totals: [{ $group: { _id: null, count: { $sum: '$bookingCount' } } }],
+        },
+      },
+    ]);
+
+    const result = results[0] || { concepts: [], totals: [] };
+    const totalBookings = result.totals?.[0]?.count ?? 0;
+    const data = (result.concepts || []).map((row: any, index: number) => {
+      const percentage = totalBookings
+        ? Number(((row.bookingCount / totalBookings) * 100).toFixed(1))
+        : 0;
+      return {
+        rank: index + 1,
+        conceptId: row._id?.toString(),
+        name: row.concept?.name || `Concept #${index + 1}`,
+        bookingCount: row.bookingCount,
+        percentage,
+        share: percentage,
+      };
+    });
+
+    return { data, concepts: data, totalBookings, from, to };
+  }
+
+  /** VS-111: completion, cancellation, and dispute rates for all bookings. */
+  async getConversionMetrics(query: { from?: string; to?: string }) {
+    const { filter: dateFilter, from, to } = this.analyticsDateRange(
+      query.from,
+      query.to,
+    );
+    const rows = await this.bookingModel.aggregate<{ _id: string; count: number }>([
+      { $match: dateFilter },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]);
+    const counts = new Map(rows.map((row) => [row._id, row.count]));
+    const totalBookings = rows.reduce((sum, row) => sum + row.count, 0);
+    const completed = counts.get('COMPLETED') ?? 0;
+    const cancelled = counts.get('CANCELLED') ?? 0;
+    const disputed = counts.get('DISPUTED') ?? 0;
+    const rate = (count: number) =>
+      totalBookings ? Number(((count / totalBookings) * 100).toFixed(1)) : 0;
+
+    return {
+      totalBookings,
+      completedBookings: completed,
+      cancelledBookings: cancelled,
+      disputedBookings: disputed,
+      completionRate: rate(completed),
+      cancellationRate: rate(cancelled),
+      disputeRate: rate(disputed),
+      from,
+      to,
+    };
+  }
+
+  /** VS-113: active rental shops and active product listings. */
+  async getShopsOverview() {
+    const [totalShops, totalProducts] = await Promise.all([
+      this.providerModel.countDocuments({
+        status: ProviderStatus.Active,
+        capabilities: ProviderCapability.AoDaiRental,
+      }),
+      this.productModel.countDocuments({ status: 'ACTIVE' } as any),
+    ]);
+    return { totalShops, totalProducts, activeShops: totalShops, listedProducts: totalProducts };
+  }
+
+  private analyticsDateRange(from?: string, to?: string, period?: string) {
+    let start: Date | undefined;
+    let end: Date | undefined;
+    const quarter = period?.toUpperCase().match(/^Q([1-4])\/(\d{4})$/);
+    if (quarter) {
+      const quarterIndex = Number(quarter[1]) - 1;
+      const year = Number(quarter[2]);
+      start = new Date(Date.UTC(year, quarterIndex * 3, 1));
+      end = new Date(Date.UTC(year, quarterIndex * 3 + 3, 1));
+    } else if (from || to) {
+      if (from) start = new Date(`${from}T00:00:00.000Z`);
+      if (to) end = new Date(`${to}T23:59:59.999Z`);
+      if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) {
+        throw new BadRequestException('Invalid analytics date range');
+      }
+    }
+    if (start && end && start >= end) throw new BadRequestException('Invalid analytics date range');
+    const filter = start || end
+      ? { createdAt: { ...(start ? { $gte: start } : {}), ...(end ? { $lt: end } : {}) } }
+      : {};
+    return { filter, from: start?.toISOString() ?? null, to: end?.toISOString() ?? null };
+  }
 }
 

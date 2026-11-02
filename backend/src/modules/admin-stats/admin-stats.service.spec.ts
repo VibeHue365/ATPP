@@ -280,4 +280,68 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
       ).rejects.toThrow('groupBy must be MONTH');
     });
   });
+
+  describe('VS-109: Popular Concept Preference Analytics', () => {
+    it('returns the top five concepts with their booking share for a quarter', async () => {
+      bookingModel.aggregate.mockResolvedValue([
+        {
+          concepts: [
+            { _id: new Types.ObjectId(), bookingCount: 40, concept: { name: 'Hue Royal Concept' } },
+            { _id: new Types.ObjectId(), bookingCount: 20, concept: { name: 'Ao Dai Garden' } },
+          ],
+          totals: [{ count: 100 }],
+        },
+      ]);
+
+      const result = await service.getPopularConcepts(
+        { period: 'Q1/2026' },
+        { sub: 'admin-id', roles: ['ADMIN'] } as any,
+      );
+
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0]).toMatchObject({ name: 'Hue Royal Concept', bookingCount: 40, percentage: 40 });
+      expect(result.totalBookings).toBe(100);
+    });
+  });
+
+  describe('VS-111: Booking Conversion & Cancellation Rate Analytics', () => {
+    it('returns completion, cancellation, and dispute rates', async () => {
+      bookingModel.aggregate.mockResolvedValue([
+        { _id: 'COMPLETED', count: 80 },
+        { _id: 'CANCELLED', count: 15 },
+        { _id: 'DISPUTED', count: 5 },
+      ]);
+
+      await expect(service.getConversionMetrics({})).resolves.toMatchObject({
+        totalBookings: 100,
+        completionRate: 80,
+        cancellationRate: 15,
+        disputeRate: 5,
+      });
+    });
+
+    it('returns zero rates with no bookings', async () => {
+      bookingModel.aggregate.mockResolvedValue([]);
+      await expect(service.getConversionMetrics({})).resolves.toMatchObject({
+        totalBookings: 0,
+        completionRate: 0,
+        cancellationRate: 0,
+        disputeRate: 0,
+      });
+    });
+  });
+
+  describe('VS-113: Active Stores & Listed Products Overview', () => {
+    it('returns active rental shops and active product counts', async () => {
+      providerModel.countDocuments.mockResolvedValue(30);
+      productModel.countDocuments.mockResolvedValue(450);
+
+      await expect(service.getShopsOverview()).resolves.toEqual({
+        totalShops: 30,
+        totalProducts: 450,
+        activeShops: 30,
+        listedProducts: 450,
+      });
+    });
+  });
 });

@@ -75,6 +75,40 @@ export class AdminStatsController {
     );
   }
 
+  @Get('popular-concepts')
+  @Roles('ADMIN', 'PROVIDER', 'SHOP')
+  @Permissions()
+  async getPopularConcepts(
+    @CurrentUser() user: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('period') period?: string,
+    @Query('shopId') shopId?: string,
+    @Query('providerId') providerId?: string,
+  ) {
+    return this.adminStatsService.getPopularConcepts(
+      { from, to, period, shopId, providerId },
+      user,
+    );
+  }
+
+  @Get('booking-conversion')
+  @Roles('ADMIN')
+  @Permissions()
+  async getConversionMetrics(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.adminStatsService.getConversionMetrics({ from, to });
+  }
+
+  @Get('shops-overview')
+  @Roles('ADMIN')
+  @Permissions()
+  async getShopsOverview() {
+    return this.adminStatsService.getShopsOverview();
+  }
+
   @Get()
   @Roles('ADMIN')
   @Permissions('dashboard:read')
