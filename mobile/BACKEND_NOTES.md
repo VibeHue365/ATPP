@@ -19,9 +19,9 @@ Code mobile không được phép chỉnh sửa backend. Mọi vấn đề bị 
 
 ## Mã khuyến mãi trong checkout kết hợp
 
-- Trạng thái: tạm hoãn; mobile khóa trường nhập mã ưu đãi khi checkout có gói chụp ảnh.
-- `CreatePhotographyComboHoldDto` không chấp nhận `promoCode`, trong khi thiết kế checkout có trường mã ưu đãi cho đơn kết hợp gói chụp ảnh và áo dài.
-- Cần xác nhận bên nào chịu trách nhiệm sở hữu và tính toán giảm giá trước khi thay đổi hợp đồng backend.
+- Trạng thái: **đã hỗ trợ (2026-11-02)**. `CreatePhotographyComboHoldDto` kế thừa `promoCode` từ `CreatePhotographyHoldDto`, backend kiểm tra và tính giảm khi giữ lịch, giống web giỏ hàng.
+- Mobile kiểm tra mã qua `POST /promotions/applicable` (cùng endpoint, cùng quy tắc `bookingType` AODAI_RENTAL/PHOTOGRAPHY/COMBO như web), hiển thị số tiền giảm do backend tính và lý do từ chối của backend; gửi `promoCode` khi tạo hold chụp ảnh/combo.
+
 
 ## Giá combo promotion chưa được nối với combo hold
 
@@ -32,16 +32,14 @@ Code mobile không được phép chỉnh sửa backend. Mọi vấn đề bị 
 
 ## Lịch sử đánh giá của khách hàng
 
-- Trạng thái: tạm hoãn; mobile hiện suy ra trạng thái chờ đánh giá/đã đánh giá từ các dịch vụ trong đơn hàng đã hoàn tất.
-- Backend cho phép tạo đánh giá và truy vấn đánh giá theo provider hoặc dịch vụ, nhưng chưa có endpoint dành cho khách hàng để lấy danh sách đánh giá do chính tài khoản đang đăng nhập gửi, kèm thông tin đơn hàng và dịch vụ.
-- Cần bổ sung endpoint chỉ đọc dành cho lịch sử đánh giá của khách hàng trước khi bật đầy đủ kho lưu trữ **Đã đánh giá** và chức năng chỉnh sửa đánh giá.
+- Trạng thái: **bỏ khỏi mobile (2026-11-02)**. Web không có trang lịch sử đánh giá; khách chỉ gửi đánh giá cho dịch vụ đã hoàn tất. Mobile bỏ tab **Đã đánh giá**, màn hình **Đánh giá của tôi** chỉ còn danh sách dịch vụ chờ đánh giá.
+
 
 ## Khiếu nại buổi chụp của khách hàng
 
-- Trạng thái: tạm hoãn; không gọi endpoint sai quyền từ mobile.
-- Frontend web gửi `PATCH /bookings/:id/status` với trạng thái `DISPUTED`, ghi chú và ảnh bằng chứng.
-- Backend hiện kiểm tra endpoint cập nhật trạng thái và chỉ cho provider của booking hoặc admin thực hiện; customer sẽ nhận lỗi `403`.
-- Cần tạo endpoint customer riêng cho khiếu nại buổi chụp, hoặc cho phép customer chuyển đúng các trạng thái photography hợp lệ sang `DISPUTED` với kiểm tra thời gian/quyền sở hữu booking.
+- Trạng thái: **không làm trên mobile (2026-11-02)**. Web phía khách hiện không có chức năng khiếu nại buổi chụp; khiếu nại của khách trên web là "Từ chối đền bù / Khiếu nại lên Admin" khi shop báo sự cố (`/api/disputes/incidents/:id/disagree`), mobile đã có.
+- Ghi nhận: backend hiện đã cho khách chuyển đơn sang `DISPUTED` qua `PATCH /bookings/:id/status` (kiểm tra "thợ không đến" dựa vào nội dung ghi chú), nhưng chưa có giao diện web dùng.
+
 
 ## Phân trang dữ liệu tài khoản
 

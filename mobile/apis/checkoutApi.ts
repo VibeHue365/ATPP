@@ -19,10 +19,11 @@ export const checkoutApi = {
     serviceFee: 0,
     promoCode: promoCode || undefined,
   }),
-  createPhotographyHold: (photo: CartItem, rentals: CartItem[]) => {
+  createPhotographyHold: (photo: CartItem, rentals: CartItem[], promoCode?: string) => {
     const [startTime, endTime] = (photo.shootTimeSlot ?? '').split('-').map(value => value.trim());
     const payload = {
       packageId: photo.photographyPackageId,
+      promoCode: promoCode || undefined,
       sessions: [{
         clientId: photo.id,
         startsAt: `${photo.shootDate}T${startTime}:00+07:00`,
