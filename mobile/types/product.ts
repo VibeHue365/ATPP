@@ -1,3 +1,8 @@
+import type { PricingCampaign } from '@/utils/campaignPricing';
+
+/** Chiến dịch giá đang chạy của shop (giảm giá hoặc phụ thu), áp theo ngày thuê. */
+export type ProductCampaign = PricingCampaign & { occasion: string };
+
 export interface ProductProvider {
   _id: string;
   businessName: string;
@@ -42,7 +47,7 @@ export interface Product {
   providerId?: ProductProvider | string;
   badges?: ProductBadge[];
   customTags?: ProductCustomTag[];
-  activeCampaign?: { occasion: string; discountPercent: number; endDate?: string } | null;
+  activeCampaign?: ProductCampaign | null;
   recommendation?: { score: number; matchPercent: number; reasons: string[] };
 }
 

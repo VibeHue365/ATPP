@@ -1,4 +1,4 @@
-import type { Product } from '@/types/product';
+import type { Product, ProductCampaign } from '@/types/product';
 
 export interface ProviderStore {
   _id: string;
@@ -12,7 +12,7 @@ export interface ProviderStore {
   policies?: { cancellationPolicy?: string; rentalPolicy?: string };
   rentalSettings?: { pickupLocation?: { addressLine?: string; ward?: string; district?: string; city?: string } };
   comboDiscountPercent?: number;
-  activeCampaign?: { occasion: string; discountPercent: number; endDate: string } | null;
+  activeCampaign?: ProductCampaign | null;
 }
 
 export interface ProviderStoreData { store: ProviderStore; products: Product[] }
