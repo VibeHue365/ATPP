@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -1746,6 +1746,143 @@ export class AdminStatsService {
       cleaning,
       maintenance,
       damaged,
+    };
+  }
+
+  /**
+   * VS-106: UC-K08 Revenue Growth Trends & Wallet Balance Analytics.
+   * Returns twelve calendar months with month-over-month growth.  Provider
+   * callers only see payments and wallet data for their own shop.
+   */
+  async getRevenueTrends(
+    query: { groupBy?: string; shopId?: string; providerId?: string },
+    currentUser?: AuthUser,
+  ) {
+    const groupBy = (query.groupBy || 'MONTH').toUpperCase();
+    if (groupBy !== 'MONTH') {
+      throw new BadRequestException('groupBy must be MONTH');
+    }
+
+    const providerId = await this.resolveProviderId(
+      query.shopId || query.providerId,
+      currentUser,
+    );
+    const now = new Date();
+    const firstMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1),
+    );
+    const nextMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+    );
+
+    const paymentMatch: any = {
+      status: { $in: [PaymentStatus.Success, 'SUCCESS', 'PAID'] },
+      purpose: {
+        $in: [
+          PaymentPurpose.DepositPayment,
+          PaymentPurpose.RemainingPayment,
+          PaymentPurpose.FullPayment,
+        ],
+      },
+      createdAt: { $gte: firstMonth, $lt: nextMonth },
+    };
+
+    const pipeline: any[] = [{ $match: paymentMatch }];
+    if (providerId) {
+      pipeline.push(
+        {
+          $lookup: {
+            from: 'bookings',
+            localField: 'bookingId',
+            foreignField: '_id',
+            as: 'booking',
+          },
+        },
+        { $unwind: '$booking' },
+        { $match: { 'booking.providerIds': providerId } },
+      );
+    }
+    pipeline.push(
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m',
+              date: '$createdAt',
+              timezone: 'Asia/Ho_Chi_Minh',
+            },
+          },
+          revenue: { $sum: '$amount' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    );
+
+    const rows = await this.paymentModel.aggregate<{ _id: string; revenue: number }>(
+      pipeline,
+    );
+    const revenueByMonth = new Map(rows.map((row) => [row._id, row.revenue]));
+    const trends: Array<{
+      month: string;
+      label: string;
+      revenue: number;
+      growthRate: number;
+      momGrowth: number;
+    }> = [];
+
+    let previousRevenue: number | null = null;
+    for (let offset = 0; offset < 12; offset += 1) {
+      const monthDate = new Date(
+        Date.UTC(firstMonth.getUTCFullYear(), firstMonth.getUTCMonth() + offset, 1),
+      );
+      const month = `${monthDate.getUTCFullYear()}-${String(
+        monthDate.getUTCMonth() + 1,
+      ).padStart(2, '0')}`;
+      const revenue = revenueByMonth.get(month) ?? 0;
+      const growthRate =
+        previousRevenue === null || previousRevenue === 0
+          ? revenue > 0 && previousRevenue === 0
+            ? 100
+            : 0
+          : Number((((revenue - previousRevenue) / previousRevenue) * 100).toFixed(1));
+      trends.push({
+        month,
+        label: `T${monthDate.getUTCMonth() + 1}/${monthDate.getUTCFullYear()}`,
+        revenue,
+        growthRate,
+        momGrowth: growthRate,
+      });
+      previousRevenue = revenue;
+    }
+
+    let walletBalance = 0;
+    if (providerId) {
+      const provider = await this.providerModel
+        .findById(providerId)
+        .select('+wallet')
+        .lean();
+      walletBalance =
+        (provider as any)?.wallet?.availableBalance ??
+        (provider as any)?.wallet?.totalEarned ??
+        0;
+    } else {
+      const walletRows = await this.providerModel.aggregate<{ total: number }>([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $ifNull: ['$wallet.availableBalance', 0] } },
+          },
+        },
+      ]);
+      walletBalance = walletRows[0]?.total ?? 0;
+    }
+
+    return {
+      groupBy,
+      trends,
+      data: trends,
+      walletBalance,
+      currentWalletBalance: walletBalance,
     };
   }
 }

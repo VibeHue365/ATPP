@@ -60,6 +60,21 @@ export class AdminStatsController {
     );
   }
 
+  @Get('revenue-trends')
+  @Roles('ADMIN', 'PROVIDER', 'SHOP')
+  @Permissions()
+  async getRevenueTrends(
+    @CurrentUser() user: AuthUser,
+    @Query('groupBy') groupBy?: string,
+    @Query('shopId') shopId?: string,
+    @Query('providerId') providerId?: string,
+  ) {
+    return this.adminStatsService.getRevenueTrends(
+      { groupBy, shopId, providerId },
+      user,
+    );
+  }
+
   @Get()
   @Roles('ADMIN')
   @Permissions('dashboard:read')

@@ -245,4 +245,39 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
       expect(cleaningInBreakdown).toMatchObject({ count: 2, percentage: 10 });
     });
   });
+
+  describe('VS-106: UC-K08 Revenue Growth Trends & Wallet Balance', () => {
+    it('returns twelve months with month-over-month growth and wallet balance', async () => {
+      const providerId = new Types.ObjectId();
+      paymentModel.aggregate.mockResolvedValue([
+        { _id: '2026-01', revenue: 1000000 },
+        { _id: '2026-02', revenue: 1500000 },
+      ]);
+      providerModel.findById.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue({
+            wallet: { availableBalance: 450000 },
+          }),
+        }),
+      });
+
+      const result = await service.getRevenueTrends(
+        { groupBy: 'MONTH', providerId: providerId.toString() },
+        { sub: 'admin-id', roles: ['ADMIN'] } as any,
+      );
+
+      expect(result.groupBy).toBe('MONTH');
+      expect(result.trends).toHaveLength(12);
+      expect(result.walletBalance).toBe(450000);
+    });
+
+    it('rejects unsupported groupBy values', async () => {
+      await expect(
+        service.getRevenueTrends(
+          { groupBy: 'INVALID' },
+          { sub: 'admin-id', roles: ['ADMIN'] } as any,
+        ),
+      ).rejects.toThrow('groupBy must be MONTH');
+    });
+  });
 });
