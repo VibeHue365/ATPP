@@ -7,7 +7,8 @@ from chatbot.normalization import extract_age_and_range, extract_gender
 from tagging.schemas import TaggingRequest, TaggingResponse
 from tagging.tagging_engine import suggest_tags
 from vision.clip_engine import InvalidImageError
-from vision.schemas import VisualMatch, VisualMatchRequest
+from vision.product_draft import draft_from_photos
+from vision.schemas import ProductDraftRequest, ProductDraftResponse, VisualMatch, VisualMatchRequest
 from vision.visual_search import match_products, start_warm_up
 
 app    = FastAPI(title="AI Style Matching", version="2.0")
@@ -38,6 +39,15 @@ async def suggest_smart_tags(request: TaggingRequest):
 def visual_search_match(request: VisualMatchRequest):
     try:
         return match_products(request)
+    except InvalidImageError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+# UC-C10: suggest a name and description from the provider's photos (same local CLIP).
+@app.post("/vision/describe-product", response_model=ProductDraftResponse)
+def describe_product_photos(request: ProductDraftRequest):
+    try:
+        return draft_from_photos(request)
     except InvalidImageError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 

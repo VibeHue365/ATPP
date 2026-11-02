@@ -23,6 +23,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { SmartTagEditor } from '../../smart-tagging/components/SmartTagEditor';
+import { ProductDraftSuggestion } from './ProductDraftSuggestion';
 import { productsApi } from '../api/providerDashboardApi';
 import {
   colorLabels,
@@ -380,6 +381,26 @@ export function ProductWizardModal({
     }
   };
 
+  // Add missing size × colour × material combinations for newly selected colours.
+  const addVariantRowsForColors = (cols: string[]) => {
+    if (prodSizes.length === 0) return;
+    const mats = prodMaterials.length > 0 ? prodMaterials : ['SILK'];
+    const newRows: VariantRow[] = [];
+    for (const col of cols) {
+      for (const s of prodSizes) {
+        for (const m of mats) {
+          const exists = variants.some((v) => v.size === s && v.color === col && v.material === m);
+          if (!exists) {
+            newRows.push({ size: s, color: col, material: m, quantity: 1, condition: 'GOOD' });
+          }
+        }
+      }
+    }
+    if (newRows.length > 0) {
+      setVariants((prev) => [...prev, ...newRows]);
+    }
+  };
+
   const handleToggleColor = (col: string) => {
     const isRemoving = prodColors.includes(col);
     const updated = isRemoving
@@ -390,22 +411,18 @@ export function ProductWizardModal({
     if (isRemoving) {
       // Remove only variants that match the deselected color
       setVariants((prev) => prev.filter((v) => v.color !== col));
-    } else if (prodSizes.length > 0) {
-      // Add missing combinations for newly selected color
-      const mats = prodMaterials.length > 0 ? prodMaterials : ['SILK'];
-      const newRows: VariantRow[] = [];
-      for (const s of prodSizes) {
-        for (const m of mats) {
-          const exists = variants.some((v) => v.size === s && v.color === col && v.material === m);
-          if (!exists) {
-            newRows.push({ size: s, color: col, material: m, quantity: 1, condition: 'GOOD' });
-          }
-        }
-      }
-      if (newRows.length > 0) {
-        setVariants((prev) => [...prev, ...newRows]);
-      }
+    } else {
+      addVariantRowsForColors([col]);
     }
+  };
+
+  // UC-C10: select the colours suggested from the photos in a single update
+  // (toggling them one by one would each read the same stale prodColors).
+  const handleAddColors = (cols: string[]) => {
+    const toAdd = cols.filter((col) => !prodColors.includes(col));
+    if (toAdd.length === 0) return;
+    setProdColors([...prodColors, ...toAdd]);
+    addVariantRowsForColors(toAdd);
   };
 
   const handleToggleMaterial = (mat: string) => {
@@ -913,6 +930,16 @@ export function ProductWizardModal({
                       </button>
                     )}
                   </div>
+
+                  <ProductDraftSuggestion
+                    imageUrls={prodImages}
+                    disabled={uploadingImages}
+                    colorOptions={ALL_COLORS}
+                    selectedColors={prodColors}
+                    onApplyName={setProdName}
+                    onApplyDescription={(text) => setProdDescription(text.slice(0, 1000))}
+                    onSelectColors={handleAddColors}
+                  />
                 </div>
               </div>
 

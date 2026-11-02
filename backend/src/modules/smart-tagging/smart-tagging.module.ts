@@ -10,6 +10,7 @@ import {
 import { ProviderSmartTagsController } from './controllers/provider-smart-tags.controller';
 import { ProviderPortfolioSmartTagsController } from './controllers/provider-portfolio-smart-tags.controller';
 import { AdminSmartTagsController } from './controllers/admin-smart-tags.controller';
+import { ProviderProductDraftController } from './controllers/provider-product-draft.controller';
 import {
   SmartTagAssignment,
   SmartTagAssignmentSchema,
@@ -32,6 +33,7 @@ import {
 } from './schemas/smart-tag-taxonomy-metadata.schema';
 import { RuleBasedTaggingService } from './services/rule-based-tagging.service';
 import { AiTaggingClientService } from './services/ai-tagging-client.service';
+import { ProductDraftClientService } from './services/product-draft-client.service';
 import { SmartTagPublicProjectionService } from './services/smart-tag-public-projection.service';
 import { SmartTagTaxonomyService } from './services/smart-tag-taxonomy.service';
 import { SmartTaggingService } from './services/smart-tagging.service';
@@ -56,10 +58,12 @@ export const smartTaggingModels = MongooseModule.forFeature([
     ProviderSmartTagsController,
     ProviderPortfolioSmartTagsController,
     AdminSmartTagsController,
+    ProviderProductDraftController,
   ],
   providers: [
     RuleBasedTaggingService,
     AiTaggingClientService,
+    ProductDraftClientService,
     SmartTagTaxonomyService,
     SmartTaggingService,
     SmartTagPublicProjectionService,

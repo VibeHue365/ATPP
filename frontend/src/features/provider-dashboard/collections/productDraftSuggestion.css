@@ -1,0 +1,192 @@
+/* UC-C10 suggestion panel in wizard step 1 (colours follow productWizardFigma.css). */
+.pdraft {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px dashed #e7c6cd;
+  border-radius: 12px;
+  background: #fdf7f8;
+}
+
+.pdraft-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.pdraft-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 999px;
+  background: #881337;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.pdraft-trigger:hover:not(:disabled) {
+  background: #9f1239;
+}
+
+.pdraft-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pdraft-hint {
+  flex: 1;
+  min-width: 200px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.pdraft-spin {
+  animation: pdraft-spin 1s linear infinite;
+}
+
+@keyframes pdraft-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pdraft-message {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff;
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.pdraft-message.is-error {
+  background: #fff0f1;
+  color: #be123c;
+}
+
+.pdraft-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.pdraft-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pdraft-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f3e7e9;
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.pdraft-chip strong {
+  color: #881337;
+}
+
+.pdraft-chip small {
+  color: #9ca3af;
+  font-size: 10px;
+}
+
+.pdraft-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f1e4e7;
+}
+
+.pdraft-row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.pdraft-label {
+  display: block;
+  margin-bottom: 3px;
+  color: #9ca3af;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pdraft-value {
+  margin: 0;
+  color: #1f2937;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.pdraft-apply {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid #881337;
+  border-radius: 8px;
+  background: #fff;
+  color: #881337;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pdraft-apply:hover:not(:disabled) {
+  background: #881337;
+  color: #fff;
+}
+
+.pdraft-apply:disabled {
+  border-color: #d1d5db;
+  color: #6b7280;
+  cursor: default;
+}
+
+.pdraft-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pdraft-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1f2937;
+  font-size: 13px;
+}
+
+.pdraft-color i {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+}
+
+@media (max-width: 640px) {
+  .pdraft-row {
+    flex-direction: column;
+  }
+}

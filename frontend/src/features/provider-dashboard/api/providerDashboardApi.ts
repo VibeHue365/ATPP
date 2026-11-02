@@ -97,6 +97,10 @@ export const productsApi = {
   create<T = unknown>(...args: Tail<Parameters<typeof httpClient.post<T>>>) {
     return httpClient.post<T>(`/products`, ...args);
   },
+  /** UC-C10: name/description/colour suggestion from uploaded photos (local AI). */
+  draftFromPhotos<T = unknown>(...args: Tail<Parameters<typeof httpClient.post<T>>>) {
+    return httpClient.post<T>(`/provider/products/ai-draft`, ...args);
+  },
   getPriceHistory<T = unknown>(productId: string, page = 1, limit = 10, ...args: Tail<Parameters<typeof httpClient.get<T>>>) {
     return httpClient.get<T>(`/products/my-listings/${productId}/price-history?page=${page}&limit=${limit}`, ...args);
   },
