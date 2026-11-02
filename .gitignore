@@ -18,6 +18,8 @@ frontend/dist/
 .coverage
 coverage.xml
 htmlcov/
+# AI service model downloads and visual search index cache
+ai-service/model-cache/
 
 # Runtime uploads
 backend/uploads/

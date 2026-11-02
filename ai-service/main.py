@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from db.connection import db, products_col
@@ -6,6 +6,9 @@ from chatbot.chatbot_engine import ChatbotEngine
 from chatbot.normalization import extract_age_and_range, extract_gender
 from tagging.schemas import TaggingRequest, TaggingResponse
 from tagging.tagging_engine import suggest_tags
+from vision.clip_engine import InvalidImageError
+from vision.schemas import VisualMatch, VisualMatchRequest
+from vision.visual_search import match_products, start_warm_up
 
 app    = FastAPI(title="AI Style Matching", version="2.0")
 chatbot = ChatbotEngine()
@@ -27,6 +30,19 @@ class ImageChatRequest(BaseModel):
 @app.post("/tagging/suggest", response_model=TaggingResponse)
 async def suggest_smart_tags(request: TaggingRequest):
     return suggest_tags(request)
+
+
+# Plain `def`: FastAPI runs it in a worker thread, so CLIP's CPU work does not
+# block the chatbot and tagging requests on the event loop.
+@app.post("/visual-search/match", response_model=list[VisualMatch])
+def visual_search_match(request: VisualMatchRequest):
+    try:
+        return match_products(request)
+    except InvalidImageError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+start_warm_up()
 
 
 async def _get_product_context(limit: int = 10) -> str:

@@ -54,6 +54,9 @@ services:
       - ./ai-service/.env
     ports:
       - "8000:8000"
+    # Lets visual search reach the backend on the host (needed on Linux; built in on Windows/macOS).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=2)"]
       interval: 10s
