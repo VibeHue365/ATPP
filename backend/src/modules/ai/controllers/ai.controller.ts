@@ -78,14 +78,8 @@ export class AiController {
     return this.aiService.contextRecommend(body);
   }
 
-  @Post('visual-search/match')
-  async visualMatch(
-    @CurrentUser() user: AuthUser,
-    @Body() body: any,
-  ): Promise<any> {
-    await this.rateLimitService.assertRateLimit(`ai_match_${user.sub}`, 20, 60);
-    return this.aiService.visualMatch(body);
-  }
+  // POST visual-search/match lives in VisualSearchController: it is open to guests,
+  // which this controller's class-level JwtAuthGuard cannot allow.
 
   @Post('culling/analyze-photos')
   @UseGuards(RolesGuard)

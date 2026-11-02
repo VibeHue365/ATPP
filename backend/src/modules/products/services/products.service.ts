@@ -176,6 +176,7 @@ export class ProductsService implements OnModuleInit {
       providerId?: string;
       providerLocation?: string;
       productTypes?: string[];
+      ids?: string[];
     },
     page: number,
     limit: number,

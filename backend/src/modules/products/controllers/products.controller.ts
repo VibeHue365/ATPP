@@ -53,6 +53,7 @@ export class ProductsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('sort') sort?: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc',
+    @Query('ids') ids?: string,
   ): Promise<any> {
     const options = {
       search,
@@ -68,8 +69,9 @@ export class ProductsController {
       providerId,
       providerLocation,
       productTypes: types?.split(',').map((type) => type.trim()).filter(Boolean),
+      ids: ids?.split(',').map((id) => id.trim()).filter(Boolean),
     };
-    if (page || limit) {
+    if (page || limit || ids) {
       const parsedPage = Math.max(1, Number.parseInt(page ?? '1', 10) || 1);
       const parsedLimit = Math.min(24, Math.max(1, Number.parseInt(limit ?? '12', 10) || 12));
       return this.productsService.getActiveProductsPage(options, parsedPage, parsedLimit, sort);

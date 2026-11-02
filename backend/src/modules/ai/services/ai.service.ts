@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+const VISUAL_MATCH_TIMEOUT_MS = 15_000;
+
 export interface ChatResponse {
   question: string;
   answer: string;
@@ -177,6 +179,8 @@ export class AiService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        // The AI service warms CLIP up at start; a hung call must not hold the request.
+        signal: AbortSignal.timeout(VISUAL_MATCH_TIMEOUT_MS),
       });
       if (!response.ok) throw new Error(`Visual Match returned ${response.status}`);
       return await response.json();

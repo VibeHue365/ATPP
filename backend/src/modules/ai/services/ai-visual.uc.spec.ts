@@ -6,6 +6,7 @@ import {
   AiController,
   ChatWithImageRequestDto,
 } from '../controllers/ai.controller';
+import { VisualSearchController } from '../controllers/visual-search.controller';
 import { AiService } from './ai.service';
 
 function createService(url?: string) {
@@ -39,6 +40,20 @@ function createController(
     service,
     rateLimit,
   };
+}
+
+function createVisualSearchController(
+  service = createService(),
+  rateLimit = jest.fn().mockResolvedValue(undefined),
+  products: any[] = [],
+) {
+  return new VisualSearchController(
+    service,
+    { assertRateLimit: rateLimit, ipKey: (ip?: string) => ip || 'unknown-ip' } as any,
+    {
+      getActiveProductsPage: jest.fn().mockResolvedValue({ data: products }),
+    } as any,
+  );
 }
 
 const user = { sub: 'customer-1', roles: ['CUSTOMER'] } as any;
@@ -129,7 +144,8 @@ describe('UC-30 Visual Search (DatTT)', () => {
     const limited = jest
       .fn()
       .mockRejectedValue(new HttpException('Too many requests', 429));
-    const { controller, service } = createController(createService(), limited);
+    const service = createService();
+    const controller = createVisualSearchController(service, limited);
     const match = jest.spyOn(service, 'visualMatch');
 
     await expect(controller.visualMatch(user, image)).rejects.toMatchObject({
@@ -139,19 +155,15 @@ describe('UC-30 Visual Search (DatTT)', () => {
     expect(match).not.toHaveBeenCalled();
   });
 
-  // Known defect UT-DEF-30-01: the visual match endpoint accepts any body and forwards a request without an image.
-  it.failing(
-    'UT-30 UTCID11 rejects a visual search request without an image',
-    async () => {
-      const fetchMock = respond([]);
+  // UT-DEF-30-01 (fixed): a request without an image used to be forwarded to the AI service.
+  it('UT-30 UTCID11 rejects a visual search request without an image', async () => {
+    const fetchMock = respond([]);
 
-      await createController()
-        .controller.visualMatch(user, {})
-        .catch(() => undefined);
-
-      expect(fetchMock).not.toHaveBeenCalled();
-    },
-  );
+    await expect(
+      createVisualSearchController().visualMatch(user, {} as any),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('UC-31 AI Context Recommendation (DatTT)', () => {

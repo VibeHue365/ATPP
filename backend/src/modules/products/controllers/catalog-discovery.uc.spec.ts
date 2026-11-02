@@ -1,4 +1,5 @@
 import { AiController } from '../../ai/controllers/ai.controller';
+import { VisualSearchController } from '../../ai/controllers/visual-search.controller';
 import { PhotographersController } from '../../photographers/controllers/photographers.controller';
 import { ProductsController } from './products.controller';
 import { ComboPromotionController } from './combo-promotion.controller';
@@ -65,7 +66,9 @@ describe('Catalog, discovery and AI direct use-case contracts', () => {
 
   it('UC-30 submits an image to the visual-match service', async () => {
     const service = { visualMatch: jest.fn().mockResolvedValue([{ productId: 'product-1', score: 0.91 }]) };
-    const { controller, rateLimit } = aiController(service);
+    const rateLimit = { assertRateLimit: jest.fn().mockResolvedValue(undefined), ipKey: jest.fn() };
+    const products = { getActiveProductsPage: jest.fn().mockResolvedValue({ data: [{ _id: 'product-1' }] }) };
+    const controller = new VisualSearchController(service as any, rateLimit as any, products as any);
     const payload = { image_base64: 'base64-image', mime_type: 'image/jpeg' };
     await controller.visualMatch(customer, payload);
     expect(rateLimit.assertRateLimit).toHaveBeenCalledWith('ai_match_customer-1', 20, 60);

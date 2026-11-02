@@ -82,7 +82,7 @@ export class ProductsRepository {
       search?: string; minPrice?: number; maxPrice?: number; minRating?: number;
       colors?: string[]; sizes?: string[]; materials?: string[]; categoryId?: string;
       styleCategoryIds?: string[]; eventCategoryIds?: string[]; providerId?: string;
-      providerLocation?: string; productTypes?: string[];
+      providerLocation?: string; productTypes?: string[]; ids?: string[];
     },
     page: number,
     limit: number,
@@ -94,6 +94,8 @@ export class ProductsRepository {
       moderationStatus: ProductModerationStatus.Approved,
       providerId: { $in: activeProviderIds },
     };
+    // Visual search (VIB-93) looks products up by id; non-public ids simply drop out.
+    if (options.ids) query._id = { $in: options.ids.filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id)) };
     if (options.providerId && Types.ObjectId.isValid(options.providerId)) query.providerId = new Types.ObjectId(options.providerId);
     if (options.categoryId && Types.ObjectId.isValid(options.categoryId)) query.categoryId = new Types.ObjectId(options.categoryId);
     if (options.providerLocation?.trim()) {
