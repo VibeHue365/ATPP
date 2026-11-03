@@ -29,9 +29,10 @@ export class AdminStatsController {
     @CurrentUser() user: AuthUser,
     @Query('page') page = 1,
     @Query('limit') limit = 10,
+    @Query('search') search?: string,
   ) {
     this.checkAdminRole(user);
-    return this.adminStatsService.getAllCustomers(+page, +limit);
+    return this.adminStatsService.getAllCustomers(+page, +limit, search);
   }
 
   @Get('providers')
@@ -39,9 +40,10 @@ export class AdminStatsController {
     @CurrentUser() user: AuthUser,
     @Query('page') page = 1,
     @Query('limit') limit = 10,
+    @Query('search') search?: string,
   ) {
     this.checkAdminRole(user);
-    return this.adminStatsService.getAllProviders(+page, +limit);
+    return this.adminStatsService.getAllProviders(+page, +limit, search);
   }
 
   @Get('bookings')
@@ -77,6 +79,15 @@ export class AdminStatsController {
   ) {
     this.checkAdminRole(user);
     return this.adminStatsService.getAllTransactions(+page, +limit);
+  }
+
+  @Get('customers/:id/detail')
+  async getCustomerDetail(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    this.checkAdminRole(user);
+    return this.adminStatsService.getCustomerDetail(id);
   }
 
   @Patch('customers/:id/ban')

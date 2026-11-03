@@ -1,3 +1,4 @@
+import { createSafeRegex } from '../../../common/utils/regex.util';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
@@ -269,16 +270,16 @@ export class InventoryService {
     }
 
     if (search) {
-      const escaped = search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      const searchRegex = new RegExp(escaped, 'i');
+      const searchRegex = createSafeRegex(search);
+      if (searchRegex) {
+        const matchingProducts = products.filter((p) => searchRegex.test(p.name));
+        const matchingProductIds = matchingProducts.map((p) => p._id);
 
-      const matchingProducts = products.filter((p) => searchRegex.test(p.name));
-      const matchingProductIds = matchingProducts.map((p) => p._id);
-
-      filter.$or = [
-        { sku: { $regex: searchRegex } },
-        { productId: { $in: matchingProductIds } },
-      ];
+        filter.$or = [
+          { sku: { $regex: searchRegex } },
+          { productId: { $in: matchingProductIds } },
+        ];
+      }
     }
 
     const total = await this.inventoryItemModel.countDocuments(filter);

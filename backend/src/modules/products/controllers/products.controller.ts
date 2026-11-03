@@ -25,6 +25,7 @@ import { UpdateProductDto } from '../dto/update-product.dto';
 import { PublicMediaService } from '../../storage/services/public-media.service';
 import { ProductAvailabilityService } from '../services/product-availability.service';
 import { PersonalizedProductRecommendationService } from '../services/personalized-product-recommendation.service';
+import { AnalyticsService } from '../../analytics/services/analytics.service';
 
 @Controller(['products', 'api/products'])
 export class ProductsController {
@@ -33,6 +34,7 @@ export class ProductsController {
     private readonly publicMedia: PublicMediaService,
     private readonly availabilityService: ProductAvailabilityService,
     private readonly recommendationService: PersonalizedProductRecommendationService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   @Get()
@@ -50,6 +52,9 @@ export class ProductsController {
     @Query('providerId') providerId?: string,
     @Query('providerLocation') providerLocation?: string,
     @Query('types') types?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('rentalType') rentalType?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('sort') sort?: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc',
@@ -68,7 +73,13 @@ export class ProductsController {
       providerId,
       providerLocation,
       productTypes: types?.split(',').map((type) => type.trim()).filter(Boolean),
+      startDate,
+      endDate,
+      rentalType,
     };
+    if (search && search.trim().length >= 2) {
+      this.analyticsService.trackSearch(search.trim()).catch(() => {});
+    }
     if (page || limit) {
       const parsedPage = Math.max(1, Number.parseInt(page ?? '1', 10) || 1);
       const parsedLimit = Math.min(24, Math.max(1, Number.parseInt(limit ?? '12', 10) || 12));

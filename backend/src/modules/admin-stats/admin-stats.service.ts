@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -18,6 +18,7 @@ import { Dispute, DisputeDocument, DisputeStatus } from '../disputes/schemas/dis
 import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
 import { ProductModerationStatus } from '../products/schemas/product.schema';
 import { ComboPromotion, ComboPromotionDocument, ComboPromotionStatus } from '../products/schemas/combo-promotion.schema';
+import { buildVietnameseRegexPattern } from '../../common/utils/vietnamese.util';
 
 @Injectable()
 export class AdminStatsService {
@@ -585,13 +586,24 @@ export class AdminStatsService {
     }));
   }
 
-  async getAllCustomers(page = 1, limit = 10) {
-    const filter = {
+  async getAllCustomers(page = 1, limit = 10, search?: string) {
+    const filter: any = {
       $and: [
         { roles: 'CUSTOMER' },
         { roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } }
       ]
     };
+    if (search && search.trim()) {
+      const pattern = buildVietnameseRegexPattern(search.trim());
+      const regex = new RegExp(pattern, 'i');
+      filter.$and.push({
+        $or: [
+          { 'profile.fullName': regex },
+          { 'auth.email': regex },
+          { 'auth.phone': regex },
+        ],
+      });
+    }
     const [total, customers] = await Promise.all([
       this.userModel.countDocuments(filter as any),
       this.userModel.find(filter as any)
@@ -650,10 +662,127 @@ export class AdminStatsService {
     };
   }
 
-  async getAllProviders(page = 1, limit = 10) {
+  async getCustomerDetail(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('ID khách hàng không hợp lệ');
+    }
+    const custObjId = new Types.ObjectId(id);
+
+    const [user, bookings] = await Promise.all([
+      this.userModel
+        .findById(custObjId)
+        .select('profile auth.email auth.phone accountStatus createdAt updatedAt')
+        .lean(),
+      this.bookingModel
+        .find({ customerId: custObjId })
+        .select('bookingCode bookingType status pricingSummary rentalPeriod createdAt updatedAt items cancellation rentalDepositRefund')
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean(),
+    ]);
+
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy thông tin khách hàng');
+    }
+
+    const bookingIds = bookings.map((b) => b._id);
+
+    const [refunds, disputes] = await Promise.all([
+      bookingIds.length > 0
+        ? this.paymentModel
+          .find({
+            bookingId: { $in: bookingIds },
+            purpose: PaymentPurpose.DepositRefund,
+          })
+          .select('paymentCode amount status createdAt description bookingId')
+          .sort({ createdAt: -1 })
+          .limit(20)
+          .lean()
+        : [],
+      this.disputeModel
+        .find({
+          $or: [
+            { customerId: custObjId },
+            ...(bookingIds.length > 0 ? [{ bookingId: { $in: bookingIds } }] : []),
+          ],
+        })
+        .select('disputeCode status reason adminDecision compensationAmount createdAt updatedAt')
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean(),
+    ]);
+
+    const completedBookings = bookings.filter((b) => b.status === 'COMPLETED').length;
+    const cancelledBookings = bookings.filter((b) => b.status === 'CANCELLED').length;
+    const totalSpent = bookings
+      .filter((b) => ['COMPLETED', 'CONFIRMED', 'DEPOSIT_PAID', 'PICKED_UP', 'RETURNED'].includes(b.status))
+      .reduce((sum, b) => sum + (b.pricingSummary?.grandTotal || 0), 0);
+
+    return {
+      user: {
+        id: user._id.toString(),
+        fullName: user.profile?.fullName || 'Khách hàng',
+        email: user.auth?.email || '',
+        phone: user.auth?.phone || '',
+        avatar: user.profile?.avatarUrl || '',
+        status: user.accountStatus || 'ACTIVE',
+        createdAt: (user as any).createdAt,
+        updatedAt: (user as any).updatedAt,
+      },
+      stats: {
+        totalBookings: bookings.length,
+        completedBookings,
+        cancelledBookings,
+        totalRefunds: refunds.length,
+        totalDisputes: disputes.length,
+        totalSpent,
+      },
+      bookings: bookings.map((b: any) => ({
+        id: b._id.toString(),
+        bookingCode: b.bookingCode || `#BK-${b._id.toString().slice(-6).toUpperCase()}`,
+        bookingType: b.bookingType,
+        status: b.status,
+        totalAmount: b.pricingSummary?.grandTotal || 0,
+        depositAmount: b.pricingSummary?.depositTotal || 0,
+        createdAt: b.createdAt,
+        rentalPeriod: b.rentalPeriod,
+        itemsCount: b.items?.length || 0,
+      })),
+      refunds: refunds.map((r: any) => ({
+        id: r._id.toString(),
+        refundCode: r.paymentCode || `#RF-${r._id.toString().slice(-6).toUpperCase()}`,
+        amount: r.amount || 0,
+        status: r.status,
+        createdAt: r.createdAt,
+        description: r.description,
+      })),
+      disputes: disputes.map((d: any) => ({
+        id: d._id.toString(),
+        disputeCode: d.disputeCode || `#DP-${d._id.toString().slice(-6).toUpperCase()}`,
+        status: d.status,
+        reason: d.reason,
+        compensationAmount: d.compensationAmount || 0,
+        createdAt: d.createdAt,
+      })),
+    };
+  }
+
+  async getAllProviders(page = 1, limit = 10, search?: string) {
+    const filter: any = {};
+    if (search && search.trim()) {
+      const pattern = buildVietnameseRegexPattern(search.trim());
+      const regex = new RegExp(pattern, 'i');
+      filter.$or = [
+        { businessName: regex },
+        { 'contact.email': regex },
+        { 'contact.phone': regex },
+        { 'address.city': regex },
+        { 'address.district': regex },
+      ];
+    }
     const [total, providers] = await Promise.all([
-      this.providerModel.countDocuments({} as any),
-      this.providerModel.find({} as any)
+      this.providerModel.countDocuments(filter),
+      this.providerModel.find(filter)
         .select('userId businessName contact capabilities status rating wallet createdAt media address paymentAccounts taxCode')
         .populate('userId', 'profile.fullName profile.avatarUrl auth.email auth.phone')
         .sort({ createdAt: -1 })
@@ -946,7 +1075,8 @@ export class AdminStatsService {
 
     // Customer / Provider search if specified
     if (search && search.trim()) {
-      const regex = new RegExp(search.trim(), 'i');
+      const pattern = buildVietnameseRegexPattern(search.trim());
+      const regex = new RegExp(pattern, 'i');
       const [matchingUsers, matchingProviders] = await Promise.all([
         this.userModel.find({
           $or: [

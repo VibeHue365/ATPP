@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import {
   Body,
   Controller,
@@ -39,6 +40,7 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
+  @Throttle({ auth: { limit: 5, ttl: 60000 } })
   @Post('register')
   register(
     @Body() dto: RegisterDto,
@@ -47,6 +49,7 @@ export class AuthController {
     return this.authService.register(dto, this.context(request));
   }
 
+  @Throttle({ auth: { limit: 5, ttl: 60000 } })
   @Post('verify-email')
   verifyEmail(
     @Body() dto: VerifyEmailDto,
@@ -55,6 +58,7 @@ export class AuthController {
     return this.authService.verifyEmail(dto, this.context(request));
   }
 
+  @Throttle({ auth: { limit: 3, ttl: 60000 } })
   @Post('resend-verification')
   resendVerification(
     @Body() dto: ResendVerificationDto,
@@ -62,6 +66,7 @@ export class AuthController {
     return this.authService.resendVerification(dto);
   }
 
+  @Throttle({ auth: { limit: 5, ttl: 60000 } })
   @Post('login')
   login(
     @Body() dto: LoginDto,
@@ -108,6 +113,7 @@ export class AuthController {
     return this.authService.changePassword(user.sub, dto, this.context(request));
   }
 
+  @Throttle({ auth: { limit: 3, ttl: 60000 } })
   @Post('forgot-password')
   forgotPassword(
     @Body() dto: ForgotPasswordDto,
@@ -116,6 +122,7 @@ export class AuthController {
     return this.authService.forgotPassword(dto, this.context(request));
   }
 
+  @Throttle({ auth: { limit: 5, ttl: 60000 } })
   @Post('reset-password')
   resetPassword(
     @Body() dto: ResetPasswordDto,

@@ -1,3 +1,5 @@
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -34,6 +36,22 @@ import { BannersModule } from './modules/banners/banners.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          name: 'default',
+          ttl: 60000,
+          limit: config.get<number>('THROTTLE_DEFAULT_LIMIT', 100),
+        },
+        {
+          name: 'auth',
+          ttl: 60000,
+          limit: config.get<number>('THROTTLE_AUTH_LIMIT', 10),
+        },
+      ],
+    }),
+
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -68,6 +86,12 @@ import { BannersModule } from './modules/banners/banners.module';
     BannersModule,
   ],
   controllers: [AppController, ApiDocsController],
-  providers: [AppService],
+    providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

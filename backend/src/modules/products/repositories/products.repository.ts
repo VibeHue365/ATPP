@@ -11,6 +11,8 @@ import {
 import { Provider, ProviderStatus } from '../../providers/schemas/provider.schema';
 import { QueryModerationProductsDto } from '../dto/product-moderation.dto';
 import { PhotographyPackage } from '../schemas/photography-package.schema';
+import { buildVietnameseRegexPattern } from '../../../common/utils/vietnamese.util';
+import { createSafeRegex, escapeRegex } from '../../../common/utils/regex.util';
 
 @Injectable()
 export class ProductsRepository {
@@ -55,8 +57,8 @@ export class ProductsRepository {
     const cached = this.providerLocationIdsCache.get(normalized);
     if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-    const escaped = normalized.replace(/[.*+?^{}()|[]\]/g, '\$&');
-    const regex = new RegExp(escaped, 'i');
+    const regex = createSafeRegex(normalized);
+    if (!regex) return [];
     const providers = await this.providerModel
       .find({
         status: ProviderStatus.Active,
@@ -83,6 +85,7 @@ export class ProductsRepository {
       colors?: string[]; sizes?: string[]; materials?: string[]; categoryId?: string;
       styleCategoryIds?: string[]; eventCategoryIds?: string[]; providerId?: string;
       providerLocation?: string; productTypes?: string[];
+      startDate?: string; endDate?: string; rentalType?: string;
     },
     page: number,
     limit: number,
@@ -106,10 +109,17 @@ export class ProductsRepository {
     }
     const typePatterns: Record<string, string> = {
       female: '(nu|nữ)',
+      'Nữ': '(nu|nữ)',
       male: 'nam',
+      'Nam': 'nam',
       couple: '(doi|đôi|cap|cặp)',
+      'Cặp đôi': '(doi|đôi|cap|cặp)',
+      ancient: '(co phuc|cổ phục|nhat binh|nhật bình|ao tac|áo tấc)',
+      'Cổ phục': '(co phuc|cổ phục|nhat binh|nhật bình|ao tac|áo tấc)',
       yearbook: '(ky yeu|kỷ yếu|hoc sinh|học sinh|sinh vien|sinh viên)',
+      'Kỷ yếu': '(ky yeu|kỷ yếu|hoc sinh|học sinh|sinh vien|sinh viên)',
       wedding: '(cuoi|cưới|hy|hỷ|dau|dâu|re|rể)',
+      'Cưới': '(cuoi|cưới|hy|hỷ|dau|dâu|re|rể)',
     };
     const selectedTypePatterns = (options.productTypes ?? [])
       .map((type) => typePatterns[type])
@@ -118,8 +128,8 @@ export class ProductsRepository {
       query.name = { $regex: selectedTypePatterns.join('|'), $options: 'i' };
     }
     if (options.search) {
-      const escaped = options.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escaped, 'i');
+      const pattern = buildVietnameseRegexPattern(options.search);
+      const regex = new RegExp(pattern, 'i');
       query.$or = [
         { name: regex },
         { description: regex },
@@ -139,9 +149,9 @@ export class ProductsRepository {
       if (options.maxPrice !== undefined) query.basePrice.$lte = options.maxPrice;
     }
     if (options.minRating !== undefined) query['rating.averageRating'] = { $gte: options.minRating };
-    if (options.colors?.length) query.colors = { $in: options.colors.map((value) => new RegExp(`^${value}$`, 'i')) };
-    if (options.sizes?.length) query.sizes = { $in: options.sizes.map((value) => new RegExp(`^${value}$`, 'i')) };
-    if (options.materials?.length) query.materials = { $in: options.materials.map((value) => new RegExp(`^${value}$`, 'i')) };
+    if (options.colors?.length) query.colors = { $in: options.colors.map((value) => new RegExp(`^${escapeRegex(value)}$`, 'i')) };
+    if (options.sizes?.length) query.sizes = { $in: options.sizes.map((value) => new RegExp(`^${escapeRegex(value)}$`, 'i')) };
+    if (options.materials?.length) query.materials = { $in: options.materials.map((value) => new RegExp(`^${escapeRegex(value)}$`, 'i')) };
 
     const safeLimit = Math.min(Math.max(limit, 1), 24);
     const safePage = Math.max(page, 1);
@@ -194,6 +204,9 @@ export class ProductsRepository {
     providerId?: string;
     providerLocation?: string;
     productTypes?: string[];
+    startDate?: string;
+    endDate?: string;
+    rentalType?: string;
     limit?: number;
   }): Promise<any[]> {
     const activeProviderIds = await this.getActiveProviderIds();
@@ -235,10 +248,17 @@ export class ProductsRepository {
 
     const typePatterns: Record<string, string> = {
       female: '(nu|nữ)',
+      'Nữ': '(nu|nữ)',
       male: 'nam',
+      'Nam': 'nam',
       couple: '(doi|đôi|cap|cặp)',
+      'Cặp đôi': '(doi|đôi|cap|cặp)',
+      ancient: '(co phuc|cổ phục|nhat binh|nhật bình|ao tac|áo tấc)',
+      'Cổ phục': '(co phuc|cổ phục|nhat binh|nhật bình|ao tac|áo tấc)',
       yearbook: '(ky yeu|kỷ yếu|hoc sinh|học sinh|sinh vien|sinh viên)',
+      'Kỷ yếu': '(ky yeu|kỷ yếu|hoc sinh|học sinh|sinh vien|sinh viên)',
       wedding: '(cuoi|cưới|hy|hỷ|dau|dâu|re|rể)',
+      'Cưới': '(cuoi|cưới|hy|hỷ|dau|dâu|re|rể)',
     };
     const selectedTypePatterns = (options?.productTypes ?? [])
       .map((type) => typePatterns[type])
@@ -247,8 +267,8 @@ export class ProductsRepository {
       query.name = { $regex: selectedTypePatterns.join('|'), $options: 'i' };
     }
     if (options?.search) {
-      const escapedSearch = options.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const searchRegex = new RegExp(escapedSearch, 'i');
+      const pattern = buildVietnameseRegexPattern(options.search);
+      const searchRegex = new RegExp(pattern, 'i');
       query.$or = [
         { name: searchRegex },
         { description: searchRegex },
@@ -279,19 +299,19 @@ export class ProductsRepository {
 
     if (options?.colors && options.colors.length > 0) {
       query.colors = {
-        $in: options.colors.map((c) => new RegExp(`^${c}$`, 'i')),
+        $in: options.colors.map((c) => new RegExp(`^${escapeRegex(c)}$`, 'i')),
       };
     }
 
     if (options?.sizes && options.sizes.length > 0) {
       query.sizes = {
-        $in: options.sizes.map((s) => new RegExp(`^${s}$`, 'i')),
+        $in: options.sizes.map((s) => new RegExp(`^${escapeRegex(s)}$`, 'i')),
       };
     }
 
     if (options?.materials && options.materials.length > 0) {
       query.materials = {
-        $in: options.materials.map((m) => new RegExp(`^${m}$`, 'i')),
+        $in: options.materials.map((m) => new RegExp(`^${escapeRegex(m)}$`, 'i')),
       };
     }
 
@@ -376,7 +396,10 @@ export class ProductsRepository {
   ): Promise<{ items: ProductDocument[]; total: number }> {
     const filter: any = { providerId, status: { $ne: ProductStatus.Inactive } };
     if (search) {
-      filter.name = { $regex: search, $options: 'i' };
+      const searchRegex = createSafeRegex(search);
+      if (searchRegex) {
+        filter.name = searchRegex;
+      }
     }
     if (sizes) {
       const sizesArray = sizes.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
@@ -519,12 +542,14 @@ export class ProductsRepository {
     }
 
     if (query.search && query.search.trim()) {
-      const searchRegex = new RegExp(query.search.trim(), 'i');
-      filter.$or = [
-        { name: searchRegex },
-        { description: searchRegex },
-        { slug: searchRegex },
-      ];
+      const searchRegex = createSafeRegex(query.search);
+      if (searchRegex) {
+        filter.$or = [
+          { name: searchRegex },
+          { description: searchRegex },
+          { slug: searchRegex },
+        ];
+      }
     }
 
     if (query.startDate || query.endDate) {

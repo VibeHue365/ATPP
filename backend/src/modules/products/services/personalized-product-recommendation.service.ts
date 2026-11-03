@@ -76,7 +76,11 @@ export class PersonalizedProductRecommendationService {
     }
 
     const ranked = candidates
-      .filter((product) => matchesPreferredSize(preferences.preferredSize, product.sizes))
+      .filter((product) => {
+        if (filters.sizes && filters.sizes.length > 0) return true;
+        if (filters.search && filters.search.trim()) return true;
+        return matchesPreferredSize(preferences.preferredSize, product.sizes);
+      })
       .map((product: any) => {
         const plain = typeof product.toObject === 'function' ? product.toObject() : { ...product };
         const approvedCustomTags = (plain.customTags ?? []).filter(

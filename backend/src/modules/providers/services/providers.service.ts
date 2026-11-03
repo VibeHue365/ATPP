@@ -537,19 +537,27 @@ const bookingIds = bookings.map((booking) => booking._id);
       { $limit: 3 },
     ]);
 
-    const popularProducts = [];
-    for (const item of popularItems) {
-      if (item._id) {
-        const prod = await this.productModel.findById(item._id);
-        if (prod) {
-          popularProducts.push({
-            name: prod.name,
-            image: prod.images?.[0] || '/hong_lien_hoa.png',
-            count: item.count,
-          });
-        }
-      }
-    }
+    const productIds = popularItems.map((item) => item._id).filter(Boolean);
+    const products = productIds.length > 0
+      ? await this.productModel
+          .find({ _id: { $in: productIds } })
+          .select('name images')
+          .lean()
+      : [];
+    const productMap = new Map(products.map((p) => [p._id.toString(), p]));
+
+    const popularProducts = popularItems
+      .map((item) => {
+        if (!item._id) return null;
+        const prod = productMap.get(item._id.toString());
+        if (!prod) return null;
+        return {
+          name: prod.name,
+          image: prod.images?.[0] || '/hong_lien_hoa.png',
+          count: item.count,
+        };
+      })
+      .filter((item): item is { name: string; image: string; count: number } => item !== null);
     // 4. UC-K06: Quản lý tồn kho / Trạng thái sản phẩm
     const totalProducts = await this.productModel.countDocuments({
       providerId,

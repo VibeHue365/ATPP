@@ -19,6 +19,7 @@ import {
 } from '../schemas/combo-promotion.schema';
 import { Product } from '../schemas/product.schema';
 import { PhotographyPackage } from '../schemas/photography-package.schema';
+import { createSafeRegex } from '../../../common/utils/regex.util';
 
 export class CreateComboPromotionDto {
   @IsString()
@@ -262,10 +263,13 @@ export class ComboPromotionService {
     }
 
     if (query?.search && query.search.trim()) {
-      filter.$or = [
-        { name: { $regex: query.search.trim(), $options: 'i' } },
-        { description: { $regex: query.search.trim(), $options: 'i' } },
-      ];
+      const searchRegex = createSafeRegex(query.search);
+      if (searchRegex) {
+        filter.$or = [
+          { name: searchRegex },
+          { description: searchRegex },
+        ];
+      }
     }
 
     if (query?.priceRange && query.priceRange !== 'Tất cả') {

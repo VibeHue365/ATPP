@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { createSafeRegex } from '../../../common/utils/regex.util';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 import {
@@ -109,13 +110,15 @@ export class UsersRepository {
     }
 
     if (filters.keyword) {
-      const keyword = filters.keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      query.$or = [
-        { userCode: { $regex: keyword, $options: 'i' } },
-        { 'profile.fullName': { $regex: keyword, $options: 'i' } },
-        { 'auth.email': { $regex: keyword, $options: 'i' } },
-        { 'auth.phone': { $regex: keyword, $options: 'i' } },
-      ];
+      const regex = createSafeRegex(filters.keyword);
+      if (regex) {
+        query.$or = [
+          { userCode: regex },
+          { 'profile.fullName': regex },
+          { 'auth.email': regex },
+          { 'auth.phone': regex },
+        ];
+      }
     }
 
     const skip = (filters.page - 1) * filters.limit;

@@ -43,6 +43,7 @@ import { UsersModule } from '../users/users.module';
 import { SmartTaggingModule } from '../smart-tagging/smart-tagging.module';
 import { StorageModule } from '../storage/storage.module';
 import { PersonalizedProductRecommendationService } from './services/personalized-product-recommendation.service';
+import { AnalyticsModule } from '../analytics/analytics.module';
 import {
   PromotionRedemption,
   PromotionRedemptionSchema,
@@ -64,7 +65,7 @@ export const productModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [productModels, UsersModule, CategoriesModule, SmartTaggingModule, StorageModule],
+  imports: [productModels, UsersModule, CategoriesModule, SmartTaggingModule, StorageModule, AnalyticsModule],
   controllers: [
     PromotionsController,
     ProductsController,

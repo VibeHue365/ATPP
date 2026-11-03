@@ -178,6 +178,9 @@ export class ProductsService implements OnModuleInit {
       providerId?: string;
       providerLocation?: string;
       productTypes?: string[];
+      startDate?: string;
+      endDate?: string;
+      rentalType?: string;
     },
     page: number,
     limit: number,
@@ -223,6 +226,9 @@ export class ProductsService implements OnModuleInit {
       providerId?: string;
       providerLocation?: string;
       productTypes?: string[];
+      startDate?: string;
+      endDate?: string;
+      rentalType?: string;
     },
     page: number,
     limit: number,
