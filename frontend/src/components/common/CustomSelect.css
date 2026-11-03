@@ -6,6 +6,10 @@
   align-items: center;
 }
 
+.custom-select-wrapper.is-open {
+  z-index: 50;
+}
+
 .custom-select-trigger {
   width: 100%;
   display: flex;

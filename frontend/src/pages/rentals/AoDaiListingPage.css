@@ -1,30 +1,30 @@
 /* ==========================================================================
-   LUMÉ ÁO DÀI LISTING PAGE (Photography Color Palette: #B52B47 & #FBE5E9)
+   LUMÉ ÁO DÀI LISTING PAGE (Photography Color Palette: #8E1B2E & #FDF2F4)
    ========================================================================== */
 
 :root {
-  --lume-primary: #B52B47;
-  --lume-primary-hover: #CA3653;
+  --lume-primary: #8E1B2E;
+  --lume-primary-hover: #741524;
   --lume-primary-dark: #8D1D34;
-  --lume-soft: #FBE5E9;
-  --lume-soft-bg: #FFF8F9;
-  --lume-border: #F0DADC;
+  --lume-soft: #FDF2F4;
+  --lume-soft-bg: #FAF8F5;
+  --lume-border: #EFE8DF;
   --lume-border-hover: #DFACB7;
-  --lume-ink: #292324;
+  --lume-ink: #231F20;
   --lume-text-secondary: #5E5054;
   --lume-muted: #746568;
   --lume-text-light: #9A858A;
   --lume-bg-gray: #F9EFF1;
   --lume-verified-green: #16A34A;
-  --lume-star-gold: #FACC15;
+  --lume-star-gold: #C28E3A;
 }
 
 .lume-aodai-page {
   width: 100%;
   min-height: 100vh;
-  background-color: #FFFDFC;
+  background-color: #FAF8F5;
   color: var(--lume-ink);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -791,7 +791,7 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #8D1D34;
-  background: #FBE5E9;
+  background: #FDF2F4;
   padding: 3px 8px;
   border-radius: 6px;
   white-space: nowrap;
@@ -1054,7 +1054,7 @@
 }
 
 .lume-match-sparkle {
-  color: #B52B47;
+  color: #8E1B2E;
   flex-shrink: 0;
 }
 

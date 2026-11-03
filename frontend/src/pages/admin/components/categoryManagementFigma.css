@@ -579,7 +579,7 @@
 .lume-cat-slug {
   font-size: 11px;
   color: #6B7280;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 /* Badges for 'Loại' */
@@ -845,7 +845,7 @@
 .lume-detail-top-slug {
   font-size: 11px;
   color: #6B7280;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 /* Section Thông tin cơ bản */
@@ -893,7 +893,7 @@
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: #4B5563;
 }
 

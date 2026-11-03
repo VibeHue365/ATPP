@@ -500,7 +500,7 @@
 .ac-user-id {
   font-size: 11px;
   color: #94a3b8;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 /* Role Badges */
@@ -1536,7 +1536,7 @@
 
 .ac-perm-code-tag {
   font-size: 11px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: #881337;
   background: #fff1f2;
   border: 1px solid #ffe4e6;

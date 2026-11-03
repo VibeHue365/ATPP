@@ -16,8 +16,8 @@
   --pkg-border: #EBE4D8;
   --pkg-border-subtle: #F3ECE1;
   --pkg-border-focus: #B91C1C;
-  --pkg-font-serif: 'Playfair Display', 'Cormorant Garamond', Georgia, serif;
-  --pkg-font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --pkg-font-serif: var(--font-display);
+  --pkg-font-sans: var(--font-body);
   --pkg-gold: #B45309;
   --pkg-gold-light: #FEF3C7;
   --pkg-green: #16A34A;

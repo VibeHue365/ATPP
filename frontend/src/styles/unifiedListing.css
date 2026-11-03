@@ -15,9 +15,9 @@
 :root {
   --maroon: #8E1B2E;
   --maroon-dark: #741524;
-  --blush: #FBEFEF;
-  --cream: #FFFBF8;
-  --line: #EFDCDC;
+  --blush: #FDF2F4;
+  --cream: #FAF8F5;
+  --line: #EFE8DF;
   --radius-card: 16px;
   --radius-hero: 24px;
   --search-height: 72px;
@@ -28,7 +28,7 @@
   min-height: 100vh;
   background-color: var(--cream, #FFFBF8);
   color: #231F20;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
 

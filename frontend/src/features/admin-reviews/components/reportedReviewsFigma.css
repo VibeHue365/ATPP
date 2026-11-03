@@ -492,7 +492,7 @@
 
 .rr-party-code {
   font-size: 11px;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   color: #64748b;
 }
 
@@ -721,7 +721,7 @@
   font-size: 13px;
   font-weight: 800;
   color: #0f172a;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 
 .rr-dock-report-time {

@@ -37,7 +37,7 @@
   height: 220px;
   opacity: 0.08;
   pointer-events: none;
-  color: #800020;
+  color: #8E1B2E;
 }
 
 /* Header */
@@ -52,7 +52,7 @@
   font-family: var(--font-header);
   font-size: 28px;
   font-weight: 700;
-  color: #800020; /* Deep red brand color */
+  color: #8E1B2E; /* Deep red brand color */
   margin: 0;
 }
 
@@ -90,7 +90,7 @@
   left: 0;
   top: 50%;
   height: 2px;
-  background-color: #800020;
+  background-color: #8E1B2E;
   transform: translateY(-50%);
   transition: width 0.3s ease;
   z-index: 1;
@@ -110,14 +110,14 @@
 }
 
 .onboarding-dot.active {
-  background-color: #800020;
-  border-color: #800020;
+  background-color: #8E1B2E;
+  border-color: #8E1B2E;
   box-shadow: 0 0 0 3px rgba(128, 0, 32, 0.15);
 }
 
 .onboarding-dot.completed {
-  background-color: #800020;
-  border-color: #800020;
+  background-color: #8E1B2E;
+  border-color: #8E1B2E;
 }
 
 .onboarding-dot.completed::after {
@@ -173,7 +173,7 @@
 }
 
 .onboarding-style-card.selected {
-  border: 1.5px solid #800020;
+  border: 1.5px solid #8E1B2E;
   background-color: #FAF8F5;
   box-shadow: 0 8px 24px rgba(128, 0, 32, 0.06);
 }
@@ -235,7 +235,7 @@
 }
 
 .onboarding-color-card.selected {
-  border: 1.5px solid #800020;
+  border: 1.5px solid #8E1B2E;
   background-color: #FAF8F5;
 }
 
@@ -288,9 +288,9 @@
 }
 
 .onboarding-size-btn.selected {
-  border: 1.5px solid #800020;
+  border: 1.5px solid #8E1B2E;
   background-color: #FAF8F5;
-  color: #800020;
+  color: #8E1B2E;
 }
 
 /* Measurements Inputs */
@@ -331,7 +331,7 @@
 
 .onboarding-measure-input:focus {
   outline: none;
-  border-bottom-color: #800020;
+  border-bottom-color: #8E1B2E;
 }
 
 /* Step 3: Purposes */
@@ -359,14 +359,14 @@
 }
 
 .onboarding-purpose-card.selected {
-  border: 1.5px solid #800020;
+  border: 1.5px solid #8E1B2E;
   background-color: #FAF8F5;
 }
 
 .onboarding-purpose-icon {
   padding: 10px;
   background-color: #FAF8F5;
-  color: #800020;
+  color: #8E1B2E;
   border-radius: 8px;
   border: 1px solid #EBE6DD;
   display: flex;
@@ -383,7 +383,7 @@
 /* AI Assistant */
 .onboarding-ai-panel {
   background-color: #FAF8F5;
-  border-left: 4px solid #800020;
+  border-left: 4px solid #8E1B2E;
   border-radius: 0 12px 12px 0;
   padding: 24px;
   margin-bottom: 32px;
@@ -432,7 +432,7 @@
 }
 
 input:checked + .onboarding-slider {
-  background-color: #800020;
+  background-color: #8E1B2E;
 }
 
 input:checked + .onboarding-slider:before {
@@ -503,7 +503,7 @@ input:checked + .onboarding-slider:before {
 
 .onboarding-btn-next {
   padding: 12px 28px;
-  background-color: #800020;
+  background-color: #8E1B2E;
   color: #ffffff;
   border: none;
   font-weight: 700;
