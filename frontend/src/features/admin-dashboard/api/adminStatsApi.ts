@@ -4,6 +4,7 @@ import { tokenStorage } from "../../../services/tokenStorage";
 import type {
   AdminStats,
   BookingConversionMetrics,
+  LowRatingPhotographerReport,
   PhotographerOverviewMetrics,
   ShopsOverviewMetrics,
   UserGrowthMetrics,
@@ -21,6 +22,10 @@ export const adminStatsApi = {
   getPhotographersOverview: () =>
     httpClient.get<PhotographerOverviewMetrics>(
       "/api/v1/admin-stats/photographers-overview",
+    ),
+  getLowRatingPhotographers: () =>
+    httpClient.get<LowRatingPhotographerReport>(
+      "/api/v1/admin/photographers/low-rating",
     ),
   getUserGrowth: (from?: string, to?: string) =>
     httpClient.get<UserGrowthMetrics>(

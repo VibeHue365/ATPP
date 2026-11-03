@@ -2590,6 +2590,42 @@ export class AdminStatsService {
     };
   }
 
+  /** VS-110: active photographers below the quality threshold with negative reviews. */
+  async getLowRatingPhotographers(threshold = 3.5) {
+    const safeThreshold = Math.min(Math.max(threshold, 1), 5);
+    const rows = await this.providerModel.aggregate([
+      { $match: { status: ProviderStatus.Active, capabilities: ProviderCapability.Photography } },
+      { $lookup: { from: 'reviews', localField: '_id', foreignField: 'providerId', as: 'reviews' } },
+      {
+        $addFields: {
+          averageRating: { $avg: '$reviews.rating' },
+          totalReviews: { $size: '$reviews' },
+          negativeReviews: { $filter: { input: '$reviews', as: 'review', cond: { $lte: ['$$review.rating', 3] } } },
+        },
+      },
+      { $match: { totalReviews: { $gt: 0 }, averageRating: { $lt: safeThreshold } } },
+      { $sort: { averageRating: 1, totalReviews: -1 } },
+      { $limit: 50 },
+      {
+        $project: {
+          businessName: 1,
+          city: '$address.city',
+          averageRating: { $round: ['$averageRating', 1] },
+          totalReviews: 1,
+          negativeReviews: { $map: { input: '$negativeReviews', as: 'review', in: { reviewId: '$$review._id', rating: '$$review.rating', comment: '$$review.comment', createdAt: '$$review.createdAt' } } },
+        },
+      },
+    ]);
+    return {
+      threshold: safeThreshold,
+      total: rows.length,
+      data: rows.map((row: any) => ({
+        photographerId: row._id.toString(), businessName: row.businessName, city: row.city ?? null,
+        averageRating: row.averageRating, totalReviews: row.totalReviews, negativeReviews: row.negativeReviews,
+      })),
+    };
+  }
+
   /** VS-112: registrations, daily active users, and 30-day MAU. */
   async getUserGrowth(query: { from?: string; to?: string }) {
     const { from, to, start, end } = this.userGrowthDateRange(

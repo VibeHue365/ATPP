@@ -20,7 +20,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { AdminStatsService } from './admin-stats.service';
 
-@Controller(['admin/stats', 'admin-stats', 'api/v1/admin-stats'])
+@Controller(['admin/stats', 'admin-stats', 'api/v1/admin-stats', 'api/v1/admin'])
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class AdminStatsController {
   constructor(private readonly adminStatsService: AdminStatsService) {}
@@ -126,6 +126,16 @@ export class AdminStatsController {
   @Permissions()
   async getPhotographersOverview(@Query('location') location?: string) {
     return this.adminStatsService.getPhotographersOverview(location);
+  }
+
+  @Get('photographers/low-rating')
+  @Roles('ADMIN')
+  @Permissions('dashboard:read')
+  async getLowRatingPhotographers(@Query('threshold') threshold?: string) {
+    const parsedThreshold = Number(threshold);
+    return this.adminStatsService.getLowRatingPhotographers(
+      Number.isFinite(parsedThreshold) ? parsedThreshold : 3.5,
+    );
   }
 
   @Get('user-growth')

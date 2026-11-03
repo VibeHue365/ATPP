@@ -153,3 +153,21 @@ export interface UserGrowthMetrics {
   mau: number;
   data: Array<{ date: string; newUsers: number; dau: number }>;
 }
+
+export interface LowRatingPhotographerReport {
+  threshold: number;
+  total: number;
+  data: Array<{
+    photographerId: string;
+    businessName: string;
+    city: string | null;
+    averageRating: number;
+    totalReviews: number;
+    negativeReviews: Array<{
+      reviewId: string;
+      rating: number;
+      comment: string;
+      createdAt?: string;
+    }>;
+  }>;
+}

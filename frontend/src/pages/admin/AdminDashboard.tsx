@@ -58,6 +58,7 @@ type AdminTab =
   | "disputes"
   | "behavior"
   | "user-growth"
+  | "low-rating-photographers"
   | "combo-moderation"
   | "product-moderation"
   | "reported-reviews"
@@ -149,6 +150,11 @@ const UserGrowthPanel = lazy(() =>
   import("../../features/admin-dashboard/components/UserGrowthPanel").then(
     (module) => ({ default: module.UserGrowthPanel }),
   ),
+);
+const LowRatingPhotographersPanel = lazy(() =>
+  import(
+    "../../features/admin-dashboard/components/LowRatingPhotographersPanel"
+  ).then((module) => ({ default: module.LowRatingPhotographersPanel })),
 );
 const ProductModerationPanel = lazy(() =>
   import("./components/ProductModerationPanel").then((module) => ({
@@ -309,6 +315,12 @@ export const navGroups: NavGroupDef[] = [
         icon: BarChart3,
       },
       {
+        id: "low-rating-photographers",
+        label: "Chất lượng photographer",
+        title: "Cảnh báo photographer có rating thấp",
+        icon: AlertOctagon,
+      },
+      {
         id: "notifications",
         label: "Thông báo hệ thống",
         title: "Tất cả thông báo hệ thống",
@@ -427,6 +439,8 @@ function TabPanel({
       return <BehaviorPanel />;
     case "user-growth":
       return <UserGrowthPanel />;
+    case "low-rating-photographers":
+      return <LowRatingPhotographersPanel />;
     case "combo-moderation":
       return <ComboModerationManagement />;
     case "product-moderation":

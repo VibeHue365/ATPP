@@ -45,3 +45,6 @@
 
 @media (max-width: 1050px) { .admin-dashboard-panel .admin-analytics-split { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .admin-booking-distribution__content { grid-template-columns: 1fr; } }
+
+.admin-low-rating-review { margin: 0 0 6px; color: #7f1d1d; font-size: 12px; }
+.admin-low-rating-review:last-child { margin-bottom: 0; }
