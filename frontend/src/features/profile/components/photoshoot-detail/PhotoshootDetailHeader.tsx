@@ -53,7 +53,7 @@ export const PhotoshootDetailHeader: React.FC<PhotoshootDetailHeaderProps> = ({
             Chi tiết lịch chụp ảnh
           </h2>
           <span style={{ fontSize: '12px', color: '#8C827A' }}>
-            Mã đơn: <strong style={{ color: '#8B1E2D' }}>{bookingCode || 'PS-LUME'}</strong>
+            Mã đơn: <strong style={{ color: '#8E1B2E' }}>{bookingCode || 'PS-LUME'}</strong>
           </span>
         </div>
       </div>
@@ -78,7 +78,7 @@ export const PhotoshootDetailHeader: React.FC<PhotoshootDetailHeaderProps> = ({
               cursor: 'pointer'
             }}
           >
-            <MapPin size={14} color="#8B1E2D" />
+            <MapPin size={14} color="#8E1B2E" />
             <span>Đổi địa điểm</span>
           </button>
         )}
@@ -101,7 +101,7 @@ export const PhotoshootDetailHeader: React.FC<PhotoshootDetailHeaderProps> = ({
               cursor: 'pointer'
             }}
           >
-            <CalendarClock size={14} color="#8B1E2D" />
+            <CalendarClock size={14} color="#8E1B2E" />
             <span>Đổi lịch chụp</span>
           </button>
         )}
@@ -117,7 +117,7 @@ export const PhotoshootDetailHeader: React.FC<PhotoshootDetailHeaderProps> = ({
             borderRadius: '8px',
             backgroundColor: '#FDF2F4',
             border: '1px solid #F7D5DA',
-            color: '#8B1E2D',
+            color: '#8E1B2E',
             fontSize: '12.5px',
             fontWeight: 750,
             cursor: 'pointer'

@@ -7,6 +7,7 @@ import { PhotoshootDeliveredGallery } from './PhotoshootDeliveredGallery';
 import { PhotoshootBottomActionBar } from './PhotoshootBottomActionBar';
 import { httpClient } from '../../../../services/httpClient';
 import { useToast } from '../../../../components/feedback/Toast';
+import { getMediaUrl } from '../../../../shared/media/mediaUrl';
 import Swal from 'sweetalert2';
 
 interface ProfilePhotoshootDetailPageProps {
@@ -123,22 +124,29 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
     if (!files || files.length === 0) return;
     setIsUploadingPhoto(true);
     try {
-      const formData = new FormData();
+      const uploadedUrls: string[] = [];
       for (let i = 0; i < files.length; i++) {
-        formData.append('files', files[i]);
+        const file = files[i];
+        if (file.size > 5 * 1024 * 1024) {
+          toast.error(`Ảnh "${file.name}" vượt quá dung lượng tối đa 5MB`);
+          continue;
+        }
+        const formData = new FormData();
+        formData.append('file', file);
+        const res: any = await httpClient.post('/api/bookings/upload-reference', formData);
+        if (res?.url) {
+          uploadedUrls.push(res.url);
+        }
       }
-      const res: any = await httpClient.post('/upload', formData);
-      if (res.urls && Array.isArray(res.urls)) {
-        setDisputePhotos(prev => [...prev, ...res.urls]);
-        toast.success('Tải ảnh bằng chứng thành công!');
-      } else if (res.url) {
-        setDisputePhotos(prev => [...prev, res.url]);
-        toast.success('Tải ảnh bằng chứng thành công!');
+      if (uploadedUrls.length > 0) {
+        setDisputePhotos(prev => [...prev, ...uploadedUrls]);
+        toast.success(`Đã tải lên ${uploadedUrls.length} ảnh bằng chứng thành công!`);
       }
     } catch (err: any) {
-      toast.error('Tải ảnh thất bại: ' + (err.message || ''));
+      toast.error('Tải ảnh thất bại: ' + (err?.message || 'Có lỗi xảy ra khi tải ảnh'));
     } finally {
       setIsUploadingPhoto(false);
+      e.target.value = '';
     }
   };
 
@@ -193,7 +201,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
         <div style="text-align: left; font-size: 14px; color: #4A3F35; line-height: 1.6;">
           <p>Đội ngũ LUMÉ & Studio sẵn sàng đồng hành cùng bạn:</p>
           <div style="background: #FDF2F4; padding: 12px 16px; border-radius: 10px; border: 1px solid #F7D5DA; margin: 12px 0;">
-            <p style="margin: 0; font-weight: 700; color: #8B1E2D; font-size: 16px;">📞 Hotline: 1900 9999</p>
+            <p style="margin: 0; font-weight: 700; color: #8E1B2E; font-size: 16px;">📞 Hotline: 1900 9999</p>
             <p style="margin: 4px 0 0 0; color: #7D736B; font-size: 12px;">Hỗ trợ 24/7 toàn quốc</p>
           </div>
           <p style="margin: 0;">📸 Nhiếp ảnh gia: <strong>${photographerName}</strong> (${photographerPhone})</p>
@@ -201,7 +209,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
         </div>
       `,
       confirmButtonText: 'Đã hiểu',
-      confirmButtonColor: '#8B1E2D'
+      confirmButtonColor: '#8E1B2E'
     });
   };
 
@@ -225,7 +233,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
         </div>
       `,
       confirmButtonText: 'Đã hiểu',
-      confirmButtonColor: '#8B1E2D'
+      confirmButtonColor: '#8E1B2E'
     });
   };
 
@@ -257,7 +265,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
             <span>Tiền cọc giữ lịch:</span>
             <span>${depositFee.toLocaleString('vi-VN')}đ</span>
           </div>
-          <div style="border-top: 1px solid #ECE5DB; padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; color: #8B1E2D;">
+          <div style="border-top: 1px solid #ECE5DB; padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; color: #8E1B2E;">
             <span>Tổng thanh toán:</span>
             <span>${totalPrice.toLocaleString('vi-VN')}đ</span>
           </div>
@@ -267,7 +275,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
         </div>
       `,
       confirmButtonText: 'Đóng',
-      confirmButtonColor: '#8B1E2D'
+      confirmButtonColor: '#8E1B2E'
     });
   };
 
@@ -539,7 +547,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
                     {disputePhotos.map((url, idx) => (
                       <div key={idx} style={{ position: 'relative', width: '60px', height: '60px' }}>
                         <img
-                          src={url}
+                          src={getMediaUrl(url) || url}
                           alt="Bằng chứng"
                           style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px', border: '1px solid #E5E7EB' }}
                         />

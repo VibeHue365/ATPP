@@ -265,7 +265,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
 
   return (
     <div style={{
-      backgroundColor: '#FAF5EE',
+      backgroundColor: '#FAF8F5',
       border: '1px solid #E8D9C0',
       borderRadius: '8px',
       padding: '14px 16px',
@@ -277,7 +277,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
     }}>
       {/* Size selector */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <label style={{ fontSize: '11px', fontWeight: 700, color: '#8B1E22', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kích cỡ</label>
+        <label style={{ fontSize: '11px', fontWeight: 700, color: '#8E1B2E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kích cỡ</label>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {sizes.map(sz => (
             <button
@@ -287,8 +287,8 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
               style={{
                 padding: '5px 12px',
                 borderRadius: '4px',
-                border: `1.5px solid ${(item.size || '').toUpperCase() === sz.toUpperCase() ? '#8B1E22' : '#D5C2AD'}`,
-                backgroundColor: (item.size || '').toUpperCase() === sz.toUpperCase() ? '#8B1E22' : 'white',
+                border: `1.5px solid ${(item.size || '').toUpperCase() === sz.toUpperCase() ? '#8E1B2E' : '#D5C2AD'}`,
+                backgroundColor: (item.size || '').toUpperCase() === sz.toUpperCase() ? '#8E1B2E' : 'white',
                 color: (item.size || '').toUpperCase() === sz.toUpperCase() ? 'white' : '#5D4037',
                 fontSize: '12px',
                 fontWeight: 700,
@@ -305,7 +305,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
       {/* Color selector */}
       {colors.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: '11px', fontWeight: 700, color: '#8B1E22', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Màu sắc</label>
+          <label style={{ fontSize: '11px', fontWeight: 700, color: '#8E1B2E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Màu sắc</label>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {colors.map(cl => (
               <button
@@ -315,8 +315,8 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
                 style={{
                   padding: '5px 12px',
                   borderRadius: '4px',
-                  border: `1.5px solid ${(item.color || '').toUpperCase() === cl.toUpperCase() ? '#8B1E22' : '#D5C2AD'}`,
-                  backgroundColor: (item.color || '').toUpperCase() === cl.toUpperCase() ? '#8B1E22' : 'white',
+                  border: `1.5px solid ${(item.color || '').toUpperCase() === cl.toUpperCase() ? '#8E1B2E' : '#D5C2AD'}`,
+                  backgroundColor: (item.color || '').toUpperCase() === cl.toUpperCase() ? '#8E1B2E' : 'white',
                   color: (item.color || '').toUpperCase() === cl.toUpperCase() ? 'white' : '#5D4037',
                   fontSize: '12px',
                   fontWeight: 700,
@@ -354,7 +354,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
               <button
                 type="button"
                 onClick={() => { const d = new Date(calendarDate); d.setMonth(d.getMonth() - 1); setCalendarDate(d); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#8B1E22', display: 'flex', alignItems: 'center' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#8E1B2E', display: 'flex', alignItems: 'center' }}
               >
                 <ChevronLeft size={16} />
               </button>
@@ -364,7 +364,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
               <button
                 type="button"
                 onClick={() => { const d = new Date(calendarDate); d.setMonth(d.getMonth() + 1); setCalendarDate(d); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#8B1E22', display: 'flex', alignItems: 'center' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#8E1B2E', display: 'flex', alignItems: 'center' }}
               >
                 <ChevronRight size={16} />
               </button>
@@ -394,23 +394,23 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
                     onClick={() => handleCalendarDayClick(d.dateStr)}
                     style={{
                       aspectRatio: '1',
-                      border: isDaySelected ? '1.5px solid #8B1E22' : '1px solid transparent',
+                      border: isDaySelected ? '1.5px solid #8E1B2E' : '1px solid transparent',
                       borderRadius: '6px',
                       backgroundColor: isDaySelected
-                        ? '#8B1E22'
+                        ? '#8E1B2E'
                         : isDayInRange
                           ? '#FFF0F1'
                           : !d.isAvailable
                             ? '#F5F5F5'
                             : d.isWeekend
-                              ? '#FCF9F2'
+                              ? '#FAF8F5'
                               : '#FFFFFF',
                       color: !d.isAvailable
                         ? '#CCCCCC'
                         : isDaySelected
                           ? '#FFFFFF'
                           : isDayInRange
-                            ? '#8B1E22'
+                            ? '#8E1B2E'
                             : '#4A4440',
                       fontWeight: isDaySelected || isDayInRange ? 700 : 500,
                       fontSize: '11px',
@@ -466,7 +466,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
                           gap: '2px',
                           cursor: (isBusy || isPast) ? 'not-allowed' : 'pointer',
                           backgroundColor: isSelected
-                            ? '#8B1E22'
+                            ? '#8E1B2E'
                             : (isBusy || isPast)
                               ? '#EAEAE8'
                               : '#FFFFFF',
@@ -476,7 +476,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
                               ? '#A0A09E'
                               : '#5D4037',
                           border: isSelected
-                            ? '1.5px solid #8B1E22'
+                            ? '1.5px solid #8E1B2E'
                             : '1.5px solid rgba(45, 41, 38, 0.15)',
                           transition: 'all 0.15s ease',
                         }}
@@ -492,7 +492,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
               </div>
             ) : (
               <div style={{
-                backgroundColor: '#FCF9F2',
+                backgroundColor: '#FAF8F5',
                 border: '1px solid #EAE1D4',
                 borderRadius: '6px',
                 padding: '12px',
@@ -500,7 +500,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
                 color: '#5D4037',
                 lineHeight: 1.5
               }}>
-                <div style={{ fontWeight: 700, color: '#8B1E22', marginBottom: '4px' }}>Thời gian chọn thuê:</div>
+                <div style={{ fontWeight: 700, color: '#8E1B2E', marginBottom: '4px' }}>Thời gian chọn thuê:</div>
                 {item.rentalFrom && item.rentalTo ? (
                   <>
                     <div>Từ ngày: <strong>{formatSingleDate(item.rentalFrom)}</strong></div>
@@ -534,7 +534,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
           padding: '5px 14px',
           borderRadius: '6px',
           border: 'none',
-          backgroundColor: '#8B1E22',
+          backgroundColor: '#8E1B2E',
           color: 'white',
           fontSize: '12px',
           fontWeight: 700,

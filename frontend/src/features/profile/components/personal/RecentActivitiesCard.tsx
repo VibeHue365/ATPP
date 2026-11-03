@@ -69,7 +69,7 @@ export const RecentActivitiesCard: React.FC<RecentActivitiesCardProps> = ({ book
           id: `act-${b._id}-${idx}`,
           title: `Đơn hàng #${code} - ${title}`,
           time: timeStr,
-          icon: <Sparkles size={16} color="#8B1E2D" />,
+          icon: <Sparkles size={16} color="#8E1B2E" />,
           badgeLabel: b.status === 'CANCELLED' ? 'Đã hủy' : 'Đã trả đồ',
           badgeBg: '#F3F4F6',
           badgeColor: '#4B5563'

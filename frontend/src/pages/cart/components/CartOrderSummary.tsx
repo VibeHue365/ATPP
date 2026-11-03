@@ -65,7 +65,7 @@ export const CartOrderSummary: React.FC<CartOrderSummaryProps> = ({
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ color: '#8B1E22' }}>
+                  <div style={{ color: '#8E1B2E' }}>
                     <Ticket size={18} />
                   </div>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: '#5D4037' }}>
@@ -77,7 +77,7 @@ export const CartOrderSummary: React.FC<CartOrderSummaryProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     gap: '4px',
-                    color: '#8B1E22',
+                    color: '#8E1B2E',
                     fontSize: '12px',
                     fontWeight: 600,
                   }}
@@ -94,7 +94,7 @@ export const CartOrderSummary: React.FC<CartOrderSummaryProps> = ({
                   justifyContent: 'space-between',
                   padding: '12px 14px',
                   backgroundColor: '#FDFBF9',
-                  border: '1.5px solid #8B1E22',
+                  border: '1.5px solid #8E1B2E',
                   borderRadius: '10px',
                 }}
               >
@@ -108,7 +108,7 @@ export const CartOrderSummary: React.FC<CartOrderSummaryProps> = ({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#8B1E22',
+                      color: '#8E1B2E',
                     }}
                   >
                     <Ticket size={16} />
@@ -128,7 +128,7 @@ export const CartOrderSummary: React.FC<CartOrderSummaryProps> = ({
                     style={{
                       background: 'transparent',
                       border: 'none',
-                      color: '#8B1E22',
+                      color: '#8E1B2E',
                       fontSize: '12px',
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -474,7 +474,7 @@ export const CartOrderSummary: React.FC<CartOrderSummaryProps> = ({
 
       {/* Quality Guarantee Shield box */}
       <div className="vh-cart-guarantee-box">
-        <div style={{ color: '#8B1E22', marginTop: '2px' }}>
+        <div style={{ color: '#8E1B2E', marginTop: '2px' }}>
           <ShieldCheck size={20} />
         </div>
         <div style={{ fontSize: '12px', color: '#5D4037', lineHeight: 1.5 }}>

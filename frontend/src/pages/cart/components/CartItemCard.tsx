@@ -144,7 +144,7 @@ export const CartItemCard: React.FC<CartItemCardProps> = ({
                       <span
                         style={{
                           fontSize: '11px',
-                          color: '#8B1E22',
+                          color: '#8E1B2E',
                           fontWeight: 600,
                           marginTop: '2px',
                         }}
@@ -186,7 +186,7 @@ export const CartItemCard: React.FC<CartItemCardProps> = ({
         {/* Price and Quantity Selector */}
         <div className="vh-cart-item-price-qty-row">
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '16px', fontWeight: 700, color: '#8B1E22' }}>
+            <span style={{ fontSize: '16px', fontWeight: 700, color: '#8E1B2E' }}>
               {item.basePrice?.toLocaleString('vi-VN')}đ
             </span>
             {item.originalPrice && item.originalPrice > (item.basePrice || 0) && (

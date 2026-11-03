@@ -97,7 +97,7 @@ export const PhotoshootBottomActionBar: React.FC<PhotoshootBottomActionBarProps>
               gap: '6px'
             }}
           >
-            <MapPin size={15} color="#8B1E2D" />
+            <MapPin size={15} color="#8E1B2E" />
             <span>Đổi địa điểm</span>
           </button>
         )}
@@ -120,7 +120,7 @@ export const PhotoshootBottomActionBar: React.FC<PhotoshootBottomActionBarProps>
               gap: '6px'
             }}
           >
-            <CalendarClock size={15} color="#8B1E2D" />
+            <CalendarClock size={15} color="#8E1B2E" />
             <span>Đổi lịch chụp</span>
           </button>
         )}
@@ -203,7 +203,7 @@ export const PhotoshootBottomActionBar: React.FC<PhotoshootBottomActionBarProps>
             style={{
               padding: '9px 18px',
               borderRadius: '10px',
-              backgroundColor: '#8B1E2D',
+              backgroundColor: '#8E1B2E',
               color: '#FFFFFF',
               border: 'none',
               fontSize: '13px',

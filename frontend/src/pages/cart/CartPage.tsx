@@ -906,7 +906,7 @@ export const CartPage: React.FC = () => {
                   e.stopPropagation();
                   toggleSelectAll();
                 }}
-                style={{ accentColor: '#8B1E22', cursor: 'pointer', margin: 0 }}
+                style={{ accentColor: '#8E1B2E', cursor: 'pointer', margin: 0 }}
               />
               <span>CHỌN TẤT CẢ</span>
             </div>

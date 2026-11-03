@@ -100,7 +100,7 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
             gap: '6px',
             padding: '10px 18px',
             borderRadius: '10px',
-            backgroundColor: currentStatus === 'PICKUP_PENDING' || currentStatus === 'READY_FOR_PICKUP' ? '#8B1E2D' : '#FFFFFF',
+            backgroundColor: currentStatus === 'PICKUP_PENDING' || currentStatus === 'READY_FOR_PICKUP' ? '#8E1B2E' : '#FFFFFF',
             border: currentStatus === 'PICKUP_PENDING' || currentStatus === 'READY_FOR_PICKUP' ? 'none' : '1px solid #DED7CB',
             color: currentStatus === 'PICKUP_PENDING' || currentStatus === 'READY_FOR_PICKUP' ? '#FFFFFF' : '#231F20',
             fontSize: '13px',
@@ -114,19 +114,19 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
               e.currentTarget.style.backgroundColor = '#721824';
             } else {
               e.currentTarget.style.backgroundColor = '#F8F5F1';
-              e.currentTarget.style.borderColor = '#8B1E2D';
+              e.currentTarget.style.borderColor = '#8E1B2E';
             }
           }}
           onMouseOut={(e) => {
             if (currentStatus === 'PICKUP_PENDING' || currentStatus === 'READY_FOR_PICKUP') {
-              e.currentTarget.style.backgroundColor = '#8B1E2D';
+              e.currentTarget.style.backgroundColor = '#8E1B2E';
             } else {
               e.currentTarget.style.backgroundColor = '#FFFFFF';
               e.currentTarget.style.borderColor = '#DED7CB';
             }
           }}
         >
-          <MapPin size={15} color={currentStatus === 'PICKUP_PENDING' || currentStatus === 'READY_FOR_PICKUP' ? '#FFFFFF' : '#8B1E2D'} />
+          <MapPin size={15} color={currentStatus === 'PICKUP_PENDING' || currentStatus === 'READY_FOR_PICKUP' ? '#FFFFFF' : '#8E1B2E'} />
           <span>Đến điểm nhận áo</span>
         </button>
       )}
@@ -184,14 +184,14 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
           }}
           onMouseOver={(e) => {
             e.currentTarget.style.backgroundColor = '#F8F5F1';
-            e.currentTarget.style.borderColor = '#8B1E2D';
+            e.currentTarget.style.borderColor = '#8E1B2E';
           }}
           onMouseOut={(e) => {
             e.currentTarget.style.backgroundColor = '#FFFFFF';
             e.currentTarget.style.borderColor = '#DED7CB';
           }}
         >
-          <Clock size={15} color="#8B1E2D" />
+          <Clock size={15} color="#8E1B2E" />
           <span>Gia hạn thời gian</span>
         </button>
       )}
@@ -216,14 +216,14 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
         }}
         onMouseOver={(e) => {
           e.currentTarget.style.backgroundColor = '#F8F5F1';
-          e.currentTarget.style.borderColor = '#8B1E2D';
+          e.currentTarget.style.borderColor = '#8E1B2E';
         }}
         onMouseOut={(e) => {
           e.currentTarget.style.backgroundColor = '#FFFFFF';
           e.currentTarget.style.borderColor = '#DED7CB';
         }}
       >
-        <Headphones size={15} color="#8B1E2D" />
+        <Headphones size={15} color="#8E1B2E" />
         <span>Liên hệ hỗ trợ</span>
       </button>
 
@@ -238,7 +238,7 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
             gap: '6px',
             padding: '10px 24px',
             borderRadius: '10px',
-            backgroundColor: '#8B1E2D',
+            backgroundColor: '#8E1B2E',
             border: 'none',
             color: '#FFFFFF',
             fontSize: '13px',
@@ -248,7 +248,7 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
             transition: 'background-color 0.15s'
           }}
           onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#721824')}
-          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#8B1E2D')}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#8E1B2E')}
         >
           <CheckSquare size={15} />
           <span>Trả áo</span>

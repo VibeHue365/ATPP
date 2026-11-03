@@ -174,7 +174,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         <div style="text-align: left; font-size: 14px; color: #4A3F35; line-height: 1.6;">
           <p>Đội ngũ LUMÉ luôn sẵn sàng hỗ trợ bạn:</p>
           <div style="background: #FDF2F4; padding: 12px 16px; border-radius: 10px; border: 1px solid #F7D5DA; margin: 12px 0;">
-            <p style="margin: 0; font-weight: 700; color: #8B1E2D; font-size: 16px;">📞 Hotline: 1900 9999</p>
+            <p style="margin: 0; font-weight: 700; color: #8E1B2E; font-size: 16px;">📞 Hotline: 1900 9999</p>
             <p style="margin: 4px 0 0 0; color: #7D736B; font-size: 12px;">Hỗ trợ 24/7 toàn quốc</p>
           </div>
           <p style="margin: 0;">✉️ Email: <strong>support@lume.vn</strong></p>
@@ -182,7 +182,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         </div>
       `,
       confirmButtonText: 'Đã hiểu',
-      confirmButtonColor: '#8B1E2D'
+      confirmButtonColor: '#8E1B2E'
     });
   };
 
@@ -206,7 +206,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         </div>
       `,
       confirmButtonText: 'Đã hiểu',
-      confirmButtonColor: '#8B1E2D'
+      confirmButtonColor: '#8E1B2E'
     });
   };
 
@@ -232,7 +232,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
             <span>Tiền đặt cọc:</span>
             <span>${depositFee.toLocaleString('vi-VN')}đ</span>
           </div>
-          <div style="border-top: 1px solid #ECE5DB; padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; color: #8B1E2D;">
+          <div style="border-top: 1px solid #ECE5DB; padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; color: #8E1B2E;">
             <span>Tổng thanh toán:</span>
             <span>${totalPrice.toLocaleString('vi-VN')}đ</span>
           </div>
@@ -242,7 +242,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         </div>
       `,
       confirmButtonText: 'Đóng',
-      confirmButtonColor: '#8B1E2D'
+      confirmButtonColor: '#8E1B2E'
     });
   };
 
@@ -255,7 +255,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
       showCancelButton: true,
       confirmButtonText: 'Đến điểm trả áo',
       cancelButtonText: 'Đóng',
-      confirmButtonColor: '#8B1E2D',
+      confirmButtonColor: '#8E1B2E',
       cancelButtonColor: '#7D736B'
     }).then((res) => {
       if (res.isConfirmed) {
@@ -316,7 +316,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         icon: 'success',
         title: 'Xử lý thành công!',
         text: 'Đã hoàn tất thủ tục bồi thường sự cố. Đơn thuê đã hoàn thành.',
-        confirmButtonColor: '#8B1E2D'
+        confirmButtonColor: '#8E1B2E'
       });
       onRefreshBooking?.();
       fetchIncidentDetails();
@@ -325,7 +325,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         icon: 'error',
         title: 'Có lỗi xảy ra',
         text: err?.response?.data?.message || err?.message || 'Không thể xác nhận đền bù.',
-        confirmButtonColor: '#8B1E2D'
+        confirmButtonColor: '#8E1B2E'
       });
     } finally {
       setRespondingIncident(false);
@@ -369,7 +369,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         icon: 'success',
         title: 'Đã gửi khiếu nại!',
         text: 'Đơn hàng đã được chuyển sang trạng thái tranh chấp. Ban Quản Trị sẽ kiểm tra và thông báo kết quả sớm nhất cho bạn.',
-        confirmButtonColor: '#8B1E2D'
+        confirmButtonColor: '#8E1B2E'
       });
       onRefreshBooking?.();
       fetchIncidentDetails();
@@ -378,7 +378,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         icon: 'error',
         title: 'Có lỗi xảy ra',
         text: err?.response?.data?.message || err?.message || 'Không thể gửi khiếu nại.',
-        confirmButtonColor: '#8B1E2D'
+        confirmButtonColor: '#8E1B2E'
       });
     } finally {
       setRespondingIncident(false);
@@ -399,7 +399,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
             Bạn xác nhận đã nhận đầy đủ áo dài và phụ kiện trực tiếp từ cửa hàng <strong>${storeName}</strong>?
           </p>
           <div style="background-color: #F8F5F1; border: 1px dashed #DED7CB; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-            <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #8B1E2D; font-size: 13px;">
+            <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #8E1B2E; font-size: 13px;">
               📸 Tải ảnh hiện trạng áo lúc nhận (Khuyến nghị):
             </label>
             <input
@@ -463,7 +463,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         icon: 'success',
         title: 'Nhận áo thành công!',
         text: 'Đơn thuê của bạn đã chuyển sang trạng thái Đang thuê. Chúc bạn có trải nghiệm tuyệt vời!',
-        confirmButtonColor: '#8B1E2D'
+        confirmButtonColor: '#8E1B2E'
       });
       onRefreshBooking?.();
     }
@@ -904,7 +904,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
             imageAlt: photo.title,
             text: `Chụp lúc: ${photo.timestamp}`,
             confirmButtonText: 'Đóng',
-            confirmButtonColor: '#8B1E2D'
+            confirmButtonColor: '#8E1B2E'
           });
         }}
       />

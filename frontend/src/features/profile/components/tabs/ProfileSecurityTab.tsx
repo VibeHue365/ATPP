@@ -26,7 +26,7 @@ export const ProfileSecurityTab: React.FC = () => {
             height: '42px',
             borderRadius: '10px',
             backgroundColor: '#FDF2F4',
-            color: '#8B1E2D',
+            color: '#8E1B2E',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

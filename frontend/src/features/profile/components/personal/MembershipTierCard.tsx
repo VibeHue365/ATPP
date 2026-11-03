@@ -80,7 +80,7 @@ export const MembershipTierCard: React.FC<MembershipTierCardProps> = ({ stats })
       <div className="lume-membership-progress-box">
         <div className="lume-membership-progress-labels">
           <span>Tiến trình hội viên</span>
-          <span style={{ color: '#8B1E2D', fontWeight: 800 }}>{targetLabel}</span>
+          <span style={{ color: '#8E1B2E', fontWeight: 800 }}>{targetLabel}</span>
         </div>
 
         <div className="lume-progress-bar-bg">
@@ -116,19 +116,19 @@ export const MembershipTierCard: React.FC<MembershipTierCardProps> = ({ stats })
           backgroundColor: '#FFFFFF',
           border: '1px solid #DFCEB4',
           borderRadius: '10px',
-          color: '#8B1E2D',
+          color: '#8E1B2E',
           fontSize: '12.5px',
           fontWeight: 750,
           cursor: 'pointer',
           transition: 'all 0.15s'
         }}
         onMouseOver={(e) => {
-          e.currentTarget.style.backgroundColor = '#8B1E2D';
+          e.currentTarget.style.backgroundColor = '#8E1B2E';
           e.currentTarget.style.color = '#FFFFFF';
         }}
         onMouseOut={(e) => {
           e.currentTarget.style.backgroundColor = '#FFFFFF';
-          e.currentTarget.style.color = '#8B1E2D';
+          e.currentTarget.style.color = '#8E1B2E';
         }}
       >
         <span>Xem chính sách hội viên</span>

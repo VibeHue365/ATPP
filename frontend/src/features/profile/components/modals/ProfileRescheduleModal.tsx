@@ -254,8 +254,8 @@ export const ProfileRescheduleModal: React.FC<ProfileRescheduleModalProps> = ({
                           borderRadius: '8px',
                           fontSize: '12px',
                           fontWeight: 700,
-                          border: isSelected ? '1.5px solid #8B1E2D' : '1px solid #DED7CB',
-                          backgroundColor: isSelected ? '#8B1E2D' : '#FFFFFF',
+                          border: isSelected ? '1.5px solid #8E1B2E' : '1px solid #DED7CB',
+                          backgroundColor: isSelected ? '#8E1B2E' : '#FFFFFF',
                           color: isSelected ? '#FFFFFF' : '#231F20',
                           cursor: 'pointer',
                           textAlign: 'center'
@@ -297,7 +297,7 @@ export const ProfileRescheduleModal: React.FC<ProfileRescheduleModalProps> = ({
             type="button"
             disabled={isSubmitting}
             onClick={handleReschedule}
-            style={{ padding: '8px 22px', borderRadius: '8px', fontSize: '12.5px', fontWeight: 750, backgroundColor: '#8B1E2D', color: '#FFFFFF', border: 'none', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
+            style={{ padding: '8px 22px', borderRadius: '8px', fontSize: '12.5px', fontWeight: 750, backgroundColor: '#8E1B2E', color: '#FFFFFF', border: 'none', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
           >
             {isSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu đổi lịch'}
           </button>

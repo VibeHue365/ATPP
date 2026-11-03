@@ -166,7 +166,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
         <div style="text-align: left; font-size: 14px; color: #4A3F35; line-height: 1.6;">
           <p>Đội ngũ LUMÉ & Đối tác đồng hành cùng bạn:</p>
           <div style="background: #FDF2F4; padding: 12px 16px; border-radius: 10px; border: 1px solid #F7D5DA; margin: 12px 0;">
-            <p style="margin: 0; font-weight: 700; color: #8B1E2D; font-size: 16px;">📞 Hotline: 1900 9999</p>
+            <p style="margin: 0; font-weight: 700; color: #8E1B2E; font-size: 16px;">📞 Hotline: 1900 9999</p>
             <p style="margin: 4px 0 0 0; color: #7D736B; font-size: 12px;">Hỗ trợ Combo 24/7 toàn quốc</p>
           </div>
           <p style="margin: 0;">🏢 Tiệm áo dài: <strong>${rentalProvider?.businessName || 'LUMÉ Huế'}</strong></p>
@@ -174,7 +174,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
         </div>
       `,
       confirmButtonText: 'Đã hiểu',
-      confirmButtonColor: '#8B1E2D'
+      confirmButtonColor: '#8E1B2E'
     });
   };
 
@@ -193,7 +193,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
         </div>
       `,
       confirmButtonText: 'Đã hiểu',
-      confirmButtonColor: '#8B1E2D'
+      confirmButtonColor: '#8E1B2E'
     });
   };
 
@@ -225,7 +225,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
             <span>Tiền cọc giữ lịch:</span>
             <span>${depositTotal.toLocaleString('vi-VN')}đ</span>
           </div>
-          <div style="border-top: 1px solid #ECE5DB; padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; color: #8B1E2D;">
+          <div style="border-top: 1px solid #ECE5DB; padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; color: #8E1B2E;">
             <span>Tổng thanh toán:</span>
             <span>${grandTotal.toLocaleString('vi-VN')}đ</span>
           </div>
@@ -235,7 +235,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
         </div>
       `,
       confirmButtonText: 'Đóng',
-      confirmButtonColor: '#8B1E2D'
+      confirmButtonColor: '#8E1B2E'
     });
   };
 
@@ -253,7 +253,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
             Bạn xác nhận đã nhận đầy đủ áo dài và phụ kiện trực tiếp từ cửa hàng <strong>${rentalProvider?.businessName || 'tiệm áo dài'}</strong> để sẵn sàng cho buổi chụp?
           </p>
           <div style="background-color: #F8F5F1; border: 1px dashed #DED7CB; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-            <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #8B1E2D; font-size: 13px;">
+            <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #8E1B2E; font-size: 13px;">
               📸 Tải ảnh hiện trạng áo lúc nhận (Khuyến nghị):
             </label>
             <input
@@ -317,7 +317,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
         icon: 'success',
         title: 'Nhận áo thành công!',
         text: 'Đơn combo của bạn đã sẵn sàng cho buổi chụp. Chúc bạn có những bức hình thật đẹp!',
-        confirmButtonColor: '#8B1E2D'
+        confirmButtonColor: '#8E1B2E'
       });
       if (onRefreshBooking) await onRefreshBooking();
     }
@@ -400,13 +400,13 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
 
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Sparkles size={16} color="#8B1E2D" />
+              <Sparkles size={16} color="#8E1B2E" />
               <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#231F20' }}>
                 Chi tiết Combo Trọn Gói
               </h2>
             </div>
             <span style={{ fontSize: '12px', color: '#8C827A' }}>
-              Mã đơn: <strong style={{ color: '#8B1E2D' }}>{comboCode}</strong>
+              Mã đơn: <strong style={{ color: '#8E1B2E' }}>{comboCode}</strong>
             </span>
           </div>
         </div>
@@ -431,7 +431,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                   cursor: 'pointer'
                 }}
               >
-                <MapPin size={14} color="#8B1E2D" />
+                <MapPin size={14} color="#8E1B2E" />
                 <span>Đổi địa điểm</span>
               </button>
 
@@ -452,7 +452,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                   cursor: 'pointer'
                 }}
               >
-                <CalendarClock size={14} color="#8B1E2D" />
+                <CalendarClock size={14} color="#8E1B2E" />
                 <span>Đổi lịch combo</span>
               </button>
             </>
@@ -469,7 +469,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
               borderRadius: '8px',
               backgroundColor: '#FDF2F4',
               border: '1px solid #F7D5DA',
-              color: '#8B1E2D',
+              color: '#8E1B2E',
               fontSize: '12.5px',
               fontWeight: 750,
               cursor: 'pointer'
@@ -791,7 +791,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
               {comboTitle}
             </h2>
             <div style={{ fontSize: '12.5px', color: '#7D736B' }}>
-              Bao gồm: <strong style={{ color: '#8B1E2D' }}>1 Trang phục Áo dài cao cấp</strong> + <strong style={{ color: '#1D4ED8' }}>1 Gói chụp ảnh ngoại cảnh Huế</strong>
+              Bao gồm: <strong style={{ color: '#8E1B2E' }}>1 Trang phục Áo dài cao cấp</strong> + <strong style={{ color: '#1D4ED8' }}>1 Gói chụp ảnh ngoại cảnh Huế</strong>
             </div>
           </div>
 
@@ -804,8 +804,8 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                 borderRadius: '20px',
                 fontSize: '12px',
                 fontWeight: 700,
-                border: activeTabSection === 'ALL' ? '1px solid #8B1E2D' : '1px solid #ECE5DB',
-                backgroundColor: activeTabSection === 'ALL' ? '#8B1E2D' : '#FCFAF8',
+                border: activeTabSection === 'ALL' ? '1px solid #8E1B2E' : '1px solid #ECE5DB',
+                backgroundColor: activeTabSection === 'ALL' ? '#8E1B2E' : '#FCFAF8',
                 color: activeTabSection === 'ALL' ? '#FFFFFF' : '#4A3F35',
                 cursor: 'pointer'
               }}
@@ -820,8 +820,8 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                 borderRadius: '20px',
                 fontSize: '12px',
                 fontWeight: 700,
-                border: activeTabSection === 'AODAI' ? '1px solid #8B1E2D' : '1px solid #ECE5DB',
-                backgroundColor: activeTabSection === 'AODAI' ? '#8B1E2D' : '#FCFAF8',
+                border: activeTabSection === 'AODAI' ? '1px solid #8E1B2E' : '1px solid #ECE5DB',
+                backgroundColor: activeTabSection === 'AODAI' ? '#8E1B2E' : '#FCFAF8',
                 color: activeTabSection === 'AODAI' ? '#FFFFFF' : '#4A3F35',
                 cursor: 'pointer'
               }}
@@ -836,8 +836,8 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                 borderRadius: '20px',
                 fontSize: '12px',
                 fontWeight: 700,
-                border: activeTabSection === 'PHOTOSHOOT' ? '1px solid #8B1E2D' : '1px solid #ECE5DB',
-                backgroundColor: activeTabSection === 'PHOTOSHOOT' ? '#8B1E2D' : '#FCFAF8',
+                border: activeTabSection === 'PHOTOSHOOT' ? '1px solid #8E1B2E' : '1px solid #ECE5DB',
+                backgroundColor: activeTabSection === 'PHOTOSHOOT' ? '#8E1B2E' : '#FCFAF8',
                 color: activeTabSection === 'PHOTOSHOOT' ? '#FFFFFF' : '#4A3F35',
                 cursor: 'pointer'
               }}
@@ -1032,7 +1032,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F3EFE9', paddingBottom: '10px' }}>
-              <Shirt size={18} color="#8B1E2D" />
+              <Shirt size={18} color="#8E1B2E" />
               <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#231F20' }}>
                 Phần 1: Trang Phục Áo Dài Thuê
               </h3>
@@ -1223,7 +1223,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Camera size={18} color="#8B1E2D" />
+              <Camera size={18} color="#8E1B2E" />
               <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#231F20' }}>
                 Kho ảnh kết quả Combo
               </h3>
@@ -1408,7 +1408,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div>
             <span style={{ fontSize: '12px', color: '#7D736B' }}>Tổng thanh toán Combo:</span>
-            <div style={{ fontSize: '18px', fontWeight: 800, color: '#8B1E2D' }}>
+            <div style={{ fontSize: '18px', fontWeight: 800, color: '#8E1B2E' }}>
               {grandTotal.toLocaleString('vi-VN')}đ
             </div>
           </div>

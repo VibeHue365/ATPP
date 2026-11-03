@@ -34,7 +34,7 @@ export const ScheduleEmptyState: React.FC<ScheduleEmptyStateProps> = ({
           height: '56px',
           borderRadius: '50%',
           backgroundColor: '#FDF2F4',
-          color: '#8B1E2D',
+          color: '#8E1B2E',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center'
@@ -80,7 +80,7 @@ export const ScheduleEmptyState: React.FC<ScheduleEmptyStateProps> = ({
               style={{
                 padding: '10px 22px',
                 borderRadius: '10px',
-                backgroundColor: '#8B1E2D',
+                backgroundColor: '#8E1B2E',
                 color: '#FFFFFF',
                 border: 'none',
                 fontSize: '13px',

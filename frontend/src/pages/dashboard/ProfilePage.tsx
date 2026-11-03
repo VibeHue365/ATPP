@@ -11,23 +11,51 @@ import { ROUTES } from '../../config/routes';
 import '../../features/profile/components/ProfilePage.css';
 import { ProfileSidebar } from '../../features/profile/components/ProfileSidebar';
 import { ProfileOverviewTab } from '../../features/profile/components/overview/ProfileOverviewTab';
-import { ProfilePersonalInfoTab } from '../../features/profile/components/tabs/ProfilePersonalInfoTab';
-import { ProfileScheduleTab } from '../../features/profile/components/schedule/ProfileScheduleTab';
-import { ProfileRentalDetailPage } from '../../features/profile/components/rental-detail/ProfileRentalDetailPage';
-import { ProfilePhotoshootDetailPage } from '../../features/profile/components/photoshoot-detail/ProfilePhotoshootDetailPage';
-import { ProfileComboDetailPage } from '../../features/profile/components/combo-detail/ProfileComboDetailPage';
-import { ProfileFavoritesTab } from '../../features/profile/components/tabs/ProfileFavoritesTab';
-import { ProfileAddressesTab } from '../../features/profile/components/tabs/ProfileAddressesTab';
-import { ProfilePaymentsTab } from '../../features/profile/components/tabs/ProfilePaymentsTab';
-import { ProfileSecurityTab } from '../../features/profile/components/tabs/ProfileSecurityTab';
-import { ProfileNotificationsTab } from '../../features/profile/components/tabs/ProfileNotificationsTab';
+
+// Sub-tabs & Modals lazy-loaded for optimal performance
+const ProfilePersonalInfoTab = React.lazy(() => import('../../features/profile/components/tabs/ProfilePersonalInfoTab').then(m => ({ default: m.ProfilePersonalInfoTab })));
+const ProfileScheduleTab = React.lazy(() => import('../../features/profile/components/schedule/ProfileScheduleTab').then(m => ({ default: m.ProfileScheduleTab })));
+const ProfileRentalDetailPage = React.lazy(() => import('../../features/profile/components/rental-detail/ProfileRentalDetailPage').then(m => ({ default: m.ProfileRentalDetailPage })));
+const ProfilePhotoshootDetailPage = React.lazy(() => import('../../features/profile/components/photoshoot-detail/ProfilePhotoshootDetailPage').then(m => ({ default: m.ProfilePhotoshootDetailPage })));
+const ProfileComboDetailPage = React.lazy(() => import('../../features/profile/components/combo-detail/ProfileComboDetailPage').then(m => ({ default: m.ProfileComboDetailPage })));
+const ProfileFavoritesTab = React.lazy(() => import('../../features/profile/components/tabs/ProfileFavoritesTab').then(m => ({ default: m.ProfileFavoritesTab })));
+const ProfileAddressesTab = React.lazy(() => import('../../features/profile/components/tabs/ProfileAddressesTab').then(m => ({ default: m.ProfileAddressesTab })));
+const ProfilePaymentsTab = React.lazy(() => import('../../features/profile/components/tabs/ProfilePaymentsTab').then(m => ({ default: m.ProfilePaymentsTab })));
+const ProfileSecurityTab = React.lazy(() => import('../../features/profile/components/tabs/ProfileSecurityTab').then(m => ({ default: m.ProfileSecurityTab })));
+const ProfileNotificationsTab = React.lazy(() => import('../../features/profile/components/tabs/ProfileNotificationsTab').then(m => ({ default: m.ProfileNotificationsTab })));
+
+const ProfileBookingDetailModal = React.lazy(() => import('../../features/profile/components/modals/ProfileBookingDetailModal').then(m => ({ default: m.ProfileBookingDetailModal })));
+const ProfileRescheduleModal = React.lazy(() => import('../../features/profile/components/modals/ProfileRescheduleModal').then(m => ({ default: m.ProfileRescheduleModal })));
+const ProfileLocationChangeModal = React.lazy(() => import('../../features/profile/components/modals/ProfileLocationChangeModal').then(m => ({ default: m.ProfileLocationChangeModal })));
+const ProfileCancelBookingModal = React.lazy(() => import('../../features/profile/components/modals/ProfileCancelBookingModal').then(m => ({ default: m.ProfileCancelBookingModal })));
+const ProfileReviewModal = React.lazy(() => import('../../features/profile/components/modals/ProfileReviewModal').then(m => ({ default: m.ProfileReviewModal })));
+
+const ProfileTabLoader: React.FC = () => (
+  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+      <div style={{ width: '32px', height: '32px', border: '3px solid rgba(192, 130, 97, 0.2)', borderTopColor: 'var(--color-primary, #C08261)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <span style={{ fontSize: '14px', color: 'var(--color-text-muted, #888)' }}>Đang tải dữ liệu...</span>
+    </div>
+  </div>
+);
+
+
+
+
+
+
+
+
+
+
+
 
 // Modals
-import { ProfileBookingDetailModal } from '../../features/profile/components/modals/ProfileBookingDetailModal';
-import { ProfileRescheduleModal } from '../../features/profile/components/modals/ProfileRescheduleModal';
-import { ProfileLocationChangeModal } from '../../features/profile/components/modals/ProfileLocationChangeModal';
-import { ProfileCancelBookingModal } from '../../features/profile/components/modals/ProfileCancelBookingModal';
-import { ProfileReviewModal } from '../../features/profile/components/modals/ProfileReviewModal';
+
+
+
+
+
 
 
 import type {
@@ -428,74 +456,8 @@ export const ProfilePage: React.FC = () => {
   }, [quickStats.membershipTier]);
 
   const specialOffers: SpecialOfferItem[] = useMemo(() => {
-    if (dbOffers.length > 0) return dbOffers;
-    const year = new Date().getFullYear();
-    if (quickStats.membershipTier === 'Diamond Member') {
-      return [
-        {
-          id: 'offer-diamond-1',
-          code: 'DIAMOND15',
-          title: 'Đặc quyền Diamond VIP - Giảm 15%',
-          description: 'Áp dụng cho mọi đơn thuê áo dài & gói chụp nghệ thuật',
-          expiryDate: `31/12/${year}`,
-          type: 'TIER_VIP',
-          discountValue: '15%'
-        },
-        {
-          id: 'offer-diamond-2',
-          code: 'FREESHIPVIP',
-          title: 'Miễn phí giao nhận hỏa tốc',
-          description: 'Áp dụng cho tất cả các đơn thuê trang phục trong năm',
-          expiryDate: `31/12/${year}`,
-          type: 'DISCOUNT_FIXED',
-          discountValue: '100.000đ'
-        }
-      ];
-    }
-    if (quickStats.membershipTier === 'Gold Member') {
-      return [
-        {
-          id: 'offer-gold-1',
-          code: 'GOLD10',
-          title: 'Ưu đãi Gold Member - Giảm 10%',
-          description: 'Áp dụng cho đơn thuê áo dài từ 500.000đ',
-          expiryDate: `31/12/${year}`,
-          type: 'TIER_VIP',
-          discountValue: '10%'
-        },
-        {
-          id: 'offer-gold-2',
-          code: 'COMBO150',
-          title: 'Giảm 150.000đ gói chụp ảnh',
-          description: 'Áp dụng cho các combo đặt trọn gói từ 1.500.000đ',
-          expiryDate: `31/12/${year}`,
-          type: 'DISCOUNT_FIXED',
-          discountValue: '150.000đ'
-        }
-      ];
-    }
-    // Silver / New Member
-    return [
-      {
-        id: 'offer-welcome-1',
-        code: 'LUMEWELCOME',
-        title: 'Mã chào mừng thành viên mới - Giảm 10%',
-        description: 'Áp dụng cho đơn thuê áo dài đầu tiên tại LUMÉ',
-        expiryDate: `31/12/${year}`,
-        type: 'DISCOUNT_PERCENT',
-        discountValue: '10%'
-      },
-      {
-        id: 'offer-combo-1',
-        code: 'COMBOPROMO',
-        title: 'Ưu đãi Combo - Giảm 100.000đ',
-        description: 'Áp dụng khi đặt trọn gói áo dài & chụp ảnh',
-        expiryDate: `31/12/${year}`,
-        type: 'DISCOUNT_FIXED',
-        discountValue: '100.000đ'
-      }
-    ];
-  }, [dbOffers, quickStats.membershipTier]);
+    return dbOffers;
+  }, [dbOffers]);
 
   // Actions
   const handleContinuePayment = async (bookingId: string) => {
@@ -560,6 +522,7 @@ export const ProfilePage: React.FC = () => {
 
           {/* Right Column: Main Content View */}
           <main className="lume-profile-main-content">
+            <React.Suspense fallback={<ProfileTabLoader />}>
             {activeTab === 'overview' && (
               <ProfileOverviewTab
                 fullName={user?.fullName}
@@ -690,11 +653,14 @@ export const ProfilePage: React.FC = () => {
             {activeTab === 'security' && <ProfileSecurityTab />}
 
             {activeTab === 'notifications' && <ProfileNotificationsTab />}
+            </React.Suspense>
           </main>
         </div>
       </div>
 
       {/* -------------------- MODALS -------------------- */}
+      <React.Suspense fallback={null}>
+      
 
       {/* 1. Modal Chi tiết Đơn hàng */}
       {activeDetailBooking && (
@@ -770,6 +736,7 @@ export const ProfilePage: React.FC = () => {
           }}
         />
       )}
+      </React.Suspense>
     </div>
   );
 };

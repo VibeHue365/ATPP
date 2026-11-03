@@ -179,33 +179,25 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
-  // Mock data for transactions history table
-  const paymentHistory = [
-    {
-      id: 'TXN89127021',
-      date: '28/04/2026',
-      service: 'Thuê trang phục "Hồng Liên Hoa"',
-      amount: '1,200,000đ',
-      method: 'Chuyển khoản QR',
-      status: 'Thành công'
-    },
-    {
-      id: 'TXN89125601',
-      date: '10/04/2026',
-      service: 'Thuê trang phục "Cúc Họa Mi"',
-      amount: '550,000đ',
-      method: 'Ví điện tử',
-      status: 'Thành công'
-    },
-    {
-      id: 'TXN89110481',
-      date: '02/09/2024',
-      service: 'Tư vấn Bộ sưu tập "Sắc Son"',
-      amount: '300,000đ',
-      method: 'Thẻ tín dụng',
-      status: 'Thành công'
+  // Transactions history table
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'transactions') {
+      setLoadingPayments(true);
+      httpClient
+        .get<any[]>('/payments/history')
+        .then((res: any) => {
+          const list = Array.isArray(res) ? res : res?.data || [];
+          setPaymentHistory(list);
+        })
+        .catch((err) => {
+          console.error('Failed to fetch payment history in Settings:', err);
+        })
+        .finally(() => setLoadingPayments(false));
     }
-  ];
+  }, [activeTab]);
 
   return (
     <div className="vh-settings-page-container">
@@ -638,21 +630,62 @@ export const SettingsPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {paymentHistory.map((payment) => (
-                      <tr key={payment.id}>
-                        <td className="font-header font-bold text-stone-900">{payment.id}</td>
-                        <td>{payment.date}</td>
-                        <td>{payment.service}</td>
-                        <td className="font-bold text-stone-950">{payment.amount}</td>
-                        <td className="text-stone-500 text-xs">{payment.method}</td>
-                        <td>
-                          <span className="vh-profile-payment-status-success-badge">
-                            <Check size={10} style={{ marginRight: '3px' }} />
-                            <span>{payment.status}</span>
-                          </span>
+                    {loadingPayments ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#6B7280' }}>
+                          Đang tải lịch sử giao dịch...
                         </td>
                       </tr>
-                    ))}
+                    ) : paymentHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#6B7280' }}>
+                          Chưa có giao dịch thanh toán nào được ghi nhận.
+                        </td>
+                      </tr>
+                    ) : (
+                      paymentHistory.map((payment) => {
+                        const code = payment.transactionCode || (payment._id ? `TXN${payment._id.slice(-8).toUpperCase()}` : 'TXN');
+                        const date = payment.createdAt ? new Date(payment.createdAt).toLocaleDateString('vi-VN') : '—';
+                        const service = payment.bookingId?.bookingCode
+                          ? `Đơn thuê ${payment.bookingId.bookingCode}`
+                          : payment.purpose === 'DEPOSIT_REFUND'
+                          ? 'Hoàn tiền đặt cọc'
+                          : 'Thanh toán dịch vụ thuê';
+                        const amountStr = typeof payment.amount === 'number'
+                          ? `${payment.amount.toLocaleString('vi-VN')}đ`
+                          : payment.amount || '0đ';
+                        const methodStr = payment.method === 'BANK_TRANSFER'
+                          ? 'Chuyển khoản QR'
+                          : payment.method === 'WALLET'
+                          ? 'Ví điện tử'
+                          : payment.method === 'COD'
+                          ? 'Thanh toán khi nhận hàng'
+                          : payment.method || 'Cổng thanh toán';
+                        const isSuccess = payment.status === 'SUCCESS' || payment.status === 'COMPLETED' || payment.status === 'PAID';
+
+                        return (
+                          <tr key={payment._id || code}>
+                            <td className="font-header font-bold text-stone-900">{code}</td>
+                            <td>{date}</td>
+                            <td>{service}</td>
+                            <td className="font-bold text-stone-950">{amountStr}</td>
+                            <td className="text-stone-500 text-xs">{methodStr}</td>
+                            <td>
+                              {isSuccess ? (
+                                <span className="vh-profile-payment-status-success-badge">
+                                  <Check size={10} style={{ marginRight: '3px' }} />
+                                  <span>Thành công</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-700">
+                                  <span>{payment.status === 'PENDING' ? 'Đang xử lý' : payment.status === 'FAILED' ? 'Thất bại' : payment.status}</span>
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>

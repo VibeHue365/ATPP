@@ -156,7 +156,7 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
 
           <div className="lume-schedule-meta-row">
             <span className="lume-schedule-meta-item">
-              <User size={14} color="#8B1E2D" />
+              <User size={14} color="#8E1B2E" />
               <span>{providerName}</span>
             </span>
 

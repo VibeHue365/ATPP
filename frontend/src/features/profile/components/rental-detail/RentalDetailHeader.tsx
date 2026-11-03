@@ -31,7 +31,7 @@ export const RentalDetailHeader: React.FC<RentalDetailHeaderProps> = ({
           background: 'none',
           border: 'none',
           padding: 0,
-          color: '#8B1E2D',
+          color: '#8E1B2E',
           fontSize: '13.5px',
           fontWeight: 700,
           cursor: 'pointer',
@@ -85,14 +85,14 @@ export const RentalDetailHeader: React.FC<RentalDetailHeaderProps> = ({
             }}
             onMouseOver={(e) => {
               e.currentTarget.style.backgroundColor = '#F8F5F1';
-              e.currentTarget.style.borderColor = '#8B1E2D';
+              e.currentTarget.style.borderColor = '#8E1B2E';
             }}
             onMouseOut={(e) => {
               e.currentTarget.style.backgroundColor = '#FFFFFF';
               e.currentTarget.style.borderColor = '#DED7CB';
             }}
           >
-            <Headphones size={15} color="#8B1E2D" />
+            <Headphones size={15} color="#8E1B2E" />
             <span>Hỗ trợ</span>
           </button>
 
@@ -106,7 +106,7 @@ export const RentalDetailHeader: React.FC<RentalDetailHeaderProps> = ({
               gap: '6px',
               padding: '9px 18px',
               borderRadius: '10px',
-              backgroundColor: '#8B1E2D',
+              backgroundColor: '#8E1B2E',
               border: 'none',
               color: '#FFFFFF',
               fontSize: '13px',
@@ -116,7 +116,7 @@ export const RentalDetailHeader: React.FC<RentalDetailHeaderProps> = ({
               transition: 'background-color 0.15s'
             }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#721824')}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#8B1E2D')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#8E1B2E')}
           >
             <RotateCcw size={15} />
             <span>Đổi hoặc gia hạn</span>

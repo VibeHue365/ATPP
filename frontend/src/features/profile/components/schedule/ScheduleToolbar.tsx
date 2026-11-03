@@ -107,7 +107,7 @@ export const ScheduleToolbar: React.FC<ScheduleToolbarProps> = ({
             gap: '6px',
             padding: '10px 20px',
             borderRadius: '10px',
-            backgroundColor: '#8B1E2D',
+            backgroundColor: '#8E1B2E',
             color: '#FFFFFF',
             border: 'none',
             fontSize: '13px',
@@ -118,7 +118,7 @@ export const ScheduleToolbar: React.FC<ScheduleToolbarProps> = ({
             whiteSpace: 'nowrap'
           }}
           onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#721824')}
-          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#8B1E2D')}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#8E1B2E')}
         >
           <Plus size={15} />
           <span>{getActionBtnText()}</span>

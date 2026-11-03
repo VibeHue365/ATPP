@@ -46,7 +46,7 @@ export const PhotoshootDeliveredGallery: React.FC<PhotoshootDeliveredGalleryProp
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Camera size={18} color="#8B1E2D" />
+            <Camera size={18} color="#8E1B2E" />
             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#231F20' }}>
               Kho ảnh kết quả từ Nhiếp ảnh gia
             </h3>

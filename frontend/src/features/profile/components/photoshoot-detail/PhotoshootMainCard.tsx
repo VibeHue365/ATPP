@@ -160,7 +160,7 @@ export const PhotoshootMainCard: React.FC<PhotoshootMainCardProps> = ({ photosho
           <div style={{ fontSize: '12.5px', color: '#7D736B', fontWeight: 600 }}>
             Mã đơn: <span style={{ color: '#231F20', fontWeight: 700 }}>{photoshootData.code}</span>
             {photoshootData.photographerName && (
-              <> • Nhiếp ảnh gia: <span style={{ color: '#8B1E2D', fontWeight: 750 }}>{photoshootData.photographerName}</span></>
+              <> • Nhiếp ảnh gia: <span style={{ color: '#8E1B2E', fontWeight: 750 }}>{photoshootData.photographerName}</span></>
             )}
           </div>
         </div>
@@ -178,22 +178,22 @@ export const PhotoshootMainCard: React.FC<PhotoshootMainCardProps> = ({ photosho
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <Calendar size={14} color="#8B1E2D" />
+            <Calendar size={14} color="#8E1B2E" />
             <span>Ngày chụp: <strong style={{ color: '#231F20' }}>{photoshootData.shootDate || 'Theo lịch hẹn'}</strong></span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <Clock size={14} color="#8B1E2D" />
+            <Clock size={14} color="#8E1B2E" />
             <span>Khung giờ: <strong style={{ color: '#231F20' }}>{photoshootData.timeSlot || '09:00 - 11:00'}</strong></span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <MapPin size={14} color="#8B1E2D" />
+            <MapPin size={14} color="#8E1B2E" />
             <span>Địa điểm: <strong style={{ color: '#231F20' }}>{photoshootData.locationName || 'Đại Nội Huế'}</strong></span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <Sparkles size={14} color="#8B1E2D" />
+            <Sparkles size={14} color="#8E1B2E" />
             <span>Concept: <strong style={{ color: '#231F20' }}>{photoshootData.concept || 'Áo dài Cổ phong'}</strong></span>
           </div>
         </div>

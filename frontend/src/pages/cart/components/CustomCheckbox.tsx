@@ -13,7 +13,7 @@ export const CustomCheckbox: React.FC<CustomCheckboxProps> = ({ checked, onChang
       className={`vh-custom-checkbox ${className}`.trim()}
       style={{
         border: checked ? 'none' : '2px solid #D5C2AD',
-        backgroundColor: checked ? '#8B1E22' : '#FFFFFF',
+        backgroundColor: checked ? '#8E1B2E' : '#FFFFFF',
       }}
     >
       {checked && (

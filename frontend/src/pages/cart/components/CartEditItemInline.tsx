@@ -61,7 +61,7 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
           style={{
             fontSize: '11px',
             fontWeight: 700,
-            color: '#8B1E22',
+            color: '#8E1B2E',
             textTransform: 'uppercase',
             letterSpacing: '0.05em',
           }}
@@ -78,8 +78,8 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
                 style={{
                   padding: '5px 12px',
                   borderRadius: '4px',
-                  border: `1.5px solid ${isSelected ? '#8B1E22' : '#D5C2AD'}`,
-                  backgroundColor: isSelected ? '#8B1E22' : 'white',
+                  border: `1.5px solid ${isSelected ? '#8E1B2E' : '#D5C2AD'}`,
+                  backgroundColor: isSelected ? '#8E1B2E' : 'white',
                   color: isSelected ? 'white' : '#5D4037',
                   fontSize: '12px',
                   fontWeight: 700,
@@ -101,7 +101,7 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
             style={{
               fontSize: '11px',
               fontWeight: 700,
-              color: '#8B1E22',
+              color: '#8E1B2E',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
             }}
@@ -118,8 +118,8 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
                   style={{
                     padding: '5px 12px',
                     borderRadius: '4px',
-                    border: `1.5px solid ${isSelected ? '#8B1E22' : '#D5C2AD'}`,
-                    backgroundColor: isSelected ? '#8B1E22' : 'white',
+                    border: `1.5px solid ${isSelected ? '#8E1B2E' : '#D5C2AD'}`,
+                    backgroundColor: isSelected ? '#8E1B2E' : 'white',
                     color: isSelected ? 'white' : '#5D4037',
                     fontSize: '12px',
                     fontWeight: 700,
@@ -178,7 +178,7 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
                   border: 'none',
                   cursor: 'pointer',
                   padding: '4px',
-                  color: '#8B1E22',
+                  color: '#8E1B2E',
                   display: 'flex',
                   alignItems: 'center',
                 }}
@@ -200,7 +200,7 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
                   border: 'none',
                   cursor: 'pointer',
                   padding: '4px',
-                  color: '#8B1E22',
+                  color: '#8E1B2E',
                   display: 'flex',
                   alignItems: 'center',
                 }}
@@ -251,10 +251,10 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
                     onClick={() => onCalendarDayClick(d.dateStr)}
                     style={{
                       aspectRatio: '1',
-                      border: isDaySelected ? '1.5px solid #8B1E22' : '1px solid transparent',
+                      border: isDaySelected ? '1.5px solid #8E1B2E' : '1px solid transparent',
                       borderRadius: '6px',
                       backgroundColor: isDaySelected
-                        ? '#8B1E22'
+                        ? '#8E1B2E'
                         : isDayInRange
                           ? '#FFF0F1'
                           : !d.isAvailable
@@ -267,7 +267,7 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
                         : isDaySelected
                           ? '#FFFFFF'
                           : isDayInRange
-                            ? '#8B1E22'
+                            ? '#8E1B2E'
                             : '#4A4440',
                       fontWeight: isDaySelected || isDayInRange ? 700 : 500,
                       fontSize: '11px',
@@ -338,7 +338,7 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
                           gap: '2px',
                           cursor: isBusy || isPast ? 'not-allowed' : 'pointer',
                           backgroundColor: isSelected
-                            ? '#8B1E22'
+                            ? '#8E1B2E'
                             : isBusy || isPast
                               ? '#EAEAE8'
                               : '#FFFFFF',
@@ -348,7 +348,7 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
                               ? '#A0A09E'
                               : '#5D4037',
                           border: isSelected
-                            ? '1.5px solid #8B1E22'
+                            ? '1.5px solid #8E1B2E'
                             : '1.5px solid rgba(45, 41, 38, 0.15)',
                           transition: 'all 0.15s ease',
                         }}
@@ -374,7 +374,7 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
                   lineHeight: 1.5,
                 }}
               >
-                <div style={{ fontWeight: 700, color: '#8B1E22', marginBottom: '4px' }}>
+                <div style={{ fontWeight: 700, color: '#8E1B2E', marginBottom: '4px' }}>
                   Thời gian chọn thuê:
                 </div>
                 {item.rentalFrom && item.rentalTo ? (
@@ -428,7 +428,7 @@ export const CartEditItemInline: React.FC<CartEditItemInlineProps> = ({
           padding: '5px 14px',
           borderRadius: '6px',
           border: 'none',
-          backgroundColor: '#8B1E22',
+          backgroundColor: '#8E1B2E',
           color: 'white',
           fontSize: '12px',
           fontWeight: 700,

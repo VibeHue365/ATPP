@@ -5,6 +5,7 @@ import { ScheduleToolbar } from './ScheduleToolbar';
 import { ScheduleUrgentAttentionSection } from './ScheduleUrgentAttentionSection';
 import { ScheduleDataTable, type ScheduleRowItem } from './ScheduleDataTable';
 import { useAuth } from '../../../auth/hooks/useAuth';
+import { includesVietnamese } from '../../../../utils/vietnameseUtils';
 import '../ProfilePage.css';
 
 interface ProfileScheduleTabProps {
@@ -547,11 +548,18 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
     }
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter((r) =>
-        r.title.toLowerCase().includes(q) ||
-        r.code.toLowerCase().includes(q)
-      );
+      const q = searchQuery.trim();
+      list = list.filter((r) => {
+        const provName = r.booking?.provider?.businessName || r.booking?.provider?.fullName || '';
+        const custName = r.booking?.customer?.fullName || r.booking?.customerName || '';
+        return (
+          includesVietnamese(r.title, q) ||
+          includesVietnamese(r.code, q) ||
+          includesVietnamese(provName, q) ||
+          includesVietnamese(custName, q) ||
+          includesVietnamese(r.statusLabel, q)
+        );
+      });
     }
 
     return list;

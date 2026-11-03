@@ -183,7 +183,7 @@ export const ProfilePaymentsTab: React.FC = () => {
             height: '42px',
             borderRadius: '10px',
             backgroundColor: '#FDF2F4',
-            color: '#8B1E2D',
+            color: '#8E1B2E',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -228,7 +228,7 @@ export const ProfilePaymentsTab: React.FC = () => {
               height: '40px',
               borderRadius: '10px',
               backgroundColor: '#FFE4E4',
-              color: '#8B1E2D',
+              color: '#8E1B2E',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -241,7 +241,7 @@ export const ProfilePaymentsTab: React.FC = () => {
             <div style={{ fontSize: '11px', fontWeight: 700, color: '#8C827A', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Tổng tiền đã thanh toán
             </div>
-            <div style={{ fontSize: '18px', fontWeight: 900, color: '#8B1E2D', marginTop: '2px' }}>
+            <div style={{ fontSize: '18px', fontWeight: 900, color: '#8E1B2E', marginTop: '2px' }}>
               - {totalPaid.toLocaleString('vi-VN')}đ
             </div>
             <div style={{ fontSize: '11px', color: '#A3928E', marginTop: '2px' }}>
@@ -347,7 +347,7 @@ export const ProfilePaymentsTab: React.FC = () => {
             style={{
               fontSize: '13px',
               fontWeight: 800,
-              color: '#8B1E2D',
+              color: '#8E1B2E',
               textTransform: 'uppercase',
               letterSpacing: '0.04em',
               margin: 0
@@ -367,8 +367,8 @@ export const ProfilePaymentsTab: React.FC = () => {
                 fontSize: '12px',
                 fontWeight: 700,
                 border: '1px solid',
-                borderColor: filterType === 'ALL' ? '#8B1E2D' : '#E2DACF',
-                backgroundColor: filterType === 'ALL' ? '#8B1E2D' : '#FFFFFF',
+                borderColor: filterType === 'ALL' ? '#8E1B2E' : '#E2DACF',
+                backgroundColor: filterType === 'ALL' ? '#8E1B2E' : '#FFFFFF',
                 color: filterType === 'ALL' ? '#FFFFFF' : '#574D4F',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'
@@ -385,8 +385,8 @@ export const ProfilePaymentsTab: React.FC = () => {
                 fontSize: '12px',
                 fontWeight: 700,
                 border: '1px solid',
-                borderColor: filterType === 'PAYMENT' ? '#8B1E2D' : '#E2DACF',
-                backgroundColor: filterType === 'PAYMENT' ? '#8B1E2D' : '#FFFFFF',
+                borderColor: filterType === 'PAYMENT' ? '#8E1B2E' : '#E2DACF',
+                backgroundColor: filterType === 'PAYMENT' ? '#8E1B2E' : '#FFFFFF',
                 color: filterType === 'PAYMENT' ? '#FFFFFF' : '#574D4F',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'
@@ -417,7 +417,7 @@ export const ProfilePaymentsTab: React.FC = () => {
 
         {loading ? (
           <div style={{ padding: '36px', textAlign: 'center', color: '#8C827A', fontSize: '13px' }}>
-            <div style={{ width: '28px', height: '28px', border: '3px solid #F3F4F6', borderTopColor: '#8B1E2D', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 10px auto' }} />
+            <div style={{ width: '28px', height: '28px', border: '3px solid #F3F4F6', borderTopColor: '#8E1B2E', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 10px auto' }} />
             Đang tải lịch sử giao dịch...
           </div>
         ) : filteredPayments.length === 0 ? (
@@ -519,7 +519,7 @@ export const ProfilePaymentsTab: React.FC = () => {
                               height: '20px',
                               borderRadius: '4px',
                               backgroundColor: isRefund ? '#DCFCE7' : '#FDF2F4',
-                              color: isRefund ? '#059669' : '#8B1E2D',
+                              color: isRefund ? '#059669' : '#8E1B2E',
                               flexShrink: 0
                             }}
                           >
@@ -558,7 +558,7 @@ export const ProfilePaymentsTab: React.FC = () => {
                           style={{
                             fontWeight: 900,
                             fontSize: '14px',
-                            color: isRefund ? '#059669' : '#8B1E2D'
+                            color: isRefund ? '#059669' : '#8E1B2E'
                           }}
                         >
                           {isRefund ? '+' : '-'} {(p.amount || 0).toLocaleString('vi-VN')}đ
@@ -569,7 +569,7 @@ export const ProfilePaymentsTab: React.FC = () => {
                             fontWeight: 700,
                             textTransform: 'uppercase',
                             letterSpacing: '0.04em',
-                            color: isRefund ? '#047857' : '#8B1E2D',
+                            color: isRefund ? '#047857' : '#8E1B2E',
                             marginTop: '2px'
                           }}
                         >
