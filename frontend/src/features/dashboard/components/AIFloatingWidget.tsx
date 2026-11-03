@@ -85,7 +85,7 @@ export const AIFloatingWidget: React.FC = () => {
               gap: '6px',
             }}
           >
-            <Sparkles size={13} style={{ color: '#B52B47' }} />
+            <Sparkles size={13} style={{ color: '#8E1B2E' }} />
             <span>TàGo Stylist AI</span>
           </div>
 
@@ -100,18 +100,18 @@ export const AIFloatingWidget: React.FC = () => {
               height: '54px',
               borderRadius: '50%',
               background: 'linear-gradient(135deg, #FFFFFF 0%, #FCFAF7 60%, #F5EFEB 100%)',
-              border: '1.5px solid rgba(181, 43, 71, 0.28)',
+              border: '1.5px solid rgba(142, 27, 46, 0.28)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               boxShadow:
-                '0 10px 28px rgba(181, 43, 71, 0.16), 0 3px 10px rgba(0, 0, 0, 0.06), inset 0 1px 2px #FFFFFF',
-              color: '#B52B47',
+                '0 10px 28px rgba(142, 27, 46, 0.16), 0 3px 10px rgba(0, 0, 0, 0.06), inset 0 1px 2px #FFFFFF',
+              color: '#8E1B2E',
               position: 'relative',
             }}
           >
-            <Sparkles size={23} className="lume-ai-sparkle-icon" style={{ color: '#B52B47' }} />
+            <Sparkles size={23} className="lume-ai-sparkle-icon" style={{ color: '#8E1B2E' }} />
           </button>
         </div>
       )}

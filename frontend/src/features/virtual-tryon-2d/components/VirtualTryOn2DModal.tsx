@@ -185,24 +185,24 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-900/80 backdrop-blur-md animate-fadeIn">
       <div 
         className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[92vh]"
-        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+        style={{ fontFamily: "var(--font-body)" }}
       >
         {/* Header Modal */}
-        <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-gradient-to-r from-amber-50/60 to-white">
+        <div className="px-6 py-4 border-b border-[#EFE8DF] flex items-center justify-between bg-gradient-to-r from-[#FAF8F5] via-[#FFFDFB] to-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-white shadow-md shadow-amber-500/20">
-              <Sparkles size={20} className="animate-pulse" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#8E1B2E] to-[#B22B42] flex items-center justify-center text-white shadow-md shadow-[#8E1B2E]/20">
+              <Sparkles size={20} className="animate-pulse text-[#D8A654]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-stone-900">
+                <h3 className="text-lg font-bold text-[#231F20]">
                   Ướm Thử Áo Dài AI 2D
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#FDF2F4] text-[#8E1B2E] border border-[#F5D3D7]">
                   Fashn-VTON 2D
                 </span>
               </div>
-              <p className="text-xs text-stone-500">
+              <p className="text-xs text-[#5A5254]">
                 {productName ? `Đang thử mẫu: ${productName}` : 'Ghép ảnh Áo Dài trực tiếp vào người mẫu bằng trí tuệ nhân tạo'}
               </p>
             </div>
@@ -372,8 +372,8 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
                 onClick={() => setCategory('one-pieces')}
                 className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition ${
                   category === 'one-pieces'
-                    ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                    : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                    ? 'bg-[#8E1B2E] text-white border-[#8E1B2E] shadow-sm'
+                    : 'bg-white text-stone-600 border-[#EFE8DF] hover:bg-[#FAF8F5]'
                 }`}
               >
                 Áo Dài Toàn Thân
@@ -383,8 +383,8 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
                 onClick={() => setCategory('tops')}
                 className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition ${
                   category === 'tops'
-                    ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                    : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                    ? 'bg-[#8E1B2E] text-white border-[#8E1B2E] shadow-sm'
+                    : 'bg-white text-stone-600 border-[#EFE8DF] hover:bg-[#FAF8F5]'
                 }`}
               >
                 Áo Cách Tân
@@ -396,16 +396,16 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
               type="button"
               onClick={handleStartTryOn}
               disabled={loading}
-              className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-500 hover:from-amber-700 hover:to-yellow-600 text-white font-bold text-sm shadow-lg shadow-amber-500/25 transition transform active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-auto"
+              className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-[#8E1B2E] via-[#A8243A] to-[#8E1B2E] hover:from-[#741524] hover:to-[#5C0F1B] text-white font-bold text-sm shadow-lg shadow-[#8E1B2E]/25 transition transform active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-auto"
             >
               {loading ? (
                 <>
-                  <RefreshCw size={18} className="animate-spin" />
+                  <RefreshCw size={18} className="animate-spin text-[#D8A654]" />
                   <span>Đang Ghép Áo Dài 2D ({progressPercent}%)...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles size={18} />
+                  <Sparkles size={18} className="text-[#D8A654]" />
                   <span>Bắt Đầu Ướm Thử Áo Dài</span>
                 </>
               )}
@@ -413,9 +413,9 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
 
             {loading && (
               <div className="mt-1">
-                <div className="w-full bg-stone-200 rounded-full h-2 overflow-hidden">
+                <div className="w-full bg-[#EFE8DF] rounded-full h-2 overflow-hidden">
                   <div 
-                    className="bg-amber-500 h-2 rounded-full transition-all duration-300"
+                    className="bg-[#8E1B2E] h-2 rounded-full transition-all duration-300"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
@@ -487,15 +487,15 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
                 </div>
               ) : (
                 <div className="text-center p-8 max-w-sm">
-                  <div className="w-14 h-14 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-3">
-                    <Sparkles size={24} />
+                  <div className="w-14 h-14 rounded-full bg-[#FDF2F4] text-[#8E1B2E] border border-[#F5D3D7] flex items-center justify-center mx-auto mb-3">
+                    <Sparkles size={24} className="text-[#C28E3A]" />
                   </div>
-                  <h4 className="text-sm font-bold text-stone-800 mb-1">
+                  <h4 className="text-sm font-bold text-[#231F20] mb-1">
                     Chưa có kết quả ướm thử
                   </h4>
-                  <p className="text-xs text-stone-500 leading-relaxed">
+                  <p className="text-xs text-[#5A5254] leading-relaxed">
                     Hãy chọn ảnh của bạn (hoặc ảnh mẫu có sẵn) và bấm nút 
-                    <strong className="text-amber-600 font-semibold"> "Bắt Đầu Ướm Thử Áo Dài"</strong> để xem bạn mặc chiếc Áo Dài này đẹp thế nào nhé!
+                    <strong className="text-[#8E1B2E] font-semibold"> "Bắt Đầu Ướm Thử Áo Dài"</strong> để xem bạn mặc chiếc Áo Dài này đẹp thế nào nhé!
                   </p>
                 </div>
               )}
@@ -503,7 +503,7 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
 
             {/* Footer kết quả */}
             {resultImageUrl && (
-              <div className="px-4 py-3 bg-white border-t border-stone-200 flex items-center justify-between">
+              <div className="px-4 py-3 bg-white border-t border-[#EFE8DF] flex items-center justify-between">
                 <span className="text-xs text-stone-500 flex items-center gap-1">
                   <ShieldCheck size={14} className="text-emerald-500" /> 
                   Ảnh đạt độ phân giải tiêu chuẩn HD
@@ -512,7 +512,7 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
                   <button
                     type="button"
                     onClick={handleDownloadResult}
-                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm transition"
+                    className="px-4 py-2 rounded-xl bg-[#8E1B2E] hover:bg-[#741524] text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm transition"
                   >
                     <Download size={14} /> Tải Ảnh Về Máy
                   </button>

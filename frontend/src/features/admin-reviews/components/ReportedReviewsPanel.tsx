@@ -631,9 +631,13 @@ export function ReportedReviewsPanel() {
                       <td>
                         <div className="rr-party-cell">
                           <img
-                            src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80"
+                            src={review.customerId?.profile?.avatarUrl || '/avatar_mai_anh.webp'}
                             alt="Khách hàng"
                             className="rr-party-avatar"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = '/avatar_mai_anh.webp';
+                            }}
                           />
                           <div className="rr-party-info">
                             <span className="rr-party-name">{getCustomerName(review)}</span>
@@ -646,9 +650,13 @@ export function ReportedReviewsPanel() {
                       <td>
                         <div className="rr-party-cell">
                           <img
-                            src="https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=80&auto=format&fit=crop&q=80"
+                            src={review.providerId?.profile?.avatarUrl || '/phuong_hoang.webp'}
                             alt="Đối tác"
                             className="rr-party-avatar"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = '/phuong_hoang.webp';
+                            }}
                           />
                           <div className="rr-party-info">
                             <span className="rr-party-name">{getProviderName(review)}</span>
@@ -834,9 +842,13 @@ export function ReportedReviewsPanel() {
                 <div className="rr-review-user-row">
                   <div className="rr-user-identity">
                     <img
-                      src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80"
+                      src={selected.customerId?.profile?.avatarUrl || '/avatar_mai_anh.webp'}
                       alt="avatar"
                       className="rr-party-avatar"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = '/avatar_mai_anh.webp';
+                      }}
                     />
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -864,7 +876,7 @@ export function ReportedReviewsPanel() {
                 </div>
 
                 <div className="rr-review-comment-box">
-                  "{selected.comment || 'Dịch vụ quá tệ, lừa đảo. Không nên đặt ở đây!!! Nhân viên thái độ rất kém, đồ cũ và dơ.'}"
+                  "{selected.comment || 'Không có nhận xét chi tiết.'}"
                 </div>
 
                 {selected.images && selected.images.length > 0 && (
@@ -894,9 +906,13 @@ export function ReportedReviewsPanel() {
                   <span className="rr-mini-card-head">Đối tác / Sản phẩm</span>
                   <div className="rr-mini-card-body">
                     <img
-                      src="https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=80&auto=format&fit=crop&q=80"
+                      src={selected.providerId?.profile?.avatarUrl || selected.bookingItemId?.coverImage || '/phuong_hoang.webp'}
                       alt="thumb"
                       style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover' }}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = '/phuong_hoang.webp';
+                      }}
                     />
                     <div>
                       <div className="rr-mini-card-title">{getProviderName(selected)}</div>
@@ -951,9 +967,13 @@ export function ReportedReviewsPanel() {
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
                       <img
-                        src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&auto=format&fit=crop&q=80"
+                        src={selected.reporterAvatar || '/hoang_minh.webp'}
                         alt="reporter"
                         style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }}
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = '/hoang_minh.webp';
+                        }}
                       />
                       <strong style={{ fontSize: '12px', color: '#0f172a' }}>{getReporterName(selected)}</strong>
                       <span style={{ fontSize: '10.5px', color: '#64748b' }}>{getReporterCode(selected)}</span>

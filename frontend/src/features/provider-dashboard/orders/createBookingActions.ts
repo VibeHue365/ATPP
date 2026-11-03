@@ -266,9 +266,10 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
                 const formData = new FormData();
                 formData.append('file', files[i]);
                 try {
-                  const res: any = await bookingsApi.uploadEvidence(formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-                  if (res.data?.url) {
-                    uploadedProofUrls.push(res.data.url);
+                  const res: any = await bookingsApi.uploadEvidence(formData);
+                  const uploadedUrl = res?.url || res?.data?.url;
+                  if (uploadedUrl) {
+                    uploadedProofUrls.push(uploadedUrl);
                   }
                 } catch (e) { console.error('Upload proof err', e); }
               }

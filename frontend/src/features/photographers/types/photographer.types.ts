@@ -178,6 +178,9 @@ export interface PhotographerDiscoveryParams {
   styleCategoryIds?: string[];
   eventCategoryIds?: string[];
   location?: string;
+  date?: string;
+  groupSize?: string;
+  timeSlot?: string;
   minPrice?: number;
   maxPrice?: number;
   minRating?: number;

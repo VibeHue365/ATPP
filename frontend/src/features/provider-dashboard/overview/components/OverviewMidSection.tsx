@@ -226,7 +226,7 @@ export const OverviewMidSection: React.FC<MidSectionProps> = ({
                       textAnchor="end"
                       fill="#9CA3AF"
                       fontSize="10"
-                      fontFamily="Plus Jakarta Sans"
+                      fontFamily="Inter, sans-serif"
                     >
                       {revLabel >= 1 ? `${revLabel}tr` : `${revLabel * 1000}k`}
                     </text>
@@ -237,7 +237,7 @@ export const OverviewMidSection: React.FC<MidSectionProps> = ({
                       textAnchor="start"
                       fill="#9CA3AF"
                       fontSize="10"
-                      fontFamily="Plus Jakarta Sans"
+                      fontFamily="Inter, sans-serif"
                     >
                       {bookLabel}
                     </text>
@@ -316,7 +316,7 @@ export const OverviewMidSection: React.FC<MidSectionProps> = ({
                     textAnchor="middle"
                     fill="#9CA3AF"
                     fontSize="10"
-                    fontFamily="Plus Jakarta Sans"
+                    fontFamily="Inter, sans-serif"
                   >
                     {pt.label}
                   </text>

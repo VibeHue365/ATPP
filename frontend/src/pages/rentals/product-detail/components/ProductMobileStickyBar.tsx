@@ -24,7 +24,7 @@ export const ProductMobileStickyBar: React.FC<ProductMobileStickyBarProps> = ({
           Giá {rentalMode === 'HOURLY' ? 'thuê theo giờ' : 'thuê ngày'}
         </span>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-          <strong style={{ fontSize: '18px', fontWeight: 800, color: '#8B1E22', letterSpacing: '-0.02em' }}>
+          <strong style={{ fontSize: '18px', fontWeight: 800, color: '#8E1B2E', letterSpacing: '-0.02em' }}>
             {computedPrice.toLocaleString('vi-VN')}đ
           </strong>
         </div>

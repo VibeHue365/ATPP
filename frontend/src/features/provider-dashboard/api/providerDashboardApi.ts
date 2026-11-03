@@ -188,7 +188,7 @@ export const bookingsApi = {
     return httpClient.post<T>(`/bookings/${bookingId}/cancel`, ...args);
   },
   uploadEvidence<T = unknown>(...args: Tail<Parameters<typeof httpClient.post<T>>>) {
-    return httpClient.post<T>(`/upload`, ...args);
+    return httpClient.post<T>(`/api/bookings/upload-reference`, ...args);
   },
   resolveReschedule<T = unknown>(bookingId: string, itemId: string, ...args: Tail<Parameters<typeof httpClient.patch<T>>>) {
     return httpClient.patch<T>(`/bookings/${bookingId}/items/${itemId}/reschedule-requests/resolve`, ...args);

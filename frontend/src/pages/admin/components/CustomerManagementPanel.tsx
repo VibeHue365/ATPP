@@ -41,8 +41,9 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { adminDirectoryApi } from '../../../features/admin-directory/api/adminDirectoryApi';
-import { adminStatsApi } from '../../../features/admin-dashboard/api/adminStatsApi';
+import { adminStatsApi, type CustomerDetailResponse } from '../../../features/admin-dashboard/api/adminStatsApi';
 import { useToast } from '../../../components/feedback/Toast';
+import { includesVietnamese } from '../../../utils/vietnameseUtils';
 import './customerManagementFigma.css';
 
 export interface CustomerDetailItem {
@@ -90,9 +91,49 @@ export function CustomerManagementPanel() {
   const [customerList, setCustomerList] = useState<CustomerDetailItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailItem | null>(null);
+  const [customerDetail, setCustomerDetail] = useState<CustomerDetailResponse | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState<boolean>(false);
   const [activePanelTab, setActivePanelTab] = useState<'overview' | 'booking' | 'refund' | 'dispute' | 'log'>('overview');
   const [isExpandedMore, setIsExpandedMore] = useState<boolean>(false);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!selectedCustomer?.id) {
+      setCustomerDetail(null);
+      return;
+    }
+    let isMounted = true;
+    setIsLoadingDetail(true);
+    adminStatsApi
+      .getCustomerDetail(selectedCustomer.id)
+      .then((res) => {
+        if (isMounted && res) {
+          setCustomerDetail(res);
+          setSelectedCustomer((prev) => {
+            if (!prev || prev.id !== selectedCustomer.id) return prev;
+            return {
+              ...prev,
+              bookings: res.stats.totalBookings,
+              completedBookings: res.stats.completedBookings,
+              refunds: res.stats.totalRefunds,
+              disputes: res.stats.totalDisputes,
+              riskLevel: res.stats.riskLevel,
+              spent: res.stats.totalSpent,
+            };
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('Lỗi khi tải chi tiết khách hàng:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingDetail(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedCustomer?.id]);
 
   const handleCopyCustomerCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -171,9 +212,17 @@ export function CustomerManagementPanel() {
 
   // Search and filters
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [verifiedFilter, setVerifiedFilter] = useState<string>('ALL');
   const [riskFilter, setRiskFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Checkbox selections
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -183,7 +232,7 @@ export function CustomerManagementPanel() {
     setIsLoading(true);
     try {
       const [resCust, resStats] = await Promise.allSettled([
-        adminDirectoryApi.customers(1, 100),
+        adminDirectoryApi.customers(1, 100, debouncedSearchQuery),
         adminStatsApi.get('month'),
       ]);
 
@@ -218,11 +267,11 @@ export function CustomerManagementPanel() {
             warning: 'NONE',
             warningLabel: 'Không có',
             riskLevel: 'LOW',
-            registrationSource: 'Website & App',
+            registrationSource: 'Website VibeHue',
             address: 'Việt Nam',
             language: 'Tiếng Việt',
-            device: 'Thiết bị di động',
-            lastIp: '113.161.72.18',
+            device: 'Trình duyệt Web / Di động',
+            lastIp: 'Mạng bảo mật (Nội bộ)',
             spent: c.spent || 0,
           };
         });
@@ -255,7 +304,7 @@ export function CustomerManagementPanel() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [debouncedSearchQuery]);
 
   useEffect(() => {
     fetchBackendData();
@@ -277,11 +326,10 @@ export function CustomerManagementPanel() {
   const filteredCustomers = useMemo(() => {
     return customerList.filter((item) => {
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchName = item.fullName.toLowerCase().includes(q);
-        const matchEmail = item.email.toLowerCase().includes(q);
-        const matchPhone = item.phone.toLowerCase().includes(q);
-        const matchCode = item.customerCode.toLowerCase().includes(q);
+        const matchName = includesVietnamese(item.fullName, searchQuery);
+        const matchEmail = includesVietnamese(item.email, searchQuery);
+        const matchPhone = includesVietnamese(item.phone, searchQuery);
+        const matchCode = includesVietnamese(item.customerCode, searchQuery);
         if (!matchName && !matchEmail && !matchPhone && !matchCode) return false;
       }
 
@@ -1135,7 +1183,9 @@ export function CustomerManagementPanel() {
                 onClick={() => setActivePanelTab('booking')}
               >
                 Booking
-                <span className="lume-cust-tab-count">{selectedCustomer.bookings}</span>
+                <span className="lume-cust-tab-count">
+                  {customerDetail ? customerDetail.stats.totalBookings : selectedCustomer.bookings}
+                </span>
               </button>
               <button
                 type="button"
@@ -1143,7 +1193,9 @@ export function CustomerManagementPanel() {
                 onClick={() => setActivePanelTab('refund')}
               >
                 Hoàn tiền
-                <span className="lume-cust-tab-count">{selectedCustomer.refunds}</span>
+                <span className="lume-cust-tab-count">
+                  {customerDetail ? customerDetail.stats.totalRefunds : selectedCustomer.refunds}
+                </span>
               </button>
               <button
                 type="button"
@@ -1151,7 +1203,9 @@ export function CustomerManagementPanel() {
                 onClick={() => setActivePanelTab('dispute')}
               >
                 Tranh chấp
-                <span className="lume-cust-tab-count">{selectedCustomer.disputes}</span>
+                <span className="lume-cust-tab-count">
+                  {customerDetail ? customerDetail.stats.totalDisputes : selectedCustomer.disputes}
+                </span>
               </button>
               <button
                 type="button"
@@ -1175,7 +1229,9 @@ export function CustomerManagementPanel() {
                       </div>
                       <span className="lume-cust-panel-stat-title">Tổng booking</span>
                     </div>
-                    <div className="lume-cust-panel-stat-val">{selectedCustomer.bookings}</div>
+                    <div className="lume-cust-panel-stat-val">
+                      {customerDetail ? customerDetail.stats.totalBookings : selectedCustomer.bookings}
+                    </div>
                   </div>
 
                   {/* Box 2: Đã hoàn thành */}
@@ -1186,7 +1242,9 @@ export function CustomerManagementPanel() {
                       </div>
                       <span className="lume-cust-panel-stat-title">Đã hoàn thành</span>
                     </div>
-                    <div className="lume-cust-panel-stat-val">{selectedCustomer.completedBookings}</div>
+                    <div className="lume-cust-panel-stat-val">
+                      {customerDetail ? customerDetail.stats.completedBookings : selectedCustomer.completedBookings}
+                    </div>
                   </div>
 
                   {/* Box 3: Đã hủy */}
@@ -1208,7 +1266,9 @@ export function CustomerManagementPanel() {
                       </div>
                       <span className="lume-cust-panel-stat-title">Hoàn tiền</span>
                     </div>
-                    <div className="lume-cust-panel-stat-val">{selectedCustomer.refunds}</div>
+                    <div className="lume-cust-panel-stat-val">
+                      {customerDetail ? customerDetail.stats.totalRefunds : selectedCustomer.refunds}
+                    </div>
                   </div>
 
                   {/* Box 5: Tranh chấp */}
@@ -1219,7 +1279,9 @@ export function CustomerManagementPanel() {
                       </div>
                       <span className="lume-cust-panel-stat-title">Tranh chấp & Khiếu nại</span>
                     </div>
-                    <div className="lume-cust-panel-stat-val">{selectedCustomer.disputes}</div>
+                    <div className="lume-cust-panel-stat-val">
+                      {customerDetail ? customerDetail.stats.totalDisputes : selectedCustomer.disputes}
+                    </div>
                   </div>
                 </div>
 
@@ -1301,7 +1363,9 @@ export function CustomerManagementPanel() {
                           <CreditCard size={13} color="#881337" />
                           <span>Tổng chi tiêu tích lũy</span>
                         </div>
-                        <strong style={{ color: '#881337' }}>{selectedCustomer.spent.toLocaleString('vi-VN')} đ</strong>
+                        <strong style={{ color: '#881337' }}>
+                          {(customerDetail ? customerDetail.stats.totalSpent : selectedCustomer.spent).toLocaleString('vi-VN')} đ
+                        </strong>
                       </div>
                     </>
                   )}
@@ -1327,37 +1391,42 @@ export function CustomerManagementPanel() {
             {/* Tab 2: Booking */}
             {activePanelTab === 'booking' && (
               <div className="lume-cust-tab-list">
-                {selectedCustomer.bookings > 0 ? (
-                  <>
-                    <div className="lume-cust-tab-card">
+                {isLoadingDetail ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#6B7280', fontSize: 12 }}>
+                    Đang tải dữ liệu đơn thuê thực tế...
+                  </div>
+                ) : customerDetail && customerDetail.bookings.length > 0 ? (
+                  customerDetail.bookings.map((b) => (
+                    <div key={b.id} className="lume-cust-tab-card">
                       <div className="lume-cust-tab-card-header">
                         <span className="lume-cust-tab-card-title">
-                          Đơn thuê #BK-{selectedCustomer.id ? selectedCustomer.id.slice(-5).toUpperCase() : '8921'}
+                          Đơn thuê {b.bookingCode}
                         </span>
-                        <span className="lume-cust-pill-verified-modern">Hoàn thành</span>
+                        <span className={`lume-cust-pill-${b.status === 'COMPLETED' ? 'verified' : 'unverified'}-modern`}>
+                          {b.status === 'COMPLETED'
+                            ? 'Hoàn thành'
+                            : b.status === 'PENDING'
+                            ? 'Chờ xác nhận'
+                            : b.status === 'CONFIRMED'
+                            ? 'Đã xác nhận'
+                            : b.status === 'CANCELLED'
+                            ? 'Đã hủy'
+                            : b.status}
+                        </span>
                       </div>
                       <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Ngày tạo: {selectedCustomer.date}</span>
+                        <span>Ngày tạo: {b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : selectedCustomer.date}</span>
                         <strong style={{ color: '#111827' }}>
-                          {(selectedCustomer.spent || 350000).toLocaleString('vi-VN')} đ
+                          {(b.totalAmount || 0).toLocaleString('vi-VN')} đ
                         </strong>
                       </div>
+                      {b.items && b.items.length > 0 && (
+                        <div style={{ marginTop: 4, fontSize: 10.5, color: '#4B5563' }}>
+                          {b.items.map((item: any) => item.productName || item.title).filter(Boolean).join(', ')}
+                        </div>
+                      )}
                     </div>
-                    {selectedCustomer.bookings > 1 && (
-                      <div className="lume-cust-tab-card">
-                        <div className="lume-cust-tab-card-header">
-                          <span className="lume-cust-tab-card-title">
-                            Đơn thuê #BK-{selectedCustomer.id ? selectedCustomer.id.slice(-3).toUpperCase() + '02' : '9012'}
-                          </span>
-                          <span className="lume-cust-pill-verified-modern">Hoàn thành</span>
-                        </div>
-                        <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>Ngày tạo: {selectedCustomer.lastActive}</span>
-                          <strong style={{ color: '#111827' }}>280.000 đ</strong>
-                        </div>
-                      </div>
-                    )}
-                  </>
+                  ))
                 ) : (
                   <div className="lume-cust-tab-empty">
                     <div className="lume-cust-empty-icon">
@@ -1373,17 +1442,25 @@ export function CustomerManagementPanel() {
             {/* Tab 3: Hoàn tiền */}
             {activePanelTab === 'refund' && (
               <div className="lume-cust-tab-list">
-                {selectedCustomer.refunds > 0 ? (
-                  <div className="lume-cust-tab-card">
-                    <div className="lume-cust-tab-card-header">
-                      <span className="lume-cust-tab-card-title">Yêu cầu hoàn cọc #RF-01</span>
-                      <span className="lume-cust-pill-unverified-modern">Đang xử lý</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Thời gian: {selectedCustomer.lastActive}</span>
-                      <strong style={{ color: '#D97706' }}>500.000 đ</strong>
-                    </div>
+                {isLoadingDetail ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#6B7280', fontSize: 12 }}>
+                    Đang tải yêu cầu hoàn tiền...
                   </div>
+                ) : customerDetail && customerDetail.refunds.length > 0 ? (
+                  customerDetail.refunds.map((r) => (
+                    <div key={r.id} className="lume-cust-tab-card">
+                      <div className="lume-cust-tab-card-header">
+                        <span className="lume-cust-tab-card-title">Yêu cầu hoàn cọc {r.refundCode}</span>
+                        <span className="lume-cust-pill-unverified-modern">
+                          {r.status === 'SUCCESS' ? 'Thành công' : r.status === 'PENDING' ? 'Đang xử lý' : r.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Thời gian: {r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : selectedCustomer.lastActive}</span>
+                        <strong style={{ color: '#D97706' }}>{(r.amount || 0).toLocaleString('vi-VN')} đ</strong>
+                      </div>
+                    </div>
+                  ))
                 ) : (
                   <div className="lume-cust-tab-empty">
                     <div className="lume-cust-empty-icon">
@@ -1399,16 +1476,24 @@ export function CustomerManagementPanel() {
             {/* Tab 4: Tranh chấp */}
             {activePanelTab === 'dispute' && (
               <div className="lume-cust-tab-list">
-                {selectedCustomer.disputes > 0 ? (
-                  <div className="lume-cust-tab-card">
-                    <div className="lume-cust-tab-card-header">
-                      <span className="lume-cust-tab-card-title">Khiếu nại hư hỏng #DP-01</span>
-                      <span className="lume-cust-status-pill suspended">Cần can thiệp</span>
-                    </div>
-                    <p style={{ margin: '4px 0 0 0', fontSize: 11, color: '#4B5563' }}>
-                      Tranh chấp phát sinh từ đơn hàng đã hoàn tất. Đội ngũ kiểm soát rủi ro đang thụ lý.
-                    </p>
+                {isLoadingDetail ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#6B7280', fontSize: 12 }}>
+                    Đang tải khiếu nại & tranh chấp...
                   </div>
+                ) : customerDetail && customerDetail.disputes.length > 0 ? (
+                  customerDetail.disputes.map((d) => (
+                    <div key={d.id} className="lume-cust-tab-card">
+                      <div className="lume-cust-tab-card-header">
+                        <span className="lume-cust-tab-card-title">{d.title} ({d.disputeCode})</span>
+                        <span className="lume-cust-status-pill suspended">
+                          {d.status === 'OPEN' ? 'Cần can thiệp' : d.status === 'RESOLVED' ? 'Đã giải quyết' : d.status}
+                        </span>
+                      </div>
+                      <p style={{ margin: '4px 0 0 0', fontSize: 11, color: '#4B5563' }}>
+                        Ngày tạo: {d.createdAt ? new Date(d.createdAt).toLocaleDateString('vi-VN') : 'Gần đây'}
+                      </p>
+                    </div>
+                  ))
                 ) : (
                   <div className="lume-cust-tab-empty">
                     <div className="lume-cust-empty-icon" style={{ background: '#ECFDF5', color: '#059669' }}>

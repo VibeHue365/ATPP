@@ -21,6 +21,7 @@ import { ComboFigmaCard } from '../../features/combos/components/ComboFigmaCard'
 import { calculateComboPricing, resolveImageUrl } from '../../features/combos/mappers/combo.mapper';
 import type { FigmaComboItem } from '../../features/combos/types/combo.types';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import { includesVietnamese } from '../../utils/vietnameseUtils';
 import './ComboListingPage.css';
 
 const DEFAULT_SIDEBAR_VALUES: SidebarFilterValues = {
@@ -314,11 +315,13 @@ export const ComboListingPage: React.FC = () => {
     }
 
     if (heroBudget === 'under_2m') {
-      setSidebarFilters((prev) => ({ ...prev, maxPrice: 2000000, presetPrice: 'under_1m' }));
+      setSidebarFilters((prev) => ({ ...prev, minPrice: 500000, maxPrice: 2000000, presetPrice: 'under_1m' }));
     } else if (heroBudget === '2m_3m') {
       setSidebarFilters((prev) => ({ ...prev, minPrice: 2000000, maxPrice: 3000000, presetPrice: '2m_3m' }));
     } else if (heroBudget === 'above_3m') {
       setSidebarFilters((prev) => ({ ...prev, minPrice: 3000000, maxPrice: 5000000, presetPrice: 'above_3m' }));
+    } else {
+      setSidebarFilters((prev) => ({ ...prev, minPrice: 500000, maxPrice: 5000000, presetPrice: null }));
     }
     setSearchParams(params, { replace: true });
     setCurrentPage(1);
@@ -329,11 +332,11 @@ export const ComboListingPage: React.FC = () => {
     return combos.filter((item) => {
       // 0. Keyword text search
       if (debouncedComboSearch.trim()) {
-        const query = debouncedComboSearch.trim().toLowerCase();
-        const matchTitle = (item.title || '').toLowerCase().includes(query);
-        const matchDesc = (item.description || '').toLowerCase().includes(query);
-        const matchRegion = (item.region || '').toLowerCase().includes(query);
-        const matchType = (item.locationType || '').toLowerCase().includes(query);
+        const query = debouncedComboSearch.trim();
+        const matchTitle = includesVietnamese(item.title, query);
+        const matchDesc = includesVietnamese(item.description, query);
+        const matchRegion = includesVietnamese(item.region, query);
+        const matchType = includesVietnamese(item.locationType, query);
         if (!matchTitle && !matchDesc && !matchRegion && !matchType) {
           return false;
         }
@@ -458,7 +461,18 @@ export const ComboListingPage: React.FC = () => {
       content: (
         <CustomSelect
           value={heroBudget}
-          onChange={(val) => setHeroBudget(val)}
+          onChange={(val) => {
+            setHeroBudget(val);
+            if (val === 'under_2m') {
+              setSidebarFilters((prev) => ({ ...prev, minPrice: 500000, maxPrice: 2000000, presetPrice: 'under_1m' }));
+            } else if (val === '2m_3m') {
+              setSidebarFilters((prev) => ({ ...prev, minPrice: 2000000, maxPrice: 3000000, presetPrice: '2m_3m' }));
+            } else if (val === 'above_3m') {
+              setSidebarFilters((prev) => ({ ...prev, minPrice: 3000000, maxPrice: 5000000, presetPrice: 'above_3m' }));
+            } else {
+              setSidebarFilters((prev) => ({ ...prev, minPrice: 500000, maxPrice: 5000000, presetPrice: null }));
+            }
+          }}
           options={[
             { value: 'all', label: 'Tất cả loại combo' },
             { value: 'under_2m', label: 'Combo Tiết kiệm (< 2tr)' },

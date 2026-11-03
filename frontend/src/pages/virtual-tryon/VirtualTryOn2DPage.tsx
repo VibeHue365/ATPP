@@ -175,7 +175,7 @@ export const VirtualTryOn2DPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-20 pt-8" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div className="min-h-screen bg-stone-50 pb-20 pt-8" style={{ fontFamily: "var(--font-body)" }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header Hero */}
         <div className="flex flex-col md:flex-row md:items-center justify-between pb-8 border-b border-stone-200 gap-4">

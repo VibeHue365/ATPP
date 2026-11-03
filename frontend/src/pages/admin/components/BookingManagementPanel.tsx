@@ -152,10 +152,18 @@ export const BookingManagementPanel: React.FC = () => {
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [serviceTypeFilter, setServiceTypeFilter] = useState<string>('Tất cả');
   const [regionFilter, setRegionFilter] = useState<string>('Tất cả');
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Selection & Docked Detail Panel (Only opens when user clicks)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -188,22 +196,29 @@ export const BookingManagementPanel: React.FC = () => {
   const isDragging = useRef<boolean>(false);
   const startX = useRef<number>(0);
   const scrollLeftStart = useRef<number>(0);
+  const bookingAbortRef = useRef<AbortController | null>(null);
 
   // Fetch data
   const fetchBookings = useCallback(async () => {
+    if (bookingAbortRef.current) {
+      bookingAbortRef.current.abort();
+    }
+    bookingAbortRef.current = new AbortController();
+    const { signal } = bookingAbortRef.current;
+
     setLoading(true);
     try {
       const params = new URLSearchParams();
       params.set('page', page.toString());
       params.set('limit', limit.toString());
-      if (searchQuery.trim()) params.set('search', searchQuery.trim());
+      if (debouncedSearchQuery.trim()) params.set('search', debouncedSearchQuery.trim());
       if (statusFilter !== 'Tất cả') params.set('status', statusFilter);
       if (serviceTypeFilter !== 'Tất cả') params.set('bookingType', serviceTypeFilter);
       if (regionFilter !== 'Tất cả') params.set('city', regionFilter);
       if (dateRange.start) params.set('startDate', dateRange.start);
       if (dateRange.end) params.set('endDate', dateRange.end);
 
-      const res = await httpClient.get<BookingApiResponse>(`/admin/stats/bookings?${params.toString()}`);
+      const res = await httpClient.get<BookingApiResponse>(`/admin/stats/bookings?${params.toString()}`, { signal });
       if (res) {
         setBookings(res.items || []);
         setTotal(res.total || 0);
@@ -221,12 +236,13 @@ export const BookingManagementPanel: React.FC = () => {
         }
       }
     } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.message === 'canceled') return;
       console.error('Error loading bookings:', err);
       toast.error(err?.message || 'Không thể tải danh sách đơn đặt lịch');
     } finally {
       setLoading(false);
     }
-  }, [page, limit, searchQuery, statusFilter, serviceTypeFilter, regionFilter, dateRange, toast]);
+  }, [page, limit, debouncedSearchQuery, statusFilter, serviceTypeFilter, regionFilter, dateRange, toast]);
 
   useEffect(() => {
     fetchBookings();

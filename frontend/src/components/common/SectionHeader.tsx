@@ -21,7 +21,7 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
         {eyebrow && (
           <span 
             className="text-xs font-bold uppercase tracking-wider inline-block"
-            style={{ color: 'var(--landing-primary, #7D3543)' }}
+            style={{ color: 'var(--landing-primary, #8E1B2E)' }}
           >
             {eyebrow}
           </span>

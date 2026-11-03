@@ -202,7 +202,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             {/* Eyebrow */}
             <span
               className="text-xs font-bold uppercase tracking-wider inline-block"
-              style={{ color: '#B52B47' }}
+              style={{ color: '#8E1B2E' }}
             >
               THUÊ ÁO DÀI & CHỤP ẢNH TRỌN GÓI
             </span>
@@ -218,7 +218,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <br />
               <span
                 className="font-serif italic font-normal"
-                style={{ color: '#B52B47' }}
+                style={{ color: '#8E1B2E' }}
               >
                 Tỏa sáng.
               </span>
@@ -239,10 +239,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 onClick={() => scrollToSection('rentals')}
                 className="rounded-xl text-sm font-bold text-white transition-all cursor-pointer hover:opacity-95 hover:shadow-md active:scale-95 flex items-center gap-2 border-none shrink-0"
                 style={{
-                  backgroundColor: '#B52B47',
+                  backgroundColor: '#8E1B2E',
                   color: '#FFFFFF',
                   padding: '12px 24px',
-                  boxShadow: '0 4px 14px rgba(181, 43, 71, 0.28)',
+                  boxShadow: '0 4px 14px rgba(142, 27, 46, 0.28)',
                 }}
               >
                 <span style={{ color: '#FFFFFF' }}>Khám phá ngay</span>
@@ -251,7 +251,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <button
                 type="button"
                 onClick={() => scrollToSection('combos')}
-                className="rounded-xl text-sm font-semibold transition-all cursor-pointer border hover:bg-[#FFF5F7] hover:border-[#B52B47] hover:text-[#B52B47] hover:shadow-sm active:scale-95 bg-white shrink-0"
+                className="rounded-xl text-sm font-semibold transition-all cursor-pointer border hover:bg-[#FFF5F7] hover:border-[#8E1B2E] hover:text-[#8E1B2E] hover:shadow-sm active:scale-95 bg-white shrink-0"
                 style={{
                   color: '#292324',
                   borderColor: '#E2CED1',
@@ -271,7 +271,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             <div className="flex flex-col gap-1 text-left">
               <span
                 className="text-base md:text-lg font-black font-header leading-tight"
-                style={{ color: '#B52B47' }}
+                style={{ color: '#8E1B2E' }}
               >
                 500+
               </span>
@@ -285,7 +285,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             <div className="flex flex-col gap-1 text-left">
               <span
                 className="text-base md:text-lg font-black font-header leading-tight"
-                style={{ color: '#B52B47' }}
+                style={{ color: '#8E1B2E' }}
               >
                 100+
               </span>
@@ -299,7 +299,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             <div className="flex flex-col gap-1 text-left">
               <span
                 className="text-base md:text-lg font-black font-header leading-tight"
-                style={{ color: '#B52B47' }}
+                style={{ color: '#8E1B2E' }}
               >
                 100%
               </span>
@@ -414,7 +414,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <div>
                 <span
                   className="text-[10px] font-bold uppercase tracking-wider block"
-                  style={{ color: '#B52B47' }}
+                  style={{ color: '#8E1B2E' }}
                 >
                   GÓI PHỔ BIẾN
                 </span>
@@ -435,7 +435,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <div className="flex items-center gap-2 mt-3">
                 <span
                   className="text-xs font-bold inline-flex items-center gap-1 hover:underline"
-                  style={{ color: '#B52B47' }}
+                  style={{ color: '#8E1B2E' }}
                 >
                   <span>Xem gói</span>
                   <ArrowRight size={14} />
@@ -473,7 +473,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <div>
                   <span
                     className="text-[10px] font-bold uppercase tracking-wider block"
-                    style={{ color: '#B52B47' }}
+                    style={{ color: '#8E1B2E' }}
                   >
                     COMBO TIẾT KIỆM {topCombo.discountPercent ? `-${topCombo.discountPercent}%` : ''}
                   </span>
@@ -494,7 +494,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <div className="flex items-center gap-2 mt-3">
                   <span
                     className="text-xs font-bold inline-flex items-center gap-1 hover:underline"
-                    style={{ color: '#B52B47' }}
+                    style={{ color: '#8E1B2E' }}
                   >
                     <span>Xem combo</span>
                     <ArrowRight size={14} />
@@ -538,7 +538,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <div>
                   <span
                     className="text-[10px] font-bold uppercase tracking-wider block"
-                    style={{ color: '#B52B47' }}
+                    style={{ color: '#8E1B2E' }}
                   >
                     {topProduct ? 'ÁO DÀI NỔI BẬT' : 'GÓI CHỤP ĐỀ XUẤT'}
                   </span>
@@ -559,7 +559,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <div className="flex items-center gap-2 mt-3">
                   <span
                     className="text-xs font-bold inline-flex items-center gap-1 hover:underline"
-                    style={{ color: '#B52B47' }}
+                    style={{ color: '#8E1B2E' }}
                   >
                     <span>{topProduct ? 'Thuê ngay' : 'Xem gói'}</span>
                     <ArrowRight size={14} />

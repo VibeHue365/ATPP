@@ -44,8 +44,8 @@ export const ComboFigmaCard: React.FC<ComboFigmaCardProps> = ({ combo }) => {
         >
           <Heart
             size={15}
-            fill={isFavorite ? '#8B1E2D' : 'none'}
-            color={isFavorite ? '#8B1E2D' : '#5E5054'}
+            fill={isFavorite ? '#8E1B2E' : 'none'}
+            color={isFavorite ? '#8E1B2E' : '#5E5054'}
           />
         </button>
       </div>

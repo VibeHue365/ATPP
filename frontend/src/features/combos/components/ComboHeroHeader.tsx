@@ -43,15 +43,15 @@ export const ComboHeroHeader: React.FC<ComboHeroHeaderProps> = ({
           {/* Value highlights mini */}
           <div className="lume-combo-hero-mini-props">
             <div className="lume-combo-hero-mini-prop">
-              <CheckCircle2 size={15} color="#8B1E2D" />
+              <CheckCircle2 size={15} color="#8E1B2E" />
               <span>Đồng bộ 100% Concept</span>
             </div>
             <div className="lume-combo-hero-mini-prop">
-              <CheckCircle2 size={15} color="#8B1E2D" />
+              <CheckCircle2 size={15} color="#8E1B2E" />
               <span>Miễn phí phụ kiện & đạo cụ</span>
             </div>
             <div className="lume-combo-hero-mini-prop">
-              <CheckCircle2 size={15} color="#8B1E2D" />
+              <CheckCircle2 size={15} color="#8E1B2E" />
               <span>Hỗ trợ đổi lịch linh hoạt</span>
             </div>
           </div>

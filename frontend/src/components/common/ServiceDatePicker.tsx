@@ -409,14 +409,14 @@ export const ServiceDatePicker: React.FC<ServiceDatePickerProps> = ({
 
           {/* Mode Context Banner for Photo/Combo */}
           {serviceType === 'photographer' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, color: '#8B263E', fontSize: 13, fontWeight: 700 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, color: '#8E1B2E', fontSize: 13, fontWeight: 700 }}>
               <Camera size={16} />
               <span>Đặt lịch chụp ảnh theo ca (Chọn ngày & khung giờ)</span>
             </div>
           )}
 
           {serviceType === 'combo' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, color: '#8B263E', fontSize: 13, fontWeight: 700 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, color: '#8E1B2E', fontSize: 13, fontWeight: 700 }}>
               <Layers size={16} />
               <span>Lịch trọn gói Combo (Áo dài & Thợ chụp ảnh đồng bộ)</span>
             </div>
@@ -613,7 +613,7 @@ export const ServiceDatePicker: React.FC<ServiceDatePickerProps> = ({
                 </div>
 
                 <div style={{ marginTop: 14, fontSize: 12, fontWeight: 700, color: '#2b2320' }}>
-                  Ngày đã chọn: <span style={{ color: '#8B263E' }}>{formatDateFull(singleDate)}</span>
+                  Ngày đã chọn: <span style={{ color: '#8E1B2E' }}>{formatDateFull(singleDate)}</span>
                 </div>
               </div>
 

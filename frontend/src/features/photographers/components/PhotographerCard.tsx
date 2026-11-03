@@ -45,7 +45,7 @@ export const PhotographerCard: React.FC<PhotographerCardProps> = ({
                 display: 'grid',
                 placeItems: 'center',
                 backgroundColor: '#FBE5E9',
-                color: '#B52B47',
+                color: '#8E1B2E',
               }}
             >
               <Camera size={34} />
@@ -70,8 +70,8 @@ export const PhotographerCard: React.FC<PhotographerCardProps> = ({
         >
           <Heart
             size={15}
-            fill={isFavorite ? '#8B1E2D' : 'none'}
-            color={isFavorite ? '#8B1E2D' : '#5E5054'}
+            fill={isFavorite ? '#8E1B2E' : 'none'}
+            color={isFavorite ? '#8E1B2E' : '#5E5054'}
           />
         </button>
       </div>
@@ -99,7 +99,7 @@ export const PhotographerCard: React.FC<PhotographerCardProps> = ({
             <span><ImageIcon size={11} />{editedPhotosCount ? `${editedPhotosCount} ảnh` : 'Gói chuẩn'}</span>
             <span>•</span>
             <span className="pl-card-rating-inline">
-              <Star size={11} fill="#FACC15" stroke="#FACC15" />
+              <Star size={11} fill="#C28E3A" stroke="#C28E3A" />
               {photographer.rating.toFixed(1)}
             </span>
           </div>

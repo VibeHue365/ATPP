@@ -23,6 +23,7 @@ import { ROUTES } from '../../config/routes';
 import { SmartTagList } from '../../features/smart-tagging/components/SmartTagList';
 import type { PublicSmartTagBadge } from '../../features/smart-tagging/types/smartTag.types';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import { includesVietnamese } from '../../utils/vietnameseUtils';
 import { useToast } from '../../components/feedback/Toast';
 import { chatService } from '../../services/chatService';
 
@@ -44,6 +45,7 @@ const getImageUrl = (url?: string | null) => {
 interface ProductFromDb {
   _id: string;
   name: string;
+  style?: string;
   basePrice: number;
   depositAmount: number;
   images: string[];
@@ -218,9 +220,10 @@ export const ProviderStorePage: React.FC = () => {
       .filter((p) => {
         // Search
         if (searchTerm.trim()) {
-          const term = searchTerm.toLowerCase();
-          const matchesName = p.name?.toLowerCase().includes(term);
-          if (!matchesName) return false;
+          const q = searchTerm.trim();
+          const matchesName = includesVietnamese(p.name, q);
+          const matchesStyle = includesVietnamese(p.style, q);
+          if (!matchesName && !matchesStyle) return false;
         }
         // Size
         if (selectedSize !== 'ALL') {
@@ -279,7 +282,7 @@ export const ProviderStorePage: React.FC = () => {
     return (
       <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FAF7F2' }}>
         <div style={{ textAlign: 'center' }}>
-          <Sparkles className="animate-spin" style={{ width: 40, height: 40, color: '#8B263E', margin: '0 auto 16px' }} />
+          <Sparkles className="animate-spin" style={{ width: 40, height: 40, color: '#8E1B2E', margin: '0 auto 16px' }} />
           <p style={{ color: '#666', fontWeight: 500 }}>Đang tải thông tin gian hàng...</p>
         </div>
       </div>
@@ -297,7 +300,7 @@ export const ProviderStorePage: React.FC = () => {
           style={{
             padding: '12px 28px',
             borderRadius: 12,
-            background: '#8B263E',
+            background: '#8E1B2E',
             color: '#fff',
             fontWeight: 600,
             border: 'none',
@@ -374,7 +377,7 @@ export const ProviderStorePage: React.FC = () => {
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               ) : (
-                <Store style={{ width: 50, height: 50, color: '#8B263E' }} />
+                <Store style={{ width: 50, height: 50, color: '#8E1B2E' }} />
               )}
             </div>
 
@@ -405,7 +408,7 @@ export const ProviderStorePage: React.FC = () => {
 
               {addressString && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#555', fontSize: 14, marginBottom: 8 }}>
-                  <MapPin style={{ width: 16, height: 16, color: '#8B263E', flexShrink: 0 }} />
+                  <MapPin style={{ width: 16, height: 16, color: '#8E1B2E', flexShrink: 0 }} />
                   <span>{addressString}</span>
                 </div>
               )}
@@ -413,18 +416,18 @@ export const ProviderStorePage: React.FC = () => {
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, color: '#666', marginTop: 10 }}>
                 {store.contact?.phone && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Phone style={{ width: 14, height: 14, color: '#8B263E' }} />
+                    <Phone style={{ width: 14, height: 14, color: '#8E1B2E' }} />
                     <span>{store.contact.phone}</span>
                   </div>
                 )}
                 {store.contact?.email && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Mail style={{ width: 14, height: 14, color: '#8B263E' }} />
+                    <Mail style={{ width: 14, height: 14, color: '#8E1B2E' }} />
                     <span>{store.contact.email}</span>
                   </div>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Shirt style={{ width: 14, height: 14, color: '#8B263E' }} />
+                  <Shirt style={{ width: 14, height: 14, color: '#8E1B2E' }} />
                   <span>{products.length} mẫu thiết kế</span>
                 </div>
               </div>
@@ -441,7 +444,7 @@ export const ProviderStorePage: React.FC = () => {
                   gap: 8,
                   padding: '12px 22px',
                   borderRadius: 14,
-                  background: 'linear-gradient(135deg, #8B263E 0%, #6A1B2D 100%)',
+                  background: 'linear-gradient(135deg, #8E1B2E 0%, #741524 100%)',
                   color: '#fff',
                   fontWeight: 700,
                   fontSize: 15,
@@ -504,8 +507,8 @@ export const ProviderStorePage: React.FC = () => {
               padding: '12px 20px',
               fontSize: 16,
               fontWeight: 700,
-              color: activeTab === 'products' ? '#8B263E' : '#666',
-              borderBottom: activeTab === 'products' ? '3px solid #8B263E' : '3px solid transparent',
+              color: activeTab === 'products' ? '#8E1B2E' : '#666',
+              borderBottom: activeTab === 'products' ? '3px solid #8E1B2E' : '3px solid transparent',
               background: 'none',
               border: 'none',
               cursor: 'pointer',
@@ -520,8 +523,8 @@ export const ProviderStorePage: React.FC = () => {
               padding: '12px 20px',
               fontSize: 16,
               fontWeight: 700,
-              color: activeTab === 'info' ? '#8B263E' : '#666',
-              borderBottom: activeTab === 'info' ? '3px solid #8B263E' : '3px solid transparent',
+              color: activeTab === 'info' ? '#8E1B2E' : '#666',
+              borderBottom: activeTab === 'info' ? '3px solid #8E1B2E' : '3px solid transparent',
               background: 'none',
               border: 'none',
               cursor: 'pointer',
@@ -655,7 +658,7 @@ export const ProviderStorePage: React.FC = () => {
             {/* PRODUCT GRID */}
             {loadingProducts ? (
               <div style={{ minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Sparkles className="animate-spin" style={{ width: 32, height: 32, color: '#8B263E' }} />
+                <Sparkles className="animate-spin" style={{ width: 32, height: 32, color: '#8E1B2E' }} />
               </div>
             ) : filteredProducts.length === 0 ? (
               <div
@@ -684,8 +687,8 @@ export const ProviderStorePage: React.FC = () => {
                   style={{
                     padding: '8px 20px',
                     borderRadius: 8,
-                    border: '1px solid #8B263E',
-                    color: '#8B263E',
+                    border: '1px solid #8E1B2E',
+                    color: '#8E1B2E',
                     background: '#fff',
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -798,7 +801,7 @@ export const ProviderStorePage: React.FC = () => {
 
                           {/* Price Row */}
                           <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                            <span style={{ fontSize: 18, fontWeight: 800, color: '#8B263E' }}>
+                            <span style={{ fontSize: 18, fontWeight: 800, color: '#8E1B2E' }}>
                               {finalPrice.toLocaleString('vi-VN')}đ
                             </span>
                             {hasDiscount && (
@@ -869,7 +872,7 @@ export const ProviderStorePage: React.FC = () => {
                             height: 36,
                             borderRadius: 8,
                             border: pageNum === currentPage ? 'none' : '1px solid #DDD',
-                            background: pageNum === currentPage ? '#8B263E' : '#fff',
+                            background: pageNum === currentPage ? '#8E1B2E' : '#fff',
                             color: pageNum === currentPage ? '#fff' : '#333',
                             fontWeight: pageNum === currentPage ? 700 : 500,
                             fontSize: 14,
@@ -914,14 +917,14 @@ export const ProviderStorePage: React.FC = () => {
             {/* Pickup Location & Address */}
             <div style={{ background: '#fff', borderRadius: 16, padding: 24, border: '1px solid #EAE4DC' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <MapPin style={{ width: 22, height: 22, color: '#8B263E' }} />
+                <MapPin style={{ width: 22, height: 22, color: '#8E1B2E' }} />
                 <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#2B181C' }}>Địa điểm nhận & thử áo</h3>
               </div>
               <p style={{ color: '#444', fontSize: 14, lineHeight: 1.6, marginBottom: 12 }}>
                 {pickupAddressString || addressString || 'Vui lòng liên hệ shop để biết địa chỉ thử đồ chính xác.'}
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#666', fontSize: 13 }}>
-                <Clock style={{ width: 16, height: 16, color: '#8B263E' }} />
+                <Clock style={{ width: 16, height: 16, color: '#8E1B2E' }} />
                 <span>Giờ mở cửa: 08:00 - 21:00 (Hàng ngày)</span>
               </div>
             </div>
@@ -929,7 +932,7 @@ export const ProviderStorePage: React.FC = () => {
             {/* Cancellation & Rental Policies */}
             <div style={{ background: '#fff', borderRadius: 16, padding: 24, border: '1px solid #EAE4DC' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <ShieldCheck style={{ width: 22, height: 22, color: '#8B263E' }} />
+                <ShieldCheck style={{ width: 22, height: 22, color: '#8E1B2E' }} />
                 <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#2B181C' }}>Chính sách cho thuê</h3>
               </div>
               <p style={{ color: '#444', fontSize: 14, lineHeight: 1.6, marginBottom: 12 }}>
@@ -937,7 +940,7 @@ export const ProviderStorePage: React.FC = () => {
                   'Khách hàng kiểm tra áo dài kỹ lưỡng khi nhận đồ. Đặt cọc tiền hoặc giấy tờ tùy thân theo yêu cầu của shop.'}
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, paddingTop: 16, borderTop: '1px solid #EEE' }}>
-                <RotateCcw style={{ width: 20, height: 20, color: '#8B263E' }} />
+                <RotateCcw style={{ width: 20, height: 20, color: '#8E1B2E' }} />
                 <div style={{ fontSize: 13, color: '#555' }}>
                   <strong>Chính sách hủy đơn:</strong> {store.policies?.cancellationPolicy || 'Hủy trước 48h hoàn 100% tiền cọc.'}
                 </div>

@@ -52,7 +52,7 @@ export const LandingPage: React.FC = () => {
       />
 
       {/* Target Service Finder Filter Bar */}
-      <ScrollReveal threshold={0.05}>
+      <ScrollReveal threshold={0.05} className="relative z-30">
         <ServiceFinderBar />
       </ScrollReveal>
 

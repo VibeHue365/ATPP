@@ -5,8 +5,11 @@ type RawProvider = Partial<Provider> & {
   capabilities?: unknown;
 };
 
-const list = <T>(kind: string, page: number, limit = 10) =>
-  httpClient.get<Page<T>>(`/admin/stats/${kind}?page=${page}&limit=${limit}`);
+const list = <T>(kind: string, page: number, limit = 10, search?: string) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (search && search.trim()) params.set('search', search.trim());
+  return httpClient.get<Page<T>>(`/admin/stats/${kind}?${params.toString()}`);
+};
 
 const normalizeCapabilities = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
@@ -41,9 +44,9 @@ const normalizeProvider = (provider: RawProvider): Provider => ({
 });
 
 export const adminDirectoryApi = {
-  customers: (page = 1, limit = 50) => list<Customer>('customers', page, limit),
-  async providers(page = 1, limit = 50): Promise<Page<Provider>> {
-    const response = await list<RawProvider>('providers', page, limit);
+  customers: (page = 1, limit = 50, search?: string) => list<Customer>('customers', page, limit, search),
+  async providers(page = 1, limit = 50, search?: string): Promise<Page<Provider>> {
+    const response = await list<RawProvider>('providers', page, limit, search);
     return { ...response, items: response.items.map(normalizeProvider) };
   },
   bookings: (page: number) => list<Booking>('bookings', page),
