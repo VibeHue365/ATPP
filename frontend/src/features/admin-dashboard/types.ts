@@ -14,7 +14,9 @@ export interface AdminPopularProduct {
 
 export interface AdminUserBehavior {
   topSearches?: Array<{ keyword: string; count: number }>;
-  pageViews?: Partial<Record<'homepage' | 'rentals' | 'photographers' | 'productDetails', number>>;
+  pageViews?: Partial<
+    Record<"homepage" | "rentals" | "photographers" | "productDetails", number>
+  >;
   popularBookings?: Array<{ _id: string; count: number }>;
   popularProducts?: AdminPopularProduct[];
   highViewZeroBookingProducts?: AdminPopularProduct[];
@@ -55,12 +57,12 @@ export interface PendingTaskItem {
   title: string;
   count: number;
   tab: string;
-  variant: 'red' | 'amber';
+  variant: "red" | "amber";
 }
 
 export interface ActivityFeedItem {
   id: string;
-  type: 'booking' | 'product' | 'refund' | 'verification' | 'dispute';
+  type: "booking" | "product" | "refund" | "verification" | "dispute";
   actor: string;
   action: string;
   timeAgo: string;
@@ -70,7 +72,7 @@ export interface SystemAlertItem {
   id: string;
   title: string;
   count: number;
-  severity: 'warning' | 'critical';
+  severity: "warning" | "critical";
 }
 
 export interface AdminOverviewKPIs {
@@ -101,7 +103,7 @@ export interface AdminStats {
   userBehavior?: AdminUserBehavior;
   kpis?: AdminOverviewKPIs;
   chart?: {
-    period: 'day' | 'week' | 'month';
+    period: "day" | "week" | "month";
     summaryBookings: number;
     summaryGmv: number;
     points: OverviewChartPoint[];
@@ -144,3 +146,10 @@ export interface PhotographerOverviewMetrics {
   location: string | null;
 }
 
+export interface UserGrowthMetrics {
+  from: string;
+  to: string;
+  totalNewUsers: number;
+  mau: number;
+  data: Array<{ date: string; newUsers: number; dau: number }>;
+}

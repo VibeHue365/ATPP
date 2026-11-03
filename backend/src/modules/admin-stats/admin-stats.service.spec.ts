@@ -18,7 +18,11 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
   let analyticsService: any;
 
   beforeEach(() => {
-    userModel = { countDocuments: jest.fn(), find: jest.fn(), aggregate: jest.fn() };
+    userModel = {
+      countDocuments: jest.fn(),
+      find: jest.fn(),
+      aggregate: jest.fn(),
+    };
     providerModel = {
       countDocuments: jest.fn(),
       find: jest.fn(),
@@ -124,7 +128,9 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
 
     it('filters precisely by from and to dates', async () => {
       bookingModel.aggregate
-        .mockResolvedValueOnce([{ _id: null, orderCount: 5, totalRevenue: 1200000 }])
+        .mockResolvedValueOnce([
+          { _id: null, orderCount: 5, totalRevenue: 1200000 },
+        ])
         .mockResolvedValueOnce([]);
 
       const result = await service.getRentalBookings(
@@ -149,26 +155,68 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
       providerModel.findOne.mockResolvedValue({ _id: shopProviderId });
 
       const mockItems = [
-        { _id: new Types.ObjectId(), rentalCount: 50, product: { name: 'Áo dài Nhật Bình Đỏ', basePrice: 500000, images: ['/img1.png'] } },
-        { _id: new Types.ObjectId(), rentalCount: 40, product: { name: 'Áo dài Ngũ Thân Vàng', basePrice: 450000, images: ['/img2.png'] } },
-        { _id: new Types.ObjectId(), rentalCount: 30, product: { name: 'Áo dài Hoa Sen', basePrice: 350000, images: ['/img3.png'] } },
-        { _id: new Types.ObjectId(), rentalCount: 20, product: { name: 'Áo dài Gấm Cung Đình', basePrice: 600000, images: ['/img4.png'] } },
-        { _id: new Types.ObjectId(), rentalCount: 10, product: { name: 'Áo dài Lụa Tơ Tằm', basePrice: 400000, images: ['/img5.png'] } },
+        {
+          _id: new Types.ObjectId(),
+          rentalCount: 50,
+          product: {
+            name: 'Áo dài Nhật Bình Đỏ',
+            basePrice: 500000,
+            images: ['/img1.png'],
+          },
+        },
+        {
+          _id: new Types.ObjectId(),
+          rentalCount: 40,
+          product: {
+            name: 'Áo dài Ngũ Thân Vàng',
+            basePrice: 450000,
+            images: ['/img2.png'],
+          },
+        },
+        {
+          _id: new Types.ObjectId(),
+          rentalCount: 30,
+          product: {
+            name: 'Áo dài Hoa Sen',
+            basePrice: 350000,
+            images: ['/img3.png'],
+          },
+        },
+        {
+          _id: new Types.ObjectId(),
+          rentalCount: 20,
+          product: {
+            name: 'Áo dài Gấm Cung Đình',
+            basePrice: 600000,
+            images: ['/img4.png'],
+          },
+        },
+        {
+          _id: new Types.ObjectId(),
+          rentalCount: 10,
+          product: {
+            name: 'Áo dài Lụa Tơ Tằm',
+            basePrice: 400000,
+            images: ['/img5.png'],
+          },
+        },
       ];
 
       bookingItemModel.aggregate.mockResolvedValue(mockItems);
 
-      const result = await service.getTopProducts(
-        {},
-        { sub: shopUserId.toString(), roles: ['PROVIDER'] } as any,
-      );
+      const result = await service.getTopProducts({}, {
+        sub: shopUserId.toString(),
+        roles: ['PROVIDER'],
+      } as any);
 
       expect(result.data).toHaveLength(5);
       expect(result.data[0].name).toBe('Áo dài Nhật Bình Đỏ');
       expect(result.data[0].rentalCount).toBe(50);
       expect(result.data[4].name).toBe('Áo dài Lụa Tơ Tằm');
       expect(result.data[4].rentalCount).toBe(10);
-      expect(result.data[0].rentalCount).toBeGreaterThan(result.data[1].rentalCount);
+      expect(result.data[0].rentalCount).toBeGreaterThan(
+        result.data[1].rentalCount,
+      );
     });
 
     it('returns data: [] when a new shop has 0 rentals', async () => {
@@ -178,10 +226,10 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
 
       bookingItemModel.aggregate.mockResolvedValue([]);
 
-      const result = await service.getTopProducts(
-        {},
-        { sub: shopUserId.toString(), roles: ['PROVIDER'] } as any,
-      );
+      const result = await service.getTopProducts({}, {
+        sub: shopUserId.toString(),
+        roles: ['PROVIDER'],
+      } as any);
 
       expect(result).toEqual({
         data: [],
@@ -209,10 +257,10 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
         { _id: 'CLEANING', count: 2 },
       ]);
 
-      const result = await service.getInventoryBreakdown(
-        {},
-        { sub: shopUserId.toString(), roles: ['PROVIDER'] } as any,
-      );
+      const result = await service.getInventoryBreakdown({}, {
+        sub: shopUserId.toString(),
+        roles: ['PROVIDER'],
+      } as any);
 
       expect(result.total).toBe(20);
       expect(result.available).toEqual({
@@ -237,11 +285,17 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
         percentageFormatted: '10%',
       });
 
-      const availableInBreakdown = result.breakdown.find((b: any) => b.status === 'AVAILABLE');
+      const availableInBreakdown = result.breakdown.find(
+        (b: any) => b.status === 'AVAILABLE',
+      );
       expect(availableInBreakdown).toMatchObject({ count: 10, percentage: 50 });
-      const rentedInBreakdown = result.breakdown.find((b: any) => b.status === 'RENTED');
+      const rentedInBreakdown = result.breakdown.find(
+        (b: any) => b.status === 'RENTED',
+      );
       expect(rentedInBreakdown).toMatchObject({ count: 8, percentage: 40 });
-      const cleaningInBreakdown = result.breakdown.find((b: any) => b.status === 'CLEANING');
+      const cleaningInBreakdown = result.breakdown.find(
+        (b: any) => b.status === 'CLEANING',
+      );
       expect(cleaningInBreakdown).toMatchObject({ count: 2, percentage: 10 });
     });
   });
@@ -273,10 +327,10 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
 
     it('rejects unsupported groupBy values', async () => {
       await expect(
-        service.getRevenueTrends(
-          { groupBy: 'INVALID' },
-          { sub: 'admin-id', roles: ['ADMIN'] } as any,
-        ),
+        service.getRevenueTrends({ groupBy: 'INVALID' }, {
+          sub: 'admin-id',
+          roles: ['ADMIN'],
+        } as any),
       ).rejects.toThrow('groupBy must be MONTH');
     });
   });
@@ -286,20 +340,32 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
       bookingModel.aggregate.mockResolvedValue([
         {
           concepts: [
-            { _id: new Types.ObjectId(), bookingCount: 40, concept: { name: 'Hue Royal Concept' } },
-            { _id: new Types.ObjectId(), bookingCount: 20, concept: { name: 'Ao Dai Garden' } },
+            {
+              _id: new Types.ObjectId(),
+              bookingCount: 40,
+              concept: { name: 'Hue Royal Concept' },
+            },
+            {
+              _id: new Types.ObjectId(),
+              bookingCount: 20,
+              concept: { name: 'Ao Dai Garden' },
+            },
           ],
           totals: [{ count: 100 }],
         },
       ]);
 
-      const result = await service.getPopularConcepts(
-        { period: 'Q1/2026' },
-        { sub: 'admin-id', roles: ['ADMIN'] } as any,
-      );
+      const result = await service.getPopularConcepts({ period: 'Q1/2026' }, {
+        sub: 'admin-id',
+        roles: ['ADMIN'],
+      } as any);
 
       expect(result.data).toHaveLength(2);
-      expect(result.data[0]).toMatchObject({ name: 'Hue Royal Concept', bookingCount: 40, percentage: 40 });
+      expect(result.data[0]).toMatchObject({
+        name: 'Hue Royal Concept',
+        bookingCount: 40,
+        percentage: 40,
+      });
       expect(result.totalBookings).toBe(100);
     });
   });
@@ -349,7 +415,12 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
     it('returns active photography partners and their completed shoots', async () => {
       providerModel.find.mockReturnValue({
         select: jest.fn().mockReturnValue({
-          lean: jest.fn().mockResolvedValue([{ _id: new Types.ObjectId() }, { _id: new Types.ObjectId() }]),
+          lean: jest
+            .fn()
+            .mockResolvedValue([
+              { _id: new Types.ObjectId() },
+              { _id: new Types.ObjectId() },
+            ]),
         }),
       });
       bookingModel.countDocuments.mockResolvedValue(120);
@@ -369,14 +440,54 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
       });
       bookingModel.countDocuments.mockResolvedValue(8);
 
-      await expect(service.getPhotographersOverview('HUE')).resolves.toMatchObject({
+      await expect(
+        service.getPhotographersOverview('HUE'),
+      ).resolves.toMatchObject({
         totalPhotographers: 1,
         completedShoots: 8,
         location: 'HUE',
       });
-      expect(providerModel.find).toHaveBeenCalledWith(expect.objectContaining({
-        'address.city': { $regex: 'HUE', $options: 'i' },
-      }));
+      expect(providerModel.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          'address.city': { $regex: 'HUE', $options: 'i' },
+        }),
+      );
+    });
+  });
+
+  describe('VS-112: Customer Growth & Daily Active Users', () => {
+    it('returns seven daily new-user points with DAU and a 30-day MAU', async () => {
+      userModel.aggregate
+        .mockResolvedValueOnce([{ _id: '2026-01-01', count: 4 }])
+        .mockResolvedValueOnce([{ _id: '2026-01-01', count: 9 }]);
+      userModel.countDocuments.mockResolvedValue(50);
+
+      const result = await service.getUserGrowth({
+        from: '2026-01-01',
+        to: '2026-01-07',
+      });
+
+      expect(result.data).toHaveLength(7);
+      expect(result.data[0]).toEqual({
+        date: '2026-01-01',
+        newUsers: 4,
+        dau: 9,
+      });
+      expect(result.totalNewUsers).toBe(4);
+      expect(result.mau).toBe(50);
+    });
+
+    it('exports the growth report as an XLSX workbook', async () => {
+      userModel.aggregate.mockResolvedValue([]);
+      userModel.countDocuments.mockResolvedValue(0);
+
+      const file = await service.exportUserGrowth({
+        from: '2026-01-01',
+        to: '2026-01-01',
+      });
+
+      expect(file.subarray(0, 2).toString()).toBe('PK');
+      expect(file.length).toBeGreaterThan(100);
     });
   });
 });

@@ -1,4 +1,16 @@
-import { Controller, Get, UseGuards, ForbiddenException, Query, Param, Patch, Body } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Patch,
+  Query,
+  Param,
+  Res,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -116,6 +128,33 @@ export class AdminStatsController {
     return this.adminStatsService.getPhotographersOverview(location);
   }
 
+  @Get('user-growth')
+  @Roles('ADMIN')
+  @Permissions('dashboard:read')
+  async getUserGrowth(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.adminStatsService.getUserGrowth({ from, to });
+  }
+
+  @Get('user-growth/export')
+  @Roles('ADMIN')
+  @Permissions('dashboard:read')
+  async exportUserGrowth(
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const file = await this.adminStatsService.exportUserGrowth({ from, to });
+    response.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    response.setHeader(
+      'Content-Disposition',
+      'attachment; filename="user-growth.xlsx"',
+    );
+    return new StreamableFile(file);
+  }
+
   @Get()
   @Roles('ADMIN')
   @Permissions('dashboard:read')
@@ -193,10 +232,7 @@ export class AdminStatsController {
   @Patch('customers/:id/ban')
   @Roles('ADMIN')
   @Permissions('user:manage')
-  async banCustomer(
-    @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-  ) {
+  async banCustomer(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     this.checkAdminRole(user);
     return this.adminStatsService.banCustomer(id);
   }
@@ -204,10 +240,7 @@ export class AdminStatsController {
   @Patch('customers/:id/unban')
   @Roles('ADMIN')
   @Permissions('user:manage')
-  async unbanCustomer(
-    @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-  ) {
+  async unbanCustomer(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     this.checkAdminRole(user);
     return this.adminStatsService.unbanCustomer(id);
   }
@@ -227,7 +260,9 @@ export class AdminStatsController {
 
   private checkAdminRole(user: AuthUser) {
     if (!user.roles?.includes('ADMIN') && !user.roles?.includes('admin')) {
-      throw new ForbiddenException('Admin role is required to access admin statistics');
+      throw new ForbiddenException(
+        'Admin role is required to access admin statistics',
+      );
     }
   }
 }
