@@ -16,6 +16,7 @@ export function BehaviorPanel() {
   const views = data?.userBehavior?.pageViews ?? {};
   const maxViews = Math.max(1, ...Object.values(views));
   const products = data?.userBehavior?.popularProducts ?? [];
+  const zeroBookingProducts = data?.userBehavior?.highViewZeroBookingProducts ?? [];
 
   return (
     <section className="admin-dashboard-panel">
@@ -46,6 +47,14 @@ export function BehaviorPanel() {
             <div className="admin-analytics-table__scroll"><table><thead><tr><th>Sản phẩm / Áo dài</th><th>Giá thuê</th><th>Lượt xem</th><th>Lượt đặt thuê</th><th>Trạng thái</th></tr></thead><tbody>
               {products.map((product) => <tr key={product._id ?? product.name}><td><strong>{product.name}</strong></td><td>{product.basePrice.toLocaleString('vi-VN')}đ</td><td>{(product.viewCount ?? 0).toLocaleString('vi-VN')}</td><td>{(product.rentCount ?? 0).toLocaleString('vi-VN')} lượt</td><td><span className="admin-analytics-status admin-analytics-status--paid">Hoạt động</span></td></tr>)}
               {!products.length && <tr><td colSpan={5} className="admin-analytics-table__empty">Chưa có dữ liệu sản phẩm.</td></tr>}
+            </tbody></table></div>
+          </article>
+
+          <article className="admin-analytics-table">
+            <header><h3>Sản phẩm xem nhiều nhưng chưa có lượt đặt</h3></header>
+            <div className="admin-analytics-table__scroll"><table><thead><tr><th>Sản phẩm / Áo dài</th><th>Giá thuê</th><th>Lượt xem</th><th>Lượt đặt thuê</th><th>Khuyến nghị</th></tr></thead><tbody>
+              {zeroBookingProducts.map((product) => <tr key={product._id ?? product.name}><td><strong>{product.name}</strong></td><td>{product.basePrice.toLocaleString('vi-VN')}đ</td><td>{(product.viewCount ?? 0).toLocaleString('vi-VN')}</td><td>0 lượt</td><td><span className="admin-analytics-status admin-analytics-status--pending">Cần xem lại giá / ảnh</span></td></tr>)}
+              {!zeroBookingProducts.length && <tr><td colSpan={5} className="admin-analytics-table__empty">Chưa có sản phẩm cần xem lại.</td></tr>}
             </tbody></table></div>
           </article>
         </>

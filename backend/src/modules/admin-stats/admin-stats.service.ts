@@ -93,6 +93,7 @@ export class AdminStatsService {
       popularBookings,
       topProductsByBookings,
       topSearches,
+      highViewZeroBookingProducts,
       registrationGrowth,
       revenueGrowth,
       bookingGrowth,
@@ -142,6 +143,7 @@ export class AdminStatsService {
         { $unwind: { path: '$product', preserveNullAndEmptyArrays: false } }
       ]).catch(() => []),
       this.analyticsService.getTopSearches(10),
+      this.analyticsService.getHighViewZeroBookingProducts(10),
       this.getCustomerGrowth(period),
       this.getRevenueGrowth(period),
       this.getBookingGrowth(period),
@@ -189,7 +191,8 @@ export class AdminStatsService {
         productDetails: activeProducts * 5
       },
       popularBookings,
-      popularProducts: popularProductsWithViews
+      popularProducts: popularProductsWithViews,
+      highViewZeroBookingProducts,
     };
 
     const [

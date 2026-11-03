@@ -9,6 +9,7 @@ export interface AdminPopularProduct {
   basePrice: number;
   viewCount?: number;
   rentCount?: number;
+  recommendation?: string;
 }
 
 export interface AdminUserBehavior {
@@ -16,6 +17,7 @@ export interface AdminUserBehavior {
   pageViews?: Partial<Record<'homepage' | 'rentals' | 'photographers' | 'productDetails', number>>;
   popularBookings?: Array<{ _id: string; count: number }>;
   popularProducts?: AdminPopularProduct[];
+  highViewZeroBookingProducts?: AdminPopularProduct[];
 }
 
 export interface AdminMetric {
