@@ -136,3 +136,9 @@ export interface ShopsOverviewMetrics {
   listedProducts: number;
 }
 
+export interface PhotographerOverviewMetrics {
+  totalPhotographers: number;
+  completedShoots: number;
+  location: string | null;
+}
+

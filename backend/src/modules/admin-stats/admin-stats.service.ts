@@ -2018,6 +2018,40 @@ export class AdminStatsService {
     return { totalShops, totalProducts, activeShops: totalShops, listedProducts: totalProducts };
   }
 
+  /** VS-114: active photography partners and completed photography sessions. */
+  async getPhotographersOverview(location?: string) {
+    const normalizedLocation = location?.trim();
+    const providerFilter: Record<string, unknown> = {
+      status: ProviderStatus.Active,
+      capabilities: ProviderCapability.Photography,
+    };
+    if (normalizedLocation) {
+      providerFilter['address.city'] = {
+        $regex: normalizedLocation,
+        $options: 'i',
+      };
+    }
+
+    const photographerIds = await this.providerModel
+      .find(providerFilter)
+      .select('_id')
+      .lean();
+    const providerIds = photographerIds.map((provider) => provider._id);
+    const completedShoots = providerIds.length
+      ? await this.bookingModel.countDocuments({
+          providerIds: { $in: providerIds },
+          bookingType: { $in: ['PHOTOGRAPHY', 'COMBO'] },
+          status: BookingStatus.Completed,
+        } as any)
+      : 0;
+
+    return {
+      totalPhotographers: providerIds.length,
+      completedShoots,
+      location: normalizedLocation || null,
+    };
+  }
+
   private analyticsDateRange(from?: string, to?: string, period?: string) {
     let start: Date | undefined;
     let end: Date | undefined;

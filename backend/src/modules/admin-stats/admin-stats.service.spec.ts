@@ -344,4 +344,39 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
       });
     });
   });
+
+  describe('VS-114: Photographer Partner Network & Completed Shoots Count', () => {
+    it('returns active photography partners and their completed shoots', async () => {
+      providerModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([{ _id: new Types.ObjectId() }, { _id: new Types.ObjectId() }]),
+        }),
+      });
+      bookingModel.countDocuments.mockResolvedValue(120);
+
+      await expect(service.getPhotographersOverview()).resolves.toEqual({
+        totalPhotographers: 2,
+        completedShoots: 120,
+        location: null,
+      });
+    });
+
+    it('filters photographer partners by city when location is supplied', async () => {
+      providerModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([{ _id: new Types.ObjectId() }]),
+        }),
+      });
+      bookingModel.countDocuments.mockResolvedValue(8);
+
+      await expect(service.getPhotographersOverview('HUE')).resolves.toMatchObject({
+        totalPhotographers: 1,
+        completedShoots: 8,
+        location: 'HUE',
+      });
+      expect(providerModel.find).toHaveBeenCalledWith(expect.objectContaining({
+        'address.city': { $regex: 'HUE', $options: 'i' },
+      }));
+    });
+  });
 });

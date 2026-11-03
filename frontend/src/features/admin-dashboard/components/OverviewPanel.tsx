@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   AlertTriangle,
+  Camera,
   Calendar,
   CalendarRange,
   DollarSign,
@@ -186,6 +187,19 @@ export const OverviewPanel: React.FC<OverviewPanelProps> = ({ onNavigateTab }) =
               iconBg="#EFF6FF"
               iconColor="#2563EB"
               onClick={() => onNavigateTab?.('product-moderation')}
+            />
+
+            <OverviewKpiCard
+              label="Photographer hoạt động"
+              value={formatNumber(data.photographersOverview.totalPhotographers)}
+              growth={0}
+              growthType="up-green"
+              growthDesc={`${formatNumber(data.photographersOverview.completedShoots)} buổi chụp hoàn thành`}
+              hideGrowth
+              icon={Camera}
+              iconBg="#F5F3FF"
+              iconColor="#7C3AED"
+              onClick={() => onNavigateTab?.('providers')}
             />
           </div>
 

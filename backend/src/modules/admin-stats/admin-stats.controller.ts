@@ -109,6 +109,13 @@ export class AdminStatsController {
     return this.adminStatsService.getShopsOverview();
   }
 
+  @Get('photographers-overview')
+  @Roles('ADMIN')
+  @Permissions()
+  async getPhotographersOverview(@Query('location') location?: string) {
+    return this.adminStatsService.getPhotographersOverview(location);
+  }
+
   @Get()
   @Roles('ADMIN')
   @Permissions('dashboard:read')
