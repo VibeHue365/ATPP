@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { GoogleOAuthProfile } from '../../../common/strategies/google.strategy';
 import { ChangePasswordDto } from '../dto/change-password.dto';
 import { ForgotPasswordDto } from '../dto/forgot-password.dto';
+import { GoogleMobileLoginDto } from '../dto/google-mobile-login.dto';
 import { LoginDto } from '../dto/login.dto';
 import { OAuthExchangeDto } from '../dto/oauth-exchange.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
@@ -91,6 +92,15 @@ export class AuthController {
     return this.authService.exchangeOAuthCode(dto, this.context(request));
   }
 
+  @Throttle({ auth: { limit: 10, ttl: 60000 } })
+  @Post('google/mobile')
+  loginGoogleMobile(
+    @Body() dto: GoogleMobileLoginDto,
+    @Req() request: RequestMeta,
+  ): Promise<object> {
+    return this.authService.loginGoogleMobile(dto.idToken, this.context(request));
+  }
+
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   logout(@CurrentUser() user: AuthUser): Promise<Record<string, unknown>> {
@@ -145,13 +155,40 @@ export class AuthController {
   }
 
   private async redirectGoogleLogin(
-    request: RequestMeta,
+    request: RequestMeta & { oauthStateDoc?: any },
     response: Response,
   ): Promise<void> {
+    const redirectUri = request.oauthStateDoc?.redirectUri;
     const result = await this.authService.handleGoogleLogin(
       request.user as GoogleOAuthProfile,
       this.context(request),
     );
+    if (redirectUri) {
+      const sep = redirectUri.includes('?') ? '&' : '?';
+      const finalUrl = `${redirectUri}${sep}code=${encodeURIComponent(result.code)}`;
+
+      response.setHeader('Content-Type', 'text/html; charset=utf-8');
+      response.send(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LUMÉ</title>
+  </head>
+  <body style="background:#FAF7F2;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;box-sizing:border-box;">
+    <div style="background:#fff;padding:32px 24px;border-radius:18px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,0.06);max-width:340px;width:100%;">
+      <h2 style="color:#5B0114;margin:0 0 12px;font-family:serif;font-size:26px;letter-spacing:1px;">LUMÉ</h2>
+      <p style="color:#2D2D2D;font-weight:600;font-size:15px;margin:0 0 8px;">Đăng nhập Google thành công!</p>
+      <p style="color:#777;font-size:13px;margin:0 0 20px;line-height:1.5;">Đang quay lại ứng dụng LUMÉ...</p>
+      <a href="${finalUrl}" style="display:block;background:#5B0114;color:#fff;text-decoration:none;padding:12px;border-radius:10px;font-weight:600;font-size:14px;">Mở ứng dụng LUMÉ</a>
+    </div>
+    <script>
+      window.location.href = ${JSON.stringify(finalUrl)};
+    </script>
+  </body>
+</html>`);
+      return;
+    }
+
     const rawFrontendUrl = this.configService.get<string>(
       'FRONTEND_URL',
       'http://localhost:5173',

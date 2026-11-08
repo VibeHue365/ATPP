@@ -14,6 +14,9 @@ export class OAuthState {
   @Prop({ type: String, default: null })
   userAgent?: string | null;
 
+  @Prop({ type: String, default: null })
+  redirectUri?: string | null;
+
   @Prop({ required: true })
   expiresAt: Date;
 

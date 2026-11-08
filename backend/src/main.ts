@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const logger = new Logger('HTTP');
@@ -79,6 +80,31 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('VibeHue Platform API')
+    .setDescription('Tài liệu API chính thức của hệ thống VibeHue Platform')
+    .setVersion('1.0.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'Authorization',
+        description: 'Nhập Bearer Token',
+        in: 'header',
+      },
+      'bearer',
+    )
+    .build();
+
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+    customSiteTitle: 'VibeHue API Docs',
+  });
   await app.listen(process.env.PORT ?? 3000);
 }
 void bootstrap();

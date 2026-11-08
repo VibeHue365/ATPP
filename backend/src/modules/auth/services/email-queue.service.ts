@@ -9,19 +9,28 @@ import { Queue, Worker } from 'bullmq';
 import { MailService } from './mail.service';
 
 export interface EmailVerificationJobData {
+  type: 'verification-otp';
   userId: string;
   verificationTokenId: string;
   email: string;
   otp: string;
 }
 
+export interface PasswordResetJobData {
+  type: 'password-reset';
+  email: string;
+  token: string;
+}
+
+export type AuthEmailJobData = EmailVerificationJobData | PasswordResetJobData;
+
 export const AUTH_EMAIL_QUEUE = 'auth-email';
 
 @Injectable()
 export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(EmailQueueService.name);
-  private queue?: Queue<EmailVerificationJobData>;
-  private worker?: Worker<EmailVerificationJobData>;
+  private queue?: Queue<AuthEmailJobData>;
+  private worker?: Worker<AuthEmailJobData>;
 
   constructor(
     private readonly config: ConfigService,
@@ -31,37 +40,48 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit(): Promise<void> {
     if (!this.enabled()) return;
 
-    const connection = this.connection();
-    this.queue = new Queue(AUTH_EMAIL_QUEUE, { connection });
+    try {
+      const connection = this.connection();
+      this.queue = new Queue(AUTH_EMAIL_QUEUE, { connection });
 
-    if (
-      this.config.get<string>('AUTH_EMAIL_WORKER_ENABLED', 'true') !== 'true'
-    ) {
-      return;
-    }
+      if (
+        this.config.get<string>('AUTH_EMAIL_WORKER_ENABLED', 'true') !== 'true'
+      ) {
+        return;
+      }
 
-    this.worker = new Worker(
-      AUTH_EMAIL_QUEUE,
-      async (job) => {
-        await this.mailService.sendEmailVerificationOtp(
-          job.data.email,
-          job.data.otp,
-        );
-      },
-      {
-        connection,
-        concurrency: this.number('AUTH_EMAIL_WORKER_CONCURRENCY', 2),
-      },
-    );
-    this.worker.on('failed', (job, error) => {
-      this.logger.error(
-        `Email verification job ${job?.id ?? 'unknown'} failed: ${error.message}`,
+      this.worker = new Worker(
+        AUTH_EMAIL_QUEUE,
+        async (job) => {
+          if (job.data.type === 'password-reset') {
+            await this.mailService.sendPasswordResetLink(
+              job.data.email,
+              job.data.token,
+            );
+          } else {
+            await this.mailService.sendEmailVerificationOtp(
+              job.data.email,
+              job.data.otp,
+            );
+          }
+        },
+        {
+          connection,
+          concurrency: this.number('AUTH_EMAIL_WORKER_CONCURRENCY', 2),
+        },
       );
-    });
-    this.worker.on('error', (error) => {
-      this.logger.error(`Email queue error: ${error.message}`);
-    });
-    await this.worker.waitUntilReady();
+      this.worker.on('failed', (job, error) => {
+        this.logger.error(
+          `Auth email job ${job?.id ?? 'unknown'} failed: ${error.message}`,
+        );
+      });
+      this.worker.on('error', (error) => {
+        this.logger.error(`Email queue error: ${error.message}`);
+      });
+      await this.worker.waitUntilReady();
+    } catch (err: any) {
+      this.logger.warn(`Could not initialize EmailQueue worker: ${err?.message}`);
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -70,27 +90,76 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
   }
 
   async enqueueVerificationOtp(
-    data: EmailVerificationJobData,
+    data: Omit<EmailVerificationJobData, 'type'>,
   ): Promise<string> {
+    const payload: EmailVerificationJobData = {
+      ...data,
+      type: 'verification-otp',
+    };
+
     if (!this.queue) {
-      throw new Error('Email queue is disabled');
+      // Fallback: Gửi đồng bộ nếu Queue tắt
+      await this.mailService.sendEmailVerificationOtp(data.email, data.otp);
+      return 'direct-sent';
     }
 
-    const job = await this.queue.add('send-verification-otp', data, {
-      jobId: this.jobId(data),
-      attempts: this.number('AUTH_EMAIL_MAX_RETRIES', 3) + 1,
-      backoff: {
-        type: 'exponential',
-        delay: this.number('AUTH_EMAIL_RETRY_DELAY_MS', 3000),
-      },
-      removeOnComplete: true,
-      removeOnFail: true,
-    });
+    try {
+      const job = await this.queue.add('send-verification-otp', payload, {
+        jobId: this.verificationJobId(data),
+        attempts: this.number('AUTH_EMAIL_MAX_RETRIES', 3) + 1,
+        backoff: {
+          type: 'exponential',
+          delay: this.number('AUTH_EMAIL_RETRY_DELAY_MS', 3000),
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      });
 
-    return String(job.id);
+      return String(job.id);
+    } catch (error: any) {
+      this.logger.warn(
+        `Failed to enqueue OTP email, falling back to direct send: ${error?.message}`,
+      );
+      await this.mailService.sendEmailVerificationOtp(data.email, data.otp);
+      return 'direct-sent-fallback';
+    }
   }
 
-  jobId(data: EmailVerificationJobData): string {
+  async enqueuePasswordReset(email: string, token: string): Promise<string> {
+    const payload: PasswordResetJobData = {
+      type: 'password-reset',
+      email,
+      token,
+    };
+
+    if (!this.queue) {
+      // Fallback: Gửi đồng bộ nếu Queue tắt
+      await this.mailService.sendPasswordResetLink(email, token);
+      return 'direct-sent';
+    }
+
+    try {
+      const job = await this.queue.add('send-password-reset', payload, {
+        attempts: this.number('AUTH_EMAIL_MAX_RETRIES', 3) + 1,
+        backoff: {
+          type: 'exponential',
+          delay: this.number('AUTH_EMAIL_RETRY_DELAY_MS', 3000),
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      });
+
+      return String(job.id);
+    } catch (error: any) {
+      this.logger.warn(
+        `Failed to enqueue password reset email, falling back to direct send: ${error?.message}`,
+      );
+      await this.mailService.sendPasswordResetLink(email, token);
+      return 'direct-sent-fallback';
+    }
+  }
+
+  verificationJobId(data: Omit<EmailVerificationJobData, 'type'>): string {
     return `verification-${data.userId}-${data.verificationTokenId}`;
   }
 

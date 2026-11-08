@@ -1,26 +1,171 @@
-import { Ionicons } from '@expo/vector-icons';
-import { type Href,router } from 'expo-router';
+import React from 'react';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { type Href, router } from 'expo-router';
+import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
+import { Colors, FontFamily } from '@/constants/theme';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCart } from '@/contexts/CartContext';
+import { useDestination } from '@/contexts/DestinationContext';
 
 export function BrandHeader() {
-  const {unreadCount}=useNotifications();
-  const {isAuthenticated}=useAuth();
-  const actions=[...(isAuthenticated?[{name:'sparkles-outline' as const,route:'/ai-assistant'}]:[]),{name:'search' as const,route:'/(tabs)/rentals'},{name:'heart-outline' as const,route:'/favorites'},{name:'notifications-outline' as const,route:'/notifications'}];
-  return <View style={styles.root}>
-    <View style={styles.brand}><View style={styles.mark}><Text style={styles.markText}>L</Text></View><View><Text style={styles.name}>LUMÉ</Text><Text style={styles.tagline}>ÁO DÀI & CHỤP ẢNH</Text></View></View>
-    <View style={styles.actions}>{actions.map(action => <Pressable accessibilityLabel={action.name==='sparkles-outline'?'Trợ lý AI':action.name==='search'?'Tìm kiếm':action.name==='heart-outline'?'Yêu thích':'Thông báo'} onPress={()=>router.push(action.route as Href)} key={action.name} style={styles.icon}><Ionicons name={action.name} size={20} color={action.name==='sparkles-outline'?Colors.primary:Colors.text} />{action.name==='notifications-outline'&&unreadCount>0&&<View style={styles.badge}><Text style={styles.badgeText}>{Math.min(unreadCount,9)}</Text></View>}</Pressable>)}</View>
-  </View>;
+  const { unreadCount } = useNotifications();
+  const { isAuthenticated } = useAuth();
+  const { count: cartCount } = useCart();
+  const { destination, openDestinationPicker } = useDestination();
+
+  return (
+    <View style={styles.root}>
+      <View style={styles.brandGroup}>
+        <Pressable onPress={() => router.push('/(tabs)' as Href)}>
+          <Image
+            source={require('@/assets/images/logo-transparent.png')}
+            style={styles.logoImage}
+            contentFit="contain"
+          />
+        </Pressable>
+
+        <Pressable
+          style={styles.locationBadge}
+          onPress={openDestinationPicker}
+          hitSlop={6}
+        >
+          <Ionicons name="compass-outline" size={13} color={Colors.primary} />
+          <Text style={styles.locationText}>{destination.name}</Text>
+          <Ionicons name="chevron-down" size={11} color={Colors.primary} />
+        </Pressable>
+      </View>
+
+      <View style={styles.actions}>
+        <Pressable
+          accessibilityLabel="Trợ lý AI Stylist"
+          onPress={() => router.push('/ai-assistant' as Href)}
+          style={styles.aiPillBtn}
+        >
+          <MaterialIcons name="auto-awesome" size={13} color="#FFFFFF" />
+          <Text style={styles.aiPillText}>AI Stylist</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityLabel="Yêu thích"
+          onPress={() =>
+            router.push((isAuthenticated ? '/favorites' : '/(auth)/login') as Href)
+          }
+          style={styles.iconBtn}
+        >
+          <Ionicons name="heart-outline" size={19} color={Colors.text} />
+        </Pressable>
+
+        <Pressable
+          accessibilityLabel="Giỏ hàng"
+          onPress={() => router.push('/cart' as Href)}
+          style={styles.iconBtn}
+        >
+          <Ionicons name="bag-handle-outline" size={19} color={Colors.text} />
+          {cartCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{Math.min(cartCount, 99)}</Text>
+            </View>
+          )}
+        </Pressable>
+
+        <Pressable
+          accessibilityLabel="Thông báo"
+          onPress={() =>
+            router.push((isAuthenticated ? '/notifications' : '/(auth)/login') as Href)
+          }
+          style={styles.iconBtn}
+        >
+          <Ionicons name="notifications-outline" size={19} color={Colors.text} />
+          {unreadCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{Math.min(unreadCount, 9)}</Text>
+            </View>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  root: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.md },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 9 }, actions: { flexDirection: 'row', gap: 8 },
-  mark: { width: 34, height: 34, borderRadius: Radius.pill, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
-  markText: { color: Colors.white, fontFamily: FontFamily.display, fontSize: 15 },
-  name: { color: Colors.primary, fontFamily: FontFamily.display, fontSize: 17, letterSpacing: 1.5 },
-  tagline: { color: Colors.textMuted, fontFamily: FontFamily.bodyMedium, fontSize: 8, letterSpacing: 0.8 },
-  icon: { width: 36, height: 36, borderRadius: Radius.pill, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },badge:{position:'absolute',right:-2,top:-3,minWidth:16,height:16,borderRadius:99,paddingHorizontal:3,backgroundColor:Colors.primary,alignItems:'center',justifyContent:'center'},badgeText:{fontFamily:FontFamily.bodyBold,fontSize:8,color:Colors.white},
+  root: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  brandGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoImage: {
+    width: 82,
+    height: 30,
+  },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFF0F3',
+    borderWidth: 1,
+    borderColor: '#FFD9DE',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  locationText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11,
+    color: Colors.primary,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  aiPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  aiPillText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11,
+    color: '#FFFFFF',
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F5F3F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    right: -2,
+    top: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    backgroundColor: Colors.primary,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 9,
+    color: '#FFFFFF',
+  },
 });

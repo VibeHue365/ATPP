@@ -19,6 +19,7 @@ import {
 } from '../schemas/verification-token.schema';
 import { RequestContext } from '../types/auth.types';
 import { MailService } from './mail.service';
+import { EmailQueueService } from './email-queue.service';
 import { RateLimitService } from './rate-limit.service';
 import { SecurityLogService } from './security-log.service';
 import { PasswordPolicyService } from './password-policy.service';
@@ -30,6 +31,7 @@ export class PasswordResetService {
     private readonly usersRepository: UsersRepository,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    private readonly emailQueueService: EmailQueueService,
     private readonly rateLimitService: RateLimitService,
     private readonly securityLogService: SecurityLogService,
     private readonly passwordPolicyService: PasswordPolicyService,
@@ -101,7 +103,7 @@ export class PasswordResetService {
     }
 
     const token = await this.createPasswordResetToken(user._id, email);
-    await this.mailService.sendPasswordResetLink(email, token);
+    await this.emailQueueService.enqueuePasswordReset(email, token);
     await this.securityLogService.recordSecurityEvent({
       type: SecurityEventType.PasswordResetRequested,
       userId: user._id,

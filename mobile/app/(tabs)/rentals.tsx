@@ -1,26 +1,680 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useState } from 'react';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { type Href, router } from 'expo-router';
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ProductCard } from '@/components/product/ProductCard';
 import { BrandHeader } from '@/components/ui/BrandHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/ScreenState';
-import { Colors, FontFamily, Radius, Shadow, Spacing } from '@/constants/theme';
+import { Colors, FontFamily, Shadow } from '@/constants/theme';
 import { useProducts } from '@/hooks/useProducts';
 import type { ProductFilters } from '@/types/product';
 import { useAuth } from '@/contexts/AuthContext';
 
-const categories=[{label:'Tất cả',value:''},{label:'Áo dài nữ',value:'female'},{label:'Áo dài nam',value:'male'},{label:'Áo dài đôi',value:'couple'}];
-const locations=['','Huế','Đà Nẵng','Hội An']; const sizes=['','S','M','L','XL'];
-type SortMode='recommended'|'newest'|'rating_desc'|'price_asc'|'price_desc';
-const publicSorts: Array<{label:string;value:Exclude<ProductFilters['sort'],undefined>}>= [{label:'Mới nhất',value:'newest'},{label:'Đánh giá cao',value:'rating_desc'},{label:'Giá thấp',value:'price_asc'},{label:'Giá cao',value:'price_desc'}];
-const memberSorts=[{label:'Phù hợp nhất',value:'recommended' as const},...publicSorts];
+const categories = [
+  { label: 'Tất cả mẫu', value: '', icon: 'sparkles-outline' as const },
+  { label: 'Áo dài nữ', value: 'female', icon: 'woman-outline' as const },
+  { label: 'Áo dài nam', value: 'male', icon: 'man-outline' as const },
+  { label: 'Áo dài đôi', value: 'couple', icon: 'people-outline' as const },
+];
 
-export default function RentalsScreen(){const{isAuthenticated}=useAuth();const [draft,setDraft]=useState('');const [search,setSearch]=useState('');const [category,setCategory]=useState('');const [locationIndex,setLocationIndex]=useState(0);const [sizeIndex,setSizeIndex]=useState(0);const [sortMode,setSortMode]=useState<SortMode>('recommended');const [page,setPage]=useState(1);const sorts:Array<{label:string;value:SortMode}>=isAuthenticated?memberSorts:publicSorts;const effectiveSort:SortMode=!isAuthenticated&&sortMode==='recommended'?'newest':sortMode;const personalized=isAuthenticated&&effectiveSort==='recommended';const filters:ProductFilters={search:search||undefined,types:category?[category]:undefined,providerLocation:locations[locationIndex]||undefined,sizes:sizes[sizeIndex]?[sizes[sizeIndex]]:undefined,sort:personalized?undefined:effectiveSort as ProductFilters['sort'],page,limit:10};const {products,loading,error,total,totalPages,reload}=useProducts(filters,personalized);const change=(fn:()=>void)=>{setPage(1);fn()};const currentSortIndex=Math.max(0,sorts.findIndex(item=>item.value===effectiveSort));
-return <SafeAreaView style={s.safe} edges={['top']}><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={s.content}><BrandHeader/><Text style={s.eyebrow}>MẪU ÁO DÀI ĐÃ XÁC MINH</Text><Text style={s.title}>Thuê áo dài tại miền Trung</Text><Text style={s.subtitle}>Chọn mẫu, size, hình thức thuê và thời gian nhận trả phù hợp.</Text><View style={s.stats}>{[['120+','Mẫu áo dài'],['15','Cửa hàng'],['4.9/5','Đánh giá']].map(([v,l])=><View key={l} style={s.stat}><Text style={s.statValue}>{v}</Text><Text style={s.statLabel}>{l}</Text></View>)}</View>
-<View style={s.filterCard}><View style={s.searchInput}><Ionicons name="search" size={18} color={Colors.textMuted}/><TextInput value={draft} onChangeText={setDraft} onSubmitEditing={()=>change(()=>setSearch(draft.trim()))} placeholder="Tên hoặc mô tả áo dài..." placeholderTextColor={Colors.textMuted} style={s.input}/></View><View style={s.filterRow}><Filter label="KHU VỰC" value={locations[locationIndex]||'Tất cả khu vực'} onPress={()=>change(()=>setLocationIndex((locationIndex+1)%locations.length))}/><Filter label="KÍCH CỠ" value={sizes[sizeIndex]||'Tất cả size'} onPress={()=>change(()=>setSizeIndex((sizeIndex+1)%sizes.length))}/></View><Pressable style={s.searchButton} onPress={()=>change(()=>setSearch(draft.trim()))}><Ionicons name="search" color={Colors.white} size={17}/><Text style={s.searchText}>Tìm áo dài ngay</Text></Pressable></View>
-<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>{categories.map(item=><Pressable key={item.value} onPress={()=>change(()=>setCategory(item.value))} style={[s.chip,category===item.value&&s.chipActive]}><Text style={[s.chipText,category===item.value&&s.chipTextActive]}>{item.label}</Text></Pressable>)}</ScrollView><View style={s.listHead}><View><Text style={s.result}>{total} mẫu phù hợp</Text>{personalized&&<Text style={s.personalizedHint}>Được sắp xếp theo sở thích của bạn</Text>}</View><Pressable style={s.sort} onPress={()=>change(()=>setSortMode(sorts[(currentSortIndex+1)%sorts.length].value))}><Text style={s.sortText}>{sorts[currentSortIndex].label} ⌄</Text></Pressable></View>
-{loading?<LoadingState label="Đang tìm áo dài..."/>:error?<ErrorState message={error} onRetry={reload}/>:products.length===0?<EmptyState title="Không tìm thấy áo dài" message="Hãy thử thay đổi từ khóa hoặc bộ lọc."/>:<View style={s.grid}>{products.map(product=><ProductCard key={product._id} product={product}/>)}</View>}
-{!loading&&totalPages>1&&<View style={s.pagination}><Pressable disabled={page===1} onPress={()=>setPage(v=>v-1)} style={[s.pageButton,page===1&&s.disabled]}><Text>‹</Text></Pressable><Text style={s.pageText}>{page}/{totalPages}</Text><Pressable disabled={page===totalPages} onPress={()=>setPage(v=>v+1)} style={[s.pageButton,page===totalPages&&s.disabled]}><Text>›</Text></Pressable></View>}</ScrollView></SafeAreaView>}
-function Filter({label,value,onPress}:{label:string;value:string;onPress:()=>void}){return <Pressable style={s.field} onPress={onPress}><Text style={s.fieldLabel}>{label}</Text><Text numberOfLines={1} style={s.fieldValue}>{value}　⌄</Text></Pressable>}
-const s=StyleSheet.create({safe:{flex:1,backgroundColor:Colors.background},content:{paddingHorizontal:Spacing.lg,paddingBottom:30},eyebrow:{fontFamily:FontFamily.bodySemiBold,fontSize:10,color:Colors.primary,marginTop:12},title:{fontFamily:FontFamily.display,fontSize:29,lineHeight:36,color:Colors.text,marginTop:8},subtitle:{fontFamily:FontFamily.body,fontSize:13,lineHeight:20,color:Colors.textSecondary,marginTop:6},stats:{flexDirection:'row',gap:10,marginTop:20},stat:{flex:1,backgroundColor:Colors.surface,borderWidth:1,borderColor:Colors.border,borderRadius:Radius.md,alignItems:'center',paddingVertical:13,...Shadow},statValue:{fontFamily:FontFamily.bodyBold,fontSize:17,color:Colors.primary},statLabel:{fontFamily:FontFamily.body,fontSize:9,color:Colors.textMuted,marginTop:4},filterCard:{backgroundColor:Colors.surface,borderWidth:1,borderColor:Colors.border,borderRadius:Radius.lg,padding:14,marginTop:16,...Shadow},searchInput:{height:45,flexDirection:'row',alignItems:'center',gap:8,borderWidth:1,borderColor:Colors.border,borderRadius:Radius.md,paddingHorizontal:12,marginBottom:10},input:{flex:1,fontFamily:FontFamily.body,fontSize:12,color:Colors.text},filterRow:{flexDirection:'row',gap:8},field:{flex:1},fieldLabel:{fontFamily:FontFamily.bodySemiBold,fontSize:8,color:Colors.textMuted,marginBottom:5},fieldValue:{fontFamily:FontFamily.body,fontSize:11,color:Colors.text,backgroundColor:Colors.background,borderWidth:1,borderColor:Colors.border,borderRadius:Radius.sm,padding:10},searchButton:{height:44,borderRadius:Radius.md,backgroundColor:Colors.primary,flexDirection:'row',gap:8,alignItems:'center',justifyContent:'center',marginTop:12},searchText:{fontFamily:FontFamily.bodySemiBold,fontSize:13,color:Colors.white},chips:{gap:8,paddingVertical:18},chip:{borderWidth:1,borderColor:Colors.border,borderRadius:Radius.pill,paddingHorizontal:16,paddingVertical:10,backgroundColor:Colors.surface},chipActive:{backgroundColor:Colors.primary,borderColor:Colors.primary},chipText:{fontFamily:FontFamily.bodyMedium,fontSize:12,color:Colors.textSecondary},chipTextActive:{color:Colors.white},listHead:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:14},result:{fontFamily:FontFamily.display,fontSize:17,color:Colors.text},personalizedHint:{fontFamily:FontFamily.body,fontSize:9,color:Colors.primary,marginTop:2},sort:{borderWidth:1,borderColor:Colors.border,borderRadius:Radius.sm,paddingHorizontal:10,paddingVertical:7},sortText:{fontFamily:FontFamily.body,fontSize:10,color:Colors.textSecondary},grid:{flexDirection:'row',flexWrap:'wrap',gap:12},pagination:{flexDirection:'row',justifyContent:'center',alignItems:'center',gap:16,marginTop:24},pageButton:{width:38,height:38,borderRadius:99,backgroundColor:Colors.surface,borderWidth:1,borderColor:Colors.border,alignItems:'center',justifyContent:'center'},disabled:{opacity:.35},pageText:{fontFamily:FontFamily.bodySemiBold,color:Colors.primary}});
+const locations = [
+  { label: 'Tất cả khu vực', value: '' },
+  { label: 'Huế', value: 'Huế' },
+  { label: 'Đà Nẵng', value: 'Đà Nẵng' },
+  { label: 'Hội An', value: 'Hội An' },
+];
+
+const sizes = [
+  { label: 'Đủ size', value: '' },
+  { label: 'Size S', value: 'S' },
+  { label: 'Size M', value: 'M' },
+  { label: 'Size L', value: 'L' },
+  { label: 'Size XL', value: 'XL' },
+];
+
+type SortMode = 'recommended' | 'newest' | 'rating_desc' | 'price_asc' | 'price_desc';
+
+const publicSorts: Array<{ label: string; value: Exclude<ProductFilters['sort'], undefined> }> = [
+  { label: 'Mới nhất', value: 'newest' },
+  { label: 'Đánh giá cao', value: 'rating_desc' },
+  { label: 'Giá thấp → cao', value: 'price_asc' },
+  { label: 'Giá cao → thấp', value: 'price_desc' },
+];
+
+const memberSorts = [{ label: 'Gợi ý cho bạn', value: 'recommended' as const }, ...publicSorts];
+
+export default function RentalsScreen() {
+  const { isAuthenticated } = useAuth();
+  const [draft, setDraft] = useState('');
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState('');
+  const [selectedSize, setSelectedSize] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('recommended');
+  const [page, setPage] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const sorts: Array<{ label: string; value: SortMode }> = isAuthenticated
+    ? memberSorts
+    : publicSorts;
+  const effectiveSort: SortMode =
+    !isAuthenticated && sortMode === 'recommended' ? 'newest' : sortMode;
+  const personalized = isAuthenticated && effectiveSort === 'recommended';
+
+  const filters: ProductFilters = {
+    search: search || undefined,
+    types: category ? [category] : undefined,
+    providerLocation: selectedLocation || undefined,
+    sizes: selectedSize ? [selectedSize] : undefined,
+    sort: personalized ? undefined : (effectiveSort as ProductFilters['sort']),
+    page,
+    limit: 10,
+  };
+
+  const { products, loading, error, total, totalPages, reload } = useProducts(
+    filters,
+    personalized
+  );
+
+  const change = (fn: () => void) => {
+    setPage(1);
+    fn();
+  };
+
+  const hasActiveFilters = Boolean(
+    search || category || selectedLocation || selectedSize
+  );
+
+  const handleResetFilters = () => {
+    setDraft('');
+    setSearch('');
+    setCategory('');
+    setSelectedLocation('');
+    setSelectedSize('');
+    setPage(1);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await reload();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.headerWrap}>
+        <BrandHeader />
+      </View>
+
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.primary}
+            colors={[Colors.primary]}
+          />
+        }
+      >
+        {/* Hero Banner Card */}
+        <View style={styles.heroCard}>
+          <View style={styles.heroBadgeRow}>
+            <View style={styles.heroTagPill}>
+              <MaterialCommunityIcons name="hanger" size={13} color={Colors.primary} />
+              <Text style={styles.heroTagText}>TỦ CỔ PHỤC & ÁO DÀI DI SẢN</Text>
+            </View>
+            <View style={styles.escrowTag}>
+              <Ionicons name="shield-checkmark" size={12} color="#059669" />
+              <Text style={styles.escrowTagText}>100% Escrow</Text>
+            </View>
+          </View>
+
+          <Text style={styles.heroTitle}>Thuê Cổ Phục & Áo Dài</Text>
+          <Text style={styles.heroSubtitle}>
+            Tuyển chọn Nhật Bình, Ngũ Thân, Áo Tấc và Áo dài truyền thống từ các nhà may uy tín
+            tại Cố đô Huế.
+          </Text>
+
+          {/* Search Input Box */}
+          <View style={styles.searchRow}>
+            <View style={styles.searchInputWrap}>
+              <Ionicons name="search" size={18} color={Colors.primary} />
+              <TextInput
+                value={draft}
+                onChangeText={setDraft}
+                onSubmitEditing={() => change(() => setSearch(draft.trim()))}
+                placeholder="Tìm Nhật Bình, Ngũ Thân, lụa tơ tằm..."
+                placeholderTextColor="#8F8E8E"
+                style={styles.searchInput}
+                returnKeyType="search"
+              />
+              {draft.length > 0 && (
+                <Pressable
+                  onPress={() => {
+                    setDraft('');
+                    if (search) change(() => setSearch(''));
+                  }}
+                >
+                  <Ionicons name="close-circle" size={18} color="#8F8E8E" />
+                </Pressable>
+              )}
+            </View>
+            <Pressable
+              style={styles.searchBtn}
+              onPress={() => change(() => setSearch(draft.trim()))}
+            >
+              <Text style={styles.searchBtnText}>Tìm</Text>
+            </Pressable>
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+            <Pressable
+              onPress={() => router.push('/stores' as Href)}
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 9,
+                borderRadius: 99,
+                backgroundColor: '#FFF0F5',
+                borderWidth: 1,
+                borderColor: '#F3C4D5',
+              }}
+            >
+              <Ionicons name="storefront-outline" size={14} color={Colors.primary} />
+              <Text
+                style={{
+                  fontFamily: FontFamily.bodyBold,
+                  fontSize: 11.5,
+                  color: Colors.primary,
+                }}
+              >
+                Danh bạ Cửa hàng
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => router.push('/virtual-tryon' as Href)}
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 9,
+                borderRadius: 99,
+                backgroundColor: '#1E1418',
+              }}
+            >
+              <Ionicons name="sparkles-outline" size={14} color="#FFFFFF" />
+              <Text
+                style={{
+                  fontFamily: FontFamily.bodyBold,
+                  fontSize: 11.5,
+                  color: '#FFFFFF',
+                }}
+              >
+                Thử đồ ảo AI 2D
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Category Tabs */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsScroll}
+        >
+          {categories.map((item) => {
+            const active = category === item.value;
+            return (
+              <Pressable
+                key={item.value}
+                onPress={() => change(() => setCategory(item.value))}
+                style={[styles.categoryChip, active && styles.categoryChipActive]}
+              >
+                <Ionicons
+                  name={item.icon}
+                  size={15}
+                  color={active ? '#FFFFFF' : Colors.primary}
+                />
+                <Text
+                  style={[styles.categoryChipText, active && styles.categoryChipTextActive]}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* Filter Bar: Area + Size */}
+        <View style={styles.filterPanel}>
+          <View style={styles.filterGroup}>
+            <Text style={styles.filterGroupLabel}>KHU VỰC:</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.inlinePills}
+            >
+              {locations.map((loc) => {
+                const active = selectedLocation === loc.value;
+                return (
+                  <Pressable
+                    key={loc.label}
+                    onPress={() => change(() => setSelectedLocation(loc.value))}
+                    style={[styles.miniPill, active && styles.miniPillActive]}
+                  >
+                    <Text style={[styles.miniPillText, active && styles.miniPillTextActive]}>
+                      {loc.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          <View style={styles.filterGroup}>
+            <Text style={styles.filterGroupLabel}>KÍCH CỠ:</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.inlinePills}
+            >
+              {sizes.map((sz) => {
+                const active = selectedSize === sz.value;
+                return (
+                  <Pressable
+                    key={sz.label}
+                    onPress={() => change(() => setSelectedSize(sz.value))}
+                    style={[styles.miniPill, active && styles.miniPillActive]}
+                  >
+                    <Text style={[styles.miniPillText, active && styles.miniPillTextActive]}>
+                      {sz.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+
+        {/* Results Count & Sort Selector */}
+        <View style={styles.listHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.resultCountText}>
+              {total} mẫu trang phục sẵn sàng
+            </Text>
+            {personalized && (
+              <Text style={styles.personalizedHint}>
+                ✨ Được cá nhân hóa theo gu thẩm mỹ của bạn
+              </Text>
+            )}
+          </View>
+
+          {hasActiveFilters && (
+            <Pressable style={styles.resetPill} onPress={handleResetFilters}>
+              <Ionicons name="refresh" size={13} color={Colors.primary} />
+              <Text style={styles.resetPillText}>Xóa lọc</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {/* Sort Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.sortScroll}
+        >
+          {sorts.map((sItem) => {
+            const active = effectiveSort === sItem.value;
+            return (
+              <Pressable
+                key={sItem.value}
+                onPress={() => change(() => setSortMode(sItem.value))}
+                style={[styles.sortChip, active && styles.sortChipActive]}
+              >
+                <Text style={[styles.sortChipText, active && styles.sortChipTextActive]}>
+                  {sItem.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* Product Grid */}
+        {loading ? (
+          <LoadingState label="Đang tải bộ sưu tập áo dài..." />
+        ) : error ? (
+          <ErrorState message={error} onRetry={reload} />
+        ) : products.length === 0 ? (
+          <EmptyState
+            title="Chưa tìm thấy mẫu phù hợp"
+            message="Bạn hãy thử đổi từ khóa tìm kiếm hoặc chọn kích cỡ, khu vực khác."
+          />
+        ) : (
+          <View style={styles.grid}>
+            {products.map((product) => (
+              <ProductCard key={product._id} product={product} />
+            ))}
+          </View>
+        )}
+
+        {/* Pagination */}
+        {!loading && totalPages > 1 && (
+          <View style={styles.pagination}>
+            <Pressable
+              disabled={page === 1}
+              onPress={() => setPage((v) => Math.max(1, v - 1))}
+              style={[styles.pageButton, page === 1 && styles.disabled]}
+            >
+              <Ionicons name="chevron-back" size={18} color={Colors.primary} />
+            </Pressable>
+            <View style={styles.pageIndicator}>
+              <Text style={styles.pageText}>
+                Trang {page} / {totalPages}
+              </Text>
+            </View>
+            <Pressable
+              disabled={page === totalPages}
+              onPress={() => setPage((v) => Math.min(totalPages, v + 1))}
+              style={[styles.pageButton, page === totalPages && styles.disabled]}
+            >
+              <Ionicons name="chevron-forward" size={18} color={Colors.primary} />
+            </Pressable>
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  headerWrap: {
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFECEB',
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 36,
+    gap: 14,
+  },
+  heroCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FFD9DE',
+    gap: 10,
+    ...Shadow,
+  },
+  heroBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroTagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFF0F3',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  heroTagText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10,
+    color: Colors.primary,
+    letterSpacing: 0.6,
+  },
+  escrowTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  escrowTagText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10,
+    color: '#059669',
+  },
+  heroTitle: {
+    fontFamily: FontFamily.display,
+    fontSize: 25,
+    lineHeight: 32,
+    color: '#1B1C1C',
+  },
+  heroSubtitle: {
+    fontFamily: FontFamily.body,
+    fontSize: 12.5,
+    lineHeight: 19,
+    color: '#5F5E5E',
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  searchInputWrap: {
+    flex: 1,
+    height: 46,
+    backgroundColor: '#F5F3F3',
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: FontFamily.body,
+    fontSize: 13,
+    color: '#1B1C1C',
+  },
+  searchBtn: {
+    height: 46,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchBtnText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+  chipsScroll: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EFECEB',
+  },
+  categoryChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  categoryChipText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: 12.5,
+    color: '#1B1C1C',
+  },
+  categoryChipTextActive: {
+    color: '#FFFFFF',
+  },
+  filterPanel: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#EFECEB',
+    gap: 10,
+  },
+  filterGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterGroupLabel: {
+    width: 64,
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10.5,
+    color: '#8F8E8E',
+  },
+  inlinePills: {
+    gap: 6,
+    paddingRight: 8,
+  },
+  miniPill: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#F5F3F3',
+  },
+  miniPillActive: {
+    backgroundColor: '#FFF0F3',
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  miniPillText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: 11.5,
+    color: '#5F5E5E',
+  },
+  miniPillTextActive: {
+    color: Colors.primary,
+    fontFamily: FontFamily.bodyBold,
+  },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  resultCountText: {
+    fontFamily: FontFamily.display,
+    fontSize: 19,
+    color: '#1B1C1C',
+  },
+  personalizedHint: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 11.5,
+    color: Colors.primary,
+    marginTop: 2,
+  },
+  resetPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#FFF0F3',
+  },
+  resetPillText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11,
+    color: Colors.primary,
+  },
+  sortScroll: {
+    gap: 8,
+    paddingRight: 8,
+    marginTop: -4,
+  },
+  sortChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EFECEB',
+  },
+  sortChipActive: {
+    borderColor: Colors.primary,
+    backgroundColor: '#FFF0F3',
+  },
+  sortChipText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 11.5,
+    color: '#5F5E5E',
+  },
+  sortChipTextActive: {
+    fontFamily: FontFamily.bodyBold,
+    color: Colors.primary,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 14,
+  },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 12,
+  },
+  pageButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EFECEB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pageIndicator: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#FFF0F3',
+  },
+  pageText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 12.5,
+    color: Colors.primary,
+  },
+  disabled: {
+    opacity: 0.35,
+  },
+});

@@ -13,6 +13,7 @@ import { QueryModerationProductsDto } from '../dto/product-moderation.dto';
 import { PhotographyPackage } from '../schemas/photography-package.schema';
 import { buildVietnameseRegexPattern } from '../../../common/utils/vietnamese.util';
 import { createSafeRegex, escapeRegex } from '../../../common/utils/regex.util';
+import { clampPagination } from '../../../common/utils/pagination.util';
 
 @Injectable()
 export class ProductsRepository {
@@ -414,13 +415,14 @@ export class ProductsRepository {
       }
     }
 
+    const { skip, limit: safeLimit } = clampPagination({ page, limit }, 20, 100);
     const total = await this.productModel.countDocuments(filter);
 
     let query = this.productModel
       .find(filter)
       .populate('categoryId')
-      .skip((page - 1) * limit)
-      .limit(limit);
+      .skip(skip)
+      .limit(safeLimit);
 
     if (sortBy === 'price_asc') {
       query = query.sort({ basePrice: 1 });

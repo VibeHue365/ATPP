@@ -8,17 +8,78 @@ import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 import { PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display/700Bold';
 import { Colors } from '@/constants/theme';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
+import { DestinationProvider } from '@/contexts/DestinationContext';
+import { DestinationPickerModal } from '@/components/destination/DestinationPickerModal';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { SocketProvider } from '@/contexts/SocketContext';
+import { configureGoogleSignIn } from '@/services/googleAuth';
+
+export const unstable_settings = {
+  initialRouteName: '(tabs)',
+};
 
 void SplashScreen.preventAutoHideAsync();
 
+function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
+  const { loading: authLoading } = useAuth();
+  const isAppReady = fontsReady && !authLoading;
+
+  useEffect(() => {
+    if (isAppReady) {
+      void SplashScreen.hideAsync();
+    }
+  }, [isAppReady]);
+
+  if (!isAppReady) {
+    return null;
+  }
+
+  return (
+    <Stack
+      initialRouteName="(tabs)"
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: Colors.background },
+      }}
+    >
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+    </Stack>
+  );
+}
+
 export default function RootLayout() {
-  const [ready] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, PlayfairDisplay_700Bold });
-  useEffect(() => { if (ready) void SplashScreen.hideAsync(); }, [ready]);
-  if (!ready) return null;
-  return <ToastProvider><AuthProvider><SocketProvider><CartProvider><NotificationProvider><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.background } }} /></NotificationProvider></CartProvider></SocketProvider></AuthProvider></ToastProvider>;
+  const [fontsReady] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    PlayfairDisplay_700Bold,
+  });
+
+  useEffect(() => {
+    configureGoogleSignIn();
+  }, []);
+
+  if (!fontsReady) return null;
+
+  return (
+    <ToastProvider>
+      <AuthProvider>
+        <SocketProvider>
+          <CartProvider>
+            <NotificationProvider>
+              <DestinationProvider>
+                <RootNavigator fontsReady={fontsReady} />
+                <DestinationPickerModal />
+              </DestinationProvider>
+            </NotificationProvider>
+          </CartProvider>
+        </SocketProvider>
+      </AuthProvider>
+    </ToastProvider>
+  );
 }

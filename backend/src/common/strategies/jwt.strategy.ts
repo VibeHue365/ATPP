@@ -15,6 +15,15 @@ import { AuthUser } from '../decorators/current-user.decorator';
 import { RolesService } from '../../modules/auth/services/roles.service';
 import { UsersRepository } from '../../modules/users/repositories/users.repository';
 import { UserStatus } from '../../modules/users/schemas/user.schema';
+import { RedisService } from '../redis/redis.service';
+
+interface CachedSessionData {
+  userId: string;
+  accountStatus: UserStatus;
+  providerStatus?: string | null;
+  roles: string[];
+  permissions: string[];
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -23,6 +32,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly authRepository: AuthRepository,
     private readonly usersRepository: UsersRepository,
     private readonly rolesService: RolesService,
+    private readonly redisService: RedisService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -41,6 +51,25 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Session is invalid');
     }
 
+    const cacheKey = `auth:session:${payload.sessionId}`;
+
+    // 1. Kiểm tra cache Redis trước để tránh tải MongoDB
+    const cached = await this.redisService.get<CachedSessionData>(cacheKey);
+    if (cached && cached.userId === payload.sub) {
+      if (cached.accountStatus !== UserStatus.Active) {
+        throw new UnauthorizedException('User is not active');
+      }
+
+      this.assertProviderAllowed(req, cached.providerStatus);
+
+      return {
+        ...payload,
+        roles: cached.roles,
+        permissions: cached.permissions,
+      };
+    }
+
+    // 2. Cache miss: Truy vấn MongoDB xác thực phiên và trạng thái
     const refreshToken = await this.authRepository.findRefreshTokenById(
       payload.sessionId,
     );
@@ -77,7 +106,33 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User is not active');
     }
 
-    if (user.provider?.providerStatus === 'SUSPENDED') {
+    this.assertProviderAllowed(req, user.provider?.providerStatus);
+
+    const { roles, permissions } =
+      await this.rolesService.getRoleCodesAndPermissions(userId);
+
+    // 3. Lưu vào Redis với TTL = 120s (2 phút)
+    await this.redisService.set(
+      cacheKey,
+      {
+        userId: payload.sub,
+        accountStatus: user.accountStatus,
+        providerStatus: user.provider?.providerStatus,
+        roles,
+        permissions,
+      } satisfies CachedSessionData,
+      120,
+    );
+
+    return {
+      ...payload,
+      roles,
+      permissions,
+    };
+  }
+
+  private assertProviderAllowed(req: Request, providerStatus?: string | null): void {
+    if (providerStatus === 'SUSPENDED') {
       const url = req.originalUrl || req.url || '';
       const method = req.method || 'GET';
 
@@ -94,14 +149,5 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         );
       }
     }
-
-    const { roles, permissions } =
-      await this.rolesService.getRoleCodesAndPermissions(userId);
-
-    return {
-      ...payload,
-      roles,
-      permissions,
-    };
   }
 }

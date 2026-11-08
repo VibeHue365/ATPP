@@ -31,6 +31,7 @@ import { ApiDocsController } from './common/controllers/api-docs.controller';
 import { GeocodingModule } from './modules/geocoding/geocoding.module';
 import { LandingCmsModule } from './modules/landing-cms/landing-cms.module';
 import { BannersModule } from './modules/banners/banners.module';
+import { RedisModule } from './common/redis/redis.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { BannersModule } from './modules/banners/banners.module';
         ),
       }),
     }),
+    RedisModule,
     AuthModule,
     UsersModule,
     ProvidersModule,

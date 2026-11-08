@@ -9,6 +9,7 @@ import { SecurityEventType } from '../schemas/security-event.schema';
 import { IssuedTokens, RequestContext } from '../types/auth.types';
 import { SecurityLogService } from './security-log.service';
 import { TokenService } from './token.service';
+import { RedisService } from '../../../common/redis/redis.service';
 
 @Injectable()
 export class SessionService {
@@ -17,6 +18,7 @@ export class SessionService {
     private readonly usersRepository: UsersRepository,
     private readonly securityLogService: SecurityLogService,
     private readonly tokenService: TokenService,
+    private readonly redisService: RedisService,
   ) {}
 
   async refreshToken(
@@ -73,6 +75,9 @@ export class SessionService {
       throw new UnauthorizedException('Refresh token is invalid');
     }
 
+    // Xóa cache phiên cũ
+    await this.redisService.del(`auth:session:${refreshTokenId}`);
+
     const user = await this.usersRepository.findUserById(refreshToken.userId);
     if (!user || user.accountStatus !== UserStatus.Active) {
       throw new UnauthorizedException('User is not active');
@@ -98,6 +103,9 @@ export class SessionService {
       new Types.ObjectId(sessionId),
       userObjectId,
     );
+
+    // Xóa cache phiên ngay lập tức
+    await this.redisService.del(`auth:session:${sessionId}`);
 
     return { message: 'Logout success' };
   }
