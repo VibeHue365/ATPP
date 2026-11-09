@@ -124,6 +124,22 @@ export function TagoDirectionsModal({
     return { lat: 16.0685, lng: 108.2215 };
   }, [destination, destValid, origin, originValid]);
 
+  // Clean and deduplicate repetitive address parts (e.g. repeated Đà Nẵng)
+  const formattedAddress = useMemo(() => {
+    if (!destination?.address) return 'Việt Nam';
+    const parts = destination.address
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const uniqueParts: string[] = [];
+    for (const part of parts) {
+      if (!uniqueParts.some((p) => p.toLowerCase() === part.toLowerCase())) {
+        uniqueParts.push(part);
+      }
+    }
+    return uniqueParts.join(', ');
+  }, [destination?.address]);
+
   if (!destination) return null;
 
   return (
@@ -138,7 +154,7 @@ export function TagoDirectionsModal({
           <Pressable style={styles.closeBtn} onPress={onClose}>
             <Ionicons name="close" size={22} color="#1E1418" />
           </Pressable>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.eyebrow}>TÀGO IN-APP DIRECTIONS</Text>
             <Text style={styles.title} numberOfLines={1}>
               Chỉ đường tới {destination.title}
@@ -146,12 +162,13 @@ export function TagoDirectionsModal({
           </View>
         </View>
 
-        {/* Map Container */}
+        {/* Map Container - Full height filling entire middle area with 0 gaps */}
         <View style={styles.mapContainer}>
           <TagoMapView
             center={mapCenter}
             zoom={14}
-            height={380}
+            height="100%"
+            style={styles.mapView}
             userLocation={originValid ? origin : null}
             markers={markers}
             selectedMarkerId="dest-store"
@@ -169,37 +186,45 @@ export function TagoDirectionsModal({
 
         {/* Route Info & Actions Bottom Sheet */}
         <View style={styles.sheetContent}>
-          {/* Metrics Pill Row */}
+          {/* Status Badge */}
+          <View style={styles.statusBadgeRow}>
+            <Ionicons name="shield-checkmark" size={14} color="#059669" />
+            <Text style={styles.statusBadgeText} numberOfLines={1}>
+              Lộ trình tối ưu · Cập nhật theo thời gian thực
+            </Text>
+          </View>
+
+          {/* Metrics Pill Row - 2 generous cards with zero font overflow */}
           <View style={styles.metricRow}>
             <View style={styles.metricCard}>
-              <Ionicons name="navigate-circle" size={20} color={Colors.primary} />
-              <View>
-                <Text style={styles.metricLabel}>Khoảng cách</Text>
-                <Text style={styles.metricValue}>
+              <View style={styles.metricIconWrap}>
+                <Ionicons name="navigate" size={16} color={Colors.primary} />
+              </View>
+              <View style={styles.metricTextWrap}>
+                <Text style={styles.metricLabel} numberOfLines={1}>
+                  Khoảng cách
+                </Text>
+                <Text style={styles.metricValue} numberOfLines={1}>
                   {route?.distanceKm != null
                     ? formatDistance(route.distanceKm)
-                    : 'Đang định vị'}
+                    : 'Đang đo'}
                 </Text>
               </View>
             </View>
 
             <View style={styles.metricCard}>
-              <Ionicons name="time-outline" size={20} color="#0D9488" />
-              <View>
-                <Text style={styles.metricLabel}>Thời gian đi xe</Text>
-                <Text style={styles.metricValue}>
+              <View style={[styles.metricIconWrap, styles.metricIconTime]}>
+                <Ionicons name="time" size={16} color="#0D9488" />
+              </View>
+              <View style={styles.metricTextWrap}>
+                <Text style={styles.metricLabel} numberOfLines={1}>
+                  Thời gian đi xe
+                </Text>
+                <Text style={styles.metricValue} numberOfLines={1}>
                   {route?.durationMinutes != null
                     ? `~${Math.round(route.durationMinutes)} phút`
                     : '10-15 phút'}
                 </Text>
-              </View>
-            </View>
-
-            <View style={styles.metricCard}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#E11D48" />
-              <View>
-                <Text style={styles.metricLabel}>Trạng thái</Text>
-                <Text style={styles.metricValue}>Lộ trình an toàn</Text>
               </View>
             </View>
           </View>
@@ -209,12 +234,12 @@ export function TagoDirectionsModal({
             <View style={styles.destIconWrap}>
               <Ionicons name="storefront" size={18} color={Colors.primary} />
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={styles.destTextWrap}>
               <Text style={styles.destTitle} numberOfLines={1}>
                 {destination.title}
               </Text>
               <Text style={styles.destAddress} numberOfLines={2}>
-                {destination.address || 'Việt Nam'}
+                {formattedAddress}
               </Text>
             </View>
           </View>
@@ -234,7 +259,7 @@ export function TagoDirectionsModal({
                   });
                 }
               }}>
-              <Ionicons name="map-outline" size={16} color="#66535B" />
+              <Ionicons name="navigate-circle-outline" size={17} color="#66535B" />
               <Text style={styles.externalMapsBtnText}>Mở Google Maps dẫn đường giọng nói</Text>
             </Pressable>
 
@@ -261,6 +286,8 @@ const styles = StyleSheet.create({
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#EDE5E9',
+    backgroundColor: '#FFFFFF',
+    zIndex: 10,
   },
   closeBtn: {
     width: 38,
@@ -284,9 +311,17 @@ const styles = StyleSheet.create({
   },
   mapContainer: {
     flex: 1,
-    minHeight: 300,
+    width: '100%',
+    overflow: 'hidden',
     position: 'relative',
     backgroundColor: '#F3EDF0',
+  },
+  mapView: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    borderRadius: 0,
+    borderWidth: 0,
   },
   loadingOverlay: {
     position: 'absolute',
@@ -304,6 +339,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    zIndex: 20,
   },
   loadingText: {
     fontFamily: FontFamily.bodyMedium,
@@ -315,40 +351,74 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 20,
-    gap: 12,
+    paddingTop: 14,
+    paddingBottom: 16,
+    gap: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  statusBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Radius.pill,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    alignSelf: 'flex-start',
+  },
+  statusBadgeText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11,
+    color: '#065F46',
   },
   metricRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
   metricCard: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 12,
+    gap: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 14,
     backgroundColor: '#FAF6F8',
     borderWidth: 1,
-    borderColor: '#F0E6EB',
+    borderColor: '#EFE6EB',
+  },
+  metricIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FCE7F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricIconTime: {
+    backgroundColor: '#E6F4EA',
+  },
+  metricTextWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   metricLabel: {
     fontFamily: FontFamily.bodyMedium,
-    fontSize: 10,
+    fontSize: 10.5,
+    letterSpacing: 0.2,
     color: '#8A737E',
   },
   metricValue: {
-    fontFamily: FontFamily.bodyBold,
-    fontSize: 12,
+    fontFamily: FontFamily.displayBold,
+    fontSize: 15,
     color: '#1E1418',
+    marginTop: 2,
   },
   destBox: {
     flexDirection: 'row',
@@ -368,6 +438,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  destTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
   destTitle: {
     fontFamily: FontFamily.bodyBold,
     fontSize: 14,
@@ -382,14 +456,14 @@ const styles = StyleSheet.create({
   },
   btnRow: {
     gap: 8,
-    marginTop: 4,
+    marginTop: 2,
   },
   externalMapsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 11,
+    paddingVertical: 10,
     borderRadius: 12,
     backgroundColor: '#F5EFF2',
   },

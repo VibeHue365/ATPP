@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import {
+  DimensionValue,
+  Platform,
+  StyleProp,
+  StyleSheet,
+  View,
+  ViewStyle,
+} from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { Colors, Radius } from '@/constants/theme';
 
@@ -22,7 +29,8 @@ export type MapMarkerItem = TagoMapMarker;
 export interface TagoMapViewProps {
   center: { lat: number; lng: number };
   zoom?: number;
-  height?: number;
+  height?: DimensionValue;
+  style?: StyleProp<ViewStyle>;
   userLocation?: { lat: number; lng: number; label?: string } | null;
   markers?: TagoMapMarker[];
   selectedMarkerId?: string | null;
@@ -46,6 +54,7 @@ export function TagoMapView({
   center,
   zoom = 14,
   height = 300,
+  style,
   userLocation,
   markers = [],
   selectedMarkerId,
@@ -594,7 +603,7 @@ export function TagoMapView({
 
   if (Platform.OS === 'web') {
     return (
-      <View style={[styles.container, { height }]}>
+      <View style={[styles.container, { height }, style]}>
         <iframe
           title="TagoMap"
           srcDoc={initialHtml}
@@ -605,7 +614,7 @@ export function TagoMapView({
   }
 
   return (
-    <View style={[styles.container, { height }]}>
+    <View style={[styles.container, { height }, style]}>
       <WebView
         ref={webViewRef}
         originWhitelist={['*']}
