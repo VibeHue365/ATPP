@@ -3,11 +3,11 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { TagoMapView, type TagoMapMarker } from '@/components/map/TagoMapView';
 import { Colors, FontFamily, Radius } from '@/constants/theme';
@@ -132,7 +132,7 @@ export function TagoDirectionsModal({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.header}>
           <Pressable style={styles.closeBtn} onPress={onClose}>
