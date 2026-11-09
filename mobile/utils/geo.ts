@@ -1,4 +1,13 @@
 import { Linking, Platform } from 'react-native';
+import {
+  MANUAL_LOCATION_TTL_MS,
+  getDeviceGpsLocation,
+  loadSavedUserLocation,
+  reverseGeocodeLabel,
+  saveUserLocation,
+  type DeviceGpsFailureReason,
+  type UserLocationSource,
+} from '@/services/userLocation';
 
 export interface GeoCoord {
   lat: number;
@@ -461,34 +470,60 @@ export function matchStoreToCity(store: any, cityCode: string): boolean {
   return false;
 }
 
-let cachedUserPosition: {
+export interface AutoUserPosition {
   lat: number;
   lng: number;
   label: string;
   cityCode: string;
+  /** Nguồn vị trí: gps | manual | ip | default */
+  source: UserLocationSource;
+  /** Bán kính sai số ước tính (mét) */
+  accuracyM?: number;
   isGps?: boolean;
-} | null = null;
+  /** Lý do GPS thất bại (nếu có) — để UI hiển thị thông báo phù hợp */
+  gpsFailure?: DeviceGpsFailureReason;
+}
 
+/** Chỉ giữ trong bộ nhớ các vị trí đáng tin: GPS hoặc người dùng tự chọn */
+let cachedUserPosition: AutoUserPosition | null = null;
+
+export function getCachedUserPosition(): AutoUserPosition | null {
+  return cachedUserPosition;
+}
+
+/**
+ * Ghi nhận vị trí người dùng (GPS hoặc tự chọn) vào bộ nhớ và lưu xuống máy.
+ */
 export function setCachedUserPosition(pos: {
   lat: number;
   lng: number;
   label: string;
-  cityCode: string;
+  cityCode?: string;
   isGps?: boolean;
+  source?: UserLocationSource;
+  accuracyM?: number;
 }) {
-  cachedUserPosition = pos;
+  const source: UserLocationSource = pos.source ?? (pos.isGps ? 'gps' : 'manual');
+  const cityCode = pos.cityCode ?? detectNearestCanonicalCity(pos.lat, pos.lng).code;
+  cachedUserPosition = {
+    lat: pos.lat,
+    lng: pos.lng,
+    label: pos.label,
+    cityCode,
+    source,
+    accuracyM: pos.accuracyM,
+    isGps: source === 'gps',
+  };
+  void saveUserLocation({
+    lat: pos.lat,
+    lng: pos.lng,
+    label: pos.label,
+    source,
+    accuracyM: pos.accuracyM,
+  });
 }
 
-export async function fetchAutoUserPosition(): Promise<{
-  lat: number;
-  lng: number;
-  label: string;
-  cityCode: string;
-}> {
-  if (cachedUserPosition) {
-    return cachedUserPosition;
-  }
-
+async function fetchIpPosition(): Promise<AutoUserPosition | null> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 2800);
@@ -502,26 +537,119 @@ export async function fetchAutoUserPosition(): Promise<{
       const lng = Number(data.longitude);
       if (isValidLatLng(lat, lng)) {
         const nearestCity = detectNearestCanonicalCity(lat, lng);
-        const cityName = data.city || nearestCity.name;
-        const result = {
+        return {
           lat,
           lng,
-          label: `${cityName} (Vị trí hiện tại)`,
+          // Nhà mạng chỉ biết thành phố — ghi rõ là ước lượng để người dùng không hiểu lầm
+          label: `${nearestCity.name} · ước lượng theo mạng`,
           cityCode: nearestCity.code,
+          source: 'ip',
+          accuracyM: 5000,
         };
-        cachedUserPosition = result;
-        return result;
       }
     }
   } catch {
     // network failure or offline
   }
+  return null;
+}
 
+/**
+ * Xác định vị trí người dùng theo thứ tự ưu tiên:
+ *   1. Vị trí người dùng tự chọn gần đây (trong 6 giờ)
+ *   2. GPS thiết bị (expo-location) + đổi ra tên đường
+ *   3. Vị trí đã lưu lần trước (GPS hoặc tự chọn)
+ *   4. Ước lượng theo IP mạng (ghi rõ "ước lượng")
+ *   5. Trung tâm Đà Nẵng mặc định
+ *
+ * @param options.requestPermission  hiện hộp thoại xin quyền vị trí nếu chưa có (mặc định: không)
+ * @param options.forceRefresh       bỏ qua cache & vị trí tự chọn, đọc lại GPS ngay (nút "Gần tôi")
+ */
+export async function fetchAutoUserPosition(options?: {
+  requestPermission?: boolean;
+  forceRefresh?: boolean;
+}): Promise<AutoUserPosition> {
+  const requestPermission = options?.requestPermission ?? false;
+  const forceRefresh = options?.forceRefresh ?? false;
+
+  if (!forceRefresh && cachedUserPosition) {
+    return cachedUserPosition;
+  }
+
+  // 1. Vị trí tự chọn còn mới -> tôn trọng lựa chọn của người dùng
+  const saved = await loadSavedUserLocation();
+  if (
+    !forceRefresh &&
+    saved &&
+    saved.source === 'manual' &&
+    Date.now() - saved.updatedAt < MANUAL_LOCATION_TTL_MS
+  ) {
+    const result: AutoUserPosition = {
+      lat: saved.lat,
+      lng: saved.lng,
+      label: saved.label,
+      cityCode: detectNearestCanonicalCity(saved.lat, saved.lng).code,
+      source: 'manual',
+      accuracyM: saved.accuracyM,
+    };
+    cachedUserPosition = result;
+    return result;
+  }
+
+  // 2. GPS thiết bị
+  const gps = await getDeviceGpsLocation({ requestPermission });
+  if (gps.ok) {
+    const nearest = detectNearestCanonicalCity(gps.lat, gps.lng);
+    const streetLabel = await reverseGeocodeLabel(gps.lat, gps.lng);
+    const result: AutoUserPosition = {
+      lat: gps.lat,
+      lng: gps.lng,
+      label: streetLabel || `${nearest.name} · GPS`,
+      cityCode: nearest.code,
+      source: 'gps',
+      accuracyM: gps.accuracyM,
+      isGps: true,
+    };
+    cachedUserPosition = result;
+    void saveUserLocation({
+      lat: result.lat,
+      lng: result.lng,
+      label: result.label,
+      source: 'gps',
+      accuracyM: result.accuracyM,
+    });
+    return result;
+  }
+  const gpsFailure = gps.reason;
+
+  // 3. Vị trí đã lưu lần trước
+  if (saved) {
+    return {
+      lat: saved.lat,
+      lng: saved.lng,
+      label: saved.label,
+      cityCode: detectNearestCanonicalCity(saved.lat, saved.lng).code,
+      source: saved.source,
+      accuracyM: saved.accuracyM,
+      isGps: saved.source === 'gps',
+      gpsFailure,
+    };
+  }
+
+  // 4. Ước lượng theo IP
+  const ipPos = await fetchIpPosition();
+  if (ipPos) {
+    return { ...ipPos, gpsFailure };
+  }
+
+  // 5. Mặc định
   return {
     lat: 16.0685,
     lng: 108.2215,
-    label: 'Đà Nẵng (Vị trí mạng)',
+    label: 'Đà Nẵng · chưa xác định được vị trí',
     cityCode: 'da-nang',
+    source: 'default',
+    gpsFailure,
   };
 }
 

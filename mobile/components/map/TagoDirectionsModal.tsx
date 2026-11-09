@@ -19,6 +19,7 @@ import {
   resolveEntityCoords,
   type RoadRouteResult,
 } from '@/utils/geo';
+import { reverseGeocodeLabel } from '@/services/userLocation';
 
 export interface DestinationInfo {
   lat: number;
@@ -206,11 +207,12 @@ export function TagoDirectionsModal({
             selectedMarkerId="dest-store"
             routePoints={route?.points || null}
             fitRouteBounds={Boolean(route?.points && route.points.length > 0)}
-            onUserGpsDetected={(coord) => {
+            onUserGpsDetected={async (coord) => {
+              const streetLabel = await reverseGeocodeLabel(coord.lat, coord.lng);
               setActiveOrigin({
                 lat: coord.lat,
                 lng: coord.lng,
-                label: 'Vị trí GPS của bạn',
+                label: streetLabel || 'Vị trí GPS của bạn',
               });
             }}
           />

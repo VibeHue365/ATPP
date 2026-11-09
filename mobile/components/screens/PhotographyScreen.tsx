@@ -81,7 +81,7 @@ export default function PhotographyScreen() {
 
   useEffect(() => {
     let active = true;
-    fetchAutoUserPosition().then((pos) => {
+    fetchAutoUserPosition({ requestPermission: true }).then((pos) => {
       if (active) {
         setUserCoords({ lat: pos.lat, lng: pos.lng });
       }

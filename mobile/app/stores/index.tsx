@@ -36,8 +36,10 @@ import {
   matchStoreToCity,
   resolveEntityCoords,
   setCachedUserPosition,
+  type AutoUserPosition,
   type RoadRouteResult,
 } from '@/utils/geo';
+import { reverseGeocodeLabel } from '@/services/userLocation';
 import { getMediaUrl } from '@/utils/media';
 
 type FilterType = 'ALL' | 'RENTAL' | 'PHOTO' | 'SALE' | 'TOP_RATED';
@@ -86,11 +88,13 @@ export default function StoresDirectoryScreen() {
   const [selectedCityCode, setSelectedCityCode] = useState<string>(initialCityCode);
   const [maxRadiusKm, setMaxRadiusKm] = useState<number | null>(null);
 
-  // User position (Auto-detected via Network IP / Device GPS)
-  const [userPos, setUserPos] = useState<{ lat: number; lng: number; label: string }>({
+  // User position (Auto-detected via Device GPS / Network IP)
+  const [userPos, setUserPos] = useState<AutoUserPosition>({
     lat: 16.0685,
     lng: 108.2215,
     label: 'Đang định vị...',
+    cityCode: 'da-nang',
+    source: 'default',
   });
   const [addressQuery, setAddressQuery] = useState('');
   const [lastSearchedQuery, setLastSearchedQuery] = useState('');
@@ -147,16 +151,12 @@ export default function StoresDirectoryScreen() {
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [roadRoute, setRoadRoute] = useState<RoadRouteResult | null>(null);
 
-  // Auto-detect real location on mount
+  // Auto-detect real location on mount: attempts GPS first (prompting permission if needed)
   useEffect(() => {
     let active = true;
-    fetchAutoUserPosition().then((pos) => {
+    fetchAutoUserPosition({ requestPermission: true }).then((pos) => {
       if (active) {
-        setUserPos({
-          lat: pos.lat,
-          lng: pos.lng,
-          label: pos.label,
-        });
+        setUserPos(pos);
       }
     });
     return () => {
@@ -164,22 +164,25 @@ export default function StoresDirectoryScreen() {
     };
   }, []);
 
-  const handleUserGpsDetected = useCallback((coord: { lat: number; lng: number }) => {
-    const nearest = detectNearestCanonicalCity(coord.lat, coord.lng);
-    const label = `${nearest.name} (GPS thiết bị)`;
-    setUserPos({
-      lat: coord.lat,
-      lng: coord.lng,
-      label,
-    });
-    setCachedUserPosition({
-      lat: coord.lat,
-      lng: coord.lng,
-      label,
-      cityCode: nearest.code,
-      isGps: true,
-    });
-  }, []);
+  const handleUserGpsDetected = useCallback(
+    async (coord: { lat: number; lng: number; accuracyM?: number }) => {
+      const nearest = detectNearestCanonicalCity(coord.lat, coord.lng);
+      const streetLabel = await reverseGeocodeLabel(coord.lat, coord.lng);
+      const label = streetLabel || `${nearest.name} · GPS`;
+      const pos: AutoUserPosition = {
+        lat: coord.lat,
+        lng: coord.lng,
+        label,
+        cityCode: nearest.code,
+        source: 'gps',
+        accuracyM: coord.accuracyM,
+        isGps: true,
+      };
+      setUserPos(pos);
+      setCachedUserPosition(pos);
+    },
+    [],
+  );
 
   const load = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true);
@@ -361,11 +364,15 @@ export default function StoresDirectoryScreen() {
         if (isValidLatLng(lat, lng)) {
           const parts = place.display_name.split(',').map((p) => p.trim());
           const mainTitle = parts.slice(0, 2).join(', ');
-          setUserPos({
+          const pos: AutoUserPosition = {
             lat,
             lng,
             label: mainTitle,
-          });
+            cityCode: detectNearestCanonicalCity(lat, lng).code,
+            source: 'manual',
+          };
+          setUserPos(pos);
+          setCachedUserPosition(pos);
           setPlaceResults([]);
           setShowLocationSearch(false);
           setAddressQuery('');
@@ -441,8 +448,8 @@ export default function StoresDirectoryScreen() {
           <Pressable
             style={s.locateMeBtn}
             onPress={async () => {
-              const pos = await fetchAutoUserPosition();
-              setUserPos({ lat: pos.lat, lng: pos.lng, label: pos.label });
+              const pos = await fetchAutoUserPosition({ requestPermission: true, forceRefresh: true });
+              setUserPos(pos);
               setSelectedCityCode('ALL');
             }}>
             <Ionicons name="locate" size={13} color="#BA0049" />
@@ -469,6 +476,23 @@ export default function StoresDirectoryScreen() {
             })}
           </ScrollView>
         </View>
+
+        {userPos.source === 'ip' ? (
+          <View style={s.ipHintBanner}>
+            <Ionicons name="information-circle" size={14} color="#B45309" />
+            <Text style={s.ipHintText} numberOfLines={1}>
+              Vị trí ước lượng theo mạng. Bật GPS để chính xác tới số nhà.
+            </Text>
+            <Pressable
+              style={s.ipHintBtn}
+              onPress={async () => {
+                const pos = await fetchAutoUserPosition({ requestPermission: true, forceRefresh: true });
+                setUserPos(pos);
+              }}>
+              <Text style={s.ipHintBtnText}>Bật GPS</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {showLocationSearch ? (
           <View style={s.customLocationDrawer}>
@@ -538,11 +562,15 @@ export default function StoresDirectoryScreen() {
                     const lat = Number(place.lat);
                     const lng = Number(place.lon);
                     if (isValidLatLng(lat, lng)) {
-                      setUserPos({
+                      const pos: AutoUserPosition = {
                         lat,
                         lng,
                         label: mainTitle,
-                      });
+                        cityCode: detectNearestCanonicalCity(lat, lng).code,
+                        source: 'manual',
+                      };
+                      setUserPos(pos);
+                      setCachedUserPosition(pos);
                       setPlaceResults([]);
                       setShowLocationSearch(false);
                       setAddressQuery('');
@@ -1056,6 +1084,35 @@ const s = StyleSheet.create({
     fontFamily: FontFamily.bodyBold,
     fontSize: 11,
     color: '#BA0049',
+  },
+  ipHintBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  ipHintText: {
+    flex: 1,
+    fontFamily: FontFamily.body,
+    fontSize: 11,
+    color: '#92400E',
+  },
+  ipHintBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#F59E0B',
+  },
+  ipHintBtnText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10.5,
+    color: '#FFFFFF',
   },
   radiusPill: {
     paddingHorizontal: 10,

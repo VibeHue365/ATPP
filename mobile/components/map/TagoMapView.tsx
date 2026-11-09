@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   DimensionValue,
+  Linking,
   Platform,
   StyleProp,
   StyleSheet,
@@ -9,6 +11,7 @@ import {
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { Colors, Radius } from '@/constants/theme';
+import { describeGpsFailure, getDeviceGpsLocation } from '@/services/userLocation';
 
 export interface TagoMapMarker {
   id: string;
@@ -31,14 +34,15 @@ export interface TagoMapViewProps {
   zoom?: number;
   height?: DimensionValue;
   style?: StyleProp<ViewStyle>;
-  userLocation?: { lat: number; lng: number; label?: string } | null;
+  userLocation?: { lat: number; lng: number; label?: string; accuracyM?: number } | null;
   markers?: TagoMapMarker[];
   selectedMarkerId?: string | null;
   onSelectMarker?: (id: string) => void;
   onMarkerPress?: (id: string) => void;
   interactivePin?: { lat: number; lng: number; label?: string } | null;
   onPinChange?: (coord: { lat: number; lng: number }) => void;
-  onUserGpsDetected?: (coord: { lat: number; lng: number }) => void;
+  /** Gọi khi người dùng bấm nút định vị và GPS thiết bị trả về vị trí hợp lệ */
+  onUserGpsDetected?: (coord: { lat: number; lng: number; accuracyM?: number }) => void;
   radiusCircle?: { lat: number; lng: number; radiusKm: number } | null;
   routePoints?: Array<[number, number]> | null;
   routeLine?: {
@@ -314,6 +318,13 @@ export function TagoMapView({
       cursor: pointer;
       font-size: 16px;
     }
+    .tago-locate-btn.is-locating svg {
+      animation: tagoSpin 1s linear infinite;
+    }
+    @keyframes tagoSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -373,33 +384,22 @@ export function TagoMapView({
 
       document.getElementById('locateBtn').addEventListener('click', function(e) {
         e.stopPropagation();
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(function(pos) {
-            var lat = pos.coords.latitude;
-            var lng = pos.coords.longitude;
-            map.flyTo([lat, lng], 15, { duration: 0.5 });
-            postToRN({ type: 'GPS_DETECTED', lat: lat, lng: lng, manual: true });
-          }, function() {
-            postToRN({ type: 'GPS_FALLBACK_REQUEST' });
-          }, { enableHighAccuracy: true, timeout: 6000 });
-        } else {
-          postToRN({ type: 'GPS_FALLBACK_REQUEST' });
-        }
+        // GPS được đọc ở phía React Native (expo-location) để có quyền vị trí thật của ứng dụng
+        postToRN({ type: 'LOCATE_REQUEST' });
       });
 
-      // Attempt auto GPS detection on load
-      setTimeout(function() {
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(function(pos) {
-            postToRN({
-              type: 'GPS_DETECTED',
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-              auto: true
-            });
-          }, function() {}, { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 });
-        }
-      }, 500);
+      window.__tagoSetLocating = function(isLocating) {
+        var btn = document.getElementById('locateBtn');
+        if (!btn) return;
+        if (isLocating) btn.classList.add('is-locating');
+        else btn.classList.remove('is-locating');
+      };
+
+      window.__tagoFlyTo = function(lat, lng, z) {
+        try {
+          map.flyTo([lat, lng], z || 16, { duration: 0.5 });
+        } catch (err) {}
+      };
 
       map.on('click', function(e) {
         postToRN({
@@ -432,6 +432,19 @@ export function TagoMapView({
         // 2. User GPS Dot
         userLayer.clearLayers();
         if (state.userLocation && typeof state.userLocation.lat === 'number') {
+          // Vòng tròn sai số (giống Google Maps) — chỉ vẽ khi sai số hợp lý (<= 2km)
+          var acc = Number(state.userLocation.accuracyM);
+          if (acc > 0 && acc <= 2000) {
+            L.circle([state.userLocation.lat, state.userLocation.lng], {
+              radius: acc,
+              color: '#2563EB',
+              weight: 1,
+              opacity: 0.45,
+              fillColor: '#2563EB',
+              fillOpacity: 0.1,
+              interactive: false
+            }).addTo(userLayer);
+          }
           var userIcon = L.divIcon({
             className: '',
             html: '<div class="tago-user-dot-wrap"><div class="tago-user-pulse"></div><div class="tago-user-core"></div></div>',
@@ -591,6 +604,45 @@ export function TagoMapView({
 </html>`;
   }, []);
 
+  const locatingRef = useRef(false);
+
+  const handleLocateRequest = async () => {
+    if (locatingRef.current) return;
+    locatingRef.current = true;
+    webViewRef.current?.injectJavaScript(
+      'window.__tagoSetLocating && window.__tagoSetLocating(true); true;',
+    );
+    try {
+      const gps = await getDeviceGpsLocation({ requestPermission: true });
+      if (gps.ok) {
+        webViewRef.current?.injectJavaScript(
+          `window.__tagoFlyTo && window.__tagoFlyTo(${gps.lat}, ${gps.lng}, 16); true;`,
+        );
+        onUserGpsDetected?.({ lat: gps.lat, lng: gps.lng, accuracyM: gps.accuracyM });
+        return;
+      }
+      // Không còn lấy tâm bản đồ làm vị trí người dùng — báo rõ lý do cho người dùng
+      const info = describeGpsFailure(gps.reason);
+      const buttons: Array<{ text: string; style?: 'cancel'; onPress?: () => void }> = [
+        { text: 'Đóng', style: 'cancel' },
+      ];
+      if (gps.reason === 'denied' || gps.reason === 'services_off') {
+        buttons.push({
+          text: 'Mở Cài đặt',
+          onPress: () => {
+            void Linking.openSettings();
+          },
+        });
+      }
+      Alert.alert(info.title, info.message, buttons);
+    } finally {
+      locatingRef.current = false;
+      webViewRef.current?.injectJavaScript(
+        'window.__tagoSetLocating && window.__tagoSetLocating(false); true;',
+      );
+    }
+  };
+
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
@@ -610,15 +662,8 @@ export function TagoMapView({
         typeof data.lng === 'number'
       ) {
         onPinChange({ lat: data.lat, lng: data.lng });
-      } else if (
-        data.type === 'GPS_DETECTED' &&
-        onUserGpsDetected &&
-        typeof data.lat === 'number' &&
-        typeof data.lng === 'number'
-      ) {
-        onUserGpsDetected({ lat: data.lat, lng: data.lng });
-      } else if (data.type === 'GPS_FALLBACK_REQUEST' && onUserGpsDetected) {
-        onUserGpsDetected(center);
+      } else if (data.type === 'LOCATE_REQUEST') {
+        void handleLocateRequest();
       }
     } catch {
       // ignore malformed WebView message
