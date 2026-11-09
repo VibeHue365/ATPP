@@ -16,6 +16,7 @@ import {
   formatDistance,
   isValidLatLng,
   openExternalDirections,
+  resolveEntityCoords,
   type RoadRouteResult,
 } from '@/utils/geo';
 
@@ -47,13 +48,36 @@ export function TagoDirectionsModal({
 }: TagoDirectionsModalProps) {
   const [route, setRoute] = useState<RoadRouteResult | null>(null);
   const [loadingRoute, setLoadingRoute] = useState(false);
-
-  const destValid =
-    destination && isValidLatLng(destination.lat, destination.lng);
-  const originValid = origin && isValidLatLng(origin.lat, origin.lng);
+  const [activeOrigin, setActiveOrigin] = useState<OriginInfo | null>(origin || null);
 
   useEffect(() => {
-    if (!visible || !destValid || !originValid) {
+    if (origin && isValidLatLng(origin.lat, origin.lng)) {
+      setActiveOrigin(origin);
+    }
+  }, [origin?.lat, origin?.lng, origin?.label]);
+
+  const resolvedDestCoords = useMemo(() => {
+    if (destination && isValidLatLng(destination.lat, destination.lng)) {
+      return { lat: destination.lat, lng: destination.lng };
+    }
+    if (destination?.address) {
+      return resolveEntityCoords({
+        address: destination.address,
+        businessName: destination.title,
+      });
+    }
+    return null;
+  }, [destination?.lat, destination?.lng, destination?.address, destination?.title]);
+
+  const destValid = Boolean(
+    resolvedDestCoords && isValidLatLng(resolvedDestCoords.lat, resolvedDestCoords.lng),
+  );
+  const originValid = Boolean(
+    activeOrigin && isValidLatLng(activeOrigin.lat, activeOrigin.lng),
+  );
+
+  useEffect(() => {
+    if (!visible || !destValid || !originValid || !activeOrigin || !resolvedDestCoords) {
       setRoute(null);
       return;
     }
@@ -61,8 +85,8 @@ export function TagoDirectionsModal({
     setLoadingRoute(true);
 
     fetchRoadRoute(
-      { lat: origin.lat, lng: origin.lng },
-      { lat: destination.lat, lng: destination.lng },
+      { lat: activeOrigin.lat, lng: activeOrigin.lng },
+      { lat: resolvedDestCoords.lat, lng: resolvedDestCoords.lng },
     )
       .then((res) => {
         if (!cancelled) setRoute(res);
@@ -77,19 +101,27 @@ export function TagoDirectionsModal({
     return () => {
       cancelled = true;
     };
-  }, [visible, destValid, originValid, origin?.lat, origin?.lng, destination?.lat, destination?.lng]);
+  }, [
+    visible,
+    destValid,
+    originValid,
+    activeOrigin?.lat,
+    activeOrigin?.lng,
+    resolvedDestCoords?.lat,
+    resolvedDestCoords?.lng,
+  ]);
 
   const markers = useMemo<TagoMapMarker[]>(() => {
-    if (!destination || !destValid) return [];
+    if (!destination || !resolvedDestCoords || !destValid) return [];
     const list: TagoMapMarker[] = [];
 
-    if (origin && originValid) {
+    if (activeOrigin && originValid) {
       list.push({
         id: 'origin-user',
-        lat: origin.lat,
-        lng: origin.lng,
+        lat: activeOrigin.lat,
+        lng: activeOrigin.lng,
         title: 'Vị trí của bạn',
-        subtitle: origin.label || 'Điểm xuất phát',
+        subtitle: activeOrigin.label || 'Điểm xuất phát',
         badgeText: '📍 Điểm đứng',
         color: '#1A73E8',
         tone: 'primary',
@@ -98,8 +130,8 @@ export function TagoDirectionsModal({
 
     list.push({
       id: 'dest-store',
-      lat: destination.lat,
-      lng: destination.lng,
+      lat: resolvedDestCoords.lat,
+      lng: resolvedDestCoords.lng,
       title: destination.title,
       subtitle: destination.address || 'Điểm đến',
       badgeText: '🎯 Điểm đến',
@@ -109,20 +141,20 @@ export function TagoDirectionsModal({
     });
 
     return list;
-  }, [destination, destValid, origin, originValid]);
+  }, [destination, resolvedDestCoords, destValid, activeOrigin, originValid]);
 
   const mapCenter = useMemo(() => {
-    if (destination && destValid) {
-      if (origin && originValid) {
+    if (resolvedDestCoords && destValid) {
+      if (activeOrigin && originValid) {
         return {
-          lat: (destination.lat + origin.lat) / 2,
-          lng: (destination.lng + origin.lng) / 2,
+          lat: (resolvedDestCoords.lat + activeOrigin.lat) / 2,
+          lng: (resolvedDestCoords.lng + activeOrigin.lng) / 2,
         };
       }
-      return { lat: destination.lat, lng: destination.lng };
+      return { lat: resolvedDestCoords.lat, lng: resolvedDestCoords.lng };
     }
     return { lat: 16.0685, lng: 108.2215 };
-  }, [destination, destValid, origin, originValid]);
+  }, [resolvedDestCoords, destValid, activeOrigin, originValid]);
 
   // Clean and deduplicate repetitive address parts (e.g. repeated Đà Nẵng)
   const formattedAddress = useMemo(() => {
@@ -169,11 +201,18 @@ export function TagoDirectionsModal({
             zoom={14}
             height="100%"
             style={styles.mapView}
-            userLocation={originValid ? origin : null}
+            userLocation={originValid && activeOrigin ? activeOrigin : null}
             markers={markers}
             selectedMarkerId="dest-store"
             routePoints={route?.points || null}
             fitRouteBounds={Boolean(route?.points && route.points.length > 0)}
+            onUserGpsDetected={(coord) => {
+              setActiveOrigin({
+                lat: coord.lat,
+                lng: coord.lng,
+                label: 'Vị trí GPS của bạn',
+              });
+            }}
           />
 
           {loadingRoute ? (
@@ -249,13 +288,13 @@ export function TagoDirectionsModal({
             <Pressable
               style={styles.externalMapsBtn}
               onPress={() => {
-                if (destValid) {
+                if (destValid && resolvedDestCoords) {
                   void openExternalDirections({
-                    destLat: destination.lat,
-                    destLng: destination.lng,
+                    destLat: resolvedDestCoords.lat,
+                    destLng: resolvedDestCoords.lng,
                     destLabel: destination.title,
-                    originLat: originValid ? origin.lat : undefined,
-                    originLng: originValid ? origin.lng : undefined,
+                    originLat: originValid && activeOrigin ? activeOrigin.lat : undefined,
+                    originLng: originValid && activeOrigin ? activeOrigin.lng : undefined,
                   });
                 }
               }}>

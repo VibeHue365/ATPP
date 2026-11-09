@@ -588,6 +588,172 @@ function deterministicOffset(seed: string): { dLat: number; dLng: number } {
   };
 }
 
+export const VIETNAM_DISTRICT_PRESETS: Array<{
+  keywords: string[];
+  lat: number;
+  lng: number;
+}> = [
+  // Đà Nẵng
+  {
+    keywords: ['hòa hiệp', 'hoa hiep', 'liên chiểu', 'lien chieu', 'hòa khánh', 'hoa khanh'],
+    lat: 16.1084,
+    lng: 108.1322,
+  },
+  {
+    keywords: ['hải châu', 'hai chau', 'phước ninh', 'thạch thang', 'hòa thuận', 'bạch đằng', 'nguyễn văn linh'],
+    lat: 16.0544,
+    lng: 108.22,
+  },
+  {
+    keywords: ['thanh khê', 'thanh khe', 'tam thuận', 'chính gián', 'vĩnh trung', 'xuân hà', 'điện biên phủ'],
+    lat: 16.065,
+    lng: 108.19,
+  },
+  {
+    keywords: ['sơn trà', 'son tra', 'an hải', 'an đồn', 'thọ quang', 'mạn thái', 'phước mỹ', 'võ nguyên giáp'],
+    lat: 16.075,
+    lng: 108.235,
+  },
+  {
+    keywords: ['ngũ hành sơn', 'ngu hanh son', 'bắc mỹ an', 'mỹ an', 'hòa hải', 'hòa quý'],
+    lat: 16.035,
+    lng: 108.245,
+  },
+  {
+    keywords: ['cẩm lệ', 'cam le', 'hòa cường', 'hoa cuong', 'hòa xuân', 'khuê trung', 'nguyễn hành'],
+    lat: 16.02,
+    lng: 108.205,
+  },
+  {
+    keywords: ['hòa vang', 'hoa vang', 'bà nà', 'hòa vương'],
+    lat: 16.002,
+    lng: 108.085,
+  },
+
+  // Huế
+  {
+    keywords: ['thuận hòa', 'thuan hoa', 'lê huân', 'thạch hãn', 'cửa hữu', 'nguyễn trãi'],
+    lat: 16.471,
+    lng: 107.575,
+  },
+  {
+    keywords: ['phú xuân', 'phu xuan', 'kinh thành'],
+    lat: 16.468,
+    lng: 107.578,
+  },
+  {
+    keywords: ['thuận hoá', 'vĩnh ninh', 'lê lợi', 'nguyễn huệ', 'đại học huế'],
+    lat: 16.462,
+    lng: 107.59,
+  },
+  {
+    keywords: ['phú hội', 'phu hoi', 'hùng vương', 'phố tây huế', 'bến nghé'],
+    lat: 16.466,
+    lng: 107.595,
+  },
+  {
+    keywords: ['vỹ dạ', 'vy da', 'cồn hến'],
+    lat: 16.475,
+    lng: 107.61,
+  },
+  {
+    keywords: ['hương thủy', 'huong thuy'],
+    lat: 16.415,
+    lng: 107.65,
+  },
+  {
+    keywords: ['hương trà', 'huong tra', 'kim long'],
+    lat: 16.46,
+    lng: 107.55,
+  },
+
+  // Hà Nội
+  {
+    keywords: ['hai bà trưng', 'hai ba trung', 'phố huế', 'bạch mai'],
+    lat: 21.0125,
+    lng: 105.852,
+  },
+  {
+    keywords: ['hoàn kiếm', 'hoan kiem', 'tràng tiền', 'hàng bài', 'hàng bông', 'hồ gươm'],
+    lat: 21.0285,
+    lng: 105.8542,
+  },
+  {
+    keywords: ['ba đình', 'ba dinh', 'quán thánh', 'liễu giai', 'đội cấn'],
+    lat: 21.035,
+    lng: 105.828,
+  },
+  {
+    keywords: ['đống đa', 'dong da', 'tôn đức thắng', 'xã đàn', 'chùa bộc'],
+    lat: 21.018,
+    lng: 105.826,
+  },
+  {
+    keywords: ['tây hồ', 'tay ho', 'quảng an', 'xuân diệu'],
+    lat: 21.065,
+    lng: 105.825,
+  },
+  {
+    keywords: ['cầu giấy', 'cau giay', 'duy tân', 'xuân thủy'],
+    lat: 21.035,
+    lng: 105.792,
+  },
+
+  // TP. Hồ Chí Minh
+  {
+    keywords: ['quận 1', 'quan 1', 'bến nghé', 'bến thành', 'nguyễn huệ', 'đồng khởi'],
+    lat: 10.7769,
+    lng: 106.7009,
+  },
+  {
+    keywords: ['quận 3', 'quan 3', 'võ văn tần', 'nguyễn đình chiểu'],
+    lat: 10.782,
+    lng: 106.685,
+  },
+  {
+    keywords: ['quận 5', 'quan 5', 'chợ lớn', 'hải thượng lãn ông'],
+    lat: 10.755,
+    lng: 106.662,
+  },
+  {
+    keywords: ['bình thạnh', 'binh thanh', 'hàng xanh'],
+    lat: 10.803,
+    lng: 106.708,
+  },
+  {
+    keywords: ['thủ đức', 'thu duc', 'thảo điền', 'an phú', 'song hành'],
+    lat: 10.805,
+    lng: 106.745,
+  },
+  {
+    keywords: ['tân bình', 'tan binh', 'sân bay tân sơn nhất'],
+    lat: 10.801,
+    lng: 106.655,
+  },
+
+  // Hội An
+  {
+    keywords: ['phố cổ', 'pho co', 'minh an', 'cẩm phô', 'trần phú', 'nguyễn thái học'],
+    lat: 15.8794,
+    lng: 108.3283,
+  },
+  {
+    keywords: ['an hội', 'an hoi', 'nguyễn hoàng'],
+    lat: 15.876,
+    lng: 108.324,
+  },
+  {
+    keywords: ['cẩm châu', 'cam chau', 'cửa đại'],
+    lat: 15.885,
+    lng: 108.345,
+  },
+  {
+    keywords: ['an bàng', 'an bang', 'cẩm an'],
+    lat: 15.912,
+    lng: 108.338,
+  },
+];
+
 /**
  * Extract coordinates from any TàGo entity (Store, Photographer, Booking, Schedule)
  * Falls back intelligently based on address/landmark/city across Vietnam.
@@ -660,6 +826,18 @@ export function resolveEntityCoords(entity: any): GeoCoord {
   for (const spot of ALL_PRESET_SPOTS) {
     if (lower.includes(spot.label.toLowerCase())) {
       return { lat: spot.lat, lng: spot.lng };
+    }
+  }
+
+  // 3.5. Match against Vietnamese district/ward presets across major regions
+  for (const preset of VIETNAM_DISTRICT_PRESETS) {
+    if (preset.keywords.some((k) => lower.includes(k))) {
+      const seed = String(entity._id || entity.id || entity.businessName || fullText);
+      const { dLat, dLng } = deterministicOffset(seed);
+      return {
+        lat: Number((preset.lat + dLat * 0.35).toFixed(6)),
+        lng: Number((preset.lng + dLng * 0.35).toFixed(6)),
+      };
     }
   }
 
@@ -767,32 +945,44 @@ export async function fetchRoadRoute(
   const cached = routeCache.get(key);
   if (cached) return cached;
 
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4500);
-    const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`;
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timer);
-    if (!res.ok) return fallback;
-    const data = await res.json();
-    const route = data?.routes?.[0];
-    const coords = route?.geometry?.coordinates;
-    if (Array.isArray(coords) && coords.length >= 2) {
-      const points: Array<[number, number]> = coords.map((c: [number, number]) => [
-        Number(c[1]),
-        Number(c[0]),
-      ]);
-      const distanceKm = Number(((route.distance || straightKm * 1000) / 1000).toFixed(2));
-      const durationMinutes = Math.max(
-        2,
-        Math.round((route.duration || distanceKm * 150) / 60),
-      );
-      const result: RoadRouteResult = { points, distanceKm, durationMinutes };
-      routeCache.set(key, result);
-      return result;
+  const endpoints = [
+    `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`,
+    `https://routing.openstreetmap.de/routed-car/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'VibeHue/1.0 (https://tago.vn; location route search)',
+        },
+      });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const route = data?.routes?.[0];
+      const coords = route?.geometry?.coordinates;
+      if (Array.isArray(coords) && coords.length >= 2) {
+        const points: Array<[number, number]> = coords.map((c: [number, number]) => [
+          Number(c[1]),
+          Number(c[0]),
+        ]);
+        const distanceKm = Number(((route.distance || straightKm * 1000) / 1000).toFixed(2));
+        const durationMinutes = Math.max(
+          2,
+          Math.round((route.duration || distanceKm * 150) / 60),
+        );
+        const result: RoadRouteResult = { points, distanceKm, durationMinutes };
+        routeCache.set(key, result);
+        return result;
+      }
+    } catch {
+      // Try next routing endpoint
     }
-  } catch {
-    // Fallback to straight line
   }
 
   return fallback;

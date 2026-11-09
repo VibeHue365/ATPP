@@ -93,6 +93,7 @@ export default function StoresDirectoryScreen() {
     label: 'Đang định vị...',
   });
   const [addressQuery, setAddressQuery] = useState('');
+  const [lastSearchedQuery, setLastSearchedQuery] = useState('');
   const [placeResults, setPlaceResults] = useState<GeocodingPlaceResult[]>([]);
   const [showLocationSearch, setShowLocationSearch] = useState(false);
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
@@ -114,6 +115,7 @@ export default function StoresDirectoryScreen() {
     if (q.length < 2) {
       setPlaceResults([]);
       setIsSearchingLocation(false);
+      setLastSearchedQuery('');
       return;
     }
     let cancelled = false;
@@ -123,13 +125,17 @@ export default function StoresDirectoryScreen() {
         const list = await geocodingApi.smartSearch(q, currentCityName);
         if (!cancelled) {
           setPlaceResults(Array.isArray(list) ? list : []);
+          setLastSearchedQuery(q);
         }
       } catch {
-        if (!cancelled) setPlaceResults([]);
+        if (!cancelled) {
+          setPlaceResults([]);
+          setLastSearchedQuery(q);
+        }
       } finally {
         if (!cancelled) setIsSearchingLocation(false);
       }
-    }, 500);
+    }, 350);
 
     return () => {
       cancelled = true;
@@ -343,11 +349,12 @@ export default function StoresDirectoryScreen() {
   };
 
   const handleSearchUserLocation = async () => {
-    if (addressQuery.trim().length < 2) return;
+    const q = addressQuery.trim();
+    if (q.length < 2) return;
     setIsSearchingLocation(true);
     try {
-      const list = await geocodingApi.smartSearch(addressQuery.trim(), currentCityName);
-      if (Array.isArray(list) && list.length === 1) {
+      const list = await geocodingApi.smartSearch(q, currentCityName);
+      if (Array.isArray(list) && list.length > 0) {
         const place = list[0];
         const lat = Number(place.lat);
         const lng = Number(place.lon);
@@ -362,12 +369,15 @@ export default function StoresDirectoryScreen() {
           setPlaceResults([]);
           setShowLocationSearch(false);
           setAddressQuery('');
+          setLastSearchedQuery('');
           return;
         }
       }
       setPlaceResults(Array.isArray(list) ? list : []);
+      setLastSearchedQuery(q);
     } catch {
       setPlaceResults([]);
+      setLastSearchedQuery(q);
     } finally {
       setIsSearchingLocation(false);
     }
@@ -484,6 +494,7 @@ export default function StoresDirectoryScreen() {
                 <Pressable
                   onPress={() => {
                     setAddressQuery('');
+                    setLastSearchedQuery('');
                     setPlaceResults([]);
                   }}
                   style={{ padding: 4, marginRight: 4 }}>
@@ -497,14 +508,16 @@ export default function StoresDirectoryScreen() {
               </Pressable>
             </View>
 
-            {isSearchingLocation && placeResults.length === 0 ? (
+            {isSearchingLocation ? (
               <View style={s.searchingHintRow}>
+                <ActivityIndicator size="small" color={Colors.primary} style={{ marginRight: 6 }} />
                 <Text style={s.searchingHintText}>Đang tra cứu gợi ý địa chỉ...</Text>
               </View>
             ) : null}
 
             {!isSearchingLocation &&
             addressQuery.trim().length >= 2 &&
+            lastSearchedQuery === addressQuery.trim() &&
             placeResults.length === 0 ? (
               <View style={s.searchingHintRow}>
                 <Text style={s.searchingHintText}>
@@ -533,6 +546,7 @@ export default function StoresDirectoryScreen() {
                       setPlaceResults([]);
                       setShowLocationSearch(false);
                       setAddressQuery('');
+                      setLastSearchedQuery('');
                     }
                   }}>
                   <View style={s.placeIconWrap}>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DimensionValue,
   Platform,
@@ -100,6 +100,8 @@ export function TagoMapView({
     [selectedMarkerId, markers],
   );
 
+  const [isMapReady, setIsMapReady] = useState(false);
+
   const payload = useMemo(
     () => ({
       center,
@@ -130,7 +132,7 @@ export function TagoMapView({
     if (!webViewRef.current) return;
     const script = `window.__updateTagoMap && window.__updateTagoMap(${JSON.stringify(payload)}); true;`;
     webViewRef.current.injectJavaScript(script);
-  }, [payload]);
+  }, [payload, isMapReady]);
 
   const initialHtml = useMemo(() => {
     const initialDataJson = JSON.stringify(payload);
@@ -410,11 +412,21 @@ export function TagoMapView({
       function renderState(state) {
         if (!state) return;
 
-        // 1. Center changes
-        var nextCenterKey = state.center.lat.toFixed(5) + ',' + state.center.lng.toFixed(5);
-        if (nextCenterKey !== lastCenterKey) {
-          lastCenterKey = nextCenterKey;
-          map.flyTo([state.center.lat, state.center.lng], state.zoom || map.getZoom(), { duration: 0.45 });
+        try {
+          map.invalidateSize();
+        } catch (e) {}
+
+        var hasValidRoute = Array.isArray(state.routePoints) && state.routePoints.length >= 2;
+
+        // 1. Center changes (only when not auto-fitting route bounds)
+        if (!state.fitRouteBounds || !hasValidRoute) {
+          if (state.center && typeof state.center.lat === 'number') {
+            var nextCenterKey = state.center.lat.toFixed(5) + ',' + state.center.lng.toFixed(5);
+            if (nextCenterKey !== lastCenterKey) {
+              lastCenterKey = nextCenterKey;
+              map.flyTo([state.center.lat, state.center.lng], state.zoom || map.getZoom(), { duration: 0.35 });
+            }
+          }
         }
 
         // 2. User GPS Dot
@@ -448,12 +460,12 @@ export function TagoMapView({
 
         // 4. Route Polyline
         routeLayer.clearLayers();
-        if (Array.isArray(state.routePoints) && state.routePoints.length >= 2) {
+        if (hasValidRoute) {
           // Outer white halo
           L.polyline(state.routePoints, {
             color: '#FFFFFF',
             weight: 8,
-            opacity: 0.9,
+            opacity: 0.95,
             lineCap: 'round',
             lineJoin: 'round'
           }).addTo(routeLayer);
@@ -461,14 +473,14 @@ export function TagoMapView({
           var poly = L.polyline(state.routePoints, {
             color: '#BA0049',
             weight: 5,
-            opacity: 0.92,
+            opacity: 0.95,
             lineCap: 'round',
             lineJoin: 'round'
           }).addTo(routeLayer);
 
           if (state.fitRouteBounds) {
             try {
-              map.fitBounds(poly.getBounds(), { padding: [42, 42], maxZoom: 16 });
+              map.fitBounds(poly.getBounds(), { padding: [48, 48], maxZoom: 16 });
             } catch (err) {}
           }
         }
@@ -567,6 +579,12 @@ export function TagoMapView({
 
       window.__updateTagoMap = renderState;
       renderState(initial);
+      postToRN({ type: 'MAP_READY' });
+      setTimeout(function() {
+        try {
+          map.invalidateSize();
+        } catch (e) {}
+      }, 350);
     })();
   </script>
 </body>
@@ -576,7 +594,13 @@ export function TagoMapView({
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'MARKER_PRESS') {
+      if (data.type === 'MAP_READY') {
+        setIsMapReady(true);
+        if (webViewRef.current) {
+          const script = `window.__updateTagoMap && window.__updateTagoMap(${JSON.stringify(payload)}); true;`;
+          webViewRef.current.injectJavaScript(script);
+        }
+      } else if (data.type === 'MARKER_PRESS') {
         if (onSelectMarker) onSelectMarker(String(data.id));
         if (onMarkerPress) onMarkerPress(String(data.id));
       } else if (
