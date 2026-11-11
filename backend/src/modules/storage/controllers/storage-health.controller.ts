@@ -1,6 +1,8 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { PublicMediaService } from '../services/public-media.service';
 
+@SkipThrottle()
 @Controller('health/storage')
 export class StorageHealthController {
   constructor(private readonly publicMedia: PublicMediaService) {}

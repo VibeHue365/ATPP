@@ -16,13 +16,13 @@ export const Badge: React.FC<BadgeProps> = ({
       case 'primary':
         return {
           backgroundColor: 'var(--landing-primary-soft, #F3E7E9)',
-          color: 'var(--landing-primary, #7D3543)',
+          color: 'var(--landing-primary, #8E1B2E)',
           border: '1px solid var(--landing-border, #E8DEDF)',
         };
       case 'gold':
         return {
           backgroundColor: 'rgba(182, 145, 91, 0.1)',
-          color: '#B6915B',
+          color: '#C28E3A',
           border: '1px solid rgba(182, 145, 91, 0.2)',
         };
       case 'success':

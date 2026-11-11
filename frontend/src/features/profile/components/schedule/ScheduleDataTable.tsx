@@ -360,8 +360,8 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
                         padding: '6px 12px',
                         borderRadius: '8px',
                         backgroundColor: activeDropdown?.id === row.id ? '#F8F5F1' : '#FFFFFF',
-                        border: activeDropdown?.id === row.id ? '1px solid #8B1E2D' : '1px solid #DED7CB',
-                        color: activeDropdown?.id === row.id ? '#8B1E2D' : '#4A3F35',
+                        border: activeDropdown?.id === row.id ? '1px solid #8E1B2E' : '1px solid #DED7CB',
+                        color: activeDropdown?.id === row.id ? '#8E1B2E' : '#4A3F35',
                         fontSize: '12px',
                         fontWeight: 700,
                         cursor: 'pointer',
@@ -434,8 +434,8 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
                   width: '28px',
                   height: '28px',
                   borderRadius: '6px',
-                  border: pg === currentPage ? '1px solid #8B1E2D' : '1px solid #DED7CB',
-                  backgroundColor: pg === currentPage ? '#8B1E2D' : '#FFFFFF',
+                  border: pg === currentPage ? '1px solid #8E1B2E' : '1px solid #DED7CB',
+                  backgroundColor: pg === currentPage ? '#8E1B2E' : '#FFFFFF',
                   color: pg === currentPage ? '#FFFFFF' : '#4A3F35',
                   fontSize: '12px',
                   fontWeight: 700,
@@ -502,9 +502,73 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#FDF2F4')}
             onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
-            <Eye size={14} color="#8B1E2D" />
+            <Eye size={14} color="#8E1B2E" />
             <span>Xem chi tiết</span>
           </button>
+
+          {/* 1b. Khách xác nhận đã nhận áo khi ở trạng thái PICKUP_PENDING / READY_FOR_PICKUP */}
+          {['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(activeDropdown.booking.status) && (
+            <button
+              type="button"
+              onClick={() => {
+                const booking = activeDropdown.booking;
+                setActiveDropdown(null);
+                onViewDetails(booking);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: '#F5EEF8',
+                color: '#8E44AD',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#EBDDF0')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F5EEF8')}
+            >
+              <CalendarCheck size={14} color="#8E44AD" />
+              <span>Xác nhận nhận áo</span>
+            </button>
+          )}
+
+          {/* 1c. Khách duyệt ảnh khi ở trạng thái AWAITING_REVIEW */}
+          {activeDropdown.booking.status === 'AWAITING_REVIEW' && (
+            <button
+              type="button"
+              onClick={() => {
+                const booking = activeDropdown.booking;
+                setActiveDropdown(null);
+                onViewDetails(booking);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: '#ECFDF5',
+                color: '#047857',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#D1FAE5')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#ECFDF5')}
+            >
+              <CalendarCheck size={14} color="#047857" />
+              <span>Duyệt ảnh</span>
+            </button>
+          )}
 
           {/* 2. Mở kho ảnh kết quả */}
           {(activeDropdown.booking.deliveredPhotos?.length > 0 || activeDropdown.booking.deliveryDriveUrl) && (
@@ -588,7 +652,7 @@ export const ScheduleDataTable: React.FC<ScheduleDataTableProps> = ({
                 borderRadius: '6px',
                 border: 'none',
                 backgroundColor: 'transparent',
-                color: '#8B1E2D',
+                color: '#8E1B2E',
                 fontSize: '12.5px',
                 fontWeight: 700,
                 cursor: 'pointer',

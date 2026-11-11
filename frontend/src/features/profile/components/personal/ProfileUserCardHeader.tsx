@@ -126,7 +126,7 @@ export const ProfileUserCardHeader: React.FC<ProfileUserCardHeaderProps> = ({
           </div>
           <div style={{ width: '1px', height: '24px', backgroundColor: '#EFEAE2' }} />
           <div style={{ textAlign: 'center' }}>
-            <span style={{ display: 'block', fontSize: '18px', fontWeight: 800, color: '#8B1E2D' }}>
+            <span style={{ display: 'block', fontSize: '18px', fontWeight: 800, color: '#8E1B2E' }}>
               {formattedSpent}
             </span>
             <span style={{ fontSize: '11px', color: '#8C827A', fontWeight: 600 }}>Tổng chi tiêu</span>

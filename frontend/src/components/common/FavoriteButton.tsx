@@ -27,7 +27,7 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
         backgroundColor: 'rgba(255, 255, 255, 0.95)',
         border: '1px solid var(--landing-border, #E8DEDF)',
         boxShadow: 'var(--landing-shadow-sm, 0 2px 10px rgba(41, 35, 36, 0.04))',
-        color: isFavorite ? 'var(--landing-primary, #7D3543)' : 'var(--landing-text-muted, #988B8D)',
+        color: isFavorite ? 'var(--landing-primary, #8E1B2E)' : 'var(--landing-text-muted, #988B8D)',
       }}
     >
       <Heart

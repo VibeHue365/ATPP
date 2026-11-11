@@ -61,6 +61,8 @@ export interface Photographer {
   activePackageCount?: number;
   isBookable?: boolean;
   serviceRadiusKm?: number | null;
+  fullName?: string | null;
+  photographySettings?: { serviceRadiusKm?: number | null } | null;
 }
 
 export type PhotographerSort = 'rating_desc' | 'reviews_desc' | 'price_asc' | 'price_desc';

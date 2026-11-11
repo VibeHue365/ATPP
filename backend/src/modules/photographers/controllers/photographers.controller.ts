@@ -5,6 +5,7 @@ import { PhotographyPackage } from '../../products/schemas/photography-package.s
 import { PhotographerDiscoveryQueryDto } from '../dto/photographer-discovery-query.dto';
 import { CreatePhotographyQuoteDto } from '../dto/photography-quote.dto';
 import { PhotographyQuoteService } from '../services/photography-quote.service';
+import { AnalyticsService } from '../../analytics/services/analytics.service';
 
 @Controller(['photographers', 'api/photographers'])
 export class PhotographersController {
@@ -12,10 +13,14 @@ export class PhotographersController {
     private readonly photographersService: PhotographersService,
     private readonly monthlyAvailabilityService: PhotographerMonthlyAvailabilityService,
     private readonly photographyQuoteService: PhotographyQuoteService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   @Get()
   async findAll(@Query() query: PhotographerDiscoveryQueryDto) {
+    if (query.q && query.q.trim().length >= 2) {
+      this.analyticsService.trackSearch(query.q.trim()).catch(() => {});
+    }
     return this.photographersService.findAll(query);
   }
 

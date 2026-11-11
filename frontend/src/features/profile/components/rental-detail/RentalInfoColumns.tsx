@@ -104,7 +104,7 @@ export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
                   gap: '10px'
                 }}
               >
-                <MapPin size={16} color="#8B1E2D" style={{ marginTop: '2px', flexShrink: 0 }} />
+                <MapPin size={16} color="#8E1B2E" style={{ marginTop: '2px', flexShrink: 0 }} />
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: 750, color: '#231F20' }}>{storeName}</div>
                   <div style={{ fontSize: '11.5px', color: '#7D736B', marginTop: '1px' }}>{storeAddress}</div>
@@ -141,7 +141,7 @@ export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
             style={{
               padding: '9px 12px',
               borderRadius: '8px',
-              backgroundColor: '#8B1E2D',
+              backgroundColor: '#8E1B2E',
               border: 'none',
               color: '#FFFFFF',
               fontSize: '12.5px',
@@ -150,7 +150,7 @@ export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
               transition: 'background-color 0.15s'
             }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#721824')}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#8B1E2D')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#8E1B2E')}
           >
             Chỉ đường
           </button>
@@ -196,7 +196,7 @@ export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#231F20' }}>Tổng thanh toán</span>
-              <span style={{ fontSize: '18px', fontWeight: 900, color: '#8B1E2D' }}>
+              <span style={{ fontSize: '18px', fontWeight: 900, color: '#8E1B2E' }}>
                 {totalPrice.toLocaleString('vi-VN')}đ
               </span>
             </div>
@@ -268,7 +268,7 @@ export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12.5px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', color: '#4A3F35' }}>
-              <Sparkles size={14} color="#8B1E2D" style={{ marginTop: '2px', flexShrink: 0 }} />
+              <Sparkles size={14} color="#8E1B2E" style={{ marginTop: '2px', flexShrink: 0 }} />
               <span>Giữ áo cẩn thận, tránh làm bẩn và rách</span>
             </div>
 
@@ -283,7 +283,7 @@ export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', color: '#4A3F35' }}>
-              <Headphones size={14} color="#8B1E2D" style={{ marginTop: '2px', flexShrink: 0 }} />
+              <Headphones size={14} color="#8E1B2E" style={{ marginTop: '2px', flexShrink: 0 }} />
               <span>Liên hệ ngay nếu có vấn đề phát sinh</span>
             </div>
           </div>

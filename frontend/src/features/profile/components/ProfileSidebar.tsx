@@ -102,7 +102,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
                   padding: '7px 12px',
                   fontSize: '13px',
                   fontWeight: isRentalActive ? 700 : 500,
-                  color: isRentalActive ? '#8B1E2D' : '#7D736B',
+                  color: isRentalActive ? '#8E1B2E' : '#7D736B',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -110,7 +110,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
                   transition: 'all 0.15s ease'
                 }}
               >
-                <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: isRentalActive ? '#8B1E2D' : '#C7BFB5' }} />
+                <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: isRentalActive ? '#8E1B2E' : '#C7BFB5' }} />
                 <span>Thuê áo dài</span>
               </button>
               <button
@@ -124,7 +124,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
                   padding: '7px 12px',
                   fontSize: '13px',
                   fontWeight: isPhotoshootActive ? 700 : 500,
-                  color: isPhotoshootActive ? '#8B1E2D' : '#7D736B',
+                  color: isPhotoshootActive ? '#8E1B2E' : '#7D736B',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -132,7 +132,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
                   transition: 'all 0.15s ease'
                 }}
               >
-                <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: isPhotoshootActive ? '#8B1E2D' : '#C7BFB5' }} />
+                <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: isPhotoshootActive ? '#8E1B2E' : '#C7BFB5' }} />
                 <span>Chụp ảnh</span>
               </button>
               <button
@@ -146,7 +146,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
                   padding: '7px 12px',
                   fontSize: '13px',
                   fontWeight: isComboActive ? 700 : 500,
-                  color: isComboActive ? '#8B1E2D' : '#7D736B',
+                  color: isComboActive ? '#8E1B2E' : '#7D736B',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -154,7 +154,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
                   transition: 'all 0.15s ease'
                 }}
               >
-                <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: isComboActive ? '#8B1E2D' : '#C7BFB5' }} />
+                <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: isComboActive ? '#8E1B2E' : '#C7BFB5' }} />
                 <span>Combo</span>
               </button>
             </div>
@@ -189,7 +189,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
                 fontSize: '11px',
                 fontWeight: 700,
                 background: '#FDF2F4',
-                color: '#8B1E2D',
+                color: '#8E1B2E',
                 padding: '2px 8px',
                 borderRadius: '999px'
               }}
@@ -286,7 +286,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
               backgroundColor: '#FDF2F4',
               borderRadius: '8px',
               padding: '10px',
-              color: '#8B1E2D',
+              color: '#8E1B2E',
               fontSize: '13.5px',
               fontWeight: 800
             }}

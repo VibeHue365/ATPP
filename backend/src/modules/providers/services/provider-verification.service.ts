@@ -1,3 +1,4 @@
+import { createSafeRegex } from '../../../common/utils/regex.util';
 import {
   BadRequestException,
   ConflictException,
@@ -825,14 +826,16 @@ export class ProviderVerificationService {
     }
 
     if (query?.province && query.province !== 'ALL') {
-      filter['businessProfile.province'] = new RegExp(query.province, 'i');
+      const provinceRegex = createSafeRegex(query.province);
+      if (provinceRegex) {
+        filter['businessProfile.province'] = provinceRegex;
+      }
     }
 
     if (query?.search && query.search.trim()) {
-      const q = query.search.trim();
-      const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escaped, 'i');
-      filter.$or = [
+      const regex = createSafeRegex(query.search);
+      if (regex) {
+        filter.$or = [
         { 'businessProfile.businessName': regex },
         { partnerCode: regex },
         { 'businessProfile.ownerName': regex },
@@ -840,6 +843,7 @@ export class ProviderVerificationService {
         { 'businessProfile.taxCode': regex },
         { 'businessProfile.email': regex },
       ];
+      }
     }
 
     const page = Math.max(1, query?.page || 1);

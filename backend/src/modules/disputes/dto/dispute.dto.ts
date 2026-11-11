@@ -12,8 +12,8 @@ export class CreateIncidentDto {
     message: 'Mỗi ảnh bằng chứng phải là URL hợp lệ',
   })
   evidencePhotos: string[];
-  @Type(() => Number) @IsInt() @Min(1) requestedAmount: number;
-  @IsIn(['MAINTENANCE', 'CLEANING']) actionType: 'MAINTENANCE' | 'CLEANING';
+  @Type(() => Number) @IsInt() @Min(0) requestedAmount: number;
+  @IsIn(['MAINTENANCE', 'CLEANING', 'NO_SHOW', 'OTHER']) actionType: 'MAINTENANCE' | 'CLEANING' | 'NO_SHOW' | 'OTHER';
 }
 
 export class ResolveDisputeDto {

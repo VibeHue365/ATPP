@@ -96,7 +96,7 @@ export const ProfileLocationChangeModal: React.FC<ProfileLocationChangeModalProp
             type="button"
             disabled={!requestedLocation || isSubmitting}
             onClick={handleSubmit}
-            style={{ padding: '8px 22px', borderRadius: '8px', fontSize: '12.5px', fontWeight: 750, backgroundColor: '#8B1E2D', color: '#FFFFFF', border: 'none', cursor: !requestedLocation || isSubmitting ? 'not-allowed' : 'pointer' }}
+            style={{ padding: '8px 22px', borderRadius: '8px', fontSize: '12.5px', fontWeight: 750, backgroundColor: '#8E1B2E', color: '#FFFFFF', border: 'none', cursor: !requestedLocation || isSubmitting ? 'not-allowed' : 'pointer' }}
           >
             {isSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu'}
           </button>

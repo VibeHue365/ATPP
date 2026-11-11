@@ -166,7 +166,7 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
 
         {/* Customer Information Banner */}
         <div style={{ backgroundColor: '#FCFAF7', padding: '16px 20px', borderRadius: '12px', border: '1px solid #ECE5DB' }}>
-          <h4 style={{ fontSize: '12.5px', fontWeight: 800, color: '#8B1E2D', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+          <h4 style={{ fontSize: '12.5px', fontWeight: 800, color: '#8E1B2E', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
             Thông tin người đặt
           </h4>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px 20px', fontSize: '13px', color: '#4A3F35' }}>
@@ -331,9 +331,9 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
         {/* Store pickup & return location for Ao Dai rentals */}
         {pickupAddress && (
           <div style={{ padding: '14px 18px', backgroundColor: '#FDF8F6', borderRadius: '12px', border: '1px solid #F5E6E0', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-            <MapPin size={18} color="#8B1E2D" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <MapPin size={18} color="#8E1B2E" style={{ flexShrink: 0, marginTop: '2px' }} />
             <div style={{ fontSize: '13px', color: '#574D4F', lineHeight: 1.5 }}>
-              <span style={{ fontWeight: 600, color: '#8B1E2D' }}>Địa chỉ nhận & trả đồ (lấy tại cửa hàng): </span>
+              <span style={{ fontWeight: 600, color: '#8E1B2E' }}>Địa chỉ nhận & trả đồ (lấy tại cửa hàng): </span>
               <strong style={{ color: '#231F20' }}>{pickupAddress}</strong>
             </div>
           </div>
@@ -341,7 +341,7 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
 
         {/* Items details */}
         <div>
-          <h4 style={{ fontSize: '12.5px', fontWeight: 800, color: '#8B1E2D', textTransform: 'uppercase', letterSpacing: '0.03em', margin: '0 0 14px 0' }}>
+          <h4 style={{ fontSize: '12.5px', fontWeight: 800, color: '#8E1B2E', textTransform: 'uppercase', letterSpacing: '0.03em', margin: '0 0 14px 0' }}>
             Danh sách dịch vụ & sản phẩm
           </h4>
 
@@ -375,7 +375,7 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
                               onClick={() => onOpenReview({ ...item, bookingId: booking._id, booking })}
                               style={{
                                 padding: '4px 10px',
-                                backgroundColor: '#8B1E2D',
+                                backgroundColor: '#8E1B2E',
                                 color: 'white',
                                 border: 'none',
                                 borderRadius: '6px',
@@ -409,7 +409,7 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
                       <span style={{ fontSize: '11.5px', color: '#7D736B' }}>
                         {item.unitPrice?.toLocaleString('vi-VN')}đ x {item.quantity || 1}
                       </span>
-                      <strong style={{ fontSize: '14px', color: '#8B1E2D' }}>
+                      <strong style={{ fontSize: '14px', color: '#8E1B2E' }}>
                         {((item.unitPrice || 0) * (item.quantity || 1)).toLocaleString('vi-VN')}đ
                       </strong>
                     </div>
@@ -459,7 +459,7 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 800, color: '#231F20', borderTop: '1px dashed #ECE5DB', paddingTop: '10px' }}>
             <span>Tổng thanh toán:</span>
-            <span style={{ color: '#8B1E2D' }}>{grandTotal.toLocaleString('vi-VN')}đ</span>
+            <span style={{ color: '#8E1B2E' }}>{grandTotal.toLocaleString('vi-VN')}đ</span>
           </div>
 
           {isPaid && (
@@ -504,7 +504,7 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
                         Bạn xác nhận đã nhận áo dài từ cửa hàng cho đơn <strong>#${booking.bookingCode}</strong>?
                       </p>
                       <div style="background-color: #F8F5F1; border: 1px dashed #DED7CB; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-                        <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #8B1E2D; font-size: 13px;">
+                        <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #8E1B2E; font-size: 13px;">
                           📸 Tải ảnh hiện trạng áo lúc nhận (Khuyến nghị):
                         </label>
                         <input
@@ -566,7 +566,7 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
                     icon: 'success',
                     title: 'Nhận áo thành công!',
                     text: 'Đơn thuê đã chuyển sang trạng thái Đang thuê.',
-                    confirmButtonColor: '#8B1E2D'
+                    confirmButtonColor: '#8E1B2E'
                   });
                   onRefreshBooking?.();
                   onClose();
@@ -598,7 +598,7 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
                 borderRadius: '8px',
                 fontSize: '12.5px',
                 fontWeight: 750,
-                backgroundColor: '#8B1E2D',
+                backgroundColor: '#8E1B2E',
                 color: 'white',
                 border: 'none',
                 cursor: 'pointer'

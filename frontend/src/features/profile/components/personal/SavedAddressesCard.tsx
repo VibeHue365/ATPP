@@ -79,7 +79,7 @@ export const SavedAddressesCard: React.FC<SavedAddressesCardProps> = ({
             style={{
               marginTop: '6px',
               padding: '7px 14px',
-              backgroundColor: '#8B1E2D',
+              backgroundColor: '#8E1B2E',
               color: '#FFFFFF',
               border: 'none',
               borderRadius: '8px',
@@ -120,7 +120,7 @@ export const SavedAddressesCard: React.FC<SavedAddressesCardProps> = ({
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '13px', fontWeight: 800, color: '#231F20', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <MapPin size={14} color="#8B1E2D" />
+                    <MapPin size={14} color="#8E1B2E" />
                     {addr.label || addr.tag || 'Địa chỉ'}
                   </span>
                   {addr.isDefault && (

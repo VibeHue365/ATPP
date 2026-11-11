@@ -2749,7 +2749,7 @@ export class BookingsService implements OnApplicationBootstrap {
     const bookingIds = bookings.map((booking) => booking._id);
     const items = bookingIds.length
       ? await this.bookingItemModel
-          .find({ bookingId: { $in: bookingIds }, providerId: provider._id })
+          .find({ bookingId: { $in: bookingIds } })
           .populate('productId')
           .populate('photographyPackageId')
           .lean()
@@ -2774,6 +2774,8 @@ export class BookingsService implements OnApplicationBootstrap {
         (item as any).name ||
         null;
 
+      const isMyItem = item.providerId?.toString() === provider._id.toString();
+
       if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
         const matchedSchedule = schedules.find(
           (s: any) =>
@@ -2786,6 +2788,7 @@ export class BookingsService implements OnApplicationBootstrap {
           return {
             ...item,
             name: resolvedName,
+            isMyItem,
             shootDate:
               item.shootDate ||
               matchedSchedule.startsAt ||
@@ -2799,6 +2802,7 @@ export class BookingsService implements OnApplicationBootstrap {
       return {
         ...item,
         name: resolvedName,
+        isMyItem,
       };
     });
 
@@ -3111,6 +3115,23 @@ export class BookingsService implements OnApplicationBootstrap {
       console.error('Failed to create completeBooking notifications:', e);
     }
 
+    try {
+      const customerIdStr = this.getCustomerIdStr(booking);
+      const providerIdStrs = (booking.providerIds || []).map((id) => id.toString());
+      const recipientIds = [...new Set([customerIdStr, ...providerIdStrs])].filter(Boolean);
+      this.notificationsService.emitBookingUpdate(
+        {
+          bookingId: booking._id.toString(),
+          bookingCode: booking.bookingCode,
+          status: BookingStatus.Completed,
+          deliveredPhotos: (booking as any).deliveredPhotos ?? [],
+        },
+        recipientIds,
+      );
+    } catch (e) {
+      console.warn('Failed to emit booking_updated in completeBooking:', e);
+    }
+
     await this.paymentsService.settleBooking(bookingIdStr);
 
     return booking;
@@ -3169,13 +3190,31 @@ export class BookingsService implements OnApplicationBootstrap {
         note: 'Khách hàng đã xác nhận hài lòng về sản phẩm ảnh chụp. Đơn hàng tiếp tục luồng thuê áo dài.',
       });
       await booking.save();
+
+      try {
+        const customerIdStr = this.getCustomerIdStr(booking);
+        const providerIdStrs = (booking.providerIds || []).map((id) => id.toString());
+        const recipientIds = [...new Set([customerIdStr, ...providerIdStrs])].filter(Boolean);
+        this.notificationsService.emitBookingUpdate(
+          {
+            bookingId: booking._id.toString(),
+            bookingCode: booking.bookingCode,
+            status: BookingStatus.ComboPhotosApproved,
+            deliveredPhotos: (booking as any).deliveredPhotos ?? [],
+          },
+          recipientIds,
+        );
+      } catch (e) {
+        console.warn('Failed to emit booking_updated in confirmCompleteByCustomer:', e);
+      }
+
       return booking;
     }
 
     // Atomic lock: prevents double-processing if cron job runs simultaneously
     const locked = await this.bookingModel.findOneAndUpdate(
       { _id: booking._id, status: BookingStatus.AwaitingReview },
-      { $set: { status: BookingStatus.Completed } },
+      { $set: { status: BookingStatus.Completed, photosApproved: true } },
       { new: false },
     );
 
@@ -3359,6 +3398,17 @@ export class BookingsService implements OnApplicationBootstrap {
     if (!allowed.includes(nextStatus)) {
       throw new BadRequestException(
         `Không được phép chuyển trạng thái đơn hàng từ ${currentStatus} sang ${nextStatus}`,
+      );
+    }
+
+    const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
+    if (
+      currentStatus === BookingStatus.AwaitingReview &&
+      (nextStatus === BookingStatus.Completed || nextStatus === BookingStatus.ComboPhotosApproved) &&
+      !isAdmin
+    ) {
+      throw new BadRequestException(
+        'Đơn hàng đang chờ khách hàng duyệt nhận ảnh. Chỉ khách hàng hoặc hệ thống tự động nghiệm thu sau 48h mới có quyền hoàn tất đơn này.',
       );
     }
 
@@ -4651,6 +4701,23 @@ export class BookingsService implements OnApplicationBootstrap {
         },
       },
     );
+
+    try {
+      const customerIdStr = this.getCustomerIdStr(booking);
+      const providerIdStrs = (booking.providerIds || []).map((id) => id.toString());
+      const recipientIds = [...new Set([customerIdStr, ...providerIdStrs])].filter(Boolean);
+      this.notificationsService.emitBookingUpdate(
+        {
+          bookingId: booking._id.toString(),
+          bookingCode: booking.bookingCode,
+          status: BookingStatus.PickedUp,
+          deliveredPhotos: (booking as any).deliveredPhotos ?? [],
+        },
+        recipientIds,
+      );
+    } catch (e) {
+      console.warn('Failed to emit booking_updated in customerConfirmPickup:', e);
+    }
 
     return { success: true, booking };
   }

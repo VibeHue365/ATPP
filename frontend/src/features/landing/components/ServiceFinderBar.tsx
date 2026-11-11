@@ -78,14 +78,14 @@ export const ServiceFinderBar: React.FC = () => {
   };
 
   return (
-    <section id="service-finder" className="w-full mt-6 md:mt-8">
+    <section id="service-finder" className="w-full mt-6 md:mt-8 relative z-30">
       <form
         onSubmit={handleSearch}
-        className="w-full rounded-2xl p-3 bg-[#F3EBEC] border border-[#E8DEDF] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-center shadow-2xs"
+        className="w-full rounded-2xl p-3 bg-[#FDF2F4] border border-[#EFE8DF] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-center shadow-2xs"
       >
         {/* Field 1: DỊCH VỤ */}
-        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0">
-          <label htmlFor="finder-service" className="text-[10px] font-bold uppercase tracking-wider text-[#7D3543] leading-none mb-1 whitespace-nowrap">
+        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0 relative">
+          <label htmlFor="finder-service" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none mb-1 whitespace-nowrap">
             Dịch vụ
           </label>
           <CustomSelect
@@ -102,8 +102,8 @@ export const ServiceFinderBar: React.FC = () => {
         </div>
 
         {/* Field 2: TỪ KHÓA TÌM KIẾM */}
-        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0">
-          <label htmlFor="finder-keyword" className="text-[10px] font-bold uppercase tracking-wider text-[#7D3543] leading-none mb-1 whitespace-nowrap">
+        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0 relative">
+          <label htmlFor="finder-keyword" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none mb-1 whitespace-nowrap">
             Từ khóa
           </label>
           <input
@@ -117,8 +117,8 @@ export const ServiceFinderBar: React.FC = () => {
         </div>
 
         {/* Field 3: NHU CẦU */}
-        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0">
-          <label htmlFor="finder-concept" className="text-[10px] font-bold uppercase tracking-wider text-[#7D3543] leading-none mb-1 whitespace-nowrap">
+        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0 relative">
+          <label htmlFor="finder-concept" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none mb-1 whitespace-nowrap">
             Nhu cầu
           </label>
           <CustomSelect
@@ -138,8 +138,8 @@ export const ServiceFinderBar: React.FC = () => {
         </div>
 
         {/* Field 4: NGÀY CHỤP/THUÊ (Traveloka Dual Month & Hourly) */}
-        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2 border border-stone-200 shadow-2xs min-w-0">
-          <label htmlFor="finder-date" className="text-[10px] font-bold uppercase tracking-wider text-[#7D3543] leading-none mb-1 whitespace-nowrap">
+        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2 border border-stone-200 shadow-2xs min-w-0 relative">
+          <label htmlFor="finder-date" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none mb-1 whitespace-nowrap">
             {serviceType === 'photographer'
               ? 'Ngày & Ca chụp'
               : serviceType === 'combo'
@@ -157,8 +157,8 @@ export const ServiceFinderBar: React.FC = () => {
         </div>
 
         {/* Field 5: ĐỊA ĐIỂM */}
-        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0">
-          <label htmlFor="finder-location" className="text-[10px] font-bold uppercase tracking-wider text-[#7D3543] leading-none mb-1 whitespace-nowrap">
+        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0 relative">
+          <label htmlFor="finder-location" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none mb-1 whitespace-nowrap">
             Địa điểm
           </label>
           <CustomSelect

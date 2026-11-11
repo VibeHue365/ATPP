@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { AdminReloadButton } from "./AdminReloadButton";
+import { includesVietnamese } from "../../../utils/vietnameseUtils";
 import {
   Check,
   Eye,
@@ -152,18 +153,16 @@ export const ProductModerationManagement: React.FC = () => {
     }
   };
 
-  const filteredItems = items.filter((item) => {
-    const nameMatch = item.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const providerMatch = (item.providerId?.businessName || "")
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const categoryMatch = (item.categoryId?.name || "")
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    return nameMatch || providerMatch || categoryMatch;
-  });
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+    const q = searchQuery.trim();
+    return items.filter((item) => {
+      const nameMatch = includesVietnamese(item.name, q);
+      const providerMatch = includesVietnamese(item.providerId?.businessName, q);
+      const categoryMatch = includesVietnamese(item.categoryId?.name, q);
+      return nameMatch || providerMatch || categoryMatch;
+    });
+  }, [items, searchQuery]);
 
   const getStatusBadgeStyle = (moderationStatus: ModerationStatus) => {
     switch (moderationStatus) {

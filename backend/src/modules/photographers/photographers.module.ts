@@ -9,6 +9,7 @@ import { PhotographyPackagesService } from './services/photography-packages.serv
 import { PhotographerMonthlyAvailabilityService } from './services/photographer-monthly-availability.service';
 import { BookingsModule } from '../bookings/bookings.module';
 import { CategoriesModule } from '../categories/categories.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 /**
  * Owns the photography domain: public discovery, service packages and
@@ -16,7 +17,7 @@ import { CategoriesModule } from '../categories/categories.module';
  * and verification domain.
  */
 @Module({
-  imports: [ProvidersModule, ProductsModule, SmartTaggingModule, BookingsModule, CategoriesModule],
+  imports: [ProvidersModule, ProductsModule, SmartTaggingModule, BookingsModule, CategoriesModule, AnalyticsModule],
   controllers: [
     PhotographersController,
     ProviderPhotographyPackagesController,

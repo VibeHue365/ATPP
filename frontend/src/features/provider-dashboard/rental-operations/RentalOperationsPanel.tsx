@@ -613,7 +613,7 @@ export function RentalOperationsPanel({
                             setIsDrawerOpen(true);
                           }}
                           className="ro-btn-action"
-                          style={{ backgroundColor: '#F8F5F1', color: '#8B1E2D', border: '1px solid #DED7CB', fontWeight: 600 }}
+                          style={{ backgroundColor: '#F8F5F1', color: '#8E1B2E', border: '1px solid #DED7CB', fontWeight: 600 }}
                         >
                           Chi tiết
                         </button>

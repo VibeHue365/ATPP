@@ -48,8 +48,15 @@ export function createIncidentActions({
       toast.error('Báo cáo sự cố bắt buộc phải có ít nhất 1 hình ảnh làm bằng chứng!');
       return;
     }
-    if (incidentAmount > (reportingOrder.depositTotal || 0)) {
-      toast.error(`Tiền đền bù không được vượt quá số tiền cọc (${(reportingOrder.depositTotal || 0).toLocaleString()}đ)`);
+    const maxLimit =
+      reportingOrder.depositTotal && reportingOrder.depositTotal > 0
+        ? reportingOrder.depositTotal
+        : (reportingOrder as any).grandTotal || (reportingOrder as any).totalAmount || 0;
+
+    if (incidentAmount > maxLimit) {
+      toast.error(
+        `Tiền đền bù không được vượt quá giới hạn đơn hàng (${maxLimit.toLocaleString()}đ)`,
+      );
       return;
     }
     try {

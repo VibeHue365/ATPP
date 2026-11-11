@@ -113,7 +113,7 @@ export const ProfileReviewModal: React.FC<ProfileReviewModalProps> = ({
       >
         <div
           style={{
-            backgroundColor: '#8B1E2D',
+            backgroundColor: '#8E1B2E',
             color: '#FFFFFF',
             display: 'flex',
             justifyContent: 'space-between',
@@ -193,7 +193,7 @@ export const ProfileReviewModal: React.FC<ProfileReviewModalProps> = ({
             style={{
               width: '100%',
               padding: '12px',
-              backgroundColor: '#8B1E2D',
+              backgroundColor: '#8E1B2E',
               color: '#FFFFFF',
               border: 'none',
               borderRadius: '10px',

@@ -38,7 +38,7 @@
 }
 
 .provider-overview-container {
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-body);
   color: var(--po-text-body);
   display: flex;
   flex-direction: column;

@@ -504,7 +504,7 @@
 .lume-partner-code-sub {
   font-size: 10px;
   color: #9CA3AF;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 /* Capability Badges */
@@ -562,7 +562,7 @@
 
 .lume-partner-contact-phone {
   color: #6B7280;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
 }
 
@@ -1169,7 +1169,7 @@
 .lume-partner-panel-code {
   font-size: 11px;
   color: #6B7280;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .lume-partner-copy-btn {

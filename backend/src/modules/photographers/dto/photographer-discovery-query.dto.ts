@@ -57,6 +57,21 @@ export class PhotographerDiscoveryQueryDto {
   location?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  date?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  groupSize?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  timeSlot?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)

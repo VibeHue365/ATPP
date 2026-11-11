@@ -28,6 +28,7 @@ describe('SessionService', () => {
       {} as never,
       securityLogService as never,
       tokenService as never,
+      { del: jest.fn().mockResolvedValue(true) } as never,
     );
 
     await expect(

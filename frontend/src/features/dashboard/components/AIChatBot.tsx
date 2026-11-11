@@ -209,8 +209,8 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
                   fontSize: '10px',
                   fontWeight: 600,
                   padding: '1px 6px',
-                  background: 'rgba(181, 43, 71, 0.08)',
-                  color: '#B52B47',
+                  background: 'rgba(142, 27, 46, 0.08)',
+                  color: '#8E1B2E',
                   borderRadius: '999px',
                 }}
               >
@@ -353,7 +353,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
                   style={{
                     fontSize: '11px',
                     fontWeight: 600,
-                    color: '#B52B47',
+                    color: '#8E1B2E',
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
                   }}
@@ -456,7 +456,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
                             transition: 'all 0.2s ease',
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#B52B47';
+                            e.currentTarget.style.background = '#8E1B2E';
                           }}
                           onMouseLeave={(e) => {
                             e.currentTarget.style.background = '#1C1917';
@@ -528,7 +528,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
               style={{
                 width: '6px',
                 height: '6px',
-                background: '#B52B47',
+                background: '#8E1B2E',
                 borderRadius: '50%',
                 display: 'inline-block',
                 animation: 'bounce 1.4s infinite ease-in-out',
@@ -539,7 +539,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
               style={{
                 width: '6px',
                 height: '6px',
-                background: '#B52B47',
+                background: '#8E1B2E',
                 borderRadius: '50%',
                 display: 'inline-block',
                 animation: 'bounce 1.4s infinite ease-in-out',
@@ -550,7 +550,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
               style={{
                 width: '6px',
                 height: '6px',
-                background: '#B52B47',
+                background: '#8E1B2E',
                 borderRadius: '50%',
                 display: 'inline-block',
                 animation: 'bounce 1.4s infinite ease-in-out',
@@ -592,10 +592,10 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
                 boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = '#B52B47';
-                e.currentTarget.style.color = '#B52B47';
+                e.currentTarget.style.borderColor = '#8E1B2E';
+                e.currentTarget.style.color = '#8E1B2E';
                 e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 3px 8px rgba(181, 43, 71, 0.1)';
+                e.currentTarget.style.boxShadow = '0 3px 8px rgba(142, 27, 46, 0.1)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.08)';
@@ -604,7 +604,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
                 e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.02)';
               }}
             >
-              <Sparkles size={11} style={{ color: '#B52B47', opacity: 0.7 }} />
+              <Sparkles size={11} style={{ color: '#8E1B2E', opacity: 0.7 }} />
               <span>{s.label}</span>
             </button>
           ))}
@@ -720,7 +720,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
               borderRadius: '50%',
               background: 'transparent',
               border: 'none',
-              color: selectedImage ? '#B52B47' : '#78716C',
+              color: selectedImage ? '#8E1B2E' : '#78716C',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -732,7 +732,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
               e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = selectedImage ? '#B52B47' : '#78716C';
+              e.currentTarget.style.color = selectedImage ? '#8E1B2E' : '#78716C';
               e.currentTarget.style.background = 'transparent';
             }}
           >
@@ -762,7 +762,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
             }}
             onMouseEnter={(e) => {
               if (hasContentToSend) {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #B52B47 0%, #941B35 100%)';
+                e.currentTarget.style.background = 'linear-gradient(135deg, #8E1B2E 0%, #941B35 100%)';
                 e.currentTarget.style.transform = 'scale(1.05)';
               }
             }}

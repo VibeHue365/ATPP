@@ -18,8 +18,8 @@ export class IncidentReport {
   @Prop({ type: Types.ObjectId, ref: 'BookingItem', required: true, index: true })
   bookingItemId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Product', required: true, index: true })
-  productId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Product', required: false, default: null, index: true })
+  productId?: Types.ObjectId | null;
 
   @Prop({ type: Types.ObjectId, ref: 'Provider', required: true, index: true })
   reportedBy: Types.ObjectId; // Provider ID của Shop
@@ -27,8 +27,8 @@ export class IncidentReport {
   @Prop({ required: true, trim: true })
   description: string;
 
-  @Prop({ type: String, enum: ['CLEANING', 'MAINTENANCE'], default: 'CLEANING' })
-  actionType: 'CLEANING' | 'MAINTENANCE';
+  @Prop({ type: String, enum: ['CLEANING', 'MAINTENANCE', 'NO_SHOW', 'OTHER'], default: 'CLEANING' })
+  actionType: 'CLEANING' | 'MAINTENANCE' | 'NO_SHOW' | 'OTHER';
 
   @Prop({ type: [String], default: [] })
   evidencePhotos: string[];

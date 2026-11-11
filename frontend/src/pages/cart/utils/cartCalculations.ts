@@ -1,3 +1,4 @@
+import { getMediaUrl } from '../../../shared/media/mediaUrl';
 import type { CartItem } from '../../../context/CartContext';
 import type { EnrichedCartItem, CartTotals } from '../types';
 import {
@@ -64,8 +65,7 @@ export const getDayMonth = (dateStr?: string | null): string => {
 
 export const getImageUrl = (url?: string | null): string => {
   if (!url) return 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600';
-  if (url.startsWith('http') || url.startsWith('blob:')) return url;
-  return `http://localhost:3000${url.startsWith('/') ? '' : '/'}${url}`;
+  return getMediaUrl(url) || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=600';
 };
 
 export const enrichCartItems = (cart: CartItem[], realProductList: any[]): EnrichedCartItem[] => {

@@ -158,16 +158,16 @@
 .vh-swal-logout-icon,
 .swal2-icon.vh-swal-logout-icon {
   background: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%) !important;
-  color: #8B1E2D !important;
-  box-shadow: 0 0 0 8px rgba(255, 228, 230, 0.75), 0 4px 12px rgba(139, 30, 45, 0.1) !important;
+  color: #8E1B2E !important;
+  box-shadow: 0 0 0 8px rgba(255, 228, 230, 0.75), 0 4px 12px rgba(142, 27, 46, 0.1) !important;
   width: 62px !important;
   height: 62px !important;
 }
 
 .vh-swal-logout-icon svg,
 .swal2-icon.vh-swal-logout-icon svg {
-  color: #8B1E2D !important;
-  stroke: #8B1E2D !important;
+  color: #8E1B2E !important;
+  stroke: #8E1B2E !important;
   width: 28px !important;
   height: 28px !important;
   display: block !important;
@@ -285,25 +285,25 @@
 
 /* Confirm Button (Primary VibeHue Burgundy) */
 .swal2-styled.swal2-confirm {
-  background: linear-gradient(135deg, #8B1E2D 0%, #721622 100%) !important;
+  background: linear-gradient(135deg, #8E1B2E 0%, #741524 100%) !important;
   color: #FFFFFF !important;
-  border: 1px solid rgba(139, 30, 45, 0.25) !important;
-  box-shadow: 0 4px 14px rgba(139, 30, 45, 0.28) !important;
+  border: 1px solid rgba(142, 27, 46, 0.25) !important;
+  box-shadow: 0 4px 14px rgba(142, 27, 46, 0.28) !important;
 }
 
 .swal2-styled.swal2-confirm:hover {
   background: linear-gradient(135deg, #9C2234 0%, #7E1826 100%) !important;
-  box-shadow: 0 6px 18px rgba(139, 30, 45, 0.38) !important;
+  box-shadow: 0 6px 18px rgba(142, 27, 46, 0.38) !important;
   transform: translateY(-1px) !important;
 }
 
 .swal2-styled.swal2-confirm:active {
   transform: translateY(0) !important;
-  box-shadow: 0 2px 8px rgba(139, 30, 45, 0.2) !important;
+  box-shadow: 0 2px 8px rgba(142, 27, 46, 0.2) !important;
 }
 
 .swal2-styled.swal2-confirm:focus-visible {
-  box-shadow: 0 0 0 3px rgba(139, 30, 45, 0.35) !important;
+  box-shadow: 0 0 0 3px rgba(142, 27, 46, 0.35) !important;
 }
 
 /* Cancel Button (Soft Neutral Secondary) */
@@ -370,9 +370,9 @@
 .swal2-input:focus,
 .swal2-textarea:focus,
 .swal2-select:focus {
-  border-color: #8B1E2D !important;
+  border-color: #8E1B2E !important;
   background: #FFFFFF !important;
-  box-shadow: 0 0 0 3px rgba(139, 30, 45, 0.12) !important;
+  box-shadow: 0 0 0 3px rgba(142, 27, 46, 0.12) !important;
   outline: none !important;
 }
 

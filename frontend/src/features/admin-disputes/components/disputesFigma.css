@@ -404,7 +404,7 @@
 }
 
 .df-booking-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-weight: 700;
   color: #0f172a;
   font-size: 12px;
@@ -468,7 +468,7 @@
 
 .df-party-code {
   font-size: 11px;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   color: #64748b;
 }
 

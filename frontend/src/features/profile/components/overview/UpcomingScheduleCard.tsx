@@ -51,7 +51,7 @@ export const UpcomingScheduleCard: React.FC<UpcomingScheduleCardProps> = ({
             onClick={onExplore}
             style={{
               padding: '6px 14px',
-              backgroundColor: '#8B1E2D',
+              backgroundColor: '#8E1B2E',
               color: '#FFFFFF',
               border: 'none',
               borderRadius: '8px',

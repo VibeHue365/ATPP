@@ -127,7 +127,7 @@ export const RentalTimelineAndPhotos: React.FC<RentalTimelineAndPhotosProps> = (
                     style={{
                       margin: '3px 0 0 0',
                       fontSize: '12px',
-                      color: isActive ? '#8B1E2D' : '#7D736B',
+                      color: isActive ? '#8E1B2E' : '#7D736B',
                       fontWeight: isActive ? 600 : 400
                     }}
                   >

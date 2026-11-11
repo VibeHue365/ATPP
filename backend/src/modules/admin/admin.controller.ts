@@ -19,6 +19,8 @@ import {
 } from '../providers/schemas/provider-verification.schema';
 import { Product } from '../products/schemas/product.schema';
 import { AnalyticsService } from '../analytics/services/analytics.service';
+import { clampPagination } from '../../common/utils/pagination.util';
+import { RedisService } from '../../common/redis/redis.service';
 
 @Controller('admin/dashboard')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
@@ -34,6 +36,7 @@ export class AdminController {
     private readonly providerVerificationModel: Model<ProviderVerification>,
     @InjectModel(Product.name) private readonly productModel: Model<Product>,
     private readonly analyticsService: AnalyticsService,
+    private readonly redisService: RedisService,
   ) {}
 
   private checkAdmin(user: AuthUser) {
@@ -241,11 +244,12 @@ export class AdminController {
         : {}),
     };
 
+    const { page: safePage, limit: safeLimit, skip } = clampPagination({ page: Number(page), limit: Number(limit) });
     const total = await this.userModel.countDocuments(filter);
     const customers = await this.userModel.find(filter)
       .sort({ createdAt: -1 })
-      .skip((Number(page) - 1) * Number(limit))
-      .limit(Number(limit));
+      .skip(skip)
+      .limit(safeLimit);
 
     const items = customers.map(c => ({
       id: c._id,
@@ -261,9 +265,9 @@ export class AdminController {
     return {
       items,
       total,
-      page: Number(page),
-      limit: Number(limit),
-      totalPages: Math.ceil(total / Number(limit)),
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
     };
   }
 
@@ -279,11 +283,12 @@ export class AdminController {
       capabilities: { $in: [ProviderCapability.AoDaiRental, 'RENTAL' as any] },
     };
 
+    const { page: safePage, limit: safeLimit, skip } = clampPagination({ page: Number(page), limit: Number(limit) });
     const total = await this.providerModel.countDocuments(filter);
     const providers = await this.providerModel.find(filter)
       .sort({ createdAt: -1 })
-      .skip((Number(page) - 1) * Number(limit))
-      .limit(Number(limit));
+      .skip(skip)
+      .limit(safeLimit);
 
     const items = providers.map(p => ({
       id: p._id,
@@ -299,9 +304,9 @@ export class AdminController {
     return {
       items,
       total,
-      page: Number(page),
-      limit: Number(limit),
-      totalPages: Math.ceil(total / Number(limit)),
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
     };
   }
 
@@ -314,6 +319,7 @@ export class AdminController {
       throw new NotFoundException('Không tìm thấy khách hàng');
     }
     customer.accountStatus = UserStatus.Banned;
+    await this.redisService.delPattern('auth:session:*');
     await customer.save();
     return { success: true, accountStatus: customer.accountStatus };
   }
@@ -327,6 +333,7 @@ export class AdminController {
       throw new NotFoundException('Không tìm thấy khách hàng');
     }
     customer.accountStatus = UserStatus.Active;
+    await this.redisService.delPattern('auth:session:*');
     await customer.save();
     return { success: true, accountStatus: customer.accountStatus };
   }

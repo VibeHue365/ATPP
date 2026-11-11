@@ -131,10 +131,16 @@ export const AoDaiListingPage: React.FC = () => {
   // Map concept param from Landing Page to Category Tab
   const getInitialTab = (): string => {
     const concept = searchParams.get("concept");
-    if (concept === 'ky-yeu') return 'Kỷ yếu';
-    if (concept === 'cap-doi') return 'Cặp đôi';
-    if (concept === 'cuoi') return 'Cổ phục';
-    return searchParams.get("tab") || "all";
+    if (concept === 'ky-yeu') return 'yearbook';
+    if (concept === 'cap-doi') return 'couple';
+    if (concept === 'cuoi') return 'ancient';
+    const tab = searchParams.get("tab");
+    if (tab === 'Nữ') return 'female';
+    if (tab === 'Nam') return 'male';
+    if (tab === 'Cặp đôi') return 'couple';
+    if (tab === 'Cổ phục') return 'ancient';
+    if (tab === 'Kỷ yếu') return 'yearbook';
+    return tab || "all";
   };
 
   const initialLocation = searchParams.get("location") || searchParams.get("providerLocation") || "";
@@ -193,10 +199,18 @@ export const AoDaiListingPage: React.FC = () => {
       setRentalDate(d);
     }
     const concept = searchParams.get("concept");
-    if (concept === 'ky-yeu') setActiveTab('Kỷ yếu');
-    else if (concept === 'cap-doi') setActiveTab('Cặp đôi');
-    else if (concept === 'cuoi') setActiveTab('Cổ phục');
-    else if (searchParams.get("tab")) setActiveTab(searchParams.get("tab")!);
+    if (concept === 'ky-yeu') setActiveTab('yearbook');
+    else if (concept === 'cap-doi') setActiveTab('couple');
+    else if (concept === 'cuoi') setActiveTab('ancient');
+    else if (searchParams.get("tab")) {
+      const tab = searchParams.get("tab")!;
+      if (tab === 'Nữ') setActiveTab('female');
+      else if (tab === 'Nam') setActiveTab('male');
+      else if (tab === 'Cặp đôi') setActiveTab('couple');
+      else if (tab === 'Cổ phục') setActiveTab('ancient');
+      else if (tab === 'Kỷ yếu') setActiveTab('yearbook');
+      else setActiveTab(tab);
+    }
   }, [searchParams]);
 
   // Sidebar Filter states
@@ -333,6 +347,12 @@ export const AoDaiListingPage: React.FC = () => {
         if (searchLocation) {
           params.append('providerLocation', searchLocation);
         }
+        const sDate = searchParams.get('startDate') || rentalDate;
+        const eDate = searchParams.get('endDate');
+        const rType = searchParams.get('rentalType');
+        if (sDate) params.append('startDate', sDate);
+        if (eDate) params.append('endDate', eDate);
+        if (rType) params.append('rentalType', rType);
         if (debouncedSearchTerm.trim()) {
           params.append('search', debouncedSearchTerm.trim());
         }
@@ -401,6 +421,8 @@ export const AoDaiListingPage: React.FC = () => {
     user?.id,
     isPersonalizedFilterActive,
     userHasOnboarding,
+    rentalDate,
+    searchParams,
   ]);
 
   // 1. Dynamic statistics computed directly from live product data
@@ -564,11 +586,11 @@ export const AoDaiListingPage: React.FC = () => {
 
   const aodaiCategoryTabs = [
     { id: 'all', label: 'Tất cả mẫu' },
-    { id: 'Nữ', label: 'Áo dài Nữ' },
-    { id: 'Nam', label: 'Áo dài Nam' },
-    { id: 'Cặp đôi', label: 'Cặp đôi' },
-    { id: 'Cổ phục', label: 'Cổ phục / Nhật Bình' },
-    { id: 'Kỷ yếu', label: 'Kỷ yếu / Sự kiện' },
+    { id: 'female', label: 'Áo dài Nữ' },
+    { id: 'male', label: 'Áo dài Nam' },
+    { id: 'couple', label: 'Cặp đôi' },
+    { id: 'ancient', label: 'Cổ phục / Nhật Bình' },
+    { id: 'yearbook', label: 'Kỷ yếu / Sự kiện' },
   ];
 
   const aodaiSearchFields: SearchFieldConfig[] = [
@@ -870,11 +892,10 @@ export const AoDaiListingPage: React.FC = () => {
               {openSections.type && (
                 <div className="lume-accordion-content">
                   <div className="lume-checkbox-list">
-                    <label className={`lume-checkbox-label ${stats.female === 0 ? "is-disabled" : ""}`}>
+                    <label className="lume-checkbox-label">
                       <div className="lume-checkbox-left">
                         <input
                           type="checkbox"
-                          disabled={stats.female === 0}
                           checked={selectedTypes.includes("female")}
                           onChange={() => handleToggleType("female")}
                         />
@@ -887,11 +908,10 @@ export const AoDaiListingPage: React.FC = () => {
                       </div>
                     </label>
 
-                    <label className={`lume-checkbox-label ${stats.male === 0 ? "is-disabled" : ""}`}>
+                    <label className="lume-checkbox-label">
                       <div className="lume-checkbox-left">
                         <input
                           type="checkbox"
-                          disabled={stats.male === 0}
                           checked={selectedTypes.includes("male")}
                           onChange={() => handleToggleType("male")}
                         />
@@ -904,11 +924,10 @@ export const AoDaiListingPage: React.FC = () => {
                       </div>
                     </label>
 
-                    <label className={`lume-checkbox-label ${stats.couple === 0 ? "is-disabled" : ""}`}>
+                    <label className="lume-checkbox-label">
                       <div className="lume-checkbox-left">
                         <input
                           type="checkbox"
-                          disabled={stats.couple === 0}
                           checked={selectedTypes.includes("couple")}
                           onChange={() => handleToggleType("couple")}
                         />

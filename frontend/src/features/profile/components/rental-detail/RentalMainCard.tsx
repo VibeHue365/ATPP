@@ -138,22 +138,22 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <Sparkles size={14} color="#8B1E2D" />
+            <Sparkles size={14} color="#8E1B2E" />
             <span>Thương hiệu: <strong style={{ color: '#231F20' }}>{rentalData.brand || 'LUMÉ'}</strong></span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <Palette size={14} color="#8B1E2D" />
+            <Palette size={14} color="#8E1B2E" />
             <span>Màu sắc: <strong style={{ color: '#231F20' }}>{rentalData.color || 'Đa sắc'}</strong></span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <Shirt size={14} color="#8B1E2D" />
+            <Shirt size={14} color="#8E1B2E" />
             <span>Chất liệu: <strong style={{ color: '#231F20' }}>{rentalData.material || 'Lụa cao cấp'}</strong></span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <Gem size={14} color="#8B1E2D" />
+            <Gem size={14} color="#8E1B2E" />
             <span>Phụ kiện đi kèm: <strong style={{ color: '#231F20' }}>{rentalData.accessories || 'Mấn đội đầu'}</strong></span>
           </div>
         </div>

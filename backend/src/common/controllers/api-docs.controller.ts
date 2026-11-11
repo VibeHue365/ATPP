@@ -1,5 +1,7 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import { Controller, Get } from '@nestjs/common';
 
+@SkipThrottle()
 @Controller('docs/auth-users')
 export class ApiDocsController {
   @Get('openapi.json')

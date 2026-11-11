@@ -3,8 +3,8 @@
    ========================================================================== */
 
 :root {
-  --lume-primary: #8B1E2D;
-  --lume-primary-hover: #721824;
+  --lume-primary: #8E1B2E;
+  --lume-primary-hover: #741524;
   --lume-primary-light: #FDF2F4;
   --lume-primary-border: #F7D5DA;
   --lume-surface: #FFFFFF;
@@ -23,7 +23,7 @@
   min-height: calc(100vh - 120px);
   background-color: var(--lume-bg);
   padding: 32px 20px 64px 20px;
-  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-body);
   color: var(--lume-text-main);
   box-sizing: border-box;
 }

@@ -29,6 +29,7 @@ import {
   OAuthLoginCode,
   RequestContext,
 } from '../types/auth.types';
+import { OAuthStateDocument } from '../schemas/oauth-state.schema';
 import { OAuthService } from './oauth.service';
 import { OtpService } from './otp.service';
 import { PasswordPolicyService } from './password-policy.service';
@@ -307,11 +308,11 @@ export class AuthService {
     return this.passwordResetService.resetPassword(dto, context);
   }
 
-  createGoogleOAuthState(context: RequestContext): Promise<string> {
-    return this.oauthService.createGoogleOAuthState(context);
+  createGoogleOAuthState(context: RequestContext, redirectUri?: string): Promise<string> {
+    return this.oauthService.createGoogleOAuthState(context, redirectUri);
   }
 
-  validateGoogleOAuthState(state: string): Promise<void> {
+  validateGoogleOAuthState(state: string): Promise<OAuthStateDocument> {
     return this.oauthService.validateGoogleOAuthState(state);
   }
 
@@ -327,6 +328,13 @@ export class AuthService {
     context: RequestContext,
   ): Promise<AuthSession> {
     return this.oauthService.exchangeOAuthCode(dto, context);
+  }
+
+  loginGoogleMobile(
+    idToken: string,
+    context: RequestContext,
+  ): Promise<AuthSession> {
+    return this.oauthService.loginWithGoogleMobile(idToken, context);
   }
 
   async getPermissions(userId: string): Promise<Record<string, unknown>> {

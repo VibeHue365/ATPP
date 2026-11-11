@@ -65,9 +65,9 @@ export const ProfileFavoritesTab: React.FC = () => {
             style={{
               padding: '6px 14px',
               borderRadius: '8px',
-              border: favoriteType === 'aodai' ? '1px solid #8B1E2D' : '1px solid #E5DFD5',
+              border: favoriteType === 'aodai' ? '1px solid #8E1B2E' : '1px solid #E5DFD5',
               backgroundColor: favoriteType === 'aodai' ? '#FDF2F4' : '#FFFFFF',
-              color: favoriteType === 'aodai' ? '#8B1E2D' : '#574D4F',
+              color: favoriteType === 'aodai' ? '#8E1B2E' : '#574D4F',
               fontSize: '12px',
               fontWeight: 700,
               cursor: 'pointer'
@@ -81,9 +81,9 @@ export const ProfileFavoritesTab: React.FC = () => {
             style={{
               padding: '6px 14px',
               borderRadius: '8px',
-              border: favoriteType === 'photographer' ? '1px solid #8B1E2D' : '1px solid #E5DFD5',
+              border: favoriteType === 'photographer' ? '1px solid #8E1B2E' : '1px solid #E5DFD5',
               backgroundColor: favoriteType === 'photographer' ? '#FDF2F4' : '#FFFFFF',
-              color: favoriteType === 'photographer' ? '#8B1E2D' : '#574D4F',
+              color: favoriteType === 'photographer' ? '#8E1B2E' : '#574D4F',
               fontSize: '12px',
               fontWeight: 700,
               cursor: 'pointer'
@@ -121,7 +121,7 @@ export const ProfileFavoritesTab: React.FC = () => {
               onClick={() => navigate('/rentals')}
               style={{
                 padding: '8px 18px',
-                backgroundColor: '#8B1E2D',
+                backgroundColor: '#8E1B2E',
                 color: '#FFFFFF',
                 border: 'none',
                 borderRadius: '8px',
@@ -165,7 +165,7 @@ export const ProfileFavoritesTab: React.FC = () => {
                       padding: '6px',
                       boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
                       display: 'flex',
-                      color: '#8B1E2D'
+                      color: '#8E1B2E'
                     }}
                   >
                     <Heart size={14} fill="currentColor" />
@@ -179,7 +179,7 @@ export const ProfileFavoritesTab: React.FC = () => {
                     {prod.materials?.[0] || 'Lụa truyền thống'}
                   </p>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#8B1E2D' }}>
+                    <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#8E1B2E' }}>
                       {(prod.basePrice || 0).toLocaleString('vi-VN')}đ/ngày
                     </span>
                     <span style={{ fontSize: '11.5px', color: '#574D4F', display: 'flex', alignItems: 'center', gap: '2px' }}>
@@ -213,7 +213,7 @@ export const ProfileFavoritesTab: React.FC = () => {
             onClick={() => navigate('/photographers')}
             style={{
               padding: '8px 18px',
-              backgroundColor: '#8B1E2D',
+              backgroundColor: '#8E1B2E',
               color: '#FFFFFF',
               border: 'none',
               borderRadius: '8px',
@@ -264,7 +264,7 @@ export const ProfileFavoritesTab: React.FC = () => {
                     padding: '6px',
                     boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
                     display: 'flex',
-                    color: '#8B1E2D'
+                    color: '#8E1B2E'
                   }}
                 >
                   <Heart size={14} fill="currentColor" />
@@ -278,7 +278,7 @@ export const ProfileFavoritesTab: React.FC = () => {
                   {photo.quote || 'Nhiếp ảnh gia chuyên nghiệp tại Huế'}
                 </p>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#8B1E2D' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#8E1B2E' }}>
                     Từ {((photo.packages?.[0]?.price || 1500000) as number).toLocaleString('vi-VN')}đ
                   </span>
                   <span style={{ fontSize: '11.5px', color: '#574D4F', display: 'flex', alignItems: 'center', gap: '2px' }}>

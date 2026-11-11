@@ -413,6 +413,9 @@ export class PhotographersService {
       maxPrice: maxPrice !== undefined && minPrice !== undefined && maxPrice < minPrice ? minPrice : maxPrice,
       minRating: query.minRating,
       sort: query.sort ?? 'rating_desc',
+      date: query.date?.trim(),
+      groupSize: query.groupSize?.trim(),
+      timeSlot: query.timeSlot?.trim(),
       page,
       limit,
     };
@@ -509,23 +512,31 @@ export class PhotographersService {
     if (hasPackageCategoryFilters && matchingPackages.length === 0) {
       return false;
     }
-    if (
-      query.minPrice !== undefined &&
-      !packagesForPrice.some((item) => (item.price ?? 0) >= query.minPrice!)
-    ) {
-      return false;
-    }
-    if (
-      query.maxPrice !== undefined &&
-      !packagesForPrice.some((item) => (item.price ?? Number.POSITIVE_INFINITY) <= query.maxPrice!)
-    ) {
-      return false;
+    if (query.minPrice !== undefined || query.maxPrice !== undefined) {
+      const hasMatchingPricePackage = packagesForPrice.some((item) => {
+        const price = item.price ?? 0;
+        const passMin = query.minPrice === undefined || price >= query.minPrice;
+        const passMax = query.maxPrice === undefined || price <= query.maxPrice;
+        return passMin && passMax;
+      });
+      if (!hasMatchingPricePackage) {
+        return false;
+      }
     }
     if (
       query.minRating !== undefined &&
       (rating?.averageRating ?? 0) < query.minRating
     ) {
       return false;
+    }
+    if (query.groupSize) {
+      const minRequired = query.groupSize === '1' ? 1
+        : query.groupSize === '2' ? 2
+        : query.groupSize === '3-5' ? 3
+        : query.groupSize === '6+' ? 6
+        : Number(query.groupSize) || 1;
+      const hasEligiblePackage = packagesForPrice.some((p: any) => (p.maxPeople ?? 1) >= minRequired);
+      if (!hasEligiblePackage) return false;
     }
     return true;
   }

@@ -91,17 +91,17 @@ export function DisputesPanel() {
     return '#KC-8834';
   };
 
-  const getBookingCode = (d: Dispute) => d.bookingId?.bookingCode || '#BK-99201';
+  const getBookingCode = (d: Dispute) => d.bookingId?.bookingCode || '';
 
   const getItemName = (d: Dispute) =>
-    d.productId?.name || d.bookingItemId?.name || 'Áo dài lụa tơ tằm cổ điển';
+    d.productId?.name || d.bookingItemId?.name || '';
 
   const getCustomerName = (d: Dispute) =>
     d.openedBy?.profile?.fullName ||
     d.openedBy?.fullName ||
     d.bookingId?.customerId?.profile?.fullName ||
     (d.bookingId?.customerId as any)?.fullName ||
-    'Nguyễn Thu Hà';
+    '';
 
   const getCustomerCode = (d: Dispute) => {
     const rawId = (d.openedBy as any)?._id || (d.bookingId?.customerId as any)?._id || d._id;
@@ -112,7 +112,7 @@ export function DisputesPanel() {
     d.reportedBy?.businessName ||
     d.reportedBy?.profile?.fullName ||
     d.reportedBy?.fullName ||
-    'Tiệm Áo Dài Diễm My';
+    '';
 
   const getProviderCode = (d: Dispute) => {
     const rawId = (d.reportedBy as any)?._id || (d.bookingId as any)?.providerId || d._id;

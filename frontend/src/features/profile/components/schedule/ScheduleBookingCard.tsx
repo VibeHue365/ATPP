@@ -9,7 +9,8 @@ import {
   CreditCard,
   Star,
   Download,
-  XCircle
+  XCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { ImageWithFallback } from '../../../../shared/media/ImageWithFallback';
 import '../ProfilePage.css';
@@ -33,12 +34,21 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
   onOpenReview,
   onContinuePayment
 }) => {
-  const item = booking.items?.[0] || {};
-  const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE';
-  const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
-  const prodObj = !isPhoto && item.productId && typeof item.productId === 'object' ? item.productId : null;
+  const isCombo =
+    booking.bookingType === 'COMBO' ||
+    (booking.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
+      booking.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
+  const prodItem = booking.items?.find((i: any) => i.itemType === 'PRODUCT' || i.productId);
+  const pkgItem = booking.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId);
 
-  const itemName = prodObj?.name || pkgObj?.name || item.name || (isPhoto ? 'Gói Chụp Ảnh Cổ Phong' : 'Áo Dài Nhật Bình');
+  const item = (isCombo ? prodItem : null) || booking.items?.[0] || {};
+  const isPhoto = !isCombo && item.itemType === 'PHOTOGRAPHY_PACKAGE';
+  const pkgObj = (isCombo ? pkgItem?.photographyPackageId : item.photographyPackageId) && typeof (isCombo ? pkgItem?.photographyPackageId : item.photographyPackageId) === 'object' ? (isCombo ? pkgItem.photographyPackageId : item.photographyPackageId) : null;
+  const prodObj = (isCombo ? prodItem?.productId : (!isPhoto && item.productId)) && typeof (isCombo ? prodItem?.productId : item.productId) === 'object' ? (isCombo ? prodItem.productId : item.productId) : null;
+
+  const itemName = isCombo
+    ? (booking.comboName || (pkgObj?.name && prodObj?.name ? `${pkgObj.name} • ${prodObj.name}` : null) || booking.name || 'Combo Áo Dài & Chụp Ảnh Nghệ Thuật')
+    : (prodObj?.name || pkgObj?.name || item.name || (isPhoto ? 'Gói Chụp Ảnh Cổ Phong' : 'Áo Dài Nhật Bình'));
   const itemImage = prodObj?.images?.[0] || pkgObj?.coverImage || item.image || item.productImage;
   const providerName =
     booking.providerIds?.[0]?.businessName ||
@@ -52,22 +62,27 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
   const dateFormatted = rawDate
     ? new Date(rawDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : 'Chưa cập nhật';
-  const timeSlot = item.shootTimeSlot || (isPhoto ? '09:00 - 11:00' : undefined);
-  const location = item.shootLocation || booking.deliveryAddress?.address || 'TP. Huế';
+  const timeSlot = item.shootTimeSlot || item.timeSlot || booking.schedules?.[0]?.timeSlot || '';
+  const location =
+    (typeof item.shootLocation === 'string' ? item.shootLocation : item.shootLocation?.name || item.shootLocation?.address) ||
+    item.shootLocationSnapshot?.address ||
+    booking.schedules?.[0]?.locationAddress ||
+    booking.deliveryAddress?.address ||
+    'TP. Huế';
 
   // Status info
   const statusConfig: Record<string, { label: string; bg: string; color: string }> = {
-    CONFIRMED: { label: isPhoto ? 'SẮP CHỤP' : 'SẮP NHẬN', bg: '#EFF6FF', color: '#1D4ED8' },
+    CONFIRMED: { label: isCombo ? 'SẮP DIỄN RA' : (isPhoto ? 'SẮP CHỤP' : 'SẮP NHẬN'), bg: '#EFF6FF', color: '#1D4ED8' },
     DEPOSIT_PAID: { label: 'CHỜ DUYỆT', bg: '#FFFBEB', color: '#B45309' },
     PENDING_PAYMENT: { label: 'CHỜ CỌC', bg: '#FEF3C7', color: '#B45309' },
     PICKUP_PENDING: { label: 'CHỜ NHẬN ĐỒ', bg: '#F5EEF8', color: '#8E44AD' },
-    PICKED_UP: { label: isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ', bg: '#ECFDF5', color: '#047857' },
-    IN_PROGRESS: { label: isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ', bg: '#ECFDF5', color: '#047857' },
+    PICKED_UP: { label: isCombo ? 'ĐANG TRẢI NGHIỆM' : (isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ'), bg: '#ECFDF5', color: '#047857' },
+    IN_PROGRESS: { label: isCombo ? 'ĐANG CHỤP ẢNH' : (isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ'), bg: '#ECFDF5', color: '#047857' },
     AWAITING_REVIEW: { label: 'CHỜ DUYỆT ẢNH', bg: '#FEF3C7', color: '#B45309' },
     COMBO_PHOTOS_APPROVED: { label: 'ĐÃ DUYỆT ẢNH', bg: '#E0F2FE', color: '#0369A1' },
     RETURN_PENDING: { label: 'CHỜ TRẢ ĐỒ', bg: '#FEF9E7', color: '#F39C12' },
-    RETURNED: { label: isPhoto ? 'HOÀN TẤT' : 'ĐÃ TRẢ', bg: '#F2F4F4', color: '#574D4F' },
-    COMPLETED: { label: isPhoto ? 'HOÀN TẤT' : 'ĐÃ TRẢ', bg: '#E8F8F5', color: '#27AE60' },
+    RETURNED: { label: isCombo ? 'HOÀN TẤT' : (isPhoto ? 'HOÀN TẤT' : 'ĐÃ TRẢ'), bg: '#F2F4F4', color: '#574D4F' },
+    COMPLETED: { label: 'HOÀN TẤT', bg: '#E8F8F5', color: '#27AE60' },
     CANCELLED: { label: 'ĐÃ HỦY', bg: '#FDEDEC', color: '#C0392B' },
     DISPUTED: { label: 'TRANH CHẤP', bg: '#FEF2F2', color: '#DC2626' },
     PARTIALLY_REFUNDED: { label: 'ĐÃ HOÀN TIỀN', bg: '#F3F4F6', color: '#4B5563' },
@@ -141,7 +156,7 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
 
           <div className="lume-schedule-meta-row">
             <span className="lume-schedule-meta-item">
-              <User size={14} color="#8B1E2D" />
+              <User size={14} color="#8E1B2E" />
               <span>{providerName}</span>
             </span>
 
@@ -173,6 +188,12 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
             {booking.status === 'PICKED_UP' && (
               <span className="lume-countdown-badge active">
                 <Clock size={11} /> ĐANG TRONG THỜI GIAN THUÊ
+              </span>
+            )}
+
+            {booking.status === 'AWAITING_REVIEW' && (
+              <span className="lume-countdown-badge urgent" style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FCD34D' }}>
+                <Clock size={11} /> ĐÃ CÓ ẢNH • CHỜ BẠN DUYỆT
               </span>
             )}
           </div>
@@ -269,8 +290,26 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
           </button>
         )}
 
+        {/* Review & Approve Photos button */}
+        {booking.status === 'AWAITING_REVIEW' && (
+          <button
+            type="button"
+            className="lume-schedule-action-btn green"
+            style={{
+              backgroundColor: '#047857',
+              color: '#FFFFFF',
+              fontWeight: 800,
+              boxShadow: '0 2px 8px rgba(4, 120, 87, 0.25)'
+            }}
+            onClick={() => onViewDetails(booking)}
+          >
+            <CheckCircle2 size={14} />
+            <span>Duyệt nhận ảnh</span>
+          </button>
+        )}
+
         {/* 7. Cancel Booking */}
-        {!['COMPLETED', 'CANCELLED', 'RETURNED'].includes(booking.status) && (
+        {!['COMPLETED', 'CANCELLED', 'RETURNED', 'AWAITING_REVIEW', 'IN_PROGRESS'].includes(booking.status) && (
           <button
             type="button"
             className="lume-schedule-action-btn danger"

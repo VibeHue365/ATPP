@@ -7,13 +7,13 @@ export const ProfileNotificationsTab: React.FC = () => {
 
   const getVisual = (type: string) => {
     const t = (type || '').toUpperCase();
-    if (t === 'BOOKING') return { label: 'Đơn hàng', icon: <Calendar size={14} color="#8B1E2D" />, bg: '#FDF2F4', color: '#8B1E2D' };
+    if (t === 'BOOKING') return { label: 'Đơn hàng', icon: <Calendar size={14} color="#8E1B2E" />, bg: '#FDF2F4', color: '#8E1B2E' };
     if (t === 'PAYMENT') return { label: 'Thanh toán', icon: <CreditCard size={14} color="#059669" />, bg: '#ECFDF5', color: '#059669' };
     if (t === 'HANDOVER') return { label: 'Giao nhận', icon: <Truck size={14} color="#2563EB" />, bg: '#EFF6FF', color: '#2563EB' };
     if (t === 'REFUND') return { label: 'Hoàn tiền', icon: <RefreshCw size={14} color="#0284C7" />, bg: '#E0F2FE', color: '#0284C7' };
     if (t === 'DISPUTE') return { label: 'Tranh chấp', icon: <AlertTriangle size={14} color="#D97706" />, bg: '#FEF3C7', color: '#D97706' };
     if (t === 'VERIFICATION') return { label: 'Xác thực', icon: <ShieldCheck size={14} color="#7C3AED" />, bg: '#F3E8FF', color: '#7C3AED' };
-    return { label: 'Hệ thống', icon: <Sparkles size={14} color="#8B1E2D" />, bg: '#FDF2F4', color: '#8B1E2D' };
+    return { label: 'Hệ thống', icon: <Sparkles size={14} color="#8E1B2E" />, bg: '#FDF2F4', color: '#8E1B2E' };
   };
 
   return (
@@ -24,7 +24,7 @@ export const ProfileNotificationsTab: React.FC = () => {
           {unreadCount > 0 && (
             <span
               style={{
-                backgroundColor: '#8B1E2D',
+                backgroundColor: '#8E1B2E',
                 color: '#FFFFFF',
                 fontSize: '11px',
                 fontWeight: 750,

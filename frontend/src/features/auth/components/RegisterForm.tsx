@@ -377,7 +377,7 @@ export const RegisterForm: React.FC = () => {
                   e.preventDefault();
                   toast.info("Điều khoản dịch vụ đang được cập nhật.");
                 }}
-                className="font-bold text-[#B52B47] hover:underline"
+                className="font-bold text-[#8E1B2E] hover:underline"
               >
                 Điều khoản dịch vụ
               </a>{" "}
@@ -388,7 +388,7 @@ export const RegisterForm: React.FC = () => {
                   e.preventDefault();
                   toast.info("Chính sách bảo mật đang được cập nhật.");
                 }}
-                className="font-bold text-[#B52B47] hover:underline"
+                className="font-bold text-[#8E1B2E] hover:underline"
               >
                 Chính sách bảo mật
               </a>{" "}
@@ -420,7 +420,7 @@ export const RegisterForm: React.FC = () => {
       {/* Partner Promotion Callout */}
       <div className="lume-auth-partner-card">
         <div className="lume-auth-partner-card-left">
-          <Sparkles size={16} className="text-[#B52B47] shrink-0" />
+          <Sparkles size={16} className="text-[#8E1B2E] shrink-0" />
           <span>Bạn là Chủ Studio hay Nhiếp ảnh gia?</span>
         </div>
         <Link to={ROUTES.PROVIDER_REGISTER} className="lume-auth-partner-card-link">

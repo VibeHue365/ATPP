@@ -80,14 +80,14 @@ export const CartComboCard: React.FC<CartComboCardProps> = ({
                 </div>
                 {item.itemType === 'PRODUCT' ? (
                   <div style={{ fontSize: '12.5px', color: '#64748B' }}>
-                    Kích cỡ: <strong style={{ color: '#8B1E22' }}>{item.size}</strong> • Màu:{' '}
-                    <strong style={{ color: '#8B1E22' }}>{item.color}</strong> • Ngày thuê:{' '}
+                    Kích cỡ: <strong style={{ color: '#8E1B2E' }}>{item.size}</strong> • Màu:{' '}
+                    <strong style={{ color: '#8E1B2E' }}>{item.color}</strong> • Ngày thuê:{' '}
                     <strong>{formatSingleDate(item.rentalFrom || item.startDate)}</strong>
                   </div>
                 ) : (
                   <div style={{ fontSize: '12.5px', color: '#64748B' }}>
                     Lịch chụp:{' '}
-                    <strong style={{ color: '#8B1E22' }}>
+                    <strong style={{ color: '#8E1B2E' }}>
                       {formatSingleDate(item.shootDate)} ({item.shootTimeSlot})
                     </strong>
                   </div>
@@ -112,10 +112,10 @@ export const CartComboCard: React.FC<CartComboCardProps> = ({
           )}
         </div>
         <div style={{ textAlign: 'right' }}>
-          <span style={{ fontSize: '12px', color: '#8B1E22', fontWeight: 600 }}>
+          <span style={{ fontSize: '12px', color: '#8E1B2E', fontWeight: 600 }}>
             Giá Combo ưu đãi:{' '}
           </span>
-          <strong style={{ fontSize: '20px', color: '#8B1E22', fontWeight: 800 }}>
+          <strong style={{ fontSize: '20px', color: '#8E1B2E', fontWeight: 800 }}>
             {entry.comboPrice.toLocaleString('vi-VN')}đ
           </strong>
         </div>

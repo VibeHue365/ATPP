@@ -195,7 +195,7 @@ export const VoucherPickerModal: React.FC<VoucherPickerModalProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#8B1E22',
+                color: '#8E1B2E',
               }}
             >
               <Ticket size={20} />
@@ -266,7 +266,7 @@ export const VoucherPickerModal: React.FC<VoucherPickerModalProps> = ({
               disabled={!manualCode.trim() || isSubmittingManual}
               style={{
                 padding: '10px 20px',
-                backgroundColor: manualCode.trim() ? '#8B1E22' : '#E0D8D0',
+                backgroundColor: manualCode.trim() ? '#8E1B2E' : '#E0D8D0',
                 color: '#FFFFFF',
                 border: 'none',
                 borderRadius: '8px',
@@ -313,9 +313,9 @@ export const VoucherPickerModal: React.FC<VoucherPickerModalProps> = ({
               padding: '10px 0',
               fontSize: '13px',
               fontWeight: activeTab === 'applicable' ? 700 : 500,
-              color: activeTab === 'applicable' ? '#8B1E22' : '#8C7E74',
+              color: activeTab === 'applicable' ? '#8E1B2E' : '#8C7E74',
               borderBottom:
-                activeTab === 'applicable' ? '2px solid #8B1E22' : '2px solid transparent',
+                activeTab === 'applicable' ? '2px solid #8E1B2E' : '2px solid transparent',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -325,7 +325,7 @@ export const VoucherPickerModal: React.FC<VoucherPickerModalProps> = ({
             <span>Có thể áp dụng</span>
             <span
               style={{
-                backgroundColor: activeTab === 'applicable' ? '#8B1E22' : '#EAE1D4',
+                backgroundColor: activeTab === 'applicable' ? '#8E1B2E' : '#EAE1D4',
                 color: activeTab === 'applicable' ? '#FFFFFF' : '#5D4037',
                 fontSize: '11px',
                 padding: '1px 6px',
@@ -345,9 +345,9 @@ export const VoucherPickerModal: React.FC<VoucherPickerModalProps> = ({
               padding: '10px 0',
               fontSize: '13px',
               fontWeight: activeTab === 'ineligible' ? 700 : 500,
-              color: activeTab === 'ineligible' ? '#8B1E22' : '#8C7E74',
+              color: activeTab === 'ineligible' ? '#8E1B2E' : '#8C7E74',
               borderBottom:
-                activeTab === 'ineligible' ? '2px solid #8B1E22' : '2px solid transparent',
+                activeTab === 'ineligible' ? '2px solid #8E1B2E' : '2px solid transparent',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -414,7 +414,7 @@ export const VoucherPickerModal: React.FC<VoucherPickerModalProps> = ({
                         display: 'flex',
                         borderRadius: '12px',
                         border: isSelected
-                          ? '2px solid #8B1E22'
+                          ? '2px solid #8E1B2E'
                           : '1px solid #EAE1D4',
                         backgroundColor: isSelected ? '#FDFBF9' : '#FFFFFF',
                         overflow: 'hidden',
@@ -430,8 +430,8 @@ export const VoucherPickerModal: React.FC<VoucherPickerModalProps> = ({
                       <div
                         style={{
                           width: '100px',
-                          backgroundColor: isSelected ? '#8B1E22' : '#F7F3ED',
-                          color: isSelected ? '#FFFFFF' : '#8B1E22',
+                          backgroundColor: isSelected ? '#8E1B2E' : '#F7F3ED',
+                          color: isSelected ? '#FFFFFF' : '#8E1B2E',
                           display: 'flex',
                           flexDirection: 'column',
                           alignItems: 'center',
@@ -534,12 +534,12 @@ export const VoucherPickerModal: React.FC<VoucherPickerModalProps> = ({
                                 height: '18px',
                                 borderRadius: '50%',
                                 border: isSelected
-                                  ? '2px solid #8B1E22'
+                                  ? '2px solid #8E1B2E'
                                   : '2px solid #C8BDB2',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                backgroundColor: isSelected ? '#8B1E22' : 'transparent',
+                                backgroundColor: isSelected ? '#8E1B2E' : 'transparent',
                               }}
                             >
                               {isSelected && (
@@ -734,7 +734,7 @@ export const VoucherPickerModal: React.FC<VoucherPickerModalProps> = ({
               onClick={handleConfirm}
               style={{
                 padding: '8px 20px',
-                backgroundColor: '#8B1E22',
+                backgroundColor: '#8E1B2E',
                 border: 'none',
                 color: '#FFFFFF',
                 borderRadius: '8px',

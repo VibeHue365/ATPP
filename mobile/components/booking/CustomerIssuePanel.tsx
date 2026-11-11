@@ -2,11 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { AxiosError } from 'axios';
 import { useEffect, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { bookingApi, type BookingIncident } from '@/apis/bookingApi';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppModal } from '@/components/ui/AppModal';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { TagoAlert } from '@/components/ui/TagoAlertModal';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useToast } from '@/contexts/ToastContext';
 import type { Booking } from '@/types/booking';
@@ -30,7 +31,7 @@ export function CustomerIssuePanel({booking,onSuccess}:{booking:Booking;onSucces
 
   const pick=async()=>{const permission=await ImagePicker.requestMediaLibraryPermissionsAsync();if(!permission.granted){show('Cần quyền truy cập thư viện ảnh','error');return}const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsMultipleSelection:true,selectionLimit:5,quality:.8});if(result.canceled)return;setSaving(true);try{const urls:string[]=[];for(const asset of result.assets){const body=new FormData();body.append('file',asset.file??({uri:asset.uri,name:asset.fileName??`evidence-${Date.now()}.jpg`,type:asset.mimeType??'image/jpeg'} as unknown as Blob));const uploaded=await bookingApi.uploadEvidence(body);urls.push(uploaded.url)}setPhotos(current=>[...current,...urls].slice(0,5));show('Đã tải ảnh bằng chứng','success')}catch(error){show(getApiErrorMessage(error,'Không thể tải ảnh bằng chứng'),'error')}finally{setSaving(false)}};
   const submit=async()=>{if(!type||!description.trim()){show('Vui lòng mô tả tình trạng trang phục','error');return}if(!photos.length){show('Cần ít nhất một ảnh bằng chứng','error');return}setSaving(true);try{if(type==='DAMAGE')await bookingApi.reportRentalDamage(booking._id,description.trim(),photos);else await bookingApi.rejectRentalHandover(booking._id,description.trim(),photos);setType(null);setDescription('');setPhotos([]);show(type==='DAMAGE'?'Đã ghi nhận lỗi trang phục':'Đã gửi yêu cầu từ chối nhận áo','success');await onSuccess()}catch(error){show(getApiErrorMessage(error,'Không thể gửi báo cáo'),'error')}finally{setSaving(false)}};
-  const respond=(agree:boolean)=>Alert.alert(agree?'Đồng ý bồi thường':'Yêu cầu xem xét','Bạn có chắc với lựa chọn này?',[{text:'Hủy',style:'cancel'},{text:'Xác nhận',style:agree?'default':'destructive',onPress:async()=>{if(!incident)return;setSaving(true);try{if(agree)await bookingApi.agreeIncident(incident._id);else await bookingApi.disagreeIncident(incident._id);show(agree?'Đã xác nhận phương án bồi thường':'Đã chuyển yêu cầu sang tranh chấp','success');setIncident({...incident,status:agree?'ACCEPTED':'DISPUTED'});await onSuccess()}catch(error){show(getApiErrorMessage(error,'Không thể gửi phản hồi'),'error')}finally{setSaving(false)}}}]);
+  const respond=(agree:boolean)=>TagoAlert.alert(agree?'Đồng ý bồi thường':'Yêu cầu xem xét','Bạn có chắc với lựa chọn này?',[{text:'Hủy',style:'cancel'},{text:'Xác nhận',style:agree?'default':'destructive',onPress:async()=>{if(!incident)return;setSaving(true);try{if(agree)await bookingApi.agreeIncident(incident._id);else await bookingApi.disagreeIncident(incident._id);show(agree?'Đã xác nhận phương án bồi thường':'Đã chuyển yêu cầu sang tranh chấp','success');setIncident({...incident,status:agree?'ACCEPTED':'DISPUTED'});await onSuccess()}catch(error){show(getApiErrorMessage(error,'Không thể gửi phản hồi'),'error')}finally{setSaving(false)}}}]);
 
   return <>
     {canInspect&&<View style={styles.box}><Text style={styles.title}>Kiểm tra áo trước khi nhận</Text><Text style={styles.copy}>Nếu áo có lỗi, hãy gửi ảnh trước khi xác nhận nhận để bảo vệ tiền cọc.</Text><View style={styles.actions}><AppButton title="Báo lỗi nhẹ" variant="secondary" onPress={()=>setType('DAMAGE')}/><AppButton title="Từ chối nhận" variant="danger" onPress={()=>setType('REJECT')}/></View></View>}

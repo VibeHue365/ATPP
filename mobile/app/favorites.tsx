@@ -1,35 +1,456 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { type Href,router,useFocusEffect } from 'expo-router';
-import { useCallback,useMemo,useState } from 'react';
-import { Pressable,RefreshControl,ScrollView,StyleSheet,Text,TextInput,View } from 'react-native';
+import { type Href, router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { photographerApi } from '@/apis/photographerApi';
 import { productApi } from '@/apis/productApi';
 import { RequireAuth } from '@/components/auth/RequireAuth';
-import { EmptyState,ErrorState,LoadingState } from '@/components/ui/ScreenState';
 import { ListPagination } from '@/components/ui/ListPagination';
-import { Colors,FontFamily,Radius,Shadow } from '@/constants/theme';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/ScreenState';
+import { Colors, FontFamily, Shadow } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import type { UserFavorite } from '@/types/auth';
 import type { Photographer } from '@/types/photographer';
 import type { Product } from '@/types/product';
 import { getMediaUrl } from '@/utils/media';
 
-type FavoriteKind='PRODUCT'|'PROVIDER';
-type Saved=
-  |{status:'AVAILABLE';kind:'PRODUCT';targetId:string;data:Product}
-  |{status:'AVAILABLE';kind:'PROVIDER';targetId:string;data:Photographer}
-  |{status:'UNAVAILABLE';kind:FavoriteKind;targetId:string};
-type Filter='ALL'|'PRODUCT'|'PROVIDER';
-export default function Screen(){return <RequireAuth><Favorites/></RequireAuth>}
-function Favorites(){const{user,toggleFavorite}=useAuth();const[items,setItems]=useState<Saved[]>([]);const[loading,setLoading]=useState(true);const[refreshing,setRefreshing]=useState(false);const[error,setError]=useState<string|null>(null);const[q,setQ]=useState('');const[filter,setFilter]=useState<Filter>('ALL');const[page,setPage]=useState(1);const[nameSort,setNameSort]=useState(false);
-  const load=useCallback(async(silent=false)=>{silent?setRefreshing(true):setLoading(true);try{setError(null);const favorites=(user?.favorites??[]) as UserFavorite[];const resolved=await Promise.all(favorites.map(async fav=>{const kind:FavoriteKind=fav.targetType.toUpperCase()==='PRODUCT'?'PRODUCT':'PROVIDER';const targetId=String(fav.targetId);try{return kind==='PRODUCT'?{status:'AVAILABLE' as const,kind,targetId,data:await productApi.detail(targetId)}:{status:'AVAILABLE' as const,kind,targetId,data:await photographerApi.detail(targetId)}}catch{return{status:'UNAVAILABLE' as const,kind,targetId}}}));setItems(resolved)}catch{setError('Không thể tải danh sách yêu thích')}finally{setLoading(false);setRefreshing(false)}},[user?.favorites]);useFocusEffect(useCallback(()=>{void load();return undefined},[load]));
-  const filtered=useMemo(()=>items.filter(item=>{if(filter!=='ALL'&&item.kind!==filter)return false;const name=savedName(item);return !q||name.toLowerCase().includes(q.toLowerCase())}).sort((a,b)=>nameSort?savedName(a).localeCompare(savedName(b),'vi'):0),[items,filter,q,nameSort]);const totalPages=Math.max(1,Math.ceil(filtered.length/8));const safePage=Math.min(page,totalPages);const visible=filtered.slice((safePage-1)*8,safePage*8);
-  const remove=async(item:Saved)=>{await toggleFavorite(item.kind,item.targetId);setItems(v=>v.filter(saved=>!(saved.kind===item.kind&&saved.targetId===item.targetId)))};
-  if(loading)return <LoadingState label="Đang mở bộ sưu tập..."/>;return <SafeAreaView style={s.safe} edges={['top']}><ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>void load(true)} tintColor={Colors.primary}/>} contentContainerStyle={s.content}><View style={s.header}><Pressable onPress={()=>router.back()} style={s.round}><Ionicons name="chevron-back" size={22}/></Pressable><View style={{flex:1}}><Text style={s.eyebrow}>LUMÉ ARCHIVE</Text><Text style={s.title}>Yêu thích <Text style={s.total}>{items.length}</Text></Text></View></View><View style={s.search}><Ionicons name="search" size={19} color={Colors.textMuted}/><TextInput value={q} onChangeText={value=>{setQ(value);setPage(1)}} placeholder="Tìm trong danh sách đã lưu..." placeholderTextColor={Colors.textMuted} style={s.input}/><Pressable onPress={()=>{setNameSort(value=>!value);setPage(1)}}><Ionicons name="text-outline" size={18} color={nameSort?Colors.primary:Colors.textMuted}/></Pressable></View><View style={s.filters}>{([['ALL',`Tất cả (${items.length})`],['PRODUCT',`Áo dài (${items.filter(v=>v.kind==='PRODUCT').length})`],['PROVIDER',`Chụp ảnh (${items.filter(v=>v.kind==='PROVIDER').length})`]] as [Filter,string][]).map(([key,label])=><Pressable key={key} onPress={()=>{setFilter(key);setPage(1)}} style={[s.chip,filter===key&&s.chipOn]}><Text style={[s.chipText,filter===key&&s.chipTextOn]}>{label}</Text></Pressable>)}</View>{error?<ErrorState message={error} onRetry={()=>void load()}/>:visible.length===0?<EmptyState title="Chưa có mục đã lưu" message="Nhấn biểu tượng trái tim tại áo dài hoặc gói chụp bạn yêu thích."/>:<View style={s.grid}>{visible.map(item=><SavedCard key={`${item.kind}-${item.targetId}`} item={item} onRemove={()=>void remove(item)}/>)}</View>}<ListPagination page={safePage} totalPages={totalPages} onChange={setPage}/><Text style={s.footer}>Hiển thị {visible.length} trong tổng số {filtered.length} mục phù hợp</Text></ScrollView></SafeAreaView>}
-function SavedCard({item,onRemove}:{item:Saved;onRemove:()=>void}){if(item.status==='UNAVAILABLE')return <UnavailableCard item={item} onRemove={onRemove}/>;const isProduct=item.kind==='PRODUCT';const data=item.data;const name=isProduct?(data as Product).name:(data as Photographer).businessName??'Gói chụp LUMÉ';const image=isProduct?(data as Product).images?.[0]:(data as Photographer).coverImage??(data as Photographer).media?.coverUrl;const price=isProduct?(data as Product).basePrice:((data as Photographer).defaultPackage?.price??(data as Photographer).packages?.[0]?.price??0);const href=isProduct?`/product/${data._id}`:`/photographer/${data._id}`;return <Pressable onPress={()=>router.push(href as Href)} style={s.card}><View><Image source={getMediaUrl(image)} style={s.image} contentFit="cover"/><Text style={s.badge}>{isProduct?'ÁO DÀI':'CHỤP ẢNH'}</Text><Pressable onPress={e=>{e.stopPropagation();onRemove()}} style={s.heart}><Ionicons name="heart" size={20} color={Colors.primary}/></Pressable></View><View style={s.cardBody}><Text style={s.place}>{isProduct?'LUMÉ ÁO DÀI':'STUDIO'}</Text><Text numberOfLines={2} style={s.name}>{name}</Text><Text style={s.meta}>{isProduct?`${(data as Product).sizes?.join('/')||'Đủ size'} · Cọc ${money((data as Product).depositAmount??0)}`:`${(data as Photographer).rating?.averageRating?.toFixed(1)??'0.0'} ★ · ${(data as Photographer).address?.city??'Miền Trung'}`}</Text><View style={s.priceRow}><Text style={s.price}>{money(price)}</Text><Text style={s.link}>Chi tiết</Text></View></View></Pressable>}
-function UnavailableCard({item,onRemove}:{item:Extract<Saved,{status:'UNAVAILABLE'}>;onRemove:()=>void}){const isProduct=item.kind==='PRODUCT';return <View style={s.card}><View style={s.unavailableImage}><Ionicons name="alert-circle-outline" size={34} color={Colors.textMuted}/><Text style={s.badge}>{isProduct?'ÁO DÀI':'CHỤP ẢNH'}</Text></View><View style={s.cardBody}><Text style={s.place}>KHÔNG CÒN KHẢ DỤNG</Text><Text numberOfLines={2} style={s.name}>{isProduct?'Sản phẩm đã ngừng hiển thị':'Studio đã ngừng hiển thị'}</Text><Text style={s.meta}>Mục này không còn được công khai trên hệ thống.</Text><Pressable onPress={onRemove} style={s.removeUnavailable}><Ionicons name="trash-outline" size={14} color={Colors.white}/><Text style={s.removeUnavailableText}>Xóa khỏi yêu thích</Text></Pressable></View></View>}
-const money=(v:number)=>new Intl.NumberFormat('vi-VN').format(v)+'đ';
-const savedName=(item:Saved)=>item.status==='UNAVAILABLE'?(item.kind==='PRODUCT'?'Sản phẩm không còn khả dụng':'Studio không còn khả dụng'):item.kind==='PRODUCT'?item.data.name:item.data.businessName??'';
-const s=StyleSheet.create({safe:{flex:1,backgroundColor:Colors.background},content:{padding:16,paddingBottom:35,gap:16},header:{flexDirection:'row',alignItems:'center',gap:13},round:{width:42,height:42,borderRadius:99,backgroundColor:Colors.surface,borderWidth:1,borderColor:Colors.border,alignItems:'center',justifyContent:'center'},eyebrow:{fontFamily:FontFamily.bodyBold,fontSize:9,color:Colors.primary},title:{fontFamily:FontFamily.display,fontSize:25,color:Colors.text},total:{fontFamily:FontFamily.bodyBold,fontSize:11,color:Colors.primary},search:{height:49,borderWidth:1,borderColor:Colors.border,borderRadius:Radius.md,backgroundColor:Colors.surface,flexDirection:'row',alignItems:'center',paddingHorizontal:13,gap:8,...Shadow},input:{flex:1,fontFamily:FontFamily.body,fontSize:12,color:Colors.text},filters:{flexDirection:'row',gap:8},chip:{paddingHorizontal:13,paddingVertical:9,borderRadius:Radius.pill,borderWidth:1,borderColor:Colors.border,backgroundColor:Colors.surface},chipOn:{backgroundColor:Colors.primary,borderColor:Colors.primary},chipText:{fontFamily:FontFamily.bodyMedium,fontSize:10,color:Colors.textSecondary},chipTextOn:{color:Colors.white},grid:{flexDirection:'row',flexWrap:'wrap',gap:12},card:{width:'48.3%',borderRadius:Radius.lg,overflow:'hidden',backgroundColor:Colors.surface,borderWidth:1,borderColor:Colors.border,...Shadow},image:{width:'100%',height:175,backgroundColor:Colors.primarySoft},unavailableImage:{width:'100%',height:175,backgroundColor:Colors.primarySoft,alignItems:'center',justifyContent:'center'},badge:{position:'absolute',left:9,top:9,paddingHorizontal:7,paddingVertical:4,borderRadius:4,overflow:'hidden',backgroundColor:Colors.surface,fontFamily:FontFamily.bodyBold,fontSize:8,color:Colors.text},heart:{position:'absolute',right:9,top:9,width:34,height:34,borderRadius:99,backgroundColor:Colors.surface,alignItems:'center',justifyContent:'center'},cardBody:{padding:11},place:{fontFamily:FontFamily.bodyMedium,fontSize:8,color:Colors.textMuted},name:{fontFamily:FontFamily.display,fontSize:15,lineHeight:20,color:Colors.text,marginTop:5,minHeight:40},meta:{fontFamily:FontFamily.body,fontSize:9,color:Colors.textMuted,marginTop:5},removeUnavailable:{marginTop:12,minHeight:34,borderRadius:Radius.sm,backgroundColor:Colors.primary,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:5,paddingHorizontal:8},removeUnavailableText:{fontFamily:FontFamily.bodySemiBold,fontSize:9,color:Colors.white},priceRow:{borderTopWidth:1,borderTopColor:Colors.border,marginTop:10,paddingTop:10,flexDirection:'row',justifyContent:'space-between',alignItems:'center'},price:{fontFamily:FontFamily.bodyBold,fontSize:13,color:Colors.primary},link:{fontFamily:FontFamily.bodySemiBold,fontSize:9,color:Colors.primary,textDecorationLine:'underline'},footer:{fontFamily:FontFamily.body,fontSize:10,color:Colors.textMuted,textAlign:'center'}});
+type FavoriteKind = 'PRODUCT' | 'PROVIDER';
+// A favorite whose product/studio is no longer public stays listed so the customer can remove it.
+type Saved =
+  | { status: 'AVAILABLE'; kind: 'PRODUCT'; targetId: string; data: Product }
+  | { status: 'AVAILABLE'; kind: 'PROVIDER'; targetId: string; data: Photographer }
+  | { status: 'UNAVAILABLE'; kind: FavoriteKind; targetId: string };
+type Filter = 'ALL' | 'PRODUCT' | 'PROVIDER';
+
+export default function Screen() {
+  return (
+    <RequireAuth>
+      <Favorites />
+    </RequireAuth>
+  );
+}
+
+function Favorites() {
+  const { user, toggleFavorite } = useAuth();
+  const [items, setItems] = useState<Saved[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState<Filter>('ALL');
+  const [page, setPage] = useState(1);
+  const [nameSort, setNameSort] = useState(false);
+
+  const load = useCallback(
+    async (silent = false) => {
+      silent ? setRefreshing(true) : setLoading(true);
+      try {
+        setError(null);
+        const favorites = (user?.favorites ?? []) as UserFavorite[];
+        const resolved = await Promise.all(
+          favorites.map(async (fav): Promise<Saved> => {
+            const kind: FavoriteKind = fav.targetType.toUpperCase() === 'PRODUCT' ? 'PRODUCT' : 'PROVIDER';
+            const targetId = String(fav.targetId);
+            try {
+              return kind === 'PRODUCT'
+                ? { status: 'AVAILABLE', kind, targetId, data: await productApi.detail(targetId) }
+                : { status: 'AVAILABLE', kind, targetId, data: await photographerApi.detail(targetId) };
+            } catch {
+              return { status: 'UNAVAILABLE', kind, targetId };
+            }
+          })
+        );
+        setItems(resolved);
+      } catch {
+        setError('Không thể tải bộ sưu tập yêu thích');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [user?.favorites]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+      return undefined;
+    }, [load])
+  );
+
+  const filtered = useMemo(
+    () =>
+      items
+        .filter((item) => {
+          if (filter !== 'ALL' && item.kind !== filter) return false;
+          const name = savedName(item);
+          return !q || name.toLowerCase().includes(q.toLowerCase());
+        })
+        .sort((a, b) => (nameSort ? savedName(a).localeCompare(savedName(b), 'vi') : 0)),
+    [items, filter, q, nameSort]
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / 8));
+  const safePage = Math.min(page, totalPages);
+  const visible = filtered.slice((safePage - 1) * 8, safePage * 8);
+
+  const remove = async (item: Saved) => {
+    await toggleFavorite(item.kind, item.targetId);
+    setItems((v) =>
+      v.filter((saved) => !(saved.kind === item.kind && saved.targetId === item.targetId))
+    );
+  };
+
+  if (loading) return <LoadingState label="Đang mở bộ sưu tập yêu thích..." />;
+
+  return (
+    <SafeAreaView style={s.safe} edges={['top']}>
+      <View style={s.topBar}>
+        <Pressable onPress={() => router.back()} style={s.round}>
+          <Ionicons name="chevron-back" size={21} color="#1B1C1C" />
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <Text style={s.eyebrow}>TÀGO ARCHIVE</Text>
+          <Text style={s.title}>
+            Bộ sưu tập yêu thích <Text style={s.total}>({items.length})</Text>
+          </Text>
+        </View>
+      </View>
+
+      <ScrollView
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void load(true)}
+            tintColor={Colors.primary}
+          />
+        }
+        contentContainerStyle={s.content}
+        showsVerticalScrollIndicator={false}>
+        <View style={s.search}>
+          <Ionicons name="search-outline" size={18} color="#8F8E8E" />
+          <TextInput
+            value={q}
+            onChangeText={(value) => {
+              setQ(value);
+              setPage(1);
+            }}
+            placeholder="Tìm trong danh sách đã lưu..."
+            placeholderTextColor="#8F8E8E"
+            style={s.input}
+          />
+          <Pressable
+            onPress={() => {
+              setNameSort((value) => !value);
+              setPage(1);
+            }}>
+            <Ionicons
+              name="swap-vertical-outline"
+              size={18}
+              color={nameSort ? Colors.primary : '#8F8E8E'}
+            />
+          </Pressable>
+        </View>
+
+        <View style={s.filters}>
+          {(
+            [
+              ['ALL', `Tất cả (${items.length})`],
+              ['PRODUCT', `Cổ phục (${items.filter((v) => v.kind === 'PRODUCT').length})`],
+              ['PROVIDER', `Nhiếp ảnh (${items.filter((v) => v.kind === 'PROVIDER').length})`],
+            ] as [Filter, string][]
+          ).map(([key, label]) => (
+            <Pressable
+              key={key}
+              onPress={() => {
+                setFilter(key);
+                setPage(1);
+              }}
+              style={[s.chip, filter === key && s.chipOn]}>
+              <Text style={[s.chipText, filter === key && s.chipTextOn]}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {error ? (
+          <ErrorState message={error} onRetry={() => void load()} />
+        ) : visible.length === 0 ? (
+          <EmptyState
+            title="Bộ sưu tập chưa có mục nào"
+            message="Hãy nhấn biểu tượng trái tim ở các mẫu cổ phục hoặc gói chụp ảnh bạn ưng ý để lưu lại so sánh và đặt lịch."
+          />
+        ) : (
+          <View style={s.grid}>
+            {visible.map((item) => (
+              <SavedCard
+                key={`${item.kind}-${item.targetId}`}
+                item={item}
+                onRemove={() => void remove(item)}
+              />
+            ))}
+          </View>
+        )}
+
+        <ListPagination page={safePage} totalPages={totalPages} onChange={setPage} />
+        {filtered.length > 0 && (
+          <Text style={s.footer}>
+            Hiển thị {visible.length}/{filtered.length} mục đã lưu
+          </Text>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function SavedCard({ item, onRemove }: { item: Saved; onRemove: () => void }) {
+  if (item.status === 'UNAVAILABLE') return <UnavailableCard item={item} onRemove={onRemove} />;
+  const isProduct = item.kind === 'PRODUCT';
+  const data = item.data;
+  const name = isProduct
+    ? (data as Product).name
+    : ((data as Photographer).businessName ?? 'Gói chụp TàGo');
+  const image = isProduct
+    ? (data as Product).images?.[0]
+    : ((data as Photographer).coverImage ?? (data as Photographer).media?.coverUrl);
+  const price = isProduct
+    ? (data as Product).basePrice
+    : ((data as Photographer).defaultPackage?.price ??
+      (data as Photographer).packages?.[0]?.price ??
+      0);
+  const href = isProduct ? `/product/${data._id}` : `/photographer/${data._id}`;
+
+  return (
+    <Pressable onPress={() => router.push(href as Href)} style={s.card}>
+      <View>
+        <Image source={getMediaUrl(image)} style={s.image} contentFit="cover" />
+        <View style={s.badge}>
+          <Text style={s.badgeText}>{isProduct ? 'CỔ PHỤC' : 'NHIẾP ẢNH'}</Text>
+        </View>
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          style={s.heart}>
+          <Ionicons name="heart" size={19} color={Colors.primary} />
+        </Pressable>
+      </View>
+      <View style={s.cardBody}>
+        <Text style={s.place}>{isProduct ? 'TÀGO ATELIER' : 'STUDIO CHÍNH HÃNG'}</Text>
+        <Text numberOfLines={2} style={s.name}>
+          {name}
+        </Text>
+        <Text style={s.meta}>
+          {isProduct
+            ? `Size ${(data as Product).sizes?.join('/') || 'Đủ size'}`
+            : `★ ${(data as Photographer).rating?.averageRating?.toFixed(1) ?? '5.0'} · ${(data as Photographer).address?.city ?? 'Huế'}`}
+        </Text>
+        <View style={s.priceRow}>
+          <Text style={s.price}>{money(price)}</Text>
+          <Text style={s.link}>Đặt ngay ›</Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function UnavailableCard({
+  item,
+  onRemove,
+}: {
+  item: Extract<Saved, { status: 'UNAVAILABLE' }>;
+  onRemove: () => void;
+}) {
+  const isProduct = item.kind === 'PRODUCT';
+  return (
+    <View style={s.card}>
+      <View style={s.unavailableImage}>
+        <Ionicons name="alert-circle-outline" size={34} color="#8F8E8E" />
+        <View style={s.badge}>
+          <Text style={s.badgeText}>{isProduct ? 'CỔ PHỤC' : 'NHIẾP ẢNH'}</Text>
+        </View>
+      </View>
+      <View style={s.cardBody}>
+        <Text style={s.place}>KHÔNG CÒN KHẢ DỤNG</Text>
+        <Text numberOfLines={2} style={s.name}>
+          {isProduct ? 'Sản phẩm đã ngừng hiển thị' : 'Studio đã ngừng hiển thị'}
+        </Text>
+        <Text style={s.meta}>Mục này không còn được công khai trên hệ thống.</Text>
+        <Pressable onPress={onRemove} style={s.removeUnavailable}>
+          <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
+          <Text style={s.removeUnavailableText}>Xóa khỏi yêu thích</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const money = (v: number) => new Intl.NumberFormat('vi-VN').format(v) + 'đ';
+const savedName = (item: Saved) =>
+  item.status === 'UNAVAILABLE'
+    ? item.kind === 'PRODUCT'
+      ? 'Sản phẩm không còn khả dụng'
+      : 'Studio không còn khả dụng'
+    : item.kind === 'PRODUCT'
+      ? item.data.name
+      : (item.data.businessName ?? '');
+
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: '#FBF9F9' },
+  topBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFECEB',
+  },
+  round: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FBF9F9',
+    borderWidth: 1,
+    borderColor: '#EFECEB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eyebrow: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 9,
+    letterSpacing: 1.2,
+    color: Colors.primary,
+  },
+  title: { fontFamily: FontFamily.display, fontSize: 21, color: '#1B1C1C' },
+  total: { fontFamily: FontFamily.bodyBold, fontSize: 14, color: Colors.primary },
+  content: { padding: 16, paddingBottom: 38, gap: 14 },
+  search: {
+    height: 46,
+    borderWidth: 1,
+    borderColor: '#EFECEB',
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 13,
+    gap: 8,
+    ...Shadow,
+  },
+  input: { flex: 1, fontFamily: FontFamily.body, fontSize: 12.5, color: '#1B1C1C' },
+  filters: { flexDirection: 'row', gap: 8 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#EFECEB',
+    backgroundColor: '#FFFFFF',
+  },
+  chipOn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  chipText: { fontFamily: FontFamily.bodySemiBold, fontSize: 11.5, color: '#5F5E5E' },
+  chipTextOn: { color: Colors.white },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  card: {
+    width: '48%',
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EFECEB',
+    ...Shadow,
+  },
+  image: { width: '100%', height: 180, backgroundColor: '#FFF0F3' },
+  unavailableImage: {
+    width: '100%',
+    height: 180,
+    backgroundColor: '#FFF0F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeUnavailable: {
+    marginTop: 12,
+    minHeight: 34,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  removeUnavailableText: { fontFamily: FontFamily.bodyBold, fontSize: 11, color: '#FFFFFF' },
+  badge: {
+    position: 'absolute',
+    left: 10,
+    top: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(27,28,28,0.75)',
+  },
+  badgeText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 8.5,
+    letterSpacing: 0.5,
+    color: '#FFFFFF',
+  },
+  heart: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardBody: { padding: 12 },
+  place: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 8.5,
+    letterSpacing: 0.5,
+    color: '#8F8E8E',
+  },
+  name: {
+    fontFamily: FontFamily.display,
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#1B1C1C',
+    marginTop: 4,
+    minHeight: 40,
+  },
+  meta: { fontFamily: FontFamily.body, fontSize: 10.5, color: '#5F5E5E', marginTop: 4 },
+  priceRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#F5F3F3',
+    marginTop: 10,
+    paddingTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  price: { fontFamily: FontFamily.bodyBold, fontSize: 14, color: Colors.primary },
+  link: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11,
+    color: Colors.primary,
+  },
+  footer: { fontFamily: FontFamily.body, fontSize: 11, color: '#8F8E8E', textAlign: 'center' },
+});

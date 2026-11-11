@@ -19,6 +19,7 @@ import {
 import { httpClient } from '../../services/httpClient';
 import { API_BASE_URL } from '../../config/env';
 import { ListingHero } from '../../components/common/ListingHero';
+import { includesVietnamese } from '../../utils/vietnameseUtils';
 import './StoresListingPage.css';
 
 interface ProviderStoreItem {
@@ -109,10 +110,11 @@ export const StoresListingPage: React.FC = () => {
 
       // Search term
       if (searchTerm.trim()) {
-        const query = searchTerm.toLowerCase();
-        const name = (store.businessName || '').toLowerCase();
-        const address = `${store.address?.addressLine || ''} ${store.address?.city || ''}`.toLowerCase();
-        if (!name.includes(query) && !address.includes(query)) return false;
+        const query = searchTerm.trim();
+        const address = `${store.address?.addressLine || ''} ${store.address?.district || ''} ${store.address?.city || ''}`;
+        const matchName = includesVietnamese(store.businessName, query);
+        const matchAddress = includesVietnamese(address, query);
+        if (!matchName && !matchAddress) return false;
       }
 
       return true;

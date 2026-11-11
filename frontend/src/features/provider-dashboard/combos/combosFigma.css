@@ -14,8 +14,8 @@
   --cb-border: #EBE4D8;
   --cb-border-subtle: #F3ECE1;
   --cb-card-bg: #FFFFFF;
-  --cb-font-serif: 'Playfair Display', Georgia, serif;
-  --cb-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --cb-font-serif: var(--font-display);
+  --cb-font-sans: var(--font-body);
   --cb-radius-sm: 6px;
   --cb-radius-md: 10px;
   --cb-radius-lg: 14px;

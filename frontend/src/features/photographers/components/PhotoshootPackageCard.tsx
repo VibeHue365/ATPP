@@ -102,7 +102,7 @@ export const PhotoshootPackageCard: React.FC<PhotoshootPackageCardProps> = ({ it
           {/* Rating Row */}
           <div className="lume-photoshoot-card__rating flex items-center gap-1.5 mt-0.5">
             <div className="flex items-center gap-1 text-xs font-bold text-stone-800">
-              <Star size={13} className="fill-amber-400 stroke-amber-400" />
+              <Star size={13} className="fill-[#C28E3A] stroke-[#C28E3A]" />
               <span>{Number.isFinite(ratingValue) ? ratingValue.toFixed(1) : '4.9'}</span>
             </div>
             <span 

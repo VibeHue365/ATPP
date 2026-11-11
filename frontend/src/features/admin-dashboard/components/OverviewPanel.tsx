@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   AlertTriangle,
   Calendar,
@@ -31,6 +31,14 @@ export const OverviewPanel: React.FC<OverviewPanelProps> = ({ onNavigateTab }) =
     return new Intl.NumberFormat('vi-VN').format(val);
   };
 
+  const dateRangeLabel = useMemo(() => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getFullYear();
+    const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
+    return `01/${month}/${year} - ${lastDay}/${month}/${year} ▾`;
+  }, []);
+
   return (
     <section className="lume-overview-container">
       {/* Top Header & Range Bar inside Overview */}
@@ -52,7 +60,7 @@ export const OverviewPanel: React.FC<OverviewPanelProps> = ({ onNavigateTab }) =
         <div className="lume-overview-header__actions">
           <div className="lume-daterange-picker" title="Khoảng thời gian thống kê">
             <CalendarRange size={15} color="#4A121A" />
-            <span>01/09/2024 - 30/09/2024 ▾</span>
+            <span>{dateRangeLabel}</span>
           </div>
 
           <button

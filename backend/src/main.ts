@@ -8,6 +8,7 @@ import { join } from 'path';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { requestLogger } from './common/http/request-logger';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const logger = new Logger('HTTP');
@@ -29,16 +30,39 @@ async function bootstrap() {
   app.use(cookieParser());
   // The Vite frontend is served from a different local origin in development.
   // Product/review uploads must be embeddable in its image elements.
+  const isProduction = process.env.NODE_ENV === 'production';
+  const storageDomains: string[] = [];
+  if (process.env.STORAGE_PUBLIC_DOMAIN) {
+    storageDomains.push(process.env.STORAGE_PUBLIC_DOMAIN);
+  }
+  if (process.env.MINIO_ENDPOINT) {
+    const minioHost = process.env.MINIO_ENDPOINT.replace(/^https?:\/\//, '');
+    storageDomains.push(`http://${minioHost}`, `https://${minioHost}`);
+  }
+
   app.use(
     helmet({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.tailwindcss.com"],
+          scriptSrc: isProduction
+            ? ["'self'"]
+            : ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com"],
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           fontSrc: ["'self'", "https://fonts.gstatic.com"],
-          imgSrc: ["'self'", "data:", "https://img.vietqr.io", "https://images.unsplash.com", "*"],
+          imgSrc: [
+            "'self'",
+            "data:",
+            "blob:",
+            "https://img.vietqr.io",
+            "https://images.unsplash.com",
+            "https://res.cloudinary.com",
+            ...storageDomains,
+            ...(!isProduction ? ["*"] : []),
+          ],
           connectSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
         },
       },
       crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -57,16 +81,47 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('VibeHue Platform API')
+    .setDescription('Tài liệu API chính thức của hệ thống VibeHue Platform')
+    .setVersion('1.0.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'Authorization',
+        description: 'Nhập Bearer Token',
+        in: 'header',
+      },
+      'bearer',
+    )
+    .build();
+
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+    customSiteTitle: 'VibeHue API Docs',
+  });
   await app.listen(process.env.PORT ?? 3000);
 }
 void bootstrap();
 // trigger watch reload: 2026-10-15T20:35:50
 
 function allowedCorsOrigins(): (string | RegExp)[] {
+  const isProduction = process.env.NODE_ENV === 'production';
   const envOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:5173')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+
+  // In production, strictly permit only explicit origins configured in FRONTEND_URL
+  if (isProduction) {
+    return envOrigins;
+  }
 
   // In development, permit localhost/127.0.0.1 on common dev ports (5173, 5174, 5175, etc.)
   return [

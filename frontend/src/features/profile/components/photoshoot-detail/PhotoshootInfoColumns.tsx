@@ -157,7 +157,7 @@ export const PhotoshootInfoColumns: React.FC<PhotoshootInfoColumnsProps> = ({
                 borderRadius: '8px',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid #DED7CB',
-                color: '#8B1E2D',
+                color: '#8E1B2E',
                 fontSize: '12px',
                 fontWeight: 700,
                 cursor: 'pointer'
@@ -233,7 +233,7 @@ export const PhotoshootInfoColumns: React.FC<PhotoshootInfoColumnsProps> = ({
                 justifyContent: 'space-between',
                 fontSize: '14px',
                 fontWeight: 800,
-                color: '#8B1E2D'
+                color: '#8E1B2E'
               }}
             >
               <span>Tổng thanh toán:</span>

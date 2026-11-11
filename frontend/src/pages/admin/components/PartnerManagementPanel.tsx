@@ -34,6 +34,7 @@ import { adminDirectoryApi } from '../../../features/admin-directory/api/adminDi
 import { adminStatsApi } from '../../../features/admin-dashboard/api/adminStatsApi';
 import type { ProviderProduct, ProviderReview } from '../../../features/admin-directory/types';
 import { useToast } from '../../../components/feedback/Toast';
+import { includesVietnamese } from '../../../utils/vietnameseUtils';
 import './partnerManagementFigma.css';
 
 export interface PartnerDetailItem {
@@ -100,9 +101,17 @@ export function PartnerManagementPanel() {
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [capabilityFilter, setCapabilityFilter] = useState<string>('ALL');
   const [ratingFilter, setRatingFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Multi-checkbox selections
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -174,7 +183,7 @@ export function PartnerManagementPanel() {
     setIsLoading(true);
     try {
       const [resProviders, resStats] = await Promise.allSettled([
-        adminDirectoryApi.providers(1, 50),
+        adminDirectoryApi.providers(1, 50, debouncedSearchQuery),
         adminStatsApi.get('month'),
       ]);
 
@@ -265,7 +274,7 @@ export function PartnerManagementPanel() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [debouncedSearchQuery, toast]);
 
   useEffect(() => {
     void fetchBackendData();
@@ -288,13 +297,12 @@ export function PartnerManagementPanel() {
     return partnerList.filter((partner) => {
       // Search
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
         const matches =
-          partner.businessName.toLowerCase().includes(q) ||
-          partner.ownerName.toLowerCase().includes(q) ||
-          partner.partnerCode.toLowerCase().includes(q) ||
-          partner.email.toLowerCase().includes(q) ||
-          partner.phone.toLowerCase().includes(q);
+          includesVietnamese(partner.businessName, searchQuery) ||
+          includesVietnamese(partner.ownerName, searchQuery) ||
+          includesVietnamese(partner.partnerCode, searchQuery) ||
+          includesVietnamese(partner.email, searchQuery) ||
+          includesVietnamese(partner.phone, searchQuery);
         if (!matches) return false;
       }
 

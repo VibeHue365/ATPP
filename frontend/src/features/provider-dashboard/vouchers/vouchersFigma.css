@@ -249,7 +249,7 @@
   font-weight: 800;
   color: var(--vc-text-dark);
   line-height: 1.1;
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: var(--font-body);
 }
 
 .vc-metric-subtext {
@@ -455,7 +455,7 @@
   font-size: 26px;
   font-weight: 800;
   line-height: 1;
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: var(--font-body);
   letter-spacing: -0.5px;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 }
@@ -537,7 +537,7 @@
 }
 
 .vc-code-badge {
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-weight: 800;
   font-size: 14px;
   letter-spacing: 0.8px;
@@ -930,7 +930,7 @@
 }
 
 .vc-code-input-wrap .vc-input-text {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-weight: 700;
   letter-spacing: 1px;
 }

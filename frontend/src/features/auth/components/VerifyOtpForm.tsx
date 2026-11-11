@@ -166,13 +166,13 @@ export const VerifyOtpForm: React.FC<VerifyOtpFormProps> = ({
       <div className="mt-4 pt-4 border-t border-[#E8DEDF]/70 flex items-center justify-between text-xs text-[#6F6264]">
         <span>Chưa nhận được mã OTP?</span>
         {cooldown > 0 ? (
-          <span className="font-semibold text-[#B52B47]">Gửi lại sau {cooldown}s</span>
+          <span className="font-semibold text-[#8E1B2E]">Gửi lại sau {cooldown}s</span>
         ) : (
           <button
             type="button"
             onClick={handleResend}
             disabled={isResending}
-            className="font-bold text-[#B52B47] hover:underline bg-transparent border-none p-0 cursor-pointer flex items-center gap-1.5"
+            className="font-bold text-[#8E1B2E] hover:underline bg-transparent border-none p-0 cursor-pointer flex items-center gap-1.5"
           >
             {isResending && <RefreshCw size={12} className="animate-spin" />}
             <span>Gửi lại mã OTP</span>

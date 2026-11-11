@@ -5,15 +5,15 @@ import { useToast } from '../../components/feedback/Toast';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { PortfolioItemFormModal } from '../../features/photographers/components/PortfolioItemFormModal';
-import { PhotographyPackageManager } from '../../features/photography-packages/components/PhotographyPackageManager';
+
 import { ProviderOverviewPanel } from '../../features/provider-dashboard/overview/ProviderOverviewPanel';
 import { createAnalyticsActions } from '../../features/provider-dashboard/analytics/createAnalyticsActions';
 import { useProviderAnalyticsState } from '../../features/provider-dashboard/analytics/useProviderAnalyticsState';
-import { CalendarPanel } from '../../features/provider-dashboard/calendar/CalendarPanel';
+
 import { createCalendarActions } from '../../features/provider-dashboard/calendar/createCalendarActions';
 import { useProviderCalendarState } from '../../features/provider-dashboard/calendar/useProviderCalendarState';
 import { CampaignModal } from '../../features/provider-dashboard/collections/CampaignModal';
-import { CollectionsPanel } from '../../features/provider-dashboard/collections/CollectionsPanel';
+
 import { createCampaignActions } from '../../features/provider-dashboard/collections/createCampaignActions';
 import { createProductDataActions } from '../../features/provider-dashboard/collections/createProductDataActions';
 import { createProductWizardActions } from '../../features/provider-dashboard/collections/createProductWizardActions';
@@ -29,7 +29,7 @@ import { useProviderSessionState } from '../../features/provider-dashboard/hooks
 import { AddInventoryModal } from '../../features/provider-dashboard/inventory/AddInventoryModal';
 import { createInventoryActions } from '../../features/provider-dashboard/inventory/createInventoryActions';
 import { EditInventoryModal } from '../../features/provider-dashboard/inventory/EditInventoryModal';
-import { InventoryPanel } from '../../features/provider-dashboard/inventory/InventoryPanel';
+
 import { useProviderInventoryState } from '../../features/provider-dashboard/inventory/useProviderInventoryState';
 import { VariantQuantityModal } from '../../features/provider-dashboard/inventory/VariantQuantityModal';
 import { ProviderHeader } from '../../features/provider-dashboard/layout/ProviderHeader';
@@ -39,32 +39,58 @@ import { createIncidentActions } from '../../features/provider-dashboard/orders/
 import { createOrderDataActions } from '../../features/provider-dashboard/orders/createOrderDataActions';
 import { IncidentReportModal } from '../../features/provider-dashboard/orders/IncidentReportModal';
 import { getOrderGroup } from '../../features/provider-dashboard/orders/orderHelpers';
-import { OrdersPanel } from '../../features/provider-dashboard/orders/OrdersPanel';
+
 import { useProviderIncidentState } from '../../features/provider-dashboard/orders/useProviderIncidentState';
 import { useProviderOrderState } from '../../features/provider-dashboard/orders/useProviderOrderState';
 import { createPayoutActions } from '../../features/provider-dashboard/payouts/createPayoutActions';
-import { PayoutsPanel } from '../../features/provider-dashboard/payouts/PayoutsPanel';
+
 import { useProviderPayoutsState } from '../../features/provider-dashboard/payouts/useProviderPayoutsState';
 import { createPortfolioActions } from '../../features/provider-dashboard/portfolio/createPortfolioActions';
-import { PortfolioPanel } from '../../features/provider-dashboard/portfolio/PortfolioPanel';
+
 import { PortfolioPreviewModal } from '../../features/provider-dashboard/portfolio/PortfolioPreviewModal';
 import { useProviderPortfolioState } from '../../features/provider-dashboard/portfolio/useProviderPortfolioState';
-import { CombosPanel } from '../../features/provider-dashboard/combos/CombosPanel';
+
 import { createPromotionActions } from '../../features/provider-dashboard/promotions/createPromotionActions';
 import { useProviderPromotionsState } from '../../features/provider-dashboard/promotions/useProviderPromotionsState';
-import { RentalOperationsPanel } from '../../features/provider-dashboard/rental-operations/RentalOperationsPanel';
+
 import { createReviewActions } from '../../features/provider-dashboard/reviews/createReviewActions';
 import { ReviewReplyModal } from '../../features/provider-dashboard/reviews/ReviewReplyModal';
-import { ReviewsPanel } from '../../features/provider-dashboard/reviews/ReviewsPanel';
+
 import { useProviderReviewsState } from '../../features/provider-dashboard/reviews/useProviderReviewsState';
-import { RolesPanel } from '../../features/provider-dashboard/roles/RolesPanel';
+
 import { createProfileActions } from '../../features/provider-dashboard/service-profile/createProfileActions';
 import { buildCancellationPolicySummary, normalizeCancellationRefundRules } from '../../features/provider-dashboard/service-profile/policyHelpers';
-import { ServiceProfilePanel } from '../../features/provider-dashboard/service-profile/ServiceProfilePanel';
+
 import { useProviderProfileState } from '../../features/provider-dashboard/service-profile/useProviderProfileState';
 import { createTrustActions } from '../../features/provider-dashboard/trust/createTrustActions';
+
+// Sub-tab Panels lazy-loaded for optimal bundle splitting
+const CalendarPanel = React.lazy(() => import('../../features/provider-dashboard/calendar/CalendarPanel').then(m => ({ default: m.CalendarPanel })));
+const CollectionsPanel = React.lazy(() => import('../../features/provider-dashboard/collections/CollectionsPanel').then(m => ({ default: m.CollectionsPanel })));
+const InventoryPanel = React.lazy(() => import('../../features/provider-dashboard/inventory/InventoryPanel').then(m => ({ default: m.InventoryPanel })));
+const OrdersPanel = React.lazy(() => import('../../features/provider-dashboard/orders/OrdersPanel').then(m => ({ default: m.OrdersPanel })));
+const PayoutsPanel = React.lazy(() => import('../../features/provider-dashboard/payouts/PayoutsPanel').then(m => ({ default: m.PayoutsPanel })));
+const PortfolioPanel = React.lazy(() => import('../../features/provider-dashboard/portfolio/PortfolioPanel').then(m => ({ default: m.PortfolioPanel })));
+const CombosPanel = React.lazy(() => import('../../features/provider-dashboard/combos/CombosPanel').then(m => ({ default: m.CombosPanel })));
+const RentalOperationsPanel = React.lazy(() => import('../../features/provider-dashboard/rental-operations/RentalOperationsPanel').then(m => ({ default: m.RentalOperationsPanel })));
+const ReviewsPanel = React.lazy(() => import('../../features/provider-dashboard/reviews/ReviewsPanel').then(m => ({ default: m.ReviewsPanel })));
+const RolesPanel = React.lazy(() => import('../../features/provider-dashboard/roles/RolesPanel').then(m => ({ default: m.RolesPanel })));
+const ServiceProfilePanel = React.lazy(() => import('../../features/provider-dashboard/service-profile/ServiceProfilePanel').then(m => ({ default: m.ServiceProfilePanel })));
+const TrustPanel = React.lazy(() => import('../../features/provider-dashboard/trust/TrustPanel').then(m => ({ default: m.TrustPanel })));
+
+const PhotographyPackageManager = React.lazy(() => import('../../features/photography-packages/components/PhotographyPackageManager').then(m => ({ default: m.PhotographyPackageManager })));
+
+const DashboardTabLoader: React.FC = () => (
+  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '320px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+      <div style={{ width: '36px', height: '36px', border: '3px solid rgba(192, 130, 97, 0.2)', borderTopColor: 'var(--color-primary, #C08261)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <span style={{ fontSize: '14px', color: 'var(--color-text-muted, #888)' }}>Đang tải dữ liệu...</span>
+    </div>
+  </div>
+);
+
 import { CustomerRatingModal } from '../../features/provider-dashboard/trust/CustomerRatingModal';
-import { TrustPanel } from '../../features/provider-dashboard/trust/TrustPanel';
+
 import { useProviderTrustState } from '../../features/provider-dashboard/trust/useProviderTrustState';
 import { NotificationsPage } from '../notifications/NotificationsPage';
 import './providerServiceProfile.css';
@@ -774,6 +800,7 @@ export const ProviderDashboard: React.FC = () => {
         <ProviderHeader {...{ notiRef, setIsNotiOpen, isNotiOpen, fetchNotifications, providerUnreadCount, handleNotiMarkAllAsRead, loadingNoti, notifications, getNotiTypeStyle, handleNotiMarkAsRead, getNotiTimeAgo, setCurrentView, provider, isSidebarCollapsed, toggleSidebar }} />
 
         {/* CONTENT SWITCH PANEL */}
+        <React.Suspense fallback={<DashboardTabLoader />}>
         {(currentView === 'overview' || currentView === 'analytics') && (
           <main style={{ flex: 1, padding: '32px' }}>
             <ProviderOverviewPanel
@@ -868,6 +895,7 @@ export const ProviderDashboard: React.FC = () => {
         {currentView === 'role-management' && (
           <RolesPanel {...{ isLoadingProvider, hasAodaiCapability, hasPhotographyCapability, navigate }} />
         )}
+        </React.Suspense>
       </div>
 
       {/* -------------------- MODAL: CAMPAIGN MANAGEMENT -------------------- */}

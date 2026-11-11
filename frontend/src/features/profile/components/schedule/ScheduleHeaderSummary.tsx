@@ -98,8 +98,8 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
           }}
           onMouseOver={(e) => {
             e.currentTarget.style.backgroundColor = '#FDF2F4';
-            e.currentTarget.style.borderColor = '#8B1E2D';
-            e.currentTarget.style.color = '#8B1E2D';
+            e.currentTarget.style.borderColor = '#8E1B2E';
+            e.currentTarget.style.color = '#8E1B2E';
           }}
           onMouseOut={(e) => {
             e.currentTarget.style.backgroundColor = '#FFFFFF';
@@ -133,7 +133,7 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
               height: '44px',
               borderRadius: '12px',
               backgroundColor: '#FDF2F4',
-              color: '#8B1E2D',
+              color: '#8E1B2E',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -176,7 +176,7 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
               height: '44px',
               borderRadius: '12px',
               backgroundColor: '#FDF2F4',
-              color: '#8B1E2D',
+              color: '#8E1B2E',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -219,7 +219,7 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
               height: '44px',
               borderRadius: '12px',
               backgroundColor: '#FDF2F4',
-              color: '#8B1E2D',
+              color: '#8E1B2E',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -262,7 +262,7 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
               height: '44px',
               borderRadius: '12px',
               backgroundColor: '#FDF2F4',
-              color: '#8B1E2D',
+              color: '#8E1B2E',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

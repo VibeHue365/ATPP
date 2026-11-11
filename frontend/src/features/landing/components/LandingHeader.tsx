@@ -65,10 +65,10 @@ export const LandingHeader: React.FC = () => {
     if (t === 'BOOKING') {
       return {
         label: 'Đơn hàng',
-        icon: <Calendar size={15} color="#B52B47" />,
+        icon: <Calendar size={15} color="#8E1B2E" />,
         bg: '#FCECEF',
         tagBg: '#FFF0F2',
-        tagColor: '#B52B47',
+        tagColor: '#8E1B2E',
       };
     }
     if (t === 'PAYMENT') {
@@ -118,10 +118,10 @@ export const LandingHeader: React.FC = () => {
     }
     return {
       label: 'Hệ thống',
-      icon: <Sparkles size={15} color="#B52B47" />,
+      icon: <Sparkles size={15} color="#8E1B2E" />,
       bg: '#FBE5E9',
       tagBg: '#FFF5F7',
-      tagColor: '#B52B47',
+      tagColor: '#8E1B2E',
     };
   };
 
@@ -536,9 +536,9 @@ export const LandingHeader: React.FC = () => {
                   height: '40px',
                   padding: '0 20px',
                   borderRadius: '12px',
-                  backgroundColor: '#B52B47',
+                  backgroundColor: '#8E1B2E',
                   color: '#FFFFFF',
-                  boxShadow: '0 4px 14px rgba(181, 43, 71, 0.35)',
+                  boxShadow: '0 4px 14px rgba(142, 27, 46, 0.35)',
                 }}
               >
                 <LogIn size={16} color="#FFFFFF" strokeWidth={2.4} className="shrink-0" />
@@ -650,9 +650,9 @@ export const LandingHeader: React.FC = () => {
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="w-full py-2.5 px-4 rounded-xl text-center text-sm font-bold text-white flex items-center justify-center gap-2 text-decoration-none shadow-sm cursor-pointer"
                   style={{
-                    backgroundColor: '#B52B47',
+                    backgroundColor: '#8E1B2E',
                     color: '#FFFFFF',
-                    boxShadow: '0 4px 14px rgba(181, 43, 71, 0.35)',
+                    boxShadow: '0 4px 14px rgba(142, 27, 46, 0.35)',
                   }}
                 >
                   <LogIn size={16} color="#FFFFFF" strokeWidth={2.4} />

@@ -1,3 +1,4 @@
+import { createSafeRegex, escapeRegex } from '../../../common/utils/regex.util';
 import {
   BadRequestException,
   ConflictException,
@@ -456,11 +457,13 @@ export class CategoriesService {
       filter.parentId = new Types.ObjectId(query.parentId);
     }
     if (query.keyword?.trim()) {
-      const keyword = this.escapeRegex(query.keyword.trim());
-      filter.$or = [
-        { name: { $regex: keyword, $options: 'i' } },
-        { slug: { $regex: keyword, $options: 'i' } },
-      ];
+      const regex = createSafeRegex(query.keyword);
+      if (regex) {
+        filter.$or = [
+          { name: regex },
+          { slug: regex },
+        ];
+      }
     }
 
     return filter;

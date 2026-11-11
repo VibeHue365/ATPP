@@ -226,3 +226,7 @@ ProductSchema.index({ status: 1, moderationStatus: 1, 'rating.averageRating': -1
 ProductSchema.index({ moderationStatus: 1, updatedAt: 1 });
 ProductSchema.index({ styleCategoryIds: 1 });
 ProductSchema.index({ eventCategoryIds: 1 });
+ProductSchema.index(
+  { name: 'text', description: 'text', 'customTags.label': 'text' },
+  { default_language: 'none', weights: { name: 10, 'customTags.label': 5, description: 1 } }
+);

@@ -3,7 +3,8 @@ import type { CartItem } from '@/types/cart';
 
 export type PromotionBookingType = 'AODAI_RENTAL' | 'PHOTOGRAPHY' | 'COMBO';
 
-interface PromotionSummary {
+export interface PromotionValidation {
+  id?: string;
   code: string;
   name: string;
   discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
@@ -19,8 +20,22 @@ export interface AppliedPromotion {
 }
 
 interface ApplicablePromotionsResponse {
-  applicable?: Array<{ promotion: PromotionSummary; discountAmount: number }>;
-  ineligible?: Array<{ promotion: PromotionSummary; reason: string }>;
+  applicable?: Array<{ promotion: PromotionValidation; discountAmount: number }>;
+  ineligible?: Array<{ promotion: PromotionValidation; reason: string }>;
+}
+
+export interface PublicPromotion {
+  _id: string;
+  code: string;
+  name: string;
+  description?: string;
+  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
+  discountValue: number;
+  maxDiscountAmount?: number | null;
+  minOrderValue?: number;
+  startDate?: string;
+  endDate?: string;
+  providerId?: string | null;
 }
 
 /** Same booking type rule as the web cart. */
@@ -55,4 +70,10 @@ export const promotionApi = {
     const rejected = result.ineligible?.find(entry => entry.promotion.code.toUpperCase() === normalized);
     throw new Error(rejected?.reason || 'Mã ưu đãi không tồn tại hoặc đã hết hạn');
   },
+  validate: (code: string, orderValue: number, providerIds: string[]) =>
+    httpClient.post<never, PromotionValidation>('/promotions/validate', { code, orderValue, providerIds }),
+  listPublic: () =>
+    httpClient.get<never, PublicPromotion[]>('/promotions/public'),
+  listByProvider: (providerId: string) =>
+    httpClient.get<never, PublicPromotion[]>(`/promotions/provider-promotions/${providerId}`),
 };

@@ -5,6 +5,7 @@ import { ScheduleToolbar } from './ScheduleToolbar';
 import { ScheduleUrgentAttentionSection } from './ScheduleUrgentAttentionSection';
 import { ScheduleDataTable, type ScheduleRowItem } from './ScheduleDataTable';
 import { useAuth } from '../../../auth/hooks/useAuth';
+import { includesVietnamese } from '../../../../utils/vietnameseUtils';
 import '../ProfilePage.css';
 
 interface ProfileScheduleTabProps {
@@ -78,6 +79,173 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
     const rows: ScheduleRowItem[] = [];
 
     bookings.forEach((b) => {
+      const isBookingCombo =
+        b.bookingType === 'COMBO' ||
+        (b.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
+          b.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
+
+      // 1. COMBO BOOKING HANDLING (1 single row per combo)
+      if (isBookingCombo) {
+        if (activeCategory !== 'COMBO') return;
+
+        const prodItem = b.items?.find((i: any) => i.itemType === 'PRODUCT' || i.productId);
+        const pkgItem = b.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId);
+
+        const prodObj = prodItem?.productId && typeof prodItem.productId === 'object' ? prodItem.productId : null;
+        const pkgObj = pkgItem?.photographyPackageId && typeof pkgItem.photographyPackageId === 'object' ? pkgItem.photographyPackageId : null;
+
+        const comboTitle =
+          b.comboName ||
+          b.comboSnapshot?.name ||
+          (pkgObj?.name && prodObj?.name ? `${pkgObj.name} • ${prodObj.name}` : null) ||
+          pkgObj?.name ||
+          prodObj?.name ||
+          b.name ||
+          'Combo Áo Dài & Chụp Ảnh Nghệ Thuật';
+
+        const image =
+          prodObj?.images?.[0] ||
+          prodObj?.coverImage ||
+          pkgObj?.coverImage ||
+          pkgObj?.images?.[0] ||
+          b.items?.[0]?.images?.[0] ||
+          b.items?.[0]?.coverImage ||
+          b.items?.[0]?.image;
+
+        const size = prodItem?.selectedSize || prodItem?.size ? `Size ${prodItem.selectedSize || prodItem.size}` : '';
+
+        const rawStart = prodItem?.rentalFrom || prodItem?.startDate || pkgItem?.shootDate || b.startDate;
+        const rawEnd = prodItem?.rentalTo || prodItem?.endDate || b.endDate;
+
+        let pickupDate = rawStart ? new Date(rawStart).toLocaleDateString('vi-VN') : 'Theo lịch';
+        let pickupTime = prodItem?.pickupTime || '09:00';
+        if (pkgItem?.shootTimeSlot) {
+          pickupTime = `${pickupTime} • Chụp: ${pkgItem.shootTimeSlot}`;
+        }
+
+        let returnDate = rawEnd ? new Date(rawEnd).toLocaleDateString('vi-VN') : '—';
+        let returnTime = prodItem?.returnTime ? `Trả đồ: ${prodItem.returnTime}` : 'Trả đồ';
+        if (b.deliveredPhotos?.length > 0) {
+          returnDate = 'Đã giao ảnh';
+          returnTime = `${b.deliveredPhotos.length} ảnh`;
+        } else if (pkgItem?.shootDate || rawStart) {
+          const estimatedDelivery = new Date(new Date(pkgItem?.shootDate || rawStart).getTime() + 3 * 24 * 60 * 60 * 1000);
+          returnDate = estimatedDelivery.toLocaleDateString('vi-VN');
+          returnTime = 'Dự kiến trả ảnh';
+        }
+
+        let statusLabel = b.status || 'ĐANG XỬ LÝ';
+        let statusSubtext = 'Đang cập nhật';
+        let statusBg = '#F2F4F4';
+        let statusColor = '#574D4F';
+
+        if (b.status === 'PENDING_PAYMENT') {
+          statusLabel = 'CHỜ CỌC';
+          statusSubtext = 'Chưa thanh toán cọc';
+          statusBg = '#FEF3C7';
+          statusColor = '#B45309';
+        } else if (b.status === 'DEPOSIT_PAID') {
+          statusLabel = 'CHỜ DUYỆT';
+          statusSubtext = 'Chờ đối tác xác nhận';
+          statusBg = '#FFFBEB';
+          statusColor = '#B45309';
+        } else if (b.status === 'CONFIRMED') {
+          statusLabel = 'SẮP DIỄN RA';
+          statusSubtext = getDaysDiffText(rawStart, 'Bắt đầu sau') || 'Đã xác nhận lịch combo';
+          statusBg = '#EFF6FF';
+          statusColor = '#1D4ED8';
+        } else if (b.status === 'PICKUP_PENDING') {
+          statusLabel = 'CHỜ NHẬN ĐỒ';
+          statusSubtext = 'Trang phục sẵn sàng, chờ nhận';
+          statusBg = '#F5EEF8';
+          statusColor = '#8E44AD';
+        } else if (b.status === 'PICKED_UP') {
+          statusLabel = 'ĐANG TRẢI NGHIỆM';
+          statusSubtext = 'Đã nhận đồ, sẵn sàng chụp';
+          statusBg = '#ECFDF5';
+          statusColor = '#047857';
+        } else if (b.status === 'IN_PROGRESS') {
+          statusLabel = 'ĐANG CHỤP ẢNH';
+          statusSubtext = 'Đang trong buổi chụp';
+          statusBg = '#ECFDF5';
+          statusColor = '#047857';
+        } else if (b.status === 'RETURN_PENDING') {
+          const hasIncident = Boolean(
+            b.activeIncident ||
+            b.hasIncident ||
+            b.statusTimeline?.some((t: any) =>
+              t.status === 'RETURN_PENDING' &&
+              (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
+            )
+          );
+          if (hasIncident) {
+            statusLabel = 'CHỜ DUYỆT SỰ CỐ';
+            statusSubtext = 'Shop yêu cầu đền bù hư hỏng';
+            statusBg = '#FFF1F2';
+            statusColor = '#E11D48';
+          } else {
+            statusLabel = 'CHỜ TRẢ ĐỒ';
+            statusSubtext = 'Đang kiểm tra trả đồ combo';
+            statusBg = '#FEF9E7';
+            statusColor = '#F39C12';
+          }
+        } else if (b.status === 'AWAITING_REVIEW') {
+          statusLabel = 'CHỜ DUYỆT ẢNH';
+          statusSubtext = 'Đã có ảnh, vui lòng xem & duyệt';
+          statusBg = '#FEF3C7';
+          statusColor = '#B45309';
+        } else if (b.status === 'COMBO_PHOTOS_APPROVED') {
+          statusLabel = 'ĐÃ DUYỆT ẢNH';
+          statusSubtext = 'Chờ hoàn tất trả đồ';
+          statusBg = '#E0F2FE';
+          statusColor = '#0369A1';
+        } else if (b.status === 'COMPLETED' || b.status === 'RETURNED') {
+          statusLabel = 'HOÀN TẤT';
+          statusSubtext = 'Đã hoàn tất trải nghiệm';
+          statusBg = '#E8F8F5';
+          statusColor = '#27AE60';
+        } else if (b.status === 'CANCELLED') {
+          statusLabel = 'ĐÃ HỦY';
+          statusSubtext = 'Đơn đã hủy';
+          statusBg = '#FDEDEC';
+          statusColor = '#C0392B';
+        } else if (b.status === 'DISPUTED') {
+          statusLabel = 'TRANH CHẤP';
+          statusSubtext = 'Đang xử lý khiếu nại';
+          statusBg = '#FEF2F2';
+          statusColor = '#DC2626';
+        } else if (b.status === 'REFUNDED' || b.status === 'PARTIALLY_REFUNDED') {
+          statusLabel = 'ĐÃ HOÀN TIỀN';
+          statusSubtext = 'Đã hoàn tiền đơn';
+          statusBg = '#F3F4F6';
+          statusColor = '#4B5563';
+        }
+
+        rows.push({
+          id: b._id,
+          bookingId: b._id,
+          code: b.bookingCode || `CB-${b._id.slice(-4)}`,
+          title: comboTitle,
+          size,
+          image,
+          pickupDate,
+          pickupTime,
+          returnDate,
+          returnTime,
+          status: b.status,
+          statusLabel,
+          statusSubtext,
+          statusBg,
+          statusColor,
+          booking: b,
+          item: prodItem || pkgItem || b.items?.[0]
+        });
+        return;
+      }
+
+      // 2. NON-COMBO BOOKINGS HANDLING
+      if (activeCategory === 'COMBO') return;
+
       (b.items || []).forEach((item: any, idx: number) => {
         const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
         const isCombo =
@@ -89,7 +257,6 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
         // Check if matches activeCategory
         if (activeCategory === 'RENTAL' && (isPhoto || isCombo)) return;
         if (activeCategory === 'PHOTOSHOOT' && (!isPhoto || isCombo)) return;
-        if (activeCategory === 'COMBO' && !isCombo) return;
 
         const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
         const prodObj = !isPhoto && item.productId && typeof item.productId === 'object' ? item.productId : null;
@@ -381,11 +548,18 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
     }
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter((r) =>
-        r.title.toLowerCase().includes(q) ||
-        r.code.toLowerCase().includes(q)
-      );
+      const q = searchQuery.trim();
+      list = list.filter((r) => {
+        const provName = r.booking?.provider?.businessName || r.booking?.provider?.fullName || '';
+        const custName = r.booking?.customer?.fullName || r.booking?.customerName || '';
+        return (
+          includesVietnamese(r.title, q) ||
+          includesVietnamese(r.code, q) ||
+          includesVietnamese(provName, q) ||
+          includesVietnamese(custName, q) ||
+          includesVietnamese(r.statusLabel, q)
+        );
+      });
     }
 
     return list;
@@ -495,22 +669,25 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
         const isConfirmed = b.status === 'CONFIRMED' || b.status === 'PICKUP_PENDING';
         const isPickedUp = b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS';
 
-        (b.items || []).forEach((item: any) => {
-          const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
-          const isCombo =
-            b.bookingType === 'COMBO' ||
-            item.itemType === 'COMBO' ||
-            (b.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
-              b.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
+        const isCombo =
+          b.bookingType === 'COMBO' ||
+          (b.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
+            b.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
 
-          if (isCombo && (isConfirmed || isPickedUp)) {
+        if (isCombo) {
+          if (isConfirmed || isPickedUp) {
             upcomingCombos++;
-          } else if (isPhoto && (isConfirmed || isPickedUp)) {
-            upcomingShoots++;
-          } else if (!isPhoto && !isCombo && isPickedUp) {
-            activeRentals++;
           }
-        });
+        } else {
+          (b.items || []).forEach((item: any) => {
+            const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
+            if (isPhoto && (isConfirmed || isPickedUp)) {
+              upcomingShoots++;
+            } else if (!isPhoto && isPickedUp) {
+              activeRentals++;
+            }
+          });
+        }
       });
     }
 
@@ -534,30 +711,41 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
 
     if (bookings && bookings.length > 0) {
       bookings.forEach((b) => {
-        (b.items || []).forEach((item: any) => {
-          const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
-          const isCombo =
-            b.bookingType === 'COMBO' ||
-            item.itemType === 'COMBO' ||
-            (b.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
-              b.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
+        const isCombo =
+          b.bookingType === 'COMBO' ||
+          (b.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
+            b.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
 
-          if (isCombo) combos++;
-          else if (isPhoto) photoshoots++;
-          else rentals++;
-
-          const matchesCategory =
-            (activeCategory === 'RENTAL' && !isPhoto && !isCombo) ||
-            (activeCategory === 'PHOTOSHOOT' && isPhoto && !isCombo) ||
-            (activeCategory === 'COMBO' && isCombo);
-
-          if (matchesCategory) {
+        if (isCombo) {
+          combos++;
+          if (activeCategory === 'COMBO') {
             subAll++;
             if (b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS' || b.status === 'AWAITING_REVIEW') subRenting++;
             if (b.status === 'PICKUP_PENDING' || b.status === 'CONFIRMED' || b.status === 'DEPOSIT_PAID') subPickupSoon++;
-            if (b.status === 'RETURNED' || b.status === 'COMPLETED' || b.status === 'RETURN_PENDING') subReturned++;
+            if (b.status === 'RETURNED' || b.status === 'COMPLETED' || b.status === 'RETURN_PENDING' || b.status === 'COMBO_PHOTOS_APPROVED') subReturned++;
           }
-        });
+        } else {
+          (b.items || []).forEach((item: any) => {
+            const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
+            if (isPhoto) {
+              photoshoots++;
+              if (activeCategory === 'PHOTOSHOOT') {
+                subAll++;
+                if (b.status === 'IN_PROGRESS' || b.status === 'AWAITING_REVIEW') subRenting++;
+                if (b.status === 'CONFIRMED' || b.status === 'DEPOSIT_PAID') subPickupSoon++;
+                if (b.status === 'COMPLETED') subReturned++;
+              }
+            } else {
+              rentals++;
+              if (activeCategory === 'RENTAL') {
+                subAll++;
+                if (b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS') subRenting++;
+                if (b.status === 'PICKUP_PENDING' || b.status === 'CONFIRMED' || b.status === 'DEPOSIT_PAID') subPickupSoon++;
+                if (b.status === 'RETURNED' || b.status === 'COMPLETED' || b.status === 'RETURN_PENDING') subReturned++;
+              }
+            }
+          });
+        }
       });
 
       return {

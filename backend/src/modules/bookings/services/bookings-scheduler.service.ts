@@ -107,7 +107,7 @@ export class BookingsSchedulerService {
           // Prevents double-processing if cron overlaps with a customer confirm-complete call.
           const locked = await this.bookingModel.findOneAndUpdate(
             { _id: candidate._id, status: BookingStatus.AwaitingReview },
-            { $set: { status: BookingStatus.Completed } },
+            { $set: { status: BookingStatus.Completed, photosApproved: true } },
             { new: false }, // return OLD doc — if null, someone else already changed it
           );
 
@@ -261,9 +261,7 @@ export class BookingsSchedulerService {
       ],
     });
 
-    for (const schedule of upcomingSchedules24h) {
-      await this.sendReminderIfNeeded(schedule, '24h', '24 giờ');
-    }
+    await this.processRemindersBatch(upcomingSchedules24h, '24h', '24 giờ');
 
     // 2. Remind 2 hours in advance
     const start2h = new Date(now.getTime() + 1.5 * 60 * 60 * 1000);
@@ -279,83 +277,111 @@ export class BookingsSchedulerService {
       ],
     });
 
-    for (const schedule of upcomingSchedules2h) {
-      await this.sendReminderIfNeeded(schedule, '2h', '2 giờ');
-    }
+    await this.processRemindersBatch(upcomingSchedules2h, '2h', '2 giờ');
   }
 
-  private async sendReminderIfNeeded(
-    schedule: BookingScheduleDocument,
+  private async processRemindersBatch(
+    schedules: BookingScheduleDocument[],
     reminderType: '24h' | '2h',
     timeLabel: string,
   ) {
+    if (!schedules.length) return;
+
     try {
-      const booking = await this.bookingModel.findById(schedule.bookingId);
-      if (!booking) return;
+      const scheduleIds = schedules.map((s) => s._id);
+      const bookingIds = [...new Set(schedules.map((s) => s.bookingId.toString()))];
 
-      const customerId = (
-        booking.customerId?._id || booking.customerId
-      ).toString();
+      // Batch query 1: Fetch all bookings for these schedules in 1 query
+      const bookings = await this.bookingModel
+        .find({ _id: { $in: bookingIds } })
+        .select('_id bookingCode customerId')
+        .lean();
+      const bookingMap = new Map(bookings.map((b) => [b._id.toString(), b]));
 
-      // Check if notification already sent to avoid duplicate
-      const alreadySent = await this.notificationModel.findOne({
-        userId: new Types.ObjectId(customerId),
-        type: NotificationType.Booking,
-        'metadata.bookingScheduleId': schedule._id,
-        'metadata.reminderType': reminderType,
-      });
+      // Batch query 2: Check all existing notifications in 1 query
+      const existingNotifications = await this.notificationModel
+        .find({
+          type: NotificationType.Booking,
+          'metadata.bookingScheduleId': { $in: scheduleIds },
+          'metadata.reminderType': reminderType,
+        })
+        .select('metadata.bookingScheduleId')
+        .lean();
 
-      if (alreadySent) return;
+      const sentScheduleIds = new Set(
+        existingNotifications
+          .map((n) => n.metadata?.bookingScheduleId?.toString())
+          .filter(Boolean),
+      );
 
-      let eventTypeLabel = '';
-      switch (schedule.scheduleType) {
-        case BookingScheduleType.Pickup:
-          eventTypeLabel = 'nhận đồ thuê';
-          break;
-        case BookingScheduleType.Return:
-          eventTypeLabel = 'trả đồ thuê';
-          break;
-        case BookingScheduleType.Photoshoot:
-          eventTypeLabel = 'chụp ảnh';
-          break;
-        case BookingScheduleType.RentalPeriod:
-          eventTypeLabel = 'kỳ hạn thuê';
-          break;
-        default:
-          eventTypeLabel = 'lịch trình';
+      for (const schedule of schedules) {
+        if (sentScheduleIds.has(schedule._id.toString())) {
+          continue;
+        }
+
+        const booking = bookingMap.get(schedule.bookingId.toString());
+        if (!booking) continue;
+
+        const customerId = (
+          (booking.customerId as any)?._id || booking.customerId
+        )?.toString();
+        if (!customerId) continue;
+
+        try {
+          let eventTypeLabel = '';
+          switch (schedule.scheduleType) {
+            case BookingScheduleType.Pickup:
+              eventTypeLabel = 'nhận đồ thuê';
+              break;
+            case BookingScheduleType.Return:
+              eventTypeLabel = 'trả đồ thuê';
+              break;
+            case BookingScheduleType.Photoshoot:
+              eventTypeLabel = 'chụp ảnh';
+              break;
+            case BookingScheduleType.RentalPeriod:
+              eventTypeLabel = 'kỳ hạn thuê';
+              break;
+            default:
+              eventTypeLabel = 'lịch trình';
+          }
+
+          const scheduledAt = schedule.startsAt ?? schedule.scheduledDate;
+          if (!scheduledAt) {
+            this.logger.warn(
+              `Skipping reminder for schedule ${schedule._id}: missing start time.`,
+            );
+            continue;
+          }
+
+          const dateObj = new Date(scheduledAt);
+          const title = `Nhắc nhở lịch trình - Còn ${timeLabel}`;
+          const content = `Bạn có lịch trình ${eventTypeLabel} cho đơn hàng ${booking.bookingCode} vào lúc ${dateObj.toLocaleTimeString('vi-VN')} ngày ${dateObj.toLocaleDateString('vi-VN')}. Vui lòng chuẩn bị đúng giờ!`;
+
+          await this.notificationsService.createNotification(
+            customerId,
+            title,
+            content,
+            NotificationType.Booking,
+            {
+              bookingId: booking._id,
+              bookingScheduleId: schedule._id,
+              reminderType,
+            },
+          );
+
+          this.logger.log(
+            `Sent ${reminderType} schedule reminder for booking ${booking.bookingCode}, schedule ID: ${schedule._id}`,
+          );
+        } catch (err) {
+          this.logger.error(
+            `Error sending schedule reminder for schedule ${schedule._id}:`,
+            err,
+          );
+        }
       }
-
-      const scheduledAt = schedule.startsAt ?? schedule.scheduledDate;
-      if (!scheduledAt) {
-        this.logger.warn(
-          `Skipping reminder for schedule ${schedule._id}: missing start time.`,
-        );
-        return;
-      }
-
-      const title = `Nhắc nhở lịch trình - Còn ${timeLabel}`;
-      const content = `Bạn có lịch trình ${eventTypeLabel} cho đơn hàng ${booking.bookingCode} vào lúc ${scheduledAt.toLocaleTimeString('vi-VN')} ngày ${scheduledAt.toLocaleDateString('vi-VN')}. Vui lòng chuẩn bị đúng giờ!`;
-
-      await this.notificationsService.createNotification(
-        customerId,
-        title,
-        content,
-        NotificationType.Booking,
-        {
-          bookingId: booking._id,
-          bookingScheduleId: schedule._id,
-          reminderType,
-        },
-      );
-
-      this.logger.log(
-        `Sent ${reminderType} schedule reminder for booking ${booking.bookingCode}, schedule ID: ${schedule._id}`,
-      );
-    } catch (err) {
-      this.logger.error(
-        `Error sending schedule reminder for schedule ${schedule._id}:`,
-        err,
-      );
+    } catch (batchErr) {
+      this.logger.error(`Error in batch reminder processing (${reminderType}):`, batchErr);
     }
   }
 
@@ -385,23 +411,44 @@ export class BookingsSchedulerService {
           itemType: BookingItemType.PhotographyPackage,
         });
 
-        if (!photoItem || !photoItem.shootDate) continue;
+        if (!photoItem) continue;
 
-        let endHour = 23;
-        let endMin = 59;
-        if (photoItem.shootTimeSlot && photoItem.shootTimeSlot.includes('-')) {
-          const parts = photoItem.shootTimeSlot.split('-');
-          if (parts.length >= 2) {
-            const [h, m] = parts[1].trim().split(':').map(Number);
-            if (!isNaN(h)) {
-              endHour = h;
-              endMin = m || 0;
+        let shootEnd: Date | null = null;
+
+        // 1. Look up schedule in BookingSchedule first
+        const schedule = await this.bookingScheduleModel
+          .findOne({
+            bookingId: booking._id,
+            scheduleType: BookingScheduleType.Photoshoot,
+            status: { $ne: BookingScheduleStatus.Cancelled },
+          })
+          .lean();
+
+        if (schedule && schedule.endsAt) {
+          shootEnd = new Date(schedule.endsAt);
+        } else if (schedule && schedule.startsAt) {
+          shootEnd = new Date(
+            new Date(schedule.startsAt).getTime() + 2 * 60 * 60 * 1000,
+          );
+        } else if (photoItem.shootDate) {
+          let endHour = 23;
+          let endMin = 59;
+          if (photoItem.shootTimeSlot && photoItem.shootTimeSlot.includes('-')) {
+            const parts = photoItem.shootTimeSlot.split('-');
+            if (parts.length >= 2) {
+              const [h, m] = parts[1].trim().split(':').map(Number);
+              if (!isNaN(h)) {
+                endHour = h;
+                endMin = m || 0;
+              }
             }
           }
+
+          shootEnd = new Date(photoItem.shootDate);
+          shootEnd.setHours(endHour, endMin, 0, 0);
         }
 
-        const shootEnd = new Date(photoItem.shootDate);
-        shootEnd.setHours(endHour, endMin, 0, 0);
+        if (!shootEnd || isNaN(shootEnd.getTime())) continue;
 
         // 2 hours past shootEnd time
         const overdueDeadline = new Date(

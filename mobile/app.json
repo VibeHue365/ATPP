@@ -37,6 +37,7 @@
       ],
       "expo-secure-store",
       "expo-image",
+      "@react-native-google-signin/google-signin",
       [
         "expo-image-picker",
         {
@@ -45,7 +46,15 @@
           "microphonePermission": false
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Cho phép LUMÉ dùng vị trí của bạn để tìm tiệm áo dài, studio gần nhất và chỉ đường chính xác.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

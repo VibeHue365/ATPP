@@ -105,7 +105,7 @@ export const ScheduleSearchFilterBar: React.FC<ScheduleSearchFilterBarProps> = (
               borderRadius: '8px',
               border: 'none',
               backgroundColor: serviceType === 'ALL' ? '#FFFFFF' : 'transparent',
-              color: serviceType === 'ALL' ? '#8B1E2D' : '#574D4F',
+              color: serviceType === 'ALL' ? '#8E1B2E' : '#574D4F',
               fontWeight: 700,
               fontSize: '12px',
               cursor: 'pointer',
@@ -123,7 +123,7 @@ export const ScheduleSearchFilterBar: React.FC<ScheduleSearchFilterBarProps> = (
               borderRadius: '8px',
               border: 'none',
               backgroundColor: serviceType === 'PHOTOSHOOT' ? '#FFFFFF' : 'transparent',
-              color: serviceType === 'PHOTOSHOOT' ? '#8B1E2D' : '#574D4F',
+              color: serviceType === 'PHOTOSHOOT' ? '#8E1B2E' : '#574D4F',
               fontWeight: 700,
               fontSize: '12px',
               cursor: 'pointer',
@@ -141,7 +141,7 @@ export const ScheduleSearchFilterBar: React.FC<ScheduleSearchFilterBarProps> = (
               borderRadius: '8px',
               border: 'none',
               backgroundColor: serviceType === 'RENTAL' ? '#FFFFFF' : 'transparent',
-              color: serviceType === 'RENTAL' ? '#8B1E2D' : '#574D4F',
+              color: serviceType === 'RENTAL' ? '#8E1B2E' : '#574D4F',
               fontWeight: 700,
               fontSize: '12px',
               cursor: 'pointer',
@@ -198,7 +198,7 @@ export const ScheduleSearchFilterBar: React.FC<ScheduleSearchFilterBarProps> = (
               justifyContent: 'center',
               padding: '7px 12px',
               border: 'none',
-              backgroundColor: viewMode === 'LIST' ? '#8B1E2D' : 'transparent',
+              backgroundColor: viewMode === 'LIST' ? '#8E1B2E' : 'transparent',
               color: viewMode === 'LIST' ? '#FFFFFF' : '#8C827A',
               cursor: 'pointer'
             }}
@@ -216,7 +216,7 @@ export const ScheduleSearchFilterBar: React.FC<ScheduleSearchFilterBarProps> = (
               justifyContent: 'center',
               padding: '7px 12px',
               border: 'none',
-              backgroundColor: viewMode === 'CALENDAR' ? '#8B1E2D' : 'transparent',
+              backgroundColor: viewMode === 'CALENDAR' ? '#8E1B2E' : 'transparent',
               color: viewMode === 'CALENDAR' ? '#FFFFFF' : '#8C827A',
               cursor: 'pointer'
             }}

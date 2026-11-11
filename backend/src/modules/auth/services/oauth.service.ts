@@ -1,13 +1,16 @@
 import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { Types } from 'mongoose';
 import { GoogleOAuthProfile } from '../../../common/strategies/google.strategy';
 import { UsersRepository } from '../../users/repositories/users.repository';
-import { AuthProviderType, UserStatus } from '../../users/schemas/user.schema';
+import { AuthProviderType, UserDocument, UserStatus } from '../../users/schemas/user.schema';
 import { UsersService } from '../../users/services/users.service';
 import { OAuthExchangeDto } from '../dto/oauth-exchange.dto';
 import { AuthRepository } from '../repositories/auth.repository';
+import { OAuthStateDocument } from '../schemas/oauth-state.schema';
 import {
   VerificationPurpose,
   VerificationTargetType,
@@ -26,6 +29,8 @@ import { RateLimitService } from './rate-limit.service';
 
 @Injectable()
 export class OAuthService {
+  private readonly googleClient: OAuth2Client;
+
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly usersRepository: UsersRepository,
@@ -34,9 +39,15 @@ export class OAuthService {
     private readonly tokenService: TokenService,
     private readonly securityLogService: SecurityLogService,
     private readonly rateLimitService: RateLimitService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.googleClient = new OAuth2Client();
+  }
 
-  async createGoogleOAuthState(context: RequestContext): Promise<string> {
+  async createGoogleOAuthState(
+    context: RequestContext,
+    redirectUri?: string,
+  ): Promise<string> {
     const stateId = new Types.ObjectId();
     const state = `${stateId.toString()}.${randomBytes(48).toString('hex')}`;
     const stateHash = await bcrypt.hash(state, 12);
@@ -46,13 +57,14 @@ export class OAuthService {
       stateHash,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
+      redirectUri: redirectUri || null,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
 
     return state;
   }
 
-  async validateGoogleOAuthState(state: string): Promise<void> {
+  async validateGoogleOAuthState(state: string): Promise<OAuthStateDocument> {
     const { stateId } = this.tokenService.parseOAuthState(state);
     const oauthState = await this.authRepository.findOAuthStateById(stateId);
 
@@ -75,84 +87,59 @@ export class OAuthService {
     if (!markedUsed) {
       throw new UnauthorizedException('OAuth state is expired or invalid');
     }
+
+    return oauthState;
   }
 
   async handleGoogleLogin(
     profile: GoogleOAuthProfile,
     _context: RequestContext,
   ): Promise<OAuthLoginCode> {
-    if (profile.emailVerified === false) {
-      throw new ForbiddenException('Google email is not verified');
-    }
-
-    const email = this.normalizeEmail(profile.email);
-    const providerUserId = profile.providerUserId;
-    let user = await this.usersRepository.findUserByAuthProvider(
-      AuthProviderType.Google,
-      providerUserId,
-    );
-
-    user ??= await this.usersRepository.findUserByEmail(email);
-    const hasGoogleProvider = Boolean(
-      user?.auth.authProviders.some(
-        (authProvider) =>
-          authProvider.provider === AuthProviderType.Google &&
-          authProvider.providerUserId === providerUserId,
-      ),
-    );
-
-    if (!user) {
-      user = await this.usersRepository.createUser({
-        auth: {
-          email: profile.email,
-          emailNormalized: email,
-          passwordHash: null,
-          emailVerified: true,
-          phoneVerified: false,
-          authProviders: [
-            {
-              provider: AuthProviderType.Google,
-              providerUserId,
-            },
-          ],
-        },
-        roles: ['CUSTOMER'],
-        defaultRole: 'CUSTOMER',
-        accountStatus: UserStatus.Active,
-        profile: {
-          fullName: profile.fullName,
-          avatarUrl: profile.avatarUrl,
-        },
-        security: {
-          failedLoginAttempts: 0,
-        },
-      });
-
-    } else if (
-      user.accountStatus === UserStatus.Suspended &&
-      user.security?.lockedUntil &&
-      user.security.lockedUntil.getTime() <= Date.now()
-    ) {
-      user =
-        (await this.usersRepository.restoreExpiredSuspension(user._id)) ?? user;
-    }
-
-    if (user.accountStatus !== UserStatus.Active) {
-      throw new ForbiddenException('Account is not active');
-    }
-
-    if (!hasGoogleProvider) {
-      await this.usersRepository.addAuthProvider(user._id, {
-        provider: AuthProviderType.Google,
-        providerUserId,
-      });
-    }
-
-    await this.usersRepository.activateEmail(user._id);
-
+    const user = await this.resolveGoogleUser(profile);
     return {
-      code: await this.createOAuthExchangeCode(user._id, email),
+      code: await this.createOAuthExchangeCode(user._id, user.auth.emailNormalized),
     };
+  }
+
+  async loginWithGoogleMobile(
+    idToken: string,
+    context: RequestContext,
+  ): Promise<AuthSession> {
+    await this.rateLimitService.assertRateLimit(
+      `auth:google:mobile:ip:${this.rateLimitService.ipKey(context.ipAddress)}`,
+      15,
+      5 * 60,
+    );
+
+    const webClientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    const androidClientId = this.configService.get<string>('GOOGLE_ANDROID_CLIENT_ID');
+    const audiences = [webClientId, androidClientId].filter(Boolean) as string[];
+
+    let payload;
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: audiences.length === 1 ? audiences[0] : audiences,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Google ID Token không hợp lệ hoặc đã hết hạn');
+    }
+
+    if (!payload || !payload.email) {
+      throw new UnauthorizedException('Google ID Token không chứa thông tin email');
+    }
+
+    const profile: GoogleOAuthProfile = {
+      providerUserId: payload.sub,
+      email: payload.email,
+      emailVerified: payload.email_verified,
+      fullName: payload.name || payload.email,
+      avatarUrl: payload.picture,
+    };
+
+    const user = await this.resolveGoogleUser(profile);
+    return this.issueSession(user, context, LoginProvider.Google);
   }
 
   async exchangeOAuthCode(
@@ -204,6 +191,88 @@ export class OAuthService {
       throw new UnauthorizedException('User is not active');
     }
 
+    return this.issueSession(user, context, LoginProvider.Google);
+  }
+
+  private async resolveGoogleUser(
+    profile: GoogleOAuthProfile,
+  ): Promise<UserDocument> {
+    if (profile.emailVerified === false) {
+      throw new ForbiddenException('Google email is not verified');
+    }
+
+    const email = this.normalizeEmail(profile.email);
+    const providerUserId = profile.providerUserId;
+    let user = await this.usersRepository.findUserByAuthProvider(
+      AuthProviderType.Google,
+      providerUserId,
+    );
+
+    user ??= await this.usersRepository.findUserByEmail(email);
+    const hasGoogleProvider = Boolean(
+      user?.auth.authProviders.some(
+        (authProvider) =>
+          authProvider.provider === AuthProviderType.Google &&
+          authProvider.providerUserId === providerUserId,
+      ),
+    );
+
+    if (!user) {
+      user = await this.usersRepository.createUser({
+        auth: {
+          email: profile.email,
+          emailNormalized: email,
+          passwordHash: null,
+          emailVerified: true,
+          phoneVerified: false,
+          authProviders: [
+            {
+              provider: AuthProviderType.Google,
+              providerUserId,
+            },
+          ],
+        },
+        roles: ['CUSTOMER'],
+        defaultRole: 'CUSTOMER',
+        accountStatus: UserStatus.Active,
+        profile: {
+          fullName: profile.fullName,
+          avatarUrl: profile.avatarUrl,
+        },
+        security: {
+          failedLoginAttempts: 0,
+        },
+      });
+    } else if (
+      user.accountStatus === UserStatus.Suspended &&
+      user.security?.lockedUntil &&
+      user.security.lockedUntil.getTime() <= Date.now()
+    ) {
+      user =
+        (await this.usersRepository.restoreExpiredSuspension(user._id)) ?? user;
+    }
+
+    if (user.accountStatus !== UserStatus.Active) {
+      throw new ForbiddenException('Account is not active');
+    }
+
+    if (!hasGoogleProvider) {
+      await this.usersRepository.addAuthProvider(user._id, {
+        provider: AuthProviderType.Google,
+        providerUserId,
+      });
+    }
+
+    await this.usersRepository.activateEmail(user._id);
+
+    return user;
+  }
+
+  private async issueSession(
+    user: UserDocument,
+    context: RequestContext,
+    provider: LoginProvider,
+  ): Promise<AuthSession> {
     const authorization =
       await this.rolesService.getRoleCodesAndPermissionsForRoles(user.roles);
     const tokens = await this.tokenService.issueTokens(
@@ -217,7 +286,7 @@ export class OAuthService {
       this.authRepository.recordLogin(
         user._id,
         user.auth.emailNormalized,
-        LoginProvider.Google,
+        provider,
         LoginStatus.Success,
         null,
         context.ipAddress,
@@ -228,7 +297,7 @@ export class OAuthService {
         userId: user._id,
         email: user.auth.emailNormalized,
         metadata: {
-          provider: LoginProvider.Google,
+          provider,
           failureReason: null,
         },
         context,

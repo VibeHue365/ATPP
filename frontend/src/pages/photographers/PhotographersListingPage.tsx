@@ -163,6 +163,9 @@ export const PhotographersListingPage: React.FC = () => {
       styleCategoryIds: readCategoryIds(params.get('styleCategoryIds')),
       eventCategoryIds: readCategoryIds(params.get('eventCategoryIds')),
       location: params.get('location') || undefined,
+      date: params.get('date') || shootDate || undefined,
+      groupSize: params.get('people') || params.get('groupSize') || groupSize || undefined,
+      timeSlot: params.get('timeSlot') || undefined,
       minPrice: readNumber(params.get('minPrice')),
       maxPrice: readNumber(params.get('maxPrice')),
       minRating: readNumber(params.get('minRating')),
@@ -411,7 +414,10 @@ export const PhotographersListingPage: React.FC = () => {
       content: (
         <CustomSelect
           value={groupSize}
-          onChange={(val) => setGroupSize(val)}
+          onChange={(val) => {
+            setGroupSize(val);
+            updateQuery({ groupSize: val || undefined, people: undefined });
+          }}
           options={[
             { value: '', label: 'Không giới hạn' },
             { value: '1', label: '1 người' },

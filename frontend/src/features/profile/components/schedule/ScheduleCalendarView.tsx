@@ -90,7 +90,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
       {/* Month Navigation */}
       <div className="lume-calendar-header-bar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <CalendarIcon size={18} color="#8B1E2D" />
+          <CalendarIcon size={18} color="#8E1B2E" />
           <h3 className="lume-calendar-month-title">
             {monthNames[month]} năm {year}
           </h3>
@@ -138,7 +138,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
         <div>Thứ 5</div>
         <div>Thứ 6</div>
         <div>Thứ 7</div>
-        <div style={{ color: '#8B1E2D' }}>Chủ Nhật</div>
+        <div style={{ color: '#8E1B2E' }}>Chủ Nhật</div>
       </div>
 
       {/* Grid Days */}
@@ -158,7 +158,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
                       width: '6px',
                       height: '6px',
                       borderRadius: '50%',
-                      backgroundColor: '#8B1E2D'
+                      backgroundColor: '#8E1B2E'
                     }}
                   />
                 )}
