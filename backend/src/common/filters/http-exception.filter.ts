@@ -21,10 +21,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const context = host.switchToHttp();
     const response = context.getResponse<Response>();
     const request = context.getRequest<Request>();
-    const statusCode =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+    let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
+    if (exception instanceof HttpException) {
+      statusCode = exception.getStatus();
+    } else if (typeof (exception as any)?.status === 'number') {
+      statusCode = (exception as any).status;
+    } else if (typeof (exception as any)?.statusCode === 'number') {
+      statusCode = (exception as any).statusCode;
+    }
     const body = this.getExceptionBody(exception);
     const message = this.normalizeMessage(body);
 
@@ -47,7 +51,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
   private getExceptionBody(exception: unknown): ErrorResponseBody {
     if (!(exception instanceof HttpException)) {
-      return { message: 'Internal server error' };
+      const err = exception as any;
+      if (err?.type === 'entity.too.large' || err?.status === 413 || err?.statusCode === 413) {
+        return {
+          statusCode: HttpStatus.PAYLOAD_TOO_LARGE,
+          message: 'Dung lượng yêu cầu quá lớn (vượt quá giới hạn cho phép).',
+        };
+      }
+      return { message: err?.message || 'Internal server error' };
     }
 
     const response = exception.getResponse();

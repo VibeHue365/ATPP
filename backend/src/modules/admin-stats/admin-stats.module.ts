@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AdminStatsController } from './admin-stats.controller';
 import { AdminStatsService } from './admin-stats.service';
+import { AdminAiAnalyticsService } from './admin-ai-analytics.service';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Provider, ProviderSchema } from '../providers/schemas/provider.schema';
 import { Product, ProductSchema } from '../products/schemas/product.schema';
@@ -10,6 +11,7 @@ import { BookingItem, BookingItemSchema } from '../bookings/schemas/booking-item
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { RefreshToken, RefreshTokenSchema } from '../auth/schemas/refresh-token.schema';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { AiModule } from '../ai/ai.module';
 import {
   ProviderVerification,
   ProviderVerificationSchema,
@@ -34,9 +36,10 @@ import { ComboPromotion, ComboPromotionSchema } from '../products/schemas/combo-
       { name: ComboPromotion.name, schema: ComboPromotionSchema },
     ]),
     AnalyticsModule,
+    AiModule,
   ],
   controllers: [AdminStatsController],
-  providers: [AdminStatsService],
-  exports: [AdminStatsService],
+  providers: [AdminStatsService, AdminAiAnalyticsService],
+  exports: [AdminStatsService, AdminAiAnalyticsService],
 })
 export class AdminStatsModule {}

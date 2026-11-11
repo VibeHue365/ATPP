@@ -477,9 +477,16 @@ export class ReviewsService {
     const reviews = await this.reviewModel
       .find({ isReported: true })
       .populate('customerId', 'profile.fullName auth.email profile.avatarUrl')
-      .populate('providerId', 'businessName partnerCode profile.avatarUrl')
+      .populate('providerId', 'businessName partnerCode media.logoUrl media.coverUrl profile.avatarUrl')
       .populate('bookingId', 'bookingCode createdAt customerId')
-      .populate('bookingItemId', 'name coverImage')
+      .populate({
+        path: 'bookingItemId',
+        select: 'name coverImage productId photographyPackageId',
+        populate: [
+          { path: 'productId', select: 'name coverImage images media' },
+          { path: 'photographyPackageId', select: 'name coverImage coverImageUrl images media' },
+        ],
+      })
       .sort({ reportedAt: -1, createdAt: -1 })
       .exec();
 

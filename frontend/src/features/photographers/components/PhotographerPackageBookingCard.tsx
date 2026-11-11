@@ -314,7 +314,7 @@ export const PhotographerPackageBookingCard: React.FC<PhotographerPackageBooking
           </div>
         )}
         <div className="ppd-booking-total__row ppd-booking-total__row--main">
-          <span>{selectedVoucher && selectedVoucher.discountAmount > 0 ? 'Tổng thanh toán cọc' : 'Tạm tính'}</span>
+          <span>{selectedVoucher && selectedVoucher.discountAmount > 0 ? 'Tổng thanh toán cọc' : ''}</span>
           <strong>{isQuoteLoading ? 'Đang tính…' : formatPrice(finalTotal)}</strong>
         </div>
       </div>

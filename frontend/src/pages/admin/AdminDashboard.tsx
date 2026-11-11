@@ -35,6 +35,7 @@ import {
   Store,
   User,
   UserCheck,
+  Brain,
 } from 'lucide-react';
 import { ROUTES } from '../../config/routes';
 import { adminDisputesApi } from '../../features/admin-disputes/api/adminDisputesApi';
@@ -62,7 +63,8 @@ type AdminTab =
   | 'reported-reviews'
   | 'policies'
   | 'users-roles'
-  | 'notifications';
+  | 'notifications'
+  | 'ai-analytics';
 
 type TabDefinition = {
   id: AdminTab;
@@ -104,6 +106,7 @@ const ReportedReviewsPanel = lazy(() => import('../../features/admin-reviews/com
 const PolicyManagement = lazy(() => import('./components/PolicyManagement').then((module) => ({ default: module.PolicyManagement })));
 const AccessControl = lazy(() => import('./components/AccessControl').then((module) => ({ default: module.AccessControl })));
 const NotificationsPage = lazy(() => import('../notifications/NotificationsPage'));
+const AiAnalyticsPanel = lazy(() => import('../../features/admin-dashboard/components/AiAnalyticsPanel').then(m => ({ default: m.AiAnalyticsPanel })));
 
 export const navGroups: NavGroupDef[] = [
   {
@@ -150,6 +153,7 @@ export const navGroups: NavGroupDef[] = [
       { id: 'policies', label: 'Cấu hình chính sách', title: 'Cấu hình Chính sách Hệ thống', icon: Settings },
       { id: 'users-roles', label: 'Tài khoản & Phân quyền', title: 'Tài khoản & Quản trị Phân quyền', icon: UserCheck },
       { id: 'behavior', label: 'Phân tích hành vi', title: 'Phân tích hành vi người dùng', icon: Activity },
+      { id: 'ai-analytics', label: 'AI Phân tích dữ liệu', title: 'Trợ lý AI Phân tích & Báo cáo', icon: Brain },
       { id: 'notifications', label: 'Thông báo hệ thống', title: 'Tất cả thông báo hệ thống', icon: Bell },
     ],
   },
@@ -239,6 +243,7 @@ function TabPanel({
     case 'reported-reviews': return <ReportedReviewsPanel />;
     case 'policies': return <PolicyManagement />;
     case 'users-roles': return <AccessControl />;
+    case 'ai-analytics': return <AiAnalyticsPanel />;
     case 'notifications': return <NotificationsPage hideBreadcrumb variant="admin" />;
   }
 }

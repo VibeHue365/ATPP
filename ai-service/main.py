@@ -10,6 +10,10 @@ from vision.clip_engine import InvalidImageError
 from vision.product_draft import draft_from_photos
 from vision.schemas import ProductDraftRequest, ProductDraftResponse, VisualMatch, VisualMatchRequest
 from vision.visual_search import match_products, start_warm_up
+from combo_suggester.schemas import ComboSuggestionRequest, ComboSuggestionResponse
+from combo_suggester.combo_engine import suggest_combo
+from admin_insights.schemas import AdminInsightsRequest, AdminInsightsResponse
+from admin_insights.insights_engine import generate_admin_insights
 
 app    = FastAPI(title="AI Style Matching", version="2.0")
 chatbot = ChatbotEngine()
@@ -53,6 +57,22 @@ def describe_product_photos(request: ProductDraftRequest):
 
 
 start_warm_up()
+
+
+@app.post("/combos/suggest", response_model=ComboSuggestionResponse)
+async def suggest_combo_endpoint(request: ComboSuggestionRequest):
+    """
+    AI hỗ trợ tạo combo từ Áo dài và Gói chụp ảnh cho Provider
+    """
+    return await suggest_combo(request)
+
+
+@app.post("/admin/analytics-insights", response_model=AdminInsightsResponse)
+async def admin_analytics_insights_endpoint(request: AdminInsightsRequest):
+    """
+    AI hỗ trợ Admin tổng hợp và phân tích dữ liệu người dùng & chất lượng shop
+    """
+    return await generate_admin_insights(request)
 
 
 async def _get_product_context(limit: int = 10) -> str:

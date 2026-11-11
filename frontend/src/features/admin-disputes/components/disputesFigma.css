@@ -324,26 +324,21 @@
   color: #e11d48;
 }
 
-/* 6. Workspace Layout (Table Left + Detail Dock Right) */
+/* 6. Workspace Layout (Table) */
 .df-workspace {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
+  display: block;
+  width: 100%;
   position: relative;
 }
 
 .df-table-container {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-.df-table-container.has-selected {
-  flex: 1.1;
 }
 
 /* Table */
@@ -603,33 +598,226 @@
 }
 
 /* ==========================================================================
-   7. Right Detail & Settlement Dock (Figma Node 323-6852)
+   7. Slide-Over Inspection Drawer (matching Product Moderation style)
    ========================================================================== */
-.df-detail-dock {
-  width: min(580px, 46vw);
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  position: sticky;
-  top: 86px;
-  max-height: calc(100vh - 106px);
-  z-index: 50;
+.df-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 998;
+  animation: dfDrawerFade 0.2s ease-out;
 }
 
-@media (max-width: 1180px) {
-  .df-detail-dock {
-    width: 100%;
-    position: relative;
-    top: 0;
-    max-height: none;
+@keyframes dfDrawerFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.df-detail-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(1080px, 95vw);
+  background: #ffffff;
+  z-index: 999;
+  box-shadow: -12px 0 45px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  animation: dfDrawerSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.df-detail-drawer.maximized {
+  width: min(1400px, 98vw);
+}
+
+@keyframes dfDrawerSlideIn {
+  from {
+    transform: translateX(100%);
   }
-  .df-workspace {
-    flex-direction: column;
+  to {
+    transform: translateX(0);
   }
+}
+
+.df-drawer-header {
+  padding: 16px 28px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.df-drawer-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.df-drawer-heading-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.df-drawer-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.df-drawer-timestamp {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.df-drawer-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.df-drawer-icon-btn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.df-drawer-icon-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.df-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+  background: #fafaf9;
+}
+
+.df-drawer-grid-2col {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .df-drawer-grid-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.df-drawer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Escrow Ribbon */
+.df-escrow-ribbon {
+  background: linear-gradient(135deg, #fff1f2 0%, #ffffff 100%);
+  border: 1px solid #fecdd3;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(190, 18, 60, 0.05);
+}
+
+.df-escrow-ribbon-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.df-escrow-ribbon-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #ffe4e6;
+  color: #be123c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.df-escrow-ribbon-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.df-escrow-ribbon-amount {
+  font-size: 20px;
+  font-weight: 800;
+  color: #be123c;
+  line-height: 1.2;
+}
+
+.df-escrow-ribbon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #be123c;
+  background: #ffffff;
+  border: 1px solid #fecdd3;
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+/* Drawer Fixed Footer */
+.df-drawer-footer {
+  padding: 14px 28px;
+  border-top: 1px solid #f1f5f9;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-shrink: 0;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.df-drawer-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.df-drawer-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 /* Dock Topbar */

@@ -25,19 +25,15 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
   onRefreshBooking
 }) => {
   const [incident, setIncident] = React.useState<any>(null);
-  const [loadingIncident, setLoadingIncident] = React.useState<boolean>(false);
   const [respondingIncident, setRespondingIncident] = React.useState<boolean>(false);
 
   const fetchIncidentDetails = React.useCallback(async () => {
     if (!booking?._id) return;
     try {
-      setLoadingIncident(true);
       const res = await httpClient.get<any>(`/api/disputes/incidents/booking/${booking._id}`);
       setIncident(res || null);
     } catch {
       setIncident(null);
-    } finally {
-      setLoadingIncident(false);
     }
   }, [booking?._id]);
 

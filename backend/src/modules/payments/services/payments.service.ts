@@ -322,60 +322,6 @@ export class PaymentsService {
       return this.paymentsRepository.findByBookingIds(bookingIds);
     } else {
       const bookings = await this.bookingModel.find({ customerId: userId });
-      for (const booking of bookings) {
-        const subTotal = booking.pricingSummary?.subTotal || 0;
-        const discount = booking.pricingSummary?.discountAmount || 0;
-        const grandTotal = booking.pricingSummary?.grandTotal || 0;
-        const storedDeposit = booking.pricingSummary?.depositTotal || 0;
-        const bookingAny = booking as any;
-        const isComboOrPhoto = booking.bookingType === 'COMBO' || booking.bookingType === 'PHOTOGRAPHY' || (bookingAny.items || []).some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
-
-        let productDepositTotal = (bookingAny.items || [])
-          .filter((i: any) => i.itemType === 'PRODUCT')
-          .reduce((sum: number, i: any) => sum + ((i.depositAmount || 0) * (i.quantity || 1)), 0);
-
-        if (productDepositTotal === 0 && isComboOrPhoto && grandTotal > 0 && subTotal > 0) {
-          const netRental = Math.max(0, subTotal - discount);
-          productDepositTotal = Math.max(0, grandTotal - netRental);
-        }
-
-        const depositTotal = (booking as any).rentalDepositRefund?.amount
-          || (isComboOrPhoto ? productDepositTotal : storedDeposit);
-
-        const disputeRefundAmount = (booking as any).disputeResult?.refundAmount || 0;
-        const cancelRefundAmount = booking.cancellation?.refundAmount || 0;
-
-        const isDepositRefundEligible = ['RETURNED', 'COMPLETED'].includes(booking.status) && depositTotal > 0 && (booking as any).rentalDepositRefund?.status !== 'NO_REFUND';
-        const isDisputeOrCancelRefund = ['CANCELLED', 'REFUNDED', 'PARTIALLY_REFUNDED', 'DISPUTED', 'COMPLETED'].includes(booking.status) && (cancelRefundAmount > 0 || disputeRefundAmount > 0);
-
-        if (isDepositRefundEligible || isDisputeOrCancelRefund) {
-          try {
-            const existingRefund = await this.bookingModel.db
-              .model('Payment')
-              .findOne({
-                bookingId: booking._id,
-                purpose: PaymentPurpose.DepositRefund,
-              })
-              .exec();
-            if (!existingRefund) {
-              const amountToRefund = isDepositRefundEligible
-                ? depositTotal
-                : cancelRefundAmount > 0
-                  ? cancelRefundAmount
-                  : disputeRefundAmount;
-              if (amountToRefund > 0) {
-                await this.refundDeposit(
-                  booking._id.toString(),
-                  amountToRefund,
-                );
-              }
-            }
-          } catch (e) {
-            this.logger.error(`Error auto-generating refund for booking ${booking.bookingCode}: ${e}`);
-          }
-        }
-      }
-
       const bookingIds = bookings.map((b) => b._id);
       return this.paymentsRepository.findByBookingIds(bookingIds);
     }

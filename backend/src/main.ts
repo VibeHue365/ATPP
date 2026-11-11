@@ -18,11 +18,11 @@ async function bootstrap() {
     origin: allowedCorsOrigins(),
     credentials: true,
   });
-  app.use(express.json({ limit: process.env.BODY_LIMIT ?? '1mb' }));
+  app.use(express.json({ limit: process.env.BODY_LIMIT ?? '10mb' }));
   app.use(
     express.urlencoded({
       extended: true,
-      limit: process.env.BODY_LIMIT ?? '1mb',
+      limit: process.env.BODY_LIMIT ?? '10mb',
     }),
   );
   app.use(cookieParser());

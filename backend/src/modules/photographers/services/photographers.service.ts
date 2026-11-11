@@ -37,28 +37,33 @@ export class PhotographersService {
     void this.getPublicPhotographers().catch(() => undefined);
   }
 
-  private publicPhotographersCache?: {
+  private static publicPhotographersCache?: {
     value: Record<string, unknown>[];
     expiresAt: number;
   };
-  private publicPhotographersInFlight?: Promise<Record<string, unknown>[]>;
+  private static publicPhotographersInFlight?: Promise<Record<string, unknown>[]>;
+
+  static clearPublicCache(): void {
+    PhotographersService.publicPhotographersCache = undefined;
+    PhotographersService.publicPhotographersInFlight = undefined;
+  }
 
   private async getPublicPhotographers(): Promise<Record<string, unknown>[]> {
     const now = Date.now();
-    if (this.publicPhotographersCache && this.publicPhotographersCache.expiresAt > now) {
-      return this.publicPhotographersCache.value;
+    if (PhotographersService.publicPhotographersCache && PhotographersService.publicPhotographersCache.expiresAt > now) {
+      return PhotographersService.publicPhotographersCache.value;
     }
-    if (this.publicPhotographersInFlight) return this.publicPhotographersInFlight;
+    if (PhotographersService.publicPhotographersInFlight) return PhotographersService.publicPhotographersInFlight;
 
-    this.publicPhotographersInFlight = this.loadPublicPhotographers()
+    PhotographersService.publicPhotographersInFlight = this.loadPublicPhotographers()
       .then((value) => {
-        this.publicPhotographersCache = { value, expiresAt: Date.now() + 120_000 };
+        PhotographersService.publicPhotographersCache = { value, expiresAt: Date.now() + 120_000 };
         return value;
       })
       .finally(() => {
-        this.publicPhotographersInFlight = undefined;
+        PhotographersService.publicPhotographersInFlight = undefined;
       });
-    return this.publicPhotographersInFlight;
+    return PhotographersService.publicPhotographersInFlight;
   }
   
   async findAll(query: PhotographerDiscoveryQueryDto = {}) {
@@ -186,7 +191,7 @@ export class PhotographersService {
 
   async findOne(id: string): Promise<any> {
     if (!Types.ObjectId.isValid(id)) {
-      throw new NotFoundException('ID nhiáº¿p áº£nh gia khÃ´ng há»£p lá»‡');
+      throw new NotFoundException('ID nhiếp ảnh gia không hợp lệ');
     }
     const photographer = await this.providerModel.findOne({
       _id: new Types.ObjectId(id),
@@ -194,7 +199,7 @@ export class PhotographersService {
       status: ProviderStatus.Active,
     }).exec();
     if (!photographer) {
-      throw new NotFoundException(`KhÃ´ng tÃ¬m tháº¥y nhiáº¿p áº£nh gia vá»›i ID: ${id}`);
+      throw new NotFoundException(`Không tìm thấy nhiếp ảnh gia với ID: ${id}`);
     }
 
     const packages = await this.packageModel
@@ -210,14 +215,14 @@ export class PhotographersService {
     );
     const portfolioItems = publicPhotographer.portfolioItems as unknown[];
     if (packages.length === 0 && portfolioItems.length === 0) {
-      throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhiáº¿p áº£nh gia cÃ´ng khai');
+      throw new NotFoundException('Không tìm thấy nhiếp ảnh gia công khai');
     }
     return publicPhotographer;
   }
 
   async findPackages(providerId: string): Promise<PhotographyPackage[]> {
     if (!Types.ObjectId.isValid(providerId)) {
-      throw new NotFoundException('ID nhÃ  cung cáº¥p khÃ´ng há»£p lá»‡');
+      throw new NotFoundException('ID nhà cung cấp không hợp lệ');
     }
     const photographer = await this.providerModel.exists({
       _id: new Types.ObjectId(providerId),
@@ -238,7 +243,7 @@ export class PhotographersService {
     timeRanges: Array<{ start: string; end: string }>;
   }> {
     if (!Types.ObjectId.isValid(providerId) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      throw new NotFoundException('ThÃ´ng tin lá»‹ch lÃ m viá»‡c khÃ´ng há»£p lá»‡');
+      throw new NotFoundException('Thông tin lịch làm việc không hợp lệ');
     }
 
     const photographer = await this.providerModel.findOne({
@@ -247,12 +252,12 @@ export class PhotographersService {
       status: ProviderStatus.Active,
     });
     if (!photographer) {
-      throw new NotFoundException('KhÃ´ng tÃ¬m tháº¥y nhiáº¿p áº£nh gia Ä‘ang hoáº¡t Ä‘á»™ng');
+      throw new NotFoundException('Không tìm thấy nhiếp ảnh gia đang hoạt động');
     }
 
     const selectedDate = new Date(`${date}T00:00:00`);
     if (Number.isNaN(selectedDate.getTime())) {
-      throw new NotFoundException('ThÃ´ng tin lá»‹ch lÃ m viá»‡c khÃ´ng há»£p lá»‡');
+      throw new NotFoundException('Thông tin lịch làm việc không hợp lệ');
     }
 
     const specificSchedule = await this.providerScheduleModel.findOne({
@@ -477,11 +482,13 @@ export class PhotographersService {
     }
 
     if (query.q) {
+      const packageTexts = packages.map((pkg: any) => `${pkg.name ?? ''} ${pkg.description ?? ''}`);
       const searchableText = [
         businessName,
         address?.city ?? '',
         address?.district ?? '',
         ...concepts.map((badge) => badge.label ?? ''),
+        ...packageTexts,
       ]
         .map((value) => this.normalizeText(value))
         .join(' ');

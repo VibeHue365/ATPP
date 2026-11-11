@@ -41,11 +41,28 @@ export interface ReportedReview {
     _id?: string;
     name?: string;
     coverImage?: string;
+    productId?: {
+      _id?: string;
+      name?: string;
+      coverImage?: string;
+      images?: string[];
+    };
+    photographyPackageId?: {
+      _id?: string;
+      name?: string;
+      coverImage?: string;
+      coverImageUrl?: string;
+    };
   };
   providerId?: {
     _id?: string;
     businessName?: string;
     partnerCode?: string;
+    media?: {
+      logoUrl?: string;
+      coverUrl?: string;
+      images?: string[];
+    };
     profile?: {
       avatarUrl?: string;
     };
