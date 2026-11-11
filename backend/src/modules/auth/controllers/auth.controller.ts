@@ -172,14 +172,14 @@ export class AuthController {
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>LUMÉ</title>
+    <title>TàGo</title>
   </head>
   <body style="background:#FAF7F2;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;box-sizing:border-box;">
     <div style="background:#fff;padding:32px 24px;border-radius:18px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,0.06);max-width:340px;width:100%;">
-      <h2 style="color:#5B0114;margin:0 0 12px;font-family:serif;font-size:26px;letter-spacing:1px;">LUMÉ</h2>
+      <h2 style="color:#BA0049;margin:0 0 12px;font-family:serif;font-size:26px;letter-spacing:1px;">TàGo</h2>
       <p style="color:#2D2D2D;font-weight:600;font-size:15px;margin:0 0 8px;">Đăng nhập Google thành công!</p>
-      <p style="color:#777;font-size:13px;margin:0 0 20px;line-height:1.5;">Đang quay lại ứng dụng LUMÉ...</p>
-      <a href="${finalUrl}" style="display:block;background:#5B0114;color:#fff;text-decoration:none;padding:12px;border-radius:10px;font-weight:600;font-size:14px;">Mở ứng dụng LUMÉ</a>
+      <p style="color:#777;font-size:13px;margin:0 0 20px;line-height:1.5;">Đang quay lại ứng dụng TàGo...</p>
+      <a href="${finalUrl}" style="display:block;background:#BA0049;color:#fff;text-decoration:none;padding:12px;border-radius:10px;font-weight:600;font-size:14px;">Mở ứng dụng TàGo</a>
     </div>
     <script>
       window.location.href = ${JSON.stringify(finalUrl)};

@@ -149,28 +149,15 @@ export default function RegisterScreen() {
     }
 
     try {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:3000';
+      let apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+      if (Platform.OS === 'android' && (apiUrl.includes('10.0.2.2') || apiUrl.includes('127.0.0.1'))) {
+        apiUrl = 'http://localhost:3000';
+      }
       const redirectUri = Linking.createURL('/oauth/callback');
       const authUrl = `${apiUrl}/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-      if (result.type === 'success' && result.url) {
-        const match = result.url.match(/[?&]code=([^&#]+)/);
-        const code = match ? decodeURIComponent(match[1]) : null;
-        if (code) {
-          const loggedInUser = await loginWithOAuthCode(code);
-          const destination = safeReturnTo(returnTo);
-          if (loggedInUser.hasCompletedOnboarding === false) {
-            router.replace({
-              pathname: '/preferences',
-              params: { onboarding: '1', returnTo: String(destination) },
-            } as unknown as Href);
-            return;
-          }
-          router.replace(destination);
-        }
-      }
+      await Linking.openURL(authUrl);
     } catch (cause) {
-      setError(getApiErrorMessage(cause, 'Không thể kết nối Google.'));
+      setError(getApiErrorMessage(cause, 'Không thể mở trình duyệt đăng ký Google.'));
     } finally {
       setGoogleLoading(false);
     }
@@ -472,7 +459,11 @@ export default function RegisterScreen() {
             onPress={() => void handleGoogleRegister()}
             disabled={loading || googleLoading}
           >
-            <Ionicons name="logo-google" size={18} color="#EA4335" />
+            <Image
+              source={require('@/assets/images/google-logo.png')}
+              style={styles.googleIcon}
+              resizeMode="contain"
+            />
             <Text style={styles.googleBtnText}>
               {googleLoading ? 'Đang kết nối Google...' : 'Tiếp tục với Google'}
             </Text>
@@ -938,6 +929,10 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodySemiBold,
     fontSize: 13.5,
     color: '#1B1C1C',
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
   },
   escrowCard: {
     marginTop: 16,

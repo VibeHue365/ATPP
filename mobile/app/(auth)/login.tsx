@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import { type Href, router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -16,7 +16,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
 import { FontFamily } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage } from '@/utils/apiError';
@@ -34,13 +33,6 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const [, response] = Google.useIdTokenAuthRequest({
-    clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    selectAccount: true,
-  });
 
   const navigateAfterLogin = (loggedInUser: SessionUser) => {
     const rolesUpper = (loggedInUser.roles ?? []).map((r) => String(r).toUpperCase());
@@ -71,19 +63,6 @@ export default function LoginScreen() {
       setGoogleLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const idToken =
-        response.params?.id_token ||
-        (response as { authentication?: { idToken?: string } })?.authentication?.idToken;
-      if (idToken) {
-        void handleAuthToken(idToken);
-      }
-    } else if (response?.type === 'error') {
-      setError(response.error?.message || 'Đăng nhập bằng Google không thành công.');
-    }
-  }, [response]);
 
   const submit = async () => {
     if (!/^\S+@\S+\.\S+$/.test(email.trim()) || !password) {
@@ -145,22 +124,15 @@ export default function LoginScreen() {
     }
 
     try {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:3000';
+      let apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+      if (Platform.OS === 'android' && (apiUrl.includes('10.0.2.2') || apiUrl.includes('127.0.0.1'))) {
+        apiUrl = 'http://localhost:3000';
+      }
       const redirectUri = Linking.createURL('/oauth/callback');
       const authUrl = `${apiUrl}/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-
-      if (result.type === 'success' && result.url) {
-        const match = result.url.match(/[?&]code=([^&#]+)/);
-        const code = match ? decodeURIComponent(match[1]) : null;
-        if (code) {
-          await handleOAuthCodeExchange(code);
-        } else {
-          setError('Không nhận được mã xác thực từ Google.');
-        }
-      }
+      await Linking.openURL(authUrl);
     } catch (cause: unknown) {
-      setError(getApiErrorMessage(cause, 'Không thể mở hộp thoại đăng nhập Google.'));
+      setError(getApiErrorMessage(cause, 'Không thể mở trình duyệt đăng nhập Google.'));
     } finally {
       setGoogleLoading(false);
     }
@@ -364,7 +336,11 @@ export default function LoginScreen() {
                 onPress={() => void handleGoogleLogin()}
                 disabled={loading || googleLoading}
               >
-                <Ionicons name="logo-google" size={18} color="#EA4335" />
+                <Image
+                  source={require('@/assets/images/google-logo.png')}
+                  style={styles.googleIcon}
+                  resizeMode="contain"
+                />
                 <Text style={styles.googleBtnText}>
                   {googleLoading ? 'Đang kết nối Google...' : 'Đăng nhập bằng Google'}
                 </Text>
@@ -753,6 +729,10 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodySemiBold,
     fontSize: 13.5,
     color: '#1B1C1C',
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
   },
   unverifiedNoticeWrap: {
     alignItems: 'center',

@@ -7,13 +7,22 @@ import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function OAuthCallbackScreen() {
   const { code, error: queryError } = useLocalSearchParams<{ code?: string; error?: string }>();
-  const { loginWithOAuthCode } = useAuth();
+  const { user, loginWithOAuthCode } = useAuth();
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     let active = true;
 
     async function handleExchange() {
+      if (user) {
+        if (user.hasCompletedOnboarding === false) {
+          router.replace('/preferences');
+        } else {
+          router.replace('/(tabs)');
+        }
+        return;
+      }
+
       if (queryError) {
         if (active) setErrorMessage('Đăng nhập Google thất bại hoặc bị hủy.');
         return;
@@ -35,6 +44,10 @@ export default function OAuthCallbackScreen() {
         }
       } catch (err: any) {
         if (active) {
+          if (user) {
+            router.replace('/(tabs)');
+            return;
+          }
           setErrorMessage(getApiErrorMessage(err, 'Đăng nhập Google không thành công.'));
         }
       }
@@ -45,7 +58,7 @@ export default function OAuthCallbackScreen() {
     return () => {
       active = false;
     };
-  }, [code, queryError, loginWithOAuthCode]);
+  }, [code, queryError, loginWithOAuthCode, user]);
 
   return (
     <View style={styles.container}>
@@ -59,7 +72,7 @@ export default function OAuthCallbackScreen() {
         </>
       ) : (
         <>
-          <ActivityIndicator size="large" color="#5B0114" />
+          <ActivityIndicator size="large" color="#BA0049" />
           <Text style={styles.title}>Đang xử lý đăng nhập Google...</Text>
           <Text style={styles.desc}>Vui lòng chờ trong giây lát</Text>
         </>
