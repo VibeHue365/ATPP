@@ -1045,6 +1045,41 @@ export default function CustomerHomeScreen() {
               </View>
             )}
 
+            {/* FEATURE BANNER: Thử Cổ Phục Ảo Bằng AI (Virtual Try-On) */}
+            <View style={styles.aiBannerContainer}>
+              <Pressable
+                style={styles.aiBannerCard}
+                onPress={() => router.push('/virtual-tryon' as Href)}
+              >
+                <View style={styles.aiBannerDecorCircle} />
+                <View style={styles.aiBannerContentCol}>
+                  <View style={styles.aiBannerBadge}>
+                    <MaterialIcons name="auto-awesome" size={11} color="#FFD9DE" />
+                    <Text style={styles.aiBannerBadgeText}>CÔNG NGHỆ ĐỘT PHÁ</Text>
+                  </View>
+                  <Text style={styles.aiBannerHeading}>Thử Cổ Phục Ảo AI</Text>
+                  <Text style={styles.aiBannerSubtext} numberOfLines={2}>
+                    Tải ảnh chân dung và ướm thử ngay Nhật Bình, Áo Tấc lên người chỉ trong 3 giây.
+                  </Text>
+                  <View style={styles.aiBannerBtn}>
+                    <Text style={styles.aiBannerBtnText}>Thử đồ ngay</Text>
+                    <Ionicons name="sparkles" size={12} color="#BA0049" />
+                  </View>
+                </View>
+                <View style={styles.aiBannerImageWrap}>
+                  <Image
+                    source={require('@/assets/images/hero-gam-moi-v2.webp')}
+                    style={styles.aiBannerImage}
+                    contentFit="cover"
+                  />
+                  <View style={styles.aiBannerFloatingPill}>
+                    <MaterialIcons name="camera-alt" size={10} color="#FFFFFF" />
+                    <Text style={styles.aiBannerFloatingPillText}>AI Fitting</Text>
+                  </View>
+                </View>
+              </Pressable>
+            </View>
+
             {/* SECTION 6: Combo Trọn Gói Nổi Bật (100% Real Combos from /combo-promotions/public) */}
             {combos.length > 0 && (
               <View style={styles.sectionContainer}>
@@ -1194,7 +1229,11 @@ export default function CustomerHomeScreen() {
                   </Text>
                 </View>
               ) : (
-                <View style={styles.photographerStack}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.horizontalCardsScroll}
+                >
                   {photographers.map((photographer: Photographer) => {
                     const name = photographer.businessName || 'Studio Nhiếp Ảnh';
                     const avgRating = photographer.rating?.averageRating;
@@ -1208,9 +1247,9 @@ export default function CustomerHomeScreen() {
 
                     // Collect all valid image URLs through getMediaUrl()
                     const rawPortfolioList: Array<string | undefined | null> = [
-                      ...(photographer.defaultPackage?.images ?? []),
                       photographer.coverImage,
                       photographer.media?.coverUrl,
+                      ...(photographer.defaultPackage?.images ?? []),
                       ...(photographer.media?.images ?? []),
                       ...(photographer.portfolio ?? []),
                     ];
@@ -1237,8 +1276,11 @@ export default function CustomerHomeScreen() {
                       }
                     });
 
-                    const avatarUri = uniqueResolvedImages[0];
-                    const previewThumbs = uniqueResolvedImages.slice(0, 3);
+                    const heroImageUri = uniqueResolvedImages[0] || null;
+                    const avatarUri =
+                      uniqueResolvedImages.length > 1
+                        ? uniqueResolvedImages[1]
+                        : uniqueResolvedImages[0] || null;
 
                     const locationTag =
                       photographer.address?.district ||
@@ -1250,125 +1292,325 @@ export default function CustomerHomeScreen() {
                     return (
                       <Pressable
                         key={photographer._id}
-                        style={styles.photographerCard}
+                        style={styles.photographerHCard}
                         onPress={() => router.push(`/photographer/${photographer._id}`)}
                       >
-                        <View style={styles.photographerTopRow}>
-                          <View style={styles.photographerLeftRow}>
-                            <View style={styles.photographerAvatarWrap}>
+                        {/* Top Hero Banner */}
+                        <View style={styles.photographerHImageWrap}>
+                          {heroImageUri ? (
+                            <Image
+                              source={heroImageUri}
+                              style={styles.photographerHImage}
+                              contentFit="cover"
+                              transition={180}
+                            />
+                          ) : (
+                            <View style={[styles.photographerHImage, styles.placeholderCenter]}>
+                              <Ionicons name="camera" size={32} color="#BA0049" />
+                            </View>
+                          )}
+                          <View style={styles.photoSpotGradientOverlay} />
+
+                          {/* Floating Rating Badge */}
+                          <View style={styles.photographerHRatingBadge}>
+                            <Ionicons name="star" size={11} color="#F59E0B" />
+                            <Text style={styles.photographerHRatingText}>
+                              {avgRating !== undefined && avgRating > 0 ? avgRating.toFixed(1) : '5.0'}
+                            </Text>
+                            <Text style={styles.photographerHReviewCountText}>
+                              ({totalReviews})
+                            </Text>
+                          </View>
+
+                          {/* Floating Location / Package Chip */}
+                          {locationTag ? (
+                            <View style={styles.photographerHLocationBadge}>
+                              <Ionicons name="location-sharp" size={10} color="#BA0049" />
+                              <Text style={styles.photographerHLocationText} numberOfLines={1}>
+                                {locationTag}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+
+                        {/* Card Body */}
+                        <View style={styles.photographerHBody}>
+                          <View style={styles.photographerHHeaderRow}>
+                            <View style={styles.photographerHAvatarWrap}>
                               {avatarUri ? (
                                 <Image
                                   source={avatarUri}
-                                  style={styles.photographerAvatar}
+                                  style={styles.photographerHAvatar}
                                   contentFit="cover"
                                   transition={180}
                                 />
                               ) : (
                                 <View
-                                  style={[styles.photographerAvatar, styles.placeholderCenter]}
+                                  style={[styles.photographerHAvatar, styles.placeholderCenter]}
                                 >
-                                  <Ionicons name="camera" size={20} color="#BA0049" />
+                                  <Ionicons name="camera" size={16} color="#BA0049" />
                                 </View>
                               )}
                               {photographer.isBookable !== false && (
-                                <View style={styles.photographerOnlineDot} />
+                                <View style={styles.photographerHOnlineDot} />
                               )}
                             </View>
-                            <View style={styles.photographerMetaCol}>
-                              <View style={styles.photographerNameRow}>
-                                <Text style={styles.photographerName} numberOfLines={1}>
-                                  {name}
-                                </Text>
-                                {photographer.activePackageCount ? (
-                                  <View style={styles.photographerRoleBadge}>
-                                    <Text style={styles.photographerRoleBadgeText}>
-                                      {photographer.activePackageCount} gói
-                                    </Text>
-                                  </View>
-                                ) : null}
-                              </View>
-                              <View style={styles.photographerStatsRow}>
-                                {avgRating !== undefined && avgRating > 0 ? (
-                                  <>
-                                    <Ionicons name="star" size={13} color="#F59E0B" />
-                                    <Text style={styles.photographerRatingText}>
-                                      {avgRating.toFixed(1)}
-                                    </Text>
-                                    <Text style={styles.photographerDotSep}>•</Text>
-                                  </>
-                                ) : null}
-                                <Text style={styles.photographerMetaText}>
-                                  {totalReviews} đánh giá
-                                </Text>
-                                {defaultPkg?.name ? (
-                                  <>
-                                    <Text style={styles.photographerDotSep}>•</Text>
-                                    <Text
-                                      style={styles.photographerSpecialtyText}
-                                      numberOfLines={1}
-                                    >
-                                      {defaultPkg.name}
-                                    </Text>
-                                  </>
-                                ) : null}
-                              </View>
-                            </View>
-                          </View>
 
-                          {locationTag ? (
-                            <View style={styles.styleToneChip}>
-                              <Text style={styles.styleToneChipText}>{locationTag}</Text>
-                            </View>
-                          ) : null}
-                        </View>
-
-                        {/* Real Portfolio Preview (1, 2, or 3 images cleanly formatted) */}
-                        {previewThumbs.length > 0 ? (
-                          <View style={styles.portfolioGrid}>
-                            {previewThumbs.map((imgUri, pIdx) => (
-                              <Image
-                                key={`${photographer._id}-port-${pIdx}`}
-                                source={imgUri}
-                                style={[
-                                  styles.portfolioThumb,
-                                  previewThumbs.length === 1 && styles.portfolioThumbSingle,
-                                ]}
-                                contentFit="cover"
-                                transition={180}
-                              />
-                            ))}
-                          </View>
-                        ) : photographer.quote ? (
-                          <Text style={styles.photographerQuoteText} numberOfLines={2}>
-                            “{photographer.quote}”
-                          </Text>
-                        ) : null}
-
-                        <View style={styles.photographerFooterRow}>
-                          <View>
-                            <Text style={styles.priceLabelSmall}>Chỉ từ</Text>
-                            <View style={styles.priceValueRow}>
-                              <Text style={styles.aoDaiPriceText}>
-                                {price > 0 ? formatVND(price) : 'Liên hệ'}
+                            <View style={styles.photographerHMetaCol}>
+                              <Text style={styles.photographerHName} numberOfLines={1}>
+                                {name}
                               </Text>
-                              {price > 0 && (
-                                <Text style={styles.priceUnitText}> {durationLabel}</Text>
-                              )}
+                              <Text style={styles.photographerHSpecialty} numberOfLines={1}>
+                                {defaultPkg?.name ||
+                                  (photographer.activePackageCount
+                                    ? `${photographer.activePackageCount} gói chụp sẵn sàng`
+                                    : 'Nhiếp ảnh gia chuyên nghiệp')}
+                              </Text>
                             </View>
                           </View>
-                          <Pressable
-                            style={styles.photographerBookBtn}
-                            onPress={() => router.push(`/photographer/${photographer._id}`)}
-                          >
-                            <MaterialIcons name="event-available" size={14} color="#FFFFFF" />
-                            <Text style={styles.photographerBookBtnText}>Xem lịch trống</Text>
-                          </Pressable>
+
+                          {/* Footer with Price and CTA */}
+                          <View style={styles.photographerHFooterRow}>
+                            <View style={styles.photographerHPriceCol}>
+                              <Text style={styles.priceLabelSmall}>Chỉ từ</Text>
+                              <View style={styles.priceValueRow}>
+                                <Text style={styles.photographerHPriceText}>
+                                  {price > 0 ? formatVND(price) : 'Liên hệ'}
+                                </Text>
+                                {price > 0 && (
+                                  <Text style={styles.priceUnitText}> {durationLabel}</Text>
+                                )}
+                              </View>
+                            </View>
+
+                            <View style={styles.photographerHBookBtn}>
+                              <Text style={styles.photographerHBookBtnText}>Xem lịch</Text>
+                              <Ionicons name="chevron-forward" size={11} color="#FFFFFF" />
+                            </View>
+                          </View>
                         </View>
                       </Pressable>
                     );
                   })}
-                </View>
+
+                  {/* End Card: View All */}
+                  <Pressable
+                    style={styles.photographerSeeAllCard}
+                    onPress={() => router.push('/(tabs)/photography')}
+                  >
+                    <View style={styles.photographerSeeAllCircle}>
+                      <Ionicons name="arrow-forward" size={20} color="#BA0049" />
+                    </View>
+                    <Text style={styles.photographerSeeAllTitle}>Xem tất cả</Text>
+                    <Text style={styles.photographerSeeAllSubtitle}>
+                      {photographers.length > 0
+                        ? `${photographers.length}+ thợ ảnh & studio`
+                        : 'Khám phá thêm'}
+                    </Text>
+                  </Pressable>
+                </ScrollView>
               )}
+            </View>
+
+            {/* SECTION 8: Quy trình 3 bước trải nghiệm VibeHue (How It Works) */}
+            <View style={styles.sectionContainer}>
+              <View style={styles.sectionHeaderRow}>
+                <View style={styles.sectionTitleWrap}>
+                  <View style={styles.titleWithBadgeRow}>
+                    <Text style={styles.sectionHeading}>Trải Nghiệm Dễ Dàng</Text>
+                    <View style={styles.howItWorksBadge}>
+                      <Ionicons name="sparkles" size={11} color="#BA0049" />
+                      <Text style={styles.howItWorksBadgeText}>3 Bước</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.sectionSubheading}>
+                    Sở hữu bộ ảnh kỷ niệm Cố Đô trọn vẹn chỉ trong vài thao tác
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.howItWorksCardList}>
+                <View style={styles.howItWorksCard}>
+                  <View style={styles.howItWorksStepNumber}>
+                    <Text style={styles.howItWorksStepText}>1</Text>
+                  </View>
+                  <View style={styles.howItWorksIconWrap}>
+                    <MaterialCommunityIcons name="hanger" size={22} color="#BA0049" />
+                  </View>
+                  <View style={styles.howItWorksContent}>
+                    <Text style={styles.howItWorksCardTitle}>Chọn Cổ Phục & Concept</Text>
+                    <Text style={styles.howItWorksCardDesc}>
+                      Hàng trăm mẫu áo Nhật Bình, Ngũ Thân chuẩn phom từ các tiệm TàGo uy tín.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.howItWorksCard}>
+                  <View style={styles.howItWorksStepNumber}>
+                    <Text style={styles.howItWorksStepText}>2</Text>
+                  </View>
+                  <View style={styles.howItWorksIconWrap}>
+                    <Ionicons name="camera" size={22} color="#BA0049" />
+                  </View>
+                  <View style={styles.howItWorksContent}>
+                    <Text style={styles.howItWorksCardTitle}>Ghép Thợ Ảnh Hợp Gu</Text>
+                    <Text style={styles.howItWorksCardDesc}>
+                      Xem trước portfolio thực tế, so sánh giá minh bạch và đặt lịch giữ cọc an toàn.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.howItWorksCard}>
+                  <View style={styles.howItWorksStepNumber}>
+                    <Text style={styles.howItWorksStepText}>3</Text>
+                  </View>
+                  <View style={styles.howItWorksIconWrap}>
+                    <MaterialCommunityIcons
+                      name="image-multiple-outline"
+                      size={22}
+                      color="#BA0049"
+                    />
+                  </View>
+                  <View style={styles.howItWorksContent}>
+                    <Text style={styles.howItWorksCardTitle}>Check-in & Nhận Ảnh Đẹp</Text>
+                    <Text style={styles.howItWorksCardDesc}>
+                      Thợ hỗ trợ tạo dáng nhiệt tình tại điểm chụp, nhận ảnh chỉnh sửa chu đáo đúng hẹn.
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* SECTION 9: Khoảnh Khắc Cố Đô (Customer Stories & Testimonials) */}
+            <View style={[styles.sectionContainer, styles.customerStoriesContainer]}>
+              <View style={styles.sectionHeaderRow}>
+                <View style={styles.sectionTitleWrap}>
+                  <View style={styles.titleWithBadgeRow}>
+                    <Text style={styles.sectionHeading}>Khoảnh Khắc Cố Đô</Text>
+                    <View style={styles.storiesRatingPill}>
+                      <Ionicons name="star" size={11} color="#F59E0B" />
+                      <Text style={styles.storiesRatingPillText}>4.9/5</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.sectionSubheading}>
+                    Hình ảnh & cảm nhận thực tế từ khách hàng đã trải nghiệm cùng VibeHue
+                  </Text>
+                </View>
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalCardsScroll}
+              >
+                {/* Story 1 */}
+                <View style={styles.storyCard}>
+                  <View style={styles.storyImageWrap}>
+                    <Image
+                      source={require('@/assets/images/hero-silk-stone-v2.webp')}
+                      style={styles.storyImage}
+                      contentFit="cover"
+                      transition={180}
+                    />
+                    <View style={styles.storyLocationPill}>
+                      <Ionicons name="location-sharp" size={10} color="#BA0049" />
+                      <Text style={styles.storyLocationText}>Lăng Khải Định</Text>
+                    </View>
+                  </View>
+                  <View style={styles.storyBody}>
+                    <View style={styles.storyRatingRow}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Ionicons key={`s1-${s}`} name="star" size={12} color="#F59E0B" />
+                      ))}
+                      <Text style={styles.storyConceptTag}>Nhật Bình TàGo</Text>
+                    </View>
+                    <Text style={styles.storyFeedbackText} numberOfLines={3}>
+                      “Trải nghiệm vượt kỳ vọng! Áo thơm tho sạch sẽ, anh thợ chỉ góc chụp không đụng hàng ai luôn.”
+                    </Text>
+                    <View style={styles.storyAuthorRow}>
+                      <View style={styles.storyAuthorAvatarPlaceholder}>
+                        <Text style={styles.storyAuthorAvatarText}>NM</Text>
+                      </View>
+                      <View style={styles.storyAuthorMeta}>
+                        <Text style={styles.storyAuthorName}>Ngọc Mai & Bạn</Text>
+                        <Text style={styles.storyAuthorOrigin}>Du khách Hà Nội</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Story 2 */}
+                <View style={styles.storyCard}>
+                  <View style={styles.storyImageWrap}>
+                    <Image
+                      source={require('@/assets/images/hero-hue-heritage-v2.webp')}
+                      style={styles.storyImage}
+                      contentFit="cover"
+                      transition={180}
+                    />
+                    <View style={styles.storyLocationPill}>
+                      <Ionicons name="location-sharp" size={10} color="#BA0049" />
+                      <Text style={styles.storyLocationText}>Đại Nội Huế</Text>
+                    </View>
+                  </View>
+                  <View style={styles.storyBody}>
+                    <View style={styles.storyRatingRow}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Ionicons key={`s2-${s}`} name="star" size={12} color="#F59E0B" />
+                      ))}
+                      <Text style={styles.storyConceptTag}>Áo Tấc Cung Đình</Text>
+                    </View>
+                    <Text style={styles.storyFeedbackText} numberOfLines={3}>
+                      “Lần đầu đi Huế chụp ảnh mà ưng bụng ghê gớm. Đặt combo qua app vừa tiện vừa tiết kiệm 15%.”
+                    </Text>
+                    <View style={styles.storyAuthorRow}>
+                      <View style={styles.storyAuthorAvatarPlaceholder}>
+                        <Text style={styles.storyAuthorAvatarText}>MT</Text>
+                      </View>
+                      <View style={styles.storyAuthorMeta}>
+                        <Text style={styles.storyAuthorName}>Minh Trang</Text>
+                        <Text style={styles.storyAuthorOrigin}>Du khách TP.HCM</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Story 3 */}
+                <View style={styles.storyCard}>
+                  <View style={styles.storyImageWrap}>
+                    <Image
+                      source={require('@/assets/images/hero-gam-moi-v2.webp')}
+                      style={styles.storyImage}
+                      contentFit="cover"
+                      transition={180}
+                    />
+                    <View style={styles.storyLocationPill}>
+                      <Ionicons name="location-sharp" size={10} color="#BA0049" />
+                      <Text style={styles.storyLocationText}>Cung An Định</Text>
+                    </View>
+                  </View>
+                  <View style={styles.storyBody}>
+                    <View style={styles.storyRatingRow}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Ionicons key={`s3-${s}`} name="star" size={12} color="#F59E0B" />
+                      ))}
+                      <Text style={styles.storyConceptTag}>Ảnh Gia Đình</Text>
+                    </View>
+                    <Text style={styles.storyFeedbackText} numberOfLines={3}>
+                      “Cả nhà 4 người chụp rất vui vẻ. Thợ kiên nhẫn với các bé nhỏ, màu ảnh cổ kính sang trọng.”
+                    </Text>
+                    <View style={styles.storyAuthorRow}>
+                      <View style={styles.storyAuthorAvatarPlaceholder}>
+                        <Text style={styles.storyAuthorAvatarText}>TH</Text>
+                      </View>
+                      <View style={styles.storyAuthorMeta}>
+                        <Text style={styles.storyAuthorName}>Gia đình chị Hằng</Text>
+                        <Text style={styles.storyAuthorOrigin}>Du khách Đà Nẵng</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </ScrollView>
             </View>
           </>
         )}
@@ -2314,14 +2556,387 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#5F5E5E',
   },
-  photographerStack: {
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  photographerCard: {
+  /* Photographer Carousel */
+  photographerHCard: {
+    width: 268,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(227, 190, 195, 0.35)',
+    shadowColor: '#1B1C1C',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  photographerHImageWrap: {
+    width: '100%',
+    height: 154,
+    position: 'relative',
+    backgroundColor: '#EFEDED',
+  },
+  photographerHImage: {
+    width: '100%',
+    height: '100%',
+  },
+  photographerHRatingBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(27, 28, 28, 0.72)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  photographerHRatingText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11,
+    color: '#FFFFFF',
+  },
+  photographerHReviewCountText: {
+    fontFamily: FontFamily.body,
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  photographerHLocationBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    maxWidth: 120,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  photographerHLocationText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: 10,
+    color: '#1B1C1C',
+  },
+  photographerHBody: {
+    padding: 12,
+    gap: 8,
+  },
+  photographerHHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  photographerHAvatarWrap: {
+    position: 'relative',
+  },
+  photographerHAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#EFEDED',
+    borderWidth: 1.5,
+    borderColor: '#FFD9DE',
+  },
+  photographerHOnlineDot: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#10B981',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  photographerHMetaCol: {
+    flex: 1,
+  },
+  photographerHName: {
+    fontFamily: FontFamily.display,
+    fontSize: 14,
+    color: '#1B1C1C',
+  },
+  photographerHSpecialty: {
+    fontFamily: FontFamily.body,
+    fontSize: 11,
+    color: '#7E7677',
+    marginTop: 1,
+  },
+  photographerHFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(227, 190, 195, 0.22)',
+  },
+  photographerHPriceCol: {
+    flex: 1,
+    marginRight: 6,
+  },
+  photographerHPriceText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 14,
+    color: '#BA0049',
+  },
+  photographerHBookBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#BA0049',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  photographerHBookBtnText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11,
+    color: '#FFFFFF',
+  },
+  photographerSeeAllCard: {
+    width: 140,
+    backgroundColor: '#FFF5F6',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(186, 0, 73, 0.25)',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: 14,
+  },
+  photographerSeeAllCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFD9DE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  photographerSeeAllTitle: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 13,
+    color: '#BA0049',
+    textAlign: 'center',
+  },
+  photographerSeeAllSubtitle: {
+    fontFamily: FontFamily.body,
+    fontSize: 10.5,
+    color: '#7E7677',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+
+  /* AI Virtual Try-On Banner */
+  aiBannerContainer: {
+    paddingHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 6,
+  },
+  aiBannerCard: {
+    flexDirection: 'row',
+    height: 152,
+    backgroundColor: '#270F19',
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 217, 222, 0.22)',
+    shadowColor: '#BA0049',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 3,
+    position: 'relative',
+  },
+  aiBannerDecorCircle: {
+    position: 'absolute',
+    top: -30,
+    right: 90,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(186, 0, 73, 0.22)',
+  },
+  aiBannerContentCol: {
+    flex: 1,
+    padding: 13,
+    justifyContent: 'space-between',
+    zIndex: 2,
+  },
+  aiBannerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 217, 222, 0.16)',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 999,
+    alignSelf: 'flex-start',
+  },
+  aiBannerBadgeText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 8.5,
+    color: '#FFD9DE',
+    letterSpacing: 0.4,
+  },
+  aiBannerHeading: {
+    fontFamily: FontFamily.display,
+    fontSize: 15,
+    color: '#FFFFFF',
+    lineHeight: 20,
+  },
+  aiBannerSubtext: {
+    fontFamily: FontFamily.body,
+    fontSize: 10.5,
+    color: 'rgba(255, 255, 255, 0.78)',
+    lineHeight: 15,
+  },
+  aiBannerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 999,
+    alignSelf: 'flex-start',
+  },
+  aiBannerBtnText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11,
+    color: '#BA0049',
+  },
+  aiBannerImageWrap: {
+    width: 120,
+    height: '100%',
+    position: 'relative',
+    backgroundColor: '#3E1D28',
+    overflow: 'hidden',
+  },
+  aiBannerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  aiBannerFloatingPill: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(27, 28, 28, 0.75)',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 999,
+  },
+  aiBannerFloatingPillText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 9,
+    color: '#FFFFFF',
+  },
+
+  /* SECTION 8: How It Works */
+  howItWorksBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FFD9DE',
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 999,
+  },
+  howItWorksBadgeText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10,
+    color: '#BA0049',
+  },
+  howItWorksCardList: {
+    paddingHorizontal: 16,
+    gap: 10,
+    marginTop: 2,
+  },
+  howItWorksCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(227, 190, 195, 0.32)',
+    shadowColor: '#1B1C1C',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 1.5,
+    gap: 12,
+  },
+  howItWorksStepNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFF0F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(186, 0, 73, 0.15)',
+  },
+  howItWorksStepText: {
+    fontFamily: FontFamily.display,
+    fontSize: 12,
+    color: '#BA0049',
+  },
+  howItWorksIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FBF5F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  howItWorksContent: {
+    flex: 1,
+  },
+  howItWorksCardTitle: {
+    fontFamily: FontFamily.display,
+    fontSize: 13.5,
+    color: '#1B1C1C',
+    marginBottom: 2,
+  },
+  howItWorksCardDesc: {
+    fontFamily: FontFamily.body,
+    fontSize: 11.5,
+    color: '#5F5E5E',
+    lineHeight: 16.5,
+  },
+
+  /* SECTION 9: Customer Stories / UGC Feed */
+  customerStoriesContainer: {
+    paddingBottom: 32,
+  },
+  storiesRatingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  storiesRatingPillText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10.5,
+    color: '#B45309',
+  },
+  storyCard: {
+    width: 260,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(227, 190, 195, 0.32)',
     shadowColor: '#1B1C1C',
@@ -2330,145 +2945,92 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 2,
   },
-  photographerTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
-  photographerLeftRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-    marginRight: 8,
-  },
-  photographerAvatarWrap: {
+  storyImageWrap: {
+    width: '100%',
+    height: 150,
     position: 'relative',
-  },
-  photographerAvatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
     backgroundColor: '#EFEDED',
-    borderWidth: 2,
-    borderColor: '#FFD9DE',
   },
-  photographerOnlineDot: {
+  storyImage: {
+    width: '100%',
+    height: '100%',
+  },
+  storyLocationPill: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#10B981',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  photographerMetaCol: {
-    flex: 1,
-  },
-  photographerNameRow: {
+    bottom: 8,
+    left: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  photographerName: {
-    fontFamily: FontFamily.display,
-    fontSize: 15,
-    color: '#1B1C1C',
-    flexShrink: 1,
-  },
-  photographerRoleBadge: {
-    backgroundColor: '#FFD9DE',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    gap: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 999,
   },
-  photographerRoleBadgeText: {
-    fontFamily: FontFamily.bodyBold,
-    fontSize: 9,
-    color: '#BA0049',
-  },
-  photographerStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-    flexWrap: 'wrap',
-  },
-  photographerRatingText: {
-    fontFamily: FontFamily.bodyBold,
-    fontSize: 11.5,
-    color: '#1B1C1C',
-  },
-  photographerDotSep: {
-    fontSize: 10,
-    color: '#5F5E5E',
-  },
-  photographerMetaText: {
-    fontFamily: FontFamily.body,
-    fontSize: 11,
-    color: '#5F5E5E',
-  },
-  photographerSpecialtyText: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: 11,
-    color: '#BA0049',
-  },
-  styleToneChip: {
-    backgroundColor: '#F5F3F3',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  styleToneChipText: {
+  storyLocationText: {
     fontFamily: FontFamily.bodySemiBold,
-    fontSize: 10,
-    color: '#5B3F43',
+    fontSize: 9.5,
+    color: '#1B1C1C',
   },
-  photographerQuoteText: {
+  storyBody: {
+    padding: 12,
+    gap: 8,
+  },
+  storyRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  storyConceptTag: {
+    marginLeft: 'auto',
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 10,
+    color: '#BA0049',
+    backgroundColor: '#FFF0F2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  storyFeedbackText: {
     fontFamily: FontFamily.body,
     fontSize: 11.5,
-    color: '#5F5E5E',
+    color: '#433B3C',
+    lineHeight: 17,
     fontStyle: 'italic',
-    marginTop: 10,
   },
-  portfolioGrid: {
+  storyAuthorRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginTop: 12,
-  },
-  portfolioThumb: {
-    flex: 1,
-    height: 84,
-    borderRadius: 12,
-    backgroundColor: '#EFEDED',
-  },
-  portfolioThumbSingle: {
-    height: 140,
-  },
-  photographerFooterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 10,
+    marginTop: 2,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(227, 190, 195, 0.25)',
+    borderTopColor: 'rgba(227, 190, 195, 0.22)',
   },
-  photographerBookBtn: {
-    flexDirection: 'row',
+  storyAuthorAvatarPlaceholder: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FFD9DE',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#BA0049',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
+    justifyContent: 'center',
   },
-  photographerBookBtnText: {
+  storyAuthorAvatarText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10,
+    color: '#BA0049',
+  },
+  storyAuthorMeta: {
+    flex: 1,
+  },
+  storyAuthorName: {
     fontFamily: FontFamily.bodyBold,
     fontSize: 11.5,
-    color: '#FFFFFF',
+    color: '#1B1C1C',
+  },
+  storyAuthorOrigin: {
+    fontFamily: FontFamily.body,
+    fontSize: 10,
+    color: '#7E7677',
   },
 });

@@ -393,9 +393,6 @@ export function TagoLocationPicker({
           multiline
         />
         <View style={styles.coordFooter}>
-          <Text style={styles.coordText}>
-            Tọa độ: {valLat.toFixed(4)}, {valLng.toFixed(4)}
-          </Text>
           {distanceFromProviderKm !== null ? (
             <View
               style={[
@@ -420,7 +417,14 @@ export function TagoLocationPicker({
                   : ''}
               </Text>
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.radiusBadgeOk}>
+              <Ionicons name="location-sharp" size={13} color="#059669" />
+              <Text style={[styles.radiusBadgeText, { color: '#059669' }]}>
+                Điểm hẹn chụp ảnh tại Cố đô
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     </View>
