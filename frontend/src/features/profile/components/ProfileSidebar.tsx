@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   User,
   Calendar,
+  FileText,
   Heart,
   MapPin,
   CreditCard,
@@ -16,6 +17,7 @@ import {
   ChevronRight,
   Store
 } from 'lucide-react';
+import { CONTRACTS_V2_ENABLED } from '../../../config/features';
 import type { ProfileTab } from '../types/profile.types';
 
 interface ProfileSidebarProps {
@@ -158,6 +160,19 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
             </div>
           )}
         </div>
+
+        {/* Hợp đồng điện tử */}
+        {CONTRACTS_V2_ENABLED && (
+          <button
+            type="button"
+            className={`lume-sidebar-menu-btn ${activeTab === 'contracts' ? 'active' : ''}`}
+            onClick={() => onSelectTab('contracts')}
+            data-testid="sidebar-contracts-btn"
+          >
+            <FileText size={18} />
+            <span>Hợp đồng điện tử</span>
+          </button>
+        )}
 
         {/* Yêu thích */}
         <button

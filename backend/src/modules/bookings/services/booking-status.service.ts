@@ -42,6 +42,8 @@ const SYSTEM_POLICIES = {
   PHOTOGRAPHY_CANCEL_PENALTY_RATE: 0.2,
 };
 import { BookingsRepository } from '../repositories/bookings.repository';
+import { pendingBookingExpiryFilter } from './booking-expiry-filter';
+import { freePaymentClaim, newPaymentClaim } from './payment-expiry-claim';
 
 @Injectable()
 export class BookingStatusService {
@@ -70,52 +72,65 @@ export class BookingStatusService {
     }
 
     try {
-      const cutoff = new Date(
-        Date.now() - SYSTEM_POLICIES.BOOKING_HOLD_TIMEOUT_MS,
-      );
+      const now = new Date();
+      const cutoff = new Date(now.getTime() - SYSTEM_POLICIES.BOOKING_HOLD_TIMEOUT_MS);
+      const expiryFilter = pendingBookingExpiryFilter(now, cutoff);
 
       const expiredBookings = await this.bookingsRepository.findBookings(
-        {
-          status: BookingStatus.PendingPayment,
-          createdAt: { $lt: cutoff },
-        },
+        expiryFilter,
         undefined,
         session,
       );
 
       if (expiredBookings.length > 0) {
-        const bookingIds = expiredBookings.map((b) => b._id);
-
-        await this.bookingsRepository.updateManyBookings(
-          { _id: { $in: bookingIds } },
-          {
-            $set: { status: BookingStatus.Cancelled },
-            $push: {
-              statusTimeline: {
+        for (const booking of expiredBookings) {
+          // A successful gateway payment can precede booking finalization.
+          if (await this.bookingsRepository.hasSuccessfulPayment(booking._id, session))
+            continue;
+          // A payment or another expiry worker may have changed the booking
+          // after the initial scan. Only the winner may release its resources.
+          const isV2 = booking.contractFlowVersion === 2;
+          const changed = await this.bookingsRepository.updateManyBookings(
+            isV2
+              ? { _id: booking._id, contractFlowVersion: 2, $and: [expiryFilter, freePaymentClaim(now)] }
+              : { _id: booking._id, ...expiryFilter },
+            {
+              $set: {
                 status: BookingStatus.Cancelled,
-                changedAt: new Date(),
-                note: 'Tự động hủy đơn hàng do quá hạn thanh toán (30 phút)',
+                ...(isV2
+                  ? {
+                      paymentExpiryClaim: newPaymentClaim(
+                        'EXPIRY',
+                        now,
+                        new Date(now.getTime() + 60_000),
+                      ),
+                    }
+                  : {}),
+              },
+              $inc: { revision: 1 },
+              $push: {
+                statusTimeline: {
+                  status: BookingStatus.Cancelled,
+                  changedAt: now,
+                  note: 'PAYMENT_EXPIRED',
+                },
               },
             },
-          },
-          session,
-        );
-
-        await this.bookingsRepository.updateManySchedules(
-          { bookingId: { $in: bookingIds } },
-          { $set: { status: BookingScheduleStatus.Cancelled } },
-          session,
-        );
-
-        await this.inventoryReservationModel
-          .updateMany(
-            { bookingId: { $in: bookingIds } },
-            { $set: { status: ReservationStatus.Cancelled } },
-          )
-          .session(session);
-
-        for (const bId of bookingIds) {
-          await this.promotionsService.releaseVoucher(bId, session);
+            session,
+          );
+          if (changed.modifiedCount !== 1) continue;
+          await this.bookingsRepository.updateManySchedules(
+            { bookingId: booking._id },
+            { $set: { status: BookingScheduleStatus.Cancelled } },
+            session,
+          );
+          await this.inventoryReservationModel
+            .updateMany(
+              { bookingId: booking._id, status: ReservationStatus.TempReserved },
+              { $set: { status: ReservationStatus.Cancelled } },
+            )
+            .session(session);
+          await this.promotionsService.releaseVoucher(booking._id, session);
         }
       }
 
@@ -511,6 +526,7 @@ export class BookingStatusService {
               refundAmount,
             },
           },
+          $inc: { revision: 1 },
           $push: {
             statusTimeline: {
               status: BookingStatus.Cancelled,

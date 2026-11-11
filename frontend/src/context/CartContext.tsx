@@ -7,6 +7,7 @@ export interface CartItem {
   id: string; // Unique cart item ID (can be combination of product/package ID + date to handle multiple bookings)
   itemType: CartItemType;
   productId?: string | null;
+  providerId?: string | null;
   productName?: string | null;
   productImage?: string | null;
   basePrice?: number;

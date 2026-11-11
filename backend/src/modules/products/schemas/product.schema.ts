@@ -95,6 +95,13 @@ export class Product {
   @Prop({ required: false, min: 0 })
   hourlyPrice?: number;
 
+  /**
+   * Giá trị bồi hoàn trang phục (độc lập với giá thuê và tiền cọc),
+   * dùng làm cơ sở tính tỷ lệ bồi thường trong hợp đồng khi trang phục bị hư hỏng/mất mát.
+   */
+  @Prop({ type: Number, required: false, min: 0, default: null })
+  replacementValue?: number | null;
+
   @Prop({ type: [String], default: [] })
   sizes: string[];
 

@@ -20,10 +20,13 @@ import {
   Lock,
   ShieldCheck,
   Check,
+  FileText,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { useToast } from '../../../components/feedback/Toast';
 import { httpClient } from '../../../services/httpClient';
+import { useAuth } from '../../../features/auth/hooks/useAuth';
+import { BookingContractsSection } from '../../../components/contracts/BookingContractsSection';
 import './bookingManagementFigma.css';
 
 interface BookingCustomer {
@@ -161,8 +164,16 @@ export const BookingManagementPanel: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeBooking, setActiveBooking] = useState<BookingDetail | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
-  const [detailTab, setDetailTab] = useState<'overview' | 'timeline' | 'payment' | 'notes'>('overview');
+  const [detailTab, setDetailTab] = useState<'overview' | 'timeline' | 'payment' | 'notes' | 'contracts'>('overview');
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+
+  // Contract access permissions for Admin
+  const { user, permissions } = useAuth();
+  const isSuperAdmin = Boolean(user?.roles?.some((r) => r.toUpperCase() === 'SUPER_ADMIN'));
+  const isAdmin = Boolean(user?.roles?.some((r) => r.toUpperCase() === 'ADMIN') || isSuperAdmin);
+  const hasUserRead = permissions?.includes('user:read') || false;
+  const hasProviderRead = permissions?.includes('provider:read') || false;
+  const canViewContracts = Boolean(isAdmin && (isSuperAdmin || (hasUserRead && hasProviderRead)));
 
   // Modern Modals States
   const [detailModalBooking, setDetailModalBooking] = useState<BookingDetail | null>(null);
@@ -1138,6 +1149,14 @@ export const BookingManagementPanel: React.FC = () => {
               >
                 Ghi chú
               </button>
+              <button
+                type="button"
+                className={`lume-detail-tab-btn ${detailTab === 'contracts' ? 'active' : ''}`}
+                onClick={() => setDetailTab('contracts')}
+                data-testid="admin-booking-tab-contracts"
+              >
+                Hợp đồng
+              </button>
             </div>
 
             {/* Tab content */}
@@ -1240,6 +1259,39 @@ export const BookingManagementPanel: React.FC = () => {
                       {activeBooking.customerNotes || 'Không có ghi chú bổ sung.'}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {detailTab === 'contracts' && (
+                <div style={{ fontSize: '12px', color: '#334155' }} data-testid="admin-booking-contracts-content">
+                  {!canViewContracts ? (
+                    <div
+                      style={{
+                        padding: '12px 14px',
+                        background: '#fff1f2',
+                        border: '1px solid #fecdd3',
+                        borderRadius: '8px',
+                        color: '#be123c',
+                        lineHeight: 1.5,
+                      }}
+                      data-testid="admin-contracts-permission-denied"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, marginBottom: '4px' }}>
+                        <AlertTriangle size={15} />
+                        <span>Không đủ quyền xem hợp đồng</span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '12px' }}>
+                        Tài khoản quản trị cần quyền <code>user:read</code> và <code>provider:read</code> để tra cứu văn bản hợp đồng điện tử theo quy chuẩn bảo mật.
+                      </p>
+                    </div>
+                  ) : (
+                    <BookingContractsSection
+                      bookingId={activeBooking.bookingId || activeBooking.id}
+                      bookingStatus={activeBooking.statusLabel || activeBooking.status}
+                      viewerRole="admin"
+                      hideWhenEmpty={false}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -1501,6 +1553,52 @@ export const BookingManagementPanel: React.FC = () => {
                   <p>{detailModalBooking.customerNotes}</p>
                 </div>
               )}
+
+              {/* Contracts Section for Admin */}
+              <div
+                style={{
+                  marginTop: '20px',
+                  borderTop: '1px solid #e2e8f0',
+                  paddingTop: '16px',
+                }}
+                data-testid="admin-detail-modal-contracts-section"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <FileText size={18} color="#832145" />
+                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>
+                    Hợp đồng điện tử của đơn hàng
+                  </h4>
+                </div>
+
+                {!canViewContracts ? (
+                  <div
+                    style={{
+                      padding: '12px 16px',
+                      background: '#fff1f2',
+                      border: '1px solid #fecdd3',
+                      borderRadius: '8px',
+                      color: '#be123c',
+                      fontSize: '13px',
+                    }}
+                    data-testid="admin-modal-permission-denied"
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, marginBottom: '4px' }}>
+                      <AlertTriangle size={15} />
+                      <span>Không đủ quyền xem hợp đồng</span>
+                    </div>
+                    <p style={{ margin: 0 }}>
+                      Tài khoản quản trị của bạn chưa được cấp quyền <code>user:read</code> và <code>provider:read</code> để tra cứu văn bản hợp đồng điện tử.
+                    </p>
+                  </div>
+                ) : (
+                  <BookingContractsSection
+                    bookingId={detailModalBooking.bookingId || detailModalBooking.id}
+                    bookingStatus={detailModalBooking.statusLabel || detailModalBooking.status}
+                    viewerRole="admin"
+                    hideWhenEmpty={false}
+                  />
+                )}
+              </div>
             </div>
 
             <div className="lume-modal-footer">

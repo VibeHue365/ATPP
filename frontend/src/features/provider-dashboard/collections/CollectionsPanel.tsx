@@ -647,6 +647,9 @@ export function CollectionsPanel({
                             <div className="ps-card-deposit">
                               Cọc: {(p.depositAmount ?? 1000000).toLocaleString('vi-VN')}đ
                             </div>
+                            <div className="ps-card-deposit" style={{ color: p.replacementValue ? '#047857' : '#9CA3AF', fontSize: '11px', fontWeight: 600 }}>
+                              Bồi hoàn HĐ: {p.replacementValue ? `${p.replacementValue.toLocaleString('vi-VN')}đ` : 'Chưa có'}
+                            </div>
                           </div>
 
                           <button
@@ -679,6 +682,7 @@ export function CollectionsPanel({
                       <th className="ps-th">KÍCH CỠ</th>
                       <th className="ps-th">GIÁ THUÊ</th>
                       <th className="ps-th">TIỀN CỌC</th>
+                      <th className="ps-th">BỒI HOÀN HĐ</th>
                       <th className="ps-th">TRẠNG THÁI</th>
                       <th className="ps-th" style={{ textAlign: 'right' }}>THAO TÁC</th>
                     </tr>
@@ -746,6 +750,12 @@ export function CollectionsPanel({
 
                           <td className="ps-td" style={{ color: '#6B7280' }}>
                             {(p.depositAmount ?? 1000000).toLocaleString('vi-VN')}đ
+                          </td>
+
+                          <td className="ps-td">
+                            <span style={{ color: p.replacementValue ? '#047857' : '#9CA3AF', fontWeight: p.replacementValue ? 700 : 500, fontSize: '13px' }}>
+                              {p.replacementValue ? `${p.replacementValue.toLocaleString('vi-VN')}đ` : 'Chưa có'}
+                            </span>
                           </td>
 
                           <td className="ps-td">
@@ -1086,6 +1096,13 @@ export function CollectionsPanel({
                       <span className="ps-info-label">Tiền đặt cọc</span>
                       <span className="ps-info-value" style={{ fontWeight: 750, color: '#111827', fontSize: '13.5px' }}>
                         {(selectedProduct.depositAmount ?? 1000000).toLocaleString('vi-VN')}đ
+                      </span>
+                    </div>
+
+                    <div className="ps-info-row">
+                      <span className="ps-info-label">Giá trị bồi hoàn HĐ</span>
+                      <span className="ps-info-value" style={{ fontWeight: 750, color: selectedProduct.replacementValue ? '#047857' : '#9CA3AF', fontSize: '13.5px' }}>
+                        {selectedProduct.replacementValue ? `${selectedProduct.replacementValue.toLocaleString('vi-VN')}đ` : 'Chưa thiết lập'}
                       </span>
                     </div>
 

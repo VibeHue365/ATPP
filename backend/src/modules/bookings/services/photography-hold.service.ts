@@ -413,11 +413,41 @@ export class PhotographyHoldService {
       );
     }
 
+    let contractFlowVersion: 2 | null = null;
+    const rentalProvIds = aodaiReservations.map((r) =>
+      r.product.providerId.toString(),
+    );
+    const rentalProvIdsSet = new Set(rentalProvIds);
+    if (rentalProvIdsSet.size > 0) {
+      const statuses = new Set<
+        'LEGACY' | 'CONTRACT_ACTIVE' | 'CONTRACT_SUSPENDED'
+      >();
+      for (const provIdStr of rentalProvIdsSet) {
+        const provStatus = await this.determineShopContractStatus(
+          new Types.ObjectId(provIdStr),
+          session,
+        );
+        statuses.add(provStatus);
+      }
+      if (statuses.has('CONTRACT_SUSPENDED')) {
+        throw new BadRequestException(
+          'PROVIDER_CONTRACT_SUSPENDED: Shop đang tạm ngưng nhận đơn thuê do cần cập nhật lại quy chế sàn giao dịch điện tử. Vui lòng liên hệ Shop.',
+        );
+      }
+      if (statuses.has('LEGACY') && statuses.has('CONTRACT_ACTIVE')) {
+        throw new BadRequestException(
+          'MIXED_CONTRACT_FLOW_UNSUPPORTED: Đơn hàng không thể kết hợp giữa Shop truyền thống và Shop áp dụng Hợp đồng điện tử. Quý khách vui lòng đặt hàng riêng cho từng Shop.',
+        );
+      }
+      contractFlowVersion = statuses.has('CONTRACT_ACTIVE') ? 2 : null;
+    }
+
     const booking = new this.bookingModel({
       bookingCode: this.createBookingCode(),
       customerId,
       providerIds,
       bookingType: BookingType.Combo,
+      contractFlowVersion,
       status: BookingStatus.PendingPayment,
       holdIdempotencyKey: idempotencyKey,
       holdExpiresAt,
@@ -1095,20 +1125,41 @@ export class PhotographyHoldService {
       .exec();
     if (!expiredSchedules.length) return 0;
 
-    const scheduleIds = expiredSchedules.map((schedule) => schedule._id);
-    const bookingIds = [
-      ...new Set(
-        expiredSchedules.map((schedule) => schedule.bookingId.toString()),
-      ),
-    ].map((id) => new Types.ObjectId(id));
-    const result = await this.bookingScheduleModel.updateMany(
-      {
-        _id: { $in: scheduleIds },
-        status: BookingScheduleStatus.Held,
-        holdExpiresAt: { $lte: now },
-      },
-      { $set: { status: BookingScheduleStatus.Expired } },
-    );
+    const expiredBookingIds = new Set<string>();
+    let expiredCount = 0;
+    for (const schedule of expiredSchedules) {
+      // V2 expiry is claimed on Booking by BookingStatusService. The legacy
+      // photography worker must not change its schedule before that CAS wins.
+      if (
+        await this.bookingModel.exists({
+          _id: schedule.bookingId,
+          contractFlowVersion: 2,
+        })
+      )
+        continue;
+      // The payment row may already be SUCCESS while booking finalization is
+      // still pending. In that case the payment recovery path owns the hold.
+      if (
+        await this.bookingModel.db
+          .model('Payment')
+          .exists({ bookingId: schedule.bookingId, status: 'SUCCESS' })
+      )
+        continue;
+      const claimed = await this.bookingScheduleModel.findOneAndUpdate(
+        {
+          _id: schedule._id,
+          status: BookingScheduleStatus.Held,
+          holdExpiresAt: { $lte: now },
+        },
+        { $set: { status: BookingScheduleStatus.Expired } },
+        { new: true },
+      );
+      if (!claimed) continue;
+      expiredCount++;
+      expiredBookingIds.add(schedule.bookingId.toString());
+    }
+    if (!expiredCount) return 0;
+    const bookingIds = [...expiredBookingIds].map((id) => new Types.ObjectId(id));
     await this.inventoryReservationModel.updateMany(
       {
         bookingId: { $in: bookingIds },
@@ -1120,34 +1171,38 @@ export class PhotographyHoldService {
         $unset: { expiresAt: 1 },
       },
     );
-    await this.bookingModel.updateMany(
-      { _id: { $in: bookingIds }, status: BookingStatus.PendingPayment },
-      {
-        $set: { status: BookingStatus.Cancelled, holdExpiresAt: null },
-        $push: {
-          statusTimeline: {
-            status: BookingStatus.Cancelled,
-            changedAt: new Date(),
-            note: 'PAYMENT_EXPIRED',
+    for (const bId of bookingIds) {
+      if (
+        await this.bookingModel.db
+          .model('Payment')
+          .exists({ bookingId: bId, status: 'SUCCESS' })
+      )
+        continue;
+      const changed = await this.bookingModel.updateOne(
+        {
+          _id: bId,
+          status: BookingStatus.PendingPayment,
+          holdExpiresAt: { $lte: now },
+        },
+        {
+          $set: { status: BookingStatus.Cancelled, holdExpiresAt: null },
+          $push: {
+            statusTimeline: {
+              status: BookingStatus.Cancelled,
+              changedAt: now,
+              note: 'PAYMENT_EXPIRED',
+            },
           },
         },
-      },
-    );
-    await this.bookingModel.updateMany(
-      {
-        _id: { $in: bookingIds },
-        status: { $ne: BookingStatus.PendingPayment },
-      },
-      { $set: { holdExpiresAt: null } },
-    );
-    for (const bId of bookingIds) {
+      );
+      if (changed.modifiedCount !== 1) continue;
       try {
         await this.promotionsService.releaseVoucher(bId);
       } catch {
         // Ignore if booking had no active voucher reservation
       }
     }
-    return result.modifiedCount;
+    return expiredCount;
   }
 
   private async createHoldInTransaction(
@@ -1782,6 +1837,26 @@ export class PhotographyHoldService {
     const part = (type: string) =>
       parts.find((item) => item.type === type)?.value;
     return `${part('year')}-${part('month')}-${part('day')}`;
+  }
+
+  private async determineShopContractStatus(
+    providerId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<'LEGACY' | 'CONTRACT_ACTIVE' | 'CONTRACT_SUSPENDED'> {
+    if (!this.bookingModel?.db?.collection) return 'LEGACY';
+    const records = await this.bookingModel.db
+      .collection('provider_contract_acceptances')
+      .find({ providerId, scope: 'AO_DAI_RENTAL' }, { session })
+      .toArray();
+    if (!records || records.length === 0) return 'LEGACY';
+    const active = records.find(
+      (r: any) =>
+        r.status === 'ACTIVE' &&
+        (!r.revokedAt || new Date(r.revokedAt) > new Date()) &&
+        new Date(r.acceptedAt) <= new Date(),
+    );
+    if (!active) return 'CONTRACT_SUSPENDED';
+    return 'CONTRACT_ACTIVE';
   }
 
   private createBookingCode(): string {

@@ -156,6 +156,45 @@ export class Booking {
   @Prop({ type: Types.ObjectId, ref: 'DigitalContract', default: null })
   contractId?: Types.ObjectId | null;
 
+  // Null means the booking predates the contract flow. Phase 2 does not set it.
+  @Prop({ type: Number, enum: [2], default: null })
+  contractFlowVersion?: 2 | null;
+
+  /** Optimistic concurrency control revision counter */
+  @Prop({ type: Number, default: 0, min: 0 })
+  revision?: number;
+
+  /** V2 only: payment that finalized this booking. */
+  @Prop({ type: Types.ObjectId, ref: 'Payment', default: null, index: true })
+  finalizedPaymentId?: Types.ObjectId | null;
+
+  /** V2 only: contract intent key of the finalized payment binding. */
+  @Prop({ type: String, default: null, trim: true })
+  finalizedContractKey?: string | null;
+
+  /** V2 only: one CAS token shared by payment finalization and hold expiry. */
+  @Prop({
+    type: {
+      phase: {
+        type: String,
+        enum: ['INTENT', 'FINALIZING', 'EXPIRY'],
+        required: true,
+      },
+      token: { type: String, required: true },
+      claimedAt: { type: Date, required: true },
+      leaseUntil: { type: Date, required: true },
+      paymentId: { type: Types.ObjectId, ref: 'Payment', default: null },
+    },
+    default: null,
+  })
+  paymentExpiryClaim?: {
+    phase: 'INTENT' | 'FINALIZING' | 'EXPIRY';
+    token: string;
+    claimedAt: Date;
+    leaseUntil: Date;
+    paymentId?: Types.ObjectId | null;
+  } | null;
+
   @Prop({
     type: {
       cancelledBy: { type: Types.ObjectId, ref: 'User', default: null },

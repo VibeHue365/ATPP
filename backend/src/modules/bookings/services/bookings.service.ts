@@ -19,6 +19,7 @@ import {
   ForbiddenException,
   OnApplicationBootstrap,
   InternalServerErrorException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -65,6 +66,7 @@ import {
   InventoryReservation,
   ReservationStatus,
 } from '../../products/schemas/inventory-reservation.schema';
+import { ContractPolicyService } from '../../contracts/contract-policy.service';
 import {
   IsString,
   IsNotEmpty,
@@ -79,6 +81,8 @@ import {
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/schemas/notification.schema';
 import { PolicyResolverService } from '../../system-policies/services/policy-resolver.service';
+import { pendingBookingExpiryFilter } from './booking-expiry-filter';
+import { freePaymentClaim, newPaymentClaim } from './payment-expiry-claim';
 
 // ─── DTOs (dùng chung với controller) ────────────────────────────────────────
 
@@ -273,7 +277,41 @@ export class BookingsService implements OnApplicationBootstrap {
     private readonly policyResolverService: PolicyResolverService,
     @Inject(forwardRef(() => RentalDepositRefundCoordinatorService))
     private readonly rentalDepositRefundCoordinator: RentalDepositRefundCoordinatorService,
+    @Optional()
+    private readonly contractPolicyService?: ContractPolicyService,
   ) {}
+
+  private async determineShopContractStatus(
+    providerId: Types.ObjectId,
+    session?: any,
+  ): Promise<'LEGACY' | 'CONTRACT_ACTIVE' | 'CONTRACT_SUSPENDED'> {
+    if (
+      this.contractPolicyService &&
+      typeof this.contractPolicyService.getProviderContractParticipationStatus ===
+        'function'
+    ) {
+      const res =
+        await this.contractPolicyService.getProviderContractParticipationStatus(
+          providerId,
+          session,
+        );
+      return res.status;
+    }
+    if (!this.bookingModel?.db?.collection) return 'LEGACY';
+    const records = await this.bookingModel.db
+      .collection('provider_contract_acceptances')
+      .find({ providerId, scope: 'AO_DAI_RENTAL' }, { session })
+      .toArray();
+    if (!records || records.length === 0) return 'LEGACY';
+    const active = records.find(
+      (r: any) =>
+        r.status === 'ACTIVE' &&
+        (!r.revokedAt || new Date(r.revokedAt) > new Date()) &&
+        new Date(r.acceptedAt) <= new Date(),
+    );
+    if (!active) return 'CONTRACT_SUSPENDED';
+    return 'CONTRACT_ACTIVE';
+  }
 
   async onApplicationBootstrap() {
     try {
@@ -333,47 +371,103 @@ export class BookingsService implements OnApplicationBootstrap {
     const holdPolicy = await this.policyResolverService.getBookingHoldPolicy();
     if (!holdPolicy.autoExpireEnabled) return;
 
-    const cutoff = new Date(Date.now() - holdPolicy.holdMinutes * 60 * 1000);
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - holdPolicy.holdMinutes * 60 * 1000);
+    const expiryFilter = pendingBookingExpiryFilter(now, cutoff);
 
-    const expiredBookings = await this.bookingModel.find({
-      status: BookingStatus.PendingPayment,
-      createdAt: { $lt: cutoff },
-    });
+    const expiredBookings = await this.bookingModel.find(expiryFilter);
 
     if (expiredBookings.length === 0) return;
 
-    const bookingIds = expiredBookings.map((b) => b._id);
-
-    await this.bookingModel.updateMany(
-      { _id: { $in: bookingIds } },
-      {
-        $set: { status: BookingStatus.Cancelled },
-        $push: {
-          statusTimeline: {
-            status: BookingStatus.Cancelled,
-            changedAt: new Date(),
-            note: `Tự động hủy đơn hàng do quá hạn thanh toán (${holdPolicy.holdMinutes} phút)`,
+    for (const booking of expiredBookings) {
+      if (
+        await this.bookingModel.db
+          .model('Payment')
+          .exists({ bookingId: booking._id, status: 'SUCCESS' })
+      )
+        continue;
+      const isV2 = booking.contractFlowVersion === 2;
+      if (isV2) {
+        await this.runInTransaction(async (session) => {
+          if (
+            await this.bookingModel.db
+              .model('Payment')
+              .exists({ bookingId: booking._id, status: 'SUCCESS' })
+              .session(session)
+          )
+            return;
+          const changed = await this.bookingModel.updateOne(
+            {
+              _id: booking._id,
+              contractFlowVersion: 2,
+              $and: [expiryFilter, freePaymentClaim(now)],
+            },
+            {
+              $set: {
+                status: BookingStatus.Cancelled,
+                paymentExpiryClaim: newPaymentClaim(
+                  'EXPIRY',
+                  now,
+                  new Date(now.getTime() + 60_000),
+                ),
+              },
+              $push: {
+                statusTimeline: {
+                  status: BookingStatus.Cancelled,
+                  changedAt: now,
+                  note: 'PAYMENT_EXPIRED',
+                },
+              },
+            },
+            { session },
+          );
+          if (changed.modifiedCount !== 1) return;
+          await this.bookingScheduleModel.updateMany(
+            { bookingId: booking._id },
+            { $set: { status: BookingScheduleStatus.Cancelled } },
+            { session },
+          );
+          await this.inventoryReservationModel.updateMany(
+            { bookingId: booking._id, status: ReservationStatus.TempReserved },
+            { $set: { status: ReservationStatus.Cancelled } },
+            { session },
+          );
+          await this.bookingModel.db.model('Payment').updateMany(
+            { bookingId: booking._id, status: 'PENDING' },
+            { $set: { status: 'FAILED' } },
+            { session },
+          );
+          await this.promotionsService.releaseVoucher(booking._id, session);
+        });
+        continue;
+      }
+      const changed = await this.bookingModel.updateOne(
+        { _id: booking._id, ...expiryFilter },
+        {
+          $set: { status: BookingStatus.Cancelled },
+          $push: {
+            statusTimeline: {
+              status: BookingStatus.Cancelled,
+              changedAt: now,
+              note: `Tự động hủy đơn hàng do quá hạn thanh toán (${holdPolicy.holdMinutes} phút)`,
+            },
           },
         },
-      },
-    );
-
-    await this.bookingScheduleModel.updateMany(
-      { bookingId: { $in: bookingIds } },
-      { $set: { status: BookingScheduleStatus.Cancelled } },
-    );
-
-    await this.inventoryReservationModel.updateMany(
-      { bookingId: { $in: bookingIds } },
-      { $set: { status: ReservationStatus.Cancelled } },
-    );
-
-    await this.bookingModel.db
-      .model('Payment')
-      .updateMany(
-        { bookingId: { $in: bookingIds }, status: 'PENDING' },
+      );
+      if (changed.modifiedCount !== 1) continue;
+      await this.bookingScheduleModel.updateMany(
+        { bookingId: booking._id },
+        { $set: { status: BookingScheduleStatus.Cancelled } },
+      );
+      await this.inventoryReservationModel.updateMany(
+        { bookingId: booking._id, status: ReservationStatus.TempReserved },
+        { $set: { status: ReservationStatus.Cancelled } },
+      );
+      await this.bookingModel.db.model('Payment').updateMany(
+        { bookingId: booking._id, status: 'PENDING' },
         { $set: { status: 'FAILED' } },
       );
+    }
   }
 
   private async runInTransaction<T>(
@@ -1250,10 +1344,13 @@ export class BookingsService implements OnApplicationBootstrap {
       for (const item of dto.items) {
         let unitPrice = 0;
         let depositAmount = 0;
+        let replacementValue: number | null = null;
         let providerId: Types.ObjectId | null = null;
         let itemType: BookingItemType;
         let inventoryItemId: Types.ObjectId | null = null;
         const itemReservations: any[] = [];
+        let reservedFrom: Date | null = null;
+        let reservedTo: Date | null = null;
 
         if (item.productId) {
           const product = await this.productModel
@@ -1265,6 +1362,7 @@ export class BookingsService implements OnApplicationBootstrap {
           providerId = product.providerId;
           itemType = BookingItemType.Product;
           depositAmount = product.depositAmount;
+          replacementValue = product.replacementValue ?? null;
 
           const rType = item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY';
           if (rType === 'HOURLY') {
@@ -1313,8 +1411,8 @@ export class BookingsService implements OnApplicationBootstrap {
             unitPrice = discountedDaily * durationDays;
           }
 
-          let reservedFrom: Date | null = null;
-          let reservedTo: Date | null = null;
+          reservedFrom = null;
+          reservedTo = null;
 
           if (
             item.rentalType === 'HOURLY' &&
@@ -1448,9 +1546,10 @@ export class BookingsService implements OnApplicationBootstrap {
           priceVersionId: new Types.ObjectId(),
           unitPrice,
           depositAmount,
+          replacementValue,
           quantity,
-          rentalFrom: item.rentalFrom ? new Date(item.rentalFrom) : null,
-          rentalTo: item.rentalTo ? new Date(item.rentalTo) : null,
+          rentalFrom: reservedFrom || (item.rentalFrom ? new Date(item.rentalFrom) : null),
+          rentalTo: reservedTo || (item.rentalTo ? new Date(item.rentalTo) : null),
           shootDate: item.shootDate ? new Date(item.shootDate) : null,
           shootTimeSlot: item.shootTimeSlot || null,
           customRequests: item.customRequests || '',
@@ -1593,6 +1692,54 @@ export class BookingsService implements OnApplicationBootstrap {
       const grandTotal =
         Math.max(subTotal - discountAmount + travelFee, 0) + productDepositTotal;
 
+      // Determine contract flow version based on rental providers
+      let contractFlowVersion: 2 | null = null;
+      const bType = dto.bookingType || BookingType.AoDaiRental;
+      const isRentalType =
+        bType === BookingType.AoDaiRental || bType === BookingType.Combo;
+
+      const rentalProviderIdsSet = new Set(
+        itemDetails
+          .filter((i) => i.itemType === BookingItemType.Product && i.providerId)
+          .map((i) => i.providerId!.toString()),
+      );
+
+      if (isRentalType && rentalProviderIdsSet.size > 0) {
+        const statuses = new Set<
+          'LEGACY' | 'CONTRACT_ACTIVE' | 'CONTRACT_SUSPENDED'
+        >();
+        for (const provIdStr of rentalProviderIdsSet) {
+          const provStatus = await this.determineShopContractStatus(
+            new Types.ObjectId(provIdStr),
+            session,
+          );
+          statuses.add(provStatus);
+        }
+
+        if (statuses.has('CONTRACT_SUSPENDED')) {
+          throw new BadRequestException(
+            'PROVIDER_CONTRACT_SUSPENDED: Shop đang tạm ngưng nhận đơn thuê do cần cập nhật lại quy chế sàn giao dịch điện tử. Vui lòng liên hệ Shop.',
+          );
+        }
+
+        if (statuses.has('LEGACY') && statuses.has('CONTRACT_ACTIVE')) {
+          throw new BadRequestException(
+            'MIXED_CONTRACT_FLOW_UNSUPPORTED: Đơn hàng không thể kết hợp giữa Shop truyền thống và Shop áp dụng Hợp đồng điện tử. Quý khách vui lòng đặt hàng riêng cho từng Shop.',
+          );
+        }
+
+        if (statuses.has('CONTRACT_ACTIVE')) {
+          contractFlowVersion = 2;
+        } else {
+          contractFlowVersion = null;
+        }
+      }
+
+      const holdExpiresAt =
+        contractFlowVersion === 2
+          ? new Date(Date.now() + 15 * 60 * 1000)
+          : undefined;
+
       const [savedBookingDoc] = await this.bookingModel.create(
         [
           {
@@ -1602,7 +1749,9 @@ export class BookingsService implements OnApplicationBootstrap {
               (id) => new Types.ObjectId(id),
             ),
             bookingType: dto.bookingType || BookingType.AoDaiRental,
+            contractFlowVersion,
             status: BookingStatus.PendingPayment,
+            ...(holdExpiresAt ? { holdExpiresAt } : {}),
             pricingSummary: {
               subTotal,
               depositTotal: productDepositTotal,
@@ -1962,12 +2111,30 @@ export class BookingsService implements OnApplicationBootstrap {
         session,
       );
 
+      const provStatus = await this.determineShopContractStatus(
+        product.providerId,
+        session,
+      );
+      if (provStatus === 'CONTRACT_SUSPENDED') {
+        throw new BadRequestException(
+          'PROVIDER_CONTRACT_SUSPENDED: Shop đang tạm ngưng nhận đơn thuê do cần cập nhật lại quy chế sàn giao dịch điện tử. Vui lòng liên hệ Shop.',
+        );
+      }
+      const contractFlowVersion: 2 | null =
+        provStatus === 'CONTRACT_ACTIVE' ? 2 : null;
+      const holdExpiresAt =
+        contractFlowVersion === 2
+          ? new Date(Date.now() + 15 * 60 * 1000)
+          : undefined;
+
       const booking = new this.bookingModel({
         bookingCode,
         customerId: new Types.ObjectId(customerId),
         providerIds: [product.providerId],
         bookingType: BookingType.AoDaiRental,
+        contractFlowVersion,
         status: BookingStatus.PendingPayment,
+        ...(holdExpiresAt ? { holdExpiresAt } : {}),
         pricingSummary: {
           subTotal,
           depositTotal,
@@ -2003,9 +2170,10 @@ export class BookingsService implements OnApplicationBootstrap {
         priceVersionId: priceVersion._id,
         unitPrice,
         depositAmount: product.depositAmount,
+        replacementValue: product.replacementValue ?? null,
         quantity,
-        rentalFrom,
-        rentalTo,
+        rentalFrom: reservedFrom || (rentalFrom ? new Date(rentalFrom) : null),
+        rentalTo: reservedTo || (rentalTo ? new Date(rentalTo) : null),
         shootDate,
         shootTimeSlot,
         rentalType,
@@ -3630,6 +3798,8 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     let penaltyAmount = 0;
+    const wasPendingPayment =
+      booking.status === BookingStatus.PendingPayment;
     const isNoShow = reason.includes('[KHÁCH VẮNG MẶT - NO SHOW]');
     const depositAmt =
       (booking as any).depositAmount ||
@@ -3637,7 +3807,11 @@ export class BookingsService implements OnApplicationBootstrap {
       0;
     const grandTotal = booking.pricingSummary?.grandTotal || 0;
 
-    if (isFreeCancel && !isNoShow) {
+    if (wasPendingPayment) {
+      refundAmount = 0;
+      penaltyAmount = 0;
+      isFreeCancel = true;
+    } else if (isFreeCancel && !isNoShow) {
       refundAmount = grandTotal;
     } else if (isNoShow || (diffInHours !== undefined && diffInHours < 12)) {
       // < 12h or No-Show: 0% deposit refund (100% deposit compensation to provider), refund remaining balance
@@ -3762,7 +3936,9 @@ export class BookingsService implements OnApplicationBootstrap {
     booking.statusTimeline.push({
       status: BookingStatus.Cancelled,
       changedAt: now,
-      note: isFreeCancel
+      note: wasPendingPayment
+        ? 'Đơn hàng đã được hủy trước khi thanh toán.'
+        : isFreeCancel
         ? `Đơn hàng đã được hủy thành công. Hoàn tiền 100% (${refundAmount.toLocaleString('vi-VN')}đ).`
         : `Đơn hàng đã bị hủy. Khách bị phạt mất cọc dịch vụ (${penaltyAmount.toLocaleString('vi-VN')}đ). Hoàn cọc giữ đồ & số dư (${refundAmount.toLocaleString('vi-VN')}đ). Lý do phạt: ${penaltyReason}`,
       changedBy: userId ? new Types.ObjectId(userId) : null,

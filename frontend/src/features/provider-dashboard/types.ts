@@ -69,6 +69,7 @@ export interface Product {
   videos?: string[];
   basePrice: number;
   depositAmount: number;
+  replacementValue?: number | null;
   sizes: string[];
   colors: string[];
   materials: string[];

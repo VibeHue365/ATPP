@@ -18,6 +18,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { httpClient } from '../../services/httpClient';
+import { contractService, type ProviderContractPolicyVersion } from '../../services/contractService';
 import { API_BASE_URL } from '../../config/env';
 import { ROUTES } from '../../config/routes';
 import { SmartTagList } from '../../features/smart-tagging/components/SmartTagList';
@@ -155,6 +156,7 @@ export const ProviderStorePage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'rating'>('featured');
   const [activeTab, setActiveTab] = useState<'products' | 'info'>('products');
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [approvedContractPolicy, setApprovedContractPolicy] = useState<ProviderContractPolicyVersion | null>(null);
 
   // Load Store Info
   useEffect(() => {
@@ -162,8 +164,12 @@ export const ProviderStorePage: React.FC = () => {
     const fetchStoreInfo = async () => {
       try {
         setLoadingStore(true);
-        const data = await httpClient.get<StoreInfo>(`/products/store-info/${id}`);
+        const [data, contractPolicy] = await Promise.all([
+          httpClient.get<StoreInfo>(`/products/store-info/${id}`),
+          contractService.getPublicProviderApprovedPolicy(id).catch(() => null),
+        ]);
         setStore(data);
+        setApprovedContractPolicy(contractPolicy);
       } catch (err: any) {
         console.error('Lỗi khi tải thông tin cửa hàng:', err);
         setError('Không thể tải thông tin gian hàng.');
@@ -936,10 +942,32 @@ export const ProviderStorePage: React.FC = () => {
                 {store.policies?.rentalPolicy ||
                   'Khách hàng kiểm tra áo dài kỹ lưỡng khi nhận đồ. Đặt cọc tiền hoặc giấy tờ tùy thân theo yêu cầu của shop.'}
               </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, paddingTop: 16, borderTop: '1px solid #EEE' }}>
-                <RotateCcw style={{ width: 20, height: 20, color: '#8B263E' }} />
-                <div style={{ fontSize: 13, color: '#555' }}>
-                  <strong>Chính sách hủy đơn:</strong> {store.policies?.cancellationPolicy || 'Hủy trước 48h hoàn 100% tiền cọc.'}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 16, paddingTop: 16, borderTop: '1px solid #EEE' }}>
+                <RotateCcw style={{ width: 20, height: 20, color: '#8B263E', marginTop: 2, flexShrink: 0 }} />
+                <div style={{ fontSize: 13, color: '#555', flex: 1 }}>
+                  {approvedContractPolicy?.cancellationPolicy?.refundRules?.length ? (
+                    <div>
+                      <strong style={{ color: '#2B181C', display: 'block', marginBottom: 4 }}>
+                        Chính sách hủy đơn thuê (Theo Hợp đồng điện tử v{approvedContractPolicy.versionNumber}):
+                      </strong>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
+                        {approvedContractPolicy.cancellationPolicy.refundRules.map((rule, idx) => (
+                          <span key={idx} style={{ fontSize: 12, color: '#555' }}>
+                            • Hủy trước thời điểm nhận đồ ≥ {rule.daysBeforeRental} ngày: Hoàn trả <strong>{rule.refundPercentage}%</strong> tiền thuê.
+                          </span>
+                        ))}
+                      </div>
+                      {approvedContractPolicy.cancellationPolicy.cancellationNotes && (
+                        <p style={{ marginTop: 6, fontSize: 11, color: '#888', fontStyle: 'italic', margin: 0 }}>
+                          Lưu ý từ Shop: {approvedContractPolicy.cancellationPolicy.cancellationNotes}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <strong>Chính sách hủy đơn:</strong> {store.policies?.cancellationPolicy || 'Hủy trước 48h hoàn 100% tiền cọc.'}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -138,7 +138,7 @@ export class RentalFulfillmentService {
 
   private async transition(input: TransitionInput & { expectedStatus: RentalFulfillmentStatus; nextStatus: RentalFulfillmentStatus; action: RentalFulfillmentAction; set: Record<string, unknown>; extraFilter?: Record<string, unknown> }) {
     const itemId = this.objectId(input.itemId);
-    const updated = await this.bookingItemModel.findOneAndUpdate({ _id: itemId, itemType: BookingItemType.Product, 'rentalFulfillment.status': input.expectedStatus, ...input.extraFilter }, { $set: { ...input.set, 'rentalFulfillment.status': input.nextStatus }, $push: { 'rentalFulfillment.history': this.history(input.action, input.actor, input.note) } }, { new: true }).lean().exec();
+    const updated = await this.bookingItemModel.findOneAndUpdate({ _id: itemId, itemType: BookingItemType.Product, 'rentalFulfillment.status': input.expectedStatus, ...input.extraFilter }, { $set: { ...input.set, 'rentalFulfillment.status': input.nextStatus }, $push: { 'rentalFulfillment.history': this.history(input.action, input.actor, input.note) } }, { returnDocument: 'after' }).lean().exec();
     if (!updated) throw new ConflictException('Trạng thái bàn giao đã thay đổi hoặc thao tác hiện không hợp lệ.');
     return updated;
   }

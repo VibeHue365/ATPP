@@ -1027,9 +1027,11 @@ export const ProductDetailPage: React.FC = () => {
     const hourlyRate = product?.hourlyPrice || Math.round(base * 0.3) || 80000;
     const computedPrice = rentalMode === 'DAILY' ? base * days : hourlyRate * hours;
 
+    const rawProvId = typeof product?.providerId === 'object' ? product?.providerId?._id : product?.providerId;
     const cartPayload = {
       itemType: 'PRODUCT' as const,
-      productId: product?._id,
+      productId: product?._id ? product._id.toString() : undefined,
+      providerId: rawProvId ? rawProvId.toString() : null,
       name: product?.name,
       image:
         imagesForColor(product, selectedColor)[0] ||
@@ -1099,9 +1101,11 @@ export const ProductDetailPage: React.FC = () => {
     const hourlyRate = product?.hourlyPrice || Math.round(baseForBooking * 0.3) || 80000;
     const computedPrice = rentalMode === 'DAILY' ? baseForBooking * days : hourlyRate * hours;
 
+    const rawProvId = typeof product?.providerId === 'object' ? product?.providerId?._id : product?.providerId;
     const cartPayload = {
       itemType: 'PRODUCT' as const,
-      productId: product?._id,
+      productId: product?._id ? product._id.toString() : undefined,
+      providerId: rawProvId ? rawProvId.toString() : null,
       name: product?.name,
       image:
         imagesForColor(product, selectedColor)[0] ||

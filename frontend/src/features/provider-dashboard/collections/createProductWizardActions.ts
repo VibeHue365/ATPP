@@ -10,7 +10,7 @@ import type { useProductWizardState } from './useProductWizardState';
 import type { useProviderProductsState } from './useProviderProductsState';
 
 type Dependencies = Pick<ReturnType<typeof useProductWizardState>,
-  'setEditingProduct' | 'setProdName' | 'setProdDescription' | 'setProdBasePrice' | 'setProdDepositAmount' | 'setProdSizes' | 'setProdColors' | 'setProdMaterials' | 'setProdStatus' | 'setProdImages' | 'setProdColorImages' | 'setProdVideos' | 'setProdStyle' | 'setProdOccasions' | 'setProdStyleCategoryIds' | 'setProdEventCategoryIds' | 'prodCustomTags' | 'setProdCustomTags' | 'setCustomTagInput' | 'setVariants' | 'setWizardStep' | 'setCreatedDraftId' | 'setActiveTagCodes' | 'setProdCategoryId' | 'setIsModalOpen' | 'setEditInvSummary' | 'setUploadingImages' | 'prodVideos' | 'setUploadingVideos' | 'editingProduct' | 'editInvSummary' | 'variants' | 'setUploadingColor' | 'prodImages' | 'prodColorImages' | 'prodName' | 'prodCategoryId' | 'prodDescription' | 'prodBasePrice' | 'prodDepositAmount' | 'prodStatus' | 'prodStyle' | 'prodOccasions' | 'prodStyleCategoryIds' | 'prodEventCategoryIds' | 'wizardStep' | 'setSavingDraft' | 'createdDraftId' | 'activeTagCodes'
+  'setEditingProduct' | 'setProdName' | 'setProdDescription' | 'setProdBasePrice' | 'setProdDepositAmount' | 'setProdReplacementValue' | 'setProdSizes' | 'setProdColors' | 'setProdMaterials' | 'setProdStatus' | 'setProdImages' | 'setProdColorImages' | 'setProdVideos' | 'setProdStyle' | 'setProdOccasions' | 'setProdStyleCategoryIds' | 'setProdEventCategoryIds' | 'prodCustomTags' | 'setProdCustomTags' | 'setCustomTagInput' | 'setVariants' | 'setWizardStep' | 'setCreatedDraftId' | 'setActiveTagCodes' | 'setProdCategoryId' | 'setIsModalOpen' | 'setEditInvSummary' | 'setUploadingImages' | 'prodVideos' | 'setUploadingVideos' | 'editingProduct' | 'editInvSummary' | 'variants' | 'setUploadingColor' | 'prodImages' | 'prodColorImages' | 'prodName' | 'prodCategoryId' | 'prodDescription' | 'prodBasePrice' | 'prodDepositAmount' | 'prodReplacementValue' | 'prodStatus' | 'prodStyle' | 'prodOccasions' | 'prodStyleCategoryIds' | 'prodEventCategoryIds' | 'wizardStep' | 'setSavingDraft' | 'createdDraftId' | 'activeTagCodes'
 > &
   Pick<ReturnType<typeof useProviderProductsState>,
     'categories' | 'styleCategories' | 'eventCategories'
@@ -23,13 +23,14 @@ type Dependencies = Pick<ReturnType<typeof useProductWizardState>,
 /** Recreated each render so handlers retain the dashboard's existing closure semantics. */
 export function createProductWizardActions({
   setEditingProduct, setProdName, setProdDescription, setProdBasePrice, setProdDepositAmount,
+  setProdReplacementValue,
   setProdSizes, setProdColors, setProdMaterials, setProdStatus, setProdImages, setProdColorImages,
   setProdVideos, setProdStyle, setProdOccasions, setProdStyleCategoryIds, setProdEventCategoryIds,
   prodCustomTags, setProdCustomTags, setCustomTagInput,
   setVariants, setWizardStep, setCreatedDraftId, setActiveTagCodes, categories, setProdCategoryId,
   setIsModalOpen, setEditInvSummary, setUploadingImages, toast, prodVideos, setUploadingVideos,
   editingProduct, editInvSummary, variants, setUploadingColor, prodImages, prodColorImages, prodName,
-  prodCategoryId, prodDescription, prodBasePrice, prodDepositAmount, prodStatus, prodStyle,
+  prodCategoryId, prodDescription, prodBasePrice, prodDepositAmount, prodReplacementValue, prodStatus, prodStyle,
   prodOccasions, prodStyleCategoryIds, prodEventCategoryIds, wizardStep, setSavingDraft, createdDraftId,
   activeTagCodes, styleCategories, eventCategories, fetchProducts,
 }: Dependencies) {
@@ -40,6 +41,7 @@ export function createProductWizardActions({
     setProdDescription('');
     setProdBasePrice('');
     setProdDepositAmount('');
+    setProdReplacementValue('');
     setProdSizes([]);
     setProdColors([]);
     setProdMaterials([]);
@@ -77,6 +79,7 @@ export function createProductWizardActions({
     setProdDescription(p.description || '');
     setProdBasePrice(p.basePrice.toString());
     setProdDepositAmount(p.depositAmount.toString());
+    setProdReplacementValue(p.replacementValue != null ? p.replacementValue.toString() : '');
     setProdSizes(p.sizes || []);
     setProdColors(p.colors || []);
     setProdMaterials(p.materials || []);
@@ -110,6 +113,7 @@ export function createProductWizardActions({
     setProdDescription(p.description || '');
     setProdBasePrice(p.basePrice.toString());
     setProdDepositAmount(p.depositAmount.toString());
+    setProdReplacementValue(p.replacementValue != null ? p.replacementValue.toString() : '');
     setProdSizes(p.sizes || []);
     setProdColors(p.colors || []);
     setProdMaterials(p.materials || []);
@@ -276,22 +280,30 @@ export function createProductWizardActions({
       .map(([color, images]) => ({ color, images }));
   };
 
-  const buildBasePayload = () => ({
-    name: prodName,
-    categoryId: prodCategoryId,
-    description: prodDescription,
-    basePrice: Number(prodBasePrice),
-    depositAmount: Number(prodDepositAmount),
-    status: prodStatus,
-    images: mergedImages().length > 0 ? mergedImages() : [DEFAULT_PRODUCT_IMAGE],
-    colorImages: buildColorImagesPayload(),
-    videos: prodVideos,
-    style: prodStyle,
-    occasions: prodOccasions,
-    styleCategoryIds: prodStyleCategoryIds,
-    eventCategoryIds: prodEventCategoryIds,
-    customTags: prodCustomTags,
-  });
+  const buildBasePayload = () => {
+    const payload: Record<string, any> = {
+      name: prodName,
+      categoryId: prodCategoryId,
+      description: prodDescription,
+      basePrice: Number(prodBasePrice),
+      depositAmount: Number(prodDepositAmount),
+      status: prodStatus,
+      images: mergedImages().length > 0 ? mergedImages() : [DEFAULT_PRODUCT_IMAGE],
+      colorImages: buildColorImagesPayload(),
+      videos: prodVideos,
+      style: prodStyle,
+      occasions: prodOccasions,
+      styleCategoryIds: prodStyleCategoryIds,
+      eventCategoryIds: prodEventCategoryIds,
+      customTags: prodCustomTags,
+    };
+    if (prodReplacementValue.trim() !== '') {
+      payload.replacementValue = Math.round(Number(prodReplacementValue));
+    } else if (editingProduct && editingProduct.replacementValue != null) {
+      payload.replacementValue = null;
+    }
+    return payload;
+  };
 
   const validateWizardStep1 = () => {
     if (!prodName || !prodCategoryId || !prodBasePrice || !prodDepositAmount) {
@@ -303,6 +315,13 @@ export function createProductWizardActions({
     if (Number(prodDepositAmount) >= Number(prodBasePrice)) {
       toast.error('Giá cọc phải nhỏ hơn giá thuê');
       return false;
+    }
+    if (prodReplacementValue.trim() !== '') {
+      const repVal = Number(prodReplacementValue);
+      if (isNaN(repVal) || repVal <= 0) {
+        toast.error('Giá trị bồi hoàn phải là số dương lớn hơn 0');
+        return false;
+      }
     }
     if (mergedImages().length === 0) {
       toast.error('Cần tải lên ít nhất 1 hình ảnh sản phẩm');

@@ -88,6 +88,17 @@ export class BookingsRepository {
     return q.exec();
   }
 
+  async hasSuccessfulPayment(
+    bookingId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<boolean> {
+    const query = this.bookingModel.db
+      .model('Payment')
+      .exists({ bookingId, status: 'SUCCESS' });
+    if (session) query.session(session);
+    return Boolean(await query.exec());
+  }
+
   // --- BookingItem Operations ---
 
   async findBookingItems(

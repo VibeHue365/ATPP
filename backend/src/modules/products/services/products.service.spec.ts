@@ -601,5 +601,118 @@ describe('ProductsService moderation', () => {
       }),
     );
   });
+
+  describe('replacementValue contract integration & moderation guard', () => {
+    it('preserves existing replacementValue intact when updateProduct does not send replacementValue', async () => {
+      const existing = {
+        _id: productId,
+        providerId,
+        name: 'Ao dai Hue',
+        basePrice: 500000,
+        depositAmount: 100000,
+        replacementValue: 2500000,
+        moderationStatus: ProductModerationStatus.Approved,
+      };
+      const { service, productsRepository } = createService({
+        findById: jest.fn().mockResolvedValue(existing),
+        update: jest.fn().mockResolvedValue({ ...existing, name: 'Ao dai Hue moi' }),
+      });
+
+      await service.updateProduct(userId, productId.toString(), {
+        name: 'Ao dai Hue moi',
+      });
+
+      expect(productsRepository.update).toHaveBeenCalledWith(
+        productId,
+        expect.not.objectContaining({ replacementValue: null }),
+        expect.any(Object),
+      );
+      // Ensure replacementValue key was not included in updateData
+      const updateDataSent = (productsRepository.update as jest.Mock).mock.calls[0][1];
+      expect(updateDataSent).not.toHaveProperty('replacementValue');
+    });
+
+    it('resets moderationStatus to PendingReview when replacementValue is updated', async () => {
+      const existing = {
+        _id: productId,
+        providerId,
+        basePrice: 500000,
+        depositAmount: 100000,
+        replacementValue: 2000000,
+        moderationStatus: ProductModerationStatus.Approved,
+      };
+      const { service, productsRepository } = createService({
+        findById: jest.fn().mockResolvedValue(existing),
+        update: jest.fn().mockResolvedValue({ ...existing, replacementValue: 3500000 }),
+      });
+
+      await service.updateProduct(userId, productId.toString(), {
+        replacementValue: 3500000,
+      });
+
+      expect(productsRepository.update).toHaveBeenCalledWith(
+        productId,
+        expect.objectContaining({
+          replacementValue: 3500000,
+          moderationStatus: ProductModerationStatus.PendingReview,
+          moderationReason: null,
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('rejects update with non-positive replacementValue (<= 0)', async () => {
+      const existing = {
+        _id: productId,
+        providerId,
+        basePrice: 500000,
+        depositAmount: 100000,
+        replacementValue: 2000000,
+      };
+      const { service } = createService({
+        findById: jest.fn().mockResolvedValue(existing),
+      });
+
+      await expect(
+        service.updateProduct(userId, productId.toString(), {
+          replacementValue: 0,
+        }),
+      ).rejects.toThrow('Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0');
+
+      await expect(
+        service.updateProduct(userId, productId.toString(), {
+          replacementValue: -50000,
+        }),
+      ).rejects.toThrow('Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0');
+    });
+
+    it('allows clearing replacementValue with null and resets moderation to PendingReview', async () => {
+      const existing = {
+        _id: productId,
+        providerId,
+        basePrice: 500000,
+        depositAmount: 100000,
+        replacementValue: 2000000,
+        moderationStatus: ProductModerationStatus.Approved,
+      };
+      const { service, productsRepository } = createService({
+        findById: jest.fn().mockResolvedValue(existing),
+        update: jest.fn().mockResolvedValue({ ...existing, replacementValue: null }),
+      });
+
+      await service.updateProduct(userId, productId.toString(), {
+        replacementValue: null,
+      });
+
+      expect(productsRepository.update).toHaveBeenCalledWith(
+        productId,
+        expect.objectContaining({
+          replacementValue: null,
+          moderationStatus: ProductModerationStatus.PendingReview,
+        }),
+        expect.any(Object),
+      );
+    });
+  });
 });
 

@@ -4,10 +4,10 @@ import cookieParser from 'cookie-parser';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
-import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { requestLogger } from './common/http/request-logger';
 
 async function bootstrap() {
   const logger = new Logger('HTTP');
@@ -17,6 +17,7 @@ async function bootstrap() {
   app.enableCors({
     origin: allowedCorsOrigins(),
     credentials: true,
+    exposedHeaders: ['X-Contract-SHA256', 'Content-Disposition'],
   });
   app.use(express.json({ limit: process.env.BODY_LIMIT ?? '1mb' }));
   app.use(
@@ -89,30 +90,4 @@ function securityHeaders(
   );
   response.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   next();
-}
-
-function requestLogger(logger: Logger) {
-  return (request: Request, response: Response, next: NextFunction): void => {
-    const requestId = request.header('x-request-id') ?? randomUUID();
-    const startedAt = Date.now();
-    response.setHeader('x-request-id', requestId);
-
-    response.on('finish', () => {
-      const user = request.user as { sub?: string } | undefined;
-      logger.log(
-        JSON.stringify({
-          requestId,
-          method: request.method,
-          path: request.originalUrl,
-          statusCode: response.statusCode,
-          responseTime: Date.now() - startedAt,
-          userId: user?.sub ?? null,
-          ip: request.ip,
-          userAgent: request.header('user-agent') ?? null,
-        }),
-      );
-    });
-
-    next();
-  };
 }

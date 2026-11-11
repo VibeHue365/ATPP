@@ -1,0 +1,385 @@
+/* ContractDocumentPreview.css - High fidelity A4 document preview */
+
+.vh-doc-preview-wrapper {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+  padding: 1.75rem 2rem;
+  color: #1e293b;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .vh-doc-preview-wrapper {
+    padding: 1rem 0.85rem;
+  }
+}
+
+/* Header */
+.vh-doc-header {
+  text-align: center;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 1.1rem;
+  margin-bottom: 1.25rem;
+}
+
+.vh-doc-nation {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #1e293b;
+  text-transform: uppercase;
+}
+
+.vh-doc-motto {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: #475569;
+  margin-top: 0.15rem;
+}
+
+.vh-doc-divider {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  letter-spacing: 0.1em;
+  margin: 0.25rem 0 0.75rem 0;
+}
+
+.vh-doc-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #1e3a6c; /* Navy Blue */
+  margin: 0 0 0.85rem 0;
+  letter-spacing: 0.02em;
+}
+
+.vh-doc-meta-bar {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.8rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vh-meta-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.vh-meta-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  color: #1e3a6c;
+  word-break: break-all;
+}
+
+.vh-doc-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+/* Sections */
+.vh-doc-section {
+  margin-bottom: 1.35rem;
+}
+
+.vh-doc-section-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #1e3a6c;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1.5px solid #1e3a6c;
+  padding-bottom: 0.3rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Section I: Parties Grid */
+.vh-doc-parties-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .vh-doc-parties-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vh-doc-party-card {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  font-size: 0.825rem;
+}
+
+.vh-party-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 700;
+  color: #1e3a6c;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  margin-bottom: 0.4rem;
+}
+
+.vh-party-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.4rem;
+}
+
+.vh-party-field {
+  color: #334155;
+  margin-bottom: 0.2rem;
+  word-break: break-word;
+}
+
+.vh-field-lbl {
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Section II: Items Table */
+.vh-doc-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-bottom: 0.6rem;
+}
+
+.vh-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.825rem;
+}
+
+.vh-doc-table th {
+  background-color: #f1f5f9;
+  color: #334155;
+  font-weight: 700;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid #cbd5e1;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.vh-doc-table td {
+  padding: 0.65rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+}
+
+.vh-doc-rental-terms {
+  background-color: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vh-doc-term-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #334155;
+}
+
+.vh-term-icon {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+/* Section III: Financial Summary */
+.vh-doc-fin-box {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.85rem 1.1rem;
+  max-width: 420px;
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .vh-doc-fin-box {
+    max-width: 100%;
+  }
+}
+
+.vh-fin-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+  color: #334155;
+}
+
+.vh-fin-row.discount {
+  color: #166534;
+}
+
+.vh-fin-divider {
+  border-top: 1px solid #cbd5e1;
+  margin: 0.5rem 0;
+}
+
+.vh-fin-row.total {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #1e3a6c;
+}
+
+.vh-fin-total-val {
+  color: #76141c; /* Crimson accent */
+  font-size: 1.05rem;
+}
+
+.vh-fin-note {
+  font-size: 0.73rem;
+  font-style: italic;
+  color: #64748b;
+  margin-top: 0.5rem;
+  line-height: 1.4;
+}
+
+/* Section IV: Articles */
+.vh-doc-articles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  font-size: 0.84rem;
+}
+
+.vh-article-block h5 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1e3a6c;
+  margin: 0 0 0.3rem 0;
+}
+
+.vh-article-block ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.vh-article-block li {
+  color: #334155;
+}
+
+/* Section V: Execution & Audit */
+.vh-doc-execution-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .vh-doc-execution-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vh-exec-card {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.vh-exec-role {
+  font-weight: 700;
+  color: #1e3a6c;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.vh-exec-text {
+  color: #1e293b;
+}
+
+.vh-exec-text.muted {
+  font-size: 0.725rem;
+  color: #64748b;
+}
+
+.vh-exec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: 700;
+  font-size: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.vh-exec-badge.platform {
+  color: #1e3a6c;
+}
+
+.vh-exec-badge.accepted {
+  color: #166534;
+}
+
+.vh-exec-badge.pending {
+  color: #b45309;
+}
+
+.vh-doc-audit-metadata {
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.725rem;
+  color: #64748b;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.vh-audit-title {
+  font-weight: 700;
+  color: #334155;
+  font-size: 0.735rem;
+}
+
+.vh-audit-line code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #1e293b;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+/* Document Footer */
+.vh-doc-footer {
+  margin-top: 1.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.725rem;
+  text-align: center;
+  color: #94a3b8;
+  font-style: italic;
+}

@@ -107,6 +107,7 @@ export const enrichCartItems = (cart: CartItem[], realProductList: any[]): Enric
 
         return {
           ...item,
+          productId: dbProduct._id ? dbProduct._id.toString() : item.productId,
           depositAmount: dbProduct.depositAmount,
           basePrice,
           originalPrice: originalBasePrice,

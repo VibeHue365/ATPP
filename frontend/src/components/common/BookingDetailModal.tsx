@@ -10,6 +10,7 @@ import { API_BASE_URL } from '../../config/env';
 import { downloadPhotosAsZip, downloadSinglePhoto } from '../../utils/downloadUtils';
 import { useToast } from '../feedback/Toast';
 import { ConfirmModal } from '../../utils/confirmModal';
+import { BookingContractsSection } from '../contracts/BookingContractsSection';
 
 interface BookingDetailModalProps {
   bookingId: string | null;
@@ -1296,6 +1297,16 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
 
           {viewerRole === 'customer' && bookingId && !['RETURNED', 'COMPLETED', 'CANCELLED', 'DISPUTED'].includes(booking?.status) && (
             <CustomerRefundPanel bookingId={bookingId} />
+          )}
+
+          {/* Contracts Section */}
+          {booking._id && (
+            <BookingContractsSection
+              bookingId={booking._id}
+              viewerRole={viewerRole}
+              title={viewerRole === 'provider' ? 'Hợp đồng điện tử (Phạm vi đối tác)' : 'Hợp đồng điện tử'}
+              hideWhenEmpty={true}
+            />
           )}
 
           {/* Pricing & Billing Summary */}

@@ -74,6 +74,8 @@ type ProductWizardModalProps = Pick<
   | 'setProdBasePrice'
   | 'prodDepositAmount'
   | 'setProdDepositAmount'
+  | 'prodReplacementValue'
+  | 'setProdReplacementValue'
   | 'prodDescription'
   | 'setProdDescription'
   | 'uploadingImages'
@@ -144,6 +146,8 @@ export function ProductWizardModal({
   setProdBasePrice,
   prodDepositAmount,
   setProdDepositAmount,
+  prodReplacementValue,
+  setProdReplacementValue,
   prodDescription,
   setProdDescription,
   handleImageChange,
@@ -637,6 +641,38 @@ export function ProductWizardModal({
                         required
                       />
                       <span className="pwm-input-unit">VND</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Replacement Value Row */}
+                <div className="pwm-form-row">
+                  <div className="pwm-form-group" style={{ flex: '1 1 100%' }}>
+                    <label className="pwm-label">
+                      Giá trị bồi hoàn trang phục (VNĐ)
+                    </label>
+                    <div className="pwm-input-unit-wrap">
+                      <input
+                        type="number"
+                        min={1}
+                        value={prodReplacementValue}
+                        onChange={(e) => setProdReplacementValue(e.target.value)}
+                        placeholder="Ví dụ: 2000000"
+                        className="pwm-input"
+                        style={{ paddingRight: '50px' }}
+                      />
+                      <span className="pwm-input-unit">VND</span>
+                    </div>
+                    <div style={{ marginTop: '8px', padding: '10px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '12px', color: '#475569', lineHeight: 1.6 }}>
+                      <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#1E293B' }}>
+                        Lưu ý quan trọng về Giá trị bồi hoàn:
+                      </p>
+                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                        <li><strong>Căn cứ bồi thường:</strong> Là giá trị tài sản làm cơ sở tính tiền bồi thường theo tỷ lệ % khi xảy ra sự cố hư hỏng/mất mát trong Hợp đồng điện tử.</li>
+                        <li><strong>Độc lập với Giá thuê và Tiền cọc:</strong> Đây không phải là giá thuê, cũng không phải tiền đặt cọc. Trường hợp hư hỏng nặng vượt quá tiền cọc, khách hàng có nghĩa vụ thanh toán bổ sung phần còn thiếu theo hợp đồng.</li>
+                        <li><strong>Bắt buộc</strong> nếu Shop lựa chọn phương thức bồi thường <em>"% Giá trị tài sản"</em> trong Chính sách xử lý sự cố.</li>
+                        <li><strong>Quy trình kiểm duyệt:</strong> Giá trị bồi hoàn sẽ được Quản trị viên sàn kiểm duyệt trước khi áp dụng chính thức cho khách thuê.</li>
+                      </ul>
                     </div>
                   </div>
                 </div>

@@ -15,6 +15,7 @@ import { API_BASE_URL } from '../../../../config/env';
 import { useToast } from '../../../../components/feedback/Toast';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../../services/httpClient';
+import { BookingContractsSection } from '../../../../components/contracts/BookingContractsSection';
 
 interface ProfileBookingDetailModalProps {
   booking: any;
@@ -418,6 +419,15 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
             })}
           </div>
         </div>
+
+        {/* Electronic Contracts */}
+        <BookingContractsSection
+          bookingId={booking._id}
+          bookingStatus={booking.status}
+          viewerRole="customer"
+          title="Hợp đồng thuê điện tử"
+          hideWhenEmpty={true}
+        />
 
         {/* Financial Summary */}
         <div style={{ marginLeft: 'auto', width: '340px', display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #ECE5DB', paddingTop: '16px' }}>

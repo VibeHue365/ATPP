@@ -732,6 +732,12 @@ export class ProductsService implements OnModuleInit {
       throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
     }
 
+    if (dto.replacementValue !== undefined && dto.replacementValue !== null) {
+      if (!Number.isFinite(dto.replacementValue) || dto.replacementValue <= 0) {
+        throw new BadRequestException('Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0');
+      }
+    }
+
     await this.categoriesService.assertActiveProductCategory(dto.categoryId);
     await this.categoriesService.assertActiveCategories(
       dto.styleCategoryIds ?? [],
@@ -792,6 +798,10 @@ export class ProductsService implements OnModuleInit {
       videos: dto.videos || [],
       basePrice: dto.basePrice,
       depositAmount: dto.depositAmount,
+      replacementValue:
+        dto.replacementValue && dto.replacementValue > 0
+          ? Math.round(dto.replacementValue)
+          : null,
       sizes: productSizes,
       sizeChartPolicyVersion: 1,
       colors: productColors,
@@ -952,7 +962,14 @@ export class ProductsService implements OnModuleInit {
       (dto.depositAmount !== undefined &&
         dto.depositAmount !== product.depositAmount);
 
-    if (!productChanged) {
+    // replacementValue là giá trị tài sản làm căn cứ bồi thường trong hợp đồng điện tử.
+    // Nếu có sự thay đổi, sản phẩm bắt buộc phải qua phê duyệt của Ban Quản trị sàn.
+    const replacementValueChanged =
+      dto.replacementValue !== undefined &&
+      dto.replacementValue !== (product as any).replacementValue;
+    const anyChanged = productChanged || priceChanged || replacementValueChanged;
+    // Nếu không có gì thực sự thay đổi thì thoát sớm
+    if (!anyChanged) {
       return product;
     }
     if (dto.name !== undefined) {
@@ -1002,6 +1019,16 @@ export class ProductsService implements OnModuleInit {
     if (dto.basePrice !== undefined) updateData.basePrice = dto.basePrice;
     if (dto.depositAmount !== undefined)
       updateData.depositAmount = dto.depositAmount;
+    if (dto.replacementValue !== undefined) {
+      if (dto.replacementValue !== null) {
+        if (!Number.isFinite(dto.replacementValue) || dto.replacementValue <= 0) {
+          throw new BadRequestException('Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0');
+        }
+        updateData.replacementValue = Math.round(dto.replacementValue);
+      } else {
+        updateData.replacementValue = null;
+      }
+    }
     if (dto.sizes !== undefined) updateData.sizes = dto.sizes;
     if (dto.colors !== undefined) updateData.colors = dto.colors;
     if (dto.materials !== undefined) updateData.materials = dto.materials;
@@ -1015,7 +1042,8 @@ export class ProductsService implements OnModuleInit {
       );
     }
 
-    // Only an actual provider change must be reviewed again.
+    // Mọi thay đổi về thông tin, hình ảnh, giá thuê hay giá trị bồi hoàn hợp đồng
+    // đều bắt buộc phải được Ban Quản trị phê duyệt lại nhằm ngăn ngừa hành vi gian lận.
     updateData.moderationStatus = ProductModerationStatus.PendingReview;
     updateData.moderationReason = null;
     updateData.moderatedAt = null;

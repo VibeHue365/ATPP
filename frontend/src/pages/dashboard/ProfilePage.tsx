@@ -21,6 +21,7 @@ import { ProfileAddressesTab } from '../../features/profile/components/tabs/Prof
 import { ProfilePaymentsTab } from '../../features/profile/components/tabs/ProfilePaymentsTab';
 import { ProfileSecurityTab } from '../../features/profile/components/tabs/ProfileSecurityTab';
 import { ProfileNotificationsTab } from '../../features/profile/components/tabs/ProfileNotificationsTab';
+import { ProfileContractsTab } from '../../features/profile/components/tabs/ProfileContractsTab';
 
 // Modals
 import { ProfileBookingDetailModal } from '../../features/profile/components/modals/ProfileBookingDetailModal';
@@ -28,6 +29,10 @@ import { ProfileRescheduleModal } from '../../features/profile/components/modals
 import { ProfileLocationChangeModal } from '../../features/profile/components/modals/ProfileLocationChangeModal';
 import { ProfileCancelBookingModal } from '../../features/profile/components/modals/ProfileCancelBookingModal';
 import { ProfileReviewModal } from '../../features/profile/components/modals/ProfileReviewModal';
+import { CONTRACTS_V2_ENABLED } from '../../config/features';
+import { contractService } from '../../services/contractService';
+import { translateError } from '../../utils/errorTranslator';
+import { ContractReviewModal } from '../../components/contracts/ContractReviewModal';
 
 
 import type {
@@ -52,7 +57,7 @@ export const ProfilePage: React.FC = () => {
     rawCategory === 'PHOTOSHOOT' || rawCategory === 'COMBO' ? rawCategory : 'RENTAL';
 
   const [activeTab, setActiveTab] = useState<ProfileTab>(
-    ['overview', 'personal', 'schedule', 'favorites', 'addresses', 'payments', 'security', 'notifications'].includes(
+    ['overview', 'personal', 'schedule', 'contracts', 'favorites', 'addresses', 'payments', 'security', 'notifications'].includes(
       initialTab
     )
       ? initialTab
@@ -65,7 +70,7 @@ export const ProfilePage: React.FC = () => {
     if (
       tabParam &&
       tabParam !== activeTab &&
-      ['overview', 'personal', 'schedule', 'favorites', 'addresses', 'payments', 'security', 'notifications'].includes(tabParam)
+      ['overview', 'personal', 'schedule', 'contracts', 'favorites', 'addresses', 'payments', 'security', 'notifications'].includes(tabParam)
     ) {
       setActiveTab(tabParam);
     }
@@ -103,6 +108,8 @@ export const ProfilePage: React.FC = () => {
   const [bookingToCancel, setBookingToCancel] = useState<any | null>(null);
   const [reviewingItem, setReviewingItem] = useState<any | null>(null);
   const [bookingIncident, setBookingIncident] = useState<any | null>(null);
+  const [pendingContractBookingId, setPendingContractBookingId] = useState<string | null>(null);
+  const [isContractModalOpen, setIsContractModalOpen] = useState(false);
 
   const fetchBookings = async (silent = false) => {
     if (!silent) setIsLoadingBookings(true);
@@ -454,7 +461,7 @@ export const ProfilePage: React.FC = () => {
   }, [dbOffers, quickStats.membershipTier]);
 
   // Actions
-  const handleContinuePayment = async (bookingId: string) => {
+  const proceedToPaymentLink = async (bookingId: string) => {
     try {
       toast.info('Đang kết nối cổng thanh toán...');
       const paymentRes: any = await httpClient.post('/payments/create-link', {
@@ -472,6 +479,24 @@ export const ProfilePage: React.FC = () => {
     } catch (err: any) {
       toast.error(err.message || 'Lỗi khi kết nối cổng thanh toán.');
     }
+  };
+
+  const handleContinuePayment = async (bookingId: string) => {
+    if (CONTRACTS_V2_ENABLED) {
+      try {
+        const readiness = await contractService.getBookingReadiness(bookingId);
+        if (readiness.requirement === 'REQUIRED' && !readiness.ready) {
+          setPendingContractBookingId(bookingId);
+          setIsContractModalOpen(true);
+          return;
+        }
+      } catch (readinessErr: any) {
+        toast.error(translateError(readinessErr?.message) || 'Không thể kiểm tra trạng thái hợp đồng điện tử');
+        return;
+      }
+    }
+
+    await proceedToPaymentLink(bookingId);
   };
 
   const handleLogout = async () => {
@@ -637,6 +662,10 @@ export const ProfilePage: React.FC = () => {
               )
             )}
 
+            {activeTab === 'contracts' && (
+              <ProfileContractsTab onNavigateRental={() => handleSelectTab('schedule', 'RENTAL')} />
+            )}
+
             {activeTab === 'favorites' && <ProfileFavoritesTab />}
 
             {activeTab === 'addresses' && <ProfileAddressesTab />}
@@ -723,6 +752,26 @@ export const ProfilePage: React.FC = () => {
           onClose={() => setReviewingItem(null)}
           onSuccess={() => {
             fetchBookings();
+          }}
+        />
+      )}
+
+      {/* 6. Modal Hợp đồng điện tử */}
+      {CONTRACTS_V2_ENABLED && pendingContractBookingId && (
+        <ContractReviewModal
+          isOpen={isContractModalOpen}
+          bookingId={pendingContractBookingId}
+          onClose={() => {
+            setIsContractModalOpen(false);
+            setPendingContractBookingId(null);
+          }}
+          onAllAccepted={() => {
+            const bId = pendingContractBookingId;
+            setIsContractModalOpen(false);
+            setPendingContractBookingId(null);
+            if (bId) {
+              void proceedToPaymentLink(bId);
+            }
           }}
         />
       )}

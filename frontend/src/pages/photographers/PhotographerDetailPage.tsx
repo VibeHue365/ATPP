@@ -21,6 +21,10 @@ import {
   type ApplicableVoucherItem,
   type IneligibleVoucherItem,
 } from '../cart/components/VoucherPickerModal';
+import { CONTRACTS_V2_ENABLED } from '../../config/features';
+import { contractService } from '../../services/contractService';
+import { translateError } from '../../utils/errorTranslator';
+import { ContractReviewModal } from '../../components/contracts/ContractReviewModal';
 type PhotographerAvailabilityStatus = 'AVAILABLE' | 'FULL' | 'NO_SCHEDULE' | 'OFF_DAY' | 'PAST';
 
 
@@ -123,6 +127,10 @@ export const PhotographerDetailPage: React.FC = () => {
   // Lightbox States
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  // Contract states
+  const [pendingContractBookingId, setPendingContractBookingId] = useState<string | null>(null);
+  const [isContractModalOpen, setIsContractModalOpen] = useState(false);
 
   const allPortfolioImages = useMemo<PhotographerPortfolioImage[]>(() => {
     if (!photographer) return [];
@@ -903,10 +911,36 @@ export const PhotographerDetailPage: React.FC = () => {
         },
       );
 
-      toast.success('Đã giữ lịch trong 10 phút. Đang chuyển đến thanh toán...');
+      toast.success('Đã giữ lịch trong 10 phút.');
 
+      if (CONTRACTS_V2_ENABLED) {
+        try {
+          const readiness = await contractService.getBookingReadiness(holdRes.bookingId);
+          if (readiness.requirement === 'REQUIRED' && !readiness.ready) {
+            setPendingContractBookingId(holdRes.bookingId);
+            setIsContractModalOpen(true);
+            return;
+          }
+        } catch (readinessErr: any) {
+          toast.error(translateError(readinessErr?.message) || 'Không thể kiểm tra trạng thái hợp đồng điện tử');
+          return;
+        }
+      }
+
+      await proceedToPayment(holdRes.bookingId);
+    } catch (err: any) {
+      console.error('Lỗi đặt lịch:', err);
+      toast.error(err.message || 'Không thể tạo lịch đặt. Vui lòng thử lại.');
+    } finally {
+      setIsBookingNow(false);
+    }
+  };
+
+  const proceedToPayment = async (targetBookingId: string) => {
+    try {
+      toast.info('Đang chuyển đến cổng thanh toán...');
       const paymentRes: any = await httpClient.post('/payments/create-link', {
-        bookingId: holdRes.bookingId,
+        bookingId: targetBookingId,
         purpose: 'DEPOSIT_PAYMENT',
       });
 
@@ -919,10 +953,8 @@ export const PhotographerDetailPage: React.FC = () => {
         throw new Error('Không thể khởi tạo liên kết thanh toán');
       }
     } catch (err: any) {
-      console.error('Lỗi đặt lịch:', err);
-      toast.error(err.message || 'Không thể tạo lịch đặt. Vui lòng thử lại.');
-    } finally {
-      setIsBookingNow(false);
+      console.error('Lỗi thanh toán:', err);
+      toast.error(err.message || 'Không thể khởi tạo liên kết thanh toán.');
     }
   };
 
@@ -1018,6 +1050,24 @@ export const PhotographerDetailPage: React.FC = () => {
       onSelectVoucher={(voucher) => setSelectedVoucher(voucher)}
       onApplyManualCode={handleApplyManualCode}
     />
+    {CONTRACTS_V2_ENABLED && pendingContractBookingId && (
+      <ContractReviewModal
+        isOpen={isContractModalOpen}
+        bookingId={pendingContractBookingId}
+        onClose={() => {
+          setIsContractModalOpen(false);
+          setPendingContractBookingId(null);
+        }}
+        onAllAccepted={() => {
+          const bId = pendingContractBookingId;
+          setIsContractModalOpen(false);
+          setPendingContractBookingId(null);
+          if (bId) {
+            void proceedToPayment(bId);
+          }
+        }}
+      />
+    )}
     </>
   );
 

@@ -60,9 +60,10 @@ class HttpClient {
       }
 
       return this.parseResponse<T>(response);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`API Request failed on ${path}:`, error);
-      throw error;
+      const translated = translateError(error?.message || 'Lỗi kết nối máy chủ.');
+      throw new Error(translated);
     }
   }
 

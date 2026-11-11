@@ -83,4 +83,21 @@ export class WebhookEventRepository {
       { $set: { error }, $unset: { processingStartedAt: 1 } },
     );
   }
+
+  async findStuckEvents(
+    olderThanMs = PROCESSING_LEASE_MS,
+    limit = 20,
+  ): Promise<PaymentWebhookEventDocument[]> {
+    const now = new Date();
+    const leaseExpiredAt = new Date(now.getTime() - olderThanMs);
+    return this.webhookEventModel
+      .find({
+        isValid: true,
+        processed: false,
+        processingStartedAt: { $lte: leaseExpiredAt },
+        processingAttempts: { $lt: 8 },
+      })
+      .limit(limit)
+      .exec();
+  }
 }

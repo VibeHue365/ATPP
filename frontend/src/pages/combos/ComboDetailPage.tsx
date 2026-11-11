@@ -429,10 +429,12 @@ export const ComboDetailPage: React.FC = () => {
     const shootLat = selectedLocation?.latitude ?? provider.address?.geo?.coordinates?.[1] ?? null;
     const shootLng = selectedLocation?.longitude ?? provider.address?.geo?.coordinates?.[0] ?? null;
 
+    const rawProvId = provider?._id || (typeof (product as any)?.providerId === 'object' ? (product as any)?.providerId?._id : (product as any)?.providerId);
     // Add Ao Dai to cart
     addToCart({
       itemType: 'PRODUCT',
-      productId: product._id,
+      productId: product._id ? product._id.toString() : undefined,
+      providerId: rawProvId ? rawProvId.toString() : null,
       productName: product.name,
       productImage: product.images?.[0] || '',
       basePrice: product.basePrice,

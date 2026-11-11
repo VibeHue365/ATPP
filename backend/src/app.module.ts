@@ -13,6 +13,7 @@ import { SystemPoliciesModule } from './modules/system-policies/system-policies.
 import { SettlementsModule } from './modules/settlements/settlements.module';
 import { ProductsModule } from './modules/products/products.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
+import { ContractsModule } from './modules/contracts/contracts.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { DisputesModule } from './modules/disputes/disputes.module';
@@ -51,6 +52,7 @@ import { BannersModule } from './modules/banners/banners.module';
     SystemPoliciesModule,
     SettlementsModule,
     ProductsModule,
+    ContractsModule,
     BookingsModule,
     PaymentsModule,
     ReviewsModule,

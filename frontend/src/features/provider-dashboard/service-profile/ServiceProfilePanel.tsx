@@ -16,6 +16,9 @@ import { SectionLoading } from '../../../components/feedback/AsyncState';
 import { useToast } from '../../../components/feedback/Toast';
 import { PhotographyLocationPicker } from '../../photographers/components/PhotographyLocationPicker';
 import { providerApi } from '../api/providerDashboardApi';
+import { ProviderContractStatusCard } from './ProviderContractStatusCard';
+import { ProviderThresholdSettingsCard } from './ProviderThresholdSettingsCard';
+import { ProviderPolicyForm } from './ProviderPolicyForm';
 import type { useProviderSessionState } from '../hooks/useProviderSessionState';
 import type { useProviderProfileState } from './useProviderProfileState';
 
@@ -326,32 +329,55 @@ export function ServiceProfilePanel({
           </section>}
 
           {profileSection === 'policy' && <section className="provider-service-panel" role="tabpanel">
-            <div className="provider-service-panel-heading">
-              <h3>Chính sách hủy dịch vụ và hoàn cọc</h3>
-              <p>Thiết lập từng mốc hủy và tỷ lệ hoàn cọc. Hệ thống sẽ tự viết thành chính sách rõ ràng cho khách.</p>
-            </div>
-            <div className="provider-policy-builder">
-              <div className="provider-policy-builder-header">
-                <div><strong>Mốc hoàn cọc</strong><span>Nhập số ngày trước lịch hẹn và phần trăm hoàn tiền cọc tương ứng.</span></div>
-                <div className="provider-policy-builder-actions">
-                  <button type="button" className="provider-policy-secondary-action" onClick={() => setCancellationRefundRules([{ noticeDays: 7, refundPercent: 100 }, { noticeDays: 3, refundPercent: 50 }, { noticeDays: 0, refundPercent: 0 }])}>Dùng mẫu phổ biến</button>
-                  <button type="button" className="provider-policy-primary-action" onClick={() => setCancellationRefundRules((rules) => [...rules, { noticeDays: 0, refundPercent: 0 }])}><Plus size={15} /> Thêm mốc</button>
+            {/* If provider has photography capability, allow them to configure photography cancellation policy */}
+            {hasPhotographyCapability ? (
+              <>
+                <div className="provider-service-panel-heading">
+                  <h3>Chính sách hủy dịch vụ Chụp ảnh (Photography)</h3>
+                  <p>Thiết lập từng mốc hủy và tỷ lệ hoàn cọc áp dụng riêng cho lịch hẹn Chụp ảnh. (Dịch vụ Thuê Áo dài được quản lý riêng qua Hợp đồng điện tử bên dưới).</p>
                 </div>
+                <div className="provider-policy-builder">
+                  <div className="provider-policy-builder-header">
+                    <div><strong>Mốc hoàn cọc chụp ảnh</strong><span>Nhập số ngày trước lịch hẹn và phần trăm hoàn tiền cọc tương ứng.</span></div>
+                    <div className="provider-policy-builder-actions">
+                      <button type="button" className="provider-policy-secondary-action" onClick={() => setCancellationRefundRules([{ noticeDays: 7, refundPercent: 100 }, { noticeDays: 3, refundPercent: 50 }, { noticeDays: 0, refundPercent: 0 }])}>Dùng mẫu phổ biến</button>
+                      <button type="button" className="provider-policy-primary-action" onClick={() => setCancellationRefundRules((rules) => [...rules, { noticeDays: 0, refundPercent: 0 }])}><Plus size={15} /> Thêm mốc</button>
+                    </div>
+                  </div>
+                  {cancellationRefundRules.length === 0 ? <div className="provider-policy-empty"><strong>Chưa có mốc hoàn cọc cho dịch vụ chụp ảnh.</strong><span>Thêm mốc theo chính sách dịch vụ của cửa hàng.</span></div> : <div className="provider-policy-rules">
+                    <div className="provider-policy-rule-labels"><span>Hủy trước lịch</span><span>Tỷ lệ hoàn cọc</span><span /></div>
+                    {cancellationRefundRules.map((rule, index) => <div className="provider-policy-rule" key={index}>
+                      <label><input type="number" min="0" max="365" step="1" value={rule.noticeDays} onChange={(event) => setCancellationRefundRules((rules) => rules.map((item, itemIndex) => itemIndex === index ? { ...item, noticeDays: Number(event.target.value) } : item))} /><span>ngày</span></label>
+                      <label><input type="number" min="0" max="100" step="1" value={rule.refundPercent} onChange={(event) => setCancellationRefundRules((rules) => rules.map((item, itemIndex) => itemIndex === index ? { ...item, refundPercent: Number(event.target.value) } : item))} /><span>% hoàn</span></label>
+                      <button type="button" className="provider-policy-remove" onClick={() => setCancellationRefundRules((rules) => rules.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Xóa mốc hủy ${rule.noticeDays} ngày`}><Trash2 size={16} /></button>
+                    </div>)}
+                  </div>}
+                </div>
+                <div className="provider-service-field provider-policy-notes">
+                  <label htmlFor="provider-cancellation-notes">Ghi chú hủy lịch chụp ảnh (không bắt buộc)</label>
+                  <textarea id="provider-cancellation-notes" value={cancellationAdditionalNotes} onChange={(e) => setCancellationAdditionalNotes(e.target.value)} placeholder="Ví dụ: Khách cần báo trước để bảo lưu tiền cọc cho lần chụp sau." />
+                </div>
+                <div className="provider-service-policy-preview"><strong>Xem trước chính sách hủy chụp ảnh:</strong><p>{cancellationPolicySummary || 'Chưa thiết lập chính sách hủy lịch chụp ảnh.'}</p></div>
+              </>
+            ) : hasAodaiCapability ? (
+              /* If provider only does Ao Dai Rental, present clean single-source-of-truth guidance */
+              <div style={{ padding: '18px 22px', borderRadius: 14, border: '1px solid #e7dfd5', background: '#fdfbf7', marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <FileText size={20} style={{ color: '#8b263e' }} />
+                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#2b181c' }}>
+                    Chính sách Hủy thuê & Hoàn tiền cọc Áo dài (Contracts V2)
+                  </h3>
+                </div>
+                <p style={{ fontSize: 13, color: '#665', lineHeight: 1.6, margin: 0 }}>
+                  Đối với dịch vụ Thuê Áo dài, chính sách hủy đơn và hoàn tiền cọc được quản lý tập trung và kiểm duyệt pháp lý thông qua <strong>Hợp đồng điện tử (Contracts V2)</strong> ở biểu mẫu bên dưới.
+                  Nội dung sau khi được Ban Quản trị phê duyệt sẽ được đồng bộ nhất quán hiển thị trên trang gian hàng, màn hình đặt thuê và hợp đồng giao kết với khách hàng.
+                </p>
               </div>
-              {cancellationRefundRules.length === 0 ? <div className="provider-policy-empty"><strong>Chưa có mốc hoàn cọc.</strong><span>Chọn “Dùng mẫu phổ biến” hoặc thêm mốc theo chính sách của cửa hàng.</span></div> : <div className="provider-policy-rules">
-                <div className="provider-policy-rule-labels"><span>Hủy trước lịch</span><span>Tỷ lệ hoàn cọc</span><span /></div>
-                {cancellationRefundRules.map((rule, index) => <div className="provider-policy-rule" key={index}>
-                  <label><input type="number" min="0" max="365" step="1" value={rule.noticeDays} onChange={(event) => setCancellationRefundRules((rules) => rules.map((item, itemIndex) => itemIndex === index ? { ...item, noticeDays: Number(event.target.value) } : item))} /><span>ngày</span></label>
-                  <label><input type="number" min="0" max="100" step="1" value={rule.refundPercent} onChange={(event) => setCancellationRefundRules((rules) => rules.map((item, itemIndex) => itemIndex === index ? { ...item, refundPercent: Number(event.target.value) } : item))} /><span>% hoàn</span></label>
-                  <button type="button" className="provider-policy-remove" onClick={() => setCancellationRefundRules((rules) => rules.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Xóa mốc hủy ${rule.noticeDays} ngày`}><Trash2 size={16} /></button>
-                </div>)}
-              </div>}
-            </div>
-            <div className="provider-service-field provider-policy-notes">
-              <label htmlFor="provider-cancellation-notes">Ghi chú thêm (không bắt buộc)</label>
-              <textarea id="provider-cancellation-notes" value={cancellationAdditionalNotes} onChange={(e) => setCancellationAdditionalNotes(e.target.value)} placeholder="Ví dụ: Phí chuyển khoản không được hoàn; khách cần liên hệ shop để xác nhận yêu cầu hủy." />
-            </div>
-            <div className="provider-service-policy-preview"><strong>Xem trước hiển thị với khách:</strong><p>{cancellationPolicySummary || 'Chưa thiết lập chính sách hủy và hoàn cọc.'}</p></div>
+            ) : null}
+
+            <ProviderPolicyForm />
+            <ProviderContractStatusCard />
+            <ProviderThresholdSettingsCard />
           </section>}
 
           <div className="provider-service-savebar">

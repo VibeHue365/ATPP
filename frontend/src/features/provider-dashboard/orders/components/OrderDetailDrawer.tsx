@@ -34,6 +34,7 @@ import Swal from 'sweetalert2';
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../../assets/images/onboarding_traditional.webp';
 import { RentalEvidenceImage } from '../../../rentals/components/RentalEvidenceImage';
+import { BookingContractsSection } from '../../../../components/contracts/BookingContractsSection';
 
 interface OrderDetailDrawerProps {
   order: Order | null;
@@ -1274,6 +1275,17 @@ export function OrderDetailDrawer({
                     })
                   )}
                 </div>
+
+                {/* Hợp đồng điện tử (Phạm vi đối tác) */}
+                <div style={{ marginTop: '16px' }}>
+                  <BookingContractsSection
+                    bookingId={order._id}
+                    bookingStatus={order.status}
+                    viewerRole="provider"
+                    title="Hợp đồng điện tử (Phạm vi đối tác)"
+                    hideWhenEmpty={true}
+                  />
+                </div>
               </div>
 
               {/* CỘT PHẢI (Hồ sơ minh chứng, Thanh toán Escrow, Stepper, Ghi chú) */}
@@ -1760,6 +1772,17 @@ export function OrderDetailDrawer({
                   • <strong>Giải ngân doanh thu:</strong> Doanh thu được tự động chuyển về ví đối tác của bạn ngay sau khi khách hàng xác nhận nhận đủ ảnh và hoàn trả áo dài nguyên vẹn.<br />
                   • <strong>Bảo hiểm sự cố:</strong> Trường hợp phát sinh hư hỏng, hệ thống trọng tài VibeHue sẽ thụ lý bằng chứng hình ảnh trong vòng 24 giờ.
                 </div>
+              </div>
+
+              {/* Hợp đồng điện tử (Phạm vi đối tác) */}
+              <div style={{ marginTop: '16px' }}>
+                <BookingContractsSection
+                  bookingId={order._id}
+                  bookingStatus={order.status}
+                  viewerRole="provider"
+                  title="Hợp đồng điện tử (Phạm vi đối tác)"
+                  hideWhenEmpty={true}
+                />
               </div>
             </div>
           )}

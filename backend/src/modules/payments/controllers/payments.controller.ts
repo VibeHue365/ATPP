@@ -122,10 +122,25 @@ export class PaymentsController {
       );
     }
 
+    const matchedPayment = await this.paymentsRepository.findByOrderCode(orderCode);
+    const isV2 = matchedPayment?.contractBinding?.flowVersion === 2;
+
     const checksumKey = this.configService.get<string>(
       'PAYOS_CHECKSUM_KEY',
       '',
     );
+    if (isV2) {
+      if (!checksumKey || checksumKey.includes('your_'))
+        throw new BadRequestException('V2_WEBHOOK_SIGNATURE_KEY_REQUIRED');
+      if (
+        !matchedPayment ||
+        webhookData.amount !== matchedPayment.amount ||
+        webhookData.currency !== matchedPayment.contractBinding?.currency ||
+        webhookData.orderCode !== matchedPayment.payos?.orderCode ||
+        !['PAID', 'FAILED', 'EXPIRED', 'CANCELLED'].includes(status)
+      )
+        throw new BadRequestException('V2_WEBHOOK_PAYMENT_MISMATCH');
+    }
     if (checksumKey && !checksumKey.includes('your_')) {
       if (!this.verifyPayOSSignature(body.data, body.signature, checksumKey)) {
         this.logger.warn(
@@ -142,8 +157,10 @@ export class PaymentsController {
     const webhookId = `payos_${orderCode}_${status}`;
     const claim = await this.webhookEventRepository.claimVerifiedEvent(
       webhookId,
-      body.data,
-      body.signature,
+      isV2
+        ? { orderCode, status, amount: webhookData.amount, currency: webhookData.currency }
+        : body.data,
+      isV2 ? null : body.signature,
     );
     if (claim.state === 'processed') {
       return { status: 'success', note: 'already_processed' };
@@ -170,7 +187,9 @@ export class PaymentsController {
             'Số tiền webhook không khớp giao dịch.',
           );
         }
-        await this.paymentsService.confirmPayment(payment.paymentCode);
+        if (isV2)
+          await this.paymentsService.confirmPayment(payment.paymentCode, { source: 'WEBHOOK', orderCode });
+        else await this.paymentsService.confirmPayment(payment.paymentCode);
       } else if (['FAILED', 'EXPIRED', 'CANCELLED'].includes(status)) {
         const payment =
           await this.paymentsRepository.findByOrderCode(orderCode);
@@ -224,7 +243,7 @@ export class PaymentsController {
   @Post('checkout/:code/confirm')
   async confirmSimulation(@Param('code') code: string) {
     this.ensureSimulatorEnabled();
-    return this.paymentsService.confirmPayment(code);
+    return this.paymentsService.confirmPayment(code, { source: 'SIMULATOR' });
   }
 
   @Post('checkout/:code/cancel')
