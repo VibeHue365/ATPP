@@ -495,7 +495,7 @@ export function ProviderHeader({
                 className="p-dropdown-item"
                 onClick={() => {
                   setIsProfileOpen(false);
-                  navigate('/chat');
+                  setCurrentView('chat');
                 }}
                 role="menuitem"
                 type="button"

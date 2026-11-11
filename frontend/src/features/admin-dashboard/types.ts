@@ -9,13 +9,17 @@ export interface AdminPopularProduct {
   basePrice: number;
   viewCount?: number;
   rentCount?: number;
+  recommendation?: string;
 }
 
 export interface AdminUserBehavior {
   topSearches?: Array<{ keyword: string; count: number }>;
-  pageViews?: Partial<Record<'homepage' | 'rentals' | 'photographers' | 'productDetails', number>>;
+  pageViews?: Partial<
+    Record<"homepage" | "rentals" | "photographers" | "productDetails", number>
+  >;
   popularBookings?: Array<{ _id: string; count: number }>;
   popularProducts?: AdminPopularProduct[];
+  highViewZeroBookingProducts?: AdminPopularProduct[];
 }
 
 export interface AdminMetric {
@@ -53,12 +57,12 @@ export interface PendingTaskItem {
   title: string;
   count: number;
   tab: string;
-  variant: 'red' | 'amber';
+  variant: "red" | "amber";
 }
 
 export interface ActivityFeedItem {
   id: string;
-  type: 'booking' | 'product' | 'refund' | 'verification' | 'dispute';
+  type: "booking" | "product" | "refund" | "verification" | "dispute";
   actor: string;
   action: string;
   timeAgo: string;
@@ -68,7 +72,7 @@ export interface SystemAlertItem {
   id: string;
   title: string;
   count: number;
-  severity: 'warning' | 'critical';
+  severity: "warning" | "critical";
 }
 
 export interface AdminOverviewKPIs {
@@ -99,7 +103,7 @@ export interface AdminStats {
   userBehavior?: AdminUserBehavior;
   kpis?: AdminOverviewKPIs;
   chart?: {
-    period: 'day' | 'week' | 'month';
+    period: "day" | "week" | "month";
     summaryBookings: number;
     summaryGmv: number;
     points: OverviewChartPoint[];
@@ -186,4 +190,57 @@ export interface AdminAiInsightsResponse {
     copilotAnswer?: string;
     source: string;
   };
+}
+
+// ─── Admin statistics (TienDat) ───
+
+export interface BookingConversionMetrics {
+  totalBookings: number;
+  completedBookings: number;
+  cancelledBookings: number;
+  disputedBookings: number;
+  completionRate: number;
+  cancellationRate: number;
+  disputeRate: number;
+  from?: string;
+  to?: string;
+}
+
+export interface ShopsOverviewMetrics {
+  totalShops: number;
+  totalProducts: number;
+  activeShops: number;
+  listedProducts: number;
+}
+
+export interface PhotographerOverviewMetrics {
+  totalPhotographers: number;
+  completedShoots: number;
+  location: string | null;
+}
+
+export interface UserGrowthMetrics {
+  from: string;
+  to: string;
+  totalNewUsers: number;
+  mau: number;
+  data: Array<{ date: string; newUsers: number; dau: number }>;
+}
+
+export interface LowRatingPhotographerReport {
+  threshold: number;
+  total: number;
+  data: Array<{
+    photographerId: string;
+    businessName: string;
+    city: string | null;
+    averageRating: number;
+    totalReviews: number;
+    negativeReviews: Array<{
+      reviewId: string;
+      rating: number;
+      comment: string;
+      createdAt?: string;
+    }>;
+  }>;
 }

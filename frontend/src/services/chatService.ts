@@ -1,9 +1,21 @@
 import { httpClient } from './httpClient';
 import type { ChatRoom, ChatMessage } from '../types/chat.types';
 
+export interface AvailableChatPartner {
+  _id: string;
+  userId: string;
+  businessName: string;
+  capabilities: string[];
+  avatarUrl: string | null;
+}
+
 export const chatService = {
   async getRooms(): Promise<ChatRoom[]> {
     return httpClient.get<ChatRoom[]>('/chat/rooms');
+  },
+
+  async getAvailablePartners(): Promise<AvailableChatPartner[]> {
+    return httpClient.get<AvailableChatPartner[]>('/chat/partners');
   },
 
   async getMessages(roomId: string, limit: number = 100, skip: number = 0): Promise<ChatMessage[]> {

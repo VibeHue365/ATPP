@@ -78,10 +78,23 @@ export class NotificationsService {
     });
     const savedNotification = await newNotification.save();
 
-    // 1. Send Email Notification
+    let recipient: UserDocument | null = null;
     try {
-      const user = await this.userModel.findById(new Types.ObjectId(userId));
-      if (user && user.auth && user.auth.email) {
+      recipient = await this.userModel.findById(new Types.ObjectId(userId));
+    } catch (userError) {
+      console.warn('Unable to load notification recipient:', userError);
+    }
+
+    // 1. Send Email Notification. Marketing opt-out never suppresses
+    // transactional or critical account emails.
+    try {
+      const isMarketing = metadata.channel === 'MARKETING';
+      const marketingEmailEnabled =
+        recipient?.notificationPreferences?.marketingEmail !== false;
+      if (
+        recipient?.auth?.email &&
+        (!isMarketing || marketingEmailEnabled)
+      ) {
         const emailHtml = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e8e2d5; border-radius: 8px;">
             <h2 style="color: #4a0e17; border-bottom: 2px solid #4a0e17; padding-bottom: 10px;">Thông báo từ VibeHue</h2>
@@ -91,7 +104,7 @@ export class NotificationsService {
             <p style="color: #7a7a7a; font-size: 11px;">Đây là thông báo tự động từ hệ thống VibeHue. Vui lòng không trả lời email này.</p>
           </div>
         `;
-        await this.mailService.sendMail(user.auth.email, `[VibeHue] Thông báo: ${title}`, emailHtml);
+        await this.mailService.sendMail(recipient.auth.email, `[VibeHue] Thông báo: ${title}`, emailHtml);
       }
     } catch (mailError) {
       console.warn('Email notification delivery failed:', mailError);
@@ -99,7 +112,9 @@ export class NotificationsService {
 
     // 2. Emit Realtime WebSocket Event
     try {
-      if (this.chatGateway && this.chatGateway.server) {
+      const appPushEnabled =
+        recipient?.notificationPreferences?.appPush !== false;
+      if (appPushEnabled && this.chatGateway && this.chatGateway.server) {
         const userSockets = this.chatGateway.getActiveConnections().get(userId) || [];
         userSockets.forEach((socketId) => {
           this.chatGateway.server.to(socketId).emit('new_notification', savedNotification);

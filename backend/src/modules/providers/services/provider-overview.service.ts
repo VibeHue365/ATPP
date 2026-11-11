@@ -891,7 +891,7 @@ export class ProviderOverviewService {
         },
       },
       { $sort: { count: -1, revenue: -1 } },
-      { $limit: 4 },
+      { $limit: 5 },
     ]);
 
     const result: ProviderOverviewTopService[] = [];

@@ -11,6 +11,7 @@ import {
   UserStatus,
 } from '../schemas/user.schema';
 import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
+import { UpdateNotificationSettingsDto } from '../dto/update-notification-settings.dto';
 
 export interface AdminUserListFilters {
   keyword?: string;
@@ -479,6 +480,25 @@ export class UsersRepository {
         { $set: updateQuery },
       );
     }
+  }
+
+  async updateNotificationSettings(
+    userId: Types.ObjectId,
+    dto: UpdateNotificationSettingsDto,
+  ): Promise<void> {
+    const update: Record<string, boolean> = {};
+    if (dto.marketingEmail !== undefined) {
+      update['notificationPreferences.marketingEmail'] = dto.marketingEmail;
+    }
+    if (dto.appPush !== undefined) {
+      update['notificationPreferences.appPush'] = dto.appPush;
+    }
+    if (Object.keys(update).length === 0) return;
+
+    await this.userModel.updateOne(
+      { _id: userId, deletedAt: null },
+      { $set: update },
+    );
   }
 
   async toggleFavorite(

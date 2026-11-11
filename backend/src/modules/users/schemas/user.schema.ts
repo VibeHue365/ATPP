@@ -90,6 +90,11 @@ export interface UserPreferences {
   note?: string | null;
 }
 
+export interface UserNotificationPreferences {
+  marketingEmail: boolean;
+  appPush: boolean;
+}
+
 export interface UserAddress {
   label: string;
   recipientName?: string | null;
@@ -220,6 +225,15 @@ export class User {
     default: {},
   })
   preferences: UserPreferences;
+
+  @Prop({
+    type: {
+      marketingEmail: { type: Boolean, default: true },
+      appPush: { type: Boolean, default: true },
+    },
+    default: { marketingEmail: true, appPush: true },
+  })
+  notificationPreferences: UserNotificationPreferences;
 
   @Prop({
     type: [

@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { Injectable, Logger } from '@nestjs/common';
@@ -25,6 +24,10 @@ import {
   BookingStatus,
 } from '../schemas/booking.schema';
 import {
+  Provider,
+  ProviderDocument,
+} from '../../providers/schemas/provider.schema';
+import {
   Notification,
   NotificationDocument,
   NotificationType,
@@ -44,6 +47,8 @@ export class BookingsSchedulerService {
     private readonly bookingModel: Model<BookingDocument>,
     @InjectModel(BookingItem.name)
     private readonly bookingItemModel: Model<BookingItemDocument>,
+    @InjectModel(Provider.name)
+    private readonly providerModel: Model<ProviderDocument>,
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
     private readonly notificationsService: NotificationsService,
@@ -247,7 +252,69 @@ export class BookingsSchedulerService {
     this.logger.log('Running automatic schedule reminders cron-job...');
     const now = new Date();
 
-    // 1. Remind 24 hours in advance
+    // 1. Remind from BookingSchedule model (24h & 2h)
+    await this.processBookingScheduleReminders(now);
+
+    // 2. Direct check on active BookingItems for Rental Pickup, Return, Overdue Return, and Photoshoots
+    await this.processBookingItemReminders(now);
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async handleReviewReminders() {
+    this.logger.log('Running post-service review reminders cron-job...');
+    const now = new Date();
+    const reminderCutoff = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+    const oldestEligible = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    try {
+      const bookings = await this.bookingModel
+        .find({
+          status: { $in: [BookingStatus.Completed, BookingStatus.Returned] },
+          statusTimeline: {
+            $elemMatch: {
+              status: { $in: [BookingStatus.Completed, BookingStatus.Returned] },
+              changedAt: { $gte: oldestEligible, $lte: reminderCutoff },
+            },
+          },
+        })
+        .select('_id bookingCode customerId status statusTimeline')
+        .lean();
+
+      for (const booking of bookings) {
+        const hasUnreviewedItem = await this.bookingItemModel.exists({
+          bookingId: booking._id,
+          isReviewed: { $ne: true },
+        });
+        if (!hasUnreviewedItem) continue;
+
+        const customerId = (
+          (booking.customerId as any)?._id || booking.customerId
+        ).toString();
+        const reminderKey = `review_reminder_${booking._id}`;
+        const alreadySent = await this.notificationModel.findOne({
+          userId: new Types.ObjectId(customerId),
+          'metadata.reminderKey': reminderKey,
+        });
+        if (alreadySent) continue;
+
+        await this.notificationsService.createNotification(
+          customerId,
+          'Chia sẻ trải nghiệm của bạn',
+          `Đơn hàng ${booking.bookingCode} đã hoàn thành. Hãy dành ít phút đánh giá sản phẩm và dịch vụ để giúp VibeHue phục vụ bạn tốt hơn!`,
+          NotificationType.Booking,
+          {
+            bookingId: booking._id,
+            reminderKey,
+            action: 'REVIEW_BOOKING',
+          },
+        );
+      }
+    } catch (error) {
+      this.logger.error('Error in handleReviewReminders:', error);
+    }
+  }
+
+  private async processBookingScheduleReminders(now: Date) {
     const start24h = new Date(now.getTime() + 23.5 * 60 * 60 * 1000);
     const end24h = new Date(now.getTime() + 24.5 * 60 * 60 * 1000);
 
@@ -263,7 +330,6 @@ export class BookingsSchedulerService {
 
     await this.processRemindersBatch(upcomingSchedules24h, '24h', '24 giờ');
 
-    // 2. Remind 2 hours in advance
     const start2h = new Date(now.getTime() + 1.5 * 60 * 60 * 1000);
     const end2h = new Date(now.getTime() + 2.5 * 60 * 60 * 1000);
 
@@ -331,16 +397,16 @@ export class BookingsSchedulerService {
           let eventTypeLabel = '';
           switch (schedule.scheduleType) {
             case BookingScheduleType.Pickup:
-              eventTypeLabel = 'nhận đồ thuê';
+              eventTypeLabel = 'nhận áo dài';
               break;
             case BookingScheduleType.Return:
-              eventTypeLabel = 'trả đồ thuê';
+              eventTypeLabel = 'trả áo dài';
               break;
             case BookingScheduleType.Photoshoot:
               eventTypeLabel = 'chụp ảnh';
               break;
             case BookingScheduleType.RentalPeriod:
-              eventTypeLabel = 'kỳ hạn thuê';
+              eventTypeLabel = 'kỳ hạn thuê áo dài';
               break;
             default:
               eventTypeLabel = 'lịch trình';
@@ -355,8 +421,8 @@ export class BookingsSchedulerService {
           }
 
           const dateObj = new Date(scheduledAt);
-          const title = `Nhắc nhở lịch trình - Còn ${timeLabel}`;
-          const content = `Bạn có lịch trình ${eventTypeLabel} cho đơn hàng ${booking.bookingCode} vào lúc ${dateObj.toLocaleTimeString('vi-VN')} ngày ${dateObj.toLocaleDateString('vi-VN')}. Vui lòng chuẩn bị đúng giờ!`;
+          const title = `Nhắc nhở: Lịch ${eventTypeLabel} – Còn ${timeLabel}`;
+          const content = `Bạn có lịch ${eventTypeLabel} cho đơn hàng ${booking.bookingCode} vào lúc ${dateObj.toLocaleTimeString('vi-VN')} ngày ${dateObj.toLocaleDateString('vi-VN')}. Vui lòng chuẩn bị đúng giờ!`;
 
           await this.notificationsService.createNotification(
             customerId,
@@ -382,6 +448,353 @@ export class BookingsSchedulerService {
       }
     } catch (batchErr) {
       this.logger.error(`Error in batch reminder processing (${reminderType}):`, batchErr);
+    }
+  }
+
+  private async processBookingItemReminders(now: Date) {
+    try {
+      const activeBookings = await this.bookingModel
+        .find({
+          status: {
+            $in: [
+              BookingStatus.Confirmed,
+              BookingStatus.DepositPaid,
+              BookingStatus.PickupPending,
+              BookingStatus.PickedUp,
+              BookingStatus.InProgress,
+            ],
+          },
+        })
+        .select('_id bookingCode customerId providerIds status pricingSummary')
+        .lean();
+
+      if (!activeBookings || activeBookings.length === 0) return;
+
+      const bookingIds = activeBookings.map((b) => b._id);
+      const items = await this.bookingItemModel
+        .find({ bookingId: { $in: bookingIds } })
+        .lean();
+
+      const bookingMap = new Map(
+        activeBookings.map((b) => [b._id.toString(), b]),
+      );
+
+      for (const item of items) {
+        const booking = bookingMap.get(item.bookingId.toString());
+        if (!booking) continue;
+        const customerId = (
+          (booking.customerId as any)?._id || booking.customerId
+        ).toString();
+
+        // 1. RENTAL ITEM REMINDERS (Nhắc nhận áo & Nhắc trả áo & Cảnh báo quá hạn)
+        if (item.itemType === BookingItemType.Product) {
+          await this.handleRentalItemReminders(item, booking, customerId, now);
+        }
+
+        // 2. PHOTOGRAPHY ITEM REMINDERS (Nhắc lịch chụp ảnh cho Customer & Photographer)
+        if (item.itemType === BookingItemType.PhotographyPackage) {
+          await this.handlePhotographyItemReminders(
+            item,
+            booking,
+            customerId,
+            now,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.error('Error in processBookingItemReminders:', err);
+    }
+  }
+
+  private async handleRentalItemReminders(
+    item: any,
+    booking: any,
+    customerId: string,
+    now: Date,
+  ) {
+    try {
+      // Determine pickup time & return time
+      let pickupTime: Date | null = null;
+      let returnTime: Date | null = null;
+
+      if (item.rentalType === 'HOURLY') {
+        if (item.shootDate) {
+          const d = new Date(item.shootDate);
+          let startH = 8;
+          let startM = 0;
+          let endH = 12;
+          let endM = 0;
+          if (item.shootTimeSlot && item.shootTimeSlot.includes('-')) {
+            const parts = item.shootTimeSlot.split('-');
+            const [sh, sm] = parts[0].trim().split(':').map(Number);
+            if (!isNaN(sh)) {
+              startH = sh;
+              startM = sm || 0;
+            }
+            const [eh, em] = parts[1].trim().split(':').map(Number);
+            if (!isNaN(eh)) {
+              endH = eh;
+              endM = em || 0;
+            }
+          }
+          pickupTime = new Date(d);
+          pickupTime.setHours(startH, startM, 0, 0);
+          returnTime = new Date(d);
+          returnTime.setHours(endH, endM, 0, 0);
+        }
+      } else {
+        // DAILY
+        if (item.rentalFrom) {
+          const fromObj = new Date(item.rentalFrom);
+          pickupTime = new Date(item.rentalFrom);
+          if (fromObj.getHours() === 0 && fromObj.getMinutes() === 0) {
+            pickupTime.setHours(8, 0, 0, 0);
+          }
+        }
+        if (item.rentalTo) {
+          const toObj = new Date(item.rentalTo);
+          returnTime = new Date(item.rentalTo);
+          if (toObj.getHours() === 0 && toObj.getMinutes() === 0) {
+            returnTime.setHours(20, 0, 0, 0);
+          }
+        }
+      }
+
+      // --- A. Pickup Reminders (24h and 2h before pickupTime) ---
+      if (
+        pickupTime &&
+        (booking.status === BookingStatus.Confirmed ||
+          booking.status === BookingStatus.DepositPaid)
+      ) {
+        const msUntilPickup = pickupTime.getTime() - now.getTime();
+        const hoursUntilPickup = msUntilPickup / (1000 * 60 * 60);
+
+        // 24h pickup reminder (18h to 36h window)
+        if (hoursUntilPickup >= 18 && hoursUntilPickup <= 36) {
+          const key = `pickup_24h_${item._id}`;
+          const exists = await this.notificationModel.findOne({
+            userId: new Types.ObjectId(customerId),
+            'metadata.reminderKey': key,
+          });
+          if (!exists) {
+            await this.notificationsService.createNotification(
+              customerId,
+              'Nhắc nhở: Lịch nhận áo dài ngày mai',
+              `Bạn có lịch nhận áo dài cho đơn hàng ${booking.bookingCode} vào ngày ${pickupTime.toLocaleDateString('vi-VN')}. Vui lòng đến cửa hàng đúng hẹn để nhận trang phục!`,
+              NotificationType.Booking,
+              { bookingId: booking._id, reminderKey: key },
+            );
+          }
+        }
+
+        // 2h pickup reminder (1h to 3h window)
+        if (hoursUntilPickup >= 1.0 && hoursUntilPickup <= 3.0) {
+          const key = `pickup_2h_${item._id}`;
+          const exists = await this.notificationModel.findOne({
+            userId: new Types.ObjectId(customerId),
+            'metadata.reminderKey': key,
+          });
+          if (!exists) {
+            await this.notificationsService.createNotification(
+              customerId,
+              'Nhắc nhở: Sắp đến giờ nhận áo dài (còn 2 tiếng)',
+              `Chỉ còn 2 tiếng nữa là đến giờ nhận áo dài cho đơn hàng ${booking.bookingCode}. Vui lòng chuẩn bị đến cửa hàng nhận trang phục!`,
+              NotificationType.Booking,
+              { bookingId: booking._id, reminderKey: key },
+            );
+          }
+        }
+      }
+
+      // --- B. Return Reminders (24h and 2h before returnTime) ---
+      if (
+        returnTime &&
+        (booking.status === BookingStatus.PickedUp ||
+          booking.status === BookingStatus.InProgress ||
+          booking.status === BookingStatus.Confirmed)
+      ) {
+        const msUntilReturn = returnTime.getTime() - now.getTime();
+        const hoursUntilReturn = msUntilReturn / (1000 * 60 * 60);
+
+        // 24h return reminder (18h to 36h window)
+        if (hoursUntilReturn >= 18 && hoursUntilReturn <= 36) {
+          const key = `return_24h_${item._id}`;
+          const exists = await this.notificationModel.findOne({
+            userId: new Types.ObjectId(customerId),
+            'metadata.reminderKey': key,
+          });
+          if (!exists) {
+            const depositStr = (
+              booking.pricingSummary?.depositTotal || 0
+            ).toLocaleString('vi-VN');
+            await this.notificationsService.createNotification(
+              customerId,
+              'Nhắc nhở: Hạn trả áo dài ngày mai',
+              `Đơn hàng ${booking.bookingCode} sẽ đến hạn trả áo dài vào ngày ${returnTime.toLocaleDateString('vi-VN')}. Vui lòng hoàn trả áo đúng hạn để nhận lại 100% tiền cọc (${depositStr}đ)!`,
+              NotificationType.Booking,
+              { bookingId: booking._id, reminderKey: key },
+            );
+          }
+        }
+
+        // 2h return reminder (1h to 3h window)
+        if (hoursUntilReturn >= 1.0 && hoursUntilReturn <= 3.0) {
+          const key = `return_2h_${item._id}`;
+          const exists = await this.notificationModel.findOne({
+            userId: new Types.ObjectId(customerId),
+            'metadata.reminderKey': key,
+          });
+          if (!exists) {
+            await this.notificationsService.createNotification(
+              customerId,
+              'Nhắc nhở: Sắp hết hạn thuê áo dài (còn 2 tiếng)',
+              `Đơn hàng ${booking.bookingCode} chỉ còn 2 tiếng nữa là đến hạn hoàn trả áo dài. Vui lòng hoàn trả trước giờ hẹn để tránh phát sinh phụ phí trễ hạn!`,
+              NotificationType.Booking,
+              { bookingId: booking._id, reminderKey: key },
+            );
+          }
+        }
+
+        // --- C. Overdue Return Alert (Quá hạn trả áo) ---
+        if (
+          (booking.status === BookingStatus.PickedUp ||
+            booking.status === BookingStatus.InProgress) &&
+          now.getTime() > returnTime.getTime()
+        ) {
+          const todayKey = `overdue_return_${item._id}_${now.toISOString().split('T')[0]}`;
+          const exists = await this.notificationModel.findOne({
+            userId: new Types.ObjectId(customerId),
+            'metadata.reminderKey': todayKey,
+          });
+          if (!exists) {
+            await this.notificationsService.createNotification(
+              customerId,
+              'Cảnh báo: Đơn hàng quá hạn trả áo dài',
+              `Đơn hàng ${booking.bookingCode} đã quá thời hạn trả áo dài. Vui lòng liên hệ cửa hàng hoặc hoàn trả ngay hôm nay để tránh bị trừ phí trễ hạn từ tiền cọc.`,
+              NotificationType.Booking,
+              { bookingId: booking._id, reminderKey: todayKey },
+            );
+          }
+        }
+      }
+    } catch (e) {
+      this.logger.error('Error handling rental item reminders:', e);
+    }
+  }
+
+  private async handlePhotographyItemReminders(
+    item: any,
+    booking: any,
+    customerId: string,
+    now: Date,
+  ) {
+    try {
+      if (!item.shootDate) return;
+      const d = new Date(item.shootDate);
+      let startH = 8;
+      let startM = 0;
+      if (item.shootTimeSlot && item.shootTimeSlot.includes('-')) {
+        const [sh, sm] = item.shootTimeSlot
+          .split('-')[0]
+          .trim()
+          .split(':')
+          .map(Number);
+        if (!isNaN(sh)) {
+          startH = sh;
+          startM = sm || 0;
+        }
+      }
+      const shootStartTime = new Date(d);
+      shootStartTime.setHours(startH, startM, 0, 0);
+
+      const msUntilShoot = shootStartTime.getTime() - now.getTime();
+      const hoursUntilShoot = msUntilShoot / (1000 * 60 * 60);
+
+      // Resolve photographer User ID
+      let photographerUserId: string | null = null;
+      if (item.providerId) {
+        const prov = await this.providerModel
+          .findById(item.providerId)
+          .select('userId')
+          .lean();
+        if (prov?.userId) {
+          photographerUserId = prov.userId.toString();
+        }
+      }
+
+      // 24h Photoshoot reminder (18h to 30h window)
+      if (hoursUntilShoot >= 18 && hoursUntilShoot <= 30) {
+        const key = `photo_24h_${item._id}`;
+        const customerReminderExists = await this.notificationModel.findOne({
+          userId: new Types.ObjectId(customerId),
+          'metadata.reminderKey': key,
+        });
+        const slotStr = item.shootTimeSlot || '';
+        if (!customerReminderExists) {
+          await this.notificationsService.createNotification(
+            customerId,
+            'Nhắc nhở: Lịch chụp ảnh ngày mai',
+            `Bạn có lịch chụp ảnh cho đơn hàng ${booking.bookingCode} vào lúc ${slotStr} ngày ${shootStartTime.toLocaleDateString('vi-VN')}. Vui lòng chuẩn bị trang phục và đến đúng hẹn!`,
+            NotificationType.Booking,
+            { bookingId: booking._id, reminderKey: key },
+          );
+        }
+
+        if (photographerUserId) {
+          const providerKey = `prov_${key}`;
+          const providerReminderExists = await this.notificationModel.findOne({
+            userId: new Types.ObjectId(photographerUserId),
+            'metadata.reminderKey': providerKey,
+          });
+          if (!providerReminderExists) {
+            await this.notificationsService.createNotification(
+              photographerUserId,
+              'Nhắc nhở: Lịch chụp ảnh với khách hàng ngày mai',
+              `Bạn có lịch chụp ảnh cho đơn hàng ${booking.bookingCode} vào lúc ${slotStr} ngày ${shootStartTime.toLocaleDateString('vi-VN')}. Vui lòng chuẩn bị thiết bị đúng giờ!`,
+              NotificationType.Booking,
+              { bookingId: booking._id, reminderKey: providerKey },
+            );
+          }
+        }
+      }
+
+      // 2h Photoshoot reminder (1h to 3h window)
+      if (hoursUntilShoot >= 1.0 && hoursUntilShoot <= 3.0) {
+        const key = `photo_2h_${item._id}`;
+        const customerReminderExists = await this.notificationModel.findOne({
+          userId: new Types.ObjectId(customerId),
+          'metadata.reminderKey': key,
+        });
+        const slotStr = item.shootTimeSlot || '';
+        if (!customerReminderExists) {
+          await this.notificationsService.createNotification(
+            customerId,
+            'Nhắc nhở: Sắp đến giờ chụp ảnh (còn 2 tiếng)',
+            `Chỉ còn 2 tiếng nữa là đến buổi chụp ảnh đơn ${booking.bookingCode} (${slotStr}). Vui lòng chuẩn bị sẵn sàng!`,
+            NotificationType.Booking,
+            { bookingId: booking._id, reminderKey: key },
+          );
+        }
+
+        if (photographerUserId) {
+          const providerKey = `prov_${key}`;
+          const providerReminderExists = await this.notificationModel.findOne({
+            userId: new Types.ObjectId(photographerUserId),
+            'metadata.reminderKey': providerKey,
+          });
+          if (!providerReminderExists) {
+            await this.notificationsService.createNotification(
+              photographerUserId,
+              'Nhắc nhở: Sắp đến giờ chụp ảnh với khách hàng (còn 2 tiếng)',
+              `Chỉ còn 2 tiếng nữa là đến buổi chụp ảnh đơn ${booking.bookingCode} (${slotStr}). Vui lòng kiểm tra địa điểm và thiết bị!`,
+              NotificationType.Booking,
+              { bookingId: booking._id, reminderKey: providerKey },
+            );
+          }
+        }
+      }
+    } catch (e) {
+      this.logger.error('Error handling photography item reminders:', e);
     }
   }
 

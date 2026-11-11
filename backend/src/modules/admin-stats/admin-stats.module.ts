@@ -19,6 +19,7 @@ import {
 import { Dispute, DisputeSchema } from '../disputes/schemas/dispute.schema';
 import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
 import { ComboPromotion, ComboPromotionSchema } from '../products/schemas/combo-promotion.schema';
+import { InventoryItem, InventoryItemSchema } from '../products/schemas/inventory-item.schema';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ComboPromotion, ComboPromotionSchema } from '../products/schemas/combo-
       { name: Dispute.name, schema: DisputeSchema },
       { name: Review.name, schema: ReviewSchema },
       { name: ComboPromotion.name, schema: ComboPromotionSchema },
+      { name: InventoryItem.name, schema: InventoryItemSchema },
     ]),
     AnalyticsModule,
     AiModule,

@@ -474,7 +474,7 @@ export class ProvidersService {
     );
   }
 
-  async getProviderAnalytics(userIdStr: string, period = 'month') {
+  async getProviderAnalytics(userIdStr: string, period = 'month', from?: string, to?: string) {
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
     if (!provider) {
@@ -482,6 +482,17 @@ export class ProvidersService {
     }
 
     const providerId = provider._id;
+
+    // Date range filter support (VS-103)
+    const dateFilter: any = {};
+    if (from && to) {
+      const sStr = from.includes('T') ? from : `${from}T00:00:00.000Z`;
+      const eStr = to.includes('T') ? to : `${to}T23:59:59.999Z`;
+      dateFilter.createdAt = { $gte: new Date(sStr), $lte: new Date(eStr) };
+    } else if (from) {
+      const sStr = from.includes('T') ? from : `${from}T00:00:00.000Z`;
+      dateFilter.createdAt = { $gte: new Date(sStr) };
+    }
 
     // 1. UC-K04 & UC-K09: Doanh thu & hoa hồng
     const bookings = await this.bookingModel.find({
@@ -495,9 +506,10 @@ export class ProvidersService {
           'RETURNED',
         ],
       },
+      ...dateFilter,
     } as any);
 
-const bookingIds = bookings.map((booking) => booking._id);
+    const bookingIds = bookings.map((booking) => booking._id);
     const revenueItems = bookingIds.length
       ? await this.bookingItemModel.find({ bookingId: { $in: bookingIds }, providerId } as any).lean()
       : [];
@@ -509,17 +521,31 @@ const bookingIds = bookings.map((booking) => booking._id);
     const totalRevenue = Array.from(revenueByBooking.values()).reduce((sum, amount) => sum + amount, 0);
     const commissionFee = Math.round(totalRevenue * 0.15);
 
+    // VS-103: Thống kê riêng cho dịch vụ thuê (Ao Dai Rental)
+    const rentalBookings = bookings.filter((b: any) => {
+      const bType = String(b.bookingType || '').toUpperCase();
+      return bType === 'AODAI_RENTAL' || bType === 'RENTAL';
+    });
+    const rentalBookingIds = new Set(rentalBookings.map((b) => b._id.toString()));
+    const rentalRevenue = Array.from(revenueByBooking.entries()).reduce((sum, [bId, amt]) => {
+      return rentalBookingIds.has(bId) ? sum + amt : sum;
+    }, 0);
+    const rentalOrderCount = rentalBookings.length;
+
     // 2. UC-K13: Tỷ lệ đặt lịch thành công & hủy lịch
     const allBookingsCount = await this.bookingModel.countDocuments({
       providerIds: providerId,
+      ...dateFilter,
     } as any);
     const successBookingsCount = await this.bookingModel.countDocuments({
       providerIds: providerId,
       status: 'COMPLETED',
+      ...dateFilter,
     } as any);
     const cancelledBookingsCount = await this.bookingModel.countDocuments({
       providerIds: providerId,
       status: 'CANCELLED',
+      ...dateFilter,
     } as any);
 
     const successRate = allBookingsCount
@@ -529,12 +555,12 @@ const bookingIds = bookings.map((booking) => booking._id);
       ? Math.round((cancelledBookingsCount / allBookingsCount) * 1000) / 10
       : 0;
 
-    // 3. UC-K05: Sản phẩm phổ biến nhất (Top 3)
+    // 3. UC-K05 & VS-104: Sản phẩm phổ biến nhất (Top 5 theo shop)
     const popularItems = await this.bookingItemModel.aggregate([
       { $match: { providerId } },
-      { $group: { _id: '$productId', count: { $sum: 1 } } },
+      { $group: { _id: '$productId', count: { $sum: { $ifNull: ['$quantity', 1] } } } },
       { $sort: { count: -1 } },
-      { $limit: 3 },
+      { $limit: 5 },
     ]);
 
     const productIds = popularItems.map((item) => item._id).filter(Boolean);
@@ -552,30 +578,68 @@ const bookingIds = bookings.map((booking) => booking._id);
         const prod = productMap.get(item._id.toString());
         if (!prod) return null;
         return {
+          productId: prod._id.toString(),
+          _id: prod._id.toString(),
           name: prod.name,
           image: prod.images?.[0] || '/hong_lien_hoa.png',
           count: item.count,
+          rentalCount: item.count,
         };
       })
-      .filter((item): item is { name: string; image: string; count: number } => item !== null);
-    // 4. UC-K06: Quản lý tồn kho / Trạng thái sản phẩm
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    // 4. UC-K06 & VS-105: Quản lý tồn kho / Trạng thái sản phẩm kèm tỷ lệ phần trăm
     const totalProducts = await this.productModel.countDocuments({
       providerId,
     } as any);
-    const inventoryStatus = await this.bookingModel.db
+
+    const providerProducts = await this.productModel.find({ providerId }).select('_id');
+    const providerProductIds = providerProducts.map((p) => p._id);
+
+    const invRawRows: Array<{ _id: string; count: number }> = await this.bookingModel.db
       .model('InventoryItem')
       .aggregate([
-        { $match: { providerId } },
+        {
+          $match: {
+            $or: [
+              { providerId },
+              { productId: { $in: providerProductIds } },
+            ],
+          },
+        },
         { $group: { _id: '$status', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
-      ])
-      .then((rows: Array<{ _id: string; count: number }>) => rows.map((row) => ({
-        name: row._id,
-        status: row._id,
+      ]);
+
+    const totalInvItems = invRawRows.reduce((sum, r) => sum + r.count, 0);
+
+    const statusNameMap: Record<string, string> = {
+      AVAILABLE: 'Available',
+      RENTED: 'In Use',
+      CLEANING: 'Cleaning',
+      MAINTENANCE: 'Maintenance',
+      DAMAGED: 'Damaged',
+    };
+
+    const inventoryStatus = invRawRows.map((row) => {
+      const percentage = totalInvItems > 0 ? Math.round((row.count / totalInvItems) * 100) : 0;
+      const statusKey = String(row._id || '').toUpperCase();
+      return {
+        name: statusNameMap[statusKey] || statusKey,
+        status: statusKey,
         count: row.count,
+        percentage,
+        percentageFormatted: `${percentage}%`,
         detail: '',
-        color: row._id === 'AVAILABLE' ? 'available' : row._id === 'RENTED' ? 'rental' : 'maintenance',
-      })));
+        color:
+          statusKey === 'AVAILABLE'
+            ? 'available'
+            : statusKey === 'RENTED'
+            ? 'rental'
+            : 'maintenance',
+      };
+    });
+
 
     // 5. UC-K08: Doanh thu theo thời gian (Tuần, Tháng, Năm)
     const revenueGrowth = [];
@@ -741,8 +805,15 @@ const bookingIds = bookings.map((booking) => booking._id);
       upcomingSchedules,
       popularConcepts,
       averageRating: avgRating,
+      rentalStats: {
+        orderCount: rentalOrderCount,
+        revenue: rentalRevenue,
+      },
+      rentalOrderCount,
+      rentalRevenue,
     };
   }
+
 
   private toObjectId(id: string): Types.ObjectId {
     if (!Types.ObjectId.isValid(id)) {
@@ -804,5 +875,174 @@ const bookingIds = bookings.map((booking) => booking._id);
         createdAt: s.createdAt,
       })),
     };
+  }
+
+  /**
+   * VS-107: completed photography/combo settlements are the source of truth
+   * for earnings.  This avoids reporting unpaid or cancelled bookings as
+   * income and returns zeros for a new photographer.
+   */
+  async getEarnings(userIdStr: string) {
+    const provider = await this.requireProvider(userIdStr);
+    const Settlement = this.bookingModel.db.model('Settlement');
+    const rows = await Settlement.aggregate([
+      {
+        $match: {
+          providerId: provider._id,
+          status: 'SETTLED',
+        },
+      },
+      {
+        $lookup: {
+          from: 'bookings',
+          localField: 'bookingId',
+          foreignField: '_id',
+          as: 'booking',
+        },
+      },
+      { $unwind: '$booking' },
+      {
+        $match: {
+          'booking.status': 'COMPLETED',
+          'booking.bookingType': { $in: ['PHOTOGRAPHY', 'COMBO'] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          completedShoots: { $sum: 1 },
+          grossEarnings: { $sum: { $ifNull: ['$grossAmount', 0] } },
+          platformCommission: { $sum: { $ifNull: ['$commissionAmount', 0] } },
+          netPayout: { $sum: { $ifNull: ['$payableAmount', '$netAmount'] } },
+        },
+      },
+    ]);
+
+    const summary = rows[0] ?? {
+      completedShoots: 0,
+      grossEarnings: 0,
+      platformCommission: 0,
+      netPayout: 0,
+    };
+    const commissionRate =
+      summary.grossEarnings > 0
+        ? Number(
+            ((summary.platformCommission / summary.grossEarnings) * 100).toFixed(2),
+          )
+        : 0;
+
+    return {
+      completedShoots: summary.completedShoots,
+      grossEarnings: summary.grossEarnings,
+      totalEarnings: summary.grossEarnings,
+      platformCommission: summary.platformCommission,
+      commissionPaid: summary.platformCommission,
+      commissionRate,
+      netPayout: summary.netPayout,
+    };
+  }
+
+  /** VS-108: calendar events for the authenticated photographer. */
+  async getPhotographerCalendar(
+    userIdStr: string,
+    month?: string,
+    from?: string,
+    to?: string,
+  ) {
+    const provider = await this.requireProvider(userIdStr);
+    let start: Date;
+    let end: Date;
+
+    if (month) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        throw new BadRequestException('month must use YYYY-MM format');
+      }
+      const [year, monthIndex] = month.split('-').map(Number);
+      start = new Date(Date.UTC(year, monthIndex - 1, 1));
+      end = new Date(Date.UTC(year, monthIndex, 1));
+    } else {
+      const now = new Date();
+      start = from ? new Date(`${from}T00:00:00.000Z`) : new Date(now.setHours(0, 0, 0, 0));
+      end = to
+        ? new Date(`${to}T23:59:59.999Z`)
+        : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 3, 1));
+    }
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+      throw new BadRequestException('Invalid calendar date range');
+    }
+
+    const BookingSchedule = this.bookingModel.db.model('BookingSchedule');
+    const schedules = await BookingSchedule.aggregate([
+      {
+        $match: {
+          providerId: provider._id,
+          scheduleType: 'PHOTOSHOOT',
+        },
+      },
+      { $addFields: { eventDate: { $ifNull: ['$startsAt', '$scheduledDate'] } } },
+      { $match: { eventDate: { $gte: start, $lt: end } } },
+      {
+        $lookup: {
+          from: 'bookings',
+          localField: 'bookingId',
+          foreignField: '_id',
+          as: 'booking',
+        },
+      },
+      { $unwind: { path: '$booking', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'booking_items',
+          localField: 'bookingItemId',
+          foreignField: '_id',
+          as: 'bookingItem',
+        },
+      },
+      { $unwind: { path: '$bookingItem', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 1,
+          bookingId: 1,
+          eventDate: 1,
+          providerLocalDate: 1,
+          startsAt: 1,
+          endsAt: 1,
+          timeSlot: 1,
+          scheduleStatus: '$status',
+          bookingStatus: '$booking.status',
+          bookingCode: '$booking.bookingCode',
+          location: {
+            $ifNull: [
+              '$locationAddress',
+              { $ifNull: ['$bookingItem.shootLocation', '$bookingItem.shootLocationSnapshot.address'] },
+            ],
+          },
+        },
+      },
+      { $sort: { eventDate: 1, startsAt: 1 } },
+    ]);
+
+    const events = schedules.map((schedule: any) => {
+      const cancelled =
+        schedule.scheduleStatus === 'CANCELLED' ||
+        schedule.bookingStatus === 'CANCELLED';
+      const date = schedule.providerLocalDate || new Date(schedule.eventDate).toISOString().slice(0, 10);
+      return {
+        id: schedule._id?.toString(),
+        bookingId: schedule.bookingId?.toString(),
+        bookingCode: schedule.bookingCode || '',
+        date,
+        startsAt: schedule.startsAt || schedule.eventDate,
+        endsAt: schedule.endsAt || null,
+        timeSlot: schedule.timeSlot || null,
+        location: schedule.location || '',
+        status: cancelled ? 'CANCELLED' : schedule.scheduleStatus || 'CONFIRMED',
+        cancelled,
+        markerColor: cancelled ? 'gray' : 'green',
+        textDecoration: cancelled ? 'line-through' : 'none',
+      };
+    });
+
+    return { month: month || null, from: start.toISOString(), to: end.toISOString(), events, data: events };
   }
 }

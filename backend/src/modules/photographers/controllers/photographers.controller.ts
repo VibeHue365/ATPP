@@ -1,4 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import type { AuthUser } from '../../../common/decorators/current-user.decorator';
+import { ProvidersService } from '../../providers/services/providers.service';
 import { PhotographersService } from '../services/photographers.service';
 import { PhotographerMonthlyAvailabilityService } from '../services/photographer-monthly-availability.service';
 import { PhotographyPackage } from '../../products/schemas/photography-package.schema';
@@ -7,14 +11,32 @@ import { CreatePhotographyQuoteDto } from '../dto/photography-quote.dto';
 import { PhotographyQuoteService } from '../services/photography-quote.service';
 import { AnalyticsService } from '../../analytics/services/analytics.service';
 
-@Controller(['photographers', 'api/photographers'])
+@Controller(['photographers', 'api/photographers', 'api/v1/photographers'])
 export class PhotographersController {
   constructor(
     private readonly photographersService: PhotographersService,
     private readonly monthlyAvailabilityService: PhotographerMonthlyAvailabilityService,
     private readonly photographyQuoteService: PhotographyQuoteService,
     private readonly analyticsService: AnalyticsService,
+    private readonly providersService: ProvidersService,
   ) {}
+
+  @Get('earnings')
+  @UseGuards(JwtAuthGuard)
+  async getEarnings(@CurrentUser() user: AuthUser) {
+    return this.providersService.getEarnings(user.sub);
+  }
+
+  @Get('schedules/calendar')
+  @UseGuards(JwtAuthGuard)
+  async getCalendar(
+    @CurrentUser() user: AuthUser,
+    @Query('month') month?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.providersService.getPhotographerCalendar(user.sub, month, from, to);
+  }
 
   @Get()
   async findAll(@Query() query: PhotographerDiscoveryQueryDto) {

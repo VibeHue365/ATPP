@@ -29,7 +29,6 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../../assets/images/onboarding_traditional.webp';
@@ -44,6 +43,7 @@ interface OrderDetailDrawerProps {
   resolveRescheduleRequest: (order: Order, item: any, approved: boolean) => Promise<void>;
   changeOrderStatus: (_id: string, apiStatus: string) => Promise<void>;
   onOpenIncidentReport: (order: Order) => void;
+  onOpenChat: () => void;
   toast: any;
 }
 
@@ -55,6 +55,7 @@ export function OrderDetailDrawer({
   resolveRescheduleRequest,
   changeOrderStatus,
   onOpenIncidentReport,
+  onOpenChat,
   toast,
 }: OrderDetailDrawerProps) {
   const [isMaximized, setIsMaximized] = useState(false);
@@ -67,8 +68,6 @@ export function OrderDetailDrawer({
   const [internalNotesList, setInternalNotesList] = useState<Array<{ author: string; time: string; text: string }>>([
     { author: 'Hệ thống VibeHue Escrow', time: order?.orderDate || 'Khi xác nhận', text: 'Khách hàng hoàn tất đặt cọc qua VibeHue Escrow. Đơn được xác nhận tự động.' },
   ]);
-
-  const navigate = useNavigate();
 
   // Keyboard shortcut Esc to close
   useEffect(() => {
@@ -1133,7 +1132,7 @@ export function OrderDetailDrawer({
                       <button
                         type="button"
                         className="p-card-edit-btn"
-                        onClick={() => navigate('/chat')}
+                        onClick={onOpenChat}
                       >
                         <MessageSquare size={13} />
                         <span>Nhắn tin</span>
@@ -2460,7 +2459,7 @@ export function OrderDetailDrawer({
                   style={{ justifyContent: 'center' }}
                   onClick={() => {
                     setIsContactModalOpen(false);
-                    navigate('/chat');
+                    onOpenChat();
                   }}
                 >
                   <MessageSquare size={15} />

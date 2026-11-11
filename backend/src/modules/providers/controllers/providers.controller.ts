@@ -82,14 +82,39 @@ export class ProvidersController {
   async getAnalytics(
     @CurrentUser() user: AuthUser,
     @Query('period') period?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
-    return this.providersService.getProviderAnalytics(user.sub, period);
+    return this.providersService.getProviderAnalytics(
+      user.sub,
+      period,
+      from || startDate,
+      to || endDate,
+    );
   }
 
   /** GET /providers/me/wallet — Xem số dư ví thợ ảnh */
   @Get('me/wallet')
   async getWallet(@CurrentUser() user: AuthUser) {
     return this.providersService.getWallet(user.sub);
+  }
+
+  /** GET /providers/me/earnings — photographer earnings and commission summary */
+  @Get('me/earnings')
+  async getEarnings(@CurrentUser() user: AuthUser) {
+    return this.providersService.getEarnings(user.sub);
+  }
+
+  @Get('me/schedules/calendar')
+  async getCalendar(
+    @CurrentUser() user: AuthUser,
+    @Query('month') month?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.providersService.getPhotographerCalendar(user.sub, month, from, to);
   }
 
   @Patch('me')

@@ -1,12 +1,34 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import * as ExcelJS from 'exceljs';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { Provider, ProviderDocument, ProviderCapability, ProviderStatus } from '../providers/schemas/provider.schema';
+import {
+  Provider,
+  ProviderDocument,
+  ProviderCapability,
+  ProviderStatus,
+} from '../providers/schemas/provider.schema';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
-import { Booking, BookingDocument, BookingStatus } from '../bookings/schemas/booking.schema';
-import { BookingItem, BookingItemDocument } from '../bookings/schemas/booking-item.schema';
-import { Payment, PaymentDocument, PaymentStatus, PaymentPurpose } from '../payments/schemas/payment.schema';
+import {
+  Booking,
+  BookingDocument,
+  BookingStatus,
+} from '../bookings/schemas/booking.schema';
+import {
+  BookingItem,
+  BookingItemDocument,
+} from '../bookings/schemas/booking-item.schema';
+import {
+  Payment,
+  PaymentDocument,
+  PaymentStatus,
+  PaymentPurpose,
+} from '../payments/schemas/payment.schema';
 import { RefreshToken } from '../auth/schemas/refresh-token.schema';
 import { AnalyticsService } from '../analytics/services/analytics.service';
 import {
@@ -14,26 +36,44 @@ import {
   ProviderVerificationDocument,
   VerificationStatus,
 } from '../providers/schemas/provider-verification.schema';
-import { Dispute, DisputeDocument, DisputeStatus } from '../disputes/schemas/dispute.schema';
+import {
+  Dispute,
+  DisputeDocument,
+  DisputeStatus,
+} from '../disputes/schemas/dispute.schema';
 import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
 import { ProductModerationStatus } from '../products/schemas/product.schema';
 import { ComboPromotion, ComboPromotionDocument, ComboPromotionStatus } from '../products/schemas/combo-promotion.schema';
 import { buildVietnameseRegexPattern } from '../../common/utils/vietnamese.util';
+import {
+  InventoryItem,
+  InventoryItemDocument,
+} from '../products/schemas/inventory-item.schema';
+import type { AuthUser } from '../../common/decorators/current-user.decorator';
 
 @Injectable()
 export class AdminStatsService {
-  private overviewStatsCache = new Map<string, { data: any; cachedAt: number }>();
+  private overviewStatsCache = new Map<
+    string,
+    { data: any; cachedAt: number }
+  >();
   private inFlightRequests = new Map<string, Promise<any>>();
   private readonly CACHE_TTL_MS = 60_000;
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Provider.name) private readonly providerModel: Model<ProviderDocument>,
-    @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
-    @InjectModel(Booking.name) private readonly bookingModel: Model<BookingDocument>,
-    @InjectModel(BookingItem.name) private readonly bookingItemModel: Model<BookingItemDocument>,
-    @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
-    @InjectModel(RefreshToken.name) private readonly refreshTokenModel: Model<RefreshToken>,
+    @InjectModel(Provider.name)
+    private readonly providerModel: Model<ProviderDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
+    @InjectModel(Booking.name)
+    private readonly bookingModel: Model<BookingDocument>,
+    @InjectModel(BookingItem.name)
+    private readonly bookingItemModel: Model<BookingItemDocument>,
+    @InjectModel(Payment.name)
+    private readonly paymentModel: Model<PaymentDocument>,
+    @InjectModel(RefreshToken.name)
+    private readonly refreshTokenModel: Model<RefreshToken>,
     @InjectModel(ProviderVerification.name)
     private readonly providerVerificationModel: Model<ProviderVerificationDocument>,
     @InjectModel(Dispute.name)
@@ -42,8 +82,10 @@ export class AdminStatsService {
     private readonly reviewModel: Model<ReviewDocument>,
     @InjectModel(ComboPromotion.name)
     private readonly comboPromotionModel: Model<ComboPromotionDocument>,
+    @InjectModel(InventoryItem.name)
+    private readonly inventoryItemModel: Model<InventoryItemDocument>,
     private readonly analyticsService: AnalyticsService,
-  ) { }
+  ) {}
 
   async getAdminStats(period = 'month') {
     const cached = this.overviewStatsCache.get(period);
@@ -74,8 +116,8 @@ export class AdminStatsService {
     const customerFilter = {
       $and: [
         { roles: 'CUSTOMER' },
-        { roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } }
-      ]
+        { roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } },
+      ],
     };
 
     const [
@@ -90,6 +132,7 @@ export class AdminStatsService {
       popularBookings,
       topProductsByBookings,
       topSearches,
+      highViewZeroBookingProducts,
       registrationGrowth,
       revenueGrowth,
       bookingGrowth,
@@ -98,12 +141,22 @@ export class AdminStatsService {
       openDisputes,
     ] = await Promise.all([
       this.userModel.countDocuments(customerFilter as any),
-      this.userModel.countDocuments({ ...customerFilter, accountStatus: 'ACTIVE' } as any),
-      this.userModel.countDocuments({ ...customerFilter, accountStatus: 'BANNED' } as any),
-      this.providerModel.countDocuments({ capabilities: ProviderCapability.AoDaiRental } as any),
+      this.userModel.countDocuments({
+        ...customerFilter,
+        accountStatus: 'ACTIVE',
+      } as any),
+      this.userModel.countDocuments({
+        ...customerFilter,
+        accountStatus: 'BANNED',
+      } as any),
+      this.providerModel.countDocuments({
+        capabilities: ProviderCapability.AoDaiRental,
+      } as any),
       this.productModel.countDocuments({ status: 'ACTIVE' } as any),
       this.providerModel.countDocuments({ capabilities: 'PHOTOGRAPHY' } as any),
-      this.bookingModel.countDocuments({ bookingType: { $in: ['PHOTOGRAPHY', 'COMBO'] } } as any),
+      this.bookingModel.countDocuments({
+        bookingType: { $in: ['PHOTOGRAPHY', 'COMBO'] },
+      } as any),
       this.paymentModel.aggregate<{ total: number }>([
         {
           $match: {
@@ -121,30 +174,40 @@ export class AdminStatsService {
       ]),
       this.bookingModel.aggregate([
         { $match: { status: { $ne: 'CANCELLED' } } },
-        { $group: { _id: '$bookingType', count: { $sum: 1 } } }
+        { $group: { _id: '$bookingType', count: { $sum: 1 } } },
       ]),
-      this.bookingItemModel.aggregate([
-        { $match: { productId: { $ne: null } } },
-        { $group: { _id: '$productId', count: { $sum: { $ifNull: ['$quantity', 1] } } } },
-        { $sort: { count: -1 } },
-        { $limit: 10 },
-        {
-          $lookup: {
-            from: 'products',
-            localField: '_id',
-            foreignField: '_id',
-            as: 'product'
-          }
-        },
-        { $unwind: { path: '$product', preserveNullAndEmptyArrays: false } }
-      ]).catch(() => []),
+      this.bookingItemModel
+        .aggregate([
+          { $match: { productId: { $ne: null } } },
+          {
+            $group: {
+              _id: '$productId',
+              count: { $sum: { $ifNull: ['$quantity', 1] } },
+            },
+          },
+          { $sort: { count: -1 } },
+          { $limit: 10 },
+          {
+            $lookup: {
+              from: 'products',
+              localField: '_id',
+              foreignField: '_id',
+              as: 'product',
+            },
+          },
+          { $unwind: { path: '$product', preserveNullAndEmptyArrays: false } },
+        ])
+        .catch(() => []),
       this.analyticsService.getTopSearches(10),
+      this.analyticsService.getHighViewZeroBookingProducts(10),
       this.getCustomerGrowth(period),
       this.getRevenueGrowth(period),
       this.getBookingGrowth(period),
       this.bookingModel.countDocuments({} as any),
       this.providerVerificationModel.countDocuments({
-        status: { $in: [VerificationStatus.Submitted, VerificationStatus.UnderReview] },
+        status: {
+          $in: [VerificationStatus.Submitted, VerificationStatus.UnderReview],
+        },
       }),
       this.disputeModel.countDocuments({
         status: { $in: [DisputeStatus.Open, DisputeStatus.UnderReview] },
@@ -152,27 +215,34 @@ export class AdminStatsService {
     ]);
 
     const totalRevenue = revenueTotals[0]?.total ?? 0;
-    const platformCommission = totalRevenue * 0.10;
+    const platformCommission = totalRevenue * 0.1;
 
-    const popularProducts = topProductsByBookings.length > 0
-      ? topProductsByBookings.map((r: any) => ({
-        _id: r._id.toString(),
-        name: r.product.name,
-        basePrice: r.product.basePrice,
-        viewCount: 0,
-        rentCount: r.count
-      }))
-      : (await this.productModel.find({ status: 'ACTIVE' } as any).limit(5).select('name basePrice')).map(p => ({
-        _id: p._id.toString(),
-        name: p.name,
-        basePrice: p.basePrice,
-        viewCount: 0,
-        rentCount: 0
-      }));
+    const popularProducts =
+      topProductsByBookings.length > 0
+        ? topProductsByBookings.map((r: any) => ({
+            _id: r._id.toString(),
+            name: r.product.name,
+            basePrice: r.product.basePrice,
+            viewCount: 0,
+            rentCount: r.count,
+          }))
+        : (
+            await this.productModel
+              .find({ status: 'ACTIVE' } as any)
+              .limit(5)
+              .select('name basePrice')
+          ).map((p) => ({
+            _id: p._id.toString(),
+            name: p.name,
+            basePrice: p.basePrice,
+            viewCount: 0,
+            rentCount: 0,
+          }));
 
-    const topProductIds = popularProducts.map(p => new Types.ObjectId(p._id));
-    const viewCountMap = await this.analyticsService.getViewCountMap(topProductIds);
-    const popularProductsWithViews = popularProducts.map(p => ({
+    const topProductIds = popularProducts.map((p) => new Types.ObjectId(p._id));
+    const viewCountMap =
+      await this.analyticsService.getViewCountMap(topProductIds);
+    const popularProductsWithViews = popularProducts.map((p) => ({
       ...p,
       viewCount: viewCountMap.get(p._id) ?? 0,
     }));
@@ -183,10 +253,11 @@ export class AdminStatsService {
         homepage: totalCustomers * 6,
         rentals: totalCustomers * 4,
         photographers: totalPhotographers * 3,
-        productDetails: activeProducts * 5
+        productDetails: activeProducts * 5,
       },
       popularBookings,
-      popularProducts: popularProductsWithViews
+      popularProducts: popularProductsWithViews,
+      highViewZeroBookingProducts,
     };
 
     const [
@@ -203,7 +274,9 @@ export class AdminStatsService {
       this.getRecentActivities(),
     ]);
 
-    const extractGrowthPercentage = (buckets: Array<{ label: string; value: number }>) => {
+    const extractGrowthPercentage = (
+      buckets: Array<{ label: string; value: number }>,
+    ) => {
       if (!buckets || buckets.length < 2) return 0;
       const current = buckets[buckets.length - 1]?.value ?? 0;
       const previous = buckets[buckets.length - 2]?.value ?? 0;
@@ -220,24 +293,24 @@ export class AdminStatsService {
         total: totalCustomers,
         active: activeCustomers,
         banned: bannedCustomers,
-        growth: registrationGrowth
+        growth: registrationGrowth,
       },
       shops: {
         total: totalShops,
-        activeProducts: activeProducts
+        activeProducts: activeProducts,
       },
       photographers: {
         total: totalPhotographers,
-        bookings: totalPhotoBookings
+        bookings: totalPhotoBookings,
       },
       revenue: {
         total: totalRevenue,
         commission: platformCommission,
-        growth: revenueGrowth
+        growth: revenueGrowth,
       },
       bookings: {
         total: totalBookings,
-        growth: bookingGrowth
+        growth: bookingGrowth,
       },
       operational: {
         pendingVerifications,
@@ -290,11 +363,25 @@ export class AdminStatsService {
     };
   }
 
-  private async getOverviewChartPoints(period = 'month'): Promise<Array<{ day: string; bookings: number; gmvMillions: number }>> {
+  private async getOverviewChartPoints(
+    period = 'month',
+  ): Promise<Array<{ day: string; bookings: number; gmvMillions: number }>> {
     const now = new Date();
-    const totalDaysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const totalDaysInMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+    ).getDate();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const endOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
 
     const [paymentsByDay, bookingsByDay] = await Promise.all([
       this.paymentModel.aggregate<{ _id: string; totalAmount: number }>([
@@ -306,7 +393,13 @@ export class AdminStatsService {
         },
         {
           $group: {
-            _id: { $dateToString: { format: '%d', date: '$createdAt', timezone: 'Asia/Bangkok' } },
+            _id: {
+              $dateToString: {
+                format: '%d',
+                date: '$createdAt',
+                timezone: 'Asia/Bangkok',
+              },
+            },
             totalAmount: { $sum: '$amount' },
           },
         },
@@ -320,17 +413,29 @@ export class AdminStatsService {
         },
         {
           $group: {
-            _id: { $dateToString: { format: '%d', date: '$createdAt', timezone: 'Asia/Bangkok' } },
+            _id: {
+              $dateToString: {
+                format: '%d',
+                date: '$createdAt',
+                timezone: 'Asia/Bangkok',
+              },
+            },
             count: { $sum: 1 },
           },
         },
       ]),
     ]);
 
-    const paymentMap = new Map(paymentsByDay.map((p) => [p._id, p.totalAmount]));
+    const paymentMap = new Map(
+      paymentsByDay.map((p) => [p._id, p.totalAmount]),
+    );
     const bookingMap = new Map(bookingsByDay.map((b) => [b._id, b.count]));
 
-    const points: Array<{ day: string; bookings: number; gmvMillions: number }> = [];
+    const points: Array<{
+      day: string;
+      bookings: number;
+      gmvMillions: number;
+    }> = [];
     for (let d = 1; d <= totalDaysInMonth; d++) {
       const dayStr = String(d).padStart(2, '0');
       const gmv = paymentMap.get(dayStr) ?? 0;
@@ -345,7 +450,10 @@ export class AdminStatsService {
   }
 
   private async getServiceShare() {
-    const rawCounts = await this.bookingModel.aggregate<{ _id: string; count: number }>([
+    const rawCounts = await this.bookingModel.aggregate<{
+      _id: string;
+      count: number;
+    }>([
       { $match: { status: { $ne: 'CANCELLED' } } },
       { $group: { _id: '$bookingType', count: { $sum: 1 } } },
     ]);
@@ -369,21 +477,51 @@ export class AdminStatsService {
     }
 
     const total = rentalCount + photoCount + comboCount + otherCount;
-    const calcPct = (cnt: number) => (total > 0 ? Number(((cnt / total) * 100).toFixed(1)) : 0);
+    const calcPct = (cnt: number) =>
+      total > 0 ? Number(((cnt / total) * 100).toFixed(1)) : 0;
 
     return {
       total,
       items: [
-        { id: 'rental', name: 'Thuê áo dài', count: rentalCount, percentage: calcPct(rentalCount), color: '#4A121A' },
-        { id: 'photo', name: 'Chụp ảnh', count: photoCount, percentage: calcPct(photoCount), color: '#E06D75' },
-        { id: 'combo', name: 'Combo trọn gói', count: comboCount, percentage: calcPct(comboCount), color: '#F4A6AC' },
-        { id: 'other', name: 'Dịch vụ khác', count: otherCount, percentage: calcPct(otherCount), color: '#D1D5DB' },
+        {
+          id: 'rental',
+          name: 'Thuê áo dài',
+          count: rentalCount,
+          percentage: calcPct(rentalCount),
+          color: '#4A121A',
+        },
+        {
+          id: 'photo',
+          name: 'Chụp ảnh',
+          count: photoCount,
+          percentage: calcPct(photoCount),
+          color: '#E06D75',
+        },
+        {
+          id: 'combo',
+          name: 'Combo trọn gói',
+          count: comboCount,
+          percentage: calcPct(comboCount),
+          color: '#F4A6AC',
+        },
+        {
+          id: 'other',
+          name: 'Dịch vụ khác',
+          count: otherCount,
+          percentage: calcPct(otherCount),
+          color: '#D1D5DB',
+        },
       ],
     };
   }
 
-  private async getTopPartners(): Promise<Array<{ rank: number; name: string; bookings: number; avatar: string }>> {
-    const topAgg = await this.bookingModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+  private async getTopPartners(): Promise<
+    Array<{ rank: number; name: string; bookings: number; avatar: string }>
+  > {
+    const topAgg = await this.bookingModel.aggregate<{
+      _id: Types.ObjectId;
+      count: number;
+    }>([
       { $match: { providerId: { $ne: null }, status: { $ne: 'CANCELLED' } } },
       { $group: { _id: '$providerId', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
@@ -423,7 +561,10 @@ export class AdminStatsService {
       rank: idx + 1,
       name: p.businessName || `Đối tác #${idx + 1}`,
       bookings: 0,
-      avatar: (p as any)?.media?.avatarUrl || (p as any)?.avatarUrl || '/avatar_hanna.webp',
+      avatar:
+        (p as any)?.media?.avatarUrl ||
+        (p as any)?.avatarUrl ||
+        '/avatar_hanna.webp',
     }));
   }
 
@@ -442,7 +583,9 @@ export class AdminStatsService {
         createdAt: { $lte: twentyFourHoursAgo },
       }),
       this.providerVerificationModel.countDocuments({
-        status: { $in: [VerificationStatus.Submitted, VerificationStatus.UnderReview] },
+        status: {
+          $in: [VerificationStatus.Submitted, VerificationStatus.UnderReview],
+        },
       }),
       this.productModel.countDocuments({
         moderationStatus: ProductModerationStatus.PendingReview,
@@ -469,27 +612,91 @@ export class AdminStatsService {
         openDisputes,
       },
       tasks: [
-        { id: 'task-1', title: 'Booking chờ xác nhận > 24h', count: pendingBookings24h, tab: 'bookings', variant: 'red' as const },
-        { id: 'task-2', title: 'Hồ sơ đối tác chờ duyệt', count: pendingVerifications, tab: 'verifications', variant: 'red' as const },
-        { id: 'task-3', title: 'Sản phẩm chờ duyệt', count: pendingProducts, tab: 'product-moderation', variant: 'red' as const },
-        { id: 'task-4', title: 'Combo chờ duyệt', count: pendingCombos, tab: 'combo-moderation', variant: 'amber' as const },
-        { id: 'task-5', title: 'Yêu cầu hoàn tiền mới', count: pendingRefunds, tab: 'refunds', variant: 'red' as const },
-        { id: 'task-6', title: 'Tranh chấp cần xử lý', count: openDisputes, tab: 'disputes', variant: 'red' as const },
+        {
+          id: 'task-1',
+          title: 'Booking chờ xác nhận > 24h',
+          count: pendingBookings24h,
+          tab: 'bookings',
+          variant: 'red' as const,
+        },
+        {
+          id: 'task-2',
+          title: 'Hồ sơ đối tác chờ duyệt',
+          count: pendingVerifications,
+          tab: 'verifications',
+          variant: 'red' as const,
+        },
+        {
+          id: 'task-3',
+          title: 'Sản phẩm chờ duyệt',
+          count: pendingProducts,
+          tab: 'product-moderation',
+          variant: 'red' as const,
+        },
+        {
+          id: 'task-4',
+          title: 'Combo chờ duyệt',
+          count: pendingCombos,
+          tab: 'combo-moderation',
+          variant: 'amber' as const,
+        },
+        {
+          id: 'task-5',
+          title: 'Yêu cầu hoàn tiền mới',
+          count: pendingRefunds,
+          tab: 'refunds',
+          variant: 'red' as const,
+        },
+        {
+          id: 'task-6',
+          title: 'Tranh chấp cần xử lý',
+          count: openDisputes,
+          tab: 'disputes',
+          variant: 'red' as const,
+        },
       ],
       alerts: {
         warnings: [
-          { id: 'w-1', title: 'Booking chờ xác nhận > 24h', count: pendingBookings24h, severity: 'warning' as const },
-          { id: 'w-2', title: 'Hoàn tiền cần xử lý', count: pendingRefunds, severity: 'warning' as const },
-          { id: 'w-3', title: 'Sản phẩm đang chờ duyệt', count: pendingProducts, severity: 'warning' as const },
+          {
+            id: 'w-1',
+            title: 'Booking chờ xác nhận > 24h',
+            count: pendingBookings24h,
+            severity: 'warning' as const,
+          },
+          {
+            id: 'w-2',
+            title: 'Hoàn tiền cần xử lý',
+            count: pendingRefunds,
+            severity: 'warning' as const,
+          },
+          {
+            id: 'w-3',
+            title: 'Sản phẩm đang chờ duyệt',
+            count: pendingProducts,
+            severity: 'warning' as const,
+          },
         ].filter((w) => w.count > 0),
         critical: [
-          { id: 'c-1', title: 'Tranh chấp cần xử lý', count: openDisputes, severity: 'critical' as const },
+          {
+            id: 'c-1',
+            title: 'Tranh chấp cần xử lý',
+            count: openDisputes,
+            severity: 'critical' as const,
+          },
         ].filter((c) => c.count > 0),
       },
     };
   }
 
-  private async getRecentActivities(): Promise<Array<{ id: string; type: 'booking' | 'product' | 'refund' | 'verification' | 'dispute'; actor: string; action: string; timeAgo: string }>> {
+  private async getRecentActivities(): Promise<
+    Array<{
+      id: string;
+      type: 'booking' | 'product' | 'refund' | 'verification' | 'dispute';
+      actor: string;
+      action: string;
+      timeAgo: string;
+    }>
+  > {
     const formatTimeAgo = (date: Date) => {
       const diffMs = Date.now() - new Date(date).getTime();
       const diffMin = Math.floor(diffMs / 60000);
@@ -508,30 +715,38 @@ export class AdminStatsService {
       return `${parts[0]} ${parts[parts.length - 1].slice(0, 1)}***`;
     };
 
-    const [recentBookings, recentVerifications, recentDisputes] = await Promise.all([
-      this.bookingModel
-        .find()
-        .sort({ createdAt: -1 })
-        .limit(3)
-        .select('bookingType customerId createdAt code')
-        .populate({ path: 'customerId', select: 'profile.fullName' })
-        .lean(),
-      this.providerVerificationModel
-        .find()
-        .sort({ updatedAt: -1 })
-        .limit(1)
-        .select('providerId status updatedAt')
-        .populate({ path: 'providerId', select: 'businessName' })
-        .lean(),
-      this.disputeModel
-        .find()
-        .sort({ createdAt: -1 })
-        .limit(1)
-        .select('disputeCode status createdAt')
-        .lean(),
-    ]);
+    const [recentBookings, recentVerifications, recentDisputes] =
+      await Promise.all([
+        this.bookingModel
+          .find()
+          .sort({ createdAt: -1 })
+          .limit(3)
+          .select('bookingType customerId createdAt code')
+          .populate({ path: 'customerId', select: 'profile.fullName' })
+          .lean(),
+        this.providerVerificationModel
+          .find()
+          .sort({ updatedAt: -1 })
+          .limit(1)
+          .select('providerId status updatedAt')
+          .populate({ path: 'providerId', select: 'businessName' })
+          .lean(),
+        this.disputeModel
+          .find()
+          .sort({ createdAt: -1 })
+          .limit(1)
+          .select('disputeCode status createdAt')
+          .lean(),
+      ]);
 
-    const feed: Array<{ id: string; type: 'booking' | 'product' | 'refund' | 'verification' | 'dispute'; actor: string; action: string; timeAgo: string; timestamp: number }> = [];
+    const feed: Array<{
+      id: string;
+      type: 'booking' | 'product' | 'refund' | 'verification' | 'dispute';
+      actor: string;
+      action: string;
+      timeAgo: string;
+      timestamp: number;
+    }> = [];
 
     for (const b of recentBookings) {
       const customer = (b as any).customerId;
@@ -558,7 +773,10 @@ export class AdminStatsService {
         id: `act-v-${v._id.toString()}`,
         type: 'verification',
         actor: `Đối tác ${partnerName}`,
-        action: v.status === 'APPROVED' ? 'đã được phê duyệt thành công!' : 'vừa nộp hồ sơ xác minh',
+        action:
+          v.status === 'APPROVED'
+            ? 'đã được phê duyệt thành công!'
+            : 'vừa nộp hồ sơ xác minh',
         timeAgo: formatTimeAgo((v as any).updatedAt),
         timestamp: new Date((v as any).updatedAt).getTime(),
       });
@@ -569,7 +787,10 @@ export class AdminStatsService {
         id: `act-d-${d._id.toString()}`,
         type: 'dispute',
         actor: `Tranh chấp #${(d as any).disputeCode || d._id.toString().slice(-4)}`,
-        action: d.status === 'OPEN' ? 'vừa được tạo và chờ xử lý' : 'vừa có cập nhật mới',
+        action:
+          d.status === 'OPEN'
+            ? 'vừa được tạo và chờ xử lý'
+            : 'vừa có cập nhật mới',
         timeAgo: formatTimeAgo((d as any).createdAt),
         timestamp: new Date((d as any).createdAt).getTime(),
       });
@@ -590,8 +811,8 @@ export class AdminStatsService {
     const filter: any = {
       $and: [
         { roles: 'CUSTOMER' },
-        { roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } }
-      ]
+        { roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } },
+      ],
     };
     if (search && search.trim()) {
       const pattern = buildVietnameseRegexPattern(search.trim());
@@ -606,7 +827,8 @@ export class AdminStatsService {
     }
     const [total, customers] = await Promise.all([
       this.userModel.countDocuments(filter as any),
-      this.userModel.find(filter as any)
+      this.userModel
+        .find(filter as any)
         .select('profile auth.email auth.phone accountStatus createdAt')
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
@@ -615,12 +837,16 @@ export class AdminStatsService {
     ]);
 
     const customerIds = customers.map((customer) => customer._id);
-    const bookingCounts = customerIds.length > 0
-      ? await this.bookingModel.aggregate<{ _id: Types.ObjectId; count: number }>([
-        { $match: { customerId: { $in: customerIds } } },
-        { $group: { _id: '$customerId', count: { $sum: 1 } } },
-      ])
-      : [];
+    const bookingCounts =
+      customerIds.length > 0
+        ? await this.bookingModel.aggregate<{
+            _id: Types.ObjectId;
+            count: number;
+          }>([
+            { $match: { customerId: { $in: customerIds } } },
+            { $group: { _id: '$customerId', count: { $sum: 1 } } },
+          ])
+        : [];
     const bookingCountByCustomer = new Map(
       bookingCounts.map((entry) => [entry._id.toString(), entry.count]),
     );
@@ -637,8 +863,13 @@ export class AdminStatsService {
 
     const items = customers.map((customer: any, idx: number) => {
       let avatarUrl = customer.profile?.avatarUrl;
-      if (!avatarUrl || avatarUrl.includes('unsplash.com') || avatarUrl.includes('example.com')) {
-        avatarUrl = customerFallbackAvatars[idx % customerFallbackAvatars.length];
+      if (
+        !avatarUrl ||
+        avatarUrl.includes('unsplash.com') ||
+        avatarUrl.includes('example.com')
+      ) {
+        avatarUrl =
+          customerFallbackAvatars[idx % customerFallbackAvatars.length];
       }
       return {
         id: customer._id.toString(),
@@ -647,7 +878,9 @@ export class AdminStatsService {
         phone: customer.auth?.phone || '',
         avatar: avatarUrl,
         status: customer.accountStatus || 'ACTIVE',
-        date: customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('vi-VN') : '2026-01-01',
+        date: customer.createdAt
+          ? new Date(customer.createdAt).toLocaleDateString('vi-VN')
+          : '2026-01-01',
         bookings: bookingCountByCustomer.get(customer._id.toString()) ?? 0,
         spent: 0,
       };
@@ -658,7 +891,7 @@ export class AdminStatsService {
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
     };
   }
 
@@ -794,58 +1027,72 @@ export class AdminStatsService {
     const providerIds = providers.map((provider: any) => provider._id);
     const legacyUserIds = providers
       .map((provider: any) => provider.userId?._id)
-      .filter((id: Types.ObjectId | undefined): id is Types.ObjectId => Boolean(id));
+      .filter((id: Types.ObjectId | undefined): id is Types.ObjectId =>
+        Boolean(id),
+      );
 
-    const [productList, bookingStats, verificationsList, reviewsList] = providerIds.length > 0
-      ? await Promise.all([
-        this.productModel.find({
-          providerId: { $in: [...providerIds, ...legacyUserIds] },
-        })
-          .select('providerId name basePrice images status')
-          .lean(),
-        this.bookingModel.aggregate<{
-          _id: Types.ObjectId;
-          totalRevenue: number;
-          completedCount: number;
-          totalCount: number;
-        }>([
-          { $match: { providerIds: { $in: providerIds } } },
-          { $unwind: '$providerIds' },
-          { $match: { providerIds: { $in: providerIds } } },
-          {
-            $group: {
-              _id: '$providerIds',
-              totalRevenue: {
-                $sum: {
-                  $cond: [{ $eq: ['$status', BookingStatus.Completed] }, '$pricingSummary.grandTotal', 0],
+    const [productList, bookingStats, verificationsList, reviewsList] =
+      providerIds.length > 0
+        ? await Promise.all([
+            this.productModel
+              .find({
+                providerId: { $in: [...providerIds, ...legacyUserIds] },
+              })
+              .select('providerId name basePrice images status')
+              .lean(),
+            this.bookingModel.aggregate<{
+              _id: Types.ObjectId;
+              totalRevenue: number;
+              completedCount: number;
+              totalCount: number;
+            }>([
+              { $match: { providerIds: { $in: providerIds } } },
+              { $unwind: '$providerIds' },
+              { $match: { providerIds: { $in: providerIds } } },
+              {
+                $group: {
+                  _id: '$providerIds',
+                  totalRevenue: {
+                    $sum: {
+                      $cond: [
+                        { $eq: ['$status', BookingStatus.Completed] },
+                        '$pricingSummary.grandTotal',
+                        0,
+                      ],
+                    },
+                  },
+                  completedCount: {
+                    $sum: {
+                      $cond: [
+                        { $eq: ['$status', BookingStatus.Completed] },
+                        1,
+                        0,
+                      ],
+                    },
+                  },
+                  totalCount: { $sum: 1 },
                 },
               },
-              completedCount: {
-                $sum: {
-                  $cond: [{ $eq: ['$status', BookingStatus.Completed] }, 1, 0],
-                },
-              },
-              totalCount: { $sum: 1 },
-            },
-          },
-        ]),
-        this.providerVerificationModel.find({
-          $or: [
-            { providerId: { $in: providerIds } },
-            { userId: { $in: legacyUserIds } },
-          ],
-        })
-          .select('providerId userId status verificationType')
-          .lean(),
-        this.reviewModel.find({
-          providerId: { $in: providerIds },
-        })
-          .populate('customerId', 'profile.fullName profile.avatarUrl')
-          .sort({ createdAt: -1 })
-          .select('providerId customerId rating comment createdAt')
-          .lean(),
-      ])
-      : [[], [], [], []];
+            ]),
+            this.providerVerificationModel
+              .find({
+                $or: [
+                  { providerId: { $in: providerIds } },
+                  { userId: { $in: legacyUserIds } },
+                ],
+              })
+              .select('providerId userId status verificationType')
+              .lean(),
+            this.reviewModel
+              .find({
+                providerId: { $in: providerIds },
+              })
+              .populate('customerId', 'profile.fullName profile.avatarUrl')
+              .sort({ createdAt: -1 })
+              .select('providerId customerId rating comment createdAt')
+              .lean(),
+          ])
+        : [[], [], [], []];
 
     const productsByProvider = new Map<string, any[]>();
     for (const p of productList) {
@@ -857,7 +1104,10 @@ export class AdminStatsService {
       }
     }
 
-    const bookingStatsMap = new Map<string, { totalRevenue: number; completedCount: number; totalCount: number }>();
+    const bookingStatsMap = new Map<
+      string,
+      { totalRevenue: number; completedCount: number; totalCount: number }
+    >();
     for (const b of bookingStats) {
       bookingStatsMap.set(b._id.toString(), b);
     }
@@ -892,25 +1142,55 @@ export class AdminStatsService {
       const user = provider.userId;
       const providerKey = provider._id.toString();
       const userKey = user?._id?.toString();
-      const storedEarnings = provider.wallet?.totalEarned || provider.wallet?.availableBalance || 0;
+      const storedEarnings =
+        provider.wallet?.totalEarned || provider.wallet?.availableBalance || 0;
       let avatarUrl = provider.media?.logoUrl || user?.profile?.avatarUrl;
-      if (!avatarUrl || avatarUrl.includes('unsplash.com') || avatarUrl.includes('example.com')) {
+      if (
+        !avatarUrl ||
+        avatarUrl.includes('unsplash.com') ||
+        avatarUrl.includes('example.com')
+      ) {
         avatarUrl = fallbackAvatars[idx % fallbackAvatars.length];
       }
 
-      const bStat = bookingStatsMap.get(providerKey) || { totalRevenue: 0, completedCount: 0, totalCount: 0 };
-      const prodList = [...(productsByProvider.get(providerKey) || []), ...(userKey ? productsByProvider.get(userKey) || [] : [])];
+      const bStat = bookingStatsMap.get(providerKey) || {
+        totalRevenue: 0,
+        completedCount: 0,
+        totalCount: 0,
+      };
+      const prodList = [
+        ...(productsByProvider.get(providerKey) || []),
+        ...(userKey ? productsByProvider.get(userKey) || [] : []),
+      ];
       const revList = reviewsByProvider.get(providerKey) || [];
-      const verif = verificationMap.get(providerKey) || (userKey ? verificationMap.get(userKey) : null);
+      const verif =
+        verificationMap.get(providerKey) ||
+        (userKey ? verificationMap.get(userKey) : null);
 
-      const isVerified = verif?.status === VerificationStatus.Approved || verif?.status === 'APPROVED' || provider.status === 'ACTIVE';
+      const isVerified =
+        verif?.status === VerificationStatus.Approved ||
+        verif?.status === 'APPROVED' ||
+        provider.status === 'ACTIVE';
 
       const fullAddress = provider.address
-        ? [provider.address.addressLine, provider.address.ward, provider.address.district, provider.address.city].filter(Boolean).join(', ')
+        ? [
+            provider.address.addressLine,
+            provider.address.ward,
+            provider.address.district,
+            provider.address.city,
+          ]
+            .filter(Boolean)
+            .join(', ')
         : 'Chưa cập nhật';
 
-      const defaultPayment = provider.paymentAccounts?.find((acc: any) => acc.isDefault) || provider.paymentAccounts?.[0];
-      const realTaxCode = provider.taxCode || verif?.businessLicense?.licenseNumber || verif?.identityCard?.cardNumber || '';
+      const defaultPayment =
+        provider.paymentAccounts?.find((acc: any) => acc.isDefault) ||
+        provider.paymentAccounts?.[0];
+      const realTaxCode =
+        provider.taxCode ||
+        verif?.businessLicense?.licenseNumber ||
+        verif?.identityCard?.cardNumber ||
+        '';
 
       return {
         id: providerKey,
@@ -926,17 +1206,30 @@ export class AdminStatsService {
         taxCode: realTaxCode,
         bankAccount: defaultPayment?.accountNumberMasked || 'Chưa liên kết',
         bankName: defaultPayment?.bankName || 'Chưa liên kết',
-        createdAt: provider.createdAt ? new Date(provider.createdAt).toLocaleDateString('vi-VN') : '',
+        createdAt: provider.createdAt
+          ? new Date(provider.createdAt).toLocaleDateString('vi-VN')
+          : '',
         totalProducts: prodList.length,
         completedBookings: bStat.completedCount,
         totalBookings: bStat.totalCount,
-        completionRate: bStat.totalCount > 0 ? Math.round((bStat.completedCount / bStat.totalCount) * 100) : 100,
-        rating: provider.rating?.averageRating ? Number(provider.rating.averageRating.toFixed(1)) : 0,
+        completionRate:
+          bStat.totalCount > 0
+            ? Math.round((bStat.completedCount / bStat.totalCount) * 100)
+            : 100,
+        rating: provider.rating?.averageRating
+          ? Number(provider.rating.averageRating.toFixed(1))
+          : 0,
         totalEarnings: storedEarnings || bStat.totalRevenue || 0,
         isVerified,
         hasIdCard: Boolean(verif?.identityCard?.cardNumber || isVerified),
-        hasBusinessLicense: Boolean(verif?.businessLicense?.licenseNumber || isVerified),
-        hasStudioProof: Boolean(verif?.shopPhotos?.length || verif?.portfolioProof?.length || isVerified),
+        hasBusinessLicense: Boolean(
+          verif?.businessLicense?.licenseNumber || isVerified,
+        ),
+        hasStudioProof: Boolean(
+          verif?.shopPhotos?.length ||
+          verif?.portfolioProof?.length ||
+          isVerified,
+        ),
         products: prodList.map((p: any) => ({
           id: p._id.toString(),
           name: p.name,
@@ -950,7 +1243,9 @@ export class AdminStatsService {
           avatar: r.customerId?.profile?.avatarUrl || '',
           rating: r.rating,
           comment: r.comment,
-          date: r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : '',
+          date: r.createdAt
+            ? new Date(r.createdAt).toLocaleDateString('vi-VN')
+            : '',
         })),
       };
     });
@@ -960,7 +1255,7 @@ export class AdminStatsService {
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
     };
   }
 
@@ -977,7 +1272,9 @@ export class AdminStatsService {
     // 1. Calculate overall real metrics across all bookings in MongoDB
     const [allBookingsSummary, allDisputes] = await Promise.all([
       this.bookingModel.find({}, 'status createdAt').lean(),
-      this.disputeModel.find({}, 'bookingId reason status adminDecision createdAt').lean(),
+      this.disputeModel
+        .find({}, 'bookingId reason status adminDecision createdAt')
+        .lean(),
     ]);
 
     const totalAll = allBookingsSummary.length;
@@ -985,7 +1282,13 @@ export class AdminStatsService {
       ['PENDING_PAYMENT', 'DRAFT', 'AWAITING_REVIEW'].includes(b.status),
     ).length;
     const upcomingCount = allBookingsSummary.filter((b: any) =>
-      ['CONFIRMED', 'DEPOSIT_PAID', 'PICKUP_PENDING', 'IN_PROGRESS', 'PICKED_UP'].includes(b.status),
+      [
+        'CONFIRMED',
+        'DEPOSIT_PAID',
+        'PICKUP_PENDING',
+        'IN_PROGRESS',
+        'PICKED_UP',
+      ].includes(b.status),
     ).length;
     const completedCount = allBookingsSummary.filter((b: any) =>
       ['COMPLETED', 'RETURNED'].includes(b.status),
@@ -997,9 +1300,10 @@ export class AdminStatsService {
     const disputeBookingIdSet = new Set(
       allDisputes.map((d: any) => d.bookingId?.toString()).filter(Boolean),
     );
-    const disputedCount = allBookingsSummary.filter((b: any) =>
-      ['DISPUTED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(b.status) ||
-      disputeBookingIdSet.has(b._id.toString()),
+    const disputedCount = allBookingsSummary.filter(
+      (b: any) =>
+        ['DISPUTED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(b.status) ||
+        disputeBookingIdSet.has(b._id.toString()),
     ).length;
 
     const totalSafe = totalAll || 1;
@@ -1031,15 +1335,36 @@ export class AdminStatsService {
 
     if (statusFilter && statusFilter !== 'ALL' && statusFilter !== 'Tất cả') {
       if (statusFilter === 'PENDING' || statusFilter === 'Chờ xác nhận') {
-        filter.status = { $in: ['PENDING_PAYMENT', 'DRAFT', 'AWAITING_REVIEW'] };
-      } else if (statusFilter === 'UPCOMING' || statusFilter === 'Sắp diễn ra') {
-        filter.status = { $in: ['CONFIRMED', 'DEPOSIT_PAID', 'PICKUP_PENDING', 'IN_PROGRESS', 'PICKED_UP'] };
-      } else if (statusFilter === 'COMPLETED' || statusFilter === 'Đã hoàn thành') {
+        filter.status = {
+          $in: ['PENDING_PAYMENT', 'DRAFT', 'AWAITING_REVIEW'],
+        };
+      } else if (
+        statusFilter === 'UPCOMING' ||
+        statusFilter === 'Sắp diễn ra'
+      ) {
+        filter.status = {
+          $in: [
+            'CONFIRMED',
+            'DEPOSIT_PAID',
+            'PICKUP_PENDING',
+            'IN_PROGRESS',
+            'PICKED_UP',
+          ],
+        };
+      } else if (
+        statusFilter === 'COMPLETED' ||
+        statusFilter === 'Đã hoàn thành'
+      ) {
         filter.status = { $in: ['COMPLETED', 'RETURNED'] };
       } else if (statusFilter === 'CANCELLED' || statusFilter === 'Đã hủy') {
         filter.status = 'CANCELLED';
-      } else if (statusFilter === 'DISPUTED' || statusFilter === 'Có tranh chấp') {
-        const disputeIds = Array.from(disputeBookingIdSet).map(id => new Types.ObjectId(id));
+      } else if (
+        statusFilter === 'DISPUTED' ||
+        statusFilter === 'Có tranh chấp'
+      ) {
+        const disputeIds = Array.from(disputeBookingIdSet).map(
+          (id) => new Types.ObjectId(id),
+        );
         filter.$or = [
           { status: { $in: ['DISPUTED', 'PARTIALLY_REFUNDED', 'REFUNDED'] } },
           { _id: { $in: disputeIds } },
@@ -1049,12 +1374,25 @@ export class AdminStatsService {
       }
     }
 
-    if (bookingTypeFilter && bookingTypeFilter !== 'ALL' && bookingTypeFilter !== 'Tất cả') {
-      if (bookingTypeFilter === 'Thuê áo dài' || bookingTypeFilter === 'AODAI_RENTAL') {
+    if (
+      bookingTypeFilter &&
+      bookingTypeFilter !== 'ALL' &&
+      bookingTypeFilter !== 'Tất cả'
+    ) {
+      if (
+        bookingTypeFilter === 'Thuê áo dài' ||
+        bookingTypeFilter === 'AODAI_RENTAL'
+      ) {
         filter.bookingType = 'AODAI_RENTAL';
-      } else if (bookingTypeFilter === 'Chụp ảnh' || bookingTypeFilter === 'PHOTOGRAPHY') {
+      } else if (
+        bookingTypeFilter === 'Chụp ảnh' ||
+        bookingTypeFilter === 'PHOTOGRAPHY'
+      ) {
         filter.bookingType = 'PHOTOGRAPHY';
-      } else if (bookingTypeFilter === 'Combo' || bookingTypeFilter === 'COMBO') {
+      } else if (
+        bookingTypeFilter === 'Combo' ||
+        bookingTypeFilter === 'COMBO'
+      ) {
         filter.bookingType = 'COMBO';
       } else {
         filter.bookingType = bookingTypeFilter;
@@ -1078,32 +1416,37 @@ export class AdminStatsService {
       const pattern = buildVietnameseRegexPattern(search.trim());
       const regex = new RegExp(pattern, 'i');
       const [matchingUsers, matchingProviders] = await Promise.all([
-        this.userModel.find({
-          $or: [
-            { 'profile.fullName': regex },
-            { 'auth.phone': regex },
-            { 'auth.email': regex },
-          ],
-        }, '_id').lean(),
-        this.providerModel.find({
-          businessName: regex,
-        }, '_id').lean(),
+        this.userModel
+          .find(
+            {
+              $or: [
+                { 'profile.fullName': regex },
+                { 'auth.phone': regex },
+                { 'auth.email': regex },
+              ],
+            },
+            '_id',
+          )
+          .lean(),
+        this.providerModel
+          .find(
+            {
+              businessName: regex,
+            },
+            '_id',
+          )
+          .lean(),
       ]);
 
-      const userIds = matchingUsers.map(u => u._id);
-      const provIds = matchingProviders.map(p => p._id);
+      const userIds = matchingUsers.map((u) => u._id);
+      const provIds = matchingProviders.map((p) => p._id);
 
-      const searchOr: any[] = [
-        { bookingCode: regex },
-      ];
+      const searchOr: any[] = [{ bookingCode: regex }];
       if (userIds.length > 0) searchOr.push({ customerId: { $in: userIds } });
       if (provIds.length > 0) searchOr.push({ providerIds: { $in: provIds } });
 
       if (filter.$or) {
-        filter.$and = [
-          { $or: filter.$or },
-          { $or: searchOr },
-        ];
+        filter.$and = [{ $or: filter.$or }, { $or: searchOr }];
         delete filter.$or;
       } else {
         filter.$or = searchOr;
@@ -1112,7 +1455,8 @@ export class AdminStatsService {
 
     const [total, bookings] = await Promise.all([
       this.bookingModel.countDocuments(filter),
-      this.bookingModel.find(filter)
+      this.bookingModel
+        .find(filter)
         .populate('customerId', 'profile auth')
         .populate('providerIds', 'businessName contact address media')
         .sort({ createdAt: -1 })
@@ -1123,14 +1467,16 @@ export class AdminStatsService {
 
     const bookingIds = bookings.map((b: any) => b._id);
 
-    const [bookingItems, disputes] = bookingIds.length > 0
-      ? await Promise.all([
-        this.bookingItemModel.find({ bookingId: { $in: bookingIds } })
-          .populate('productId', 'name images basePrice')
-          .lean(),
-        this.disputeModel.find({ bookingId: { $in: bookingIds } }).lean(),
-      ])
-      : [[], []];
+    const [bookingItems, disputes] =
+      bookingIds.length > 0
+        ? await Promise.all([
+            this.bookingItemModel
+              .find({ bookingId: { $in: bookingIds } })
+              .populate('productId', 'name images basePrice')
+              .lean(),
+            this.disputeModel.find({ bookingId: { $in: bookingIds } }).lean(),
+          ])
+        : [[], []];
 
     const itemsByBookingId = new Map<string, any[]>();
     for (const item of bookingItems) {
@@ -1152,7 +1498,10 @@ export class AdminStatsService {
 
     const items = bookings.map((b: any) => {
       const custObj = b.customerId as any;
-      const provObj = (b.providerIds && b.providerIds.length > 0) ? (b.providerIds[0] as any) : null;
+      const provObj =
+        b.providerIds && b.providerIds.length > 0
+          ? (b.providerIds[0] as any)
+          : null;
       const bItems = itemsByBookingId.get(b._id.toString()) || [];
       const disp = disputeByBookingId.get(b._id.toString());
 
@@ -1174,7 +1523,8 @@ export class AdminStatsService {
       if (firstItem?.rentalFrom) {
         const d = new Date(firstItem.rentalFrom);
         scheduleDate = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-        scheduleTime = firstItem.rentalType === 'HOURLY' ? 'Theo giờ' : 'Theo ngày';
+        scheduleTime =
+          firstItem.rentalType === 'HOURLY' ? 'Theo giờ' : 'Theo ngày';
       } else if (firstItem?.shootDate) {
         const d = new Date(firstItem.shootDate);
         scheduleDate = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
@@ -1194,24 +1544,34 @@ export class AdminStatsService {
         } else {
           issueText = 'Khách khiếu nại';
         }
-      } else if (['DISPUTED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(b.status)) {
-        issueText = b.status === 'DISPUTED' ? 'Khách khiếu nại' : 'Yêu cầu hoàn tiền';
+      } else if (
+        ['DISPUTED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(b.status)
+      ) {
+        issueText =
+          b.status === 'DISPUTED' ? 'Khách khiếu nại' : 'Yêu cầu hoàn tiền';
       }
 
       // Determine payment status
-      const isPaid = b.paymentSummary?.paymentStatus === 'PAID' ||
+      const isPaid =
+        b.paymentSummary?.paymentStatus === 'PAID' ||
         ['COMPLETED', 'RETURNED'].includes(b.status) ||
-        (b.pricingSummary?.grandTotal > 0 && b.paymentSummary?.totalPaid >= b.pricingSummary?.grandTotal);
+        (b.pricingSummary?.grandTotal > 0 &&
+          b.paymentSummary?.totalPaid >= b.pricingSummary?.grandTotal);
 
       // Status translation
       let statusLabel = 'Sắp diễn ra';
       if (['COMPLETED', 'RETURNED'].includes(b.status)) {
         statusLabel = 'Đã hoàn thành';
-      } else if (['PENDING_PAYMENT', 'DRAFT', 'AWAITING_REVIEW'].includes(b.status)) {
+      } else if (
+        ['PENDING_PAYMENT', 'DRAFT', 'AWAITING_REVIEW'].includes(b.status)
+      ) {
         statusLabel = 'Chờ xác nhận';
       } else if (b.status === 'CANCELLED') {
         statusLabel = 'Đã hủy';
-      } else if (['DISPUTED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(b.status) || disp) {
+      } else if (
+        ['DISPUTED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(b.status) ||
+        disp
+      ) {
         statusLabel = 'Có tranh chấp';
       }
 
@@ -1226,23 +1586,44 @@ export class AdminStatsService {
       }
 
       const rawCity = provObj?.address?.city || '';
-      const cleanCity = rawCity ? rawCity.replace(/^Thành phố\s+/i, '').replace(/^Tỉnh\s+/i, '') : 'Chưa cập nhật';
+      const cleanCity = rawCity
+        ? rawCity.replace(/^Thành phố\s+/i, '').replace(/^Tỉnh\s+/i, '')
+        : 'Chưa cập nhật';
 
-      const customerFullName = custObj?.profile?.fullName || custObj?.auth?.email || 'Khách hàng';
+      const customerFullName =
+        custObj?.profile?.fullName || custObj?.auth?.email || 'Khách hàng';
       const providerBusinessName = provObj?.businessName || 'Chưa liên kết';
-      const custCode = custObj?._id ? `#KH${custObj._id.toString().slice(-6).toUpperCase()}` : '—';
-      const provCode = provObj?._id ? `#DT${provObj._id.toString().slice(-5).toUpperCase()}` : '—';
+      const custCode = custObj?._id
+        ? `#KH${custObj._id.toString().slice(-6).toUpperCase()}`
+        : '—';
+      const provCode = provObj?._id
+        ? `#DT${provObj._id.toString().slice(-5).toUpperCase()}`
+        : '—';
 
       const specsList = [];
-      if (firstItem?.selectedColor) specsList.push(`Màu ${firstItem.selectedColor}`);
-      if (firstItem?.selectedSize) specsList.push(`Size ${firstItem.selectedSize}`);
-      const specsText = specsList.length > 0 ? specsList.join(' - ') : (firstItem?.customizationNotes || 'Tiêu chuẩn');
+      if (firstItem?.selectedColor)
+        specsList.push(`Màu ${firstItem.selectedColor}`);
+      if (firstItem?.selectedSize)
+        specsList.push(`Size ${firstItem.selectedSize}`);
+      const specsText =
+        specsList.length > 0
+          ? specsList.join(' - ')
+          : firstItem?.customizationNotes || 'Tiêu chuẩn';
 
-      const fullProvAddress = [provObj?.address?.addressLine, provObj?.address?.ward, provObj?.address?.district, provObj?.address?.city].filter(Boolean).join(', ') || cleanCity;
+      const fullProvAddress =
+        [
+          provObj?.address?.addressLine,
+          provObj?.address?.ward,
+          provObj?.address?.district,
+          provObj?.address?.city,
+        ]
+          .filter(Boolean)
+          .join(', ') || cleanCity;
 
       return {
         id: b.bookingCode || b._id.toString(),
-        bookingCode: b.bookingCode || `BK${b._id.toString().slice(-7).toUpperCase()}`,
+        bookingCode:
+          b.bookingCode || `BK${b._id.toString().slice(-7).toUpperCase()}`,
         bookingId: b._id.toString(),
         customerName: customerFullName,
         providerName: providerBusinessName,
@@ -1252,7 +1633,9 @@ export class AdminStatsService {
         status: b.status || 'CONFIRMED',
         statusLabel,
         rentalDate: scheduleDate,
-        returnDate: (b as any).updatedAt ? new Date((b as any).updatedAt).toLocaleDateString('vi-VN') : scheduleDate,
+        returnDate: (b as any).updatedAt
+          ? new Date((b as any).updatedAt).toLocaleDateString('vi-VN')
+          : scheduleDate,
         createdAt: b.createdAt,
         updatedAt: b.updatedAt,
         isPaid,
@@ -1268,7 +1651,10 @@ export class AdminStatsService {
           phone: customerPhone,
           email: custObj?.auth?.email || 'Chưa cập nhật',
           avatar: customerAvatar,
-          address: custObj?.profile?.address?.fullAddress || custObj?.profile?.address?.city || 'Chưa cập nhật',
+          address:
+            custObj?.profile?.address?.fullAddress ||
+            custObj?.profile?.address?.city ||
+            'Chưa cập nhật',
         },
         provider: {
           id: provObj?._id?.toString() || '',
@@ -1280,24 +1666,58 @@ export class AdminStatsService {
           avatar: provObj?.media?.logoUrl || provObj?.media?.avatarUrl || '',
         },
         serviceDetails: {
-          name: firstItem?.productId?.name || (serviceLabel === 'Chụp ảnh' ? 'Dịch vụ chụp ảnh' : 'Dịch vụ áo dài'),
-          package: firstItem?.rentalType === 'HOURLY' ? 'Gói thuê theo giờ' : firstItem?.rentalType === 'DAILY' ? 'Gói thuê theo ngày' : serviceLabel,
+          name:
+            firstItem?.productId?.name ||
+            (serviceLabel === 'Chụp ảnh'
+              ? 'Dịch vụ chụp ảnh'
+              : 'Dịch vụ áo dài'),
+          package:
+            firstItem?.rentalType === 'HOURLY'
+              ? 'Gói thuê theo giờ'
+              : firstItem?.rentalType === 'DAILY'
+                ? 'Gói thuê theo ngày'
+                : serviceLabel,
           specs: specsText,
-          image: firstItem?.productId?.images?.[0] || firstItem?.referenceImage || '',
-          location: firstItem?.shootLocation || firstItem?.pickupReturnLocationSnapshot?.address || cleanCity,
+          image:
+            firstItem?.productId?.images?.[0] ||
+            firstItem?.referenceImage ||
+            '',
+          location:
+            firstItem?.shootLocation ||
+            firstItem?.pickupReturnLocationSnapshot?.address ||
+            cleanCity,
           guests: serviceLabel === 'Chụp ảnh' ? '1 - 2 người' : '1 người',
         },
         financials: {
           total: b.pricingSummary?.grandTotal || 0,
-          paid: isPaid ? (b.pricingSummary?.grandTotal || 0) : (b.paymentSummary?.totalPaid || b.pricingSummary?.depositTotal || 0),
-          refunded: b.paymentSummary?.totalRefunded || (disp?.adminDecision?.refundAmount || 0),
+          paid: isPaid
+            ? b.pricingSummary?.grandTotal || 0
+            : b.paymentSummary?.totalPaid ||
+              b.pricingSummary?.depositTotal ||
+              0,
+          refunded:
+            b.paymentSummary?.totalRefunded ||
+            disp?.adminDecision?.refundAmount ||
+            0,
           disputesCount: disp ? 1 : 0,
         },
-        timeline: b.statusTimeline && b.statusTimeline.length > 0 ? b.statusTimeline : [
-          { status: 'DRAFT', changedAt: b.createdAt, note: 'Khách tạo đơn đặt lịch' },
-          { status: b.status, changedAt: b.updatedAt || b.createdAt, note: 'Cập nhật trạng thái' },
-        ],
-        customerNotes: b.pickupDamageReport?.description || b.cancellation?.reason || '',
+        timeline:
+          b.statusTimeline && b.statusTimeline.length > 0
+            ? b.statusTimeline
+            : [
+                {
+                  status: 'DRAFT',
+                  changedAt: b.createdAt,
+                  note: 'Khách tạo đơn đặt lịch',
+                },
+                {
+                  status: b.status,
+                  changedAt: b.updatedAt || b.createdAt,
+                  note: 'Cập nhật trạng thái',
+                },
+              ],
+        customerNotes:
+          b.pickupDamageReport?.description || b.cancellation?.reason || '',
       };
     });
 
@@ -1316,8 +1736,11 @@ export class AdminStatsService {
     const transferModel = this.bookingModel.db.model('SettlementTransfer');
     const [total, transfers] = await Promise.all([
       transferModel.countDocuments({}),
-      transferModel.find({})
-        .select('transactionReference bookingId providerId amountSent destinationBankAccount status createdAt')
+      transferModel
+        .find({})
+        .select(
+          'transactionReference bookingId providerId amountSent destinationBankAccount status createdAt',
+        )
         .populate('bookingId', 'bookingCode')
         .populate('providerId', 'businessName')
         .sort({ createdAt: -1 })
@@ -1335,10 +1758,17 @@ export class AdminStatsService {
         bookingCode: bookingObj?.bookingCode || '',
         providerName: provObj?.businessName || 'Nhà cung cấp',
         amount: t.amountSent || 0,
-        date: t.createdAt ? new Date(t.createdAt).toLocaleDateString('vi-VN') : '',
+        date: t.createdAt
+          ? new Date(t.createdAt).toLocaleDateString('vi-VN')
+          : '',
         bank: t.destinationBankAccount?.bankName || 'Ngân hàng',
         account: t.destinationBankAccount?.accountNumber || '*********',
-        status: t.status === 'SUCCESS' ? 'PAID' : t.status === 'PENDING' ? 'PENDING' : 'FAILED',
+        status:
+          t.status === 'SUCCESS'
+            ? 'PAID'
+            : t.status === 'PENDING'
+              ? 'PENDING'
+              : 'FAILED',
       };
     });
 
@@ -1347,44 +1777,62 @@ export class AdminStatsService {
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
     };
   }
 
   async banCustomer(userId: string) {
     const userObjectId = new Types.ObjectId(userId);
-    await this.userModel.updateOne(
-      { _id: userObjectId } as any,
-      { $set: { accountStatus: 'BANNED' } }
-    );
+    await this.userModel.updateOne({ _id: userObjectId } as any, {
+      $set: { accountStatus: 'BANNED' },
+    });
     // Revoke all active sessions immediately so the user is kicked out
     await this.refreshTokenModel.updateMany(
       { userId: userObjectId },
-      { $set: { revokedAt: new Date() } }
+      { $set: { revokedAt: new Date() } },
     );
-    return { success: true, message: 'Khách hàng đã bị khóa tài khoản và đăng xuất khỏi hệ thống' };
+    return {
+      success: true,
+      message: 'Khách hàng đã bị khóa tài khoản và đăng xuất khỏi hệ thống',
+    };
   }
 
   async unbanCustomer(userId: string) {
-    await this.userModel.updateOne(
-      { _id: new Types.ObjectId(userId) } as any,
-      { $set: { accountStatus: 'ACTIVE' } }
-    );
+    await this.userModel.updateOne({ _id: new Types.ObjectId(userId) } as any, {
+      $set: { accountStatus: 'ACTIVE' },
+    });
     return { success: true, message: 'Khách hàng đã được mở khóa tài khoản' };
   }
 
   private periodBuckets(period = 'month') {
     const now = new Date();
-    const buckets: Array<{ key: string; label: string; start: Date; end: Date }> = [];
+    const buckets: Array<{
+      key: string;
+      label: string;
+      start: Date;
+      end: Date;
+    }> = [];
 
     if (period === 'week') {
       for (let offset = 6; offset >= 0; offset -= 1) {
-        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
+        const date = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() - offset,
+        );
         buckets.push({
           key: this.dateKey(date),
           label: `${date.getDate()}/${date.getMonth() + 1}`,
           start: new Date(date.getFullYear(), date.getMonth(), date.getDate()),
-          end: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999),
+          end: new Date(
+            date.getFullYear(),
+            date.getMonth(),
+            date.getDate(),
+            23,
+            59,
+            59,
+            999,
+          ),
         });
       }
       return { buckets, format: '%Y-%m-%d' };
@@ -1409,7 +1857,15 @@ export class AdminStatsService {
         key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
         label: `Thg ${date.getMonth() + 1}`,
         start: date,
-        end: new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999),
+        end: new Date(
+          date.getFullYear(),
+          date.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        ),
       });
     }
     return { buckets, format: '%Y-%m' };
@@ -1421,28 +1877,45 @@ export class AdminStatsService {
 
   private async getCustomerGrowth(period = 'month') {
     const { buckets, format } = this.periodBuckets(period);
-    const rows = await this.userModel.aggregate<{ _id: string; value: number }>([
-      {
-        $match: {
-          roles: 'CUSTOMER',
-          $and: [{ roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } }],
-          createdAt: { $gte: buckets[0].start, $lte: buckets[buckets.length - 1].end },
+    const rows = await this.userModel.aggregate<{ _id: string; value: number }>(
+      [
+        {
+          $match: {
+            roles: 'CUSTOMER',
+            $and: [{ roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } }],
+            createdAt: {
+              $gte: buckets[0].start,
+              $lte: buckets[buckets.length - 1].end,
+            },
+          },
         },
-      },
-      {
-        $group: {
-          _id: { $dateToString: { format, date: '$createdAt', timezone: 'Asia/Bangkok' } },
-          value: { $sum: 1 },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format,
+                date: '$createdAt',
+                timezone: 'Asia/Bangkok',
+              },
+            },
+            value: { $sum: 1 },
+          },
         },
-      },
-    ]);
+      ],
+    );
     const values = new Map(rows.map((row) => [row._id, row.value]));
-    return buckets.map(({ key, label }) => ({ label, value: values.get(key) ?? 0 }));
+    return buckets.map(({ key, label }) => ({
+      label,
+      value: values.get(key) ?? 0,
+    }));
   }
 
   private async getRevenueGrowth(period = 'month') {
     const { buckets, format } = this.periodBuckets(period);
-    const rows = await this.paymentModel.aggregate<{ _id: string; value: number }>([
+    const rows = await this.paymentModel.aggregate<{
+      _id: string;
+      value: number;
+    }>([
       {
         $match: {
           status: { $in: [PaymentStatus.Success, 'SUCCESS', 'PAID'] },
@@ -1453,37 +1926,64 @@ export class AdminStatsService {
               PaymentPurpose.FullPayment,
             ],
           },
-          createdAt: { $gte: buckets[0].start, $lte: buckets[buckets.length - 1].end },
+          createdAt: {
+            $gte: buckets[0].start,
+            $lte: buckets[buckets.length - 1].end,
+          },
         },
       },
       {
         $group: {
-          _id: { $dateToString: { format, date: '$createdAt', timezone: 'Asia/Bangkok' } },
+          _id: {
+            $dateToString: {
+              format,
+              date: '$createdAt',
+              timezone: 'Asia/Bangkok',
+            },
+          },
           value: { $sum: '$amount' },
         },
       },
     ]);
     const values = new Map(rows.map((row) => [row._id, row.value]));
-    return buckets.map(({ key, label }) => ({ label, value: values.get(key) ?? 0 }));
+    return buckets.map(({ key, label }) => ({
+      label,
+      value: values.get(key) ?? 0,
+    }));
   }
 
   private async getBookingGrowth(period = 'month') {
     const { buckets, format } = this.periodBuckets(period);
-    const rows = await this.bookingModel.aggregate<{ _id: string; value: number }>([
+    const rows = await this.bookingModel.aggregate<{
+      _id: string;
+      value: number;
+    }>([
       {
         $match: {
-          createdAt: { $gte: buckets[0].start, $lte: buckets[buckets.length - 1].end },
+          createdAt: {
+            $gte: buckets[0].start,
+            $lte: buckets[buckets.length - 1].end,
+          },
         },
       },
       {
         $group: {
-          _id: { $dateToString: { format, date: '$createdAt', timezone: 'Asia/Bangkok' } },
+          _id: {
+            $dateToString: {
+              format,
+              date: '$createdAt',
+              timezone: 'Asia/Bangkok',
+            },
+          },
           value: { $sum: 1 },
         },
       },
     ]);
     const values = new Map(rows.map((row) => [row._id, row.value]));
-    return buckets.map(({ key, label }) => ({ label, value: values.get(key) ?? 0 }));
+    return buckets.map(({ key, label }) => ({
+      label,
+      value: values.get(key) ?? 0,
+    }));
   }
 
   async updateBookingStatus(id: string, status: string, note?: string) {
@@ -1493,7 +1993,7 @@ export class AdminStatsService {
     }
     if (!booking) {
       booking = await this.bookingModel.findOne({
-        $or: [{ bookingId: id }, { code: id }]
+        $or: [{ bookingId: id }, { code: id }],
       });
     }
     if (!booking) {
@@ -1509,5 +2009,920 @@ export class AdminStatsService {
     }
     await booking.save();
     return { success: true, bookingId: booking._id, status: booking.status };
+  }
+
+  /**
+   * Helper to resolve provider/shop ID for stats queries based on query params and currentUser.
+   */
+  async resolveProviderId(
+    queryProviderId?: string,
+    currentUser?: AuthUser,
+  ): Promise<Types.ObjectId | null> {
+    const isAdmin = currentUser?.roles?.some(
+      (r) => r.toUpperCase() === 'ADMIN',
+    );
+
+    if (isAdmin) {
+      if (queryProviderId && Types.ObjectId.isValid(queryProviderId)) {
+        return new Types.ObjectId(queryProviderId);
+      }
+      return null;
+    }
+
+    if (currentUser?.sub) {
+      if (Types.ObjectId.isValid(currentUser.sub)) {
+        const userObjectId = new Types.ObjectId(currentUser.sub);
+        const provider = await this.providerModel.findOne({
+          userId: userObjectId,
+        });
+        if (provider) {
+          return provider._id;
+        }
+        const directProvider = await this.providerModel.findById(userObjectId);
+        if (directProvider) {
+          return directProvider._id;
+        }
+      }
+    }
+
+    if (queryProviderId && Types.ObjectId.isValid(queryProviderId)) {
+      return new Types.ObjectId(queryProviderId);
+    }
+
+    return null;
+  }
+
+  /**
+   * VS-103: UC-K04 Rental Bookings & Revenue Analytics Dashboard
+   * GET /api/v1/admin-stats/rental-bookings | MongoDB Aggregation Pipeline
+   */
+  async getRentalBookings(
+    query: {
+      from?: string;
+      to?: string;
+      startDate?: string;
+      endDate?: string;
+      shopId?: string;
+      providerId?: string;
+    },
+    currentUser?: AuthUser,
+  ) {
+    const targetProviderId = await this.resolveProviderId(
+      query.shopId || query.providerId,
+      currentUser,
+    );
+
+    const fromStr = query.from || query.startDate;
+    const toStr = query.to || query.endDate;
+
+    let start: Date;
+    let end: Date;
+
+    if (fromStr && toStr) {
+      const sStr = fromStr.includes('T') ? fromStr : `${fromStr}T00:00:00.000Z`;
+      const eStr = toStr.includes('T') ? toStr : `${toStr}T23:59:59.999Z`;
+      start = new Date(sStr);
+      end = new Date(eStr);
+    } else if (fromStr) {
+      const sStr = fromStr.includes('T') ? fromStr : `${fromStr}T00:00:00.000Z`;
+      start = new Date(sStr);
+      end = new Date();
+    } else {
+      const now = new Date();
+      start = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0),
+      );
+      end = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        ),
+      );
+    }
+
+    const matchStage: any = {
+      bookingType: { $in: ['AODAI_RENTAL', 'RENTAL'] },
+      status: { $ne: 'CANCELLED' },
+      createdAt: { $gte: start, $lte: end },
+    };
+
+    if (targetProviderId) {
+      matchStage.$or = [
+        { providerId: targetProviderId },
+        { providerIds: targetProviderId },
+      ];
+    }
+
+    const [summaryResult, dailyPoints] = await Promise.all([
+      this.bookingModel.aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: null,
+            orderCount: { $sum: 1 },
+            totalRevenue: {
+              $sum: {
+                $ifNull: ['$pricingSummary.grandTotal', 0],
+              },
+            },
+          },
+        },
+      ]),
+      this.bookingModel.aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: '%Y-%m-%d',
+                date: '$createdAt',
+                timezone: 'Asia/Bangkok',
+              },
+            },
+            count: { $sum: 1 },
+            revenue: {
+              $sum: {
+                $ifNull: ['$pricingSummary.grandTotal', 0],
+              },
+            },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+    ]);
+
+    const orderCount = summaryResult[0]?.orderCount ?? 0;
+    let revenue = summaryResult[0]?.totalRevenue ?? 0;
+
+    if (revenue === 0 && orderCount > 0 && targetProviderId) {
+      const bookings = await this.bookingModel.find(matchStage).select('_id');
+      const bookingIds = bookings.map((b) => b._id);
+      const items = await this.bookingItemModel
+        .find({
+          bookingId: { $in: bookingIds },
+          providerId: targetProviderId,
+        })
+        .lean();
+      revenue = items.reduce(
+        (sum, item) => sum + (item.unitPrice || 0) * (item.quantity || 1),
+        0,
+      );
+    }
+
+    const dailyChart = dailyPoints.map((p) => {
+      const parts = String(p._id).split('-');
+      const day = parts[2] || p._id;
+      return {
+        date: p._id,
+        day,
+        count: p.count,
+        orderCount: p.count,
+        revenue: p.revenue,
+      };
+    });
+
+    return {
+      orderCount,
+      revenue,
+      totalOrders: orderCount,
+      totalRevenue: revenue,
+      dailyChart,
+      chart: dailyChart,
+      from: start.toISOString(),
+      to: end.toISOString(),
+    };
+  }
+
+  /**
+   * VS-104: UC-K05 Top Rented Products Analytics Report
+   * GET /api/v1/admin-stats/top-products | Aggregation $sort: { rentalCount: -1 }
+   */
+  async getTopProducts(
+    query: {
+      shopId?: string;
+      providerId?: string;
+      limit?: number | string;
+    },
+    currentUser?: AuthUser,
+  ) {
+    const targetProviderId = await this.resolveProviderId(
+      query.shopId || query.providerId,
+      currentUser,
+    );
+
+    const limit = query.limit ? Math.max(1, Number(query.limit)) : 5;
+
+    const itemMatch: any = {
+      productId: { $ne: null },
+    };
+    if (targetProviderId) {
+      itemMatch.providerId = targetProviderId;
+    }
+
+    const popularItems = await this.bookingItemModel.aggregate([
+      { $match: itemMatch },
+      {
+        $lookup: {
+          from: 'bookings',
+          localField: 'bookingId',
+          foreignField: '_id',
+          as: 'booking',
+        },
+      },
+      { $unwind: { path: '$booking', preserveNullAndEmptyArrays: true } },
+      {
+        $match: {
+          'booking.status': { $ne: 'CANCELLED' },
+        },
+      },
+      {
+        $group: {
+          _id: '$productId',
+          rentalCount: { $sum: { $ifNull: ['$quantity', 1] } },
+        },
+      },
+      { $sort: { rentalCount: -1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'products',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'product',
+        },
+      },
+      { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+    ]);
+
+    if (!popularItems || popularItems.length === 0) {
+      return {
+        data: [],
+        items: [],
+        total: 0,
+      };
+    }
+
+    const data = popularItems.map((item, index) => ({
+      rank: index + 1,
+      productId: item._id?.toString(),
+      _id: item._id?.toString(),
+      name: item.product?.name || `Sản phẩm #${index + 1}`,
+      rentalCount: item.rentalCount,
+      count: item.rentalCount,
+      image: item.product?.images?.[0] || '/hong_lien_hoa.png',
+      images: item.product?.images || [],
+      basePrice: item.product?.basePrice ?? 0,
+      category: item.product?.category || '',
+    }));
+
+    return {
+      data,
+      items: data,
+      total: data.length,
+    };
+  }
+
+  /**
+   * VS-105: UC-K06 Inventory Breakdown Analytics (State Percentage Chart)
+   * GET /api/v1/admin-stats/inventory-breakdown | AdminStatsService.getInventoryBreakdown()
+   */
+  async getInventoryBreakdown(
+    query: {
+      shopId?: string;
+      providerId?: string;
+    },
+    currentUser?: AuthUser,
+  ) {
+    const targetProviderId = await this.resolveProviderId(
+      query.shopId || query.providerId,
+      currentUser,
+    );
+
+    let itemFilter: any = {};
+    if (targetProviderId) {
+      const providerProducts = await this.productModel
+        .find({ providerId: targetProviderId })
+        .select('_id')
+        .lean();
+      const productIds = providerProducts.map((p) => p._id);
+      itemFilter = {
+        $or: [
+          { providerId: targetProviderId },
+          { productId: { $in: productIds } },
+        ],
+      };
+    }
+
+    const rows = await this.inventoryItemModel.aggregate<{
+      _id: string;
+      count: number;
+    }>([
+      { $match: itemFilter },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]);
+
+    const totalItems = rows.reduce((sum, r) => sum + r.count, 0);
+
+    const statusNameMap: Record<string, string> = {
+      AVAILABLE: 'Available',
+      RENTED: 'In Use',
+      CLEANING: 'Cleaning',
+      MAINTENANCE: 'Maintenance',
+      DAMAGED: 'Damaged',
+      LOST: 'Lost',
+    };
+
+    const breakdown = rows.map((row) => {
+      const percentage =
+        totalItems > 0 ? Math.round((row.count / totalItems) * 100) : 0;
+      const statusKey = String(row._id || '').toUpperCase();
+      return {
+        status: statusKey,
+        name: statusNameMap[statusKey] || statusKey,
+        count: row.count,
+        percentage,
+        percentageFormatted: `${percentage}%`,
+        color:
+          statusKey === 'AVAILABLE'
+            ? 'available'
+            : statusKey === 'RENTED'
+              ? 'rental'
+              : 'maintenance',
+      };
+    });
+
+    const getStatusInfo = (key: string, defaultName: string) => {
+      const found = breakdown.find((b) => b.status === key);
+      return {
+        status: key,
+        name: defaultName,
+        count: found?.count ?? 0,
+        percentage: found?.percentage ?? 0,
+        percentageFormatted: `${found?.percentage ?? 0}%`,
+      };
+    };
+
+    const available = getStatusInfo('AVAILABLE', 'Available');
+    const inUse = getStatusInfo('RENTED', 'In Use');
+    const cleaning = getStatusInfo('CLEANING', 'Cleaning');
+    const maintenance = getStatusInfo('MAINTENANCE', 'Maintenance');
+    const damaged = getStatusInfo('DAMAGED', 'Damaged');
+
+    return {
+      total: totalItems,
+      totalItems,
+      breakdown,
+      data: breakdown,
+      items: breakdown,
+      available,
+      inUse,
+      rented: inUse,
+      cleaning,
+      maintenance,
+      damaged,
+    };
+  }
+
+  /**
+   * VS-106: UC-K08 Revenue Growth Trends & Wallet Balance Analytics.
+   * Returns twelve calendar months with month-over-month growth.  Provider
+   * callers only see payments and wallet data for their own shop.
+   */
+  async getRevenueTrends(
+    query: { groupBy?: string; shopId?: string; providerId?: string },
+    currentUser?: AuthUser,
+  ) {
+    const groupBy = (query.groupBy || 'MONTH').toUpperCase();
+    if (groupBy !== 'MONTH') {
+      throw new BadRequestException('groupBy must be MONTH');
+    }
+
+    const providerId = await this.resolveProviderId(
+      query.shopId || query.providerId,
+      currentUser,
+    );
+    const now = new Date();
+    const firstMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1),
+    );
+    const nextMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+    );
+
+    const paymentMatch: any = {
+      status: { $in: [PaymentStatus.Success, 'SUCCESS', 'PAID'] },
+      purpose: {
+        $in: [
+          PaymentPurpose.DepositPayment,
+          PaymentPurpose.RemainingPayment,
+          PaymentPurpose.FullPayment,
+        ],
+      },
+      createdAt: { $gte: firstMonth, $lt: nextMonth },
+    };
+
+    const pipeline: any[] = [{ $match: paymentMatch }];
+    if (providerId) {
+      pipeline.push(
+        {
+          $lookup: {
+            from: 'bookings',
+            localField: 'bookingId',
+            foreignField: '_id',
+            as: 'booking',
+          },
+        },
+        { $unwind: '$booking' },
+        { $match: { 'booking.providerIds': providerId } },
+      );
+    }
+    pipeline.push(
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m',
+              date: '$createdAt',
+              timezone: 'Asia/Ho_Chi_Minh',
+            },
+          },
+          revenue: { $sum: '$amount' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    );
+
+    const rows = await this.paymentModel.aggregate<{
+      _id: string;
+      revenue: number;
+    }>(pipeline);
+    const revenueByMonth = new Map(rows.map((row) => [row._id, row.revenue]));
+    const trends: Array<{
+      month: string;
+      label: string;
+      revenue: number;
+      growthRate: number;
+      momGrowth: number;
+    }> = [];
+
+    let previousRevenue: number | null = null;
+    for (let offset = 0; offset < 12; offset += 1) {
+      const monthDate = new Date(
+        Date.UTC(
+          firstMonth.getUTCFullYear(),
+          firstMonth.getUTCMonth() + offset,
+          1,
+        ),
+      );
+      const month = `${monthDate.getUTCFullYear()}-${String(
+        monthDate.getUTCMonth() + 1,
+      ).padStart(2, '0')}`;
+      const revenue = revenueByMonth.get(month) ?? 0;
+      const growthRate =
+        previousRevenue === null || previousRevenue === 0
+          ? revenue > 0 && previousRevenue === 0
+            ? 100
+            : 0
+          : Number(
+              (((revenue - previousRevenue) / previousRevenue) * 100).toFixed(
+                1,
+              ),
+            );
+      trends.push({
+        month,
+        label: `T${monthDate.getUTCMonth() + 1}/${monthDate.getUTCFullYear()}`,
+        revenue,
+        growthRate,
+        momGrowth: growthRate,
+      });
+      previousRevenue = revenue;
+    }
+
+    let walletBalance = 0;
+    if (providerId) {
+      const provider = await this.providerModel
+        .findById(providerId)
+        .select('+wallet')
+        .lean();
+      walletBalance =
+        (provider as any)?.wallet?.availableBalance ??
+        (provider as any)?.wallet?.totalEarned ??
+        0;
+    } else {
+      const walletRows = await this.providerModel.aggregate<{ total: number }>([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $ifNull: ['$wallet.availableBalance', 0] } },
+          },
+        },
+      ]);
+      walletBalance = walletRows[0]?.total ?? 0;
+    }
+
+    return {
+      groupBy,
+      trends,
+      data: trends,
+      walletBalance,
+      currentWalletBalance: walletBalance,
+    };
+  }
+
+  /** VS-109: Top five most booked photoshoot concepts/packages. */
+  async getPopularConcepts(
+    query: {
+      from?: string;
+      to?: string;
+      period?: string;
+      shopId?: string;
+      providerId?: string;
+    },
+    currentUser?: AuthUser,
+  ) {
+    const providerId = await this.resolveProviderId(
+      query.shopId || query.providerId,
+      currentUser,
+    );
+    const {
+      filter: dateFilter,
+      from,
+      to,
+    } = this.analyticsDateRange(query.from, query.to, query.period);
+    const bookingMatch: any = {
+      bookingType: { $in: ['PHOTOGRAPHY', 'COMBO'] },
+      status: { $ne: 'CANCELLED' },
+      ...dateFilter,
+    };
+    if (providerId) bookingMatch.providerIds = providerId;
+
+    const results = await this.bookingModel.aggregate([
+      { $match: bookingMatch },
+      {
+        $lookup: {
+          from: 'booking_items',
+          localField: '_id',
+          foreignField: 'bookingId',
+          as: 'item',
+        },
+      },
+      { $unwind: '$item' },
+      {
+        $match: {
+          'item.photographyPackageId': { $ne: null },
+          ...(providerId ? { 'item.providerId': providerId } : {}),
+        },
+      },
+      {
+        $group: {
+          _id: '$item.photographyPackageId',
+          bookingCount: { $sum: 1 },
+        },
+      },
+      {
+        $facet: {
+          concepts: [
+            { $sort: { bookingCount: -1, _id: 1 } },
+            { $limit: 5 },
+            {
+              $lookup: {
+                from: 'photography_packages',
+                localField: '_id',
+                foreignField: '_id',
+                as: 'concept',
+              },
+            },
+            { $unwind: { path: '$concept', preserveNullAndEmptyArrays: true } },
+          ],
+          totals: [{ $group: { _id: null, count: { $sum: '$bookingCount' } } }],
+        },
+      },
+    ]);
+
+    const result = results[0] || { concepts: [], totals: [] };
+    const totalBookings = result.totals?.[0]?.count ?? 0;
+    const data = (result.concepts || []).map((row: any, index: number) => {
+      const percentage = totalBookings
+        ? Number(((row.bookingCount / totalBookings) * 100).toFixed(1))
+        : 0;
+      return {
+        rank: index + 1,
+        conceptId: row._id?.toString(),
+        name: row.concept?.name || `Concept #${index + 1}`,
+        bookingCount: row.bookingCount,
+        percentage,
+        share: percentage,
+      };
+    });
+
+    return { data, concepts: data, totalBookings, from, to };
+  }
+
+  /** VS-111: completion, cancellation, and dispute rates for all bookings. */
+  async getConversionMetrics(query: { from?: string; to?: string }) {
+    const {
+      filter: dateFilter,
+      from,
+      to,
+    } = this.analyticsDateRange(query.from, query.to);
+    const rows = await this.bookingModel.aggregate<{
+      _id: string;
+      count: number;
+    }>([
+      { $match: dateFilter },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]);
+    const counts = new Map(rows.map((row) => [row._id, row.count]));
+    const totalBookings = rows.reduce((sum, row) => sum + row.count, 0);
+    const completed = counts.get('COMPLETED') ?? 0;
+    const cancelled = counts.get('CANCELLED') ?? 0;
+    const disputed = counts.get('DISPUTED') ?? 0;
+    const rate = (count: number) =>
+      totalBookings ? Number(((count / totalBookings) * 100).toFixed(1)) : 0;
+
+    return {
+      totalBookings,
+      completedBookings: completed,
+      cancelledBookings: cancelled,
+      disputedBookings: disputed,
+      completionRate: rate(completed),
+      cancellationRate: rate(cancelled),
+      disputeRate: rate(disputed),
+      from,
+      to,
+    };
+  }
+
+  /** VS-113: active rental shops and active product listings. */
+  async getShopsOverview() {
+    const [totalShops, totalProducts] = await Promise.all([
+      this.providerModel.countDocuments({
+        status: ProviderStatus.Active,
+        capabilities: ProviderCapability.AoDaiRental,
+      }),
+      this.productModel.countDocuments({ status: 'ACTIVE' } as any),
+    ]);
+    return {
+      totalShops,
+      totalProducts,
+      activeShops: totalShops,
+      listedProducts: totalProducts,
+    };
+  }
+
+  /** VS-114: active photography partners and completed photography sessions. */
+  async getPhotographersOverview(location?: string) {
+    const normalizedLocation = location?.trim();
+    const providerFilter: Record<string, unknown> = {
+      status: ProviderStatus.Active,
+      capabilities: ProviderCapability.Photography,
+    };
+    if (normalizedLocation) {
+      providerFilter['address.city'] = {
+        $regex: normalizedLocation,
+        $options: 'i',
+      };
+    }
+
+    const photographerIds = await this.providerModel
+      .find(providerFilter)
+      .select('_id')
+      .lean();
+    const providerIds = photographerIds.map((provider) => provider._id);
+    const completedShoots = providerIds.length
+      ? await this.bookingModel.countDocuments({
+          providerIds: { $in: providerIds },
+          bookingType: { $in: ['PHOTOGRAPHY', 'COMBO'] },
+          status: BookingStatus.Completed,
+        } as any)
+      : 0;
+
+    return {
+      totalPhotographers: providerIds.length,
+      completedShoots,
+      location: normalizedLocation || null,
+    };
+  }
+
+  /** VS-110: active photographers below the quality threshold with negative reviews. */
+  async getLowRatingPhotographers(threshold = 3.5) {
+    const safeThreshold = Math.min(Math.max(threshold, 1), 5);
+    const rows = await this.providerModel.aggregate([
+      { $match: { status: ProviderStatus.Active, capabilities: ProviderCapability.Photography } },
+      { $lookup: { from: 'reviews', localField: '_id', foreignField: 'providerId', as: 'reviews' } },
+      {
+        $addFields: {
+          averageRating: { $avg: '$reviews.rating' },
+          totalReviews: { $size: '$reviews' },
+          negativeReviews: { $filter: { input: '$reviews', as: 'review', cond: { $lte: ['$$review.rating', 3] } } },
+        },
+      },
+      { $match: { totalReviews: { $gt: 0 }, averageRating: { $lt: safeThreshold } } },
+      { $sort: { averageRating: 1, totalReviews: -1 } },
+      { $limit: 50 },
+      {
+        $project: {
+          businessName: 1,
+          city: '$address.city',
+          averageRating: { $round: ['$averageRating', 1] },
+          totalReviews: 1,
+          negativeReviews: { $map: { input: '$negativeReviews', as: 'review', in: { reviewId: '$$review._id', rating: '$$review.rating', comment: '$$review.comment', createdAt: '$$review.createdAt' } } },
+        },
+      },
+    ]);
+    return {
+      threshold: safeThreshold,
+      total: rows.length,
+      data: rows.map((row: any) => ({
+        photographerId: row._id.toString(), businessName: row.businessName, city: row.city ?? null,
+        averageRating: row.averageRating, totalReviews: row.totalReviews, negativeReviews: row.negativeReviews,
+      })),
+    };
+  }
+
+  /** VS-112: registrations, daily active users, and 30-day MAU. */
+  async getUserGrowth(query: { from?: string; to?: string }) {
+    const { from, to, start, end } = this.userGrowthDateRange(
+      query.from,
+      query.to,
+    );
+    const customerFilter = {
+      roles: 'CUSTOMER',
+      $and: [{ roles: { $nin: ['ADMIN', 'admin', 'PROVIDER'] } }],
+    };
+    const [registrations, activeUsers, monthlyActiveUsers] = await Promise.all([
+      this.userModel.aggregate<{ _id: string; count: number }>([
+        {
+          $match: { ...customerFilter, createdAt: { $gte: start, $lte: end } },
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: '%Y-%m-%d',
+                date: '$createdAt',
+                timezone: 'Asia/Ho_Chi_Minh',
+              },
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+      this.userModel.aggregate<{ _id: string; count: number }>([
+        {
+          $match: {
+            ...customerFilter,
+            'security.lastLoginAt': { $gte: start, $lte: end },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: '%Y-%m-%d',
+                date: '$security.lastLoginAt',
+                timezone: 'Asia/Ho_Chi_Minh',
+              },
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+      this.userModel.countDocuments({
+        ...customerFilter,
+        'security.lastLoginAt': {
+          $gte: new Date(end.getTime() - 29 * 24 * 60 * 60 * 1000),
+          $lte: end,
+        },
+      } as any),
+    ]);
+    const registrationMap = new Map(
+      registrations.map((row) => [row._id, row.count]),
+    );
+    const activeMap = new Map(activeUsers.map((row) => [row._id, row.count]));
+    const data: Array<{ date: string; newUsers: number; dau: number }> = [];
+    for (
+      let date = new Date(start);
+      date <= end;
+      date.setUTCDate(date.getUTCDate() + 1)
+    ) {
+      const key = date.toISOString().slice(0, 10);
+      data.push({
+        date: key,
+        newUsers: registrationMap.get(key) ?? 0,
+        dau: activeMap.get(key) ?? 0,
+      });
+    }
+    return {
+      from,
+      to,
+      totalNewUsers: data.reduce((total, row) => total + row.newUsers, 0),
+      mau: monthlyActiveUsers,
+      data,
+    };
+  }
+
+  async exportUserGrowth(query: { from?: string; to?: string }) {
+    const report = await this.getUserGrowth(query);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('User growth');
+    sheet.columns = [
+      { header: 'Date', key: 'date', width: 14 },
+      { header: 'New users', key: 'newUsers', width: 16 },
+      { header: 'Daily active users', key: 'dau', width: 22 },
+    ];
+    sheet.addRows(report.data);
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4A0E17' },
+    };
+    sheet.autoFilter = 'A1:C1';
+    sheet.getColumn('newUsers').numFmt = '#,##0';
+    sheet.getColumn('dau').numFmt = '#,##0';
+    const summary = workbook.addWorksheet('Summary');
+    summary.addRows([
+      ['User growth report'],
+      ['From', report.from],
+      ['To', report.to],
+      ['New users', report.totalNewUsers],
+      ['MAU (last 30 days)', report.mau],
+    ]);
+    summary.getRow(1).font = { bold: true, size: 14 };
+    summary.getColumn(1).width = 24;
+    summary.getColumn(2).width = 20;
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  private userGrowthDateRange(from?: string, to?: string) {
+    const parse = (value: string, suffix: string) =>
+      new Date(`${value}${suffix}`);
+    const end = to ? parse(to, 'T23:59:59.999Z') : new Date();
+    const start = from
+      ? parse(from, 'T00:00:00.000Z')
+      : new Date(
+          Date.UTC(
+            end.getUTCFullYear(),
+            end.getUTCMonth(),
+            end.getUTCDate() - 6,
+          ),
+        );
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      start > end
+    ) {
+      throw new BadRequestException('Invalid user growth date range');
+    }
+    return {
+      start,
+      end,
+      from: start.toISOString().slice(0, 10),
+      to: end.toISOString().slice(0, 10),
+    };
+  }
+
+  private analyticsDateRange(from?: string, to?: string, period?: string) {
+    let start: Date | undefined;
+    let end: Date | undefined;
+    const quarter = period?.toUpperCase().match(/^Q([1-4])\/(\d{4})$/);
+    if (quarter) {
+      const quarterIndex = Number(quarter[1]) - 1;
+      const year = Number(quarter[2]);
+      start = new Date(Date.UTC(year, quarterIndex * 3, 1));
+      end = new Date(Date.UTC(year, quarterIndex * 3 + 3, 1));
+    } else if (from || to) {
+      if (from) start = new Date(`${from}T00:00:00.000Z`);
+      if (to) end = new Date(`${to}T23:59:59.999Z`);
+      if (
+        (start && Number.isNaN(start.getTime())) ||
+        (end && Number.isNaN(end.getTime()))
+      ) {
+        throw new BadRequestException('Invalid analytics date range');
+      }
+    }
+    if (start && end && start >= end)
+      throw new BadRequestException('Invalid analytics date range');
+    const filter =
+      start || end
+        ? {
+            createdAt: {
+              ...(start ? { $gte: start } : {}),
+              ...(end ? { $lt: end } : {}),
+            },
+          }
+        : {};
+    return {
+      filter,
+      from: start?.toISOString() ?? null,
+      to: end?.toISOString() ?? null,
+    };
   }
 }

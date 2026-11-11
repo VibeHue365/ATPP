@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   CalendarDays,
   CalendarClock,
@@ -31,6 +32,18 @@ import type { useProviderSessionState } from '../hooks/useProviderSessionState';
 import { toLocalDateKey } from '../shared/dateHelpers';
 import type { useProviderCalendarState } from './useProviderCalendarState';
 import './calendarFigma.css';
+import { providerApi } from '../api/providerDashboardApi';
+
+type PhotographerCalendarEvent = {
+  id: string;
+  date: string;
+  startsAt?: string;
+  endsAt?: string | null;
+  timeSlot?: string | null;
+  location: string;
+  status: string;
+  cancelled: boolean;
+};
 
 type CalendarPanelProps = Pick<ReturnType<typeof useProviderSessionState>,
   'isLoadingProvider'
@@ -118,6 +131,21 @@ export function CalendarPanel({
   // Month navigation helpers
   const currentYear = calendarMonth.getFullYear();
   const currentMonthIdx = calendarMonth.getMonth(); // 0-indexed
+  const [photographyEvents, setPhotographyEvents] = useState<PhotographerCalendarEvent[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const month = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
+    providerApi
+      .getCalendar<{ events?: PhotographerCalendarEvent[] }>(month)
+      .then((response) => {
+        if (active) setPhotographyEvents(response.events || []);
+      })
+      .catch(() => {
+        if (active) setPhotographyEvents([]);
+      });
+    return () => { active = false; };
+  }, [currentYear, currentMonthIdx]);
 
   const handlePrevMonth = () => {
     setCalendarMonth(new Date(currentYear, currentMonthIdx - 1, 1));
@@ -217,6 +245,24 @@ export function CalendarPanel({
     }
   });
 
+  const photographyEventsByDate = new Map<string, PhotographerCalendarEvent[]>();
+  photographyEvents.forEach((event) => {
+    const events = photographyEventsByDate.get(event.date) || [];
+    events.push(event);
+    photographyEventsByDate.set(event.date, events);
+    const ordersForDate = ordersByDateMap.get(event.date) || [];
+    ordersForDate.push({
+      _id: event.id,
+      bookingType: 'PHOTOGRAPHY',
+      customerName: event.location || 'Chưa cập nhật địa điểm',
+      status: event.cancelled ? 'CANCELLED' : event.status,
+      startDate: event.startsAt,
+      schedules: [{ timeSlot: event.timeSlot }],
+      isPhotographerCalendarEvent: true,
+    });
+    ordersByDateMap.set(event.date, ordersForDate);
+  });
+
   // Calculate monthly stats for the displayed month
   let workingDaysCount = 0;
   let blockedDaysCount = 0;
@@ -227,7 +273,9 @@ export function CalendarPanel({
     const dateKey = toLocalDateKey(dayDate);
     const jsDay = dayDate.getDay();
     const isBlocked = blockedDatesMap.has(dateKey);
-    const hasOrder = (ordersByDateMap.get(dateKey)?.length || 0) > 0;
+    const hasOrder =
+      (ordersByDateMap.get(dateKey)?.length || 0) > 0 ||
+      (photographyEventsByDate.get(dateKey)?.length || 0) > 0;
     const isRecurringWork = recurringDaysSet.has(jsDay);
 
     if (isBlocked) {
@@ -490,7 +538,7 @@ export function CalendarPanel({
                       const timeSlot = ord.schedules?.[0]?.timeSlot || (ord.startDate ? new Date(ord.startDate).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '08:00 - 12:00');
 
                       return (
-                        <div key={ord._id} className="cal-order-card">
+                        <div key={ord._id} className={`cal-order-card ${ord.status === 'CANCELLED' ? 'cal-order-card-cancelled' : ''}`}>
                           <div className="cal-order-left">
                             <div className={`cal-order-icon ${iconClass}`}>
                               {iconEl}

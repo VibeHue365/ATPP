@@ -10,12 +10,16 @@ import { AdminAuditAction } from '../../auth/schemas/admin-audit-log.schema';
 import { Booking, BookingStatus, PaymentStatus as BookingPaymentStatus } from '../../bookings/schemas/booking.schema';
 import { BookingItem } from '../../bookings/schemas/booking-item.schema';
 import { Payment, PaymentStatus } from '../../payments/schemas/payment.schema';
+import { Provider } from '../../providers/schemas/provider.schema';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/schemas/notification.schema';
 import { SETTLEMENT_ERROR_CODES } from '../constants/settlement-error-codes';
 import { SettlementStatus } from '../constants/settlement-status.enum';
 import {
   HoldSettlementDto,
   MarkSettlementSettledDto,
   RegenerateSettlementsDto,
+  RejectSettlementDto,
   ReleaseSettlementDto,
 } from '../dto/settlement.dto';
 import { Settlement } from '../schemas/settlement.schema';
@@ -36,9 +40,12 @@ export class SettlementsService {
     private readonly paymentModel: Model<Payment>,
     @InjectModel(SettlementAdjustment.name)
     private readonly adjustmentModel: Model<SettlementAdjustment>,
+    @InjectModel(Provider.name)
+    private readonly providerModel: Model<Provider>,
     private readonly calculationService: SettlementCalculationService,
     private readonly codeService: SettlementCodeService,
     private readonly securityLogService: SecurityLogService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createSettlementsForBooking(bookingId: string): Promise<Settlement[]> {
@@ -212,6 +219,12 @@ export class SettlementsService {
       before,
     );
 
+    await this.notifyProvider(
+      settlement,
+      'Yêu cầu chi trả đang tạm giữ',
+      `Khoản chi trả ${settlement.settlementCode} trị giá ${settlement.payableAmount.toLocaleString('vi-VN')}đ đang được tạm giữ. Lý do: ${dto.reason}`,
+    );
+
     return settlement;
   }
 
@@ -247,6 +260,59 @@ export class SettlementsService {
       dto.reason,
       context,
       before,
+    );
+
+    await this.notifyProvider(
+      settlement,
+      'Yêu cầu chi trả đã được phê duyệt',
+      `Khoản chi trả ${settlement.settlementCode} trị giá ${settlement.payableAmount.toLocaleString('vi-VN')}đ đã sẵn sàng để thanh toán.`,
+    );
+
+    return settlement;
+  }
+
+  async rejectSettlement(
+    actorId: string,
+    settlementId: string,
+    dto: RejectSettlementDto,
+    context?: SecurityRequestContext,
+  ): Promise<Settlement> {
+    const id = this.toObjectId(settlementId);
+    const before = await this.findByIdOrThrow(id);
+    const settlement = await this.settlementModel.findOneAndUpdate(
+      {
+        _id: id,
+        status: {
+          $in: [SettlementStatus.ReadyToSettle, SettlementStatus.OnHold],
+        },
+      },
+      {
+        $set: {
+          status: SettlementStatus.Cancelled,
+          holdReason: dto.reason,
+        },
+      },
+      { new: true },
+    );
+
+    if (!settlement) {
+      throw new BadRequestException(
+        SETTLEMENT_ERROR_CODES.StatusTransitionInvalid,
+      );
+    }
+
+    await this.auditOne(
+      settlement,
+      actorId,
+      AdminAuditAction.SettlementCancelled,
+      dto.reason,
+      context,
+      before,
+    );
+    await this.notifyProvider(
+      settlement,
+      'Yêu cầu chi trả đã bị từ chối',
+      `Khoản chi trả ${settlement.settlementCode} trị giá ${settlement.payableAmount.toLocaleString('vi-VN')}đ đã bị từ chối. Lý do: ${dto.reason}`,
     );
 
     return settlement;
@@ -330,7 +396,42 @@ export class SettlementsService {
       before,
     );
 
+    await this.notifyProvider(
+      settlement!,
+      'Chi trả thành công',
+      `Khoản chi trả ${settlement!.settlementCode} trị giá ${settlement!.payableAmount.toLocaleString('vi-VN')}đ đã được thanh toán thành công.${dto.payoutReference ? ` Mã giao dịch: ${dto.payoutReference}.` : ''}`,
+    );
+
     return settlement!;
+  }
+
+  private async notifyProvider(
+    settlement: Settlement,
+    title: string,
+    content: string,
+  ): Promise<void> {
+    try {
+      const provider = await this.providerModel
+        .findById(settlement.providerId)
+        .select('userId')
+        .lean();
+      if (!provider?.userId) return;
+
+      await this.notificationsService.createNotification(
+        provider.userId.toString(),
+        title,
+        content,
+        NotificationType.Payment,
+        {
+          settlementId: (settlement as any)._id,
+          settlementCode: settlement.settlementCode,
+          status: settlement.status,
+        },
+      );
+    } catch (error) {
+      // A notification failure must not roll back a completed financial action.
+      console.warn('Settlement notification delivery failed:', error);
+    }
   }
 
   private async applyPendingAdjustments(settlement: Settlement): Promise<number> {
