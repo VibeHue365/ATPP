@@ -81,10 +81,7 @@ export class BookingsController {
           'Photography và combo phải được tạo qua API giữ lịch chuyên dụng.',
         );
       }
-      return this.bookingsService.createBooking(
-        user.sub,
-        body as CreateBookingDto,
-      );
+      return this.bookingsService.createBooking(user.sub, body);
     } else {
       return this.bookingsService.createProductBooking(
         user.sub,
@@ -200,7 +197,15 @@ export class BookingsController {
   async updateStatus(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() body: { status: string; note?: string; handoverPhotos?: string[]; deliveredPhotos?: string[]; deliveryDriveUrl?: string; evidencePhotos?: string[] },
+    @Body()
+    body: {
+      status: string;
+      note?: string;
+      handoverPhotos?: string[];
+      deliveredPhotos?: string[];
+      deliveryDriveUrl?: string;
+      evidencePhotos?: string[];
+    },
   ) {
     if (!body?.status) throw new BadRequestException('Thiếu trường status');
     return this.bookingsService.updateBookingStatus(
@@ -276,10 +281,8 @@ export class BookingsController {
   }
 
   /** GET /bookings/busy-dates/product/:productId hoặc GET /api/bookings/busy-dates/product/:productId */
- 
 
   /** GET /bookings/busy-dates/provider/:providerId hoặc GET /api/bookings/busy-dates/provider/:providerId */
- 
 
   /** GET /bookings/stock/product/:productId/summary */
   @Get('stock/product/:productId/summary')
@@ -289,7 +292,15 @@ export class BookingsController {
 
   @Post('stock/batch')
   async getProductStockBatch(
-    @Body() body: { items?: Array<{ key?: string; productId?: string; size?: string; color?: string }> },
+    @Body()
+    body: {
+      items?: Array<{
+        key?: string;
+        productId?: string;
+        size?: string;
+        color?: string;
+      }>;
+    },
   ) {
     return this.bookingsService.getProductStockCounts(body?.items ?? []);
   }
@@ -313,7 +324,11 @@ export class BookingsController {
     @CurrentUser() user: AuthUser,
     @Body() body?: { evidencePhotos?: string[] },
   ) {
-    return this.bookingsService.customerConfirmPickup(id, user.sub, body?.evidencePhotos);
+    return this.bookingsService.customerConfirmPickup(
+      id,
+      user.sub,
+      body?.evidencePhotos,
+    );
   }
 
   @Post(':id/customer-report-damage')

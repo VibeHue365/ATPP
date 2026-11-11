@@ -2,17 +2,18 @@ import {
   BadRequestException,
   Injectable,
   Inject,
+  Optional,
   forwardRef,
   NotFoundException,
   ForbiddenException,
   ConflictException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import {
-  Payment,
   PaymentDocument,
   PaymentPurpose,
   PaymentStatus,
@@ -47,6 +48,15 @@ import { SettlementStatus } from '../../settlements/constants/settlement-status.
 import { PhotographyHoldService } from '../../bookings/services/photography-hold.service';
 import { PromotionsService } from '../../products/services/promotions.service';
 import { getPrimaryFrontendUrl } from '../../../common/config/frontend-url.util';
+import { ContractCheckoutGuard } from '../../contracts/contract-checkout-guard.service';
+import { CONTRACTS_V2_ENABLED } from '../../contracts/contracts.constants';
+import { contractIntentKey, paymentMatchesBinding } from './contract-payment-binding';
+import { PaymentExpiryClaimService } from './payment-expiry-claim.service';
+import { PaymentRecoveryService } from './payment-recovery.service';
+import { hashContract } from '../../contracts/canonical-contract';
+import { freePaymentClaimBranches, newPaymentClaim } from '../../bookings/services/payment-expiry-claim';
+import { V2PaymentFinalizationService } from './v2-payment-finalization.service';
+import { WebhookEventRepository } from '../repositories/webhook-event.repository';
 
 interface PaymentAccountDoc {
   bankName?: string;
@@ -97,6 +107,15 @@ export class PaymentsService {
     @Inject(forwardRef(() => RentalDepositRefundCoordinatorService))
     private readonly depositCoordinator: RentalDepositRefundCoordinatorService,
     private readonly promotionsService: PromotionsService,
+    @Inject(CONTRACTS_V2_ENABLED) private readonly contractsV2Enabled: boolean,
+    private readonly contractCheckoutGuard: ContractCheckoutGuard,
+    private readonly paymentExpiryClaim: PaymentExpiryClaimService,
+    private readonly paymentRecovery: PaymentRecoveryService,
+    @Optional()
+    @Inject(forwardRef(() => V2PaymentFinalizationService))
+    private readonly v2Finalizer?: V2PaymentFinalizationService,
+    @Optional()
+    private readonly webhookEventRepository?: WebhookEventRepository,
   ) {}
 
   async createPaymentLink(
@@ -121,6 +140,16 @@ export class PaymentsService {
       );
     }
 
+    if (
+      booking.contractFlowVersion === 2 &&
+      booking.bookingType !== BookingType.Photography
+    ) {
+      if (!this.contractsV2Enabled)
+        throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
+      const v2Amount = await this.calculatePaymentAmount(booking, purpose);
+      return this.createV2PaymentIntent(booking, purpose, v2Amount);
+    }
+
     // Check for existing PENDING payment for the same booking — reuse if found
     const existingPendingPayment =
       await this.paymentsRepository.findPendingPaymentByBooking(bookingId);
@@ -128,61 +157,7 @@ export class PaymentsService {
       return existingPendingPayment;
     }
 
-    let amount = 0;
-    if (
-      purpose === PaymentPurpose.DepositPayment &&
-      booking.pricingSummary?.amountDueNow !== undefined &&
-      booking.pricingSummary?.amountDueNow !== null
-    ) {
-      amount = booking.pricingSummary.amountDueNow;
-    } else if (purpose === PaymentPurpose.DepositPayment) {
-      if (booking.bookingType === BookingType.Combo) {
-        // Combo deposit = 100% Product rental + 100% Product deposit + 100% Photographer fee + serviceFee - comboDiscount - voucherDiscount
-        const items = await this.bookingModel.db
-          .model('BookingItem')
-          .find({ bookingId: booking._id });
-        const prodItems = items.filter((i: any) => i.itemType === 'PRODUCT');
-        const photoItems = items.filter(
-          (i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE',
-        );
-
-        const prodRentalTotal = prodItems.reduce(
-          (sum: number, i: any) => sum + i.unitPrice * i.quantity,
-          0,
-        );
-        const prodDepositTotal = prodItems.reduce(
-          (sum: number, i: any) => sum + i.depositAmount * i.quantity,
-          0,
-        );
-        const photoDepositTotal = photoItems.reduce(
-          (sum: number, i: any) => sum + i.unitPrice * i.quantity,
-          0,
-        );
-
-        amount =
-          prodRentalTotal +
-          prodDepositTotal +
-          photoDepositTotal -
-          (booking.pricingSummary.comboDiscountTotal || 0) -
-          (booking.pricingSummary.voucherDiscountTotal || 0);
-      } else if (booking.bookingType === BookingType.Photography) {
-        amount =
-          booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
-      } else {
-        amount =
-          booking.pricingSummary.depositTotal ||
-          booking.pricingSummary.grandTotal;
-      }
-    } else if (purpose === PaymentPurpose.FullPayment) {
-      amount =
-        booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
-    } else if (purpose === PaymentPurpose.RemainingPayment) {
-      amount =
-        booking.pricingSummary.grandTotal - booking.paymentSummary.totalPaid;
-    } else {
-      amount =
-        booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
-    }
+    const amount = await this.calculatePaymentAmount(booking, purpose);
 
     const frontendBase = getPrimaryFrontendUrl(process.env.FRONTEND_URL);
 
@@ -235,6 +210,230 @@ export class PaymentsService {
     return payment;
   }
 
+  private async calculatePaymentAmount(
+    booking: Booking & { _id: Types.ObjectId },
+    purpose: PaymentPurpose,
+  ): Promise<number> {
+    if (
+      purpose === PaymentPurpose.DepositPayment &&
+      booking.pricingSummary?.amountDueNow !== undefined &&
+      booking.pricingSummary?.amountDueNow !== null
+    )
+      return booking.pricingSummary.amountDueNow;
+    if (purpose === PaymentPurpose.DepositPayment) {
+      if (booking.bookingType === BookingType.Combo) {
+        const items = await this.bookingModel.db
+          .model('BookingItem')
+          .find({ bookingId: booking._id });
+        const prodItems = items.filter((item: any) => item.itemType === 'PRODUCT');
+        const photoItems = items.filter(
+          (item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE',
+        );
+        const prodRentalTotal = prodItems.reduce(
+          (sum: number, item: any) => sum + item.unitPrice * item.quantity,
+          0,
+        );
+        const prodDepositTotal = prodItems.reduce(
+          (sum: number, item: any) => sum + item.depositAmount * item.quantity,
+          0,
+        );
+        const photoDepositTotal = photoItems.reduce(
+          (sum: number, item: any) => sum + item.unitPrice * item.quantity,
+          0,
+        );
+        return (
+          prodRentalTotal +
+          prodDepositTotal +
+          photoDepositTotal -
+          (booking.pricingSummary.comboDiscountTotal || 0) -
+          (booking.pricingSummary.voucherDiscountTotal || 0)
+        );
+      }
+      return booking.bookingType === BookingType.Photography
+        ? booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal
+        : booking.pricingSummary.depositTotal || booking.pricingSummary.grandTotal;
+    }
+    if (purpose === PaymentPurpose.RemainingPayment)
+      return booking.pricingSummary.grandTotal - booking.paymentSummary.totalPaid;
+    return booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
+  }
+
+  private async createV2PaymentIntent(
+    booking: Booking & { _id: Types.ObjectId },
+    purpose: PaymentPurpose,
+    amount: number,
+  ): Promise<PaymentDocument> {
+    if (purpose === PaymentPurpose.RemainingPayment)
+      throw new ConflictException('V2_REMAINING_PAYMENT_NOT_IMPLEMENTED');
+    const decision = await this.contractCheckoutGuard.evaluate(
+      booking._id.toString(),
+      amount,
+      purpose,
+    );
+    const binding = decision.binding;
+    if (!binding) throw new ConflictException('CONTRACT_BINDING_REQUIRED');
+    await this.assertV2IntentIndex();
+    const pending = await this.paymentsRepository.findPendingPaymentByBooking(booking._id);
+    if (pending && paymentMatchesBinding(pending, binding)) {
+      return pending;
+    }
+
+    const key = contractIntentKey(binding);
+    const existingBound = await this.paymentsRepository.model.findOne({
+      contractIntentKey: key,
+      bookingId: booking._id,
+      purpose,
+      status: { $in: [PaymentStatus.Pending, PaymentStatus.Success] },
+    });
+    if (existingBound) {
+      if (!paymentMatchesBinding(existingBound, binding))
+        throw new ConflictException('PAYMENT_BINDING_STALE');
+      return existingBound;
+    }
+    const paymentId = new Types.ObjectId();
+    const paymentCode = `PAYV2_${paymentId.toHexString().toUpperCase()}`;
+    const orderCode = Math.floor(100000 + Math.random() * 900000);
+    const checkoutUrl = `${getPrimaryFrontendUrl(process.env.FRONTEND_URL)}/checkout/result?paymentCode=${paymentCode}`;
+    const session = await this.bookingModel.db.startSession();
+    let created: PaymentDocument | null = null;
+    try {
+      await session.withTransaction(async () => {
+        await this.contractCheckoutGuard.assertCurrent(decision, session);
+        const concurrent = await this.paymentsRepository.model.findOne({
+          bookingId: booking._id,
+          status: PaymentStatus.Pending,
+          purpose: { $ne: PaymentPurpose.DepositRefund },
+        }).session(session);
+        if (concurrent) {
+          if (paymentMatchesBinding(concurrent, binding)) {
+            created = concurrent;
+            return;
+          }
+          // The existing pending payment has a stale binding (e.g. from an older contract version).
+          // Safely supersede the previous pending payment without erasing its data, binding or evidence.
+          await this.paymentsRepository.model.updateOne(
+            { _id: concurrent._id, status: PaymentStatus.Pending },
+            {
+              $set: {
+                status: PaymentStatus.Cancelled,
+                supersededAt: new Date(),
+                supersededByPaymentId: paymentId,
+                supersededReason: 'CONTRACT_VERSION_UPGRADED',
+              },
+            },
+            { session },
+          );
+          // Free the booking claim if held by concurrent so that claimIntent can atomically claim for paymentId
+          await this.bookingModel.updateOne(
+            { _id: booking._id, 'paymentExpiryClaim.paymentId': concurrent._id },
+            { $set: { paymentExpiryClaim: null } },
+            { session },
+          );
+        }
+        await this.paymentExpiryClaim.claimIntent(booking._id, paymentId, session);
+        const zero = amount === 0;
+        const rows = await this.paymentsRepository.model.create(
+          [{
+            _id: paymentId,
+            bookingId: booking._id,
+            paymentCode,
+            amount,
+            purpose,
+            paymentMethod: 'PAYOS_SIMULATOR',
+            status: zero ? PaymentStatus.Success : PaymentStatus.Pending,
+            paidAt: zero ? new Date() : null,
+            contractBinding: binding,
+            contractIntentKey: key,
+            payos: {
+              orderCode,
+              paymentLinkId: `${zero ? 'zero' : 'link'}_${paymentCode}`,
+              checkoutUrl,
+              qrCode: `${zero ? 'zero' : 'mock_qr'}_${paymentCode}`,
+              description: `Thanh toan don hang ${booking.bookingCode}`,
+            },
+          }],
+          { session },
+        );
+        created = rows[0];
+        if (zero) {
+          await this.paymentExpiryClaim.claimFinalization(
+            booking._id,
+            paymentId,
+            session,
+          );
+          await this.paymentRecovery.recordAcknowledged(
+            paymentId,
+            booking._id,
+            key,
+            session,
+          );
+        }
+      });
+    } catch (error) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const winner = await this.paymentsRepository.model.findOne({
+          contractIntentKey: key,
+          bookingId: booking._id,
+          purpose,
+          status: { $in: [PaymentStatus.Pending, PaymentStatus.Success] },
+        });
+        if (winner && paymentMatchesBinding(winner, binding)) return winner;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+    if (!created) throw new ConflictException('PAYMENT_INTENT_NOT_CREATED');
+    if (amount === 0 && this.v2Finalizer) {
+      this.v2Finalizer.processPayment(paymentId).catch(() => {});
+    }
+    return created;
+  }
+
+  private async assertV2IntentIndex() {
+    const col = this.paymentsRepository.model.collection;
+    let indexes: any[] = [];
+    try {
+      indexes = await col.indexes();
+    } catch {
+      indexes = [];
+    }
+    const hasIndex = indexes.some(
+      (index) =>
+        index.unique &&
+        JSON.stringify(index.key) ===
+          JSON.stringify({ contractIntentKey: 1 }),
+    );
+    if (!hasIndex) {
+      try {
+        await col.createIndex(
+          { contractIntentKey: 1 },
+          {
+            unique: true,
+            partialFilterExpression: { contractIntentKey: { $type: 'string' } },
+            name: 'payments_contract_intent_key_unique',
+          },
+        );
+      } catch (err: any) {
+        try {
+          const recheck = await col.indexes();
+          const ok = recheck.some(
+            (index) =>
+              index.unique &&
+              JSON.stringify(index.key) ===
+                JSON.stringify({ contractIntentKey: 1 }),
+          );
+          if (!ok) {
+            throw new ServiceUnavailableException('PAYMENT_INTENT_INDEX_REQUIRED');
+          }
+        } catch {
+          throw new ServiceUnavailableException('PAYMENT_INTENT_INDEX_REQUIRED');
+        }
+      }
+    }
+  }
+
   async getPaymentStatus(paymentCode: string, userIdStr: string) {
     let payment =
       await this.paymentsRepository.findPaymentWithBooking(paymentCode);
@@ -246,10 +445,23 @@ export class PaymentsService {
       throw new ForbiddenException('Bạn không có quyền xem giao dịch này.');
     }
 
-    // In sandbox environment, auto-confirm pending payments immediately
-    if (payment.status === PaymentStatus.Pending) {
+    // In sandbox / simulator environment, auto-confirm pending payments immediately
+    if (
+      payment.status === PaymentStatus.Pending &&
+      payment.paymentMethod === 'PAYOS_SIMULATOR'
+    ) {
       try {
-        await this.confirmPayment(paymentCode);
+        const isV2Rental =
+          booking.contractFlowVersion === 2 &&
+          booking.bookingType !== BookingType.Photography;
+        if (isV2Rental) {
+          await this.confirmPayment(paymentCode, {
+            source: 'SIMULATOR',
+            orderCode: payment.payos?.orderCode,
+          });
+        } else {
+          await this.confirmPayment(paymentCode);
+        }
         const updated =
           await this.paymentsRepository.findPaymentWithBooking(paymentCode);
         if (updated) {
@@ -294,7 +506,23 @@ export class PaymentsService {
       await this.paymentsRepository.findPendingPaymentsByBookingIds(
         bookings.map((booking) => booking._id),
       );
-    return payments
+    const visible: typeof payments = [];
+    for (const payment of payments) {
+      const booking = await this.bookingModel.findById(payment.bookingId).lean();
+      if (booking?.contractFlowVersion === 2 && booking.bookingType !== BookingType.Photography) {
+        if (!this.contractsV2Enabled || !payment.contractBinding) continue;
+        try {
+          const decision = await this.contractCheckoutGuard.evaluate(
+            booking._id.toString(), payment.amount, payment.purpose,
+          );
+          if (!decision.binding || !paymentMatchesBinding(payment, decision.binding)) continue;
+        } catch {
+          continue;
+        }
+      }
+      visible.push(payment);
+    }
+    return visible
       .filter((payment) => payment.payos?.checkoutUrl)
       .map((payment) => ({
         paymentCode: payment.paymentCode,
@@ -594,22 +822,96 @@ export class PaymentsService {
     }
   }
 
-  async confirmPayment(paymentCode: string): Promise<PaymentDocument> {
+  @Cron(CronExpression.EVERY_MINUTE)
+  async reconcileStuckWebhooks(): Promise<number> {
+    if (!this.webhookEventRepository) return 0;
+    const stuckEvents = await this.webhookEventRepository.findStuckEvents();
+    let reconciled = 0;
+    for (const event of stuckEvents) {
+      try {
+        const claim = await this.webhookEventRepository.claimVerifiedEvent(
+          event.webhookId,
+          event.payload,
+          event.signature ?? null,
+        );
+        if (claim.state !== 'claimed') continue;
+        const { orderCode, status, amount } = (event.payload || {}) as Record<string, any>;
+        if (status === 'PAID' && typeof orderCode === 'number') {
+          const payment = await this.paymentsRepository.findByOrderCode(orderCode);
+          if (payment && payment.status === PaymentStatus.Pending) {
+            if (typeof amount === 'number' && amount !== payment.amount) {
+              await this.webhookEventRepository.markError(event.webhookId, 'AMOUNT_MISMATCH');
+              continue;
+            }
+            const isV2 = payment.contractBinding?.flowVersion === 2;
+            if (isV2) {
+              await this.confirmPayment(payment.paymentCode, { source: 'WEBHOOK', orderCode });
+            } else {
+              await this.confirmPayment(payment.paymentCode);
+            }
+            await this.webhookEventRepository.markProcessed(event.webhookId);
+            reconciled++;
+            continue;
+          }
+        }
+        await this.webhookEventRepository.markProcessed(event.webhookId);
+      } catch (err: any) {
+        await this.webhookEventRepository.markError(
+          event.webhookId,
+          err?.message || 'RECONCILE_FAILED',
+        );
+      }
+    }
+    return reconciled;
+  }
+
+  async confirmPayment(
+    paymentCode: string,
+    evidence?: { source: 'WEBHOOK' | 'SIMULATOR'; orderCode?: number },
+  ): Promise<PaymentDocument> {
     const candidate =
       await this.paymentsRepository.findPaymentByCode(paymentCode);
     if (!candidate) throw new NotFoundException('Payment not found');
+    const booking = await this.bookingModel.findById(candidate.bookingId);
+    if (!booking) {
+      throw new NotFoundException(
+        'Không tìm thấy đơn đặt lịch tương ứng với giao dịch.',
+      );
+    }
+    if (
+      booking.contractFlowVersion === 2 &&
+      booking.bookingType !== BookingType.Photography
+    ) {
+      if (!this.contractsV2Enabled)
+        throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
+      if (
+        evidence?.source === 'WEBHOOK' &&
+        evidence.orderCode !== undefined &&
+        evidence.orderCode !== candidate.payos?.orderCode
+      )
+        throw new ConflictException('PAYMENT_ORDER_MISMATCH');
+      if (
+        candidate.status !== PaymentStatus.Pending &&
+        candidate.status !== PaymentStatus.Success
+      ) {
+        if (evidence?.source !== 'WEBHOOK')
+          throw new ForbiddenException('V2_PAYMENT_EVIDENCE_REQUIRED');
+        return this.acknowledgeV2ForReview(
+          candidate,
+          booking,
+          'PAYMENT_AFTER_FAILURE_EVENT',
+        );
+      }
+      if (candidate.status === PaymentStatus.Pending && !evidence)
+        throw new ForbiddenException('V2_PAYMENT_EVIDENCE_REQUIRED');
+      return this.confirmV2Payment(candidate, booking);
+    }
     if (
       candidate.status !== PaymentStatus.Pending &&
       candidate.status !== PaymentStatus.Success
     ) {
       throw new BadRequestException(
         `Cannot confirm payment with status: ${candidate.status}`,
-      );
-    }
-    const booking = await this.bookingModel.findById(candidate.bookingId);
-    if (!booking) {
-      throw new NotFoundException(
-        'Không tìm thấy đơn đặt lịch tương ứng với giao dịch.',
       );
     }
     if (booking.status === BookingStatus.Cancelled) {
@@ -662,6 +964,159 @@ export class PaymentsService {
 
     await this.finalizeAfterPayment(payment);
     return payment;
+  }
+
+  private async confirmV2Payment(
+    candidate: PaymentDocument,
+    booking: Booking & { _id: Types.ObjectId },
+  ): Promise<PaymentDocument> {
+    const binding = candidate.contractBinding;
+    const key = candidate.contractIntentKey;
+    if (candidate.status === PaymentStatus.Success) {
+      await this.paymentRecovery.recordAcknowledged(
+        candidate._id,
+        booking._id,
+        key ?? hashContract({ unboundPaymentId: candidate._id.toString() }),
+      );
+      if (
+        booking.status === BookingStatus.Cancelled ||
+        (booking.status === BookingStatus.PendingPayment &&
+          (!booking.holdExpiresAt || booking.holdExpiresAt <= new Date()))
+      )
+        await this.paymentRecovery.requireReview(
+          candidate._id,
+          'PAYMENT_AFTER_HOLD_EXPIRY',
+        );
+      return candidate;
+    }
+    let ready = false;
+    let decision: Awaited<ReturnType<ContractCheckoutGuard['evaluate']>> | null = null;
+    if (binding && key) {
+      try {
+        decision = await this.contractCheckoutGuard.evaluate(
+          booking._id.toString(),
+          candidate.amount,
+          candidate.purpose,
+        );
+        ready =
+          !!decision.binding && paymentMatchesBinding(candidate, decision.binding);
+      } catch {
+        ready = false;
+      }
+    }
+    if (!ready || !decision) {
+      return this.acknowledgeV2ForReview(candidate, booking, 'CONTRACT_BINDING_STALE');
+    }
+
+    const session = await this.bookingModel.db.startSession();
+    let acknowledged: PaymentDocument | null = null;
+    try {
+      await session.withTransaction(async () => {
+        await this.contractCheckoutGuard.assertCurrent(decision!, session);
+        await this.paymentExpiryClaim.claimFinalization(
+          booking._id,
+          candidate._id,
+          session,
+        );
+        acknowledged = await this.paymentsRepository.model.findOneAndUpdate(
+          { _id: candidate._id, status: PaymentStatus.Pending },
+          { $set: { status: PaymentStatus.Success, paidAt: new Date() } },
+          { new: true, session },
+        );
+        if (!acknowledged)
+          throw new ConflictException('PAYMENT_STATUS_CHANGED');
+        await this.paymentRecovery.recordAcknowledged(
+          candidate._id,
+          booking._id,
+          key!,
+          session,
+        );
+      });
+    } catch (error) {
+      const currentPayment = await this.paymentsRepository.findPaymentByCode(
+        candidate.paymentCode,
+      );
+      if (currentPayment?.status === PaymentStatus.Success) return currentPayment;
+      const currentBooking = await this.bookingModel.findById(booking._id);
+      if (
+        currentBooking?.status !== BookingStatus.PendingPayment ||
+        !currentBooking.holdExpiresAt ||
+        currentBooking.holdExpiresAt <= new Date()
+      )
+        return this.acknowledgeV2ForReview(
+          candidate,
+          booking,
+          'PAYMENT_AFTER_HOLD_EXPIRY',
+        );
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+    if (this.v2Finalizer && acknowledged) {
+      try {
+        await this.v2Finalizer.processPayment(candidate._id);
+      } catch (e) {
+        console.warn('V2 finalizer failed during confirmV2Payment:', e);
+      }
+    }
+    return acknowledged!;
+  }
+
+  private async acknowledgeV2ForReview(
+    candidate: PaymentDocument,
+    booking: Booking & { _id: Types.ObjectId },
+    reason: string,
+  ): Promise<PaymentDocument> {
+    const key =
+      candidate.contractIntentKey ??
+      hashContract({ unboundPaymentId: candidate._id.toString() });
+    const session = await this.bookingModel.db.startSession();
+    let payment: PaymentDocument | null = null;
+    try {
+      await session.withTransaction(async () => {
+        payment = await this.paymentsRepository.model.findOneAndUpdate(
+          {
+            _id: candidate._id,
+            status: {
+              $in: [PaymentStatus.Pending, PaymentStatus.Failed, PaymentStatus.Cancelled],
+            },
+          },
+          {
+            $set: {
+              status: PaymentStatus.Success,
+              paidAt: new Date(),
+              needsManualReview: true,
+            },
+          },
+          { new: true, session },
+        );
+        if (!payment) {
+          payment = await this.paymentsRepository.model.findById(candidate._id).session(session);
+          if (payment?.status !== PaymentStatus.Success)
+            throw new ConflictException('PAYMENT_STATUS_CHANGED');
+        }
+        await this.paymentRecovery.recordAcknowledged(
+          candidate._id,
+          booking._id,
+          key,
+          session,
+        );
+        await this.paymentRecovery.requireReview(candidate._id, reason, session);
+        await this.bookingModel.updateOne(
+          { _id: booking._id },
+          {
+            $set: {
+              paymentReviewRequired: true,
+              paymentReviewReason: reason,
+            },
+          },
+          { session },
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+    return payment!;
   }
 
   async finalizeAfterPayment(payment: PaymentDocument): Promise<void> {
@@ -883,6 +1338,14 @@ export class PaymentsService {
     status:
       PaymentStatus.Failed | PaymentStatus.Cancelled = PaymentStatus.Failed,
   ): Promise<PaymentDocument> {
+    const candidate = await this.paymentsRepository.findPaymentByCode(paymentCode);
+    if (!candidate) throw new NotFoundException('Payment not found');
+    const candidateBooking = await this.bookingModel.findById(candidate.bookingId).lean();
+    if (candidateBooking?.contractFlowVersion === 2 && candidateBooking.bookingType !== BookingType.Photography) {
+      if (!this.contractsV2Enabled)
+        throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
+      return this.failV2Payment(candidate, status);
+    }
     const session = await this.bookingModel.db.startSession();
     let result: PaymentDocument | null = null;
     try {
@@ -949,6 +1412,61 @@ export class PaymentsService {
     } finally {
       await session.endSession();
     }
+  }
+
+  private async failV2Payment(
+    candidate: PaymentDocument,
+    status: PaymentStatus.Failed | PaymentStatus.Cancelled,
+  ): Promise<PaymentDocument> {
+    if (candidate.status === PaymentStatus.Success) return candidate;
+    if (candidate.status === status) return candidate;
+    const session = await this.bookingModel.db.startSession();
+    let result: PaymentDocument | null = null;
+    try {
+      await session.withTransaction(async () => {
+        const now = new Date();
+        const booking = await this.bookingModel.findById(candidate.bookingId).session(session).lean();
+        if (!booking) throw new NotFoundException('Booking not found');
+        if (booking.status === BookingStatus.PendingPayment) {
+          const moved = await this.bookingModel.updateOne({
+            _id: booking._id,
+            contractFlowVersion: 2,
+            status: BookingStatus.PendingPayment,
+            $or: [
+              ...freePaymentClaimBranches(now),
+              { 'paymentExpiryClaim.phase': 'INTENT', 'paymentExpiryClaim.paymentId': candidate._id },
+            ],
+          }, {
+            $set: {
+              status: BookingStatus.Cancelled,
+              paymentExpiryClaim: newPaymentClaim('EXPIRY', now, new Date(now.getTime() + 60_000)),
+            },
+            $push: { statusTimeline: { status: BookingStatus.Cancelled, changedAt: now, note: 'V2_PAYMENT_FAILED' } },
+          }, { session });
+          if (moved.modifiedCount !== 1)
+            throw new ConflictException('PAYMENT_EXPIRY_CLAIM_BUSY');
+          await this.bookingModel.db.model('BookingSchedule').updateMany(
+            { bookingId: booking._id, status: 'HELD' },
+            { $set: { status: 'CANCELLED' } }, { session },
+          );
+          await this.bookingModel.db.model('InventoryReservation').updateMany(
+            { bookingId: booking._id, status: 'TEMP_RESERVED' },
+            { $set: { status: 'CANCELLED' }, $unset: { expiresAt: 1 } }, { session },
+          );
+          await this.promotionsService.releaseVoucher(booking._id, session);
+        } else if (booking.status !== BookingStatus.Cancelled) {
+          throw new ConflictException('BOOKING_ALREADY_FINALIZED');
+        }
+        result = await this.paymentsRepository.model.findOneAndUpdate(
+          { _id: candidate._id, status: PaymentStatus.Pending },
+          { $set: { status } }, { new: true, session },
+        );
+        if (!result) throw new ConflictException('PAYMENT_STATUS_CHANGED');
+      });
+    } finally {
+      await session.endSession();
+    }
+    return result!;
   }
 
   async createEscrowEntry(

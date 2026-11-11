@@ -24,6 +24,7 @@ interface ProductItem {
   images?: string[];
   basePrice: number;
   depositAmount: number;
+  replacementValue?: number | null;
   status: string;
   moderationStatus: ModerationStatus;
   moderationReason?: string | null;
@@ -643,6 +644,38 @@ export const ProductModerationManagement: React.FC = () => {
                         }}
                       >
                         {item.depositAmount.toLocaleString("vi-VN")}đ
+                      </strong>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "2px",
+                        borderLeft: "1px solid #E8E2D5",
+                        paddingLeft: "12px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          textTransform: "uppercase",
+                          color: "#7A7A7A",
+                          fontWeight: 700,
+                          letterSpacing: "0.02em",
+                        }}
+                      >
+                        Bồi hoàn HĐ
+                      </span>
+                      <strong
+                        style={{
+                          fontSize: "14px",
+                          color: item.replacementValue ? "#047857" : "#6B7280",
+                          fontWeight: 800,
+                        }}
+                      >
+                        {item.replacementValue
+                          ? `${item.replacementValue.toLocaleString("vi-VN")}đ`
+                          : "Chưa có"}
                       </strong>
                     </div>
                   </div>

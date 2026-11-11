@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
 import { Payment, PaymentSchema } from './schemas/payment.schema';
+import { PaymentRecovery, PaymentRecoverySchema } from './schemas/payment-recovery.schema';
 import {
   PaymentWebhookEvent,
   PaymentWebhookEventSchema,
@@ -42,9 +43,14 @@ import { SettlementTransferMapper } from './mappers/settlement-transfer.mapper';
 import { SettlementsModule } from '../settlements/settlements.module';
 import { SystemPoliciesModule } from '../system-policies/system-policies.module';
 import { ProductsModule } from '../products/products.module';
+import { ContractsModule } from '../contracts/contracts.module';
+import { PaymentExpiryClaimService } from './services/payment-expiry-claim.service';
+import { PaymentRecoveryService } from './services/payment-recovery.service';
+import { V2PaymentFinalizationService } from './services/v2-payment-finalization.service';
 
 export const paymentModels = MongooseModule.forFeature([
   { name: Payment.name, schema: PaymentSchema },
+  { name: PaymentRecovery.name, schema: PaymentRecoverySchema },
   { name: PaymentWebhookEvent.name, schema: PaymentWebhookEventSchema },
   { name: RefundRequest.name, schema: RefundRequestSchema },
   { name: RefundAttempt.name, schema: RefundAttemptSchema },
@@ -64,6 +70,7 @@ export const paymentModels = MongooseModule.forFeature([
     SettlementsModule,
     SystemPoliciesModule,
     ProductsModule,
+    ContractsModule,
   ],
   controllers: [PaymentsController, RefundsController],
   providers: [
@@ -77,6 +84,9 @@ export const paymentModels = MongooseModule.forFeature([
     TransferRepository,
     WebhookEventRepository,
     SettlementTransferMapper,
+    PaymentExpiryClaimService,
+    PaymentRecoveryService,
+    V2PaymentFinalizationService,
   ],
   exports: [
     paymentModels,
@@ -90,6 +100,9 @@ export const paymentModels = MongooseModule.forFeature([
     TransferRepository,
     WebhookEventRepository,
     SettlementTransferMapper,
+    PaymentExpiryClaimService,
+    PaymentRecoveryService,
+    V2PaymentFinalizationService,
   ],
 })
 export class PaymentsModule {}

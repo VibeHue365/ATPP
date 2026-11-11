@@ -11,6 +11,7 @@ export function useProductWizardState() {
   const [prodDescription, setProdDescription] = useState('');
   const [prodBasePrice, setProdBasePrice] = useState('');
   const [prodDepositAmount, setProdDepositAmount] = useState('');
+  const [prodReplacementValue, setProdReplacementValue] = useState('');
   const [prodSizes, setProdSizes] = useState<string[]>([]);
   const [prodColors, setProdColors] = useState<string[]>([]);
   const [prodMaterials, setProdMaterials] = useState<string[]>([]);
@@ -37,7 +38,7 @@ export function useProductWizardState() {
   return {
     isModalOpen, setIsModalOpen, editingProduct, setEditingProduct, prodName, setProdName, prodCategoryId,
     setProdCategoryId, prodDescription, setProdDescription, prodBasePrice, setProdBasePrice,
-    prodDepositAmount, setProdDepositAmount, prodSizes, setProdSizes, prodColors, setProdColors,
+    prodDepositAmount, setProdDepositAmount, prodReplacementValue, setProdReplacementValue, prodSizes, setProdSizes, prodColors, setProdColors,
     prodMaterials, setProdMaterials, prodStatus, setProdStatus, prodImages, setProdImages,
     prodColorImages, setProdColorImages, uploadingColor, setUploadingColor, uploadingImages,
     setUploadingImages, prodVideos, setProdVideos, uploadingVideos, setUploadingVideos, prodStyle,

@@ -153,7 +153,7 @@ export class ProductsRepository {
       : { createdAt: -1 };
     const [items, total] = await Promise.all([
       this.productModel.find(query)
-        .select('providerId categoryId styleCategoryIds eventCategoryIds name slug images basePrice depositAmount sizes colors materials style occasions taggingRevision rating status customTags createdAt')
+        .select('providerId categoryId styleCategoryIds eventCategoryIds name slug images basePrice depositAmount replacementValue sizes colors materials style occasions taggingRevision rating status customTags createdAt')
         .populate('categoryId', 'name slug')
         .populate('providerId', 'businessName status address.city address.district media rating')
         .sort(order as any).skip((safePage - 1) * safeLimit).limit(safeLimit).lean().exec(),
@@ -434,7 +434,7 @@ export class ProductsRepository {
   ): Promise<ProductDocument[]> {
     return this.productModel
       .find({ moderationStatus: status })
-      .select('name description images basePrice depositAmount status moderationStatus moderationReason updatedAt categoryId providerId taggingRevision')
+      .select('name description images basePrice depositAmount replacementValue status moderationStatus moderationReason updatedAt categoryId providerId taggingRevision')
       .sort({ updatedAt: 1 })
       .populate('categoryId', 'name')
       .populate('providerId', 'businessName userId')
@@ -643,16 +643,18 @@ export class ProductsRepository {
     id: Types.ObjectId,
     data: any,
     expectedStatus?: ProductModerationStatus,
+    chartSnapshot?: { version: number; sizes: string[] },
   ): Promise<any | null> {
     const filter = expectedStatus
       ? { _id: id, moderationStatus: expectedStatus }
       : { _id: id };
     const prod = await this.productModel
-      .findOneAndUpdate(filter, data, { new: true })
+      .findOneAndUpdate(chartSnapshot ? { ...filter, sizeChartVersion: chartSnapshot.version, sizes: chartSnapshot.sizes } : filter, data, { new: true })
       .populate('categoryId')
       .populate('providerId')
       .exec();
     if (prod) return prod;
+    if (chartSnapshot) return null;
 
     const pkg = await this.packageModel
       .findOneAndUpdate(filter, data, { new: true })

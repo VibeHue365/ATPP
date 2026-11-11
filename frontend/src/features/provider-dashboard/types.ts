@@ -55,6 +55,7 @@ export interface Order {
 }
 
 export interface Product {
+  sizeChartPolicyVersion?: number;
   _id: string;
   name: string;
   providerId?: string | { _id?: string; [key: string]: any };
@@ -68,6 +69,7 @@ export interface Product {
   videos?: string[];
   basePrice: number;
   depositAmount: number;
+  replacementValue?: number | null;
   sizes: string[];
   colors: string[];
   materials: string[];

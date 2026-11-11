@@ -70,6 +70,11 @@ export class UpdateProductDto {
   depositAmount?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(1, { message: 'Giá trị bồi hoàn trang phục phải lớn hơn 0' })
+  replacementValue?: number | null;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   sizes?: string[];

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { SmartTagEditor } from '../../smart-tagging/components/SmartTagEditor';
 import { ProductDraftSuggestion } from './ProductDraftSuggestion';
+import { SizeChartEditor } from '../size-chart/SizeChartEditor';
 import { productsApi } from '../api/providerDashboardApi';
 import {
   colorLabels,
@@ -74,6 +75,8 @@ type ProductWizardModalProps = Pick<
   | 'setProdBasePrice'
   | 'prodDepositAmount'
   | 'setProdDepositAmount'
+  | 'prodReplacementValue'
+  | 'setProdReplacementValue'
   | 'prodDescription'
   | 'setProdDescription'
   | 'uploadingImages'
@@ -124,6 +127,7 @@ type ProductWizardModalProps = Pick<
     handleWizardFinish: () => Promise<void>;
     handleWizardBack: () => void;
     handleWizardNext: () => Promise<void>;
+    handlePrepareSizeChart: () => Promise<void>;
   };
 
 export function ProductWizardModal({
@@ -143,6 +147,8 @@ export function ProductWizardModal({
   setProdBasePrice,
   prodDepositAmount,
   setProdDepositAmount,
+  prodReplacementValue,
+  setProdReplacementValue,
   prodDescription,
   setProdDescription,
   handleImageChange,
@@ -185,6 +191,7 @@ export function ProductWizardModal({
   handleWizardFinish,
   handleWizardBack,
   handleWizardNext,
+  handlePrepareSizeChart,
   savingDraft,
   activeTagCodes,
 }: ProductWizardModalProps) {
@@ -194,6 +201,7 @@ export function ProductWizardModal({
   const [materialOrigin, setMaterialOrigin] = useState<string>('');
   const [fitTips, setFitTips] = useState<string>('');
   const [customTagError, setCustomTagError] = useState('');
+  const [sizeChartPending, setSizeChartPending] = useState(false);
   const [priceHistory, setPriceHistory] = useState<ProductPriceHistoryItem[]>([]);
   const [priceHistoryOpen, setPriceHistoryOpen] = useState(false);
   const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
@@ -509,7 +517,7 @@ export function ProductWizardModal({
 
   const stepsList = [
     { n: 1, title: 'Thông tin cơ bản', sub: 'Tên, mô tả, hình ảnh' },
-    { n: 2, title: 'Biến thể & Tồn kho', sub: 'Kích cỡ, màu sắc, số lượng' },
+    { n: 2, title: 'Biến thể & Bảng size', sub: 'Kích cỡ, số đo, tồn kho' },
     { n: 3, title: 'Thẻ thông minh AI', sub: 'Kiểu dáng, phong cách, dịp sử dụng' },
   ];
 
@@ -650,6 +658,38 @@ export function ProductWizardModal({
                         required
                       />
                       <span className="pwm-input-unit">VND</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Replacement Value Row */}
+                <div className="pwm-form-row">
+                  <div className="pwm-form-group" style={{ flex: '1 1 100%' }}>
+                    <label className="pwm-label">
+                      Giá trị bồi hoàn trang phục (VNĐ)
+                    </label>
+                    <div className="pwm-input-unit-wrap">
+                      <input
+                        type="number"
+                        min={1}
+                        value={prodReplacementValue}
+                        onChange={(e) => setProdReplacementValue(e.target.value)}
+                        placeholder="Ví dụ: 2000000"
+                        className="pwm-input"
+                        style={{ paddingRight: '50px' }}
+                      />
+                      <span className="pwm-input-unit">VND</span>
+                    </div>
+                    <div style={{ marginTop: '8px', padding: '10px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '12px', color: '#475569', lineHeight: 1.6 }}>
+                      <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#1E293B' }}>
+                        Lưu ý quan trọng về Giá trị bồi hoàn:
+                      </p>
+                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                        <li><strong>Căn cứ bồi thường:</strong> Là giá trị tài sản làm cơ sở tính tiền bồi thường theo tỷ lệ % khi xảy ra sự cố hư hỏng/mất mát trong Hợp đồng điện tử.</li>
+                        <li><strong>Độc lập với Giá thuê và Tiền cọc:</strong> Đây không phải là giá thuê, cũng không phải tiền đặt cọc. Trường hợp hư hỏng nặng vượt quá tiền cọc, khách hàng có nghĩa vụ thanh toán bổ sung phần còn thiếu theo hợp đồng.</li>
+                        <li><strong>Bắt buộc</strong> nếu Shop lựa chọn phương thức bồi thường <em>"% Giá trị tài sản"</em> trong Chính sách xử lý sự cố.</li>
+                        <li><strong>Quy trình kiểm duyệt:</strong> Giá trị bồi hoàn sẽ được Quản trị viên sàn kiểm duyệt trước khi áp dụng chính thức cho khách thuê.</li>
+                      </ul>
                     </div>
                   </div>
                 </div>
@@ -1128,6 +1168,12 @@ export function ProductWizardModal({
             </div>
           )}
 
+          {wizardStep === 2 && editingProduct?._id && <SizeChartEditor
+            key={editingProduct._id}
+            productId={editingProduct._id}
+            onPendingChange={setSizeChartPending}
+          />}
+
           {wizardStep === 2 && (
             editingProduct ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -1415,10 +1461,16 @@ export function ProductWizardModal({
                   <div className="pwm-step2-heading">
                     <h4>2. Thiết lập biến thể &amp; Tồn kho</h4>
                     <p>Tạo các biến thể (size, màu sắc, chất liệu) và khai báo số lượng hiện có trong kho.</p>
+                    <p className="pwm-size-chart-step-hint">
+                      Chọn size và màu, kiểm tra ma trận biến thể, rồi lưu nháp để nhập số đo hoặc tải ảnh bảng size ngay tại bước này.
+                    </p>
                   </div>
 
                   {/* Attribute Selectors Card */}
-                  <div className="pwm-attr-card">
+                  {createdDraftId && <p className="pwm-size-chart-step-hint">
+                    Biến thể đã lưu cho bản nháp. Hãy nhập và xác nhận bảng size bên dưới. Bạn có thể chỉnh tồn kho sau khi tạo sản phẩm.
+                  </p>}
+                  <div className="pwm-attr-card" inert={Boolean(createdDraftId)}>
                     <h5 className="pwm-attr-card-title">Chọn thuộc tính biến thể</h5>
                     <p className="pwm-attr-card-sub">Chọn các tùy chọn áp dụng cho sản phẩm này</p>
 
@@ -1496,8 +1548,22 @@ export function ProductWizardModal({
                     </div>
                   </div>
 
+                  {!createdDraftId ? (
+                    <div className="pwm-size-chart-prepare">
+                      <strong>Bảng số đo theo từng size</strong>
+                      <p>Kiểm tra các biến thể và số lượng bên dưới trước khi lưu. Bản nháp này chưa hiển thị cho khách.</p>
+                      <button type="button" onClick={() => void handlePrepareSizeChart()} disabled={savingDraft}>
+                        {savingDraft ? 'Đang lưu biến thể...' : 'Lưu biến thể để nhập bảng size'}
+                      </button>
+                    </div>
+                  ) : <SizeChartEditor
+                    key={createdDraftId}
+                    productId={createdDraftId}
+                    onPendingChange={setSizeChartPending}
+                  />}
+
                   {/* Variant Matrix Table Card */}
-                  <div className="pwm-matrix-card">
+                  <div className="pwm-matrix-card" inert={Boolean(createdDraftId)}>
                     <div className="pwm-matrix-header">
                       <div className="pwm-matrix-header-info">
                         <h4>Ma trận biến thể ({variants.length})</h4>
@@ -2287,6 +2353,7 @@ export function ProductWizardModal({
                   <button
                     type="button"
                     onClick={handleWizardBack}
+                    disabled={sizeChartPending}
                     className="pwm-btn-back"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
@@ -2297,6 +2364,7 @@ export function ProductWizardModal({
                 <button
                   type="button"
                   onClick={handleWizardFinish}
+                  disabled={sizeChartPending}
                   className="pwm-btn-next"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
@@ -2310,6 +2378,7 @@ export function ProductWizardModal({
                   <button
                     type="button"
                     onClick={handleWizardBack}
+                    disabled={sizeChartPending}
                     className="pwm-btn-back"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
@@ -2322,7 +2391,7 @@ export function ProductWizardModal({
                   <button
                     type="button"
                     onClick={handleWizardNext}
-                    disabled={savingDraft}
+                    disabled={savingDraft || sizeChartPending}
                     className="pwm-btn-next"
                   >
                     <span>{savingDraft ? 'Đang lưu...' : 'Tiếp tục'}</span>
@@ -2334,7 +2403,7 @@ export function ProductWizardModal({
                   <button
                     type="button"
                     onClick={handleWizardFinish}
-                    disabled={activeTagCodes.length < 1}
+                    disabled={sizeChartPending || activeTagCodes.length < 1}
                     className="pwm-btn-next"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >

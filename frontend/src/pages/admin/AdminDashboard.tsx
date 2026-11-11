@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleDollarSign,
+  FileCheck2,
   FileText,
   Folder,
   Home,
@@ -62,6 +63,7 @@ type AdminTab =
   | 'product-moderation'
   | 'reported-reviews'
   | 'policies'
+  | 'contract-policies'
   | 'users-roles'
   | 'notifications'
   | 'ai-analytics';
@@ -104,6 +106,7 @@ const ProductModerationPanel = lazy(() => import('./components/ProductModeration
 const ComboModerationManagement = lazy(() => import('./components/ComboModerationManagement'));
 const ReportedReviewsPanel = lazy(() => import('../../features/admin-reviews/components/ReportedReviewsPanel').then((module) => ({ default: module.ReportedReviewsPanel })));
 const PolicyManagement = lazy(() => import('./components/PolicyManagement').then((module) => ({ default: module.PolicyManagement })));
+const AdminContractPolicyReviewPanel = lazy(() => import('../../features/admin-contract-policy/components/AdminContractPolicyReviewPanel').then((module) => ({ default: module.AdminContractPolicyReviewPanel })));
 const AccessControl = lazy(() => import('./components/AccessControl').then((module) => ({ default: module.AccessControl })));
 const NotificationsPage = lazy(() => import('../notifications/NotificationsPage'));
 const AiAnalyticsPanel = lazy(() => import('../../features/admin-dashboard/components/AiAnalyticsPanel').then(m => ({ default: m.AiAnalyticsPanel })));
@@ -142,6 +145,7 @@ export const navGroups: NavGroupDef[] = [
     label: 'KIỂM DUYỆT & TRỢ GIÚP',
     items: [
       { id: 'verifications', label: 'Phê duyệt hồ sơ đối tác', title: 'Phê duyệt hồ sơ đăng ký đối tác', icon: ShieldCheck },
+      { id: 'contract-policies', label: 'Duyệt chính sách thuê', title: 'Phê duyệt chính sách hợp đồng Shop', icon: FileCheck2 },
       { id: 'disputes', label: 'Giải quyết tranh chấp', title: 'Giải quyết tranh chấp sự cố', icon: MessageSquare },
       { id: 'reported-reviews', label: 'Báo cáo đánh giá (Spam)', title: 'Báo cáo vi phạm & Spam Đánh giá', icon: AlertOctagon },
     ],
@@ -242,6 +246,7 @@ function TabPanel({
     case 'product-moderation': return <ProductModerationPanel />;
     case 'reported-reviews': return <ReportedReviewsPanel />;
     case 'policies': return <PolicyManagement />;
+    case 'contract-policies': return <AdminContractPolicyReviewPanel />;
     case 'users-roles': return <AccessControl />;
     case 'ai-analytics': return <AiAnalyticsPanel />;
     case 'notifications': return <NotificationsPage hideBreadcrumb variant="admin" />;

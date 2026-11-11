@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { SizeChart, SizeChartSchema } from './size-chart.schema';
 
 export type ProductDocument = HydratedDocument<Product>;
 
@@ -94,8 +95,25 @@ export class Product {
   @Prop({ required: false, min: 0 })
   hourlyPrice?: number;
 
+  /**
+   * Giá trị bồi hoàn trang phục (độc lập với giá thuê và tiền cọc),
+   * dùng làm cơ sở tính tỷ lệ bồi thường trong hợp đồng khi trang phục bị hư hỏng/mất mát.
+   */
+  @Prop({ type: Number, required: false, min: 0, default: null })
+  replacementValue?: number | null;
+
   @Prop({ type: [String], default: [] })
   sizes: string[];
+
+  // Missing marker identifies pre-VIB-92 products. Never default this to 1.
+  @Prop({ type: Number, enum: [1], immutable: true })
+  sizeChartPolicyVersion?: number;
+
+  @Prop({ type: Number, default: 0 })
+  sizeChartVersion: number;
+
+  @Prop({ type: SizeChartSchema, default: null })
+  sizeChart?: SizeChart | null;
 
   @Prop({ type: [String], default: [] })
   colors: string[];

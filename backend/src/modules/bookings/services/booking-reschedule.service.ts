@@ -530,6 +530,12 @@ export class BookingRescheduleService {
         );
       }
 
+      await this.bookingsRepository.updateBooking(
+        bookingId,
+        { $inc: { revision: 1 } },
+        session,
+      );
+
       try {
         await this.notificationsService.createNotification(
           this.getCustomerIdStr(booking),

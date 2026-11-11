@@ -2,6 +2,7 @@ export type ProfileTab =
   | 'overview'
   | 'personal'
   | 'schedule'
+  | 'contracts'
   | 'favorites'
   | 'addresses'
   | 'payments'

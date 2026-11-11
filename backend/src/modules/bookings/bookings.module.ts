@@ -13,10 +13,6 @@ import {
   ProviderScheduleLockSchema,
 } from './schemas/provider-schedule-lock.schema';
 import {
-  DigitalContract,
-  DigitalContractSchema,
-} from './schemas/digital-contract.schema';
-import {
   RentalHandover,
   RentalHandoverSchema,
 } from './schemas/rental-handover.schema';
@@ -31,7 +27,10 @@ import { RentalFulfillmentWorkflowService } from './services/rental-fulfillment-
 import { RentalDepositRefundCoordinatorService } from './services/rental-deposit-refund-coordinator.service';
 import { RentalFulfillmentController } from './controllers/rental-fulfillment.controller';
 import { AdminRentalMigrationController } from './controllers/admin-rental-migration.controller';
-import { RentalEvidenceUpload, RentalEvidenceUploadSchema } from './schemas/rental-evidence-upload.schema';
+import {
+  RentalEvidenceUpload,
+  RentalEvidenceUploadSchema,
+} from './schemas/rental-evidence-upload.schema';
 import { PhotographyQuoteService } from '../photographers/services/photography-quote.service';
 import { ProductsModule } from '../products/products.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -40,6 +39,7 @@ import { ProvidersModule } from '../providers/providers.module';
 import { SettlementsModule } from '../settlements/settlements.module';
 import { SystemPoliciesModule } from '../system-policies/system-policies.module';
 import { StorageModule } from '../storage/storage.module';
+import { ContractsModule } from '../contracts/contracts.module';
 
 import { BookingStatusService } from './services/booking-status.service';
 import { BookingCreationService } from './services/booking-creation.service';
@@ -51,7 +51,6 @@ export const bookingModels = MongooseModule.forFeature([
   { name: BookingItem.name, schema: BookingItemSchema },
   { name: BookingSchedule.name, schema: BookingScheduleSchema },
   { name: ProviderScheduleLock.name, schema: ProviderScheduleLockSchema },
-  { name: DigitalContract.name, schema: DigitalContractSchema },
   { name: RentalHandover.name, schema: RentalHandoverSchema },
   { name: RentalEvidenceUpload.name, schema: RentalEvidenceUploadSchema },
 ]);
@@ -66,8 +65,15 @@ export const bookingModels = MongooseModule.forFeature([
     SettlementsModule,
     SystemPoliciesModule,
     StorageModule,
+    ContractsModule,
   ],
-  controllers: [BookingsController, PublicBookingAvailabilityController, PhotographyHoldsController, RentalFulfillmentController, AdminRentalMigrationController],
+  controllers: [
+    BookingsController,
+    PublicBookingAvailabilityController,
+    PhotographyHoldsController,
+    RentalFulfillmentController,
+    AdminRentalMigrationController,
+  ],
   providers: [
     BookingsRepository,
     BookingsService,

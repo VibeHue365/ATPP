@@ -1,420 +1,437 @@
-import React from 'react';
-import { Sparkles } from 'lucide-react';
-import { Modal } from '../../../../components/common/Modal';
-import type { FitPreference } from '../types';
+import { useEffect, useRef, useState } from "react";
+import { Modal } from "../../../../components/common/Modal";
+import { httpClient } from "../../../../services/httpClient";
+import {
+  bodyKeys,
+  sizeRecommendationApi,
+} from "../../../../features/rentals/services/sizeRecommendationApi";
+import type {
+  BodyKey,
+  Measurements,
+  PublicChart,
+  Recommendation,
+} from "../../../../features/rentals/services/sizeRecommendationApi";
+import { ProductSizeChartTable } from "./ProductSizeChartTable";
+import "./productSizeRecommendation.css";
 
-interface ProductAiSizeModalProps {
+type Props = {
   isOpen: boolean;
   onClose: () => void;
+  productId: string;
   productName: string;
-  aiHeight: number | '';
-  setAiHeight: (val: number | '') => void;
-  aiWeight: number | '';
-  setAiWeight: (val: number | '') => void;
-  aiChest: number | '';
-  setAiChest: (val: number | '') => void;
-  aiWaist: number | '';
-  setAiWaist: (val: number | '') => void;
-  aiFitPref: FitPreference;
-  setAiFitPref: (pref: FitPreference) => void;
-  aiResultSize: string;
-  aiReason: string;
-  isAiLoading: boolean;
-  onCalculate: () => void;
+  isAuthenticated: boolean;
   onApplySize: (size: string) => void;
-  onContactCustom: () => void;
+};
+const labels: Record<BodyKey, string> = {
+  height: "Chiều cao",
+  weight: "Cân nặng",
+  chest: "Vòng ngực",
+  waist: "Vòng eo",
+  hip: "Vòng mông",
+  shoulder: "Ngang vai",
+  bicep: "Vòng bắp tay",
+};
+const empty = (): Record<BodyKey, string> => ({ height: "", weight: "", chest: "", waist: "", hip: "", shoulder: "", bicep: "" });
+const statusLabels: Record<Recommendation["status"], string> = {
+  UNAVAILABLE: "Chưa có dữ liệu tư vấn đáng tin cậy",
+  MATCH: "Size phù hợp với các số đo đã kiểm tra",
+  MULTIPLE_MATCHES: "Có nhiều size phù hợp",
+  PRELIMINARY: "Gợi ý sơ bộ — chưa xác nhận độ vừa",
+  NO_MATCH: "Chưa có size phù hợp",
+  INSUFFICIENT_DATA: "Chưa đủ dữ liệu để chọn size",
+};
+const missingLabel = (key: BodyKey | "fitPreference") =>
+  key === "fitPreference" ? "sở thích mặc" : labels[key].toLowerCase();
+const describeViolation = (
+  violation: Recommendation["evaluations"][number]["violations"][number],
+) => {
+  const name = labels[violation.measurement];
+  const { min, max } = violation.expected;
+  if (violation.kind === "BODY_RANGE")
+    return `${name} ${violation.actual} ${violation.unit} nằm ngoài ${min}–${max} ${violation.unit}, lệch ${violation.deviation} ${violation.unit}.`;
+  const actual = violation.actual as { min: number; max: number };
+  const overlap = violation.coverage === "PARTIAL_OVERLAP";
+  return `${name}: độ cử động ${actual.min}–${actual.max} cm ${overlap ? "chỉ giao một phần với" : "không giao với"} khoảng ${min}–${max} cm cửa hàng khai báo; lệch tối đa ${violation.deviation} cm. Cần hỏi cửa hàng trước khi chọn.`;
+};
+
+export function ProductAiSizeModal(props: Props) {
+  if (!props.isOpen) return null;
+  return <ProductAiSizeModalContent key={`${props.productId}:${props.isAuthenticated}`} {...props} />;
 }
 
-export const ProductAiSizeModal: React.FC<ProductAiSizeModalProps> = ({
+function ProductAiSizeModalContent({
   isOpen,
   onClose,
+  productId,
   productName,
-  aiHeight,
-  setAiHeight,
-  aiWeight,
-  setAiWeight,
-  aiChest,
-  setAiChest,
-  aiWaist,
-  setAiWaist,
-  aiFitPref,
-  setAiFitPref,
-  aiResultSize,
-  aiReason,
-  isAiLoading,
-  onCalculate,
+  isAuthenticated,
   onApplySize,
-  onContactCustom,
-}) => {
+}: Props) {
+  const [values, setValues] = useState(empty);
+  const [fit, setFit] = useState<Measurements["fitPreference"]>(null);
+  const [chart, setChart] = useState<PublicChart | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [profileNote, setProfileNote] = useState("");
+  const [result, setResult] = useState<Recommendation | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const requestGeneration = useRef(0);
+
+  useEffect(() => {
+    requestGeneration.current += 1;
+    let cancelled = false;
+    Promise.all([
+      sizeRecommendationApi.chart(productId),
+      isAuthenticated
+        ? httpClient
+            .get<{
+              preferences?: { sizeInfo?: Partial<Measurements> };
+            }>("/users/me")
+            .catch(() => null)
+        : Promise.resolve(null),
+    ])
+      .then(([response, profile]) => {
+        if (cancelled) return;
+        setChart(response.sizeChart);
+        setLoaded(true);
+        const info = profile?.preferences?.sizeInfo;
+        if (info) {
+          setValues(
+            Object.fromEntries(
+              bodyKeys.map((key) => [
+                key,
+                typeof info[key] === "number" &&
+                Number.isFinite(info[key]) &&
+                info[key]! > 0
+                  ? String(info[key])
+                  : "",
+              ]),
+            ) as ReturnType<typeof empty>,
+          );
+          setFit(
+            info.fitPreference &&
+              ["SLIM", "REGULAR", "COMFORT"].includes(info.fitPreference)
+              ? info.fitPreference
+              : null,
+          );
+          setProfileNote(
+            "Đã điền số đo từ hồ sơ. Bạn có thể sửa cho lần tư vấn này.",
+          );
+        } else
+          setProfileNote(
+            "Bạn có thể nhập số đo trực tiếp. Hệ thống không tự ước tính ba vòng.",
+          );
+      })
+      .catch(() => {
+        if (!cancelled)
+          setError("Không tải được bảng size. Hãy đóng và mở lại để thử lại.");
+      });
+    return () => {
+      cancelled = true;
+      requestGeneration.current += 1;
+    };
+  }, [productId, isAuthenticated]);
+
+  const input = (): Measurements => {
+    const data = Object.fromEntries(
+      bodyKeys.map((key) => {
+        const text = values[key].trim();
+        if (!text) return [key, null];
+        const value = Number(text);
+        if (
+          !Number.isFinite(value) ||
+          value <= 0 ||
+          value > (key === "weight" ? 1000 : 300)
+        )
+          throw new Error(
+            `${labels[key]} chưa hợp lệ. Hãy nhập số dương theo đơn vị hiển thị.`,
+          );
+        return [key, value];
+      }),
+    ) as Record<BodyKey, number | null>;
+    return { ...data, fitPreference: fit };
+  };
+  const calculate = async () => {
+    const generation = requestGeneration.current;
+    setLoading(true);
+    setError("");
+    setResult(null);
+    try {
+      const response = await sizeRecommendationApi.recommend(
+        productId,
+        {
+          ...input(),
+          fitPreference: chart?.measurementType === "GARMENT" ? fit : null,
+        },
+      );
+      if (generation !== requestGeneration.current) return;
+      if (response.chartVersion !== chart?.version) {
+        const latest = await sizeRecommendationApi.chart(productId);
+        if (generation !== requestGeneration.current) return;
+        setChart(latest.sizeChart);
+        setError(
+          "Bảng size đã thay đổi. Hãy kiểm tra bảng mới và bấm gợi ý lại.",
+        );
+        return;
+      }
+      setResult(response);
+    } catch (err) {
+      if (generation === requestGeneration.current)
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Không lấy được gợi ý. Không có size nào được tự chọn.",
+        );
+    } finally {
+      if (generation === requestGeneration.current) setLoading(false);
+    }
+  };
+  const applySize = async (size: string) => {
+    const generation = requestGeneration.current;
+    setLoading(true);
+    setError("");
+    try {
+      const latest = await sizeRecommendationApi.chart(productId);
+      if (generation !== requestGeneration.current) return;
+      if (
+        latest.status !== "READY" ||
+        latest.sizeChart?.version !== result?.chartVersion
+      ) {
+        setChart(latest.sizeChart);
+        setResult(null);
+        setError(
+          "Bảng size đã thay đổi hoặc chưa xác nhận. Hãy lấy gợi ý mới trước khi chọn size.",
+        );
+        return;
+      }
+      onApplySize(size);
+    } catch {
+      if (generation === requestGeneration.current)
+        setError("Không kiểm tra được bảng size hiện tại. Chưa áp dụng size.");
+    } finally {
+      if (generation === requestGeneration.current) setLoading(false);
+    }
+  };
+  const saveProfile = async () => {
+    setSavingProfile(true);
+    setError("");
+    try {
+      await httpClient.patch("/users/me/preferences", {
+        preferences: { sizeInfo: input() },
+      });
+      setProfileNote("Đã cập nhật số đo vào hồ sơ.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không lưu được số đo.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Gợi ý Size Thông Minh bởi AI"
-      maxWidth="500px"
+      title="Gợi ý size cho bạn"
+      maxWidth="720px"
     >
-      <div
-        style={{
-          padding: '10px 0',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '20px',
-        }}
-      >
-        <p
-          style={{
-            fontSize: '13.5px',
-            color: 'var(--color-text-secondary)',
-            lineHeight: 1.6,
-            margin: 0,
-          }}
-        >
-          Nhập số đo cơ thể của bạn bên dưới để Trợ lý AI phân tích và đưa ra
-          đề xuất kích cỡ tối ưu nhất cho thiết kế <strong>{productName}</strong>.
+      <div className="product-size-recommendation">
+        <p>
+          Đối chiếu số đo với bảng size đã được cửa hàng xác nhận cho{" "}
+          <strong>{productName}</strong>. Hãy kiểm tra số đo và chiều dài áo trước
+          khi chọn kích cỡ.
         </p>
-
-        {/* Form Fields Grid */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '16px',
-            backgroundColor: '#FAF8F5',
-            padding: '16px',
-            borderRadius: '12px',
-            border: '1px solid #EAE1D4',
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>
-              Chiều cao (cm)
-            </label>
-            <input
-              type="number"
-              value={aiHeight}
-              onChange={(e) => {
-                const val = e.target.value;
-                setAiHeight(val === '' ? '' : parseInt(val) || 0);
-              }}
-              onBlur={() => {
-                if (aiHeight !== '') {
-                  setAiHeight(Math.max(100, Math.min(250, Number(aiHeight))));
-                }
-              }}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '8px',
-                border: '1px solid #D5C2AD',
-                outline: 'none',
-                fontSize: '13.5px',
-                fontWeight: 600,
-              }}
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>
-              Cân nặng (kg)
-            </label>
-            <input
-              type="number"
-              value={aiWeight}
-              onChange={(e) => {
-                const val = e.target.value;
-                setAiWeight(val === '' ? '' : parseInt(val) || 0);
-              }}
-              onBlur={() => {
-                if (aiWeight !== '') {
-                  setAiWeight(Math.max(20, Math.min(200, Number(aiWeight))));
-                }
-              }}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '8px',
-                border: '1px solid #D5C2AD',
-                outline: 'none',
-                fontSize: '13.5px',
-                fontWeight: 600,
-              }}
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>
-              Vòng ngực (cm)
-            </label>
-            <input
-              type="number"
-              value={aiChest}
-              onChange={(e) => {
-                const val = e.target.value;
-                setAiChest(val === '' ? '' : parseInt(val) || 0);
-              }}
-              onBlur={() => {
-                if (aiChest !== '') {
-                  setAiChest(Math.max(40, Math.min(150, Number(aiChest))));
-                }
-              }}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '8px',
-                border: '1px solid #D5C2AD',
-                outline: 'none',
-                fontSize: '13.5px',
-                fontWeight: 600,
-              }}
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>
-              Vòng eo (cm)
-            </label>
-            <input
-              type="number"
-              value={aiWaist}
-              onChange={(e) => {
-                const val = e.target.value;
-                setAiWaist(val === '' ? '' : parseInt(val) || 0);
-              }}
-              onBlur={() => {
-                if (aiWaist !== '') {
-                  setAiWaist(Math.max(30, Math.min(150, Number(aiWaist))));
-                }
-              }}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '8px',
-                border: '1px solid #D5C2AD',
-                outline: 'none',
-                fontSize: '13.5px',
-                fontWeight: 600,
-              }}
-            />
-          </div>
-          <div
-            style={{
-              gridColumn: 'span 2',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
-            }}
-          >
-            <label style={{ fontSize: '12px', fontWeight: 700, color: '#4A4440' }}>
-              Sở thích mặc áo dài
-            </label>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setAiFitPref('SLIM')}
-                style={{
-                  flex: 1,
-                  padding: '10px',
-                  borderRadius: '8px',
-                  fontSize: '12.5px',
-                  fontWeight: 700,
-                  border:
-                    aiFitPref === 'SLIM'
-                      ? '1.5px solid var(--color-primary-dark)'
-                      : '1px solid #D5C2AD',
-                  backgroundColor:
-                    aiFitPref === 'SLIM'
-                      ? 'var(--color-primary-trans)'
-                      : 'white',
-                  color:
-                    aiFitPref === 'SLIM'
-                      ? 'var(--color-primary-dark)'
-                      : '#7E6D5B',
-                  cursor: 'pointer',
-                }}
-              >
-                Mặc ôm dáng
-              </button>
-              <button
-                type="button"
-                onClick={() => setAiFitPref('COMFORT')}
-                style={{
-                  flex: 1,
-                  padding: '10px',
-                  borderRadius: '8px',
-                  fontSize: '12.5px',
-                  fontWeight: 700,
-                  border:
-                    aiFitPref === 'COMFORT'
-                      ? '1.5px solid var(--color-primary-dark)'
-                      : '1px solid #D5C2AD',
-                  backgroundColor:
-                    aiFitPref === 'COMFORT'
-                      ? 'var(--color-primary-trans)'
-                      : 'white',
-                  color:
-                    aiFitPref === 'COMFORT'
-                      ? 'var(--color-primary-dark)'
-                      : '#7E6D5B',
-                  cursor: 'pointer',
-                }}
-              >
-                Mặc thoải mái
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Trigger Button */}
-        <button
-          type="button"
-          disabled={isAiLoading}
-          onClick={onCalculate}
-          style={{
-            width: '100%',
-            padding: '12px',
-            borderRadius: '10px',
-            backgroundColor: isAiLoading
-              ? '#8C827A'
-              : 'var(--color-primary-dark)',
-            color: 'white',
-            border: 'none',
-            fontSize: '14px',
-            fontWeight: 700,
-            cursor: isAiLoading ? 'not-allowed' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-          }}
-        >
-          {isAiLoading ? (
-            <>ĐANG PHÂN TÍCH BỞI AI...</>
-          ) : (
-            <>
-              <Sparkles size={16} />
-              <span>PHÂN TÍCH SỐ ĐO BẰNG AI</span>
-            </>
-          )}
-        </button>
-
-        {/* Result Block */}
-        {(aiResultSize || aiReason) && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              backgroundColor: 'white',
-              border: '1.5px solid rgba(182, 145, 91, 0.4)',
-              padding: '20px',
-              borderRadius: '12px',
-              animation: 'fadeIn 0.25s ease-out',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <span
-                style={{
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  color: '#8C827A',
-                }}
-              >
-                SIZE ĐỀ XUẤT TỐI ƯU:
-              </span>
-              <span
-                style={{
-                  fontSize: aiResultSize === 'CUSTOM' ? '15px' : '24px',
-                  fontWeight: 800,
-                  color:
-                    aiResultSize === 'CUSTOM'
-                      ? '#B85C00'
-                      : 'var(--color-primary-dark)',
-                  fontFamily: 'var(--font-header)',
-                }}
-              >
-                {aiResultSize === 'CUSTOM'
-                  ? 'ĐẶT MAY / LIÊN HỆ SHOP'
-                  : `SIZE ${aiResultSize}`}
-              </span>
-            </div>
-            <div
-              style={{
-                height: '1px',
-                backgroundColor: 'rgba(182, 145, 91, 0.15)',
-              }}
-            />
-            <p
-              style={{
-                fontSize: '13px',
-                color: '#4A4440',
-                lineHeight: 1.6,
-                margin: 0,
-                textAlign: 'justify',
-              }}
-            >
-              {aiReason}
-            </p>
-          </div>
+        {error && (
+          <p role="alert" className="size-recommendation-error">
+            {error}
+          </p>
         )}
-
-        {/* Apply size selection */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '12px',
-            justifyContent: 'flex-end',
-            borderTop: '1px solid #EAEAE8',
-            paddingTop: '16px',
-            marginTop: '4px',
-          }}
-        >
-          <button
-            type="button"
-            className="vh-btn vh-btn-outline"
-            style={{
-              padding: '8px 24px',
-              borderRadius: '8px',
-              fontSize: '13px',
-            }}
-            onClick={onClose}
-          >
-            Hủy bỏ
-          </button>
-          {aiResultSize && aiResultSize !== 'CUSTOM' && (
-            <button
-              type="button"
-              className="vh-btn vh-btn-primary"
-              style={{
-                padding: '8px 24px',
-                borderRadius: '8px',
-                fontSize: '13px',
-              }}
-              onClick={() => onApplySize(aiResultSize)}
+        {!loaded && !error && <p role="status">Đang tải bảng size và hồ sơ…</p>}
+        {loaded && !chart && (
+          <p role="status">
+            Cửa hàng chưa có bảng size đã xác nhận. Bạn vẫn xem và đặt thuê
+            được, nhưng hiện chưa đủ dữ liệu để tư vấn size.
+          </p>
+        )}
+        {chart && (
+          <>
+            <p>{profileNote}</p>
+            <fieldset
+              disabled={loading || savingProfile}
+              className="size-recommendation-fields"
             >
-              ÁP DỤNG SIZE {aiResultSize}
-            </button>
-          )}
-          {aiResultSize === 'CUSTOM' && (
-            <button
-              type="button"
-              className="vh-btn vh-btn-primary"
-              style={{
-                padding: '8px 24px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                backgroundColor: '#B85C00',
-                borderColor: '#B85C00',
-              }}
-              onClick={onContactCustom}
-            >
-              LIÊN HỆ TƯ VẤN MAY
-            </button>
-          )}
-        </div>
+              {bodyKeys.filter((key) =>
+                (key !== "shoulder" && key !== "bicep") ||
+                chart.rows.some((row) => row[key]),
+              ).map((key) => (
+                <label key={key}>
+                  {labels[key]} ({key === "weight" ? "kg" : "cm"})
+                  <input
+                    aria-label={`${labels[key]} (${key === "weight" ? "kg" : "cm"})`}
+                    type="number"
+                    min="1"
+                    max={key === "weight" ? 1000 : 300}
+                    step="0.1"
+                    placeholder="Chưa khai báo"
+                    value={values[key]}
+                    aria-invalid={result?.missingMeasurements?.includes(key) || undefined}
+                    onChange={(e) => {
+                      setValues({ ...values, [key]: e.target.value });
+                      setResult(null);
+                    }}
+                  />
+                  {result?.missingMeasurements?.includes(key) && (
+                    <span className="size-recommendation-field-hint">Cần bổ sung để kiểm tra bảng size này.</span>
+                  )}
+                </label>
+              ))}
+              {chart.measurementType === "GARMENT" && (
+                <label>
+                  Sở thích mặc
+                  <select
+                    value={fit ?? ""}
+                    aria-invalid={result?.missingMeasurements?.includes("fitPreference") || undefined}
+                    onChange={(e) => {
+                      setFit(
+                        (e.target.value || null) as Measurements["fitPreference"],
+                      );
+                      setResult(null);
+                    }}
+                  >
+                    <option value="">Chưa chọn</option>
+                    <option value="SLIM">Ôm</option>
+                    <option value="REGULAR">Vừa</option>
+                    <option value="COMFORT">Thoải mái</option>
+                  </select>
+                  {result?.missingMeasurements?.includes("fitPreference") && (
+                    <span className="size-recommendation-field-hint">Cần chọn kiểu mặc có quy tắc được cửa hàng khai báo.</span>
+                  )}
+                </label>
+              )}
+            </fieldset>
+            {chart.measurementType === "BODY" && (
+              <p>Sở thích mặc chỉ được tính khi cửa hàng khai báo quy tắc độ cử động cho bảng số đo áo.</p>
+            )}
+            <details>
+              <summary>Hướng dẫn đo cơ thể</summary>
+              <p>
+                Dùng thước dây đo cả vòng: ngực tại phần nở nhất, eo tại phần
+                nhỏ nhất và mông tại phần nở nhất. Giữ thước ngang, không siết.
+                Nhập số đo cơ thể; không nhập chiều ngang áo hoặc tự cộng độ
+                rộng. Ngang vai đo từ mỏm vai này sang mỏm vai kia; vòng bắp tay đo quanh phần rộng nhất của bắp tay.
+              </p>
+            </details>
+            <div className="size-recommendation-actions">
+              <button
+                type="button"
+                disabled={loading || savingProfile}
+                onClick={() => void calculate()}
+              >
+                {loading
+                  ? "Đang đối chiếu…"
+                  : "Gợi ý size theo bảng của mẫu áo"}
+              </button>
+              {isAuthenticated && (
+                <button
+                  type="button"
+                  disabled={savingProfile || loading}
+                  onClick={() => void saveProfile()}
+                >
+                  {savingProfile ? "Đang lưu…" : "Lưu số đo vào hồ sơ"}
+                </button>
+              )}
+            </div>
+            {result && (
+              <section aria-label="Kết quả tư vấn size" aria-live="polite">
+                <h3>{statusLabels[result.status]}</h3>
+                {!!result.missingMeasurements?.length && (
+                  <p className="size-recommendation-guidance">
+                    Hãy bổ sung {result.missingMeasurements.map(missingLabel).join(", ")} để kiểm tra đầy đủ. Hệ thống không tự suy đoán các số đo còn thiếu.
+                  </p>
+                )}
+                {!!result.missingChartMeasurements?.length && (
+                  <p className="size-recommendation-guidance">
+                    Bảng của cửa hàng còn thiếu {result.missingChartMeasurements.map(missingLabel).join(", ")} ở một số size. Hãy liên hệ cửa hàng để bổ sung.
+                  </p>
+                )}
+                {result.candidates.length > 0 && (
+                  <p>Size: {result.candidates.join(", ")}</p>
+                )}
+                {result.status === "NO_MATCH" && result.closestSizes?.length > 0 && (
+                  <div className="size-recommendation-nearest">
+                    <h4>Size lệch ít nhất để bạn đối chiếu</h4>
+                    <p>Chưa size nào đáp ứng đủ các số đo. Các size dưới đây chỉ để tham khảo; hệ thống không tự chọn size để đặt thuê.</p>
+                    {result.closestSizes.map((size) => {
+                      const evaluation = result.evaluations.find((row) => row.size === size);
+                      return (
+                        <div key={size}>
+                          <strong>Size {size}</strong>
+                          <ul>
+                            {evaluation?.violations?.map((violation) => (
+                              <li key={`${violation.measurement}:${violation.kind}`}>{describeViolation(violation)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {result.warnings.length > 0 && (
+                  <ul>
+                    {result.warnings.map((warning, index) => (
+                      <li key={index}>{warning}</li>
+                    ))}
+                  </ul>
+                )}
+                {result.evaluations.map((row) => (
+                  <details key={row.size}>
+                    <summary>
+                      Size {row.size}:{" "}
+                      {row.outcome === "MATCH"
+                        ? "phù hợp theo bảng"
+                        : row.outcome === "REJECTED"
+                          ? "có số đo không phù hợp"
+                          : "chưa đủ dữ liệu xác nhận"}
+                    </summary>
+                    <ul>
+                      {row.reasons.map((reason, index) => (
+                        <li key={index}>{reason}</li>
+                      ))}
+                    </ul>
+                  </details>
+                ))}
+                {(result.status === "MATCH" ||
+                  result.status === "MULTIPLE_MATCHES") && (
+                  <div className="size-recommendation-actions">
+                    {result.candidates.map((size) => (
+                      <button
+                        key={size}
+                        type="button"
+                        disabled={loading || savingProfile}
+                        onClick={() => void applySize(size)}
+                      >
+                        Chọn size {size}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+            <details>
+              <summary>
+                Bảng size của mẫu áo (phiên bản {chart.version})
+              </summary>
+              <p>
+                {chart.measurementType === "BODY"
+                  ? "Số đo cơ thể phù hợp"
+                  : "Số đo thực tế của áo"}
+                . Chiều dài: {chart.lengthUnit.toLowerCase()}, cân nặng:{" "}
+                {chart.weightUnit.toLowerCase()}.
+              </p>
+              <ProductSizeChartTable chart={chart} />
+            </details>
+          </>
+        )}
       </div>
     </Modal>
   );
-};
+}

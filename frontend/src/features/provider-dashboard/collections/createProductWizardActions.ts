@@ -2,6 +2,7 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import type { useToast } from '../../../components/feedback/Toast';
 import { inventoryApi, productsApi } from '../api/providerDashboardApi';
+import { sizeChartApi } from '../size-chart/sizeChartApi';
 import { colorLabels, DEFAULT_PRODUCT_IMAGE, TAG_TO_EVENT_SLUG, TAG_TO_OCCASION, TAG_TO_STYLE, TAG_TO_STYLE_SLUG } from '../constants';
 import type { Product, VariantRow } from '../types';
 import { emptyVariant, normalizeCategoryIds, normalizeVariants } from './productHelpers';
@@ -9,7 +10,7 @@ import type { useProductWizardState } from './useProductWizardState';
 import type { useProviderProductsState } from './useProviderProductsState';
 
 type Dependencies = Pick<ReturnType<typeof useProductWizardState>,
-  'setEditingProduct' | 'setProdName' | 'setProdDescription' | 'setProdBasePrice' | 'setProdDepositAmount' | 'setProdSizes' | 'setProdColors' | 'setProdMaterials' | 'setProdStatus' | 'setProdImages' | 'setProdColorImages' | 'setProdVideos' | 'setProdStyle' | 'setProdOccasions' | 'setProdStyleCategoryIds' | 'setProdEventCategoryIds' | 'prodCustomTags' | 'setProdCustomTags' | 'setCustomTagInput' | 'setVariants' | 'setWizardStep' | 'setCreatedDraftId' | 'setActiveTagCodes' | 'setProdCategoryId' | 'setIsModalOpen' | 'setEditInvSummary' | 'setUploadingImages' | 'prodVideos' | 'setUploadingVideos' | 'editingProduct' | 'editInvSummary' | 'variants' | 'setUploadingColor' | 'prodImages' | 'prodColorImages' | 'prodName' | 'prodCategoryId' | 'prodDescription' | 'prodBasePrice' | 'prodDepositAmount' | 'prodStatus' | 'prodStyle' | 'prodOccasions' | 'prodStyleCategoryIds' | 'prodEventCategoryIds' | 'wizardStep' | 'setSavingDraft' | 'createdDraftId' | 'activeTagCodes'
+  'setEditingProduct' | 'setProdName' | 'setProdDescription' | 'setProdBasePrice' | 'setProdDepositAmount' | 'setProdReplacementValue' | 'setProdSizes' | 'setProdColors' | 'setProdMaterials' | 'setProdStatus' | 'setProdImages' | 'setProdColorImages' | 'setProdVideos' | 'setProdStyle' | 'setProdOccasions' | 'setProdStyleCategoryIds' | 'setProdEventCategoryIds' | 'prodCustomTags' | 'setProdCustomTags' | 'setCustomTagInput' | 'setVariants' | 'setWizardStep' | 'setCreatedDraftId' | 'setActiveTagCodes' | 'setProdCategoryId' | 'setIsModalOpen' | 'setEditInvSummary' | 'setUploadingImages' | 'prodVideos' | 'setUploadingVideos' | 'editingProduct' | 'editInvSummary' | 'variants' | 'setUploadingColor' | 'prodImages' | 'prodColorImages' | 'prodName' | 'prodCategoryId' | 'prodDescription' | 'prodBasePrice' | 'prodDepositAmount' | 'prodReplacementValue' | 'prodStatus' | 'prodStyle' | 'prodOccasions' | 'prodStyleCategoryIds' | 'prodEventCategoryIds' | 'wizardStep' | 'setSavingDraft' | 'createdDraftId' | 'activeTagCodes'
 > &
   Pick<ReturnType<typeof useProviderProductsState>,
     'categories' | 'styleCategories' | 'eventCategories'
@@ -22,13 +23,14 @@ type Dependencies = Pick<ReturnType<typeof useProductWizardState>,
 /** Recreated each render so handlers retain the dashboard's existing closure semantics. */
 export function createProductWizardActions({
   setEditingProduct, setProdName, setProdDescription, setProdBasePrice, setProdDepositAmount,
+  setProdReplacementValue,
   setProdSizes, setProdColors, setProdMaterials, setProdStatus, setProdImages, setProdColorImages,
   setProdVideos, setProdStyle, setProdOccasions, setProdStyleCategoryIds, setProdEventCategoryIds,
   prodCustomTags, setProdCustomTags, setCustomTagInput,
   setVariants, setWizardStep, setCreatedDraftId, setActiveTagCodes, categories, setProdCategoryId,
   setIsModalOpen, setEditInvSummary, setUploadingImages, toast, prodVideos, setUploadingVideos,
   editingProduct, editInvSummary, variants, setUploadingColor, prodImages, prodColorImages, prodName,
-  prodCategoryId, prodDescription, prodBasePrice, prodDepositAmount, prodStatus, prodStyle,
+  prodCategoryId, prodDescription, prodBasePrice, prodDepositAmount, prodReplacementValue, prodStatus, prodStyle,
   prodOccasions, prodStyleCategoryIds, prodEventCategoryIds, wizardStep, setSavingDraft, createdDraftId,
   activeTagCodes, styleCategories, eventCategories, fetchProducts,
 }: Dependencies) {
@@ -39,6 +41,7 @@ export function createProductWizardActions({
     setProdDescription('');
     setProdBasePrice('');
     setProdDepositAmount('');
+    setProdReplacementValue('');
     setProdSizes([]);
     setProdColors([]);
     setProdMaterials([]);
@@ -76,6 +79,7 @@ export function createProductWizardActions({
     setProdDescription(p.description || '');
     setProdBasePrice(p.basePrice.toString());
     setProdDepositAmount(p.depositAmount.toString());
+    setProdReplacementValue(p.replacementValue != null ? p.replacementValue.toString() : '');
     setProdSizes(p.sizes || []);
     setProdColors(p.colors || []);
     setProdMaterials(p.materials || []);
@@ -109,6 +113,7 @@ export function createProductWizardActions({
     setProdDescription(p.description || '');
     setProdBasePrice(p.basePrice.toString());
     setProdDepositAmount(p.depositAmount.toString());
+    setProdReplacementValue(p.replacementValue != null ? p.replacementValue.toString() : '');
     setProdSizes(p.sizes || []);
     setProdColors(p.colors || []);
     setProdMaterials(p.materials || []);
@@ -275,22 +280,30 @@ export function createProductWizardActions({
       .map(([color, images]) => ({ color, images }));
   };
 
-  const buildBasePayload = () => ({
-    name: prodName,
-    categoryId: prodCategoryId,
-    description: prodDescription,
-    basePrice: Number(prodBasePrice),
-    depositAmount: Number(prodDepositAmount),
-    status: prodStatus,
-    images: mergedImages().length > 0 ? mergedImages() : [DEFAULT_PRODUCT_IMAGE],
-    colorImages: buildColorImagesPayload(),
-    videos: prodVideos,
-    style: prodStyle,
-    occasions: prodOccasions,
-    styleCategoryIds: prodStyleCategoryIds,
-    eventCategoryIds: prodEventCategoryIds,
-    customTags: prodCustomTags,
-  });
+  const buildBasePayload = () => {
+    const payload: Record<string, any> = {
+      name: prodName,
+      categoryId: prodCategoryId,
+      description: prodDescription,
+      basePrice: Number(prodBasePrice),
+      depositAmount: Number(prodDepositAmount),
+      status: prodStatus,
+      images: mergedImages().length > 0 ? mergedImages() : [DEFAULT_PRODUCT_IMAGE],
+      colorImages: buildColorImagesPayload(),
+      videos: prodVideos,
+      style: prodStyle,
+      occasions: prodOccasions,
+      styleCategoryIds: prodStyleCategoryIds,
+      eventCategoryIds: prodEventCategoryIds,
+      customTags: prodCustomTags,
+    };
+    if (prodReplacementValue.trim() !== '') {
+      payload.replacementValue = Math.round(Number(prodReplacementValue));
+    } else if (editingProduct && editingProduct.replacementValue != null) {
+      payload.replacementValue = null;
+    }
+    return payload;
+  };
 
   const validateWizardStep1 = () => {
     if (!prodName || !prodCategoryId || !prodBasePrice || !prodDepositAmount) {
@@ -303,11 +316,44 @@ export function createProductWizardActions({
       toast.error('Giá cọc phải nhỏ hơn giá thuê');
       return false;
     }
+    if (prodReplacementValue.trim() !== '') {
+      const repVal = Number(prodReplacementValue);
+      if (isNaN(repVal) || repVal <= 0) {
+        toast.error('Giá trị bồi hoàn phải là số dương lớn hơn 0');
+        return false;
+      }
+    }
     if (mergedImages().length === 0) {
       toast.error('Cần tải lên ít nhất 1 hình ảnh sản phẩm');
       return false;
     }
     return true;
+  };
+
+  const handlePrepareSizeChart = async () => {
+    if (editingProduct || createdDraftId) return;
+    if (!validateWizardStep1()) return;
+    const normalized = normalizeVariants(variants);
+    if (normalized.length === 0) {
+      toast.error('Cần ít nhất 1 dòng biến thể hợp lệ (size + màu) trước khi nhập bảng size.');
+      return;
+    }
+    setSavingDraft(true);
+    try {
+      const created: any = await productsApi.create({
+        ...buildBasePayload(),
+        status: 'DRAFT',
+        variants: normalized,
+      });
+      setCreatedDraftId(created._id);
+      if (normalized.length !== variants.length) {
+        toast.success('Đã gộp các biến thể trùng size/màu/chất liệu.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Lưu biến thể thất bại. Vui lòng thử lại.');
+    } finally {
+      setSavingDraft(false);
+    }
   };
 
   const handleWizardNext = async () => {
@@ -319,33 +365,23 @@ export function createProductWizardActions({
     if (wizardStep === 2) {
       // Edit mode: biến thể được quản lý ở tab Tồn kho, chỉ cần sang bước gắn thẻ.
       if (editingProduct) { setWizardStep(3); return; }
-      const normalized = normalizeVariants(variants);
-      if (normalized.length === 0) {
-        toast.error('Cần ít nhất 1 dòng biến thể hợp lệ (size + màu)');
+      if (!createdDraftId) {
+        await handlePrepareSizeChart();
         return;
       }
-      // Tạo bản NHÁP ẨN để AI có productId mà gắn thẻ (khách chưa nhìn thấy).
-      setSavingDraft(true);
       try {
-        if (createdDraftId) {
-          // Nháp đã tồn tại (quay lại rồi tiến tới): chỉ cập nhật thông tin cơ bản.
-          await productsApi.update(createdDraftId, buildBasePayload());
-        } else {
-          const created: any = await productsApi.create({
-            ...buildBasePayload(),
-            status: 'DRAFT',
-            variants: normalized,
-          });
-          setCreatedDraftId(created._id);
-          if (normalized.length !== variants.length) {
-            toast.success('Đã gộp các biến thể trùng size/màu/chất liệu.');
-          }
+        const response = await sizeChartApi.get(createdDraftId);
+        const declaredSizes = new Set(response.sizes.map(size => size.trim().toUpperCase()));
+        const chart = response.sizeChart;
+        if (chart?.status !== 'CONFIRMED' || chart.rows.length !== declaredSizes.size || chart.rows.some(row => !declaredSizes.has(row.size))) {
+          toast.error('Hãy lưu và xác nhận bảng size ở bước 2 trước khi tiếp tục.');
+          return;
         }
+        // Keep images and product details current for the existing AI tagging step.
+        await productsApi.update(createdDraftId, buildBasePayload());
         setWizardStep(3);
       } catch (err: any) {
-        toast.error(err.message || 'Lưu bản nháp thất bại. Vui lòng thử lại.');
-      } finally {
-        setSavingDraft(false);
+        toast.error(err.message || 'Không kiểm tra được bảng size. Vui lòng thử lại.');
       }
     }
   };
@@ -361,6 +397,15 @@ export function createProductWizardActions({
     try {
       const targetId = editingProduct?._id ?? createdDraftId;
       if (!targetId) return;
+      if (!editingProduct || editingProduct.sizeChartPolicyVersion === 1) {
+        const response = await sizeChartApi.get(targetId);
+        const chart = response.sizeChart;
+        const declaredSizes = new Set(response.sizes.map(size => size.trim().toUpperCase()));
+        if (chart?.status !== 'CONFIRMED' || chart.rows.length !== declaredSizes.size || chart.rows.some(row => !declaredSizes.has(row.size))) {
+          toast.error('Hãy lưu và xác nhận bảng size riêng của mẫu áo trước khi gửi duyệt.');
+          return;
+        }
+      }
       // Trường phái & dịp lễ suy ngược từ thẻ đã chọn (thẻ là nguồn sự thật);
       // nếu chưa mở bước thẻ (edit nhanh giá/mô tả) thì giữ nguyên giá trị cũ.
       const styleFromTags = activeTagCodes.map(code => TAG_TO_STYLE[code]).find(Boolean);
@@ -431,6 +476,6 @@ export function createProductWizardActions({
     loadEditInvSummary, openAddModal, openEditModal, handleDuplicateProduct, handleWizardCancel,
     handleImageChange, removeImage, handleVideoChange, removeVideo, updateVariantRow, removeVariantRow,
     addVariantRow, colorsNeedingImages, handleColorImageChange, removeColorImage, handleWizardFinish,
-    handleWizardBack, handleWizardNext,
+    handleWizardBack, handleWizardNext, handlePrepareSizeChart,
   };
 }

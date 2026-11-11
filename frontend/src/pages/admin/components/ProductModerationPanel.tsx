@@ -42,6 +42,7 @@ interface ModerationItem {
   images: string[];
   basePrice: number;
   depositAmount?: number;
+  replacementValue?: number | null;
   status: string;
   moderationStatus: ModerationStatus;
   moderationReason?: string | null;
@@ -1530,6 +1531,16 @@ export const ProductModerationPanel: React.FC = () => {
                               </div>
                             </div>
                           </div>
+
+                          <div className="lume-product-inc-card">
+                            <div className="lume-product-inc-icon"><ShieldCheck size={16} color="#047857" /></div>
+                            <div className="lume-product-inc-card-content">
+                              <div className="lume-product-inc-title">Giá trị bồi hoàn HĐ</div>
+                              <div className="lume-product-inc-sub" style={{ color: activeProduct.replacementValue ? '#047857' : '#64748b', fontWeight: 700 }}>
+                                {activeProduct.replacementValue ? `${formatVND(activeProduct.replacementValue)} VNĐ` : 'Chưa thiết lập'}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1589,6 +1600,12 @@ export const ProductModerationPanel: React.FC = () => {
                           <div className="lume-product-spec-row">
                             <span className="lume-product-spec-label">Tiền cọc thuê áo</span>
                             <span className="lume-product-spec-val">{formatVND(activeProduct.depositAmount || 0)} VNĐ</span>
+                          </div>
+                          <div className="lume-product-spec-row">
+                            <span className="lume-product-spec-label">Giá trị bồi hoàn HĐ</span>
+                            <span className="lume-product-spec-val" style={{ color: activeProduct.replacementValue ? '#047857' : '#64748b', fontWeight: 600 }}>
+                              {activeProduct.replacementValue ? `${formatVND(activeProduct.replacementValue)} VNĐ` : 'Chưa thiết lập'}
+                            </span>
                           </div>
                         </>
                       )}

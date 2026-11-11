@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   Inject,
+  Optional,
   forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -50,6 +51,7 @@ import { CreateBookingDto } from '../dto/create-booking.dto';
 import { CreateProductBookingDto } from '../dto/create-product-booking.dto';
 import { CreatePhotographyBookingDto } from '../dto/create-photography-booking.dto';
 import { BookingsRepository } from '../repositories/bookings.repository';
+import { ContractPolicyService } from '../../contracts/contract-policy.service';
 
 @Injectable()
 export class BookingCreationService {
@@ -75,7 +77,39 @@ export class BookingCreationService {
     @InjectModel(Provider.name)
     private readonly providerModel: Model<Provider>,
     private readonly voucherPricingService: VoucherPricingService,
+    @Optional() private readonly contractPolicyService?: ContractPolicyService,
   ) {}
+
+  private async determineShopContractStatus(
+    providerId: Types.ObjectId,
+    session?: any,
+  ): Promise<'LEGACY' | 'CONTRACT_ACTIVE' | 'CONTRACT_SUSPENDED'> {
+    if (
+      this.contractPolicyService &&
+      typeof this.contractPolicyService
+        .getProviderContractParticipationStatus === 'function'
+    ) {
+      const res =
+        await this.contractPolicyService.getProviderContractParticipationStatus(
+          providerId,
+          session,
+        );
+      return res.status;
+    }
+    const records = await this.bookingModel.db
+      .collection('provider_contract_acceptances')
+      .find({ providerId, scope: 'AO_DAI_RENTAL' }, { session })
+      .toArray();
+    if (!records || records.length === 0) return 'LEGACY';
+    const active = records.find(
+      (r: any) =>
+        r.status === 'ACTIVE' &&
+        (!r.revokedAt || new Date(r.revokedAt) > new Date()) &&
+        new Date(r.acceptedAt) <= new Date(),
+    );
+    if (!active) return 'CONTRACT_SUSPENDED';
+    return 'CONTRACT_ACTIVE';
+  }
 
   private normalizeColor(colorStr?: string | null): string {
     if (!colorStr) return 'WHITE';
@@ -211,6 +245,7 @@ export class BookingCreationService {
     let subTotal = 0;
     const itemDetails: Array<Partial<BookingItem>> = [];
     const providerIdsSet = new Set<string>();
+    const rentalProviderIdsSet = new Set<string>();
     const reservationsCreated: InventoryReservationDocument[] = [];
     let booking: BookingDocument | null = null;
     let promotionId: Types.ObjectId | null = null;
@@ -245,6 +280,8 @@ export class BookingCreationService {
         let depositAmount = 0;
         let providerId: Types.ObjectId | null = null;
         let itemType: BookingItemType;
+        let reservedFrom: Date | null = null;
+        let reservedTo: Date | null = null;
 
         if (item.productId) {
           const product = await this.productModel
@@ -260,6 +297,7 @@ export class BookingCreationService {
           let providerInfo = null;
           if (providerId) {
             providerIdsSet.add(providerId.toString());
+            rentalProviderIdsSet.add(providerId.toString());
             providerInfo = await this.providerModel
               .findById(providerId)
               .session(session);
@@ -316,9 +354,9 @@ export class BookingCreationService {
           }
 
           if (item.rentalFrom && item.rentalTo) {
-            const reservedFrom = new Date(item.rentalFrom);
+            reservedFrom = new Date(item.rentalFrom);
             reservedFrom.setHours(0, 0, 0, 0);
-            const reservedTo = new Date(item.rentalTo);
+            reservedTo = new Date(item.rentalTo);
             reservedTo.setHours(23, 59, 59, 999);
 
             const sizeVal = item.selectedSize
@@ -497,9 +535,10 @@ export class BookingCreationService {
                 priceVersionId: new Types.ObjectId(),
                 unitPrice,
                 depositAmount,
+                replacementValue: product.replacementValue ?? null,
                 quantity: 1,
-                rentalFrom: item.rentalFrom ? new Date(item.rentalFrom) : null,
-                rentalTo: item.rentalTo ? new Date(item.rentalTo) : null,
+                rentalFrom: reservedFrom || (item.rentalFrom ? new Date(item.rentalFrom) : null),
+                rentalTo: reservedTo || (item.rentalTo ? new Date(item.rentalTo) : null),
                 shootDate: item.shootDate ? new Date(item.shootDate) : null,
                 shootTimeSlot: item.shootTimeSlot || null,
                 customRequests: item.customRequests || '',
@@ -717,6 +756,48 @@ export class BookingCreationService {
         );
       }
 
+      // Determine contract flow version based on rental providers
+      let contractFlowVersion: 2 | null = null;
+      const bType = dto.bookingType || BookingType.AoDaiRental;
+      const isRentalType =
+        bType === BookingType.AoDaiRental || bType === BookingType.Combo;
+
+      if (isRentalType && rentalProviderIdsSet.size > 0) {
+        const statuses = new Set<
+          'LEGACY' | 'CONTRACT_ACTIVE' | 'CONTRACT_SUSPENDED'
+        >();
+        for (const provIdStr of rentalProviderIdsSet) {
+          const provStatus = await this.determineShopContractStatus(
+            new Types.ObjectId(provIdStr),
+            session,
+          );
+          statuses.add(provStatus);
+        }
+
+        if (statuses.has('CONTRACT_SUSPENDED')) {
+          throw new BadRequestException(
+            'PROVIDER_CONTRACT_SUSPENDED: Shop đang tạm ngưng nhận đơn thuê do cần cập nhật lại quy chế sàn giao dịch điện tử. Vui lòng liên hệ Shop.',
+          );
+        }
+
+        if (statuses.has('LEGACY') && statuses.has('CONTRACT_ACTIVE')) {
+          throw new BadRequestException(
+            'MIXED_CONTRACT_FLOW_UNSUPPORTED: Đơn hàng không thể kết hợp giữa Shop truyền thống và Shop áp dụng Hợp đồng điện tử. Quý khách vui lòng đặt hàng riêng cho từng Shop.',
+          );
+        }
+
+        if (statuses.has('CONTRACT_ACTIVE')) {
+          contractFlowVersion = 2;
+        } else {
+          contractFlowVersion = null;
+        }
+      }
+
+      const holdExpiresAt =
+        contractFlowVersion === 2
+          ? new Date(Date.now() + 15 * 60 * 1000)
+          : undefined;
+
       booking = await this.bookingsRepository.createBooking(
         {
           bookingCode,
@@ -726,6 +807,8 @@ export class BookingCreationService {
           ),
           bookingType: dto.bookingType || BookingType.AoDaiRental,
           status: BookingStatus.PendingPayment,
+          contractFlowVersion,
+          ...(holdExpiresAt ? { holdExpiresAt } : {}),
           pricingSummary: {
             subTotal: pricingResult.subTotal,
             depositTotal: pricingResult.depositTotal,
@@ -1200,6 +1283,22 @@ export class BookingCreationService {
         reservations.push(reservation);
       }
 
+      const provStatus = await this.determineShopContractStatus(
+        product.providerId,
+        session,
+      );
+      if (provStatus === 'CONTRACT_SUSPENDED') {
+        throw new BadRequestException(
+          'PROVIDER_CONTRACT_SUSPENDED: Shop đang tạm ngưng nhận đơn thuê do cần cập nhật lại quy chế sàn giao dịch điện tử. Vui lòng liên hệ Shop.',
+        );
+      }
+      const contractFlowVersion: 2 | null =
+        provStatus === 'CONTRACT_ACTIVE' ? 2 : null;
+      const holdExpiresAt =
+        contractFlowVersion === 2
+          ? new Date(Date.now() + 15 * 60 * 1000)
+          : undefined;
+
       const savedBooking = await this.bookingsRepository.createBooking(
         {
           bookingCode,
@@ -1207,6 +1306,8 @@ export class BookingCreationService {
           providerIds: [product.providerId],
           bookingType: BookingType.AoDaiRental,
           status: BookingStatus.PendingPayment,
+          contractFlowVersion,
+          ...(holdExpiresAt ? { holdExpiresAt } : {}),
           pricingSummary: {
             subTotal,
             depositTotal,

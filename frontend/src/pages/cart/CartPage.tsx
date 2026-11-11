@@ -28,6 +28,10 @@ import {
   type ApplicableVoucherItem,
   type IneligibleVoucherItem,
 } from './components/VoucherPickerModal';
+import { CONTRACTS_V2_ENABLED } from '../../config/features';
+import { contractService } from '../../services/contractService';
+import { translateError } from '../../utils/errorTranslator';
+import { ContractReviewModal } from '../../components/contracts/ContractReviewModal';
 import './CartPage.css';
 
 export const CartPage: React.FC = () => {
@@ -56,6 +60,11 @@ export const CartPage: React.FC = () => {
   const [applicableVouchers, setApplicableVouchers] = useState<ApplicableVoucherItem[]>([]);
   const [ineligibleVouchers, setIneligibleVouchers] = useState<IneligibleVoucherItem[]>([]);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
+
+  // Contract states
+  const [pendingContractBookingId, setPendingContractBookingId] = useState<string | null>(null);
+  const [pendingPaymentPurpose, setPendingPaymentPurpose] = useState<string>('FULL_PAYMENT');
+  const [isContractModalOpen, setIsContractModalOpen] = useState(false);
 
   // Calendar and busy date/slot states for editing item
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
@@ -658,52 +667,58 @@ export const CartPage: React.FC = () => {
       }
       return;
     }
-    if (await resumePendingCheckout()) return;
 
-    const invalidProduct = selectedItems.find(
-      (item) => item.itemType === 'PRODUCT' && getProductValidationIssues(item).length > 0,
-    );
-    if (invalidProduct) {
-      const issues = getProductValidationIssues(invalidProduct).join(', ');
-      toast.error(
-        'Áo dài "' +
-          (invalidProduct.name || invalidProduct.productName || 'trong giỏ hàng') +
-          '" đang thiếu: ' +
-          issues +
-          '. Vui lòng chỉnh lại sản phẩm này trước khi thanh toán.',
-      );
-      return;
-    }
-    try {
-      await Promise.all(
-        selectedItems
-          .filter((item) => item.itemType === 'PRODUCT')
-          .map(async (item) => {
-            const from = item.rentalFrom || item.startDate || '';
-            const to = item.rentalTo || item.endDate || from;
-            const result = await checkProductAvailability(
-              item.productId || '',
-              item.size || '',
-              item.color || '',
-              from,
-              to,
-              item.quantity,
-              item.rentalType || 'DAILY',
-              item.startTime || undefined,
-              item.endTime || undefined,
-            );
-            if (!result.available)
-              throw new Error(
-                `${item.name || item.productName || 'Sản phẩm'} không còn đủ số lượng cho lịch đã chọn.`,
-              );
-          }),
-      );
-    } catch (error: any) {
-      toast.error(error.message || 'Không thể kiểm tra lịch thuê.');
-      return;
-    }
     setIsLoading(true);
+
     try {
+      if (await resumePendingCheckout()) return;
+
+      const invalidProduct = selectedItems.find(
+        (item) => item.itemType === 'PRODUCT' && getProductValidationIssues(item).length > 0,
+      );
+      if (invalidProduct) {
+        setIsLoading(false);
+        const issues = getProductValidationIssues(invalidProduct).join(', ');
+        toast.error(
+          'Áo dài "' +
+            (invalidProduct.name || invalidProduct.productName || 'trong giỏ hàng') +
+            '" đang thiếu: ' +
+            issues +
+            '. Vui lòng chỉnh lại sản phẩm này trước khi thanh toán.',
+        );
+        return;
+      }
+
+      try {
+        await Promise.all(
+          selectedItems
+            .filter((item) => item.itemType === 'PRODUCT')
+            .map(async (item) => {
+              const from = item.rentalFrom || item.startDate || '';
+              const to = item.rentalTo || item.endDate || from;
+              const result = await checkProductAvailability(
+                item.productId || '',
+                item.size || '',
+                item.color || '',
+                from,
+                to,
+                item.quantity,
+                item.rentalType || 'DAILY',
+                item.startTime || undefined,
+                item.endTime || undefined,
+              );
+              if (!result.available)
+                throw new Error(
+                  `${item.name || item.productName || 'Sản phẩm'} không còn đủ số lượng cho lịch đã chọn.`,
+                );
+            }),
+        );
+      } catch (error: any) {
+        setIsLoading(false);
+        toast.error(translateError(error?.message) || 'Không thể kiểm tra lịch thuê.');
+        return;
+      }
+
       const productItems = selectedItems.filter((item) => item.itemType === 'PRODUCT');
       const photoItems = selectedItems.filter((item) => item.itemType === 'PHOTOGRAPHY_PACKAGE');
       if (photoItems.length > 1) {
@@ -713,25 +728,46 @@ export const CartPage: React.FC = () => {
       const rentalItemsPayload = productItems.map((item) => {
         let pId = item.productId || item.id;
         if (pId && !/^[0-9a-fA-F]{24}$/.test(pId)) {
-          let matchedProd = null;
+          let matchedProd: any = null;
+
+          // Chỉ cho phép giải quyết ID cũ khi xác minh được DUY NHẤT một bản ghi chính xác
           if (pId === 'product_gam_do' || pId === 'prod_gam_do') {
-            matchedProd = realProductList.find(
+            const matches = realProductList.filter(
               (p) => p.name?.toLowerCase().includes('đỏ') || p.name?.toLowerCase().includes('red'),
             );
+            if (matches.length === 1) matchedProd = matches[0];
           } else if (pId === 'product_to_tam' || pId === 'prod_to_tam') {
-            matchedProd = realProductList.find(
-              (p) =>
-                p.name?.toLowerCase().includes('trắng') || p.name?.toLowerCase().includes('white'),
+            const matches = realProductList.filter(
+              (p) => p.name?.toLowerCase().includes('trắng') || p.name?.toLowerCase().includes('white'),
             );
+            if (matches.length === 1) matchedProd = matches[0];
+          } else {
+            // Lọc chính xác theo providerId nếu có, không đoán mò giữa các Shop khác nhau
+            const targetName = (item.name || item.productName || '').trim().toLowerCase();
+            const candidates = realProductList.filter((p) => {
+              const pProvId = typeof p.providerId === 'object' ? p.providerId?._id?.toString() : p.providerId?.toString();
+              const matchProvider = !item.providerId || pProvId === item.providerId;
+              const matchSlug = p.slug && p.slug === pId;
+              const matchName = targetName && p.name?.trim().toLowerCase() === targetName;
+              return matchProvider && (matchSlug || matchName);
+            });
+            if (candidates.length === 1) {
+              matchedProd = candidates[0];
+            }
           }
-          if (!matchedProd && realProductList.length > 0) {
-            matchedProd = realProductList[0];
-          }
-          if (matchedProd) {
-            pId = matchedProd._id;
+
+          if (matchedProd && matchedProd._id && /^[0-9a-fA-F]{24}$/.test(matchedProd._id.toString())) {
+            pId = matchedProd._id.toString();
+          } else {
+            // Tuyệt đối KHÔNG fallback mù quáng sang realProductList[0] hoặc tự ý đổi sản phẩm
+            const label = item.name || item.productName || 'Trang phục';
+            throw new Error(
+              `Trang phục "${label}" trong giỏ hàng lưu mã phiên bản cũ không thể định danh chính xác duy nhất. Vui lòng xóa mục này và thêm lại từ trang chi tiết sản phẩm.`,
+            );
           }
         }
 
+        const isHourly = item.rentalType === 'HOURLY';
         const rentalFrom =
           item.rentalFrom ||
           item.startDate ||
@@ -739,7 +775,7 @@ export const CartPage: React.FC = () => {
         const rentalTo =
           item.rentalTo ||
           item.endDate ||
-          new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString().split('T')[0];
+          (isHourly ? rentalFrom : new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString().split('T')[0]);
 
         return {
           productId: pId,
@@ -757,7 +793,33 @@ export const CartPage: React.FC = () => {
       });
 
       let bookingId: string;
+      let bookingContractFlowVersion: number | null | undefined = null;
       let paymentPurpose: 'FULL_PAYMENT' | 'DEPOSIT_PAYMENT' = 'FULL_PAYMENT';
+
+      // Early Contract Eligibility Check (BEFORE creating booking or holding inventory)
+      if (CONTRACTS_V2_ENABLED && rentalItemsPayload.length > 0 && typeof contractService.checkEligibility === 'function') {
+        try {
+          const eligibilityItems = rentalItemsPayload
+            .filter((it) => it.productId && /^[0-9a-fA-F]{24}$/.test(it.productId))
+            .map((it) => ({ productId: it.productId }));
+
+          if (eligibilityItems.length > 0) {
+            const eligRes = await contractService.checkEligibility(eligibilityItems);
+            if (!eligRes.eligible && eligRes.ineligibleItems.length > 0) {
+              const firstFail = eligRes.ineligibleItems[0];
+              toast.error(firstFail.message);
+              setIsLoading(false);
+              return; // Stop early: do NOT create booking or hold inventory!
+            }
+          }
+        } catch (eligErr: any) {
+          console.warn('Early contract eligibility check warning:', eligErr);
+          toast.error(translateError(eligErr?.message) || 'Không thể kiểm tra điều kiện hợp đồng điện tử.');
+          setIsLoading(false);
+          return;
+        }
+      }
+
       if (photoItems.length === 1) {
         const photo = photoItems[0];
         if (
@@ -814,6 +876,7 @@ export const CartPage: React.FC = () => {
           headers: { 'Idempotency-Key': idempotencyKey },
         });
         bookingId = holdRes.bookingId;
+        bookingContractFlowVersion = holdRes?.contractFlowVersion;
         paymentPurpose = 'DEPOSIT_PAYMENT';
       } else {
         const bookingRes: any = await httpClient.post('/bookings', {
@@ -824,19 +887,63 @@ export const CartPage: React.FC = () => {
           promoCode: selectedVoucher ? selectedVoucher.promotion.code : undefined,
         });
         bookingId = bookingRes._id;
+        bookingContractFlowVersion = bookingRes?.contractFlowVersion;
       }
 
-      toast.info('Đơn đã được giữ tạm thời. Đang chuyển đến thanh toán…');
+      toast.info('Đơn đã được giữ tạm thời.');
 
+      // If booking was explicitly marked as legacy (null), skip contracts completely
+      const isLegacyBooking = bookingContractFlowVersion === null;
+
+      if (CONTRACTS_V2_ENABLED && !isLegacyBooking) {
+        try {
+          const readiness = await contractService.getBookingReadiness(bookingId);
+          if (readiness.requirement === 'REQUIRED' && !readiness.ready) {
+            setPendingContractBookingId(bookingId);
+            setPendingPaymentPurpose(paymentPurpose);
+
+            setIsContractModalOpen(true);
+            setIsLoading(false);
+            return;
+          }
+        } catch (readinessErr: any) {
+          toast.error(translateError(readinessErr?.message) || 'Không thể kiểm tra trạng thái hợp đồng điện tử');
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      await proceedToPayment(bookingId, paymentPurpose);
+    } catch (err: any) {
+      const errMsg = err?.message || err?.response?.data?.message || '';
+      if (errMsg.includes('MIXED_CONTRACT_FLOW_UNSUPPORTED')) {
+        toast.error(
+          'Đơn hàng không thể kết hợp giữa Shop truyền thống và Shop áp dụng Hợp đồng điện tử. Quý khách vui lòng đặt hàng riêng cho từng Shop.',
+        );
+      } else if (errMsg.includes('PROVIDER_CONTRACT_SUSPENDED')) {
+        toast.error(
+          'Shop đang tạm ngưng nhận đơn thuê do cần cập nhật lại quy chế sàn giao dịch điện tử. Vui lòng liên hệ Shop.',
+        );
+      } else {
+        toast.error(translateError(errMsg) || 'Thao tác thanh toán thất bại');
+      }
+      setIsLoading(false);
+    }
+  };
+
+  const proceedToPayment = async (targetBookingId: string, purpose: string) => {
+    setIsLoading(true);
+    try {
+      toast.info('Đang chuyển đến cổng thanh toán…');
       const paymentRes: any = await httpClient.post('/payments/create-link', {
-        bookingId,
-        purpose: paymentPurpose,
+        bookingId: targetBookingId,
+        purpose,
       });
 
       if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
         localStorage.setItem(
           `vh_pending_checkout_${paymentRes.paymentCode}`,
-          JSON.stringify({ bookingId, cartItemIds: selectedItems.map((item) => item.id) }),
+          JSON.stringify({ bookingId: targetBookingId, cartItemIds: selectedItems.map((item) => item.id) }),
         );
         setTimeout(() => {
           window.location.href = paymentRes.payos.checkoutUrl;
@@ -845,7 +952,7 @@ export const CartPage: React.FC = () => {
         throw new Error('Không thể khởi tạo liên kết thanh toán');
       }
     } catch (err: any) {
-      toast.error(err.message || 'Thao tác thanh toán thất bại');
+      toast.error(translateError(err?.message) || 'Thao tác thanh toán thất bại');
       setIsLoading(false);
     }
   };
@@ -1061,18 +1168,20 @@ export const CartPage: React.FC = () => {
             </div>
 
             {/* Right Column: Sticky Summary Panel */}
-            <CartOrderSummary
-              selectedItemsCount={selectedItems.length}
-              totals={totals}
-              checkedGroups={[]}
-              hasRentalProduct={selectedItems.some((item) => item.itemType === 'PRODUCT')}
-              hasCityMismatch={false}
-              isLoading={isLoading}
-              onCheckout={handleCheckout}
-              selectedVoucher={selectedVoucher}
-              onOpenVoucherPicker={handleOpenVoucherPicker}
-              onRemoveVoucher={() => setSelectedVoucher(null)}
-            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <CartOrderSummary
+                selectedItemsCount={selectedItems.length}
+                totals={totals}
+                checkedGroups={[]}
+                hasRentalProduct={selectedItems.some((item) => item.itemType === 'PRODUCT')}
+                hasCityMismatch={false}
+                isLoading={isLoading}
+                onCheckout={handleCheckout}
+                selectedVoucher={selectedVoucher}
+                onOpenVoucherPicker={handleOpenVoucherPicker}
+                onRemoveVoucher={() => setSelectedVoucher(null)}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -1087,6 +1196,38 @@ export const CartPage: React.FC = () => {
         onSelectVoucher={(voucher) => setSelectedVoucher(voucher)}
         onApplyManualCode={handleApplyManualCode}
       />
+
+      {/* Electronic Contract Review Modal */}
+      {CONTRACTS_V2_ENABLED && pendingContractBookingId && (
+        <ContractReviewModal
+          isOpen={isContractModalOpen}
+          bookingId={pendingContractBookingId}
+          onClose={async () => {
+            const bId = pendingContractBookingId;
+            setIsContractModalOpen(false);
+            setPendingContractBookingId(null);
+            if (bId) {
+              try {
+                await httpClient.post(`/bookings/${bId}/cancel`, {
+                  reason: 'Khách hàng đóng giao diện chấp thuận hợp đồng',
+                });
+                toast.info('Đã hủy giữ chỗ. Số lượng sản phẩm đã được mở lại cho giỏ hàng.');
+              } catch (e) {
+                console.warn('Failed to auto-cancel unaccepted contract booking:', e);
+              }
+            }
+          }}
+          onAllAccepted={() => {
+            const bId = pendingContractBookingId;
+            const purpose = pendingPaymentPurpose;
+            setIsContractModalOpen(false);
+            setPendingContractBookingId(null);
+            if (bId) {
+              void proceedToPayment(bId, purpose);
+            }
+          }}
+        />
+      )}
 
       {/* Mobile Sticky Checkout Bar */}
       {cart.length > 0 && (

@@ -434,6 +434,9 @@ export class UsersRepository {
       }
       if (prefs.sizeInfo) {
         const size = prefs.sizeInfo;
+          for (const field of ['chest', 'waist', 'hip', 'shoulder', 'bicep', 'fitPreference'] as const) {
+          if (size[field] !== undefined) updateQuery[`preferences.sizeInfo.${field}`] = size[field];
+        }
         if (size.height !== undefined) {
           updateQuery['preferences.sizeInfo.height'] = size.height;
         }

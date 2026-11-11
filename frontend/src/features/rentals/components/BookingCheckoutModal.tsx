@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
 import { Calendar, Tag, ShieldCheck, CreditCard, X } from 'lucide-react';
+import { CONTRACTS_V2_ENABLED, CONTRACTS_TIERED_ENABLED } from '../../../config/features';
+import { translateError } from '../../../utils/errorTranslator';
+import { contractService, type ContractDetail } from '../../../services/contractService';
+import { ContractReviewModal } from '../../../components/contracts/ContractReviewModal';
+import { ContractQuickConsentCard } from '../../../components/contracts/ContractQuickConsentCard';
 
 interface BookingCheckoutModalProps {
   isOpen: boolean;
@@ -31,6 +36,10 @@ export const BookingCheckoutModal: React.FC<BookingCheckoutModalProps> = ({
   const [appliedPromo, setAppliedPromo] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [pendingBookingId, setPendingBookingId] = useState<string | null>(null);
+  const [pendingBookingCode, setPendingBookingCode] = useState<string | null>(null);
+  const [quickContract, setQuickContract] = useState<ContractDetail | null>(null);
+  const [isContractModalOpen, setIsContractModalOpen] = useState(false);
 
   if (!isOpen) return null;
 
@@ -78,6 +87,27 @@ export const BookingCheckoutModal: React.FC<BookingCheckoutModalProps> = ({
       if (bookingType === 'PHOTOGRAPHY') {
         throw new Error('Vui lòng đặt gói chụp từ trang nhiếp ảnh gia để chọn vị trí trên bản đồ.');
       }
+
+      // Early Contract Eligibility Check (BEFORE creating booking or holding inventory)
+      if (CONTRACTS_V2_ENABLED && bookingType === 'AODAI_RENTAL') {
+        try {
+          if (typeof contractService.checkEligibility === 'function') {
+            const eligRes = await contractService.checkEligibility([{ productId: item.id }]);
+            if (!eligRes.eligible && eligRes.ineligibleItems.length > 0) {
+              const firstFail = eligRes.ineligibleItems[0];
+              toast.error(firstFail.message);
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch (eligErr: any) {
+          console.warn('Early contract eligibility check warning:', eligErr);
+          toast.error(translateError(eligErr?.message) || 'Không thể kiểm tra điều kiện hợp đồng');
+          setIsLoading(false);
+          return;
+        }
+      }
+
       // 1. Create booking
       const bookingPayload = {
         bookingType,
@@ -94,11 +124,69 @@ export const BookingCheckoutModal: React.FC<BookingCheckoutModalProps> = ({
       };
 
       const bookingRes: any = await httpClient.post('/bookings', bookingPayload);
-      toast.info('Đơn đã được giữ tạm thời. Đang chuyển đến thanh toán…');
+      toast.info('Đơn đã được giữ tạm thời.');
 
-      // 2. Create PayOS Simulated Payment Link
+      // If booking was explicitly marked as legacy (null), skip contracts completely
+      const isLegacyBooking = bookingRes?.contractFlowVersion === null;
+
+      if (CONTRACTS_V2_ENABLED && !isLegacyBooking) {
+        try {
+          const readiness = await contractService.getBookingReadiness(bookingRes._id);
+          if (readiness.requirement === 'REQUIRED' && !readiness.ready) {
+            setPendingBookingId(bookingRes._id);
+            setPendingBookingCode(bookingRes.bookingCode || null);
+
+            if (
+              CONTRACTS_TIERED_ENABLED &&
+              readiness.presentationMode === 'QUICK' &&
+              readiness.providers?.[0]?.contractId
+            ) {
+              try {
+                const detail = await contractService.getContractDetail(
+                  readiness.providers[0].contractId,
+                );
+                setQuickContract(detail);
+                setIsLoading(false);
+                return;
+              } catch (detailErr) {
+                console.warn('Failed to load quick contract detail, fallback to modal:', detailErr);
+              }
+            }
+
+            setIsContractModalOpen(true);
+            setIsLoading(false);
+            return;
+          }
+        } catch (readinessErr: any) {
+          toast.error(translateError(readinessErr?.message) || 'Không thể kiểm tra trạng thái hợp đồng điện tử');
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      await proceedToPayment(bookingRes._id);
+    } catch (err: any) {
+      const errMsg = err?.message || err?.response?.data?.message || '';
+      if (errMsg.includes('MIXED_CONTRACT_FLOW_UNSUPPORTED')) {
+        toast.error(
+          'Đơn hàng không thể kết hợp giữa Shop truyền thống và Shop áp dụng Hợp đồng điện tử. Quý khách vui lòng đặt hàng riêng cho từng Shop.',
+        );
+      } else if (errMsg.includes('PROVIDER_CONTRACT_SUSPENDED')) {
+        toast.error(
+          'Shop đang tạm ngưng nhận đơn thuê do cần cập nhật lại quy chế sàn giao dịch điện tử. Vui lòng liên hệ Shop.',
+        );
+      } else {
+        toast.error(translateError(errMsg) || 'Thao tác đặt hàng thất bại');
+      }
+      setIsLoading(false);
+    }
+  };
+
+  const proceedToPayment = async (targetBookingId: string) => {
+    setIsLoading(true);
+    try {
       const paymentRes: any = await httpClient.post('/payments/create-link', {
-        bookingId: bookingRes._id,
+        bookingId: targetBookingId,
         purpose: 'FULL_PAYMENT',
       });
 
@@ -238,23 +326,75 @@ export const BookingCheckoutModal: React.FC<BookingCheckoutModalProps> = ({
             </div>
           </div>
 
+          {/* Quick Consent Card (INLINE) when presentationMode === 'QUICK' */}
+          {quickContract && pendingBookingId && (
+            <div className="mt-2" data-testid="inline-quick-consent-section">
+              <ContractQuickConsentCard
+                contract={quickContract}
+                bookingId={pendingBookingId}
+                bookingCode={pendingBookingCode || undefined}
+                onConsented={() => {
+                  const bId = pendingBookingId;
+                  setQuickContract(null);
+                  void proceedToPayment(bId);
+                }}
+                onRefreshed={(updatedContract, readiness) => {
+                  if (
+                    updatedContract.presentationMode === 'DETAILED' ||
+                    readiness.presentationMode === 'DETAILED'
+                  ) {
+                    setQuickContract(null);
+                    setIsContractModalOpen(true);
+                  } else {
+                    setQuickContract(updatedContract);
+                  }
+                }}
+                onModeSwitchToDetailed={() => {
+                  setQuickContract(null);
+                  setIsContractModalOpen(true);
+                }}
+              />
+            </div>
+          )}
+
           {/* Confirm Button */}
-          <button
-            onClick={handleCheckout}
-            disabled={isLoading}
-            className="w-full py-3.5 bg-[#a11e22] text-white font-bold text-sm tracking-wider rounded-xl hover:bg-[#801418] transition flex items-center justify-center gap-2 shadow-md disabled:bg-stone-400 disabled:cursor-not-allowed mt-2"
-          >
-            {isLoading ? (
-              <>
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                <span>Đang xử lý đặt hàng...</span>
-              </>
-            ) : (
-              <span>TIẾN HÀNH ĐẶT CỌC & THANH TOÁN (PAYOS)</span>
-            )}
-          </button>
+          {!quickContract && (
+            <button
+              onClick={handleCheckout}
+              disabled={isLoading}
+              className="w-full py-3.5 bg-[#a11e22] text-white font-bold text-sm tracking-wider rounded-xl hover:bg-[#801418] transition flex items-center justify-center gap-2 shadow-md disabled:bg-stone-400 disabled:cursor-not-allowed mt-2"
+            >
+              {isLoading ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                  <span>Đang xử lý đặt hàng...</span>
+                </>
+              ) : (
+                <span>TIẾN HÀNH ĐẶT CỌC & THANH TOÁN (PAYOS)</span>
+              )}
+            </button>
+          )}
         </div>
       </div>
+
+      {CONTRACTS_V2_ENABLED && pendingBookingId && (
+        <ContractReviewModal
+          isOpen={isContractModalOpen}
+          bookingId={pendingBookingId}
+          onClose={() => {
+            setIsContractModalOpen(false);
+            setPendingBookingId(null);
+          }}
+          onAllAccepted={() => {
+            const bId = pendingBookingId;
+            setIsContractModalOpen(false);
+            setPendingBookingId(null);
+            if (bId) {
+              void proceedToPayment(bId);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

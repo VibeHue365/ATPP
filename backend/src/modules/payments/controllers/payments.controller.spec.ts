@@ -124,4 +124,82 @@ describe('PaymentsController PayOS webhook', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(fixture.paymentsService.confirmPayment).not.toHaveBeenCalled();
   });
+
+  describe('V2 webhook handling', () => {
+    it('rejects V2 webhook when PAYOS_CHECKSUM_KEY is missing or contains placeholder', async () => {
+      const fixture = createController('claimed');
+      fixture.paymentsRepository.findByOrderCode.mockResolvedValue({
+        paymentCode: 'PAY-V2',
+        contractBinding: { flowVersion: 2, currency: 'VND' },
+      });
+
+      await expect(
+        fixture.controller.handlePayOSWebhook(body as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects V2 webhook when currency or amount mismatches', async () => {
+      const fixture = createController('claimed');
+      (fixture as any).controller.configService = {
+        get: jest.fn().mockReturnValue('valid-checksum-key'),
+      };
+      fixture.paymentsRepository.findByOrderCode.mockResolvedValue({
+        paymentCode: 'PAY-V2',
+        amount: 500000,
+        payos: { orderCode: 123456 },
+        contractBinding: { flowVersion: 2, currency: 'VND' },
+      });
+
+      // Mismatched currency
+      await expect(
+        fixture.controller.handlePayOSWebhook({
+          ...body,
+          data: { orderCode: 123456, status: 'PAID', amount: 500000, currency: 'USD' },
+          signature: 'valid-sig',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+
+      // Mismatched amount
+      await expect(
+        fixture.controller.handlePayOSWebhook({
+          ...body,
+          data: { orderCode: 123456, status: 'PAID', amount: 499999, currency: 'VND' },
+          signature: 'valid-sig',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('calls confirmPayment with evidence { source: "WEBHOOK", orderCode } and stores minimal audit data for V2', async () => {
+      const fixture = createController('claimed');
+      (fixture as any).controller.configService = {
+        get: jest.fn().mockReturnValue('valid-checksum-key'),
+      };
+      // Mock verifyPayOSSignature to return true
+      (fixture.controller as any).verifyPayOSSignature = jest.fn().mockReturnValue(true);
+
+      fixture.paymentsRepository.findByOrderCode.mockResolvedValue({
+        paymentCode: 'PAY-V2',
+        amount: 500000,
+        payos: { orderCode: 123456 },
+        contractBinding: { flowVersion: 2, currency: 'VND' },
+      });
+
+      const res = await fixture.controller.handlePayOSWebhook({
+        ...body,
+        data: { orderCode: 123456, status: 'PAID', amount: 500000, currency: 'VND' },
+        signature: 'valid-sig',
+      } as any);
+
+      expect(res).toEqual({ status: 'success' });
+      expect(fixture.paymentsService.confirmPayment).toHaveBeenCalledWith('PAY-V2', {
+        source: 'WEBHOOK',
+        orderCode: 123456,
+      });
+      expect(fixture.webhookEventRepository.claimVerifiedEvent).toHaveBeenCalledWith(
+        'payos_123456_PAID',
+        { orderCode: 123456, status: 'PAID', amount: 500000, currency: 'VND' },
+        null, // signature redacted for V2 minimal audit
+      );
+    });
+  });
 });

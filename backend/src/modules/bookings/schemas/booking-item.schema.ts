@@ -76,6 +76,9 @@ export class BookingItem {
   @Prop({ type: Number, default: 0, min: 0 })
   depositAmount: number; // Snapshot of deposit amount at the time of booking
 
+  @Prop({ type: Number, default: null, min: 0 })
+  replacementValue?: number | null; // Snapshot of garment replacement value at booking time
+
   @Prop({ type: Number, default: 1, min: 1 })
   quantity: number;
 

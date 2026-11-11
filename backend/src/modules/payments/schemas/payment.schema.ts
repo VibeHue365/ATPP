@@ -34,6 +34,24 @@ export interface PayOSCheckoutInfo {
   description?: string | null;
 }
 
+export interface ContractPaymentBinding {
+  bindingVersion: 1;
+  flowVersion: 2;
+  bookingId: Types.ObjectId;
+  amount: number;
+  currency: 'VND';
+  purpose: PaymentPurpose;
+  bookingFingerprint: string;
+  boundAt: Date;
+  versions: Array<{
+    contractId: Types.ObjectId;
+    contractVersionId: Types.ObjectId;
+    providerId: Types.ObjectId;
+    contentHash: string;
+    bookingFingerprint: string;
+  }>;
+}
+
 @Schema({ collection: 'payments', timestamps: true })
 export class Payment {
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
@@ -107,6 +125,81 @@ export class Payment {
 
   @Prop({ type: Date, default: null })
   paidAt?: Date | null;
+
+  // Populated only by the future payment guard. Legacy payments remain null.
+  @Prop({
+    type: {
+      bindingVersion: { type: Number, enum: [1], required: true },
+      flowVersion: { type: Number, enum: [2], required: true },
+      bookingId: { type: Types.ObjectId, ref: 'Booking', required: true },
+      amount: { type: Number, min: 0, required: true },
+      currency: { type: String, enum: ['VND'], required: true },
+      purpose: {
+        type: String,
+        enum: Object.values(PaymentPurpose),
+        required: true,
+      },
+      bookingFingerprint: {
+        type: String,
+        required: true,
+        match: /^[a-f0-9]{64}$/,
+      },
+      boundAt: { type: Date, required: true },
+      versions: {
+        type: [
+          {
+            _id: false,
+            contractId: {
+              type: Types.ObjectId,
+              ref: 'DigitalContract',
+              required: true,
+            },
+            contractVersionId: {
+              type: Types.ObjectId,
+              ref: 'ContractVersion',
+              required: true,
+            },
+            providerId: {
+              type: Types.ObjectId,
+              ref: 'Provider',
+              required: true,
+            },
+            contentHash: {
+              type: String,
+              required: true,
+              match: /^[a-f0-9]{64}$/,
+            },
+            bookingFingerprint: {
+              type: String,
+              required: true,
+              match: /^[a-f0-9]{64}$/,
+            },
+          },
+        ],
+        required: true,
+        validate: {
+          validator: (versions: unknown[]) =>
+            Array.isArray(versions) && versions.length > 0,
+          message: 'Contract binding requires at least one version',
+        },
+      },
+    },
+    default: null,
+  })
+  contractBinding?: ContractPaymentBinding | null;
+
+  /** Stable V2 retry key. The index is created only by a reviewed rollout. */
+  @Prop({ type: String, default: null, match: /^[a-f0-9]{64}$/ })
+  contractIntentKey?: string | null;
+
+  @Prop({ type: Date, default: null })
+  supersededAt?: Date | null;
+
+  @Prop({ type: Types.ObjectId, ref: 'Payment', default: null })
+  supersededByPaymentId?: Types.ObjectId | null;
+
+  @Prop({ type: String, default: null })
+  supersededReason?: string | null;
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
@@ -120,5 +213,12 @@ PaymentSchema.index(
       purpose: PaymentPurpose.DepositRefund,
       originalPaymentId: { $type: 'objectId' },
     },
+  },
+);
+PaymentSchema.index(
+  { contractIntentKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { contractIntentKey: { $type: 'string' } },
   },
 );

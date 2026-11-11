@@ -14,8 +14,10 @@ from combo_suggester.schemas import ComboSuggestionRequest, ComboSuggestionRespo
 from combo_suggester.combo_engine import suggest_combo
 from admin_insights.schemas import AdminInsightsRequest, AdminInsightsResponse
 from admin_insights.insights_engine import generate_admin_insights
+from size_chart import router as size_chart_router
 
 app    = FastAPI(title="AI Style Matching", version="2.0")
+app.include_router(size_chart_router)
 chatbot = ChatbotEngine()
 
 app.add_middleware(

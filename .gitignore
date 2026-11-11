@@ -44,3 +44,12 @@ docs/
 
 /.agent/mcp_config.json
 /backend/seed-reviews-atlas.js
+backend/scratch_*.js
+minio.exe
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins-dependencies
+mobile/linux/
+mobile/macos/
+mobile/windows/
+.agents/
